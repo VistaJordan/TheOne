@@ -1,0 +1,566 @@
+/* The One — Technician payment request (Sprint 4).
+   Ported 1:1 from the approved comp (scratchpad/payment-comp.tpl.html), scoped
+   under .pay. This screen styles .field / .ctx / .ro deliberately differently
+   from the quote builder (36px field height, inset context panel, icon-bearing
+   read-only rail), which is why both sheets are scoped rather than merged.
+   Shared S4 primitives live in s4-forms.css. */
+
+/* ══ Page header band ══════════════════════════════════════════════════════ */
+.pay .pghead { padding: 16px 18px 16px; }
+
+.pay .pghead-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pay .pghead-idline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* ONE family across both themes. Barlow vs Barlow Condensed is the product's
+   load-bearing typographic distinction (prose voice vs. data/label voice), so
+   the h1 must not swap between them on a theme toggle. Matches .wo-title. */
+.pay .pg-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+:root[data-theme='night'] .pay .pg-title { letter-spacing: 0.005em; }
+
+.pay .pghead-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+
+/* read-only context grid — §3.6 read-only is styled distinctly from disabled:
+   inset tinted panel, full-strength --ink values, a lock caption, NO field
+   chrome. */
+.pay .ctx {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--thead-bg);
+  overflow: hidden;
+}
+
+.pay .ctx-cell { padding: 9px 14px; min-width: 0; }
+.pay .ctx-cell + .ctx-cell { border-left: 1px solid var(--border); }
+
+.pay .ctx-k {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.pay .ctx-v {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.pay .ctx-sub { font-size: 12px; font-weight: 400; color: var(--ink-2); }
+
+.pay .ro-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+/* ══ Page grid ═════════════════════════════════════════════════════════════ */
+.pay .pay-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
+  gap: 14px;
+  margin-top: 14px;
+  align-items: start;
+}
+
+/* ══ Numbered form sections ════════════════════════════════════════════════ */
+.pay .fsec + .fsec { border-top: 1px solid var(--row-border); }
+.pay .fsec-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px 0; }
+
+.pay .fsec-n {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pay .fsec-title { font-size: 14px; font-weight: 600; color: var(--ink); letter-spacing: -0.005em; }
+.pay .fsec-note { margin-left: auto; font-size: 11.5px; color: var(--ink-3); }
+.pay .fsec-body { padding: 11px 16px 16px; }
+
+.pay .frow { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 14px; }
+
+.pay .field + .field,
+.pay .frow + .field,
+.pay .field + .frow,
+.pay .frow + .frow { margin-top: 14px; }
+
+.pay .flabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 5px;
+}
+
+.pay .opt { font-family: 'Barlow', sans-serif; font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+
+.pay .finput,
+.pay .fselect,
+.pay .ftext {
+  display: block;
+  width: 100%;
+  height: 36px;
+  padding: 0 11px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--field-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.pay .ftext { height: auto; min-height: 72px; padding: 9px 11px; line-height: 1.5; resize: vertical; }
+.pay .finput::placeholder,
+.pay .ftext::placeholder { color: var(--ink-3); }
+
+.pay .finput:focus,
+.pay .ftext:focus,
+.pay .fselect:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.pay .fhelp {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+
+.pay .fhelp .ic { margin-top: 1px; color: var(--ink-3); }
+
+/* §3.6 read-only-distinction. Three states, three unmistakable treatments:
+     EDITABLE  solid --border-strong rail + --field-bg fill + 36px field height
+     READ-ONLY dashed rail, NO fill, NO field chrome, auto height (this rule)
+     BLOCKED   --chip fill + --ink-2 label + not-allowed cursor (.btn rules) */
+.pay .ro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pay .ro .ic { color: var(--ink-3); flex: none; }
+.pay .ro-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* §3.2 — error text sits directly under its own field, never in a summary bar */
+.pay .ferr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.pay .is-error .finput,
+.pay .is-error .amtwrap {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.pay .is-error .flabel { color: var(--ink); }
+
+/* select */
+.pay .selwrap { position: relative; }
+.pay .fselect { appearance: none; -webkit-appearance: none; padding-right: 34px; font-weight: 600; }
+
+.pay .selwrap .sel-chev {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--ink-2);
+}
+
+/* amount — §3.10 money is right-aligned + tabular */
+.pay .amtwrap {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  background: var(--field-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.pay .amt-cur {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  align-self: stretch;
+  background: var(--thead-bg);
+  border-right: 1px solid var(--border);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pay .amt-in {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 0 11px;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.pay .amt-in::placeholder { color: var(--ink-3); font-weight: 400; }
+
+/* .amt-in declares border:0;outline:0 and is excluded from the .finput:focus
+   ring, so the WRAPPER has to carry focus — otherwise the one control holding
+   the live error gives no feedback at all when you tab to it. */
+.pay .amtwrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.pay .is-error .amtwrap:focus-within {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 26%, transparent);
+}
+
+/* ── vendor picker (1) ── */
+.pay .vpick {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--thead-bg);
+  padding: 12px 13px;
+}
+
+:root[data-theme='night'] .pay .vpick { box-shadow: inset 2px 0 0 var(--accent); }
+:root[data-theme='day'] .pay .vpick { box-shadow: inset 3px 0 0 var(--accent); }
+
+.pay .vpick-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.pay .vpick-name { font-size: 14.5px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+.pay .vpick-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+
+.pay .vpick-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--row-border);
+  flex-wrap: wrap;
+}
+
+.pay .vpick-phone { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pay .vpick-phone .mono { font-size: 13px; color: var(--ink); }
+
+.pay .ro-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: var(--pill-radius);
+  background: var(--chip);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pay .fallback { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+
+.pay .linkbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pay .linkbtn:hover { text-decoration-thickness: 2px; }
+
+/* ── dropzone (3) ── */
+.pay .drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 16px;
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--thead-bg);
+  color: var(--ink-3);
+  width: 100%;
+}
+
+.pay .drop-t { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.pay .drop-s { font-size: 11.5px; color: var(--ink-3); }
+.pay .drop .ic { color: var(--ink-3); }
+.pay .drop:disabled { cursor: not-allowed; }
+
+/* ── optional recipient (4) ── */
+.pay .addrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pay .addrow:hover { background: var(--chip); color: var(--ink); }
+.pay .addrow .ic { color: var(--accent-text); }
+
+.pay .addrow-sub {
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  display: block;
+  margin-top: 1px;
+}
+
+/* ══ Submit bar ════════════════════════════════════════════════════════════
+   Generous top padding so the lock tooltip above the LOCKED control lands in
+   whitespace instead of over section 4. */
+.pay .submitbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 30px 16px 13px;
+  background: var(--thead-bg);
+  border-top: 1px solid var(--row-border);
+  border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
+}
+
+.pay .autosave { font-size: 11.5px; color: var(--ink-3); }
+.pay .submit-right { display: flex; align-items: center; gap: 12px; margin-left: auto; flex-wrap: wrap; }
+.pay .locked { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.pay .locked-cap { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-3); }
+
+/* §3.3 — the reason the primary CTA is blocked sits ADJACENT to it, not hidden */
+.pay .submit-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warn);
+}
+
+/* ══ Right rail ════════════════════════════════════════════════════════════ */
+.pay .lifebar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding: 14px 16px 6px; }
+.pay .life { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.pay .life-track { height: 4px; border-radius: var(--pill-radius); background: var(--border-strong); }
+.pay .life-lbl { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pay .life-name { font-size: 12px; font-weight: 600; color: var(--ink-3); white-space: nowrap; }
+.pay .life-mark { width: 13px; height: 13px; flex: none; display: grid; place-items: center; color: var(--ink-3); }
+.pay .life.is-current .life-track { background: var(--accent); }
+:root[data-theme='night'] .pay .life.is-current .life-track { box-shadow: 0 0 12px rgba(53, 184, 243, 0.55); }
+.pay .life.is-current .life-name { color: var(--accent-text); font-weight: 700; }
+.pay .life.is-done .life-track { background: color-mix(in srgb, var(--accent) 58%, transparent); }
+.pay .life.is-done .life-name { color: var(--ink-2); }
+.pay .life.is-done .life-mark { color: var(--accent-text); }
+
+.pay .life-pulse {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--accent);
+  position: relative;
+}
+
+.pay .life-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: pay-pulse 1.9s ease-out infinite;
+}
+
+@keyframes pay-pulse {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pay .life-pulse::after { animation: none; opacity: 0.55; }
+}
+
+.pay .life-when { padding: 0 16px 12px; font-size: 11.5px; color: var(--ink-3); line-height: 1.5; }
+
+/* AP note */
+.pay .apnote { display: flex; gap: 11px; padding: 13px 16px; }
+
+.pay .apnote-ic {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--chip);
+  color: var(--ink-2);
+}
+
+.pay .apnote-t { display: block; font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.pay .apnote-s { display: block; font-size: 12px; color: var(--ink-2); margin-top: 3px; line-height: 1.45; }
+.pay .apnote-chips { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 9px; }
+
+/* ══ Previous payments table ═══════════════════════════════════════════════ */
+.pay .tbl-wrap { overflow-x: auto; }
+.pay .tbl { font-size: 13px; }
+
+.pay .tbl th {
+  background: var(--thead-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+  text-align: left;
+}
+
+.pay .sortbtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: var(--th-size);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  transition: color 0.12s, background 0.12s;
+}
+
+.pay .sortbtn:hover { color: var(--ink); background: var(--chip); }
+.pay .sortbtn .ic { opacity: 0.45; }
+.pay .sortbtn:hover .ic { opacity: 0.9; }
+.pay .th-r .sortbtn { justify-content: flex-end; }
+.pay [aria-sort] .sortbtn { color: var(--ink); }
+.pay [aria-sort] .sortbtn .ic { opacity: 1; color: var(--accent-text); }
+
+.pay .tbl td { padding: 9px 12px; border-bottom: 1px solid var(--row-border); color: var(--ink-2); vertical-align: middle; }
+.pay .tbl tbody tr:last-child td { border-bottom: 1px solid var(--border); }
+.pay .tbl tbody tr:hover td { background: var(--thead-bg); }
+.pay .td-date { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pay .td-who { color: var(--ink); font-weight: 600; }
+.pay .td-amt { text-align: right; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pay .tbl tfoot td { padding: 11px 12px; border-bottom: 0; color: var(--ink); font-weight: 600; font-size: 13px; }
+
+.pay .tbl tfoot .td-amt {
+  font-family: var(--kpi-font), 'Barlow Condensed', sans-serif;
+  font-weight: var(--kpi-weight);
+  letter-spacing: var(--kpi-ls);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.pay .tbl-foot-k { color: var(--ink-2); font-weight: 600; }
+
+/* the WO-detail rail's mini payment list (entry point) */
+.mini-pay { padding: 4px 16px 12px; margin: 0; }
+
+.mini-pay-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--row-border);
+}
+
+.mini-pay-row:last-child { border-bottom: 0; }
+.mini-pay-when { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mini-pay-who { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-pay-amt { font-size: 12.5px; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.card-foot { display: flex; align-items: center; gap: 10px; padding: 0 16px 14px; flex-wrap: wrap; }
+
+/* ══ Responsive ════════════════════════════════════════════════════════════ */
+@media (max-width: 1240px) {
+  .pay .pay-grid { grid-template-columns: minmax(0, 1fr); }
+  .pay .ctx { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pay .ctx-cell:nth-child(3) { border-left: 0; }
+  .pay .ctx-cell:nth-child(n + 3) { border-top: 1px solid var(--border); }
+}
+
+@media (max-width: 900px) {
+  .pay .frow { grid-template-columns: minmax(0, 1fr); }
+}

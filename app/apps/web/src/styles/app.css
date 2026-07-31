@@ -1,0 +1,769 @@
+/* The One — application styles. Plain CSS over the design tokens in
+   theme/tokens.css. NO Tailwind, NO component library, NO CSS-in-JS.
+   Two skins are two token blocks toggled by data-theme; this sheet only
+   consumes tokens and encodes the small skin-specific rules from §6. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Barlow', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+input {
+  font-family: inherit;
+}
+
+/* ── Shell layout ─────────────────────────────────────────────────────────── */
+.shell {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  height: 100vh;
+  min-height: 0;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--side-bg);
+  border-right: 1px solid var(--side-border);
+  min-height: 0;
+}
+
+.side-logo {
+  padding: 18px 18px 14px;
+  display: flex;
+  align-items: center;
+}
+
+.side-logo img {
+  height: 40px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--side-ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  width: 100%;
+  transition: background 0.12s, color 0.12s;
+}
+
+.side-item:not(:disabled):hover {
+  background: var(--chip);
+  color: var(--ink);
+}
+
+.side-item.is-active {
+  background: var(--side-active-bg);
+  color: var(--side-active-ink);
+  font-weight: 600;
+}
+
+:root[data-theme="night"] .side-item.is-active {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.side-item:disabled {
+  opacity: 0.72;
+}
+
+.side-icon {
+  width: 18px;
+  display: grid;
+  place-items: center;
+  opacity: 0.9;
+  flex: none;
+}
+
+.side-label {
+  flex: 1;
+}
+
+.side-badge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.side-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--side-border);
+}
+
+.side-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 12px;
+  flex: none;
+}
+
+.side-user-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.side-user-name {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.side-user-role {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+/* ── Main column ──────────────────────────────────────────────────────────── */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── Topbar (black in BOTH themes → light ink + translucent borders) ──────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 52px;
+  flex: none;
+  padding: 0 18px;
+  background: var(--topbar-bg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* day removes the topbar bottom border */
+:root[data-theme="day"] .topbar {
+  border-bottom: 0;
+}
+
+.topbar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  max-width: 460px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.topbar-search-icon {
+  color: #b8c0ca;
+  display: grid;
+  place-items: center;
+}
+
+.topbar-search input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #eef2f6;
+  font-size: 12.5px;
+}
+
+.topbar-search input::placeholder {
+  color: #b8c0ca;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* ── Topbar breadcrumb (detail routes) ────────────────────────────────────── */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  min-width: 0;
+}
+
+.crumb-back {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cfd6de;
+  margin-right: 2px;
+}
+
+.crumb-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.crumb {
+  color: #b8c0ca;
+  font-size: 12.5px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.crumb:hover {
+  color: #fff;
+}
+
+.crumb-sep {
+  color: #8b949e;
+}
+
+.crumb-cur {
+  color: #eef2f6;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+}
+
+/* Uses the button-scoped accent pair (tokens.css) so the white label clears
+   AA on the always-black topbar in BOTH themes. */
+.btn-newwo {
+  height: 32px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--btn-accent);
+  color: var(--on-btn-accent);
+  font-weight: 600;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.btn-newwo:disabled {
+  opacity: 0.85;
+}
+
+/* night: soft glow on the New WO button */
+:root[data-theme="night"] .btn-newwo {
+  box-shadow: 0 0 0 1px rgba(53, 184, 243, 0.4), 0 0 18px rgba(53, 184, 243, 0.35);
+}
+
+/* ── "Viewing as" switcher (topbar is black in BOTH themes → light ink) ────── */
+.topbar-actor {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.topbar-actor-label {
+  color: #b8c0ca;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.topbar-actor-select {
+  height: 32px;
+  max-width: 210px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #eef2f6;
+  font-family: inherit;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  transition: background 0.12s, color 0.12s;
+}
+
+.topbar-actor-select:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.topbar-actor-select:disabled {
+  color: #b8c0ca;
+}
+
+/* The dropdown list is drawn by the OS on the page's ground, not the topbar's. */
+.topbar-actor-select option {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.topbar-bell,
+.theme-toggle {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cfd6de;
+  transition: background 0.12s, color 0.12s;
+}
+
+.topbar-bell:hover,
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* ── Canvas / page ────────────────────────────────────────────────────────── */
+.canvas {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 24px 40px;
+}
+
+.page-head {
+  margin-bottom: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* night: uppercase Barlow-Condensed page-title treatment */
+:root[data-theme="night"] .page-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.page-sub {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+/* ── KPI row ──────────────────────────────────────────────────────────────── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+
+.kpi .kl {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kpi .kv {
+  margin-top: 6px;
+  font-family: var(--kpi-font), 'Barlow Condensed', sans-serif;
+  font-weight: var(--kpi-weight);
+  letter-spacing: var(--kpi-ls);
+  font-size: 30px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.kpi .km {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+  min-height: 14px;
+}
+
+/* hot KPI (waiting approval) */
+.kpi.hot {
+  border-color: var(--danger-border);
+}
+
+.kpi.hot .kv {
+  color: var(--danger);
+}
+
+:root[data-theme="night"] .kpi.hot {
+  box-shadow: 0 0 0 1px var(--danger-border), 0 0 20px rgba(255, 107, 106, 0.22);
+}
+
+/* ── Toolbar (segmented status-group filter) ──────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 13px;
+  border-radius: calc(var(--radius-sm) - 1px);
+  transition: background 0.12s, color 0.12s;
+}
+
+.seg-btn:hover {
+  color: var(--ink);
+}
+
+.seg-btn.is-on {
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+}
+
+/* ── Table ────────────────────────────────────────────────────────────────── */
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+
+.ct {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.ct thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--thead-bg);
+  color: var(--ink-3);
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: var(--th-size);
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.ct tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--row-border);
+  vertical-align: middle;
+  color: var(--ink);
+}
+
+.ct tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.ct tbody tr:hover td {
+  background: var(--chip);
+}
+
+/* rows navigate to /work-orders/:woNumber (the WO # cell is the real link) */
+.ct tbody tr.is-clickable {
+  cursor: pointer;
+}
+
+.wo-num-link {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.wo-num-link:hover {
+  text-decoration: underline;
+}
+
+.ct .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.wo-num {
+  font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.site {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.site strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.site small {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.col-nte {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ct-empty td {
+  padding: 30px 14px;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+/* ── Status pill (real hex per theme via color-mix; §6) ───────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  border-radius: var(--pill-radius);
+  background: color-mix(in srgb, var(--pill) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--pill) 32%, transparent);
+}
+
+.pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pill-caret {
+  font-size: 9px;
+  opacity: 0.75;
+  flex: none;
+}
+
+.pill-button {
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+
+.pill-button:hover {
+  filter: brightness(1.06);
+}
+
+:root[data-theme="night"] .pill {
+  color: color-mix(in srgb, var(--pill) 78%, #ffffff);
+}
+
+:root[data-theme="day"] .pill {
+  color: var(--pill-ink-day, color-mix(in srgb, var(--pill) 72%, #000000));
+}
+
+/* ── Status change menu ───────────────────────────────────────────────────── */
+.status-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.status-menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 100;
+  min-width: 230px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+}
+
+.status-menu-pop.is-right {
+  left: auto;
+  right: 0;
+}
+
+.status-menu-note {
+  padding: 8px 10px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.status-menu-note.err {
+  color: var(--danger);
+}
+
+.status-menu-group + .status-menu-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--row-border);
+}
+
+.status-menu-group-label {
+  padding: 5px 10px 3px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+.status-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.status-menu-item:not(:disabled):hover {
+  background: var(--chip);
+}
+
+.status-menu-item.is-current {
+  background: var(--tab-on-bg);
+}
+
+.status-menu-item:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.status-menu-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--pill);
+  border: 1px solid color-mix(in srgb, var(--pill) 60%, transparent);
+}
+
+.status-menu-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-menu-check {
+  color: var(--accent-text);
+  font-weight: 700;
+  flex: none;
+}
+
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 64px 1fr;
+  }
+  .side-label,
+  .side-user-meta,
+  .side-badge,
+  .topbar-actor-label {
+    display: none;
+  }
+  .topbar-actor-select {
+    max-width: 150px;
+  }
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

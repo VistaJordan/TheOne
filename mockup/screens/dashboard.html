@@ -1,0 +1,658 @@
+<style>
+  /* ============================================================
+     Screen: Ops KPI Dashboard (Home — Jordan B., Admin)
+     Byblos Vista / Seamless FM — real ClickUp work-order data
+     All selectors prefixed #screen-dashboard
+     ============================================================ */
+  #screen-dashboard {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* ---- Header row ---- */
+  #screen-dashboard .dash-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  #screen-dashboard .dash-head__title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  #screen-dashboard .dash-date {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    background: var(--surface);
+    color: var(--ink-2);
+    font-size: var(--fs-12);
+    font-weight: 600;
+  }
+  #screen-dashboard .dash-sub {
+    margin-top: 4px;
+    font-size: var(--fs-13);
+  }
+  #screen-dashboard .dash-sub .num { color: var(--ink); font-weight: 600; }
+  #screen-dashboard .dash-head__right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  #screen-dashboard .seg {
+    display: inline-flex;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 2px;
+    gap: 2px;
+  }
+  #screen-dashboard .seg button {
+    height: 26px;
+    padding: 0 11px;
+    border-radius: 5px;
+    font-size: var(--fs-12);
+    font-weight: 500;
+    color: var(--ink-2);
+    white-space: nowrap;
+    transition: background .15s, color .15s;
+  }
+  #screen-dashboard .seg button:hover { color: var(--ink); }
+  #screen-dashboard .seg button.is-active {
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: var(--shadow-1);
+  }
+  #screen-dashboard .head-select { height: 30px; font-size: var(--fs-12); }
+
+  /* ---- KPI grid ---- */
+  #screen-dashboard .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+    gap: 14px;
+  }
+  #screen-dashboard button.kpi {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: var(--surface);
+  }
+  #screen-dashboard .kpi.is-flagged { box-shadow: inset 3px 0 0 var(--warn); }
+  #screen-dashboard .kic { width: 14px; height: 14px; }
+  #screen-dashboard .kic--danger  { color: var(--danger); }
+  #screen-dashboard .kic--warn    { color: var(--warn); }
+  #screen-dashboard .kic--info    { color: var(--info); }
+  #screen-dashboard .kic--primary { color: var(--primary); }
+  #screen-dashboard .kic--indigo  { color: var(--hue-indigo); }
+  #screen-dashboard .kic--good    { color: var(--good); }
+  #screen-dashboard .kpi__delta--warn { color: var(--warn-ink); }
+  #screen-dashboard .kpi__meta .money { color: var(--ink-2); font-weight: 600; }
+
+  /* ---- Charts grid ---- */
+  #screen-dashboard .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+  }
+  #screen-dashboard .chart-card .card__header { flex-wrap: wrap; row-gap: 6px; }
+  #screen-dashboard .chart-card .sub { color: var(--ink-3); font-weight: 500; }
+  #screen-dashboard .chart-body {
+    position: relative;
+    padding: 14px 16px 12px;
+    min-height: 196px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  #screen-dashboard .chart-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    overflow: visible;
+  }
+
+  /* chart marks */
+  #screen-dashboard .c-grid  { stroke: var(--chart-grid); stroke-width: 1; }
+  #screen-dashboard .c-axis  { fill: var(--chart-axis); font-size: 11px; font-variant-numeric: tabular-nums; }
+  #screen-dashboard .c-cat   { fill: var(--ink-2); font-size: 11px; }
+  #screen-dashboard .c-val   { fill: var(--ink); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #screen-dashboard .c-margin{ fill: var(--ink-2); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #screen-dashboard .c-s1    { fill: var(--chart-1); }
+  #screen-dashboard .c-s2    { fill: var(--chart-2); }
+  #screen-dashboard .c-line1 { fill: none; stroke: var(--chart-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  #screen-dashboard .c-line2 { fill: none; stroke: var(--chart-2); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  #screen-dashboard .c-mk1   { fill: var(--chart-1); stroke: var(--surface); stroke-width: 2; }
+  #screen-dashboard .c-mk2   { fill: var(--chart-2); stroke: var(--surface); stroke-width: 2; }
+  #screen-dashboard .cx-line { stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+  #screen-dashboard .c-hit   { fill: transparent; cursor: default; }
+  #screen-dashboard .c-hit:hover { fill: var(--ink); fill-opacity: .045; }
+
+  /* tooltip inner rows */
+  #screen-dashboard .chart-tooltip .tt-h { font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+  #screen-dashboard .chart-tooltip .tt-r {
+    display: flex; align-items: center; gap: 7px; color: var(--ink-2); line-height: 1.7;
+  }
+  #screen-dashboard .chart-tooltip .tt-r .v {
+    margin-left: 14px; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  #screen-dashboard .sw { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  #screen-dashboard .sw1 { background: var(--chart-1); }
+  #screen-dashboard .sw2 { background: var(--chart-2); }
+  #screen-dashboard .sw0 { background: transparent; }
+
+  /* ---- Bottom grid ---- */
+  #screen-dashboard .bottom-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 14px;
+  }
+  #screen-dashboard .attn-list { display: flex; flex-direction: column; }
+  #screen-dashboard button.attn-row {
+    display: grid;
+    grid-template-columns: 10px 1fr auto 16px;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    text-align: left;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    transition: background .12s;
+  }
+  #screen-dashboard button.attn-row:last-child { border-bottom: 0; }
+  #screen-dashboard button.attn-row:hover { background: var(--surface-2); }
+  #screen-dashboard .attn-row .dot { margin-top: 5px; align-self: start; }
+  #screen-dashboard .attn-txt { min-width: 0; }
+  #screen-dashboard .attn-title { font-size: var(--fs-13); font-weight: 600; color: var(--ink); }
+  #screen-dashboard .attn-title .mono { color: var(--primary-ink); }
+  #screen-dashboard .attn-title .num { font-variant-numeric: tabular-nums; }
+  #screen-dashboard .attn-sub { font-size: var(--fs-12); color: var(--ink-2); margin-top: 2px; }
+  #screen-dashboard .attn-sub .num { font-variant-numeric: tabular-nums; }
+  #screen-dashboard .attn-chev { color: var(--ink-3); transition: transform .12s, color .12s; }
+  #screen-dashboard button.attn-row:hover .attn-chev { color: var(--ink-2); transform: translateX(2px); }
+
+  /* ---- Approval mini-table ---- */
+  #screen-dashboard .appr-total { color: var(--ink-2); font-weight: 600; }
+  #screen-dashboard .appr-total .num { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #screen-dashboard table.data td .store-sub { color: var(--ink-3); }
+  #screen-dashboard table.data td.d-amber { color: var(--warn-ink); font-weight: 600; }
+  #screen-dashboard .am-cell { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+</style>
+
+<section class="screen" id="screen-dashboard">
+
+  <!-- ============ HEADER ============ -->
+  <div class="dash-head">
+    <div class="dash-head__left">
+      <div class="dash-head__title">
+        <h1>Good morning, Jordan</h1>
+        <span class="dash-date num">Mon, Jul 27</span>
+      </div>
+      <p class="dash-sub muted"><span class="num">1,273</span> open work orders across <span class="num">52</span> lists &middot; Byblos Vista / Seamless FM</p>
+    </div>
+    <div class="dash-head__right">
+      <div class="seg" role="group" aria-label="Filter by billing entity">
+        <button type="button" class="is-active" data-entity="ALL" aria-pressed="true">All</button>
+        <button type="button" data-entity="SFM" aria-pressed="false">SFM</button>
+        <button type="button" data-entity="AF" aria-pressed="false">AF</button>
+        <button type="button" data-entity="BKR" aria-pressed="false">BKR</button>
+        <button type="button" data-entity="TPM" aria-pressed="false">TPM</button>
+        <button type="button" data-entity="RF" aria-pressed="false">RF</button>
+      </div>
+      <select class="select head-select" aria-label="Date range">
+        <option>Last 7 days</option>
+        <option selected>Last 30 days</option>
+        <option>This month</option>
+        <option>Last 90 days</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ============ KPI ROW ============ -->
+  <div class="kpi-grid">
+
+    <button type="button" class="card kpi" data-goto="workorders">
+      <span class="kpi__label">
+        <svg class="kic kic--primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
+        Active work orders
+      </span>
+      <div class="kpi__value num">1,273</div>
+      <div class="kpi__meta">across <span class="num">52</span>&nbsp;routing lists</div>
+    </button>
+
+    <button type="button" class="card kpi is-flagged" data-goto="workorders">
+      <span class="kpi__label">
+        <svg class="kic kic--warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Waiting for approval
+      </span>
+      <div class="kpi__value num">268</div>
+      <div class="kpi__meta">
+        <span class="kpi__delta kpi__delta--warn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          <span class="num">31</span>
+        </span>
+        this week &middot; <span class="num">21%</span> of active
+      </div>
+    </button>
+
+    <button type="button" class="card kpi" data-goto="workorders">
+      <span class="kpi__label">
+        <svg class="kic kic--info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Quote ready
+      </span>
+      <div class="kpi__value num">100</div>
+      <div class="kpi__meta"><span class="num">8%</span> of active &middot; ready to send</div>
+    </button>
+
+    <button type="button" class="card kpi" data-goto="workorders">
+      <span class="kpi__label">
+        <svg class="kic kic--indigo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        Waiting for parts
+      </span>
+      <div class="kpi__value num">65</div>
+      <div class="kpi__meta"><span class="num">5%</span> of active &middot; sourcing</div>
+    </button>
+
+    <button type="button" class="card kpi" data-goto="workorders">
+      <span class="kpi__label">
+        <svg class="kic kic--good" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Ready to invoice
+      </span>
+      <div class="kpi__value num">15</div>
+      <div class="kpi__meta">avg <span class="money num">$607</span>/invoice</div>
+    </button>
+
+    <button type="button" class="card kpi" data-goto="workorders">
+      <span class="kpi__label">
+        <svg class="kic kic--danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+        Emergency &amp; new intake
+      </span>
+      <div class="kpi__value num">29</div>
+      <div class="kpi__meta">open + emergency &middot; needs triage</div>
+    </button>
+
+  </div>
+
+  <!-- ============ CHARTS ROW ============ -->
+  <div class="chart-grid">
+
+    <!-- Chart A: Active work orders by status (single series, horizontal) -->
+    <div class="card chart-card">
+      <div class="card__header">
+        <span class="card__title">Active work orders by status</span>
+        <span class="faint num" style="font-size:var(--fs-12)">1,273 active &middot; top 10</span>
+      </div>
+      <div class="chart-body">
+        <svg class="chart-svg" viewBox="0 0 446 162" role="img" aria-label="Active work orders by status, horizontal bar chart, top 10 statuses">
+          <!-- baseline -->
+          <line class="c-grid" x1="133.5" y1="6" x2="133.5" y2="157"/>
+          <!-- bars -->
+          <rect class="c-s1" x="134" y="10"  width="276" height="11" rx="2"/>
+          <rect class="c-s1" x="134" y="25"  width="103" height="11" rx="2"/>
+          <rect class="c-s1" x="134" y="40"  width="73"  height="11" rx="2"/>
+          <rect class="c-s1" x="134" y="55"  width="67"  height="11" rx="2"/>
+          <rect class="c-s1" x="134" y="70"  width="55"  height="11" rx="2"/>
+          <rect class="c-s1" x="134" y="85"  width="55"  height="11" rx="2"/>
+          <rect class="c-s1" x="134" y="100" width="42"  height="11" rx="2"/>
+          <rect class="c-s1" x="134" y="115" width="30"  height="11" rx="2"/>
+          <rect class="c-s1" x="134" y="130" width="30"  height="11" rx="2"/>
+          <rect class="c-s1" x="134" y="145" width="30"  height="11" rx="2"/>
+          <!-- category labels -->
+          <text class="c-cat" x="128" y="15.5"  text-anchor="end" dominant-baseline="central">Waiting for approval</text>
+          <text class="c-cat" x="128" y="30.5"  text-anchor="end" dominant-baseline="central">Quote ready</text>
+          <text class="c-cat" x="128" y="45.5"  text-anchor="end" dominant-baseline="central">Waiting for quote</text>
+          <text class="c-cat" x="128" y="60.5"  text-anchor="end" dominant-baseline="central">Waiting for parts</text>
+          <text class="c-cat" x="128" y="75.5"  text-anchor="end" dominant-baseline="central">Job scheduled</text>
+          <text class="c-cat" x="128" y="90.5"  text-anchor="end" dominant-baseline="central">Assessment scheduled</text>
+          <text class="c-cat" x="128" y="105.5" text-anchor="end" dominant-baseline="central">PM scheduled</text>
+          <text class="c-cat" x="128" y="120.5" text-anchor="end" dominant-baseline="central">Open / emergency</text>
+          <text class="c-cat" x="128" y="135.5" text-anchor="end" dominant-baseline="central">Return trip needed</text>
+          <text class="c-cat" x="128" y="150.5" text-anchor="end" dominant-baseline="central">Job ongoing</text>
+          <!-- value labels -->
+          <text class="c-val" x="416" y="15.5"  dominant-baseline="central">268</text>
+          <text class="c-val" x="243" y="30.5"  dominant-baseline="central">100</text>
+          <text class="c-val" x="213" y="45.5"  dominant-baseline="central">71</text>
+          <text class="c-val" x="207" y="60.5"  dominant-baseline="central">65</text>
+          <text class="c-val" x="195" y="75.5"  dominant-baseline="central">53</text>
+          <text class="c-val" x="195" y="90.5"  dominant-baseline="central">53</text>
+          <text class="c-val" x="182" y="105.5" dominant-baseline="central">41</text>
+          <text class="c-val" x="170" y="120.5" dominant-baseline="central">29</text>
+          <text class="c-val" x="170" y="135.5" dominant-baseline="central">29</text>
+          <text class="c-val" x="170" y="150.5" dominant-baseline="central">29</text>
+          <!-- hit rects -->
+          <rect class="c-hit" x="0" y="8"   width="446" height="15" data-tip="<div class='tt-h'>Waiting for approval</div><div class='tt-r'>Active work orders<span class='v'>268</span></div><div class='tt-r'>Share of active<span class='v'>21%</span></div>"/>
+          <rect class="c-hit" x="0" y="23"  width="446" height="15" data-tip="<div class='tt-h'>Quote ready</div><div class='tt-r'>Active work orders<span class='v'>100</span></div><div class='tt-r'>Share of active<span class='v'>8%</span></div>"/>
+          <rect class="c-hit" x="0" y="38"  width="446" height="15" data-tip="<div class='tt-h'>Waiting for quote</div><div class='tt-r'>Active work orders<span class='v'>71</span></div><div class='tt-r'>Share of active<span class='v'>6%</span></div>"/>
+          <rect class="c-hit" x="0" y="53"  width="446" height="15" data-tip="<div class='tt-h'>Waiting for parts</div><div class='tt-r'>Active work orders<span class='v'>65</span></div><div class='tt-r'>Share of active<span class='v'>5%</span></div>"/>
+          <rect class="c-hit" x="0" y="68"  width="446" height="15" data-tip="<div class='tt-h'>Job scheduled</div><div class='tt-r'>Active work orders<span class='v'>53</span></div><div class='tt-r'>Share of active<span class='v'>4%</span></div>"/>
+          <rect class="c-hit" x="0" y="83"  width="446" height="15" data-tip="<div class='tt-h'>Assessment scheduled</div><div class='tt-r'>Active work orders<span class='v'>53</span></div><div class='tt-r'>Share of active<span class='v'>4%</span></div>"/>
+          <rect class="c-hit" x="0" y="98"  width="446" height="15" data-tip="<div class='tt-h'>PM scheduled</div><div class='tt-r'>Active work orders<span class='v'>41</span></div><div class='tt-r'>Share of active<span class='v'>3%</span></div>"/>
+          <rect class="c-hit" x="0" y="113" width="446" height="15" data-tip="<div class='tt-h'>Open / emergency</div><div class='tt-r'>Active work orders<span class='v'>29</span></div><div class='tt-r'>Share of active<span class='v'>2%</span></div>"/>
+          <rect class="c-hit" x="0" y="128" width="446" height="15" data-tip="<div class='tt-h'>Return trip needed</div><div class='tt-r'>Active work orders<span class='v'>29</span></div><div class='tt-r'>Share of active<span class='v'>2%</span></div>"/>
+          <rect class="c-hit" x="0" y="143" width="446" height="16" data-tip="<div class='tt-h'>Job ongoing</div><div class='tt-r'>Active work orders<span class='v'>29</span></div><div class='tt-r'>Share of active<span class='v'>2%</span></div>"/>
+        </svg>
+        <div class="chart-tooltip" hidden></div>
+      </div>
+    </div>
+
+    <!-- Chart B: Invoiced vs cost (2 series, line) -->
+    <div class="card chart-card">
+      <div class="card__header">
+        <span class="card__title">Invoiced vs cost <span class="sub">&middot; last 8 weeks</span></span>
+        <div class="legend">
+          <span class="key"><span class="swatch sw1"></span>Invoiced</span>
+          <span class="key"><span class="swatch sw2"></span>Cost</span>
+        </div>
+      </div>
+      <div class="chart-body">
+        <svg class="chart-svg" viewBox="0 0 480 176" role="img" aria-label="Weekly invoiced versus cost over the last 8 weeks">
+          <!-- grid -->
+          <line class="c-grid" x1="40" y1="14"    x2="468" y2="14"/>
+          <line class="c-grid" x1="40" y1="59.3"  x2="468" y2="59.3"/>
+          <line class="c-grid" x1="40" y1="104.7" x2="468" y2="104.7"/>
+          <line class="c-grid" x1="40" y1="150"   x2="468" y2="150"/>
+          <!-- y axis labels -->
+          <text class="c-axis" x="34" y="150"   text-anchor="end" dominant-baseline="central">$0</text>
+          <text class="c-axis" x="34" y="104.7" text-anchor="end" dominant-baseline="central">$15k</text>
+          <text class="c-axis" x="34" y="59.3"  text-anchor="end" dominant-baseline="central">$30k</text>
+          <text class="c-axis" x="34" y="14"    text-anchor="end" dominant-baseline="central">$45k</text>
+          <!-- x axis labels -->
+          <text class="c-axis" x="40"    y="164" text-anchor="start">Jun 1</text>
+          <text class="c-axis" x="101.1" y="164" text-anchor="middle">Jun 8</text>
+          <text class="c-axis" x="162.3" y="164" text-anchor="middle">Jun 15</text>
+          <text class="c-axis" x="223.4" y="164" text-anchor="middle">Jun 22</text>
+          <text class="c-axis" x="284.6" y="164" text-anchor="middle">Jun 29</text>
+          <text class="c-axis" x="345.7" y="164" text-anchor="middle">Jul 6</text>
+          <text class="c-axis" x="406.9" y="164" text-anchor="middle">Jul 13</text>
+          <text class="c-axis" x="468"   y="164" text-anchor="end">Jul 20</text>
+          <!-- lines -->
+          <polyline class="c-line1" points="40,49.1 101.1,34.9 162.3,43.6 223.4,28.2 284.6,45.4 345.7,35.8 406.9,40 468,31.5"/>
+          <polyline class="c-line2" points="40,92.3 101.1,85.3 162.3,93.8 223.4,83.5 284.6,90.2 345.7,87.7 406.9,91.4 468,85.9"/>
+          <!-- end-point markers -->
+          <circle class="c-mk1" cx="468" cy="31.5" r="3.5"/>
+          <circle class="c-mk2" cx="468" cy="85.9" r="3.5"/>
+          <!-- crosshair (toggled) -->
+          <g class="cx" style="display:none">
+            <line class="cx-line" x1="40" y1="14" x2="40" y2="150"/>
+            <circle class="c-mk1 cx-d1" cx="40" cy="49.1" r="4"/>
+            <circle class="c-mk2 cx-d2" cx="40" cy="92.3" r="4"/>
+          </g>
+          <!-- hit rects (one per week) -->
+          <rect class="c-hit" x="0"     y="14" width="70.6" height="136" data-x="40"    data-y1="49.1" data-y2="92.3" data-tip="<div class='tt-h'>Week ending Jun 1</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$33.4k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$19.1k</span></div><div class='tt-r'><span class='sw sw0'></span>Margin<span class='v'>43%</span></div>"/>
+          <rect class="c-hit" x="70.6"  y="14" width="61.1" height="136" data-x="101.1" data-y1="34.9" data-y2="85.3" data-tip="<div class='tt-h'>Week ending Jun 8</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$38.1k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$21.4k</span></div><div class='tt-r'><span class='sw sw0'></span>Margin<span class='v'>44%</span></div>"/>
+          <rect class="c-hit" x="131.7" y="14" width="61.2" height="136" data-x="162.3" data-y1="43.6" data-y2="93.8" data-tip="<div class='tt-h'>Week ending Jun 15</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$35.2k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$18.6k</span></div><div class='tt-r'><span class='sw sw0'></span>Margin<span class='v'>47%</span></div>"/>
+          <rect class="c-hit" x="192.9" y="14" width="61.1" height="136" data-x="223.4" data-y1="28.2" data-y2="83.5" data-tip="<div class='tt-h'>Week ending Jun 22</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$40.3k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$22.0k</span></div><div class='tt-r'><span class='sw sw0'></span>Margin<span class='v'>45%</span></div>"/>
+          <rect class="c-hit" x="254"   y="14" width="61.1" height="136" data-x="284.6" data-y1="45.4" data-y2="90.2" data-tip="<div class='tt-h'>Week ending Jun 29</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$34.6k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$19.8k</span></div><div class='tt-r'><span class='sw sw0'></span>Margin<span class='v'>43%</span></div>"/>
+          <rect class="c-hit" x="315.1" y="14" width="61.2" height="136" data-x="345.7" data-y1="35.8" data-y2="87.7" data-tip="<div class='tt-h'>Week ending Jul 6</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$37.8k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$20.6k</span></div><div class='tt-r'><span class='sw sw0'></span>Margin<span class='v'>45%</span></div>"/>
+          <rect class="c-hit" x="376.3" y="14" width="61.1" height="136" data-x="406.9" data-y1="40" data-y2="91.4" data-tip="<div class='tt-h'>Week ending Jul 13</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$36.4k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$19.4k</span></div><div class='tt-r'><span class='sw sw0'></span>Margin<span class='v'>47%</span></div>"/>
+          <rect class="c-hit" x="437.4" y="14" width="42.6" height="136" data-x="468"   data-y1="31.5" data-y2="85.9" data-tip="<div class='tt-h'>Week ending Jul 20</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$39.2k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$21.2k</span></div><div class='tt-r'><span class='sw sw0'></span>Margin<span class='v'>46%</span></div>"/>
+        </svg>
+        <div class="chart-tooltip" hidden></div>
+      </div>
+    </div>
+
+    <!-- Chart C: Profit by trade — invoiced vs cost (2 series, grouped vertical) -->
+    <div class="card chart-card">
+      <div class="card__header">
+        <span class="card__title">Profit by trade <span class="sub">&middot; MTD</span></span>
+        <div class="legend">
+          <span class="key"><span class="swatch sw1"></span>Invoiced</span>
+          <span class="key"><span class="swatch sw2"></span>Cost</span>
+        </div>
+      </div>
+      <div class="chart-body">
+        <svg class="chart-svg" viewBox="0 0 480 198" role="img" aria-label="Invoiced versus cost by trade, month to date, grouped bar chart with margin labels">
+          <!-- grid -->
+          <line class="c-grid" x1="38" y1="24"    x2="470" y2="24"/>
+          <line class="c-grid" x1="38" y1="72.7"  x2="470" y2="72.7"/>
+          <line class="c-grid" x1="38" y1="121.3" x2="470" y2="121.3"/>
+          <line class="c-grid" x1="38" y1="170"   x2="470" y2="170"/>
+          <!-- y axis labels -->
+          <text class="c-axis" x="32" y="170"   text-anchor="end" dominant-baseline="central">$0</text>
+          <text class="c-axis" x="32" y="121.3" text-anchor="end" dominant-baseline="central">$10k</text>
+          <text class="c-axis" x="32" y="72.7"  text-anchor="end" dominant-baseline="central">$20k</text>
+          <text class="c-axis" x="32" y="24"    text-anchor="end" dominant-baseline="central">$30k</text>
+          <!-- invoiced bars -->
+          <path class="c-s1" d="M60.2 170 V51.3 Q60.2 49.3 62.2 49.3 H78.2 Q80.2 49.3 80.2 51.3 V170 Z"/>
+          <path class="c-s1" d="M146.6 170 V59.6 Q146.6 57.6 148.6 57.6 H164.6 Q166.6 57.6 166.6 59.6 V170 Z"/>
+          <path class="c-s1" d="M233 170 V82.5 Q233 80.5 235 80.5 H251 Q253 80.5 253 82.5 V170 Z"/>
+          <path class="c-s1" d="M319.4 170 V117.5 Q319.4 115.5 321.4 115.5 H337.4 Q339.4 115.5 339.4 117.5 V170 Z"/>
+          <path class="c-s1" d="M405.8 170 V130.1 Q405.8 128.1 407.8 128.1 H423.8 Q425.8 128.1 425.8 130.1 V170 Z"/>
+          <!-- cost bars -->
+          <path class="c-s2" d="M82.2 170 V105.8 Q82.2 103.8 84.2 103.8 H100.2 Q102.2 103.8 102.2 105.8 V170 Z"/>
+          <path class="c-s2" d="M168.6 170 V109.2 Q168.6 107.2 170.6 107.2 H186.6 Q188.6 107.2 188.6 109.2 V170 Z"/>
+          <path class="c-s2" d="M255 170 V123.3 Q255 121.3 257 121.3 H273 Q275 121.3 275 123.3 V170 Z"/>
+          <path class="c-s2" d="M341.4 170 V142.3 Q341.4 140.3 343.4 140.3 H359.4 Q361.4 140.3 361.4 142.3 V170 Z"/>
+          <path class="c-s2" d="M427.8 170 V149.1 Q427.8 147.1 429.8 147.1 H445.8 Q447.8 147.1 447.8 149.1 V170 Z"/>
+          <!-- margin % labels -->
+          <text class="c-margin" x="81.2"  y="43.3"  text-anchor="middle">45%</text>
+          <text class="c-margin" x="167.6" y="51.6"  text-anchor="middle">44%</text>
+          <text class="c-margin" x="254"   y="74.5"  text-anchor="middle">46%</text>
+          <text class="c-margin" x="340.4" y="109.5" text-anchor="middle">45%</text>
+          <text class="c-margin" x="426.8" y="122.1" text-anchor="middle">45%</text>
+          <!-- trade labels -->
+          <text class="c-cat" x="81.2"  y="184" text-anchor="middle">Handyman</text>
+          <text class="c-cat" x="167.6" y="184" text-anchor="middle">Plumbing</text>
+          <text class="c-cat" x="254"   y="184" text-anchor="middle">HVAC</text>
+          <text class="c-cat" x="340.4" y="184" text-anchor="middle">Electric</text>
+          <text class="c-cat" x="426.8" y="184" text-anchor="middle">Refrigeration</text>
+          <!-- hit rects -->
+          <rect class="c-hit" x="60.2"  y="24" width="20" height="146" data-tip="<div class='tt-h'>Handyman &middot; 45% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$24.8k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$13.6k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$11.2k</span></div>"/>
+          <rect class="c-hit" x="82.2"  y="24" width="20" height="146" data-tip="<div class='tt-h'>Handyman &middot; 45% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$24.8k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$13.6k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$11.2k</span></div>"/>
+          <rect class="c-hit" x="146.6" y="24" width="20" height="146" data-tip="<div class='tt-h'>Plumbing &middot; 44% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$23.1k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$12.9k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$10.2k</span></div>"/>
+          <rect class="c-hit" x="168.6" y="24" width="20" height="146" data-tip="<div class='tt-h'>Plumbing &middot; 44% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$23.1k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$12.9k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$10.2k</span></div>"/>
+          <rect class="c-hit" x="233"   y="24" width="20" height="146" data-tip="<div class='tt-h'>HVAC &middot; 46% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$18.4k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$10.0k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$8.4k</span></div>"/>
+          <rect class="c-hit" x="255"   y="24" width="20" height="146" data-tip="<div class='tt-h'>HVAC &middot; 46% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$18.4k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$10.0k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$8.4k</span></div>"/>
+          <rect class="c-hit" x="319.4" y="24" width="20" height="146" data-tip="<div class='tt-h'>Electric &middot; 45% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$11.2k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$6.1k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$5.1k</span></div>"/>
+          <rect class="c-hit" x="341.4" y="24" width="20" height="146" data-tip="<div class='tt-h'>Electric &middot; 45% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$11.2k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$6.1k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$5.1k</span></div>"/>
+          <rect class="c-hit" x="405.8" y="24" width="20" height="146" data-tip="<div class='tt-h'>Refrigeration &middot; 45% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$8.6k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$4.7k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$3.9k</span></div>"/>
+          <rect class="c-hit" x="427.8" y="24" width="20" height="146" data-tip="<div class='tt-h'>Refrigeration &middot; 45% margin</div><div class='tt-r'><span class='sw sw1'></span>Invoiced<span class='v'>$8.6k</span></div><div class='tt-r'><span class='sw sw2'></span>Cost<span class='v'>$4.7k</span></div><div class='tt-r'><span class='sw sw0'></span>Profit<span class='v'>$3.9k</span></div>"/>
+        </svg>
+        <div class="chart-tooltip" hidden></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ BOTTOM ROW ============ -->
+  <div class="bottom-grid">
+
+    <!-- Needs attention -->
+    <div class="card">
+      <div class="card__header">
+        <span class="card__title">Needs attention</span>
+        <span class="badge">3</span>
+      </div>
+      <div class="attn-list">
+
+        <button type="button" class="attn-row" data-goto="workorder-detail">
+          <span class="dot dot--warn"></span>
+          <span class="attn-txt">
+            <div class="attn-title"><span class="mono">WO-39403</span> &middot; waiting for approval <span class="num">10d</span></div>
+            <div class="attn-sub">7-Eleven #41669 &middot; Galveston, TX &middot; NTE <span class="num">$3,202</span> &middot; quote sent, tech ordered</div>
+          </span>
+          <span class="chip chip--sfm">SFM</span>
+          <svg class="attn-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
+        <button type="button" class="attn-row" data-goto="workorders">
+          <span class="dot dot--danger"></span>
+          <span class="attn-txt">
+            <div class="attn-title"><span class="num">14</span> WOs past grey-flag threshold</div>
+            <div class="attn-sub">Stale aging on the board &mdash; oldest sitting <span class="num">23d</span> since grey flag</div>
+          </span>
+          <span class="badge badge--danger num">14</span>
+          <svg class="attn-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
+        <button type="button" class="attn-row" data-goto="workorders">
+          <span class="dot dot--warn"></span>
+          <span class="attn-txt">
+            <div class="attn-title">Missed ETA flagged on <span class="num">3</span> WOs this week</div>
+            <div class="attn-sub">Field <code class="mono">14. Missed ETA</code> tripped &mdash; SLA reminders due to FMs</div>
+          </span>
+          <span class="badge badge--warn num">3</span>
+          <svg class="attn-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
+        <button type="button" class="attn-row" data-goto="workorders">
+          <span class="dot dot--good"></span>
+          <span class="attn-txt">
+            <div class="attn-title">Incoming WOs list empty</div>
+            <div class="attn-sub">Ecotrak intake clear &mdash; every new work order is routed to a list</div>
+          </span>
+          <span></span>
+          <svg class="attn-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+
+      </div>
+    </div>
+
+    <!-- Waiting for approval — oldest -->
+    <div class="card">
+      <div class="card__header">
+        <span class="card__title">Waiting for approval &mdash; oldest</span>
+        <span class="appr-total">oldest 6 of <span class="num">268</span></span>
+      </div>
+      <div class="table-scroll">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>WO #</th>
+              <th>Client</th>
+              <th>Store / City</th>
+              <th class="num">NTE</th>
+              <th class="num">Days</th>
+              <th>AM</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-goto="workorder-detail">
+              <td><span class="mono">WO-39403</span></td>
+              <td>7-Eleven</td>
+              <td>Galveston, TX <span class="store-sub">&middot; 41669</span></td>
+              <td class="num">$3,202</td>
+              <td class="num d-amber">10</td>
+              <td><span class="am-cell"><span class="avatar avatar--sm">PH</span>P. Hope</span></td>
+            </tr>
+            <tr data-goto="workorder-detail">
+              <td><span class="mono">WO-40356</span></td>
+              <td>Safety</td>
+              <td>Temple, TX <span class="store-sub">&middot; Residence Inn</span></td>
+              <td class="num">$5,818</td>
+              <td class="num d-amber">9</td>
+              <td><span class="am-cell"><span class="avatar avatar--sm">PH</span>P. Hope</span></td>
+            </tr>
+            <tr data-goto="workorder-detail">
+              <td><span class="mono">WO-37597</span></td>
+              <td>AMC</td>
+              <td>Provo, UT <span class="store-sub">&middot; AMC Theatres</span></td>
+              <td class="num">$3,464</td>
+              <td class="num d-amber">8</td>
+              <td><span class="am-cell"><span class="avatar avatar--sm">PH</span>P. Hope</span></td>
+            </tr>
+            <tr data-goto="workorder-detail">
+              <td><span class="mono">WO-38893</span></td>
+              <td>WKS</td>
+              <td>Glen Carbon, IL <span class="store-sub">&middot; Denny's</span></td>
+              <td class="num">$1,197</td>
+              <td class="num d-amber">8</td>
+              <td><span class="am-cell"><span class="avatar avatar--sm">PH</span>P. Hope</span></td>
+            </tr>
+            <tr data-goto="workorder-detail">
+              <td><span class="mono">WO-38787</span></td>
+              <td>Flynn</td>
+              <td>Orange, NJ <span class="store-sub">&middot; Wendy's</span></td>
+              <td class="num">$724</td>
+              <td class="num">7</td>
+              <td><span class="am-cell"><span class="avatar avatar--sm">PH</span>P. Hope</span></td>
+            </tr>
+            <tr data-goto="workorder-detail">
+              <td><span class="mono">WO-40127</span></td>
+              <td>Advanced</td>
+              <td>Medford, MA <span class="store-sub">&middot; Panda Express</span></td>
+              <td class="num">$300</td>
+              <td class="num">7</td>
+              <td><span class="am-cell"><span class="avatar avatar--sm">PH</span>P. Hope</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+<script>
+  (function () {
+    var root = document.getElementById('screen-dashboard');
+    if (!root) return;
+
+    /* --- Entity segmented control (single-select, visual state only) --- */
+    var seg = root.querySelector('.seg');
+    if (seg) {
+      seg.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-entity]');
+        if (!btn) return;
+        seg.querySelectorAll('button').forEach(function (b) {
+          b.classList.remove('is-active');
+          b.setAttribute('aria-pressed', 'false');
+        });
+        btn.classList.add('is-active');
+        btn.setAttribute('aria-pressed', 'true');
+      });
+    }
+
+    /* --- Shared chart hover tooltip (+ line crosshair) --- */
+    function place(body, tip, e) {
+      var r = body.getBoundingClientRect();
+      var x = e.clientX - r.left + 14;
+      var y = e.clientY - r.top + 14;
+      var tw = tip.offsetWidth, th = tip.offsetHeight;
+      if (x + tw > r.width) x = e.clientX - r.left - tw - 12;
+      if (x < 2) x = 2;
+      if (y + th > r.height) y = r.height - th - 2;
+      if (y < 2) y = 2;
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+    }
+
+    root.querySelectorAll('.chart-card').forEach(function (card) {
+      var body = card.querySelector('.chart-body');
+      var tip = card.querySelector('.chart-tooltip');
+      var cx = card.querySelector('.cx');
+      if (!body || !tip) return;
+
+      body.querySelectorAll('[data-tip]').forEach(function (h) {
+        h.addEventListener('mouseenter', function () {
+          tip.innerHTML = h.getAttribute('data-tip');
+          tip.hidden = false;
+          if (cx && h.hasAttribute('data-x')) {
+            var X = h.getAttribute('data-x');
+            var ln = cx.querySelector('.cx-line');
+            ln.setAttribute('x1', X); ln.setAttribute('x2', X);
+            var d1 = cx.querySelector('.cx-d1'), d2 = cx.querySelector('.cx-d2');
+            d1.setAttribute('cx', X); d1.setAttribute('cy', h.getAttribute('data-y1'));
+            d2.setAttribute('cx', X); d2.setAttribute('cy', h.getAttribute('data-y2'));
+            cx.style.display = '';
+          }
+        });
+        h.addEventListener('mousemove', function (e) { place(body, tip, e); });
+        h.addEventListener('mouseleave', function () {
+          tip.hidden = true;
+          if (cx) cx.style.display = 'none';
+        });
+      });
+    });
+  })();
+</script>

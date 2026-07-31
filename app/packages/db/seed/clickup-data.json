@@ -1,0 +1,2839 @@
+{
+ "statuses": [
+  {
+   "name": "Open",
+   "type": "open",
+   "order": 0,
+   "color": "#ff3f48"
+  },
+  {
+   "name": "emergency",
+   "type": "custom",
+   "order": 1,
+   "color": "#ff3f48"
+  },
+  {
+   "name": "waiting for quote",
+   "type": "custom",
+   "order": 2,
+   "color": "#ff3f48"
+  },
+  {
+   "name": "approved",
+   "type": "custom",
+   "order": 3,
+   "color": "#ee5e99"
+  },
+  {
+   "name": "return trip needed",
+   "type": "custom",
+   "order": 4,
+   "color": "#ff3f48"
+  },
+  {
+   "name": "assessment ongoing",
+   "type": "custom",
+   "order": 5,
+   "color": "#f8ae00"
+  },
+  {
+   "name": "job ongoing",
+   "type": "custom",
+   "order": 6,
+   "color": "#f8ae00"
+  },
+  {
+   "name": "assessment scheduled",
+   "type": "custom",
+   "order": 7,
+   "color": "#ee5e99"
+  },
+  {
+   "name": "job scheduled",
+   "type": "custom",
+   "order": 8,
+   "color": "#ee5e99"
+  },
+  {
+   "name": "pm scheduled",
+   "type": "custom",
+   "order": 9,
+   "color": "#b660e0"
+  },
+  {
+   "name": "quote ready",
+   "type": "custom",
+   "order": 10,
+   "color": "#4466ff"
+  },
+  {
+   "name": "please order parts",
+   "type": "custom",
+   "order": 11,
+   "color": "#b660e0"
+  },
+  {
+   "name": "waiting for parts",
+   "type": "custom",
+   "order": 12,
+   "color": "#aa8d80"
+  },
+  {
+   "name": "!! waiting for advice",
+   "type": "custom",
+   "order": 13,
+   "color": "#1090e0"
+  },
+  {
+   "name": "!! waiting for approval",
+   "type": "custom",
+   "order": 14,
+   "color": "#0f9d9f"
+  },
+  {
+   "name": "<< invoiced not paid >>",
+   "type": "custom",
+   "order": 15,
+   "color": "#656f7d"
+  },
+  {
+   "name": "!! ready to invoice",
+   "type": "done",
+   "order": 16,
+   "color": "#6bed5e"
+  },
+  {
+   "name": "done/incurred",
+   "type": "done",
+   "order": 17,
+   "color": "#64c6a2"
+  },
+  {
+   "name": "!! canceled/postponed",
+   "type": "closed",
+   "order": 18,
+   "color": "#008844"
+  }
+ ],
+ "fields": [
+  {
+   "name": "WO PDF",
+   "type": "attachment"
+  },
+  {
+   "name": "🎩 Profitability Exception",
+   "type": "checkbox"
+  },
+  {
+   "name": "23. Action",
+   "type": "drop_down",
+   "options": [
+    "PPRLink",
+    "GQLink",
+    "GeneratePdf",
+    "yoda"
+   ]
+  },
+  {
+   "name": "🚨 SLA Updated",
+   "type": "checkbox"
+  },
+  {
+   "name": "Zip Code",
+   "type": "short_text"
+  },
+  {
+   "name": "13. Late quote",
+   "type": "checkbox"
+  },
+  {
+   "name": "Grey Flag Date",
+   "type": "date"
+  },
+  {
+   "name": "Completion Assignee",
+   "type": "users"
+  },
+  {
+   "name": "Hours To Checkout",
+   "type": "number"
+  },
+  {
+   "name": "MGR-Rating",
+   "type": "short_text"
+  },
+  {
+   "name": "PDF Link",
+   "type": "short_text"
+  },
+  {
+   "name": "17. Address",
+   "type": "location"
+  },
+  {
+   "name": "Days Since INP",
+   "type": "formula",
+   "formula": true
+  },
+  {
+   "name": "1. Not Fully Paid",
+   "type": "checkbox"
+  },
+  {
+   "name": "Days Since QC",
+   "type": "formula",
+   "formula": true
+  },
+  {
+   "name": "Pay Date",
+   "type": "date"
+  },
+  {
+   "name": "Client",
+   "type": "drop_down",
+   "options": [
+    "Swig Stores",
+    "First Watch",
+    "MOD Pizza",
+    "PCRK",
+    "Flynn",
+    "Portland Leather",
+    "Mobettahs",
+    "Puttshack",
+    "Outback Steakhouse",
+    "Vuori",
+    "KinderCare",
+    "ONO-BBQ",
+    "AMERCO",
+    "REPI",
+    "Extra Space",
+    "Cheesecake Factory",
+    "FedEx",
+    "Rural King",
+    "RMH",
+    "Uncommon Brands",
+    "Riser Fitness",
+    "Habit Burger",
+    "Learning Center",
+    "SunHoldings",
+    "7-Eleven",
+    "Mimi's Cafe",
+    "Wendy's",
+    "DinTai",
+    "Avolta",
+    "Net Lease Capital",
+    "Car Mart",
+    "Canteen",
+    "Innovative Rental Care",
+    "Biscuitville",
+    "Ampler Group",
+    "WKS",
+    "RedRoof",
+    "Giant Oil",
+    "AMC",
+    "Sizzling Platter"
+   ]
+  },
+  {
+   "name": "Act ETA",
+   "type": "date"
+  },
+  {
+   "name": "20. Last Update",
+   "type": "text"
+  },
+  {
+   "name": "Total Invoiced",
+   "type": "currency"
+  },
+  {
+   "name": "👣 Order/Tracking Details",
+   "type": "text"
+  },
+  {
+   "name": "11. Penalty",
+   "type": "checkbox"
+  },
+  {
+   "name": "Tech Rating",
+   "type": "emoji"
+  },
+  {
+   "name": "36. Name - OLD",
+   "type": "short_text"
+  },
+  {
+   "name": "18. Check-in/out Status",
+   "type": "drop_down",
+   "options": [
+    "1. Checked-in",
+    "3. Checked-out - RTN",
+    "2. Checked-out"
+   ]
+  },
+  {
+   "name": "👣 Parts Order Date",
+   "type": "date"
+  },
+  {
+   "name": "35. WO Description",
+   "type": "text"
+  },
+  {
+   "name": "Invoice Date",
+   "type": "date"
+  },
+  {
+   "name": "QC",
+   "type": "drop_down",
+   "options": [
+    "Closing issue - Major",
+    "Closing issue - Minor",
+    "Payment issue - Major",
+    "Payment issue - Minor",
+    "Procurement issue - Major",
+    "Procurement issue - Minor",
+    "Several issues"
+   ]
+  },
+  {
+   "name": "Facility Manager",
+   "type": "text"
+  },
+  {
+   "name": "INV/COLL",
+   "type": "checkbox"
+  },
+  {
+   "name": "Date-Time Received",
+   "type": "date"
+  },
+  {
+   "name": "Tech Map",
+   "type": "short_text"
+  },
+  {
+   "name": "Days Since Grey Flag",
+   "type": "formula",
+   "formula": true
+  },
+  {
+   "name": "Invoice #",
+   "type": "short_text"
+  },
+  {
+   "name": "21. Comp",
+   "type": "drop_down",
+   "options": [
+    "AF",
+    "SFM",
+    "TPM",
+    "RF",
+    "BKR",
+    "EDS",
+    "sf"
+   ]
+  },
+  {
+   "name": "ST Feeback",
+   "type": "text"
+  },
+  {
+   "name": "Days since Done",
+   "type": "formula",
+   "formula": true
+  },
+  {
+   "name": "State",
+   "type": "drop_down",
+   "options": [
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "Ct",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IM",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "ST",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
+    "IN",
+    "Medford",
+    "Sulphur",
+    "DC",
+    "SD",
+    "FL ",
+    "Huntsville",
+    "NHH",
+    "TC",
+    "CS",
+    "I;",
+    "MN ",
+    "IIN",
+    "ks",
+    "nv",
+    " MN",
+    "TX ",
+    "LN",
+    "az",
+    "TZ",
+    " 69101-2243"
+   ]
+  },
+  {
+   "name": "Admin Comment",
+   "type": "text"
+  },
+  {
+   "name": "Needs Feedback",
+   "type": "checkbox"
+  },
+  {
+   "name": "✅ Quote Ready To Send",
+   "type": "checkbox"
+  },
+  {
+   "name": "28. Sharepoint Link",
+   "type": "url"
+  },
+  {
+   "name": "Give us Today",
+   "type": "formula",
+   "formula": true
+  },
+  {
+   "name": "Trade",
+   "type": "drop_down",
+   "options": [
+    "Plumbing",
+    "Electric",
+    "HVAC",
+    "Handyman",
+    "Janitorial",
+    "Locksmith",
+    "Overhead Door",
+    "Roofing",
+    "Pest Control",
+    "Landscaping",
+    "General Contracting",
+    "HVAC PM",
+    "Appliance",
+    "Refrigeration",
+    "Refrigeration PM",
+    "PM"
+   ]
+  },
+  {
+   "name": "MGR-Feedback",
+   "type": "text"
+  },
+  {
+   "name": "QuoteReqCheckoutDate",
+   "type": "short_text"
+  },
+  {
+   "name": "29. PDF Link",
+   "type": "short_text"
+  },
+  {
+   "name": "Tech Review",
+   "type": "text"
+  },
+  {
+   "name": "26. PPR Link",
+   "type": "short_text"
+  },
+  {
+   "name": "25. IVR Link",
+   "type": "short_text"
+  },
+  {
+   "name": "TL",
+   "type": "users"
+  },
+  {
+   "name": "Previous Assignees",
+   "type": "users"
+  },
+  {
+   "name": "Relationship Owner",
+   "type": "users"
+  },
+  {
+   "name": "🚨 Feedback Updated",
+   "type": "checkbox"
+  },
+  {
+   "name": "Assignee Name TXT",
+   "type": "short_text"
+  },
+  {
+   "name": "MoD Call Notes",
+   "type": "text"
+  },
+  {
+   "name": "38. WKO#",
+   "type": "short_text"
+  },
+  {
+   "name": "27. Yoda Link",
+   "type": "short_text"
+  },
+  {
+   "name": "🎩 A/TL notes",
+   "type": "short_text"
+  },
+  {
+   "name": "✅ On Sheet",
+   "type": "checkbox"
+  },
+  {
+   "name": "Store",
+   "type": "short_text"
+  },
+  {
+   "name": "Bill For Incurred",
+   "type": "checkbox"
+  },
+  {
+   "name": "Admin Check",
+   "type": "checkbox"
+  },
+  {
+   "name": "Told FM",
+   "type": "short_text"
+  },
+  {
+   "name": "GTG",
+   "type": "checkbox"
+  },
+  {
+   "name": "31. Support Trainee",
+   "type": "users"
+  },
+  {
+   "name": "QC Date",
+   "type": "date"
+  },
+  {
+   "name": "34. Cost",
+   "type": "currency"
+  },
+  {
+   "name": "📦 ETA Provided ?",
+   "type": "checkbox"
+  },
+  {
+   "name": "City",
+   "type": "short_text"
+  },
+  {
+   "name": "🚨 SLA Requested",
+   "type": "checkbox"
+  },
+  {
+   "name": "SLA Due Date",
+   "type": "date"
+  },
+  {
+   "name": "22. FM",
+   "type": "drop_down",
+   "options": [
+    "JDE",
+    "RCS",
+    "FmUSA",
+    "RSM365",
+    "Envirousa",
+    "Broadway National",
+    "DMG",
+    "Test_ION",
+    "AAFM",
+    "Trillium",
+    "Safety",
+    "RKB",
+    "MaintenX",
+    "Titan",
+    "Davaco",
+    "KFM24",
+    "Nest",
+    "MRA",
+    "Brandpoint",
+    "Branded",
+    "PRS",
+    "Powerhouse",
+    "Vanguard",
+    "FrontStreet",
+    "HFS",
+    "TrueSource",
+    "EMCOR",
+    "Grimaldi's",
+    "RMM",
+    "Laser",
+    "Vixxo",
+    "Ferrandino & Son",
+    "Advanced",
+    "ED Shelman",
+    "Pet Supermarket",
+    "Lessen",
+    "Outback Steakhouse",
+    "Dynamic",
+    "Vuori",
+    "RESQ",
+    "POWEER",
+    "TCG",
+    "KBS",
+    "TFG",
+    "DWM",
+    "AG",
+    "FEON",
+    "OS",
+    "AllSystems",
+    "EVO",
+    "KINDERCARE",
+    "ONO-BBQ",
+    "AMERCO",
+    "HMCB",
+    "OAP",
+    "MACYS",
+    "Board room salon ",
+    "REPI",
+    "Toy Factory",
+    "CSH",
+    "Extra Space",
+    "CCC",
+    "CHEESECAKE FACTORY  ",
+    "HERO",
+    "Bashas",
+    "FedEx",
+    "JRSK",
+    "Rural King",
+    "23rd Goup",
+    "Ralph Lauren",
+    "RMH",
+    "COLT",
+    "EMM",
+    "Charter Foods",
+    "Freshco",
+    "Baldor Foods",
+    "Patriot",
+    "Honeywell",
+    "Impact",
+    "GHC",
+    "BOSS",
+    "Uncommon Brands",
+    "Swig Stores",
+    "AFS",
+    "First Watch",
+    "MOD Pizza",
+    "PCRK",
+    "TDS",
+    "Flynn",
+    "Riser Fitness",
+    "solt",
+    "SeamGo",
+    "Portland Leather ",
+    "Mobettahs",
+    "Puttshack",
+    "Habit Burger",
+    "WKS",
+    "AMC",
+    "Giant Oil",
+    "RedRoof",
+    "SizzlingPlatter",
+    "Learning",
+    "SunHoldings",
+    "7-Eleven",
+    "Canteen",
+    "Mimi'sCafe ",
+    "OReilly",
+    "Wendy's",
+    "DinTai",
+    "NETLeaseCapital",
+    "CarMart",
+    "Avolta",
+    "InnovativeRenalCare",
+    "Biscuitville",
+    "QDOBA",
+    "subn",
+    "AMP",
+    "SHEER",
+    "rf",
+    "irc"
+   ]
+  },
+  {
+   "name": "19. CO#",
+   "type": "short_text"
+  },
+  {
+   "name": "14. Missed ETA",
+   "type": "checkbox"
+  },
+  {
+   "name": "Sales Owner",
+   "type": "drop_down",
+   "options": [
+    "Ro",
+    "Teresa",
+    "-"
+   ]
+  },
+  {
+   "name": "Update Given",
+   "type": "checkbox"
+  },
+  {
+   "name": "15. Recall",
+   "type": "checkbox"
+  },
+  {
+   "name": "Tech Quote",
+   "type": "text"
+  },
+  {
+   "name": "🚨 Feedback Requested",
+   "type": "checkbox"
+  },
+  {
+   "name": "Quote Check",
+   "type": "checkbox"
+  },
+  {
+   "name": "30. IVR Pin",
+   "type": "short_text"
+  },
+  {
+   "name": "AM",
+   "type": "users"
+  },
+  {
+   "name": "Invoicing Assignee",
+   "type": "users"
+  },
+  {
+   "name": "16. Client NTE 🔴",
+   "type": "currency"
+  },
+  {
+   "name": "24. Sign-Off Link",
+   "type": "short_text"
+  },
+  {
+   "name": "37. PDF",
+   "type": "attachment"
+  },
+  {
+   "name": "QC notes",
+   "type": "short_text"
+  },
+  {
+   "name": "✅ Client AFM",
+   "type": "short_text"
+  },
+  {
+   "name": "❌Today",
+   "type": "checkbox"
+  },
+  {
+   "name": "Check ",
+   "type": "checkbox"
+  },
+  {
+   "name": "Client Quote",
+   "type": "text"
+  },
+  {
+   "name": "MoD Call",
+   "type": "drop_down",
+   "options": [
+    "Please Call MoD!",
+    "MoD Call - Positive",
+    "MoD Call - Complaint!!",
+    "MoD Call - Problem/RTN!",
+    "MoD Call - Call later",
+    "No Call needed - BFI ",
+    "MoD - Dead end",
+    "MoD Call - Issue resolved",
+    "TL check - Not on us"
+   ]
+  },
+  {
+   "name": "12. Bad quote",
+   "type": "checkbox"
+  },
+  {
+   "name": "Capital Project",
+   "type": "checkbox"
+  },
+  {
+   "name": "Profit",
+   "type": "formula",
+   "formula": true
+  },
+  {
+   "name": "Problem Type",
+   "type": "drop_down",
+   "options": [
+    "No SignOff Sheet",
+    "No Check In"
+   ]
+  },
+  {
+   "name": "Audited",
+   "type": "checkbox"
+  },
+  {
+   "name": "Added To Inventory",
+   "type": "checkbox"
+  },
+  {
+   "name": "Discount",
+   "type": "currency"
+  },
+  {
+   "name": "Days since Invoiced",
+   "type": "formula",
+   "formula": true
+  }
+ ],
+ "aggregates": {
+  "sampled": 300,
+  "byStatus": {
+   "invoiced": 100,
+   "done/incurred": 49,
+   "!! waiting for approval": 46,
+   "quote ready": 17,
+   "!! canceled/postponed": 14,
+   "waiting for quote": 12,
+   "waiting for parts": 11,
+   "job scheduled": 9,
+   "assessment scheduled": 9,
+   "pm scheduled": 7,
+   "Open": 5,
+   "return trip needed": 5,
+   "job ongoing": 5,
+   "!! approved": 4,
+   "<< invoiced not paid >>": 3,
+   "assessment ongoing": 2,
+   "!! waiting for advice": 1,
+   "!! ready to invoice": 1
+  },
+  "byClient": {
+   "SunHoldings": 26,
+   "Flynn": 21,
+   "MOD Pizza": 15,
+   "7-Eleven": 12,
+   "RMH": 12,
+   "PCRK": 10,
+   "WKS": 10,
+   "Uncommon Brands": 8,
+   "Cheesecake Factory": 7,
+   "Riser Fitness": 4,
+   "First Watch": 3,
+   "Portland Leather": 3,
+   "Vuori": 3,
+   "Sizzling Platter": 3,
+   "AMC": 3,
+   "Mobettahs": 2,
+   "Rural King": 2,
+   "Innovative Rental Care": 1,
+   "Wendy's": 1,
+   "Mimi's Cafe": 1,
+   "KinderCare": 1
+  },
+  "byTrade": {
+   "Handyman": 95,
+   "Plumbing": 94,
+   "HVAC": 42,
+   "Electric": 25,
+   "Appliance": 13,
+   "Refrigeration": 12,
+   "General Contracting": 8,
+   "Overhead Door": 3,
+   "HVAC PM": 3,
+   "Locksmith": 3,
+   "Pest Control": 1
+  },
+  "byFM": {
+   "EMCOR": 53,
+   "Advanced": 27,
+   "SunHoldings": 26,
+   "Flynn": 22,
+   "FrontStreet": 16,
+   "MOD Pizza": 16,
+   "7-Eleven": 12,
+   "RMH": 12,
+   "Vixxo": 10,
+   "SHEER": 10,
+   "PCRK": 10,
+   "WKS": 10,
+   "Uncommon Brands": 8,
+   "CHEESECAKE FACTORY  ": 7,
+   "Powerhouse": 7,
+   "PRS": 5,
+   "Laser": 5,
+   "Nest": 4,
+   "Portland Leather ": 4,
+   "SizzlingPlatter": 4
+  },
+  "byComp": {
+   "SFM": 154,
+   "AF": 61,
+   "BKR": 54,
+   "TPM": 22,
+   "RF": 9
+  },
+  "byState": {
+   "TX": 50,
+   "IN": 25,
+   "IL": 21,
+   "CA": 18,
+   "FL": 17,
+   "MO": 15,
+   "PA": 12,
+   "IA": 11,
+   "NJ": 11,
+   "CO": 8,
+   "MA": 7,
+   "NE": 7,
+   "WA": 7,
+   "AZ": 7,
+   "AR": 6
+  },
+  "byAM": {
+   "Peter Hope": 246,
+   "Kevin James": 53,
+   "Peter Hope, Kevin James": 1
+  },
+  "invoicedSample": {
+   "n": 100,
+   "totalInvoiced": 60653,
+   "totalCost": 33562,
+   "totalProfit": 27092,
+   "avgInvoice": 607,
+   "avgProfit": 271
+  }
+ },
+ "taskSamples": [
+  {
+   "id": "WO-39403",
+   "name": "WOT0452814",
+   "status": "<< invoiced not paid >>",
+   "list": "Matt Hammond",
+   "created": "2026-06-25",
+   "due": "2026-06-25",
+   "assignees": [
+    "Matt Hammond"
+   ],
+   "tags": [
+    "tech ordered"
+   ],
+   "priority": "high",
+   "fields": {
+    "35. WO Description": "Standing freezer (Customer facing) - Freezer not holding temperature/not working\n\nStanding ice cream freezer is not holding temp - stuck in defrost",
+    "37. PDF": "1 file(s)",
+    "38. WKO#": "INC25879269",
+    "AM": "Peter Hope",
+    "City": "GALVESTON",
+    "Client": "7-Eleven",
+    "Date-Time Received": "2026-06-25",
+    "Days Since Grey Flag": "-1296",
+    "Days Since INP": "-1296",
+    "GTG": true,
+    "Grey Flag Date": "2026-07-20",
+    "Previous Assignees": "Matt Hammond",
+    "QuoteReqCheckoutDate": "MM/DD/YYYY",
+    "Sales Owner": "Ro",
+    "State": "TX",
+    "Store": "41669",
+    "Trade": "Refrigeration",
+    "Zip Code": "77551",
+    "👣 Order/Tracking Details": "ETA:\nOrder #:\nTracking #:\nLink:\n~~~~~~~~~~~~~~~~~~~~~~\n",
+    "1. Not Fully Paid": true,
+    "16. Client NTE 🔴": 3202,
+    "17. Address": "5714 Broadway Avenue J, Galveston, TX 77551, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "CI @ 7.10.2026 10:00 am est\nCO @ 7.10.2026 5:46 pm est\n",
+    "21. Comp": "SFM",
+    "22. FM": "7-Eleven",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=WOT0452814&bf7ou=5714%20Broadway%20Avenue%20J%2C%20Galveston%2C%20TX%2077551%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-39403",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-39403",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/sites/ByblosVistaConsulting/Shared%20Documents/General/Work%20Orders%20-%202026/2026%20-%20SFM/7-Eleven/WO%23WOT0452814,%20GALVESTON,TX",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-39403",
+    "34. Cost": 560,
+    "Admin Check": true,
+    "Client Quote": "Tech reported that he standing ice cream freezer is not maintaining the required operating temperature due to a contaminated refrigeration system, a restricted filter drier, a dirty condenser coil, and an improperly adjusted thermostatic expansion valve (TXV)\n\nRequired is to\nPerform full inspection ",
+    "Invoice #": "2404",
+    "Invoice Date": "2026-07-20",
+    "Quote Check": true,
+    "Total Invoiced": 3202,
+    "✅ Quote Ready To Send": true
+   }
+  },
+  {
+   "id": "WO-38787",
+   "name": "6296859",
+   "status": "<< invoiced not paid >>",
+   "list": "Matt Hammond",
+   "created": "2026-06-17",
+   "due": "2026-06-18",
+   "assignees": [
+    "Matt Hammond"
+   ],
+   "tags": [],
+   "priority": "high",
+   "fields": {
+    "35. WO Description": "Sink Bowl Cracked (Metal Sink)\nUNDER THE SINK IT SELF IS LEAKING I BELIEVE THE SINK BOWL HAS A CRACK\n\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "Assignee Name TXT": "Matt Hammond",
+    "City": "Orange",
+    "Client": "Flynn",
+    "Date-Time Received": "2026-06-17",
+    "Days Since Grey Flag": "-1276",
+    "Days Since INP": "-1276",
+    "GTG": true,
+    "Grey Flag Date": "2026-06-30",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Matt Hammond",
+    "Sales Owner": "Teresa",
+    "State": "NJ",
+    "Store": "Wendy's",
+    "Trade": "Plumbing",
+    "Zip Code": "07050",
+    "1. Not Fully Paid": true,
+    "16. Client NTE 🔴": 724.19,
+    "17. Address": "2 Main St, City of Orange, NJ 07050, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "CI @ 6.29.2026 4:14 PM EST\nCO @ 6.29.2026 7:15 PM EST\n\nETA 29Jun26 @ TBD Yousef (973) 897-9060 375$\n\n",
+    "21. Comp": "SFM",
+    "22. FM": "Flynn",
+    "23. Action": "GeneratePdf",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=6296859&bf7ou=2%20Main%20St%2C%20City%20of%20Orange%2C%20NJ%2007050%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-38787",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-38787",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgBnyU8h66FUTaa1nwB9HL9RAZYC_XLIqp67zTJUwkEHg1o?e=DKWHiX",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-38787",
+    "34. Cost": 104,
+    "Admin Check": true,
+    "Client Quote": "Tech reported that the sink drain cap has deteriorated, additionally the supply lines needs replacement\n\nRequired is to:\nPerform full inspection of the work area\nShut off the sink water supply\nDisconnect existing drain assembly and water supply lines\nRemove and dispose of deteriorated drain componen",
+    "Invoice #": "2053",
+    "Invoice Date": "2026-06-30",
+    "Total Invoiced": 724.19,
+    "✅ Quote Ready To Send": true
+   }
+  },
+  {
+   "id": "WO-38893",
+   "name": "072200862",
+   "status": "<< invoiced not paid >>",
+   "list": "Matt Hammond",
+   "created": "2026-06-19",
+   "due": "2026-06-19",
+   "assignees": [
+    "Matt Hammond"
+   ],
+   "tags": [],
+   "priority": "high",
+   "fields": {
+    "35. WO Description": "Refrigeration > Walk in Freezer 1\nNot Cooling\nWalk-in freezer reading almost 30 degrees F. Issue is newly occurring. Both walk-in cooler and walk-in freezer are running warm simultaneously. Urgent food safety concern.\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Glen Carbon",
+    "Client": "WKS",
+    "Date-Time Received": "2026-06-19",
+    "Days Since Grey Flag": "-1296",
+    "Days Since INP": "-1296",
+    "GTG": true,
+    "Grey Flag Date": "2026-07-20",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Matt Hammond",
+    "Sales Owner": "Ro",
+    "State": "IL",
+    "Store": "Denny's Restaurant",
+    "Trade": "Refrigeration",
+    "Zip Code": "62034",
+    "1. Not Fully Paid": true,
+    "16. Client NTE 🔴": 1197.1,
+    "17. Address": "27 Junction Dr, Glen Carbon, IL 62034, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "CI @ 6.19.2026 2:07 PM EST\nCO @ 6.19.2026 6:10 PM EST\n",
+    "21. Comp": "SFM",
+    "22. FM": "WKS",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=072200862&bf7ou=27%20Junction%20Dr%2C%20Glen%20Carbon%2C%20IL%2062034%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-38893",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-38893",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgA9CMkczAl2R7-ldmn5YwdiAbNHwqQ7LNXn6_N_hbXN3Gs?e=4oZxHf",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-38893",
+    "34. Cost": 0,
+    "Admin Check": true,
+    "Client Quote": "Tech reported that the walk-in freezer is inoperative due to a failed three-phase contactor with a defective 230V coil\n\nNote to Customer:\nPlease note that replacement of the failed contactor is required before complete troubleshooting of the walk-in freezer can be performed. Until the unit is operat",
+    "Invoice #": "2398",
+    "Invoice Date": "2026-07-20",
+    "Quote Check": true,
+    "Total Invoiced": 1197.1,
+    "✅ Quote Ready To Send": true
+   }
+  },
+  {
+   "id": "WO-41061",
+   "name": "357699062",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-21",
+   "due": "2026-07-21",
+   "assignees": [
+    "Bob Sanders"
+   ],
+   "tags": [],
+   "priority": "urgent",
+   "fields": {
+    "35. WO Description": "EXTERIOR / General Construction / Doors and Closers / Doors and Closers Needs Repair - Front / Panic bar locking mechanism at the front lobby is not working and the door will not lock.\n\n\n\n\n\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Irvine",
+    "Client": "Cheesecake Factory",
+    "Date-Time Received": "2026-07-21",
+    "Days Since Grey Flag": "-1297",
+    "Grey Flag Date": "2026-07-21",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Bob Sanders",
+    "Profit": "-412",
+    "Sales Owner": "Ro",
+    "State": "CA",
+    "Store": "Cheesecake Factory - Irvine",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=600+Spectrum+Center+Dr%2C+Irvine%2C+CA+92618%2C+USA&lat=33.650965&lng=-117.746271&state=CA",
+    "Trade": "Handyman",
+    "Zip Code": "92618",
+    "16. Client NTE 🔴": 1000,
+    "17. Address": "600 Spectrum Center Dr, Irvine, CA 92618, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "Plan C: lockhouse $0 NOW\n\n",
+    "21. Comp": "SFM",
+    "22. FM": "CHEESECAKE FACTORY  ",
+    "23. Action": "PPRLink",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=357699062&bf7ou=600%20Spectrum%20Center%20Dr%2C%20Irvine%2C%20CA%2092618%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-41061",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-41061",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgCUDzuYjHgCSqibv2gC08LKAR0q7VnFL0vx9K2kT1hIptw?e=nQFI9x",
+    "34. Cost": 412,
+    "Admin Check": true,
+    "Admin Comment": "portal status: completed/warranty \n",
+    "Client Quote": "Tech Reported that lock is damage and door is not closing properly\n\nRequired is to\nFull inspection of the work area\nDismount door\nAdjust door hinges\nDisassemble and repair panic bar \nReassemble panic bar\nMount door\nFinal testing\nClean work area\n\nIncurred:\nTrip  $50.00\n1 hour labor Tech 1  $89.00\n\nTa",
+    "Completion Assignee": "Maya Keaton",
+    "Days since Done": "1297",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-41066",
+   "name": "357712341",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-21",
+   "due": "2026-07-22",
+   "assignees": [
+    "Nadine Asher"
+   ],
+   "tags": [],
+   "priority": "low",
+   "fields": {
+    "35. WO Description": "BACK OF HOUSE (BOH) / SINKS / 3 COMP WASH SINK / PIPES/DRAINS UNDERNEATH LEAKING / Pipes under 3 comp sink keep coming unattached\n\n\n\n\n\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Ammon",
+    "Client": "Mobettahs",
+    "Date-Time Received": "2026-07-21",
+    "Days Since Grey Flag": "-1299",
+    "Grey Flag Date": "2026-07-23",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Nadine Asher",
+    "Profit": "0",
+    "Sales Owner": "Teresa",
+    "State": "ID",
+    "Store": "Mobettahs",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=3427+S+25th+E%2C+Ammon%2C+ID+83406%2C+USA&lat=43.4669833&lng=-111.9835266&state=ID",
+    "Trade": "Plumbing",
+    "Zip Code": "83406",
+    "16. Client NTE 🔴": 500,
+    "17. Address": "3427 S 25th E, Ammon, ID 83406, USA",
+    "21. Comp": "SFM",
+    "22. FM": "Mobettahs",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=357712341&bf7ou=3427%20S%2025th%20E%2C%20Ammon%2C%20ID%2083406%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-41066",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-41066",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgCutGrS3Aw9TbgwNYq5N2PnAVANLZ7OXbFRcahXMUxSCRA?e=E9lyMo",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-41066",
+    "34. Cost": 0,
+    "Admin Comment": "checked\n",
+    "Bill For Incurred": true,
+    "Client Quote": "Tech Reported that BFI\n\nRequired is to\n\nIncurred:\nTrip  $75.00\n1 hour labor Tech 1  $90.00\n\nTax 5.3% $8.74\nTotal Incurred $173.74",
+    "Completion Assignee": "Maya Keaton",
+    "Days since Done": "1299",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-40801",
+   "name": "239166-01",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-17",
+   "due": "2026-07-20",
+   "assignees": [
+    "Tania Quitalig"
+   ],
+   "tags": [],
+   "priority": "normal",
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION\nRECEPTION AREA / Plumbing / Water Fountain (Bottle filling stations) / Filter - New Filter Onsite / Please enter your\nLock Box Code:: 8557 / Filter for the water filling station needs to be replaced. Replacement filter was ordered and is\non-site. Please sent tech to replace water",
+    "AM": "Peter Hope",
+    "City": "Morehead City",
+    "Date-Time Received": "2026-07-17",
+    "Days Since Grey Flag": "-1297",
+    "Grey Flag Date": "2026-07-21",
+    "MGR-Feedback": "Very professional ",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Tania Quitalig",
+    "Profit": "-101.41",
+    "State": "NC",
+    "Store": "Ther Apsen Dental Group",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=5193+Hwy+70+W%2C+Morehead+City%2C+NC+28557%2C+USA&lat=34.7383403&lng=-76.8092649&state=NC",
+    "Trade": "Plumbing",
+    "Zip Code": "28557",
+    "16. Client NTE 🔴": 140,
+    "17. Address": "5193 Hwy 70 W, Morehead City, NC 28557, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "21. Comp": "AF",
+    "22. FM": "Advanced",
+    "23. Action": "GQLink",
+    "24. Sign-Off Link": "https://alphafixerssignoff.paperform.co/?ed9ra=239166-01&bf7ou=5193%20Hwy%2070%20W%2C%20Morehead%20City%2C%20NC%2028557%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40801",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40801",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgA0lwcMV7jtR600vjvIECckAUM9ZG0ap-_QCrU-nEfQDcA?e=3MI736",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-40801",
+    "34. Cost": 101.41,
+    "Admin Check": true,
+    "Admin Comment": "waiting on completion notes\n",
+    "Client Quote": "Tech Reported that the water fountain filter needs replacement\n\nRequired is to\nFull inspection of the work area\nShut off the water supply\nRemove and dispose of the existing water filter\nInstall new compatible water fountain filter\nRestore the water supply\nPerform final inspection\nClean the work area",
+    "Completion Assignee": "Paige Carter",
+    "Days since Done": "1296",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-40656",
+   "name": "239119-01",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-15",
+   "due": "2026-07-16",
+   "assignees": [
+    "Carter Dane"
+   ],
+   "tags": [],
+   "priority": "urgent",
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION\n\"RESTROOM Employee / Lighting (Interior) / Ceiling Lighting / Fixture Out / Please enter your Lock Box Code:: 0816 /\nOne of the lights in the hall outside of the employee restroom is out. Please see attached photo & floorplan. Please\nsend tech to repair light that is out. Complet",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Mason City",
+    "Date-Time Received": "2026-07-15",
+    "Days Since Grey Flag": "-1293",
+    "Grey Flag Date": "2026-07-17",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Carter Dane",
+    "Profit": "-235",
+    "State": "IA",
+    "Store": "The Aspend Dental Group",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=4199+4th+St+SW%2C+Mason+City%2C+IA+50401%2C+USA&lat=43.1477595&lng=-93.2648456&state=IA",
+    "Trade": "Electric",
+    "Zip Code": "50401",
+    "16. Client NTE 🔴": 180,
+    "17. Address": "4199 4th St SW, Mason City, IA 50401, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "ci 1.20 est pm \nco 3.35est PM\n-Scheduled at 1 PM with Mathew LeMay +15158257738\n",
+    "21. Comp": "AF",
+    "22. FM": "Advanced",
+    "23. Action": "PPRLink",
+    "24. Sign-Off Link": "https://alphafixerssignoff.paperform.co/?ed9ra=239119-01&bf7ou=4199%204th%20St%20SW%2C%20Mason%20City%2C%20IA%2050401%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40656",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40656",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgDtsnkp2Wq0TalAA6hao1PaAWa0iMWHeSxpkbzG7n28f_g?e=d3psFT",
+    "34. Cost": 235,
+    "Admin Check": true,
+    "Admin Comment": "NTE not updated \n",
+    "Client Quote": "Tech Reported that one of the lights in the hall outside of the employee restroom is out\n\nRequired is to\nFull inspection of the work area\nTroubleshoot the light fixture and it's connections \nShut off the power supply to the affected area\nDisassemble and dispose of the light bulb and ballast \nRun new",
+    "Completion Assignee": "Lauren Kent",
+    "Days since Done": "1292",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-37597",
+   "name": "450000086",
+   "status": "done/incurred",
+   "list": "Matt Hammond",
+   "created": "2026-05-26",
+   "due": "2026-05-27",
+   "assignees": [
+    "Matt Hammond"
+   ],
+   "tags": [],
+   "priority": "urgent",
+   "fields": {
+    "35. WO Description": "Problem\nEXTERIOR > Electrical > Transformer/Main Power\nNo Power\nOur electrical wiring / power box for our trash compactor was damaged (hit by a lawnmower) and it needs to be repaired. We no longer have power to the compactor outside.\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Provo",
+    "Client": "AMC",
+    "Date-Time Received": "2026-05-26",
+    "Days Since Grey Flag": "-1257",
+    "Grey Flag Date": "2026-06-11",
+    "Previous Assignees": "Matt Hammond",
+    "SLA Due Date": "2026-05-23",
+    "Sales Owner": "Teresa",
+    "State": "UT",
+    "Store": "\tAMC Theatres",
+    "Trade": "Electric",
+    "Zip Code": "84604",
+    "16. Client NTE 🔴": 3464.37,
+    "17. Address": "4925 N Edgewood Dr, Provo, UT 84604, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "CI @ 5.27.2026 2:07 PM EST\nCO @ 5.27.2026 4:56 PM EST\n\nPlan A: Eon Electric Tell: (801) 615-1560 ETA 3 PM EST\nPlan B: Anthony tell: (801) 244-4539 ETA 1-2 pm est\n",
+    "21. Comp": "SFM",
+    "22. FM": "AMC",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=450000086&bf7ou=4925%20N%20Edgewood%20Dr%2C%20Provo%2C%20UT%2084604%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-37597",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-37597",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgDnfSGyZwM0S5hYrBumfp39AZUIUhhjoGrbG3w9nxBAZ8U?e=JfqjmQ",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-37597",
+    "34. Cost": 2163,
+    "Admin Check": true,
+    "Admin Comment": "reminder sent 7/20\nSLA reminder sent 7/13\n\n\n\n",
+    "Client Quote": "Tech reported that the trash compactor electrical conduit was damaged, resulting in exposed wiring and loss of protection for the electrical circuit supplying the compactor. The damaged underground conduit and wiring require repair to restore safe and reliable operation of the trash compactor\n\nRequi",
+    "Completion Assignee": "Ella Finch",
+    "Days since Done": "1256",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-37579",
+   "name": "351801398",
+   "status": "done/incurred",
+   "list": "Matt Hammond",
+   "created": "2026-05-26",
+   "due": "2026-05-27",
+   "assignees": [
+    "Matt Hammond"
+   ],
+   "tags": [],
+   "priority": "urgent",
+   "fields": {
+    "35. WO Description": "KITCHEN / Appliances / Exhaust Hood / Broken or Missing Parts / Please enter the approximate age of unit: / Please enter the make and model: / Please enter the serial number: / Is request in response to a licensing write up?: No / Please review report attached. During annual inspection for fire pane",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Littleton",
+    "Client": "KinderCare",
+    "Date-Time Received": "2026-05-26",
+    "Days Since Grey Flag": "-1291",
+    "Grey Flag Date": "2026-07-15",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Matt Hammond",
+    "Sales Owner": "Ro",
+    "State": "CO",
+    "Store": "Trailmark Learning Center",
+    "Trade": "Appliance",
+    "Zip Code": "80127",
+    "1. Not Fully Paid": true,
+    "16. Client NTE 🔴": 850,
+    "17. Address": "9743 S Carr Way, Littleton, CO 80127, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "CI @ 5.27.2026 4:41 PM EST\nCo @ 5.27.2026 8:30 PM EST\n",
+    "21. Comp": "SFM",
+    "22. FM": "KINDERCARE",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=351801398&bf7ou=9743%20S%20Carr%20Way%2C%20Littleton%2C%20CO%2080127%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-37579",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-37579",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgASQkFFY5uvTa_ad1S7a4nYAcy6WYyvnQHvOGJY7CjKr2g?e=qJCD13",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-37579",
+    "34. Cost": 225,
+    "Admin Check": true,
+    "Admin Comment": "pending confirmation\n\nLabor hour rate approved by Matt \n",
+    "Client Quote": "Tech Reported that the fire suppression/hood system requires coordinated diagnostic evaluation and repair\n\nRequired is to\nConduct comprehensive inspection of fire suppression system control components and electrical interfaces\nPlace fire alarm panel in test mode to prevent inadvertent alarm activati",
+    "Days since Done": "1290",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-41027",
+   "name": "97100-01",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-21",
+   "due": "2026-07-22",
+   "assignees": [
+    "Tania Quitalig"
+   ],
+   "tags": [],
+   "priority": "low",
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION\nRESTROOM / Restroom Equipment / Paper Towel Dispenser / Damaged/Broken / Who is the contact to schedule\nonsite visit: Janet Schussler / Contact for this issue's phone number (VENDOR TO CONTACT THIS NUMBER FOR\nSCHEDULING ONLY): 5152253603 / Paper towel dispenser fall off the wall ",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "W. Des Moines",
+    "Date-Time Received": "2026-07-21",
+    "Days Since Grey Flag": "-1298",
+    "Grey Flag Date": "2026-07-22",
+    "MGR-Feedback": "Fixed in a timely manner, was great in the rooms. ",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Tania Quitalig",
+    "Profit": "-97.5",
+    "State": "IA",
+    "Store": "2 For U Childcare - Loc # 236",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=720+S+68th+St%2C+West+Des+Moines%2C+IA+50266%2C+USA&lat=41.5587145&lng=-93.7992403&state=IA",
+    "Trade": "Plumbing",
+    "Zip Code": "50266",
+    "16. Client NTE 🔴": 140,
+    "17. Address": "720 S 68th St, West Des Moines, IA 50266, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "7/22 at 4:30, Del (515) 393-9732, $97.5, ACH\n",
+    "21. Comp": "AF",
+    "22. FM": "SHEER",
+    "23. Action": "GQLink",
+    "24. Sign-Off Link": "https://alphafixerssignoff.paperform.co/?ed9ra=97100-01&bf7ou=720%20S%2068th%20St%2C%20West%20Des%20Moines%2C%20IA%2050266%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-41027",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-41027",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgAbrGXlwlbnT7f8Pn9V-x4GAcEvX_Wnn9HfuZt8afgCjXI?e=VzgGgZ",
+    "34. Cost": 97.5,
+    "Admin Check": true,
+    "Client Quote": "Tech Reported that the paper towel dispenser has fallen off the wall\n\nRequired is to\nFull inspection of the work area\nRemove and dispose of the damaged hardware\nPatch the holes with joint compound\nSupply and install new mounting hardware\nReinstall and secure paper tower dispenser in place\nSecure all",
+    "Completion Assignee": "Kathrine Kane",
+    "Days since Done": "1298"
+   }
+  },
+  {
+   "id": "WO-40782",
+   "name": "356855539",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-17",
+   "due": "2026-07-17",
+   "assignees": [
+    "Bob Sanders"
+   ],
+   "tags": [],
+   "priority": "urgent",
+   "fields": {
+    "35. WO Description": "Toilet is clogged in the womens restrooms. Clock in/out is MANDATORY, using the app, or the IVR number 855-899-5867, option 1. Pictures of completed work are required for payment. If the team has issues on site, or needs an NTE increase, please call 217-234-5130 ext 2900.\n\n\n\n\n\n",
+    "AM": "Peter Hope",
+    "City": "Lavale",
+    "Client": "Rural King",
+    "Date-Time Received": "2026-07-17",
+    "Days Since Grey Flag": "-1294",
+    "Grey Flag Date": "2026-07-18",
+    "MGR-Feedback": "Thank you for coming, he have been the only guy who came and know what he is doing. He took the time to fix the problem ",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Bob Sanders",
+    "Profit": "-550",
+    "Sales Owner": "Ro",
+    "State": "MD",
+    "Store": "Rural King",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=1262+Vocke+Rd+%23300%2C+La+Vale%2C+MD+21502%2C+USA&lat=39.628237&lng=-78.834685&state=MD",
+    "Trade": "Plumbing",
+    "Zip Code": "21502",
+    "16. Client NTE 🔴": 659.32,
+    "17. Address": "1262 Vocke Rd #300, La Vale, MD 21502, USA",
+    "20. Last Update": "tech reported 4 toilets clogged and has to drain the main then test all toilets individually \nIVR number was unavailable, sign off required on Monday for 2 hours\n\n",
+    "21. Comp": "SFM",
+    "22. FM": "Rural King",
+    "23. Action": "yoda",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=356855539&bf7ou=1262%20Vocke%20Rd%20%23300%2C%20La%20Vale%2C%20MD%2021502%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40782",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40782",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgDqGPNWqSYzQKumLLJKQS0lAUASE-K4NuNvpofRFZ_uQOA?e=1zqB4c",
+    "34. Cost": 550,
+    "Admin Check": true,
+    "Admin Comment": "note sent 7/22\nNTE not updated\n\n",
+    "Client Quote": "Tech Reported that mainline was clogged, affecting 4 toilets and clogging one of them\n\nRequired is to\nFull inspection of work area\nRun snake through toilet\nRun snake through main line\nFinal testing \nClean work area\n\nIncurred:\nTrip  $75.00\n\nTax 6% $4.50\nTotal Incurred $79.50\n\nAdditional Repair:\n\nServ",
+    "Days since Done": "1294"
+   }
+  },
+  {
+   "id": "WO-40356",
+   "name": "106271-01",
+   "status": "!! approved",
+   "list": "AM Peter",
+   "created": "2026-07-10",
+   "due": "2026-07-14",
+   "assignees": [
+    "Tania Quitalig"
+   ],
+   "tags": [],
+   "priority": null,
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION\nBOILER/MECHANICAL ROOM / Plumbing / Backflow / Notice of Backflow Testing Required / Best contact number:\n2549132201 / We have 4 back flows that need to be tested we are on are final notice we have 5 days to complete.\nWe need to complete this ASAP\nImportant Billing Note to Vendor",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Temple",
+    "Date-Time Received": "2026-07-10",
+    "Days Since Grey Flag": "-1289",
+    "Grey Flag Date": "2026-07-13",
+    "MGR-Rating": "4",
+    "Previous Assignees": "Tania Quitalig",
+    "Profit": "-151.01",
+    "State": "TX",
+    "Store": "T53 - Temple TX Residence Inn",
+    "Trade": "Plumbing",
+    "Zip Code": "76502",
+    "1. Not Fully Paid": true,
+    "16. Client NTE 🔴": 5817.71,
+    "17. Address": "4301 S General Bruce Dr, Temple, TX 76502, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "7/23 , Justin (512) 948-5309, agreed for $3,970, requires a deposit for materials, scheduled to get the work done today\n",
+    "21. Comp": "TPM",
+    "22. FM": "Safety",
+    "23. Action": "PPRLink",
+    "24. Sign-Off Link": "https://bf8xowiy.paperform.co/?ed9ra=106271-01&bf7ou=4301%20S%20General%20Bruce%20Dr%2C%20Temple%2C%20TX%2076502%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40356",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40356",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgCtAEvdxE8LRJuVi2JvEKX0AUFk5je8dJeaHrsCSpnGgV8?e=PCEL9N",
+    "34. Cost": 151.01,
+    "Client Quote": "Tech Reported that 4 backflows need to be tested\n\nRequired is to\nFull inspection of the work area\nCheck shutoff valves are operating correctly\nEnsure test cocks are functional\nClose shutoff valves\nRelieve pressure through the test cocks\nRemove and close the test cocks\nSlowly reopen the shutoff valve",
+    "Completion Assignee": "Lauren Kent",
+    "Quote Check": true,
+    "✅ On Sheet": true,
+    "✅ Quote Ready To Send": true
+   }
+  },
+  {
+   "id": "WO-36500",
+   "name": "RFP430202620428",
+   "status": "!! ready to invoice",
+   "list": "Matt Hammond",
+   "created": "2026-04-30",
+   "due": "2026-05-04",
+   "assignees": [
+    "Matt Hammond"
+   ],
+   "tags": [],
+   "priority": "high",
+   "fields": {
+    "35. WO Description": "Please provide a free quote to repair the wall and reattach the existing tile in the front men's restroom\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Clearfield",
+    "Client": "Rural King",
+    "Date-Time Received": "2026-04-30",
+    "Days Since Grey Flag": "-1237",
+    "Days Since INP": "-1237",
+    "Grey Flag Date": "2026-05-22",
+    "Previous Assignees": "Matt Hammond",
+    "Sales Owner": "Ro",
+    "State": "PA",
+    "Store": "Rural King",
+    "Trade": "Handyman",
+    "Zip Code": "16830",
+    "16. Client NTE 🔴": 0.01,
+    "17. Address": "86 Plaza Dr, Clearfield, PA 16830, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "21. Comp": "SFM",
+    "22. FM": "Rural King",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=RFP430202620428&bf7ou=86%20Plaza%20Dr%2C%20Clearfield%2C%20PA%2016830%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-36500",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-36500",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgAgnlJNpiPtQ4my2Y-WRbJ_ARMvwU65TfnfvlqC7AXuH6U?e=y91Pzu",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-36500",
+    "34. Cost": 0,
+    "Admin Check": true,
+    "Client Quote": "$0 charge\n",
+    "Days since Done": "1236",
+    "Invoice #": "0",
+    "Invoice Date": "2026-05-22",
+    "Total Invoiced": 0
+   }
+  },
+  {
+   "id": "WO-40970",
+   "name": "239161-01",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-20",
+   "due": "2026-07-21",
+   "assignees": [
+    "Tania Quitalig"
+   ],
+   "tags": [],
+   "priority": null,
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION\nOPERATORY (AD / OCC) 1 / Cabinets/Millwork / Lower Cabinets / Broken shelf / Missing pins / Please enter your Lock\nBox Code:: 6925 / Please see attached picture, please have tech repair shelving under computer desk area op 1.\nAdvise if this can not be repaired. Completion photos ",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Waukesha",
+    "Date-Time Received": "2026-07-20",
+    "Days Since Grey Flag": "-1297",
+    "Grey Flag Date": "2026-07-21",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Tania Quitalig",
+    "Profit": "-120",
+    "State": "WI",
+    "Store": "Aspen Dental - Waukesha - Loc # 1361",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=2320+E+Moreland+Blvd%2C+Waukesha%2C+WI+53186%2C+USA&lat=43.0315793&lng=-88.1800296&state=WI",
+    "Trade": "Handyman",
+    "Zip Code": "53186-2948",
+    "16. Client NTE 🔴": 140,
+    "17. Address": "2320 E Moreland Blvd, Waukesha, WI 53186, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "7/21 3:45 PM EST, (414) 510-8010, $85 total with rush fee, Check\n7/21 at 3:00 PM EST, Raphael (920) 512-6565 , $90 total, online invoice\n",
+    "21. Comp": "AF",
+    "22. FM": "Advanced",
+    "23. Action": "GQLink",
+    "24. Sign-Off Link": "https://alphafixerssignoff.paperform.co/?ed9ra=239161-01&bf7ou=2320%20E%20Moreland%20Blvd%2C%20Waukesha%2C%20WI%2053186%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40970",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40970",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgD3S52gM6HVSLkzjxi3EeOAATp1f_BhA173t_SqX6iZx9M?e=kU1Ebm",
+    "34. Cost": 120,
+    "Admin Comment": "no manager name on SO \n",
+    "Client Quote": "Tech Reported that the shelving under the computer desk is detached\n\nRequired is to\nFull inspection of the work area\nRemove and dispose of the damaged screws and bolts\nDrill new holes\nSupply and install new screws and bolts\nRealign and secure the shelving\nPerform final inspection\nClean work area\n\nIn",
+    "Days since Done": "1297",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-40845",
+   "name": "1-6605403792",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-18",
+   "due": "2026-07-21",
+   "assignees": [
+    "Carter Dane"
+   ],
+   "tags": [],
+   "priority": null,
+   "fields": {
+    "35. WO Description": "Asset: Bathroom /Restroom - - Asset type: Bathroom /Restroom Manufacturer: - Model: - Serial Number: - Issue: Faucets (taps) leaking Issue description: left men's bathroom sink not working.\n",
+    "AM": "Peter Hope",
+    "City": "Porter",
+    "Date-Time Received": "2026-07-17",
+    "Days Since Grey Flag": "-1297",
+    "Grey Flag Date": "2026-07-21",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Carter Dane",
+    "Profit": "-90",
+    "State": "TX",
+    "Store": "Circle K",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=21997+FM1314%2C+Porter%2C+TX+77365%2C+USA&lat=30.1311624&lng=-95.28348489999999&state=TX",
+    "Trade": "Plumbing",
+    "Zip Code": "77365",
+    "👣 Order/Tracking Details": "ETA:\nOrder #:\nTracking #:\nLink:\n~~~~~~~~~~~~~~~~~~~~~~\n",
+    "16. Client NTE 🔴": 500,
+    "17. Address": "21997 FM1314, Porter, TX 77365, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "Tech went onsite and found the job already done\n",
+    "21. Comp": "TPM",
+    "22. FM": "Vixxo",
+    "23. Action": "PPRLink",
+    "24. Sign-Off Link": "https://bf8xowiy.paperform.co/?ed9ra=1-6605403792&bf7ou=21997%20FM1314%2C%20Porter%2C%20TX%2077365%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40845",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40845",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgCB8dy5fXD9QosraViGt2aVAdhEnb9r13f6GKPrK-yEv8o?e=JGrMhO",
+    "34. Cost": 90,
+    "Client Quote": "Tech Reported that the left men's bathroom sink is working properly\n\nIncurred:\nTrip  $60.00\n1 hour labor Tech 1  $80.00\n\nTotal Incurred $140.00",
+    "Completion Assignee": "Paige Carter",
+    "Days since Done": "1296",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-40611",
+   "name": "2984757-01",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-14",
+   "due": "2026-07-15",
+   "assignees": [
+    "Mitchel Hampton"
+   ],
+   "tags": [],
+   "priority": "low",
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION\nDOORS / Manual Door / Restrooms / Stall Door Latch / we need 2 new new handles on 4th and 5th stalls, had a\nremodel last year so newer door handles. Thanks.\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Clearwater",
+    "Date-Time Received": "2026-07-14",
+    "Days Since Grey Flag": "-1297",
+    "Grey Flag Date": "2026-07-21",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Mitchel Hampton",
+    "Profit": "-185",
+    "State": "FL",
+    "Store": "TJ Maxx",
+    "Trade": "Handyman",
+    "Zip Code": "33761",
+    "16. Client NTE 🔴": 507.95,
+    "17. Address": "2541 Countryside Blvd #2, Clearwater, FL 33761, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "nigel, 124$,9:30-10:00, check\n",
+    "21. Comp": "AF",
+    "22. FM": "FrontStreet",
+    "23. Action": "GQLink",
+    "24. Sign-Off Link": "https://alphafixerssignoff.paperform.co/?ed9ra=2984757-01&bf7ou=2541%20Countryside%20Blvd%20%232%2C%20Clearwater%2C%20FL%2033761%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40611",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40611",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgC17oxatsWyTqaaHYwoF1WNAa9rfYG0m6pfpMU4lhXlN3k?e=ex6JJi",
+    "34. Cost": 185,
+    "Admin Check": true,
+    "Client Quote": "Tech Reported that store needs 2 new door handles for the 4th and 5th stalls\n\nRequired is to\nFull inspection of the work area\nRemove and dispose of loose handles and mounting hardware\nSupply and install new screws and mounting hardware\nSupply and install (2) new handles and secure in place \nPerform ",
+    "Completion Assignee": "Kathrine Kane",
+    "Days since Done": "1297",
+    "✅ On Sheet": true
+   }
+  },
+  {
+   "id": "WO-40374",
+   "name": "239048-01",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-10",
+   "due": "2026-07-10",
+   "assignees": [
+    "Bob Sanders"
+   ],
+   "tags": [],
+   "priority": "urgent",
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION\nRESTROOM / PLUMBING / TOILET / NOT OPERATIONAL\nclogged toilet in restroom. overflows when flushed\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Covington",
+    "Date-Time Received": "2026-07-10",
+    "Days Since Grey Flag": "-1294",
+    "Grey Flag Date": "2026-07-18",
+    "Previous Assignees": "Zach Malden, Bob Sanders",
+    "Profit": "-325",
+    "State": "LA",
+    "Store": "ALDI",
+    "Trade": "Plumbing",
+    "Zip Code": "70433",
+    "16. Client NTE 🔴": 250,
+    "17. Address": "2100 N Collins Blvd Ste 132, Covington, LA 70433, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "Job done.\nStill waiting for approval. I agreed with Eagles team that our finance team will contact them regarding their credit card payment. \n\n\n",
+    "21. Comp": "AF",
+    "22. FM": "Advanced",
+    "24. Sign-Off Link": "https://alphafixerssignoff.paperform.co/?ed9ra=239048-01&bf7ou=2100%20N%20Collins%20Blvd%20Ste%20132%2C%20Covington%2C%20LA%2070433%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40374",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40374",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgDfNR1pfo74TLz_dI7gqS8QAeZWohHL0dULTNHHxLb6kZE?e=cQjFzm",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-40374",
+    "34. Cost": 325,
+    "Admin Check": true,
+    "Admin Comment": "reminder sent 7/23\nAFQ Waiting approval 7/20\n",
+    "Client Quote": "Tech Reported that Toilet is clogged\n\nRequired is to\nFull inspection of work area\nRun snake\nPerform final testing\nClean work area\n\nIncurred:\nTrip  $65.00\n\nTax 4.45% $2.89\nTotal Incurred $67.89\n\nAdditional Repair:\n\nService:\nSnake  $250.00\n\nLabor:\n3 hours labor Tech 1  $225.00\n\nTotal Additional $475.0",
+    "Completion Assignee": "Lauren Kent",
+    "Days since Done": "1287",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-40172",
+   "name": "239004-01",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-07",
+   "due": "2026-07-09",
+   "assignees": [
+    "Mark Shannon"
+   ],
+   "tags": [],
+   "priority": "urgent",
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION Urinal will overflow when flushing. Has been happening for a while.\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Covington",
+    "Date-Time Received": "2026-07-07",
+    "Days Since Grey Flag": "-1293",
+    "Grey Flag Date": "2026-07-17",
+    "Previous Assignees": "Mark Shannon",
+    "Profit": "-275",
+    "State": "LA",
+    "Store": "2nd & Charles",
+    "Trade": "Plumbing",
+    "Zip Code": "70433",
+    "16. Client NTE 🔴": 250,
+    "17. Address": "401 US-190, Covington, LA 70433, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "21. Comp": "AF",
+    "22. FM": "Advanced",
+    "23. Action": "PPRLink",
+    "24. Sign-Off Link": "https://alphafixerssignoff.paperform.co/?ed9ra=239004-01&bf7ou=401%20US-190%2C%20Covington%2C%20LA%2070433%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40172",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40172",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgAemwUfosUcQa4QstL4K6xMAetqqt-r6YEtIwzuG7ZQ_9E?e=bYyKeg",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-40172",
+    "34. Cost": 275,
+    "Admin Check": true,
+    "Admin Comment": "tony email sent 7/20\nNTE not updated\n",
+    "Client Quote": "Tech Reported that the urinal is clogged and the flushometer is not working properly\n\nRequired is to\nFull inspection of the work area\nRun a snake\nAdjust the flushometer\nPerform final testing\nClean the work area\n\nIncurred:\nTrip  $65.00\n\nTotal Incurred $65.00\n\nAdditional Repair:\n\nService:\nSnaking  $25",
+    "Completion Assignee": "Lauren Kent",
+    "Days since Done": "1285",
+    "Quote Check": true
+   }
+  },
+  {
+   "id": "WO-40818",
+   "name": "254350-01",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-17",
+   "due": "2026-07-20",
+   "assignees": [
+    "Carter Dane"
+   ],
+   "tags": [],
+   "priority": "low",
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION\nPLUMBING / Plumbing / Roof Drain or Pipe in ceiling / Roof Drain or Pipe in ceiling leaking / e-Mail Address:\nshelby.santos@kohls.com / Girls carpet near wall column gets soaked in water when it rains\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "SAN ANTONIO",
+    "Date-Time Received": "2026-07-17",
+    "Days Since Grey Flag": "-1297",
+    "Grey Flag Date": "2026-07-21",
+    "Previous Assignees": "Carter Dane",
+    "Profit": "-102.2",
+    "State": "TX",
+    "Store": "KOHLS - Loc # 10644",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=1950+N+Loop+1604+E%2C+San+Antonio%2C+TX+78232%2C+USA&lat=29.6057484&lng=-98.4624702&state=TX",
+    "Trade": "Plumbing",
+    "Zip Code": "78232",
+    "16. Client NTE 🔴": 150,
+    "17. Address": "1950 N Loop 1604 E, San Antonio, TX 78232, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "Assessment scheduled with Gene from AAA plumbing at 10 AM no assessment fee\nBack up Jude from O5 Plumbing +12108992474 at 2 PM\n",
+    "21. Comp": "TPM",
+    "22. FM": "PRS",
+    "23. Action": "yoda",
+    "24. Sign-Off Link": "https://bf8xowiy.paperform.co/?ed9ra=254350-01&bf7ou=1950%20N%20Loop%201604%20E%2C%20San%20Antonio%2C%20TX%2078232%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40818",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40818",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgDK0WxpnCL3RYfvCdPonvaSAevFr7ixDZhWU91xrarQEG8?e=UL48Be",
+    "34. Cost": 102.2,
+    "Admin Check": true,
+    "Client Quote": "Tech Reported that there was no active water intrusion at the time of the assessment. The store manager confirmed that the leak occurs only during heavy rainfall and does not appear during normal rain. Since the leak was inactive, the technician was unable to identify its exact source. A return visi",
+    "Completion Assignee": "Paige Carter",
+    "Days since Done": "1297"
+   }
+  },
+  {
+   "id": "WO-40379",
+   "name": "96817-01",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-10",
+   "due": "2026-07-14",
+   "assignees": [
+    "Mark Shannon"
+   ],
+   "tags": [],
+   "priority": "low",
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION\n\"INTERIOR / SINKS / RESTROOM SINK / FAUCET LOOSE / It actually isn’t loose but there isn’t a code for water not\ntemping correctly. The men’s restroom sink water temp needs to be adjusted to be above 100 degrees, right now it\nis temping between 70-80 degrees\"\nSERVICE DESCRIPTION\nP",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Des Moines ",
+    "Date-Time Received": "2026-07-10",
+    "Days Since Grey Flag": "-1299",
+    "Grey Flag Date": "2026-07-23",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Mark Shannon",
+    "Profit": "-100",
+    "State": "IA",
+    "Store": "Chipotle Mexican Grill - Loc # 1545",
+    "Trade": "Plumbing",
+    "Zip Code": "50310",
+    "16. Client NTE 🔴": 140,
+    "17. Address": "3737 Merle Hay Rd, Des Moines, IA 50310, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "21. Comp": "AF",
+    "22. FM": "SHEER",
+    "23. Action": "PPRLink",
+    "24. Sign-Off Link": "https://alphafixerssignoff.paperform.co/?ed9ra=96817-01&bf7ou=3737%20Merle%20Hay%20Rd%2C%20Des%20Moines%2C%20IA%2050310%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40379",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40379",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgCvpqX6QRbySYhssKz6cwrPAeajxMIzLk2eG2GMumS1YWg?e=pmEbJe",
+    "34. Cost": 100,
+    "Admin Check": true,
+    "Client Quote": "Tech Reported that The water Heater needs to be adjusted, and it has to be done in afterhours not to disturb the water flow\n\nRequired is to\nFull inspection of the work area\nshut down the hot water valve \nadjust the temperature to a higher level \nopening the hot water valve \nFinal testing and finaliz",
+    "Completion Assignee": "Kathrine Kane",
+    "Days since Done": "1291",
+    "✅ On Sheet": true
+   }
+  },
+  {
+   "id": "WO-40127",
+   "name": "238998-01",
+   "status": "!! waiting for approval",
+   "list": "AM Peter",
+   "created": "2026-07-07",
+   "due": "2026-07-08",
+   "assignees": [
+    "Jude Baxter"
+   ],
+   "tags": [],
+   "priority": null,
+   "fields": {
+    "35. WO Description": "SERVICE DESCRIPTION 03. DINING ROOM / Doors/Lock/Windows/Glass / Doors / Crack, Gap, & Holes Repair / Need service to replace the closet door located in dining room area. Look for replacement to high quality, able to protect through wet mop and heavy duty operate\"\n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Medford",
+    "Date-Time Received": "2026-07-07",
+    "Days Since Grey Flag": "-1284",
+    "Grey Flag Date": "2026-07-08",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Simon Yates, Jude Baxter",
+    "Profit": "-100",
+    "State": "MA",
+    "Store": "Panda Express",
+    "Trade": "Handyman",
+    "Zip Code": "02155",
+    "16. Client NTE 🔴": 300,
+    "17. Address": "491 Riverside Ave, Medford, MA 02155, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "Nick Handyman will do the assessment for 100$ paid through Square at 1pm.\n",
+    "21. Comp": "AF",
+    "22. FM": "Advanced",
+    "23. Action": "GQLink",
+    "24. Sign-Off Link": "https://alphafixerssignoff.paperform.co/?ed9ra=238998-01&bf7ou=491%20Riverside%20Ave%2C%20Medford%2C%20MA%2002155%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40127",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40127",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgBJZqUlBbnKR4n12Q5YiR2-AdLwy9Z6OKDtuV2FL3RnYGk?e=bMYCLb",
+    "34. Cost": 100,
+    "Client Quote": "Tech Reported that both sliding doors are damaged beyond repair\n\nRequired is to\nFull inspection of the work area\nRemove and dispose of the 2 damaged sliding doors panels\nInspect existing tracks, rollers, guides, stops, and hardware\nSupply and install two new sliding door panels\nAdjust and align both",
+    "Tech Rating": 5,
+    "✅ On Sheet": true,
+    "✅ Quote Ready To Send": true
+   }
+  },
+  {
+   "id": "WO-41037",
+   "name": "6062-0047",
+   "status": "done/incurred",
+   "list": "AM Peter",
+   "created": "2026-07-21",
+   "due": "2026-07-21",
+   "assignees": [
+    "Mitchel Hampton"
+   ],
+   "tags": [],
+   "priority": null,
+   "fields": {
+    "35. WO Description": " \n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "City": "Short Hills",
+    "Client": "Vuori",
+    "Date-Time Received": "2026-07-21",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Mitchel Hampton",
+    "Profit": "-205.54",
+    "SLA Due Date": "2026-07-21",
+    "Sales Owner": "Ro",
+    "State": "NJ",
+    "Store": "Vuori",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=1200+Morris+Tpke+D215%2C+Short+Hills%2C+NJ+07078%2C+USA&lat=40.7408743&lng=-74.3642457&state=NJ",
+    "Trade": "Plumbing",
+    "Zip Code": "07078",
+    "16. Client NTE 🔴": 500,
+    "17. Address": "1200 Morris Tpke D215, Short Hills, NJ 07078, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "21. Comp": "SFM",
+    "22. FM": "Vuori",
+    "23. Action": "GeneratePdf",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=6062-0047&bf7ou=1200%20Morris%20Tpke%20D215%2C%20Short%20Hills%2C%20NJ%2007078%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-41037",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-41037",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgBSAlouy8TdSK2Suh7ytpDTAccBuLgZ8ZyXHjUxhFb-Jps?e=Q7d35S",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-41037",
+    "34. Cost": 205.54,
+    "Days since Done": "1298"
+   }
+  },
+  {
+   "id": "WO-40668",
+   "name": "WOT0779478",
+   "status": "invoiced",
+   "list": "Invoiced",
+   "created": "2026-07-15",
+   "due": "2026-07-15",
+   "assignees": [
+    "John Hayes"
+   ],
+   "tags": [],
+   "priority": "high",
+   "fields": {
+    "35. WO Description": "Fountain Machine - Ice maker not making ice\n\nNot dispensing ice, ice is visible at the top",
+    "37. PDF": "1 file(s)",
+    "38. WKO#": "INC26571599",
+    "AM": "Peter Hope",
+    "Assignee Name TXT": "John Hayes",
+    "City": "MANTECA",
+    "Client": "7-Eleven",
+    "Date-Time Received": "2026-07-15",
+    "Days Since Grey Flag": "-1292",
+    "Days Since QC": "-1292",
+    "Days since Invoiced": "-1292",
+    "Grey Flag Date": "2026-07-16",
+    "MGR-Feedback": "Great work",
+    "MGR-Rating": "5",
+    "Previous Assignees": "John Hayes",
+    "Profit": "474.44000000000005",
+    "Sales Owner": "Ro",
+    "State": "CA",
+    "Store": "7-eleven",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=1399+N+Main+St%2C+Manteca%2C+CA+95336%2C+USA&lat=37.8182149&lng=-121.2176517&state=CA",
+    "Trade": "Appliance",
+    "Zip Code": "95336",
+    "👣 Order/Tracking Details": "ETA:\nOrder #:\nTracking #:\nLink:\n~~~~~~~~~~~~~~~~~~~~~~\n",
+    "16. Client NTE 🔴": 1000,
+    "17. Address": "1399 N Main St, Manteca, CA 95336, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "Amigo CI 07/15/2026 3PM\n",
+    "21. Comp": "SFM",
+    "22. FM": "7-Eleven",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=WOT0779478&bf7ou=1399%20N%20Main%20St%2C%20Manteca%2C%20CA%2095336%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40668",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40668",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/sites/ByblosVistaConsulting/Shared%20Documents/General/Work%20Orders%20-%202026/2026%20-%20SFM/7-Eleven/WO%23WOT0779478,%20MANTECA,CA",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-40668",
+    "34. Cost": 500,
+    "Admin Check": true,
+    "Client Quote": "Tech Reported that he ice dispenser is not dispensing ice properly due to worn hardware\n\nRequired is to\nFull inspection of the work area\nShut off power supply to the ice dispenser\nRemove the front access panels\nInspect the dispenser chute, actuator assembly, linkage, mounting hardware, and dispensin",
+    "Days since Done": "1291",
+    "Invoice #": "2346",
+    "Invoice Date": "2026-07-16",
+    "QC": "Closing issue - Major",
+    "QC Date": "2026-07-16",
+    "QC notes": "SO for the wrong entity ",
+    "Quote Check": true,
+    "Total Invoiced": 974.44
+   }
+  },
+  {
+   "id": "WO-40947",
+   "name": "SUN-8401-248",
+   "status": "invoiced",
+   "list": "Invoiced",
+   "created": "2026-07-20",
+   "due": "2026-07-22",
+   "assignees": [
+    "Alan Tate"
+   ],
+   "tags": [],
+   "priority": "high",
+   "fields": {
+    "35. WO Description": "Service needed for several spots in the ceiling both front and back of house leaking when it rains \n",
+    "37. PDF": "1 file(s)",
+    "AM": "Peter Hope",
+    "Assignee Name TXT": "Alan Tate",
+    "City": "Raleigh",
+    "Client": "SunHoldings",
+    "Date-Time Received": "2026-07-20",
+    "Days Since Grey Flag": "-1297",
+    "Days Since QC": "-1298",
+    "Days since Invoiced": "-1298",
+    "GTG": true,
+    "Grey Flag Date": "2026-07-21",
+    "Previous Assignees": "Alan Tate",
+    "Profit": "143.17",
+    "Sales Owner": "Ro",
+    "State": "NC",
+    "Store": "Bar Louie",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=8401+Brier+Creek+Pkwy%2C+Raleigh%2C+NC+27617%2C+USA&lat=35.907272&lng=-78.7848384&state=NC",
+    "Trade": "Handyman",
+    "Zip Code": "27617",
+    "16. Client NTE 🔴": 750,
+    "17. Address": "8401 Brier Creek Pkwy, Raleigh, NC 27617, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "CI@12:30pm\nCO@2pm\n",
+    "21. Comp": "SFM",
+    "22. FM": "SunHoldings",
+    "24. Sign-Off Link": "https://seamlessfm.paperform.co/?ed9ra=SUN-8401-248&bf7ou=8401%20Brier%20Creek%20Pkwy%2C%20Raleigh%2C%20NC%2027617%2C%20USA",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40947",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40947",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/:f:/s/ByblosVistaConsulting/IgCesRj6z9tHQIW_lazl3okcAbfsK54s6Xi1ThVpZ6FJTaw?e=Fz1F32",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-40947",
+    "34. Cost": 0,
+    "Admin Check": true,
+    "Bill For Incurred": true,
+    "Client Quote": "BFI\nIncurred:\n1.5 hours labor Tech 1  $133.50\n\nTax 7.25% $9.67\nTotal Incurred $143.17\n",
+    "Completion Assignee": "Maya Keaton",
+    "Days since Done": "1297",
+    "Invoice #": "2439",
+    "Invoice Date": "2026-07-22",
+    "QC": "Closing issue - Minor",
+    "QC Date": "2026-07-22",
+    "QC notes": "Missing CiCo status",
+    "Quote Check": true,
+    "Total Invoiced": 143.17
+   }
+  },
+  {
+   "id": "WO-40948",
+   "name": "1084679-00000006",
+   "status": "invoiced",
+   "list": "Invoiced",
+   "created": "2026-07-20",
+   "due": "2026-07-24",
+   "assignees": [
+    "Adam Keller"
+   ],
+   "tags": [],
+   "priority": "high",
+   "fields": {
+    "30. IVR Pin": "985954458",
+    "35. WO Description": "Building Interior > Plumbing Clog Toilet/Urinal/Sink/Drain Our customer restroom toilet is plugged Have you already tried a plunger or attempted to repair?: Yes\\nBest Contact: Heather\\nBest Contact Phone: 541-630-4001\n\nOur customer restroom toilet is plugged Have you already tried a plunger or attem",
+    "38. WKO#": "WKO-05651999",
+    "AM": "Kevin James",
+    "Assignee Name TXT": "Adam Keller",
+    "City": "Central Point",
+    "Date-Time Received": "2026-07-20",
+    "Days Since Grey Flag": "-1297",
+    "Days since Invoiced": "-1297",
+    "GTG": true,
+    "Grey Flag Date": "2026-07-21",
+    "MGR-Feedback": "Good job",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Adam Keller",
+    "Profit": "250",
+    "State": "OR",
+    "Store": "Dollar Tree",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=505+S+Front+St%2C+Central+Point%2C+OR+97502%2C+USA&lat=42.3695474&lng=-122.9130645&state=OR",
+    "Tech Quote": "Cost $250\n",
+    "Trade": "Plumbing",
+    "Zip Code": "97502-2722",
+    "👣 Order/Tracking Details": "ETA:\nOrder #:\nTracking #:\nLink:\n~~~~~~~~~~~~~~~~~~~~~~\n",
+    "16. Client NTE 🔴": 500,
+    "17. Address": "505 S Front St, Central Point, OR 97502, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "19. CO#": "123285",
+    "21. Comp": "BKR",
+    "22. FM": "EMCOR",
+    "23. Action": "GQLink",
+    "24. Sign-Off Link": "https://bkremcor.paperform.co/?ed9ra=1084679-00000006&bf7ou=505%20S%20Front%20St%2C%20Central%20Point%2C%20OR%2097502%2C%20USA",
+    "25. IVR Link": "https://vista-ping.vercel.app/wo/ead0f43f-bc73-42ac-8a35-beb7108087b9",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40948",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40948",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/sites/ByblosVistaConsulting/Shared%20Documents/General/Work%20Orders%20-%202026/2026%20-%20BKR/EMCOR%20-BKR/E-WO%231084679-00000006,%20Central%20Point,%20OR",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-40948",
+    "34. Cost": 250,
+    "Admin Check": true,
+    "Client Quote": "Tech Reported that the toilet is clogged\n\nRequired is to\nFull inspection of the work area \nRun a snake \nFinal inspection \nClean the work area\n\nIncurred:\nTrip  $75.00\n3 hours labor Tech 1  $225.00\nSnake Fee  $200.00\n\nTotal Incurred $500.00",
+    "Days since Done": "1297",
+    "Invoice #": "15573",
+    "Invoice Date": "2026-07-21",
+    "Quote Check": true,
+    "Total Invoiced": 500
+   }
+  },
+  {
+   "id": "WO-40652",
+   "name": "1085513-00000003",
+   "status": "invoiced",
+   "list": "Invoiced",
+   "created": "2026-07-15",
+   "due": "2026-07-15",
+   "assignees": [
+    "Jude Baxter"
+   ],
+   "tags": [],
+   "priority": "high",
+   "fields": {
+    "30. IVR Pin": "928601508",
+    "35. WO Description": "Building Exterior > Electrical - Exterior Electric The panel to turn the interior and exterior lights on is broken. Unable to turn on lights\\nBest Contact: Erin\\nBest Contact Phone: 5072252890\n\nThe panel to turn the interior and exterior lights on is broken. Unable to turn on lights\\nBest Contact: E",
+    "38. WKO#": "WKO-05637203",
+    "AM": "Kevin James",
+    "Assignee Name TXT": "Jude Baxter",
+    "City": "Mankato",
+    "Date-Time Received": "2026-07-15",
+    "Days Since Grey Flag": "-1293",
+    "Days Since QC": "-1292",
+    "Days since Invoiced": "-1296",
+    "GTG": true,
+    "Grey Flag Date": "2026-07-17",
+    "MGR-Feedback": "3 lights in total are out all over 12 feet. All single ",
+    "Previous Assignees": "Jude Baxter",
+    "Profit": "80",
+    "State": "MN",
+    "Store": "Dollar Tree",
+    "Trade": "Electric",
+    "Zip Code": "56001-7115",
+    "👣 Order/Tracking Details": "ETA:\nOrder #:\nTracking #:\nLink:\n~~~~~~~~~~~~~~~~~~~~~~\n",
+    "16. Client NTE 🔴": 375,
+    "17. Address": "201 Sioux Rd 100 100, Mankato, MN 56001, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "20. Last Update": "Electrical Services LLC is going to the emergency right now.\nDon's Electrical & Handyman Service is going for the inspection now for a fee of 65$ paid through ACH\n",
+    "21. Comp": "BKR",
+    "22. FM": "EMCOR",
+    "24. Sign-Off Link": "https://bkremcor.paperform.co/?ed9ra=1085513-00000003&bf7ou=201%20Sioux%20Rd%20100%20100%2C%20Mankato%2C%20MN%2056001%2C%20USA",
+    "25. IVR Link": "https://vista-ping.vercel.app/wo/40d5ad26-b22a-4019-b73e-ed74524f1be6",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40652",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40652",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/sites/ByblosVistaConsulting/Shared%20Documents/General/Work%20Orders%20-%202026/2026%20-%20BKR/EMCOR%20-BKR/E-WO%231085513-00000003,%20Mankato,%20MN",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-40652",
+    "34. Cost": 295,
+    "Admin Check": true,
+    "Client Quote": "Tech Reported that Three external lights not working\n\nRequired is to\nCheck the panel for the external lights\nDiagnose the tripping issue in this panel for the lights\nFix the tripping issue\nTest the breakers not tripping\nLock the panel\nCheck lights working\nClean the work area\n\nIncurred:\nTrip  $75.00\n",
+    "Days since Done": "1293",
+    "Invoice #": "15477",
+    "Invoice Date": "2026-07-20",
+    "QC": "Closing issue - Major",
+    "QC Date": "2026-07-16",
+    "QC notes": "wrong entity on SO ",
+    "Quote Check": true,
+    "Total Invoiced": 375
+   }
+  },
+  {
+   "id": "WO-41017",
+   "name": "1084067-00000011",
+   "status": "invoiced",
+   "list": "Invoiced",
+   "created": "2026-07-21",
+   "due": "2026-07-21",
+   "assignees": [
+    "Jude Baxter"
+   ],
+   "tags": [],
+   "priority": "high",
+   "fields": {
+    "30. IVR Pin": "962268374",
+    "35. WO Description": "Building Exterior > Building Shell - Exterior Structure/Foundation Water enters the building through the walls and floods the stockroom and sales floor.\n\nWater enters the building through the walls and floods the stockroom and sales floor.",
+    "38. WKO#": "WKO-05646783A",
+    "AM": "Kevin James",
+    "Assignee Name TXT": "Jude Baxter",
+    "City": "Saint Louis",
+    "Date-Time Received": "2026-07-21",
+    "Days Since Grey Flag": "-1298",
+    "Days since Invoiced": "-1299",
+    "GTG": true,
+    "Grey Flag Date": "2026-07-22",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Jude Baxter",
+    "Profit": "162.2",
+    "State": "MO",
+    "Store": "Family Dollar",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=2708+N+Florissant+Ave%2C+St.+Louis%2C+MO+63106%2C+USA&lat=38.6501114&lng=-90.1993387&state=MO",
+    "Trade": "Handyman",
+    "Zip Code": "63106-2928",
+    "👣 Order/Tracking Details": "ETA:\nOrder #:\nTracking #:\nLink:\n~~~~~~~~~~~~~~~~~~~~~~\n",
+    "16. Client NTE 🔴": 500,
+    "17. Address": "2708 N Florissant Ave, St. Louis, MO 63106, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "19. CO#": "773291",
+    "20. Last Update": "Seeder and son will be attending the job at 2 pm today\n",
+    "21. Comp": "BKR",
+    "22. FM": "EMCOR",
+    "24. Sign-Off Link": "https://bkremcor.paperform.co/?ed9ra=1084067-00000011&bf7ou=2708%20N%20Florissant%20Ave%2C%20St.%20Louis%2C%20MO%2063106%2C%20USA",
+    "25. IVR Link": "https://vista-ping.vercel.app/wo/a04e94be-c3c5-4631-809a-c1d455f05806",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-41017",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-41017",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/sites/ByblosVistaConsulting/Shared%20Documents/General/Work%20Orders%20-%202026/2026%20-%20BKR/EMCOR%20-BKR/E-WO%231084067-00000011,%20Saint%20Louis,%20MO",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-41017",
+    "34. Cost": 250,
+    "Admin Check": true,
+    "Client Quote": "Tech Reported that The roof is leaking water into the Shop and needs a new roof for the store\n\nRequired is to\nFull inspection of the area\nAssess the water leak source\nSupply and Apply sealant on the roof cracks\nClean the work area.\n\nNote to Customer:\nThis is only a temporary fix and the roof needs r",
+    "Completion Assignee": "Henry Reed",
+    "Days since Done": "1297",
+    "Invoice #": "15616",
+    "Invoice Date": "2026-07-23",
+    "Quote Check": true,
+    "Total Invoiced": 412.2
+   }
+  },
+  {
+   "id": "WO-40999",
+   "name": "1082932-00000002",
+   "status": "invoiced",
+   "list": "Invoiced",
+   "created": "2026-07-20",
+   "due": "2026-07-21",
+   "assignees": [
+    "Zach Malden"
+   ],
+   "tags": [],
+   "priority": "high",
+   "fields": {
+    "30. IVR Pin": "957544005",
+    "35. WO Description": "Building Interior > Plumbing Toilet/Urinal Run/Overflow Missing toilet seat Have you already tried a plunger or attempted to repair?: Yes\\nBest Contact: Keri\\nBest Contact Phone: 4808537534\n\nMissing toilet seat Have you already tried a plunger or attempted to repair?: Yes\\nBest Contact: Keri\\nBest C",
+    "38. WKO#": "WKO-05652996",
+    "AM": "Kevin James",
+    "Assignee Name TXT": "Zach Malden",
+    "City": "Pinetop",
+    "Date-Time Received": "2026-07-20",
+    "Days Since Grey Flag": "-1298",
+    "Days since Invoiced": "-1298",
+    "GTG": true,
+    "Grey Flag Date": "2026-07-22",
+    "MGR-Feedback": "N A",
+    "MGR-Rating": "5",
+    "Previous Assignees": "Zach Malden",
+    "Profit": "292.19000000000005",
+    "State": "AZ",
+    "Store": "Family Dollar",
+    "Tech Map": "https://tech-locator.vercel.app/view?address=2604+E+White+Mountain+Blvd%2C+Pinetop%2C+AZ+85935%2C+USA&lat=34.12461830000001&lng=-109.9256853&state=AZ",
+    "Trade": "Plumbing",
+    "Zip Code": "85935-7387",
+    "👣 Order/Tracking Details": "ETA:\nOrder #:\nTracking #:\nLink:\n~~~~~~~~~~~~~~~~~~~~~~\n",
+    "16. Client NTE 🔴": 500,
+    "17. Address": "2604 E White Mountain Blvd, Pinetop, AZ 85935, USA",
+    "18. Check-in/out Status": "2. Checked-out",
+    "19. CO#": "163535",
+    "21. Comp": "BKR",
+    "22. FM": "EMCOR",
+    "24. Sign-Off Link": "https://bkremcor.paperform.co/?ed9ra=1082932-00000002&bf7ou=2604%20E%20White%20Mountain%20Blvd%2C%20Pinetop%2C%20AZ%2085935%2C%20USA",
+    "25. IVR Link": "https://vista-ping.vercel.app/wo/7e80a653-e7e4-4309-adf6-fcaeecf6343e",
+    "26. PPR Link": "https://alphafixers.azurewebsites.net/payment?customTaskId=WO-40999",
+    "27. Yoda Link": "https://alphafixers.azurewebsites.net/quote?customTaskId=WO-40999",
+    "28. Sharepoint Link": "https://byblosvista.sharepoint.com/sites/ByblosVistaConsulting/Shared%20Documents/General/Work%20Orders%20-%202026/2026%20-%20BKR/EMCOR%20-BKR/E-WO%231082932-00000002,%20Pinetop,%20AZ",
+    "29. PDF Link": "https://alpha-fixers-backend-prod-cjbwc6etd6a6esa4.eastus-01.azurewebsites.net/pdf?taskId=WO-40999",
+    "34. Cost": 191.48,
+    "Admin Check": true,
+    "Client Quote": "Tech Reported that the toilet need seat installed\n\nRequired is to\nFull inspection\nSupply and install new seat\nFinal testing\n\nIncurred:\nTrip  $75.00\n3 hours labor Tech 1  $225.00\nToilet seat   $183.67\n\nTotal Incurred $483.67",
+    "Completion Assignee": "Paige Carter",
+    "Days since Done": "1297",
+    "Invoice #": "15612",
+    "Invoice Date": "2026-07-22",
+    "Quote Check": true,
+    "Total Invoiced": 483.67
+   }
+  }
+ ],
+ "routing": [
+  {
+   "folder": "Active",
+   "lists": [
+    {
+     "name": "AM Peter",
+     "tasks": 116
+    },
+    {
+     "name": "Matt Hammond",
+     "tasks": 112
+    },
+    {
+     "name": "Charly Snyder",
+     "tasks": 89
+    },
+    {
+     "name": "Sean Rodgers",
+     "tasks": 72
+    },
+    {
+     "name": "Adam Keller",
+     "tasks": 67
+    },
+    {
+     "name": "Joseph Foster",
+     "tasks": 66
+    },
+    {
+     "name": "Nate Hart",
+     "tasks": 65
+    },
+    {
+     "name": "Zach Malden",
+     "tasks": 59
+    },
+    {
+     "name": "Elio Armani",
+     "tasks": 57
+    },
+    {
+     "name": "John Hayes",
+     "tasks": 54
+    },
+    {
+     "name": "Pierre Dale",
+     "tasks": 48
+    },
+    {
+     "name": "Ben Jackson",
+     "tasks": 46
+    },
+    {
+     "name": "Alan Tate",
+     "tasks": 45
+    },
+    {
+     "name": "Jay Murphy",
+     "tasks": 45
+    },
+    {
+     "name": "Julian Garcia",
+     "tasks": 45
+    },
+    {
+     "name": "Paul Collins",
+     "tasks": 40
+    },
+    {
+     "name": "Ian Knox",
+     "tasks": 40
+    },
+    {
+     "name": "Sergio Kane",
+     "tasks": 28
+    },
+    {
+     "name": "Mia Baldwin",
+     "tasks": 27
+    },
+    {
+     "name": "Scott Clark",
+     "tasks": 26
+    },
+    {
+     "name": "Nadine Asher",
+     "tasks": 25
+    },
+    {
+     "name": "Nora Allen",
+     "tasks": 20
+    },
+    {
+     "name": "Sammy Reid",
+     "tasks": 17
+    },
+    {
+     "name": "Mary Kirby",
+     "tasks": 14
+    },
+    {
+     "name": "Jude Baxter",
+     "tasks": 12
+    },
+    {
+     "name": "Matthew Parker",
+     "tasks": 11
+    },
+    {
+     "name": "Fady Curtis",
+     "tasks": 6
+    },
+    {
+     "name": "Mark Shannon",
+     "tasks": 6
+    },
+    {
+     "name": "Jenna Kelly",
+     "tasks": 5
+    },
+    {
+     "name": "Leo Spencer",
+     "tasks": 5
+    },
+    {
+     "name": "Gloria Smith",
+     "tasks": 3
+    },
+    {
+     "name": "Nolan Sinclair",
+     "tasks": 2
+    },
+    {
+     "name": "Incoming WOs",
+     "tasks": 0
+    },
+    {
+     "name": "AM Kevin",
+     "tasks": 0
+    },
+    {
+     "name": "Jack Dean",
+     "tasks": 0
+    },
+    {
+     "name": "Antonio Cavalli",
+     "tasks": 0
+    },
+    {
+     "name": "Tony Hawk",
+     "tasks": 0
+    },
+    {
+     "name": "Lucas Samuels",
+     "tasks": 0
+    },
+    {
+     "name": "Charles Saul",
+     "tasks": 0
+    },
+    {
+     "name": "Jordan Brown",
+     "tasks": 0
+    },
+    {
+     "name": "User 1",
+     "tasks": 0
+    },
+    {
+     "name": "AM Ion",
+     "tasks": 0
+    },
+    {
+     "name": "AM Steven",
+     "tasks": 0
+    },
+    {
+     "name": "Elias farha (Dev)",
+     "tasks": 0
+    },
+    {
+     "name": "Waiting for Approval Park",
+     "tasks": 0
+    },
+    {
+     "name": "Ion ",
+     "tasks": 0
+    },
+    {
+     "name": "DMG DONE park",
+     "tasks": 0
+    },
+    {
+     "name": "Template",
+     "tasks": 0
+    },
+    {
+     "name": "Testing -- IT",
+     "tasks": 0
+    },
+    {
+     "name": "Frida Mason",
+     "tasks": 0
+    },
+    {
+     "name": "Joanna Dawson",
+     "tasks": 0
+    },
+    {
+     "name": "Anthony Navaro",
+     "tasks": 0
+    }
+   ]
+  },
+  {
+   "folder": "✅ Finished WOs",
+   "lists": [
+    {
+     "name": "Invoiced",
+     "tasks": 17770
+    },
+    {
+     "name": "Canceled/Postponed",
+     "tasks": 124
+    },
+    {
+     "name": "Ready To Invoice",
+     "tasks": 15
+    },
+    {
+     "name": "Checked",
+     "tasks": 0
+    },
+    {
+     "name": "RTI - Park",
+     "tasks": 0
+    }
+   ]
+  },
+  {
+   "folder": "SFM",
+   "lists": [
+    {
+     "name": "Seamless FM Executive View",
+     "tasks": 2056
+    }
+   ]
+  }
+ ],
+ "people": [
+  {
+   "name": "Carter Dane",
+   "initials": "CD",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Andrew El Housseini",
+   "initials": "AH",
+   "role": "admin",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Mitchel Hampton",
+   "initials": "MH",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Tania Quitalig",
+   "initials": "TQ",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Bob Sanders",
+   "initials": "BS",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Mark Shannon",
+   "initials": "MS",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Jude Baxter",
+   "initials": "JB",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Nadine Asher",
+   "initials": "NA",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Alan Tate",
+   "initials": "AT",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "John Hayes",
+   "initials": "JH",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Elise",
+   "initials": "E",
+   "role": "admin",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Adam Keller",
+   "initials": "AK",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Faysal AH",
+   "initials": "FA",
+   "role": "admin",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Matt Hammond",
+   "initials": "MH",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Zach Malden",
+   "initials": "ZM",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Jordan Brown",
+   "initials": "JB",
+   "role": "admin",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Kevin James",
+   "initials": "KJ",
+   "role": "member",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Ion",
+   "initials": "I",
+   "role": "admin",
+   "email": "@alphafixers.com"
+  },
+  {
+   "name": "Steven Khoury",
+   "initials": "SK",
+   "role": "admin",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Bernard Khoury",
+   "initials": "BK",
+   "role": "admin",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Peter Hope",
+   "initials": "PH",
+   "role": "admin",
+   "email": "@byblosvista.com"
+  },
+  {
+   "name": "Michael Khoury",
+   "initials": "MK",
+   "role": "owner",
+   "email": "@byblosvista.com"
+  }
+ ],
+ "tags": [
+  "tech will order",
+  "ap ordered",
+  "client ordered",
+  "ap will order",
+  "sourcing parts",
+  "efs",
+  "vendor will order",
+  "dispatcher ordered part",
+  "tech ordered",
+  "vendor ordered",
+  "dispatcher ordered door",
+  "corporate will order"
+ ],
+ "views": [
+  {
+   "name": "Team",
+   "type": "box"
+  },
+  {
+   "name": "Invoices Dashboard",
+   "type": "dashboard"
+  },
+  {
+   "name": "Activity",
+   "type": "activity"
+  },
+  {
+   "name": "Workload",
+   "type": "workload"
+  },
+  {
+   "name": "Calendar",
+   "type": "calendar"
+  },
+  {
+   "name": "Chat",
+   "type": "conversation"
+  },
+  {
+   "name": "QC",
+   "type": "table"
+  },
+  {
+   "name": "All jobs (copy)",
+   "type": "list"
+  },
+  {
+   "name": "All jobs (copy) (copy)",
+   "type": "list"
+  },
+  {
+   "name": "SunHoldings",
+   "type": "table"
+  },
+  {
+   "name": "All jobs",
+   "type": "table"
+  },
+  {
+   "name": "MoD feedback",
+   "type": "table"
+  },
+  {
+   "name": "Last 7 days",
+   "type": "table"
+  },
+  {
+   "name": "QA",
+   "type": "table"
+  },
+  {
+   "name": "Last month",
+   "type": "table"
+  },
+  {
+   "name": "Today",
+   "type": "table"
+  },
+  {
+   "name": "Overview",
+   "type": "location_overview"
+  },
+  {
+   "name": "Vista",
+   "type": "conversation"
+  },
+  {
+   "name": "Gloria's Dashboard",
+   "type": "dashboard"
+  },
+  {
+   "name": "Gloria's Map",
+   "type": "map"
+  },
+  {
+   "name": "All jobs (copy)",
+   "type": "table"
+  }
+ ]
+}

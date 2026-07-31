@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seamless FM — Brand Identity Kit</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black: #000000;
+    --blue: #35b8f3;
+    --blue-dark: #1a9fd4;
+    --blue-light: #7fd5f8;
+    --blue-glow: rgba(53,184,243,0.15);
+    --white: #ffffff;
+    --gray-100: #f5f5f5;
+    --gray-200: #e0e0e0;
+    --gray-400: #999999;
+    --gray-600: #555555;
+    --gray-800: #222222;
+    --navy: #0a1628;
+    --navy-mid: #0d2137;
+    --teal: #00a878;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Barlow', sans-serif;
+    background: #0a0a0a;
+    color: var(--white);
+    line-height: 1.6;
+  }
+
+  /* NAV */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(0,0,0,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(53,184,243,0.2);
+    padding: 0 3rem;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 60px;
+  }
+  .nav-logo {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: 0.08em;
+    color: var(--white);
+    margin-right: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-logo span { color: var(--blue); }
+  .nav-links { display: flex; gap: 0; }
+  .nav-links a {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gray-400);
+    text-decoration: none;
+    padding: 0 1rem;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .nav-links a:hover { color: var(--blue); border-bottom-color: var(--blue); }
+
+  /* HERO */
+  .hero {
+    background: #000;
+    border-bottom: 1px solid rgba(53,184,243,0.15);
+    padding: 6rem 3rem 5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -200px; right: -200px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(53,184,243,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-tag {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--blue);
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .hero-tag::before {
+    content: '';
+    display: inline-block;
+    width: 24px; height: 1px;
+    background: var(--blue);
+  }
+  .hero h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 800;
+    font-size: clamp(48px, 8vw, 88px);
+    line-height: 0.95;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+  }
+  .hero h1 span { color: var(--blue); }
+  .hero-sub {
+    font-size: 16px;
+    font-weight: 300;
+    color: var(--gray-400);
+    max-width: 500px;
+    line-height: 1.7;
+  }
+  .hero-meta {
+    display: flex;
+    gap: 2rem;
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .hero-meta-item { font-size: 12px; color: var(--gray-400); }
+  .hero-meta-item strong { display: block; color: var(--white); font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+
+  /* SECTIONS */
+  section {
+    padding: 5rem 3rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  section:nth-child(odd) { background: #050505; }
+  section:nth-child(even) { background: #080808; }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 3rem;
+  }
+  .section-num {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--blue);
+    text-transform: uppercase;
+  }
+  .section-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--white);
+  }
+  .section-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+    margin-left: 1rem;
+  }
+
+  /* COLOR PALETTE */
+  .color-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.06); }
+  .color-swatch {
+    background: #080808;
+    overflow: hidden;
+  }
+  .color-block { height: 140px; position: relative; display: flex; align-items: flex-end; padding: 1rem; }
+  .color-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  .color-info { padding: 1rem; }
+  .color-name { font-size: 14px; font-weight: 600; color: var(--white); margin-bottom: 4px; }
+  .color-hex { font-family: 'Barlow Condensed', monospace; font-size: 20px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .color-role { font-size: 11px; color: var(--gray-400); line-height: 1.5; }
+  .color-usage {
+    margin: 0.75rem 1rem 1rem;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .usage-tag {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    padding: 2px 7px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    color: var(--gray-400);
+  }
+
+  /* TYPOGRAPHY */
+  .type-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 2rem;
+  }
+  .type-block {
+    background: #080808;
+    padding: 2rem;
+  }
+  .type-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--blue);
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .type-label::after { content: ''; flex: 1; height: 1px; background: rgba(53,184,243,0.2); }
+  .type-specimen { margin-bottom: 1.5rem; }
+  .type-meta { font-size: 11px; color: var(--gray-400); font-family: monospace; line-height: 1.8; }
+  .type-meta span { color: var(--blue); }
+
+  .type-scale { display: flex; flex-direction: column; gap: 1.5rem; padding: 2rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); }
+  .type-scale-row { display: flex; align-items: baseline; gap: 1.5rem; }
+  .type-scale-label { font-size: 10px; color: var(--gray-400); min-width: 100px; font-family: monospace; }
+
+  /* LOGO */
+  .logo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.06); }
+  .logo-cell {
+    padding: 3rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    min-height: 220px;
+    background: #080808;
+  }
+  .logo-cell.dark-bg { background: #000; }
+  .logo-cell.light-bg { background: #f0f0f0; }
+  .logo-cell.blue-bg { background: var(--blue); }
+  .logo-caption {
+    font-size: 11px;
+    color: var(--gray-400);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .logo-caption.dark { color: #888; }
+
+  /* Logo SVG recreation */
+  .sfm-logo { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .sfm-logo-icon { width: 48px; height: 48px; }
+  .sfm-logo-text-main {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 800;
+    font-size: 28px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .sfm-logo-text-sub {
+    font-family: 'Barlow', sans-serif;
+    font-weight: 400;
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  .dont-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 2rem; }
+  .dont-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .dont-card::before {
+    content: '✕';
+    position: absolute;
+    top: 1rem; right: 1rem;
+    font-size: 12px;
+    color: #e24b4a;
+    font-weight: 700;
+  }
+  .dont-card-label { font-size: 11px; font-weight: 600; color: #e24b4a; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .dont-card p { font-size: 13px; color: var(--gray-400); line-height: 1.6; }
+
+  /* TONE */
+  .tone-intro {
+    font-size: 18px;
+    font-weight: 300;
+    color: var(--gray-400);
+    max-width: 700px;
+    line-height: 1.8;
+    margin-bottom: 3rem;
+    border-left: 3px solid var(--blue);
+    padding-left: 1.5rem;
+  }
+  .tone-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.06); margin-bottom: 2rem; }
+  .tone-cell {
+    background: #080808;
+    padding: 1.75rem;
+  }
+  .tone-word {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--white);
+    margin-bottom: 0.5rem;
+  }
+  .tone-desc { font-size: 13px; color: var(--gray-400); line-height: 1.6; margin-bottom: 1rem; }
+  .tone-example {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--blue-light);
+    line-height: 1.6;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .voice-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; }
+  .voice-col { padding: 1.5rem; border: 1px solid rgba(255,255,255,0.06); }
+  .voice-col.dont { border-color: rgba(226,75,74,0.2); background: rgba(226,75,74,0.04); }
+  .voice-col.do { border-color: rgba(53,184,243,0.2); background: rgba(53,184,243,0.04); }
+  .voice-col-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1rem; }
+  .voice-col.do .voice-col-label { color: var(--blue); }
+  .voice-col.dont .voice-col-label { color: #e24b4a; }
+  .voice-item { font-size: 13px; color: var(--gray-400); line-height: 1.7; padding: 0.4rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .voice-item:last-child { border-bottom: none; }
+
+  /* SOCIAL TEMPLATES */
+  .templates-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+  .template-card {
+    background: #0d0d0d;
+    border: 1px solid rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  .template-preview {
+    aspect-ratio: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 1.5rem;
+  }
+  .template-preview.portrait { aspect-ratio: 4/5; }
+  .template-preview.landscape { aspect-ratio: 16/9; }
+  .template-platform {
+    position: absolute;
+    top: 1rem; right: 1rem;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    background: rgba(0,0,0,0.6);
+    color: var(--gray-400);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .template-dims {
+    position: absolute;
+    top: 1rem; left: 1rem;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.4);
+    font-family: monospace;
+  }
+  .template-content { position: relative; z-index: 2; }
+  .template-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--blue); margin-bottom: 6px; }
+  .template-headline { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 800; text-transform: uppercase; line-height: 1.1; color: var(--white); margin-bottom: 8px; }
+  .template-body { font-size: 11px; color: rgba(255,255,255,0.6); line-height: 1.5; }
+  .template-url { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--blue); margin-top: 10px; }
+  .template-meta {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .template-name { font-size: 12px; font-weight: 600; color: var(--white); }
+  .template-spec { font-size: 11px; color: var(--gray-400); font-family: monospace; }
+
+  /* ASSETS */
+  .assets-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.06); }
+  .asset-cell {
+    background: #080808;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .asset-icon {
+    width: 48px; height: 48px;
+    background: rgba(53,184,243,0.1);
+    border: 1px solid rgba(53,184,243,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .asset-name { font-size: 14px; font-weight: 600; color: var(--white); }
+  .asset-desc { font-size: 12px; color: var(--gray-400); line-height: 1.6; }
+  .asset-spec { font-size: 11px; font-family: monospace; color: var(--blue); }
+
+  /* FOOTER */
+  footer {
+    background: #000;
+    border-top: 1px solid rgba(53,184,243,0.15);
+    padding: 3rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .footer-brand {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .footer-brand span { color: var(--blue); }
+  .footer-meta { font-size: 12px; color: var(--gray-400); }
+
+  /* UTILITY */
+  .chip {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+  .chip-blue { background: rgba(53,184,243,0.12); color: var(--blue); border: 1px solid rgba(53,184,243,0.25); }
+  .chip-green { background: rgba(0,168,120,0.12); color: #00c896; border: 1px solid rgba(0,168,120,0.25); }
+  .chip-red { background: rgba(226,75,74,0.12); color: #e24b4a; border: 1px solid rgba(226,75,74,0.25); }
+
+  @media (max-width: 768px) {
+    nav { padding: 0 1.5rem; }
+    .nav-links { display: none; }
+    .hero { padding: 4rem 1.5rem 3rem; }
+    section { padding: 3rem 1.5rem; }
+    .type-row { grid-template-columns: 1fr; }
+    .voice-compare { grid-template-columns: 1fr; }
+    footer { padding: 2rem 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <svg width="22" height="22" viewBox="0 0 40 40" fill="none">
+      <rect width="40" height="40" fill="#000"/>
+      <path d="M10 10 L20 10 Q30 10 30 20 Q30 30 20 30 L10 30 L10 25 L20 25 Q25 25 25 20 Q25 15 20 15 L15 15 L15 20 L10 20 Z" fill="#35b8f3"/>
+    </svg>
+    SEAMLESS <span>FM</span>
+  </div>
+  <div class="nav-links">
+    <a href="#colors">Colors</a>
+    <a href="#typography">Typography</a>
+    <a href="#logo">Logo</a>
+    <a href="#tone">Tone</a>
+    <a href="#social">Social</a>
+    <a href="#assets">Assets</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-tag">Official Brand Document</div>
+  <h1>Brand<br>Identity<br><span>Kit</span></h1>
+  <p class="hero-sub">The complete visual and communication reference for Seamless Facility Management. Use this document to ensure every touchpoint is consistent, professional, and on-brand.</p>
+  <div class="hero-meta">
+    <div class="hero-meta-item"><strong>Version</strong>1.0 — 2026</div>
+    <div class="hero-meta-item"><strong>Company</strong>Seamless FM</div>
+    <div class="hero-meta-item"><strong>Website</strong>www.seamlessfm.com</div>
+    <div class="hero-meta-item"><strong>Contact</strong>info@seamlessfm.com</div>
+  </div>
+</div>
+
+<!-- 01 COLOR PALETTE -->
+<section id="colors">
+  <div class="section-header">
+    <span class="section-num">01</span>
+    <h2 class="section-title">Color Palette</h2>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="color-grid">
+    <!-- Primary Black -->
+    <div class="color-swatch">
+      <div class="color-block" style="background:#000000;">
+        <span class="color-badge chip chip-blue">Primary</span>
+      </div>
+      <div class="color-info">
+        <div class="color-name">Black</div>
+        <div class="color-hex" style="color:#ffffff;">#000000</div>
+        <div class="color-role">Dominant background. Conveys authority, strength, and professionalism.</div>
+      </div>
+      <div class="color-usage">
+        <span class="usage-tag">Backgrounds</span>
+        <span class="usage-tag">Text on light</span>
+        <span class="usage-tag">Headers</span>
+        <span class="usage-tag">Footers</span>
+      </div>
+    </div>
+
+    <!-- Secondary Blue -->
+    <div class="color-swatch">
+      <div class="color-block" style="background:#35b8f3;">
+        <span class="color-badge" style="background:rgba(0,0,0,0.25); color:#000; font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; padding:3px 8px;">Secondary</span>
+      </div>
+      <div class="color-info">
+        <div class="color-name">Blue Accent</div>
+        <div class="color-hex" style="color:#35b8f3;">#35B8F3</div>
+        <div class="color-role">Brand signature. Used for highlights, CTAs, and key visual elements.</div>
+      </div>
+      <div class="color-usage">
+        <span class="usage-tag">Buttons</span>
+        <span class="usage-tag">Highlights</span>
+        <span class="usage-tag">Icons</span>
+        <span class="usage-tag">Borders</span>
+        <span class="usage-tag">Links</span>
+      </div>
+    </div>
+
+    <!-- Tertiary White -->
+    <div class="color-swatch">
+      <div class="color-block" style="background:#ffffff; border-bottom: 1px solid rgba(0,0,0,0.08);">
+        <span class="color-badge" style="background:rgba(0,0,0,0.08); color:#333; font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; padding:3px 8px;">Tertiary</span>
+      </div>
+      <div class="color-info">
+        <div class="color-name">White</div>
+        <div class="color-hex" style="color:#aaaaaa;">#FFFFFF</div>
+        <div class="color-role">Clean contrast. Used for text on dark, light sections, and breathing space.</div>
+      </div>
+      <div class="color-usage">
+        <span class="usage-tag">Body text</span>
+        <span class="usage-tag">Light BG</span>
+        <span class="usage-tag">Logo (reversed)</span>
+        <span class="usage-tag">Cards</span>
+      </div>
+    </div>
+
+    <!-- Support Dark Navy -->
+    <div class="color-swatch">
+      <div class="color-block" style="background:#0a1628;">
+        <span class="color-badge chip chip-blue">Support</span>
+      </div>
+      <div class="color-info">
+        <div class="color-name">Deep Navy</div>
+        <div class="color-hex" style="color:#6ea3d4;">#0A1628</div>
+        <div class="color-role">Alternative dark background. Adds depth and dimension alongside black.</div>
+      </div>
+      <div class="color-usage">
+        <span class="usage-tag">Alt backgrounds</span>
+        <span class="usage-tag">Cards</span>
+        <span class="usage-tag">Sections</span>
+      </div>
+    </div>
+
+    <!-- Blue Light -->
+    <div class="color-swatch">
+      <div class="color-block" style="background:#1a9fd4;">
+        <span class="color-badge" style="background:rgba(0,0,0,0.25); color:#fff; font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; padding:3px 8px;">Support</span>
+      </div>
+      <div class="color-info">
+        <div class="color-name">Blue Dark</div>
+        <div class="color-hex" style="color:#35b8f3;">#1A9FD4</div>
+        <div class="color-role">Blue accent hover state and secondary blue usage.</div>
+      </div>
+      <div class="color-usage">
+        <span class="usage-tag">Hover states</span>
+        <span class="usage-tag">Gradients</span>
+        <span class="usage-tag">Depth</span>
+      </div>
+    </div>
+
+    <!-- Teal -->
+    <div class="color-swatch">
+      <div class="color-block" style="background:#00a878;">
+        <span class="color-badge" style="background:rgba(0,0,0,0.25); color:#fff; font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; padding:3px 8px;">Accent</span>
+      </div>
+      <div class="color-info">
+        <div class="color-name">Teal</div>
+        <div class="color-hex" style="color:#00c896;">#00A878</div>
+        <div class="color-role">Used in select existing assets. Secondary accent when blue is dominant.</div>
+      </div>
+      <div class="color-usage">
+        <span class="usage-tag">Badges</span>
+        <span class="usage-tag">Success states</span>
+        <span class="usage-tag">Icons</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Color usage rules -->
+  <div style="margin-top: 2rem; padding: 1.5rem 2rem; background: rgba(53,184,243,0.04); border: 1px solid rgba(53,184,243,0.15);">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); margin-bottom: 1rem;">Color Usage Rules</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+      <div style="font-size: 13px; color: var(--gray-400); line-height: 1.7;"><strong style="color:var(--white); display:block; margin-bottom:4px;">80 / 15 / 5 Rule</strong>80% Black backgrounds, 15% White text/elements, 5% Blue accents. Never let blue dominate.</div>
+      <div style="font-size: 13px; color: var(--gray-400); line-height: 1.7;"><strong style="color:var(--white); display:block; margin-bottom:4px;">Never on Blue</strong>Do not place body text on the blue background. Blue is reserved for highlights and accents only.</div>
+      <div style="font-size: 13px; color: var(--gray-400); line-height: 1.7;"><strong style="color:var(--white); display:block; margin-bottom:4px;">Contrast</strong>All text must meet WCAG AA contrast ratios. White on black ✓ Blue on black ✓ Black on blue ✓</div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 TYPOGRAPHY -->
+<section id="typography">
+  <div class="section-header">
+    <span class="section-num">02</span>
+    <h2 class="section-title">Typography</h2>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="type-row">
+    <div class="type-block">
+      <div class="type-label">Display / Headlines</div>
+      <div class="type-specimen">
+        <div style="font-family:'Barlow Condensed',sans-serif; font-size:52px; font-weight:800; text-transform:uppercase; line-height:0.95; letter-spacing:0.02em;">Facility<br>Management<br><span style="color:var(--blue);">Redefined.</span></div>
+      </div>
+      <div class="type-meta">
+        Family: <span>Barlow Condensed</span><br>
+        Weight: <span>800 ExtraBold</span><br>
+        Style: <span>Uppercase / Condensed</span><br>
+        Usage: <span>Hero headlines, section titles, poster text</span>
+      </div>
+    </div>
+    <div class="type-block">
+      <div class="type-label">Body / UI Text</div>
+      <div class="type-specimen">
+        <div style="font-family:'Barlow',sans-serif; font-size:16px; font-weight:400; color: rgba(255,255,255,0.7); line-height:1.75; max-width: 380px;">Seamless FM delivers fast, reliable facility maintenance for multi-site commercial operations. From HVAC to plumbing — your facility, our responsibility.</div>
+        <div style="margin-top:1rem; font-family:'Barlow',sans-serif; font-size:13px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color: var(--blue);">Contact Us Today →</div>
+      </div>
+      <div class="type-meta">
+        Family: <span>Barlow</span><br>
+        Weight: <span>300 Light / 400 Regular / 600 SemiBold</span><br>
+        Usage: <span>Body copy, captions, UI labels, CTAs</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Type Scale -->
+  <div style="margin-bottom: 1rem; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue);">Type Scale</div>
+  <div class="type-scale">
+    <div class="type-scale-row">
+      <span class="type-scale-label">Display / 88px / 800</span>
+      <span style="font-family:'Barlow Condensed',sans-serif; font-size: clamp(32px,6vw,72px); font-weight:800; text-transform:uppercase; line-height:1;">Seamless FM</span>
+    </div>
+    <div class="type-scale-row">
+      <span class="type-scale-label">H1 / 48px / 800</span>
+      <span style="font-family:'Barlow Condensed',sans-serif; font-size:clamp(28px,4vw,48px); font-weight:800; text-transform:uppercase;">Your Facility, Our Responsibility</span>
+    </div>
+    <div class="type-scale-row">
+      <span class="type-scale-label">H2 / 32px / 700</span>
+      <span style="font-family:'Barlow Condensed',sans-serif; font-size:clamp(22px,3vw,32px); font-weight:700; text-transform:uppercase;">Commercial Facility Services</span>
+    </div>
+    <div class="type-scale-row">
+      <span class="type-scale-label">H3 / 22px / 600</span>
+      <span style="font-family:'Barlow',sans-serif; font-size:22px; font-weight:600;">Preventative Maintenance Programs</span>
+    </div>
+    <div class="type-scale-row">
+      <span class="type-scale-label">Body / 16px / 400</span>
+      <span style="font-family:'Barlow',sans-serif; font-size:16px; font-weight:400; color:rgba(255,255,255,0.65);">We handle HVAC, plumbing, electrical, and more — on schedule, every time.</span>
+    </div>
+    <div class="type-scale-row">
+      <span class="type-scale-label">Caption / 12px / 500</span>
+      <span style="font-family:'Barlow',sans-serif; font-size:12px; font-weight:500; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-400);">www.seamlessfm.com · (267) 814-5880</span>
+    </div>
+  </div>
+</section>
+
+<!-- 03 LOGO USAGE -->
+<section id="logo">
+  <div class="section-header">
+    <span class="section-num">03</span>
+    <h2 class="section-title">Logo Usage</h2>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="logo-grid" style="margin-bottom: 2rem;">
+    <!-- Primary on Black -->
+    <div class="logo-cell dark-bg">
+      <div class="sfm-logo">
+        <svg class="sfm-logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="48" height="48" fill="#000"/>
+          <path d="M10 8 L24 8 Q38 8 38 20 Q38 28 30 31 L38 40 L30 40 L22 31 L18 31 L18 40 L10 40 Z M18 15 L18 24 L24 24 Q30 24 30 19.5 Q30 15 24 15 Z" fill="#35b8f3"/>
+        </svg>
+        <div class="sfm-logo-text-main" style="color:#fff;">SEAMLESS</div>
+        <div class="sfm-logo-text-sub" style="color:#35b8f3; letter-spacing:0.3em;">FACILITY MANAGEMENT</div>
+      </div>
+      <div class="logo-caption">Primary — Dark background</div>
+    </div>
+
+    <!-- White on Blue -->
+    <div class="logo-cell" style="background: #35b8f3;">
+      <div class="sfm-logo">
+        <svg class="sfm-logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="48" height="48" fill="#35b8f3"/>
+          <path d="M10 8 L24 8 Q38 8 38 20 Q38 28 30 31 L38 40 L30 40 L22 31 L18 31 L18 40 L10 40 Z M18 15 L18 24 L24 24 Q30 24 30 19.5 Q30 15 24 15 Z" fill="#000"/>
+        </svg>
+        <div class="sfm-logo-text-main" style="color:#000;">SEAMLESS</div>
+        <div class="sfm-logo-text-sub" style="color:#000; opacity:0.6; letter-spacing:0.3em;">FACILITY MANAGEMENT</div>
+      </div>
+      <div class="logo-caption dark">Blue accent background</div>
+    </div>
+
+    <!-- Black on White -->
+    <div class="logo-cell light-bg">
+      <div class="sfm-logo">
+        <svg class="sfm-logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="48" height="48" fill="#fff"/>
+          <path d="M10 8 L24 8 Q38 8 38 20 Q38 28 30 31 L38 40 L30 40 L22 31 L18 31 L18 40 L10 40 Z M18 15 L18 24 L24 24 Q30 24 30 19.5 Q30 15 24 15 Z" fill="#000"/>
+        </svg>
+        <div class="sfm-logo-text-main" style="color:#000;">SEAMLESS</div>
+        <div class="sfm-logo-text-sub" style="color:#35b8f3; letter-spacing:0.3em;">FACILITY MANAGEMENT</div>
+      </div>
+      <div class="logo-caption dark">Light / white background</div>
+    </div>
+
+    <!-- Icon only -->
+    <div class="logo-cell dark-bg">
+      <svg width="72" height="72" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="48" height="48" rx="8" fill="#111"/>
+        <path d="M10 8 L24 8 Q38 8 38 20 Q38 28 30 31 L38 40 L30 40 L22 31 L18 31 L18 40 L10 40 Z M18 15 L18 24 L24 24 Q30 24 30 19.5 Q30 15 24 15 Z" fill="#35b8f3"/>
+      </svg>
+      <div class="logo-caption">Icon mark only</div>
+    </div>
+  </div>
+
+  <!-- Clear space rule -->
+  <div style="padding: 1.5rem 2rem; background: rgba(53,184,243,0.04); border: 1px solid rgba(53,184,243,0.15); margin-bottom: 2rem;">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); margin-bottom: 0.75rem;">Clear Space Rule</div>
+    <p style="font-size: 13px; color: var(--gray-400); line-height: 1.7; max-width: 600px;">Always maintain a minimum clear space equal to the height of the "S" letterform around all sides of the logo. Never crowd the logo with other elements, text, or edges.</p>
+  </div>
+
+  <!-- Don'ts -->
+  <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #e24b4a; margin-bottom: 1rem;">Logo Don'ts</div>
+  <div class="dont-grid">
+    <div class="dont-card">
+      <div class="dont-card-label">Don't stretch</div>
+      <p>Never distort or change the proportions of the logo in any direction.</p>
+    </div>
+    <div class="dont-card">
+      <div class="dont-card-label">Don't recolor</div>
+      <p>Never use colors outside the brand palette for the logo or icon mark.</p>
+    </div>
+    <div class="dont-card">
+      <div class="dont-card-label">Don't add effects</div>
+      <p>No drop shadows, glows, bevels, or gradients applied to the logo.</p>
+    </div>
+    <div class="dont-card">
+      <div class="dont-card-label">Don't rotate</div>
+      <p>The logo must always appear horizontal. No angled or rotated placements.</p>
+    </div>
+    <div class="dont-card">
+      <div class="dont-card-label">Don't use on busy BG</div>
+      <p>Never place the logo on complex imagery without a clean overlay or background.</p>
+    </div>
+    <div class="dont-card">
+      <div class="dont-card-label">Don't alter text</div>
+      <p>Never change the font, spacing, or layout of the wordmark or tagline.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 04 TONE OF VOICE -->
+<section id="tone">
+  <div class="section-header">
+    <span class="section-num">04</span>
+    <h2 class="section-title">Tone of Voice</h2>
+    <div class="section-line"></div>
+  </div>
+
+  <p class="tone-intro">Seamless FM speaks like an expert who gets things done. We're direct, confident, and solution-focused — not corporate-stiff. We respect our clients' time and speak to results, not process.</p>
+
+  <div class="tone-grid">
+    <div class="tone-cell">
+      <div class="tone-word">Authoritative</div>
+      <div class="tone-desc">We know facility management. Our voice demonstrates deep expertise without being condescending.</div>
+      <div class="tone-example">"Multi-site HVAC requires a system — not a series of one-off calls."</div>
+    </div>
+    <div class="tone-cell">
+      <div class="tone-word">Direct</div>
+      <div class="tone-desc">No fluff. State the benefit, the action, or the result. Short sentences win.</div>
+      <div class="tone-example">"Fast response. Qualified techs. Done right."</div>
+    </div>
+    <div class="tone-cell">
+      <div class="tone-word">Professional</div>
+      <div class="tone-desc">We serve commercial clients. Language is polished, grammar is tight, tone is business-appropriate.</div>
+      <div class="tone-example">"Our preventative maintenance programs reduce unexpected downtime by up to 40%."</div>
+    </div>
+    <div class="tone-cell">
+      <div class="tone-word">Trustworthy</div>
+      <div class="tone-desc">Every promise we make is one we can keep. Reliability is the core of how we communicate.</div>
+      <div class="tone-example">"We'll take it from there. Every time."</div>
+    </div>
+    <div class="tone-cell">
+      <div class="tone-word">Results-Driven</div>
+      <div class="tone-desc">Lead with outcomes. Clients care about what happens, not how we do it.</div>
+      <div class="tone-example">"Refer a client. Earn $500 on the first call, $2,000 on first order."</div>
+    </div>
+    <div class="tone-cell">
+      <div class="tone-word">Approachable</div>
+      <div class="tone-desc">Professional but human. We're partners, not vendors. A little warmth goes a long way.</div>
+      <div class="tone-example">"Know a business that needs us? We'll handle the rest."</div>
+    </div>
+  </div>
+
+  <div class="voice-compare">
+    <div class="voice-col dont">
+      <div class="voice-col-label">Don't write this</div>
+      <div class="voice-item">"We are pleased to offer a comprehensive suite of integrated facility management solutions..."</div>
+      <div class="voice-item">"Our team of professionals leverages best-in-class methodologies..."</div>
+      <div class="voice-item">"Please do not hesitate to contact us at your earliest convenience."</div>
+      <div class="voice-item">"We provide value-added services across multiple verticals."</div>
+    </div>
+    <div class="voice-col do">
+      <div class="voice-col-label">Write this instead</div>
+      <div class="voice-item">"We handle HVAC, plumbing, electrical — across all your locations."</div>
+      <div class="voice-item">"Certified techs. Fast response. No excuses."</div>
+      <div class="voice-item">"Call us today at (267) 814-5880 — we'll take it from there."</div>
+      <div class="voice-item">"One call covers all your commercial facilities."</div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 SOCIAL MEDIA TEMPLATES -->
+<section id="social">
+  <div class="section-header">
+    <span class="section-num">05</span>
+    <h2 class="section-title">Social Media Templates</h2>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="templates-grid">
+
+    <!-- Instagram Square -->
+    <div class="template-card">
+      <div class="template-preview" style="background: linear-gradient(160deg, #0a1628 0%, #000 60%);">
+        <div class="template-dims">1080 × 1080 px</div>
+        <div class="template-platform">Instagram</div>
+        <div style="position:absolute; top:1.5rem; left:1.5rem;">
+          <div style="font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:800; letter-spacing:0.1em; color:#fff;">SEAMLESS<span style="color:#35b8f3;">FM</span></div>
+        </div>
+        <div style="position:absolute; top:50%; left:1.5rem; right:1.5rem; transform:translateY(-50%);">
+          <div style="width:40px; height:2px; background:#35b8f3; margin-bottom:12px;"></div>
+          <div style="font-family:'Barlow Condensed',sans-serif; font-size:36px; font-weight:800; text-transform:uppercase; line-height:1.05; color:#fff;">YOUR<br>FACILITY.<br><span style="color:#35b8f3;">OUR CALL.</span></div>
+        </div>
+        <div class="template-content">
+          <div class="template-body">Fast response · All trades · Multi-site</div>
+          <div class="template-url">www.seamlessfm.com</div>
+        </div>
+      </div>
+      <div class="template-meta">
+        <div class="template-name">Service Highlight</div>
+        <div class="template-spec">1:1 · 1080×1080</div>
+      </div>
+    </div>
+
+    <!-- Instagram Portrait -->
+    <div class="template-card">
+      <div class="template-preview portrait" style="background: #000;">
+        <div class="template-dims">1080 × 1350 px</div>
+        <div class="template-platform">Instagram</div>
+        <div style="position:absolute; top:1.5rem; left:1.5rem;">
+          <div style="font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:800; letter-spacing:0.1em; color:#fff;">SEAMLESS<span style="color:#35b8f3;">FM</span></div>
+        </div>
+        <div style="position:absolute; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center;">
+          <div style="text-align:center; padding:2rem;">
+            <div style="font-family:'Barlow Condensed',sans-serif; font-size:64px; font-weight:900; text-transform:uppercase; line-height:0.9; color:#fff;">DID<br>YOU<br><span style="color:#35b8f3; font-size:80px;">KNOW?</span></div>
+          </div>
+        </div>
+        <div class="template-content">
+          <div class="template-eyebrow">Tip of the week</div>
+          <div class="template-body">Regular HVAC filter changes can cut energy costs by up to 15%.</div>
+          <div class="template-url">www.seamlessfm.com</div>
+        </div>
+      </div>
+      <div class="template-meta">
+        <div class="template-name">Educational / Tips</div>
+        <div class="template-spec">4:5 · 1080×1350</div>
+      </div>
+    </div>
+
+    <!-- LinkedIn Post -->
+    <div class="template-card">
+      <div class="template-preview" style="background: linear-gradient(135deg, #000 50%, #0a1628 100%);">
+        <div class="template-dims">1200 × 1200 px</div>
+        <div class="template-platform">LinkedIn</div>
+        <div style="position:absolute; top:1.5rem; left:1.5rem; right:1.5rem; display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:800; letter-spacing:0.1em; color:#fff;">SEAMLESS<span style="color:#35b8f3;">FM</span></div>
+          <div style="font-size:9px; font-weight:600; letter-spacing:0.08em; color:rgba(255,255,255,0.4);">FACILITY MANAGEMENT</div>
+        </div>
+        <div style="position:absolute; top:50%; left:1.5rem; transform:translateY(-50%); right:1.5rem;">
+          <div style="font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#35b8f3; margin-bottom:8px;">Client Referral Program</div>
+          <div style="font-family:'Barlow Condensed',sans-serif; font-size:28px; font-weight:800; text-transform:uppercase; color:#fff; line-height:1.1;">Turn Your Network<br>Into <span style="color:#35b8f3;">$2,000</span></div>
+        </div>
+        <div class="template-content">
+          <div class="template-body">Refer a multi-site business. Get paid when they sign.</div>
+          <div class="template-url">info@seamlessfm.com</div>
+        </div>
+      </div>
+      <div class="template-meta">
+        <div class="template-name">Referral / Promo</div>
+        <div class="template-spec">1:1 · 1200×1200</div>
+      </div>
+    </div>
+
+    <!-- LinkedIn Banner -->
+    <div class="template-card">
+      <div class="template-preview landscape" style="background: linear-gradient(90deg, #000 0%, #0d2137 100%);">
+        <div class="template-dims">1584 × 396 px</div>
+        <div class="template-platform">LinkedIn Banner</div>
+        <div style="position:absolute; top:50%; left:2rem; transform:translateY(-50%);">
+          <div style="font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:800; letter-spacing:0.1em; color:#fff;">SEAMLESS <span style="color:#35b8f3;">FM</span></div>
+          <div style="font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:800; text-transform:uppercase; color:#fff; line-height:1.1; margin:4px 0;">YOUR FACILITY.<br>OUR RESPONSIBILITY.</div>
+          <div style="font-size:10px; font-weight:500; letter-spacing:0.08em; color:#35b8f3; margin-top:6px;">WWW.SEAMLESSFM.COM</div>
+        </div>
+      </div>
+      <div class="template-meta">
+        <div class="template-name">LinkedIn Cover Banner</div>
+        <div class="template-spec">4:1 · 1584×396</div>
+      </div>
+    </div>
+
+    <!-- Story -->
+    <div class="template-card">
+      <div class="template-preview" style="aspect-ratio:9/16; background:#000;">
+        <div class="template-dims">1080 × 1920 px</div>
+        <div class="template-platform">Story</div>
+        <div style="position:absolute; top:2rem; left:1.5rem; right:1.5rem; display:flex; justify-content:space-between;">
+          <div style="font-family:'Barlow Condensed',sans-serif; font-size:16px; font-weight:800; color:#fff;">SEAMLESS<span style="color:#35b8f3;">FM</span></div>
+        </div>
+        <div style="position:absolute; top:50%; left:1.5rem; right:1.5rem; transform:translateY(-50%); text-align:center;">
+          <div style="font-family:'Barlow Condensed',sans-serif; font-size:52px; font-weight:900; text-transform:uppercase; color:#fff; line-height:0.95;">WE'RE<br>HERE<br><span style="color:#35b8f3;">FOR YOU</span></div>
+          <div style="font-size:12px; font-weight:400; color:rgba(255,255,255,0.5); margin-top:1rem; line-height:1.6;">All season. All trades.<br>All locations.</div>
+        </div>
+        <div style="position:absolute; bottom:2rem; left:1.5rem; right:1.5rem; text-align:center;">
+          <div style="font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#35b8f3;">www.seamlessfm.com</div>
+        </div>
+      </div>
+      <div class="template-meta">
+        <div class="template-name">Instagram / Facebook Story</div>
+        <div class="template-spec">9:16 · 1080×1920</div>
+      </div>
+    </div>
+
+    <!-- Email Header -->
+    <div class="template-card">
+      <div class="template-preview landscape" style="background: #000; aspect-ratio: 3/1;">
+        <div class="template-dims">600 × 200 px</div>
+        <div class="template-platform">Email</div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between; padding:1.5rem 2rem;">
+          <div>
+            <div style="font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:800; letter-spacing:0.06em; color:#fff;">SEAMLESS <span style="color:#35b8f3;">FM</span></div>
+            <div style="font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-top:2px;">Facility Management</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:10px; color:#35b8f3; font-weight:600; letter-spacing:0.06em;">www.seamlessfm.com</div>
+            <div style="font-size:10px; color:rgba(255,255,255,0.4); margin-top:2px;">(267) 814-5880</div>
+          </div>
+        </div>
+        <div style="position:absolute; bottom:0; left:0; right:0; height:2px; background:#35b8f3;"></div>
+      </div>
+      <div class="template-meta">
+        <div class="template-name">Email Header</div>
+        <div class="template-spec">3:1 · 600×200</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- 06 ASSETS -->
+<section id="assets">
+  <div class="section-header">
+    <span class="section-num">06</span>
+    <h2 class="section-title">Brand Assets</h2>
+    <div class="section-line"></div>
+  </div>
+
+  <div class="assets-grid">
+    <div class="asset-cell">
+      <div class="asset-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="#35b8f3" stroke-width="1.5"/><path d="M8 12h8M12 8v8" stroke="#35b8f3" stroke-width="1.5"/></svg>
+      </div>
+      <div class="asset-name">Primary Logo</div>
+      <div class="asset-desc">Full horizontal lockup with icon, wordmark, and tagline. Default usage for all formal communications.</div>
+      <div class="asset-spec">SVG · PNG · @2x · @3x</div>
+    </div>
+    <div class="asset-cell">
+      <div class="asset-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#35b8f3" stroke-width="1.5"/><path d="M12 7v5l3 3" stroke="#35b8f3" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="asset-name">Icon Mark</div>
+      <div class="asset-desc">Standalone "S" icon for favicons, app icons, social avatars, and small-scale usage.</div>
+      <div class="asset-spec">SVG · PNG · ICO · 16–512px</div>
+    </div>
+    <div class="asset-cell">
+      <div class="asset-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="12" rx="2" stroke="#35b8f3" stroke-width="1.5"/><path d="M7 10h10M7 14h6" stroke="#35b8f3" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="asset-name">Wordmark Only</div>
+      <div class="asset-desc">"SEAMLESS FM" text lockup without icon. Use when icon already appears nearby.</div>
+      <div class="asset-spec">SVG · PNG · Dark + Light</div>
+    </div>
+    <div class="asset-cell">
+      <div class="asset-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" stroke="#35b8f3" stroke-width="1.5"/></svg>
+      </div>
+      <div class="asset-name">Color Swatches</div>
+      <div class="asset-desc">Official Pantone, CMYK, RGB, and HEX values for all brand colors. For print and digital use.</div>
+      <div class="asset-spec">ASE · PDF · HEX reference</div>
+    </div>
+    <div class="asset-cell">
+      <div class="asset-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h10M4 17h7" stroke="#35b8f3" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="asset-name">Font Files</div>
+      <div class="asset-desc">Barlow Condensed (headings) and Barlow (body) — licensed via Google Fonts for free use.</div>
+      <div class="asset-spec">TTF · WOFF2 · Google Fonts</div>
+    </div>
+    <div class="asset-cell">
+      <div class="asset-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="14" rx="2" stroke="#35b8f3" stroke-width="1.5"/><path d="M8 21h8M12 17v4" stroke="#35b8f3" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="asset-name">Social Templates</div>
+      <div class="asset-desc">Canva templates for Instagram (1:1, 4:5), LinkedIn (1:1, banner), Stories (9:16), and Email headers.</div>
+      <div class="asset-spec">Canva · PNG · PDF export</div>
+    </div>
+    <div class="asset-cell">
+      <div class="asset-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="#35b8f3" stroke-width="1.5"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="#35b8f3" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="asset-name">Document Templates</div>
+      <div class="asset-desc">Branded Word and PDF templates for proposals, quotes, service agreements, and reports.</div>
+      <div class="asset-spec">DOCX · PDF · Canva</div>
+    </div>
+    <div class="asset-cell">
+      <div class="asset-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 16l4-4 4 4 4-6 4 6" stroke="#35b8f3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="asset-name">Presentation Deck</div>
+      <div class="asset-desc">Branded PowerPoint / Canva slide master with title slides, content layouts, and section dividers.</div>
+      <div class="asset-spec">PPTX · Canva · PDF</div>
+    </div>
+  </div>
+
+  <!-- Canva Brand Kit reference -->
+  <div style="margin-top: 2rem; padding: 1.5rem 2rem; background: rgba(53,184,243,0.04); border: 1px solid rgba(53,184,243,0.15); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); margin-bottom: 4px;">Canva Brand Kit</div>
+      <div style="font-size: 13px; color: var(--gray-400);">All assets are stored and accessible in the Seamless FM Canva brand kit.</div>
+    </div>
+    <div style="font-family: monospace; font-size: 13px; color: var(--blue); background: rgba(53,184,243,0.08); border: 1px solid rgba(53,184,243,0.2); padding: 6px 14px;">ID: kAGsIIs6BB8</div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div>
+    <div class="footer-brand">SEAMLESS <span>FM</span></div>
+    <div style="font-size:11px; color:var(--gray-400); margin-top:4px; letter-spacing:0.06em; text-transform:uppercase;">Facility Management</div>
+  </div>
+  <div class="footer-meta" style="text-align:right;">
+    <div>www.seamlessfm.com</div>
+    <div>info@seamlessfm.com · (267) 814-5880</div>
+    <div style="margin-top:4px; font-size:11px; color:var(--gray-600);">Brand Identity Kit v1.0 · 2026 · Confidential</div>
+  </div>
+</footer>
+
+</body>
+</html>

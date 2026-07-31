@@ -1,0 +1,652 @@
+<style>
+  /* ===== Dispatch & Team screen — all selectors prefixed #screen-vendors ===== */
+  #screen-vendors { padding: 20px 24px; }
+
+  #screen-vendors .dhead {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+  }
+  #screen-vendors .sub { margin-top: 3px; color: var(--ink-2); max-width: 62ch; }
+  #screen-vendors .head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+  #screen-vendors .tabs { margin-top: 14px; margin-bottom: 6px; }
+  #screen-vendors .panel { display: none; }
+  #screen-vendors .panel.is-active { display: block; }
+
+  #screen-vendors .toolbar .search { width: 236px; }
+  #screen-vendors .sort-chip { padding-right: 10px; }
+  #screen-vendors .sort-chip svg { width: 13px; height: 13px; color: var(--ink-3); }
+
+  /* workload legend */
+  #screen-vendors .wl-legend {
+    display: flex; align-items: center; gap: 8px 18px; flex-wrap: wrap;
+    font-size: var(--fs-12); color: var(--ink-2);
+    margin: 0 0 12px; padding: 8px 12px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm);
+  }
+  #screen-vendors .wl-legend .key { display: inline-flex; align-items: center; gap: 7px; }
+  #screen-vendors .wl-legend .mini-meter { width: 42px; height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+  #screen-vendors .wl-legend .mini-meter > span { display: block; height: 100%; width: 70%; background: var(--primary); border-radius: 3px; }
+  #screen-vendors .wl-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--warn); }
+
+  /* person / list cell */
+  #screen-vendors .pl { display: flex; align-items: center; gap: 10px; }
+  #screen-vendors .pl__name { font-weight: 600; color: var(--ink); display: inline-flex; align-items: center; gap: 7px; }
+  #screen-vendors .amtag {
+    height: 16px; padding: 0 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+    border-radius: 4px;
+  }
+  #screen-vendors .amtag::before { display: none; }
+  #screen-vendors .pl__note {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: var(--fs-11); color: var(--ink-2); margin-top: 2px;
+  }
+  #screen-vendors .dot--teal { background: var(--hue-teal); }
+
+  /* open WOs cell with inline meter */
+  #screen-vendors .wl-open { display: inline-flex; align-items: center; gap: 9px; justify-content: flex-end; }
+  #screen-vendors .wl-open .meter { width: 72px; }
+  #screen-vendors .wl-open .num { min-width: 26px; text-align: right; font-weight: 600; }
+
+  #screen-vendors .warn-num { color: var(--warn-ink); font-weight: 600; }
+  #screen-vendors .states { font-size: var(--fs-11); color: var(--ink-3); }
+
+  #screen-vendors tr.more-row td {
+    color: var(--ink-3); font-size: var(--fs-12); text-align: center; cursor: default;
+    background: var(--surface-2);
+  }
+  #screen-vendors tr.more-row:hover td { background: var(--surface-2); }
+
+  #screen-vendors .table-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 16px; border-top: 1px solid var(--border);
+    font-size: var(--fs-12); color: var(--ink-3);
+  }
+  #screen-vendors .table-foot b { color: var(--ink-2); }
+
+  /* ===== Ops buckets ===== */
+  #screen-vendors .ovl { margin: 2px 0 12px; }
+  #screen-vendors .ops-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 14px;
+  }
+  #screen-vendors .ops-card {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 14px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-1);
+  }
+  #screen-vendors .ops-card__top { display: flex; align-items: flex-start; gap: 11px; }
+  #screen-vendors .ops-ico {
+    width: 34px; height: 34px; border-radius: var(--r-sm); flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--primary-soft); color: var(--primary-ink);
+  }
+  #screen-vendors .ops-ico svg { width: 18px; height: 18px; }
+  #screen-vendors .ops-card--sys .ops-ico { background: var(--surface-3); color: var(--ink-3); }
+  #screen-vendors .ops-card__title { font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  #screen-vendors .ops-card__meta { display: inline-flex; align-items: center; gap: 6px; margin-top: 3px; font-size: var(--fs-12); color: var(--ink-2); }
+  #screen-vendors .ops-card__desc { font-size: var(--fs-12); color: var(--ink-3); line-height: 1.5; }
+  #screen-vendors .ops-card .btn { align-self: flex-start; }
+  #screen-vendors .systag {
+    height: 16px; padding: 0 6px; font-size: 10px; font-weight: 700; letter-spacing: .05em;
+    border-radius: 4px; text-transform: uppercase;
+    background: var(--surface-3); color: var(--ink-3);
+    display: inline-flex; align-items: center;
+  }
+
+  /* archive strip */
+  #screen-vendors .arch-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+  #screen-vendors .stat-chip {
+    display: inline-flex; flex-direction: column; gap: 2px;
+    padding: 9px 13px; min-width: 118px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm);
+    text-align: left;
+  }
+  #screen-vendors .stat-chip__k { font-size: var(--fs-11); color: var(--ink-3); font-weight: 600; letter-spacing: .03em; }
+  #screen-vendors .stat-chip__v { font-size: var(--fs-18); font-weight: 650; letter-spacing: -.01em; color: var(--ink); }
+  #screen-vendors button.stat-chip { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  #screen-vendors button.stat-chip:hover { border-color: var(--border-strong); box-shadow: var(--shadow-2); }
+  #screen-vendors .stat-chip--hl { background: var(--primary-soft); border-color: transparent; }
+  #screen-vendors .stat-chip--hl .stat-chip__k { color: var(--primary-ink); }
+  #screen-vendors .stat-chip--hl .stat-chip__v { color: var(--primary-ink); }
+
+  /* ===== Exec rollup ===== */
+  #screen-vendors .exec-head { display: flex; align-items: flex-start; gap: 13px; }
+  #screen-vendors .exec-ico {
+    width: 40px; height: 40px; border-radius: var(--r-md); flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--primary-soft); color: var(--primary-ink);
+  }
+  #screen-vendors .exec-ico svg { width: 21px; height: 21px; }
+  #screen-vendors .exec-count {
+    margin-left: auto; font-size: var(--fs-28); font-weight: 650; letter-spacing: -.02em;
+    color: var(--ink); line-height: 1;
+  }
+  #screen-vendors .exec-head p { margin-top: 3px; max-width: 64ch; line-height: 1.5; }
+  #screen-vendors .exec-note {
+    margin: 14px 0 16px; padding: 10px 13px; line-height: 1.5;
+    background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--primary);
+    border-radius: var(--r-sm); color: var(--ink-2); font-size: var(--fs-13);
+  }
+  #screen-vendors .guest-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  #screen-vendors .guest-card {
+    padding: 14px; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: var(--r-md);
+  }
+  #screen-vendors .guest-head { display: flex; align-items: center; gap: 10px; }
+  #screen-vendors .guest-name { font-weight: 600; color: var(--ink); }
+  #screen-vendors .guest-email { font-size: var(--fs-11); margin-top: 1px; }
+  #screen-vendors .guest-pill {
+    margin-left: auto; height: 20px; padding: 0 9px; border-radius: var(--r-full);
+    font-size: var(--fs-11); font-weight: 600; white-space: nowrap;
+    background: var(--hue-gray-soft); color: var(--hue-gray);
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  #screen-vendors .guest-pill svg { width: 12px; height: 12px; }
+  #screen-vendors .gstats { margin-top: 13px; display: flex; flex-direction: column; gap: 1px; }
+  #screen-vendors .gstat {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 0; border-bottom: 1px solid var(--border);
+    font-size: var(--fs-12); color: var(--ink-2);
+  }
+  #screen-vendors .gstat:last-child { border-bottom: 0; }
+  #screen-vendors .gstat .k { display: inline-flex; align-items: center; gap: 7px; }
+  #screen-vendors .gstat .v { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  #screen-vendors .note-strip {
+    margin-top: 16px; padding-top: 13px; border-top: 1px dashed var(--border-strong);
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: var(--fs-12); color: var(--ink-3);
+  }
+  #screen-vendors .note-strip svg { width: 14px; height: 14px; }
+
+  @media (max-width: 720px) {
+    #screen-vendors .guest-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<section class="screen" id="screen-vendors">
+
+  <!-- ===== Header ===== -->
+  <div class="dhead">
+    <div>
+      <h1>Dispatch &amp; Team</h1>
+      <p class="sub">52 active lists · 1,273 open work orders — dispatching moves a WO between lists.</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn btn--ghost" title="Rebalance workload across lists">
+        <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>
+        Rebalance
+      </button>
+      <button class="btn btn--primary">
+        <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        New list
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== Tabs ===== -->
+  <div class="tabs" role="tablist">
+    <button class="tab is-active" role="tab" aria-selected="true" data-tab="workload">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Workload<span class="badge">52</span>
+    </button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="ops">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      Ops buckets
+    </button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="exec">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+      Exec rollup<span class="badge">2,056</span>
+    </button>
+  </div>
+
+  <!-- ============================================================
+       TAB 1 — WORKLOAD
+       ============================================================ -->
+  <div class="panel is-active" data-panel="workload" role="tabpanel">
+
+    <div class="toolbar">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="input" id="team-search" type="search" placeholder="Search team…" aria-label="Search team">
+      </div>
+      <button class="filter-chip">Role: <b>All</b><span class="x" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+      <button class="filter-chip">Comp: <b>All</b><span class="x" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button>
+      <div class="toolbar__spacer"></div>
+      <button class="filter-chip sort-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>
+        Sort: <b>Open WOs</b>
+      </button>
+    </div>
+
+    <div class="wl-legend">
+      <span class="key"><span class="mini-meter"><span></span></span> Workload meter — scaled to heaviest list (116)</span>
+      <span class="key"><span class="sw"></span> Amber flags: Open &gt;90 · Waiting &gt;20 · Avg days &gt;9</span>
+    </div>
+
+    <div class="card">
+      <div class="table-scroll">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Person / List</th>
+              <th class="num">Open WOs</th>
+              <th class="num">Waiting approval</th>
+              <th class="num">Quote ready</th>
+              <th class="num">Done this month</th>
+              <th class="num">Avg days in list</th>
+              <th>Top states</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <!-- AM Peter — 116 (AM) -->
+            <tr data-person="am peter">
+              <td>
+                <div class="pl">
+                  <span class="avatar avatar--sm avatar--primary">AP</span>
+                  <div><div class="pl__name">AM Peter <span class="pill pill--blue amtag">AM</span></div></div>
+                </div>
+              </td>
+              <td class="num"><span class="wl-open"><span class="num warn-num">116</span><span class="meter meter--warn"><span style="width:100%"></span></span></span></td>
+              <td class="num"><span class="warn-num">25</span></td>
+              <td class="num">12</td>
+              <td class="num">38</td>
+              <td class="num">7</td>
+              <td><span class="states">TX · CA · NC</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Matt Hammond — 112 (hero WO) -->
+            <tr data-person="matt hammond" data-goto="workorder-detail">
+              <td>
+                <div class="pl">
+                  <span class="avatar avatar--sm">MH</span>
+                  <div>
+                    <div class="pl__name">Matt Hammond</div>
+                    <div class="pl__note" title="WO-39403 waiting approval lives here"><span class="dot dot--teal"></span> WO-39403 waiting approval lives here</div>
+                  </div>
+                </div>
+              </td>
+              <td class="num"><span class="wl-open"><span class="num warn-num">112</span><span class="meter meter--warn"><span style="width:97%"></span></span></span></td>
+              <td class="num"><span class="warn-num">24</span></td>
+              <td class="num">14</td>
+              <td class="num">34</td>
+              <td class="num">8</td>
+              <td><span class="states">TX · NJ · IL</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Charly Snyder — 89 -->
+            <tr data-person="charly snyder">
+              <td><div class="pl"><span class="avatar avatar--sm">CS</span><div><div class="pl__name">Charly Snyder</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">89</span><span class="meter"><span style="width:77%"></span></span></span></td>
+              <td class="num">19</td>
+              <td class="num">11</td>
+              <td class="num">29</td>
+              <td class="num"><span class="warn-num">10</span></td>
+              <td><span class="states">IL · MO · IA</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Sean Rodgers — 72 -->
+            <tr data-person="sean rodgers">
+              <td><div class="pl"><span class="avatar avatar--sm">SR</span><div><div class="pl__name">Sean Rodgers</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">72</span><span class="meter"><span style="width:62%"></span></span></span></td>
+              <td class="num">16</td>
+              <td class="num">9</td>
+              <td class="num">26</td>
+              <td class="num">6</td>
+              <td><span class="states">TX · FL · GA</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Adam Keller — 67 -->
+            <tr data-person="adam keller">
+              <td><div class="pl"><span class="avatar avatar--sm">AK</span><div><div class="pl__name">Adam Keller</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">67</span><span class="meter"><span style="width:58%"></span></span></span></td>
+              <td class="num">15</td>
+              <td class="num">8</td>
+              <td class="num">24</td>
+              <td class="num"><span class="warn-num">11</span></td>
+              <td><span class="states">PA · NJ · NY</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Joseph Foster — 66 -->
+            <tr data-person="joseph foster">
+              <td><div class="pl"><span class="avatar avatar--sm">JF</span><div><div class="pl__name">Joseph Foster</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">66</span><span class="meter"><span style="width:57%"></span></span></span></td>
+              <td class="num">14</td>
+              <td class="num">9</td>
+              <td class="num">22</td>
+              <td class="num">7</td>
+              <td><span class="states">CA · AZ · NV</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Nate Hart — 65 -->
+            <tr data-person="nate hart">
+              <td><div class="pl"><span class="avatar avatar--sm">NH</span><div><div class="pl__name">Nate Hart</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">65</span><span class="meter"><span style="width:56%"></span></span></span></td>
+              <td class="num">14</td>
+              <td class="num">7</td>
+              <td class="num">21</td>
+              <td class="num">5</td>
+              <td><span class="states">TX · OK · AR</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Zach Malden — 59 -->
+            <tr data-person="zach malden">
+              <td><div class="pl"><span class="avatar avatar--sm">ZM</span><div><div class="pl__name">Zach Malden</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">59</span><span class="meter"><span style="width:51%"></span></span></span></td>
+              <td class="num">13</td>
+              <td class="num">8</td>
+              <td class="num">20</td>
+              <td class="num">9</td>
+              <td><span class="states">IL · IN · WI</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Elio Armani — 57 -->
+            <tr data-person="elio armani">
+              <td><div class="pl"><span class="avatar avatar--sm">EA</span><div><div class="pl__name">Elio Armani</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">57</span><span class="meter"><span style="width:49%"></span></span></span></td>
+              <td class="num">12</td>
+              <td class="num">7</td>
+              <td class="num">19</td>
+              <td class="num">6</td>
+              <td><span class="states">FL · GA · SC</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- John Hayes — 54 -->
+            <tr data-person="john hayes">
+              <td><div class="pl"><span class="avatar avatar--sm">JH</span><div><div class="pl__name">John Hayes</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">54</span><span class="meter"><span style="width:47%"></span></span></span></td>
+              <td class="num">12</td>
+              <td class="num">6</td>
+              <td class="num">18</td>
+              <td class="num">8</td>
+              <td><span class="states">TX · LA · MO</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Pierre Dale — 48 -->
+            <tr data-person="pierre dale">
+              <td><div class="pl"><span class="avatar avatar--sm">PD</span><div><div class="pl__name">Pierre Dale</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">48</span><span class="meter"><span style="width:41%"></span></span></span></td>
+              <td class="num">11</td>
+              <td class="num">6</td>
+              <td class="num">17</td>
+              <td class="num"><span class="warn-num">10</span></td>
+              <td><span class="states">CA · OR · WA</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Ben Jackson — 46 -->
+            <tr data-person="ben jackson">
+              <td><div class="pl"><span class="avatar avatar--sm">BJ</span><div><div class="pl__name">Ben Jackson</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">46</span><span class="meter"><span style="width:40%"></span></span></span></td>
+              <td class="num">10</td>
+              <td class="num">5</td>
+              <td class="num">16</td>
+              <td class="num">5</td>
+              <td><span class="states">MO · KS · NE</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Alan Tate — 45 -->
+            <tr data-person="alan tate">
+              <td><div class="pl"><span class="avatar avatar--sm">AT</span><div><div class="pl__name">Alan Tate</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">45</span><span class="meter"><span style="width:39%"></span></span></span></td>
+              <td class="num">10</td>
+              <td class="num">6</td>
+              <td class="num">16</td>
+              <td class="num">7</td>
+              <td><span class="states">TX · NM · CO</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Jay Murphy — 45 -->
+            <tr data-person="jay murphy">
+              <td><div class="pl"><span class="avatar avatar--sm">JM</span><div><div class="pl__name">Jay Murphy</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">45</span><span class="meter"><span style="width:39%"></span></span></span></td>
+              <td class="num">9</td>
+              <td class="num">5</td>
+              <td class="num">15</td>
+              <td class="num"><span class="warn-num">12</span></td>
+              <td><span class="states">NJ · PA · NY</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <!-- Julian Garcia — 45 -->
+            <tr data-person="julian garcia">
+              <td><div class="pl"><span class="avatar avatar--sm">JG</span><div><div class="pl__name">Julian Garcia</div></div></div></td>
+              <td class="num"><span class="wl-open"><span class="num">45</span><span class="meter"><span style="width:39%"></span></span></span></td>
+              <td class="num">10</td>
+              <td class="num">5</td>
+              <td class="num">15</td>
+              <td class="num">6</td>
+              <td><span class="states">CA · AZ · TX</span></td>
+              <td class="num"><span class="icon-btn" title="List actions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></td>
+            </tr>
+
+            <tr class="more-row">
+              <td colspan="8">…and 33 more lists (Paul Collins 40 · Ian Knox 40 · Sergio Kane 28 · Nadine Asher 25 · Nora Allen 20 …)</td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+      <div class="table-foot">
+        <span><b>1,273</b> open across <b>52</b> lists · heaviest: <b>AM Peter (116)</b> · avg <b>24.5</b>/list</span>
+        <span class="faint">Showing top 15</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       TAB 2 — OPS BUCKETS
+       ============================================================ -->
+  <div class="panel" data-panel="ops" role="tabpanel">
+
+    <p class="overline ovl">Operational lists — routing buckets, not people</p>
+
+    <div class="ops-grid">
+
+      <!-- Incoming WOs -->
+      <div class="ops-card">
+        <div class="ops-card__top">
+          <span class="ops-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span>
+          <div>
+            <div class="ops-card__title">Incoming WOs <span class="faint" style="font-weight:400">— Ecotrak intake</span></div>
+            <div class="ops-card__meta"><span class="dot dot--good"></span> 0 waiting · cleared today</div>
+          </div>
+        </div>
+        <p class="ops-card__desc">New work orders land here from Ecotrak before being dispatched to a person list. 22 processed this week.</p>
+        <button class="btn btn--sm">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          Open intake
+        </button>
+      </div>
+
+      <!-- Waiting for Approval Park -->
+      <div class="ops-card">
+        <div class="ops-card__top">
+          <span class="ops-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
+          <div>
+            <div class="ops-card__title">Waiting for Approval Park</div>
+            <div class="ops-card__meta"><span class="dot dot--good"></span> 0 parked</div>
+          </div>
+        </div>
+        <p class="ops-card__desc">Quotes park here when the FM response stalls, then move back to a person list once approved.</p>
+      </div>
+
+      <!-- DMG DONE park -->
+      <div class="ops-card">
+        <div class="ops-card__top">
+          <span class="ops-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span>
+          <div>
+            <div class="ops-card__title">DMG DONE park</div>
+            <div class="ops-card__meta"><span class="dot dot--good"></span> 0 pending</div>
+          </div>
+        </div>
+        <p class="ops-card__desc">DMG-client completed WOs pending batch invoicing.</p>
+      </div>
+
+      <!-- Template -->
+      <div class="ops-card ops-card--sys">
+        <div class="ops-card__top">
+          <span class="ops-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <div>
+            <div class="ops-card__title">Template <span class="systag">system</span></div>
+            <div class="ops-card__meta faint">Blueprint list — never receives live WOs</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Testing -- IT -->
+      <div class="ops-card ops-card--sys">
+        <div class="ops-card__top">
+          <span class="ops-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+          <div>
+            <div class="ops-card__title">Testing -- IT <span class="systag">system</span></div>
+            <div class="ops-card__meta faint">Sandbox list for IT — excluded from counts</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <p class="overline ovl" style="margin-top:22px">✅ Finished WOs</p>
+    <div class="arch-strip">
+      <button class="stat-chip stat-chip--hl" data-goto="workorders" title="View invoiced work orders">
+        <span class="stat-chip__k">Invoiced</span>
+        <span class="stat-chip__v num">17,770</span>
+      </button>
+      <div class="stat-chip">
+        <span class="stat-chip__k">Canceled/Postponed</span>
+        <span class="stat-chip__v num">124</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-chip__k">Ready To Invoice</span>
+        <span class="stat-chip__v num">15</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-chip__k">Checked</span>
+        <span class="stat-chip__v num">0</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-chip__k">RTI-Park</span>
+        <span class="stat-chip__v num">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       TAB 3 — EXEC ROLLUP
+       ============================================================ -->
+  <div class="panel" data-panel="exec" role="tabpanel">
+
+    <div class="card" style="margin-top:2px">
+      <div class="card__body">
+        <div class="exec-head">
+          <span class="exec-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></span>
+          <div>
+            <h3>Seamless FM Executive View</h3>
+            <p class="muted">2,056 work orders are multi-homed into this list — they live on the tech and AM lists <em>and</em> here at the same time.</p>
+          </div>
+          <span class="exec-count num">2,056</span>
+        </div>
+
+        <p class="exec-note">A reporting surface, not a queue — read-only guests see curated dashboards built on it.</p>
+
+        <div class="guest-grid">
+
+          <!-- Teresa -->
+          <div class="guest-card">
+            <div class="guest-head">
+              <span class="avatar">T</span>
+              <div>
+                <div class="guest-name">Teresa's Dashboard</div>
+                <div class="guest-email faint">teresa@seamlessfm.com</div>
+              </div>
+              <span class="guest-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>read-only guest</span>
+            </div>
+            <div class="gstats">
+              <div class="gstat"><span class="k"><span class="chip chip--sfm">SFM</span> Open</span><span class="v">92</span></div>
+              <div class="gstat"><span class="k"><span class="chip chip--af">AF</span> Open</span><span class="v">34</span></div>
+              <div class="gstat"><span class="k"><span class="chip chip--bkr">BKR</span> Open</span><span class="v">21</span></div>
+              <div class="gstat"><span class="k">Invoiced MTD</span><span class="v">$284,910</span></div>
+            </div>
+          </div>
+
+          <!-- Ro -->
+          <div class="guest-card">
+            <div class="guest-head">
+              <span class="avatar">R</span>
+              <div>
+                <div class="guest-name">Ro's Dashboard</div>
+                <div class="guest-email faint">ro@seamlessfm.com</div>
+              </div>
+              <span class="guest-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>read-only guest</span>
+            </div>
+            <div class="gstats">
+              <div class="gstat"><span class="k"><span class="chip chip--sfm">SFM</span> Open</span><span class="v">118</span></div>
+              <div class="gstat"><span class="k"><span class="chip chip--af">AF</span> Open</span><span class="v">27</span></div>
+              <div class="gstat"><span class="k"><span class="chip chip--bkr">BKR</span> Open</span><span class="v">33</span></div>
+              <div class="gstat"><span class="k">Invoiced MTD</span><span class="v">$312,540</span></div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="note-strip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          5 read-only guests · guests never see internal cost or profit fields.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<script>
+  (function () {
+    var root = document.getElementById('screen-vendors');
+    if (!root) return;
+
+    // Tab / panel switching
+    var tabs = root.querySelectorAll('.tab');
+    var panels = root.querySelectorAll('.panel');
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        var target = t.getAttribute('data-tab');
+        tabs.forEach(function (x) {
+          var on = x === t;
+          x.classList.toggle('is-active', on);
+          x.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        panels.forEach(function (p) {
+          p.classList.toggle('is-active', p.getAttribute('data-panel') === target);
+        });
+      });
+    });
+
+    // Live workload search (filter person rows by name)
+    var search = root.querySelector('#team-search');
+    if (search) {
+      search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        root.querySelectorAll('.panel[data-panel="workload"] tr[data-person]').forEach(function (row) {
+          var name = row.getAttribute('data-person') || '';
+          row.style.display = (!q || name.indexOf(q) > -1) ? '' : 'none';
+        });
+        var more = root.querySelector('.panel[data-panel="workload"] tr.more-row');
+        if (more) more.style.display = q ? 'none' : '';
+      });
+    }
+  })();
+</script>

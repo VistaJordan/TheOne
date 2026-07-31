@@ -1,0 +1,777 @@
+<style>
+  /* ============ Work Orders list — scoped to #screen-workorders ============ */
+  #screen-workorders { padding: 20px 24px; }
+
+  #screen-workorders .wo-topbar {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  }
+  #screen-workorders .wo-title-wrap { display: flex; flex-direction: column; gap: 2px; }
+  #screen-workorders .wo-sub { font-size: var(--fs-12); color: var(--ink-3); }
+
+  #screen-workorders .wo-tabs { margin-top: 12px; overflow-x: auto; }
+  #screen-workorders .tab--new { color: var(--ink-3); font-weight: 500; }
+  #screen-workorders .tab--new:hover { color: var(--primary-ink); }
+  #screen-workorders .tab--new svg { width: 14px; height: 14px; }
+
+  /* ---- Toolbar ---- */
+  #screen-workorders .toolbar { border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  #screen-workorders .search { width: 320px; }
+  #screen-workorders .wo-tool-btn {
+    height: 30px; padding: 0 10px; font-size: var(--fs-12); gap: 5px;
+  }
+  #screen-workorders .wo-tool-btn b { font-weight: 600; color: var(--ink); }
+  #screen-workorders .wo-tool-btn .wo-caret { width: 13px; height: 13px; color: var(--ink-3); }
+  #screen-workorders .wo-tool-btn .wo-lead { width: 14px; height: 14px; color: var(--ink-3); }
+  #screen-workorders .wo-saved {
+    display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-12);
+    color: var(--ink-3); padding-left: 4px; white-space: nowrap;
+  }
+  #screen-workorders .wo-saved svg { width: 13px; height: 13px; color: var(--good); }
+
+  /* ---- Table shell ---- */
+  #screen-workorders .table-scroll { max-height: 62vh; overflow-y: auto; }
+  #screen-workorders table.data { min-width: 1340px; }
+
+  /* column sizing */
+  #screen-workorders col.c-check  { width: 38px; }
+  #screen-workorders col.c-wo     { width: 90px; }
+  #screen-workorders col.c-ext    { width: 106px; }
+  #screen-workorders col.c-cs     { width: 176px; }
+  #screen-workorders col.c-comp   { width: 56px; }
+  #screen-workorders col.c-fm     { width: 96px; }
+  #screen-workorders col.c-trade  { width: 100px; }
+  #screen-workorders col.c-people { width: 84px; }
+  #screen-workorders col.c-tags   { width: 128px; }
+  #screen-workorders col.c-nte    { width: 88px; }
+  #screen-workorders col.c-age    { width: 104px; }
+  #screen-workorders col.c-ovf    { width: 108px; }
+
+  #screen-workorders td.wo-cell-check,
+  #screen-workorders th.wo-cell-check { padding-left: 14px; padding-right: 4px; }
+
+  #screen-workorders td { height: 38px; }
+
+  /* group header rows stick just under the sticky column header */
+  #screen-workorders tr.data__group td { top: 33px; z-index: 1; }
+  #screen-workorders .wo-group-inner { display: inline-flex; align-items: center; gap: 8px; }
+  #screen-workorders .wo-chev {
+    width: 22px; height: 22px; color: var(--ink-3); transition: transform .15s, background .15s, color .15s;
+    border-radius: var(--r-sm);
+  }
+  #screen-workorders .wo-chev:hover { background: var(--surface-3); color: var(--ink); }
+  #screen-workorders .wo-chev svg { width: 15px; height: 15px; }
+  #screen-workorders tr.data__group.is-collapsed .wo-chev { transform: rotate(-90deg); }
+
+  /* checkboxes */
+  #screen-workorders input.wo-cb {
+    width: 15px; height: 15px; margin: 0; cursor: pointer;
+    accent-color: var(--primary); vertical-align: middle;
+  }
+
+  /* WO number + external reference */
+  #screen-workorders .wo-num { color: var(--primary-ink); font-weight: 600; }
+  #screen-workorders .wo-ext { display: block; max-width: 100%; color: var(--ink-3); }
+
+  /* summary truncation */
+  #screen-workorders .wo-sum { max-width: 320px; color: var(--ink); }
+
+  /* client / store two-line */
+  #screen-workorders .wo-cs { line-height: 1.25; max-width: 172px; }
+  #screen-workorders .wo-cs b { display: block; font-size: var(--fs-13); font-weight: 600; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #screen-workorders .wo-cs span { display: block; font-size: var(--fs-12); color: var(--ink-3);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  #screen-workorders .wo-trade { color: var(--ink-2); font-size: var(--fs-12); }
+  #screen-workorders .wo-fm { color: var(--ink-2); font-size: var(--fs-12);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* people cell (AM + assignee, optional dispatch ghost) */
+  #screen-workorders .wo-people { display: inline-flex; align-items: center; gap: 5px; }
+  #screen-workorders .wo-assign {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 1px dashed var(--border-strong); color: var(--ink-3);
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  #screen-workorders .wo-assign:hover { border-color: var(--primary); color: var(--primary-ink); background: var(--primary-soft); }
+  #screen-workorders .wo-assign svg { width: 12px; height: 12px; }
+
+  /* parts tags */
+  #screen-workorders .wo-tags { white-space: nowrap; }
+  #screen-workorders .wo-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 18px; padding: 0 7px 0 6px; border-radius: 5px;
+    background: var(--surface-3); color: var(--ink-2);
+    font-size: var(--fs-10); font-weight: 500; letter-spacing: .01em; white-space: nowrap;
+  }
+  #screen-workorders .wo-tag svg { width: 11px; height: 11px; color: var(--ink-3); }
+
+  /* status age (days in status) */
+  #screen-workorders .wo-age { color: var(--ink-2); }
+  #screen-workorders .wo-age--warn { color: var(--warn-ink); font-weight: 600; }
+
+  /* NTE custom-field header sparkle */
+  #screen-workorders th.wo-th-nte .wo-spark {
+    width: 11px; height: 11px; color: var(--primary); display: inline-block;
+    vertical-align: -1px; margin-left: 3px;
+  }
+  #screen-workorders td.wo-nte { color: var(--ink); }
+
+  /* row action buttons cell */
+  #screen-workorders td.wo-cell-ovf { text-align: right; padding-right: 12px; }
+  #screen-workorders .wo-ovf { width: 28px; height: 28px; }
+  #screen-workorders .wo-ovf svg { width: 16px; height: 16px; }
+  #screen-workorders .wo-accept-wrap { display: inline-flex; gap: 6px; justify-content: flex-end; }
+
+  /* footer strip */
+  #screen-workorders .wo-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 4px 2px; font-size: var(--fs-12); color: var(--ink-3);
+  }
+  #screen-workorders .wo-page { display: inline-flex; align-items: center; gap: 6px; }
+  #screen-workorders .wo-page .icon-btn { width: 26px; height: 26px; }
+  #screen-workorders .wo-page .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+  #screen-workorders .wo-page .icon-btn:disabled:hover { background: none; color: var(--ink-2); }
+
+  /* bulk action bar */
+  #screen-workorders #wo-bulk {
+    position: fixed; left: 50%; bottom: 22px;
+    transform: translateX(-50%) translateY(10px);
+    z-index: var(--z-toast);
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 8px 8px 14px;
+    box-shadow: var(--shadow-2);
+    opacity: 0; pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  #screen-workorders #wo-bulk.is-visible { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+  #screen-workorders .wo-bulk-count { font-size: var(--fs-13); color: var(--ink-2); white-space: nowrap; }
+  #screen-workorders .wo-bulk-count b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #screen-workorders .wo-bulk-sep { color: var(--border-strong); padding: 0 2px; }
+  #screen-workorders .wo-bulk-x {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 26px; padding: 0 8px 0 6px; gap: 4px; border-radius: var(--r-sm);
+    color: var(--ink-2); font-size: var(--fs-12);
+  }
+  #screen-workorders .wo-bulk-x:hover { background: var(--surface-2); color: var(--ink); }
+  #screen-workorders .wo-bulk-x svg { width: 14px; height: 14px; }
+</style>
+
+<section class="screen" id="screen-workorders">
+  <!-- ===== Header ===== -->
+  <div class="wo-topbar">
+    <div class="wo-title-wrap">
+      <h1>Work Orders</h1>
+      <div class="wo-sub">Active folder · 1,273 open across 52 lists</div>
+    </div>
+    <button class="btn btn--primary" data-stop>
+      <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      New Work Order
+    </button>
+  </div>
+
+  <!-- saved-view tabs -->
+  <div class="tabs wo-tabs">
+    <button class="tab is-active">All jobs <span class="badge">1,273</span></button>
+    <button class="tab">Today</button>
+    <button class="tab">Last 7 days</button>
+    <button class="tab">QC</button>
+    <button class="tab">SunHoldings <span class="badge">26</span></button>
+    <button class="tab">MoD feedback</button>
+    <button class="tab tab--new">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      New view
+    </button>
+  </div>
+
+  <!-- ===== Toolbar ===== -->
+  <div class="toolbar">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input class="input" type="text" placeholder="Search WO #, ext ref, store, description…" aria-label="Search work orders">
+    </div>
+
+    <button class="filter-chip" data-stop>Status: <b>All open</b> <span class="x" title="Remove filter"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span></button>
+    <button class="filter-chip" data-stop>Comp: <b>All</b> <span class="x" title="Remove filter"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span></button>
+    <button class="filter-chip" data-stop>Trade: <b>All</b> <span class="x" title="Remove filter"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span></button>
+
+    <button class="btn btn--ghost wo-tool-btn" data-stop>
+      <svg class="wo-lead" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      Filter
+    </button>
+
+    <div class="toolbar__spacer"></div>
+
+    <button class="btn wo-tool-btn" data-stop>
+      <svg class="wo-lead" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      Group: <b>Status</b>
+      <svg class="wo-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <button class="btn wo-tool-btn" data-stop>
+      <svg class="wo-lead" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 16 4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16"/></svg>
+      Sort: <b>Days in status</b>
+      <svg class="wo-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <button class="btn wo-tool-btn" data-stop>
+      <svg class="wo-lead" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+      Columns
+    </button>
+
+    <span class="wo-saved" title="This view is auto-saved">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      Saved
+    </span>
+  </div>
+
+  <!-- ===== Table ===== -->
+  <div class="card">
+    <div class="table-scroll">
+      <table class="data">
+        <colgroup>
+          <col class="c-check"><col class="c-wo"><col class="c-ext"><col><col class="c-cs">
+          <col class="c-comp"><col class="c-fm"><col class="c-trade"><col class="c-people">
+          <col class="c-tags"><col class="c-nte"><col class="c-age"><col class="c-ovf">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="wo-cell-check"><input type="checkbox" class="wo-cb" id="wo-select-all" aria-label="Select all visible"></th>
+            <th>WO #</th>
+            <th title="Client/FM reference">Ext ref</th>
+            <th>Summary</th>
+            <th>Client / Store</th>
+            <th>Comp</th>
+            <th>FM</th>
+            <th>Trade</th>
+            <th>People</th>
+            <th>Tags</th>
+            <th class="num wo-th-nte" title="Custom field · 16. Client NTE">NTE<svg class="wo-spark" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M11.5 2.3a.55.55 0 0 1 1 0l1.7 6.5 6.5 1.7a.55.55 0 0 1 0 1l-6.5 1.7-1.7 6.5a.55.55 0 0 1-1 0l-1.7-6.5-6.5-1.7a.55.55 0 0 1 0-1l6.5-1.7z"/></svg></th>
+            <th class="num">Days in status</th>
+            <th aria-label="Actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- ===== Open / emergency ===== -->
+          <tr class="data__group">
+            <td colspan="13">
+              <span class="wo-group-inner">
+                <button class="icon-btn wo-chev" data-collapse="open" data-stop aria-label="Collapse group">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <span class="pill pill--red">Open / emergency</span>
+                <span class="badge">29</span>
+              </span>
+            </td>
+          </tr>
+          <!-- fresh Ecotrak arrival: Accept / Reject instead of overflow -->
+          <tr data-group="open" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-40668"></td>
+            <td><span class="mono wo-num">WO-40668</span></td>
+            <td><span class="mono wo-ext truncate" title="WOT0779478">WOT0779478</span></td>
+            <td><div class="truncate wo-sum">Fountain machine — ice maker not dispensing ice</div></td>
+            <td><div class="wo-cs"><b>7-Eleven</b><span>Manteca, CA</span></div></td>
+            <td><span class="chip chip--sfm">SFM</span></td>
+            <td class="wo-fm" title="Fresh arrival via Ecotrak intake">Ecotrak</td>
+            <td class="wo-trade">Appliance</td>
+            <td>
+              <span class="wo-people">
+                <span class="avatar-stack">
+                  <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                </span>
+                <button class="wo-assign" data-stop title="Dispatch — move to a tech list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+              </span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$1,000</td>
+            <td class="num wo-age">0d</td>
+            <td class="wo-cell-ovf">
+              <span class="wo-accept-wrap">
+                <button class="btn btn--primary btn--sm" data-stop>Accept</button>
+                <button class="btn btn--sm" data-stop>Reject</button>
+              </span>
+            </td>
+          </tr>
+          <tr data-group="open" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-38893"></td>
+            <td><span class="mono wo-num">WO-38893</span></td>
+            <td><span class="mono wo-ext truncate" title="072200862">072200862</span></td>
+            <td><div class="truncate wo-sum">Walk-in Freezer 1 — not cooling, ~30°F (food safety)</div></td>
+            <td><div class="wo-cs"><b>WKS</b><span>Denny's · Glen Carbon, IL</span></div></td>
+            <td><span class="chip chip--sfm">SFM</span></td>
+            <td class="wo-fm">WKS</td>
+            <td class="wo-trade">Refrigeration</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Matt Hammond — Tech">MH</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$1,197</td>
+            <td class="num wo-age">1d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+
+          <!-- ===== waiting for quote ===== -->
+          <tr class="data__group">
+            <td colspan="13">
+              <span class="wo-group-inner">
+                <button class="icon-btn wo-chev" data-collapse="wfq" data-stop aria-label="Collapse group">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <span class="pill pill--red">waiting for quote</span>
+                <span class="badge">71</span>
+              </span>
+            </td>
+          </tr>
+          <tr data-group="wfq" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-40845"></td>
+            <td><span class="mono wo-num">WO-40845</span></td>
+            <td><span class="mono wo-ext truncate" title="1-6605403792">1-6605403792</span></td>
+            <td><div class="truncate wo-sum">Left men's bathroom sink not working — faucet leaking</div></td>
+            <td><div class="wo-cs"><b>Circle K</b><span>Porter, TX</span></div></td>
+            <td><span class="chip chip--tpm">TPM</span></td>
+            <td class="wo-fm">Vixxo</td>
+            <td class="wo-trade">Plumbing</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Carter Dane — Tech">CD</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$500</td>
+            <td class="num wo-age">4d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+          <tr data-group="wfq" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-40374"></td>
+            <td><span class="mono wo-num">WO-40374</span></td>
+            <td><span class="mono wo-ext truncate" title="239048-01">239048-01</span></td>
+            <td><div class="truncate wo-sum">Toilet clogged in restroom — overflows when flushed</div></td>
+            <td><div class="wo-cs"><b>ALDI</b><span>Covington, LA</span></div></td>
+            <td><span class="chip chip--af">AF</span></td>
+            <td class="wo-fm">Advanced</td>
+            <td class="wo-trade">Plumbing</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Bob Sanders — Tech">BS</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$250</td>
+            <td class="num wo-age">6d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+
+          <!-- ===== quote ready ===== -->
+          <tr class="data__group">
+            <td colspan="13">
+              <span class="wo-group-inner">
+                <button class="icon-btn wo-chev" data-collapse="quoteready" data-stop aria-label="Collapse group">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <span class="pill pill--blue">quote ready</span>
+                <span class="badge">100</span>
+              </span>
+            </td>
+          </tr>
+          <tr data-group="quoteready" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-40356"></td>
+            <td><span class="mono wo-num">WO-40356</span></td>
+            <td><span class="mono wo-ext truncate" title="106271-01">106271-01</span></td>
+            <td><div class="truncate wo-sum">Backflow testing required — 4 backflows, final notice</div></td>
+            <td><div class="wo-cs"><b>Residence Inn</b><span>T53 · Temple, TX</span></div></td>
+            <td><span class="chip chip--tpm">TPM</span></td>
+            <td class="wo-fm">Safety</td>
+            <td class="wo-trade">Plumbing</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Tania Quitalig — Tech">TQ</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$5,818</td>
+            <td class="num wo-age">3d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+          <tr data-group="quoteready" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-40611"></td>
+            <td><span class="mono wo-num">WO-40611</span></td>
+            <td><span class="mono wo-ext truncate" title="2984757-01">2984757-01</span></td>
+            <td><div class="truncate wo-sum">Restroom stall door latch — 2 new handles, 4th &amp; 5th</div></td>
+            <td><div class="wo-cs"><b>TJ Maxx</b><span>Clearwater, FL</span></div></td>
+            <td><span class="chip chip--af">AF</span></td>
+            <td class="wo-fm">FrontStreet</td>
+            <td class="wo-trade">Handyman</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Mitchel Hampton — Tech">MH</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$508</td>
+            <td class="num wo-age">2d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+
+          <!-- ===== !! waiting for approval (the #1 bottleneck) ===== -->
+          <tr class="data__group">
+            <td colspan="13">
+              <span class="wo-group-inner">
+                <button class="icon-btn wo-chev" data-collapse="approval" data-stop aria-label="Collapse group">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <span class="pill pill--teal">!! waiting for approval</span>
+                <span class="badge badge--warn">268</span>
+              </span>
+            </td>
+          </tr>
+          <!-- HERO: WO-39403, 7-Eleven Galveston freezer, quote sent vs NTE, aging 10d -->
+          <tr data-group="approval" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-39403"></td>
+            <td><span class="mono wo-num">WO-39403</span></td>
+            <td><span class="mono wo-ext truncate" title="WOT0452814">WOT0452814</span></td>
+            <td><div class="truncate wo-sum">Standing freezer (customer facing) not holding temp — stuck in defrost</div></td>
+            <td><div class="wo-cs"><b>7-Eleven</b><span>#41669 · Galveston, TX</span></div></td>
+            <td><span class="chip chip--sfm">SFM</span></td>
+            <td class="wo-fm">7-Eleven</td>
+            <td class="wo-trade">Refrigeration</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Matt Hammond — Tech">MH</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"><span class="wo-tag" title="Parts: tech ordered"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>tech ordered</span></td>
+            <td class="num wo-nte">$3,202</td>
+            <td class="num wo-age wo-age--warn">10d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+          <tr data-group="approval" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-37597"></td>
+            <td><span class="mono wo-num">WO-37597</span></td>
+            <td><span class="mono wo-ext truncate" title="450000086">450000086</span></td>
+            <td><div class="truncate wo-sum">Exterior transformer / main power — no power to trash compactor</div></td>
+            <td><div class="wo-cs"><b>AMC</b><span>AMC Theatres · Provo, UT</span></div></td>
+            <td><span class="chip chip--sfm">SFM</span></td>
+            <td class="wo-fm">AMC</td>
+            <td class="wo-trade">Electric</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Matt Hammond — Tech">MH</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$3,464</td>
+            <td class="num wo-age wo-age--warn">12d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+          <tr data-group="approval" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-40127"></td>
+            <td><span class="mono wo-num">WO-40127</span></td>
+            <td><span class="mono wo-ext truncate" title="238998-01">238998-01</span></td>
+            <td><div class="truncate wo-sum">Dining room closet door — replace, heavy-duty &amp; water-resistant</div></td>
+            <td><div class="wo-cs"><b>Panda Express</b><span>Medford, MA</span></div></td>
+            <td><span class="chip chip--af">AF</span></td>
+            <td class="wo-fm">Advanced</td>
+            <td class="wo-trade">Handyman</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Jude Baxter — Tech">JB</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$300</td>
+            <td class="num wo-age wo-age--warn">8d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+
+          <!-- ===== waiting for parts ===== -->
+          <tr class="data__group">
+            <td colspan="13">
+              <span class="wo-group-inner">
+                <button class="icon-btn wo-chev" data-collapse="parts" data-stop aria-label="Collapse group">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <span class="pill pill--gray">waiting for parts</span>
+                <span class="badge">65</span>
+              </span>
+            </td>
+          </tr>
+          <tr data-group="parts" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-37579"></td>
+            <td><span class="mono wo-num">WO-37579</span></td>
+            <td><span class="mono wo-ext truncate" title="351801398">351801398</span></td>
+            <td><div class="truncate wo-sum">Exhaust hood — broken/missing parts, fire panel inspection</div></td>
+            <td><div class="wo-cs"><b>KinderCare</b><span>Trailmark LC · Littleton, CO</span></div></td>
+            <td><span class="chip chip--sfm">SFM</span></td>
+            <td class="wo-fm">KinderCare</td>
+            <td class="wo-trade">Appliance</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Matt Hammond — Tech">MH</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"><span class="wo-tag" title="Parts: tech ordered"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>tech ordered</span></td>
+            <td class="num wo-nte">$850</td>
+            <td class="num wo-age wo-age--warn">9d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+          <tr data-group="parts" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-40948"></td>
+            <td><span class="mono wo-num">WO-40948</span></td>
+            <td><span class="mono wo-ext truncate" title="1084679-00000006">1084679-00000006</span></td>
+            <td><div class="truncate wo-sum">Customer restroom toilet plugged — plunger tried</div></td>
+            <td><div class="wo-cs"><b>Dollar Tree</b><span>Central Point, OR</span></div></td>
+            <td><span class="chip chip--bkr">BKR</span></td>
+            <td class="wo-fm">EMCOR</td>
+            <td class="wo-trade">Plumbing</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Kevin James — Account Manager">KJ</span>
+                <span class="avatar avatar--sm" title="Adam Keller — Tech">AK</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"><span class="wo-tag" title="Parts: ap ordered"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>ap ordered</span></td>
+            <td class="num wo-nte">$500</td>
+            <td class="num wo-age wo-age--warn">7d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+
+          <!-- ===== job scheduled ===== -->
+          <tr class="data__group">
+            <td colspan="13">
+              <span class="wo-group-inner">
+                <button class="icon-btn wo-chev" data-collapse="scheduled" data-stop aria-label="Collapse group">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <span class="pill pill--violet">job scheduled</span>
+                <span class="badge">53</span>
+              </span>
+            </td>
+          </tr>
+          <tr data-group="scheduled" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-40947"></td>
+            <td><span class="mono wo-num">WO-40947</span></td>
+            <td><span class="mono wo-ext truncate" title="SUN-8401-248">SUN-8401-248</span></td>
+            <td><div class="truncate wo-sum">Ceiling leaking several spots, front &amp; back of house, when it rains</div></td>
+            <td><div class="wo-cs"><b>SunHoldings</b><span>Bar Louie · Raleigh, NC</span></div></td>
+            <td><span class="chip chip--sfm">SFM</span></td>
+            <td class="wo-fm">SunHoldings</td>
+            <td class="wo-trade">Handyman</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Alan Tate — Tech">AT</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$750</td>
+            <td class="num wo-age">2d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+
+          <!-- ===== done/incurred (tail — 3 rows) ===== -->
+          <tr class="data__group">
+            <td colspan="13">
+              <span class="wo-group-inner">
+                <button class="icon-btn wo-chev" data-collapse="done" data-stop aria-label="Collapse group">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <span class="pill pill--green">done/incurred</span>
+                <span class="badge">3</span>
+              </span>
+            </td>
+          </tr>
+          <tr data-group="done" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-41061"></td>
+            <td><span class="mono wo-num">WO-41061</span></td>
+            <td><span class="mono wo-ext truncate" title="357699062">357699062</span></td>
+            <td><div class="truncate wo-sum">Front lobby panic bar not working — door will not lock</div></td>
+            <td><div class="wo-cs"><b>Cheesecake Factory</b><span>Irvine, CA</span></div></td>
+            <td><span class="chip chip--sfm">SFM</span></td>
+            <td class="wo-fm">Cheesecake Factory</td>
+            <td class="wo-trade">Handyman</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Bob Sanders — Tech">BS</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$1,000</td>
+            <td class="num wo-age">1d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+          <tr data-group="done" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-41066"></td>
+            <td><span class="mono wo-num">WO-41066</span></td>
+            <td><span class="mono wo-ext truncate" title="357712341">357712341</span></td>
+            <td><div class="truncate wo-sum">Pipes under 3-comp wash sink keep coming unattached</div></td>
+            <td><div class="wo-cs"><b>Mobettahs</b><span>Ammon, ID</span></div></td>
+            <td><span class="chip chip--sfm">SFM</span></td>
+            <td class="wo-fm">Mobettahs</td>
+            <td class="wo-trade">Plumbing</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Peter Hope — Account Manager">PH</span>
+                <span class="avatar avatar--sm" title="Nadine Asher — Tech">NA</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$500</td>
+            <td class="num wo-age">1d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+          <tr data-group="done" data-goto="workorder-detail">
+            <td class="wo-cell-check"><input type="checkbox" class="wo-cb wo-row-cb" aria-label="Select WO-40999"></td>
+            <td><span class="mono wo-num">WO-40999</span></td>
+            <td><span class="mono wo-ext truncate" title="1082932-00000002">1082932-00000002</span></td>
+            <td><div class="truncate wo-sum">Restroom — missing toilet seat</div></td>
+            <td><div class="wo-cs"><b>Family Dollar</b><span>Pinetop, AZ</span></div></td>
+            <td><span class="chip chip--bkr">BKR</span></td>
+            <td class="wo-fm">EMCOR</td>
+            <td class="wo-trade">Plumbing</td>
+            <td>
+              <span class="wo-people"><span class="avatar-stack">
+                <span class="avatar avatar--sm avatar--primary" title="Kevin James — Account Manager">KJ</span>
+                <span class="avatar avatar--sm" title="Zach Malden — Tech">ZM</span>
+              </span></span>
+            </td>
+            <td class="wo-tags"></td>
+            <td class="num wo-nte">$500</td>
+            <td class="num wo-age">0d</td>
+            <td class="wo-cell-ovf"><button class="icon-btn wo-ovf" data-stop aria-label="Row actions"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== Footer strip ===== -->
+  <div class="wo-foot">
+    <span><b class="num">1,273</b> active work orders · <span class="num">52</span> lists · avg <span class="num">26</span> custom fields filled per WO</span>
+    <span class="wo-page">
+      <span class="num">1–15 of 1,273</span>
+      <button class="icon-btn" disabled aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <button class="icon-btn" disabled aria-label="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+    </span>
+  </div>
+
+  <!-- ===== Bulk action bar ===== -->
+  <div class="card" id="wo-bulk" role="region" aria-label="Bulk actions">
+    <span class="wo-bulk-count"><b id="wo-bulk-count">0</b> selected</span>
+    <span class="wo-bulk-sep">·</span>
+    <button class="btn btn--ghost btn--sm" data-stop>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M9 13h6"/></svg>
+      Move to list
+    </button>
+    <button class="btn btn--ghost btn--sm" data-stop>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+      Change status
+    </button>
+    <button class="btn btn--ghost btn--sm" data-stop>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      Export
+    </button>
+    <span class="wo-bulk-sep">·</span>
+    <button class="wo-bulk-x" id="wo-bulk-clear" data-stop>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      Clear
+    </button>
+  </div>
+</section>
+
+<script>
+  (function () {
+    var root = document.getElementById('screen-workorders');
+    if (!root) return;
+
+    /* ----- stop navigation for interactive controls inside rows ----- */
+    root.querySelectorAll('[data-stop]').forEach(function (el) {
+      el.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+
+    /* ----- collapse / expand groups ----- */
+    root.querySelectorAll('.wo-chev[data-collapse]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-collapse');
+        var header = btn.closest('tr');
+        header.classList.toggle('is-collapsed');
+        var collapsed = header.classList.contains('is-collapsed');
+        root.querySelectorAll('tr[data-group="' + key + '"]').forEach(function (r) {
+          r.style.display = collapsed ? 'none' : '';
+          if (collapsed) {
+            var cb = r.querySelector('.wo-row-cb');
+            if (cb && cb.checked) { cb.checked = false; r.classList.remove('is-selected'); }
+          }
+        });
+        updateBulk();
+      });
+    });
+
+    /* ----- selection + bulk bar ----- */
+    var bulkBar = root.querySelector('#wo-bulk');
+    var countEl = root.querySelector('#wo-bulk-count');
+    var headCb = root.querySelector('#wo-select-all');
+
+    function rowCbs() {
+      return Array.prototype.slice.call(root.querySelectorAll('.wo-row-cb'));
+    }
+    function isVisible(cb) {
+      var tr = cb.closest('tr');
+      return tr && tr.style.display !== 'none';
+    }
+    function updateBulk() {
+      var all = rowCbs();
+      var selected = all.filter(function (cb) { return cb.checked; });
+      if (selected.length) {
+        bulkBar.classList.add('is-visible');
+        countEl.textContent = selected.length;
+      } else {
+        bulkBar.classList.remove('is-visible');
+      }
+      var visible = all.filter(isVisible);
+      var visSel = visible.filter(function (cb) { return cb.checked; });
+      headCb.checked = visible.length > 0 && visSel.length === visible.length;
+      headCb.indeterminate = visSel.length > 0 && visSel.length < visible.length;
+    }
+
+    rowCbs().forEach(function (cb) {
+      cb.addEventListener('click', function (e) { e.stopPropagation(); });
+      cb.addEventListener('change', function () {
+        cb.closest('tr').classList.toggle('is-selected', cb.checked);
+        updateBulk();
+      });
+    });
+
+    headCb.addEventListener('click', function (e) { e.stopPropagation(); });
+    headCb.addEventListener('change', function () {
+      var on = headCb.checked;
+      rowCbs().filter(isVisible).forEach(function (cb) {
+        cb.checked = on;
+        cb.closest('tr').classList.toggle('is-selected', on);
+      });
+      updateBulk();
+    });
+
+    root.querySelector('#wo-bulk-clear').addEventListener('click', function () {
+      rowCbs().forEach(function (cb) {
+        cb.checked = false;
+        cb.closest('tr').classList.remove('is-selected');
+      });
+      updateBulk();
+    });
+
+    updateBulk();
+  })();
+</script>

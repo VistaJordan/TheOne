@@ -1,0 +1,25 @@
+# --- Brainstorming folders (reference material, not part of the codebase) ---
+/Support Automation/
+/Quo X Quote Builder/
+/Inbox Monitor/
+
+# --- Secrets: never commit credentials ---
+.env
+.env.*
+!.env.example
+
+# --- Dependencies & build artifacts ---
+node_modules/
+dist/
+.next/
+.vercel/
+*.tsbuildinfo
+
+# --- Local database & caches ---
+pgdata/
+.npm-cache/
+*.log
+
+# --- OS noise ---
+Thumbs.db
+.DS_Store

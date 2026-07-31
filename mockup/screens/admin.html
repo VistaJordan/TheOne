@@ -1,0 +1,997 @@
+<style>
+  /* ================= ADMIN STUDIO — scoped to #screen-admin ================= */
+  #screen-admin { padding: 20px 24px; }
+
+  #screen-admin .adm-head { margin-bottom: 18px; }
+  #screen-admin .adm-head .sub { color: var(--ink-2); font-size: var(--fs-13); margin-top: 3px; max-width: 640px; }
+
+  #screen-admin .adm-layout { display: flex; gap: 22px; align-items: flex-start; }
+
+  /* ---- left sub-nav rail ---- */
+  #screen-admin .adm-nav { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 8px; }
+  #screen-admin .adm-nav__item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    height: 34px; padding: 0 10px; border-radius: var(--r-sm);
+    color: var(--ink-2); font-size: var(--fs-13); font-weight: 500;
+    transition: background .12s, color .12s;
+  }
+  #screen-admin .adm-nav__item:hover { background: var(--surface-2); color: var(--ink); }
+  #screen-admin .adm-nav__item.is-active { background: var(--primary-soft); color: var(--primary-ink); font-weight: 600; }
+  #screen-admin .adm-nav__item svg { width: 16px; height: 16px; }
+  #screen-admin .adm-nav__item .badge { margin-left: auto; }
+  #screen-admin .adm-nav__sep { height: 1px; background: var(--border); margin: 8px 8px; }
+
+  #screen-admin .adm-content { flex: 1; min-width: 0; }
+  #screen-admin .adm-panel[hidden] { display: none; }
+
+  /* ---- shared icon base ---- */
+  #screen-admin svg.ic { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; width: 16px; height: 16px; }
+
+  /* ---- object switcher row ---- */
+  #screen-admin .adm-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  #screen-admin .seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); }
+  #screen-admin .seg__chip {
+    height: 26px; padding: 0 14px; border-radius: var(--r-sm);
+    font-size: var(--fs-12); font-weight: 600; color: var(--ink-2);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  #screen-admin .seg__chip.is-active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
+  #screen-admin .obj-new {
+    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border: 1px dashed var(--border-strong); border-radius: var(--r-md);
+    background: transparent; color: var(--ink-2); font-size: var(--fs-12); font-weight: 500;
+  }
+  #screen-admin .obj-new:hover { color: var(--ink); border-color: var(--primary); }
+  #screen-admin .obj-new svg { width: 14px; height: 14px; }
+  #screen-admin .adm-row__note { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: var(--fs-12); }
+  #screen-admin .adm-row__note svg { width: 14px; height: 14px; }
+
+  /* ---- summary strip ---- */
+  #screen-admin .sum-strip {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 10px 14px; margin-bottom: 14px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md);
+    font-size: var(--fs-12); color: var(--ink-2);
+  }
+  #screen-admin .sum-strip b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #screen-admin .sum-strip i { color: var(--ink-3); font-style: normal; }
+
+  /* ---- fields two-column ---- */
+  #screen-admin .fields-wrap { display: flex; gap: 16px; align-items: flex-start; }
+  #screen-admin .fields-main { flex: 1; min-width: 0; }
+  #screen-admin .editor { width: 320px; flex-shrink: 0; }
+
+  #screen-admin td.col-grip { width: 26px; padding-right: 0; color: var(--ink-3); cursor: grab; }
+  #screen-admin td.col-grip svg { width: 15px; height: 15px; }
+  #screen-admin th.col-grip { width: 26px; }
+  #screen-admin th.col-center, #screen-admin td.col-center { text-align: center; }
+  #screen-admin th.col-ovf { width: 34px; }
+  #screen-admin .ty { display: inline-flex; align-items: center; gap: 7px; }
+  #screen-admin .ty svg { width: 15px; height: 15px; color: var(--ink-2); }
+  #screen-admin .ty svg.lk { width: 13px; height: 13px; color: var(--ink-3); margin-left: -2px; }
+  #screen-admin .fname { font-weight: 500; color: var(--ink); }
+  #screen-admin .ck { color: var(--good-ink); display: inline-flex; }
+  #screen-admin .ck svg { width: 15px; height: 15px; }
+  #screen-admin .dash { color: var(--ink-3); }
+  #screen-admin .fill { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: var(--fs-12); }
+  #screen-admin td.col-api { line-height: 1.25; }
+  #screen-admin td.col-api .fkey { display: block; font-size: var(--fs-11); color: var(--ink-3); margin-top: 1px; }
+  #screen-admin .req-sub { display: block; font-size: var(--fs-10); color: var(--ink-3); margin-top: 1px; }
+  #screen-admin .rec { font-variant-numeric: tabular-nums; color: var(--ink); background: none; }
+  #screen-admin .rec b { font-weight: 600; }
+  #screen-admin .rec:hover { text-decoration: underline; color: var(--primary-ink); }
+  #screen-admin .rec:hover .faint { color: var(--primary-ink); }
+
+  #screen-admin .fields-foot { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  #screen-admin .fields-foot .note { color: var(--ink-3); font-size: var(--fs-12); flex: 1; }
+
+  /* ---- field editor card ---- */
+  #screen-admin .editor .card__body { display: flex; flex-direction: column; gap: 13px; }
+  #screen-admin .ed-key { position: relative; }
+  #screen-admin .ed-key .input { padding-right: 30px; background: var(--surface-2); color: var(--ink-2); width: 100%; }
+  #screen-admin .ed-key .lock { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+  #screen-admin .ed-key .lock svg { width: 14px; height: 14px; }
+  #screen-admin .editor .input, #screen-admin .editor .select { width: 100%; }
+  #screen-admin .tog-list { display: flex; flex-direction: column; margin: 2px 0; }
+  #screen-admin .tog-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  #screen-admin .tog-row:last-child { border-bottom: 0; }
+  #screen-admin .tog-row__label { font-size: var(--fs-13); }
+  #screen-admin .tog-row__sub { font-size: var(--fs-11); color: var(--ink-3); margin-top: 1px; }
+  #screen-admin .ed-foot { display: flex; align-items: center; gap: 8px; padding-top: 4px; }
+  #screen-admin .ed-foot .sp { flex: 1; }
+
+  /* ---- statuses & workflow ---- */
+  #screen-admin .wf-wrap { display: flex; gap: 16px; align-items: flex-start; }
+  #screen-admin .wf-main { flex: 1; min-width: 0; }
+  #screen-admin .wf-side { width: 300px; flex-shrink: 0; }
+
+  #screen-admin .st-row { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  #screen-admin .st-grip { color: var(--ink-3); cursor: grab; display: inline-flex; }
+  #screen-admin .st-grip svg { width: 15px; height: 15px; }
+  #screen-admin .sdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  #screen-admin .sdot--amber  { background: var(--hue-amber); }
+  #screen-admin .sdot--blue   { background: var(--hue-blue); }
+  #screen-admin .sdot--violet { background: var(--hue-violet); }
+  #screen-admin .sdot--cyan   { background: var(--hue-cyan); }
+  #screen-admin .sdot--indigo { background: var(--hue-indigo); }
+  #screen-admin .sdot--teal   { background: var(--hue-teal); }
+  #screen-admin .sdot--green  { background: var(--hue-green); }
+  #screen-admin .sdot--gray   { background: var(--hue-gray); }
+  #screen-admin .sdot--red    { background: var(--hue-red); }
+  #screen-admin .st-name { font-size: var(--fs-13); width: 196px; flex-shrink: 0; color: var(--ink); }
+  #screen-admin .st-phase { font-size: var(--fs-10); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--ink-3); width: 92px; flex-shrink: 0; }
+  #screen-admin .st-type { margin-left: auto; font-size: var(--fs-10); padding: 2px 7px; border-radius: 4px; background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--border); font-weight: 500; letter-spacing: .02em; }
+  #screen-admin .st-add { display: flex; align-items: center; gap: 8px; padding: 11px 14px; color: var(--ink-3); font-size: var(--fs-13); font-weight: 500; width: 100%; }
+  #screen-admin .st-add:hover { background: var(--surface-2); color: var(--ink); }
+  #screen-admin .st-add svg { width: 15px; height: 15px; }
+
+  #screen-admin .rule { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  #screen-admin .rule:last-of-type { border-bottom: 0; }
+  #screen-admin .rule__txt { flex: 1; font-size: var(--fs-12); color: var(--ink-2); line-height: 1.5; }
+  #screen-admin .rule__txt b { color: var(--ink); font-weight: 600; }
+  #screen-admin .rule__txt .mono { font-size: var(--fs-11); }
+  #screen-admin .rule__actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+
+  #screen-admin .tags-block { margin-top: 16px; }
+  #screen-admin .tags-block .overline { display: block; margin-bottom: 10px; }
+  #screen-admin .tags-strip { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  #screen-admin .tag-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 22px; padding: 0 9px; border-radius: var(--r-full);
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--ink-2); font-size: var(--fs-11); font-weight: 500; white-space: nowrap;
+  }
+  #screen-admin .tag-chip svg { width: 12px; height: 12px; color: var(--ink-3); }
+  #screen-admin .tags-note { font-size: var(--fs-11); color: var(--ink-3); margin-left: 4px; }
+
+  /* ---- roles & permissions ---- */
+  #screen-admin .roles { display: flex; align-items: stretch; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+  #screen-admin .role-chip { display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 132px; padding: 8px 14px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--surface); text-align: left; transition: border-color .12s, background .12s; }
+  #screen-admin .role-chip:hover { border-color: var(--primary); }
+  #screen-admin .role-chip.is-active { border-color: var(--primary); background: var(--primary-soft); }
+  #screen-admin .role-chip__name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 600; color: var(--ink); }
+  #screen-admin .role-chip.is-active .role-chip__name { color: var(--primary-ink); }
+  #screen-admin .role-chip__name svg { width: 13px; height: 13px; color: var(--ink-3); }
+  #screen-admin .role-chip__sub { font-size: var(--fs-11); color: var(--ink-3); }
+  #screen-admin .role-new { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 0 14px; border: 1px dashed var(--border-strong); border-radius: var(--r-md); background: transparent; color: var(--ink-2); font-size: var(--fs-12); font-weight: 500; }
+  #screen-admin .role-new:hover { color: var(--ink); border-color: var(--primary); }
+  #screen-admin .role-new svg { width: 14px; height: 14px; }
+
+  #screen-admin table.perm th.pcol, #screen-admin table.perm td.pcell { text-align: center; width: 76px; }
+  #screen-admin table.perm td.mod { font-weight: 500; color: var(--ink); }
+  #screen-admin table.perm td.mod .sub { display: block; font-size: var(--fs-11); color: var(--ink-3); font-weight: 400; margin-top: 1px; }
+  #screen-admin .perm-yes { color: var(--good-ink); display: inline-flex; }
+  #screen-admin .perm-yes svg { width: 16px; height: 16px; }
+  #screen-admin .perm-no { color: var(--ink-3); }
+
+  #screen-admin .scope { margin-top: 16px; }
+  #screen-admin .scope-opt { display: flex; align-items: flex-start; gap: 11px; padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer; margin-bottom: 8px; transition: border-color .12s, background .12s; }
+  #screen-admin .scope-opt:hover { border-color: var(--border-strong); }
+  #screen-admin .scope-opt.is-sel { border-color: var(--primary); background: var(--primary-soft); }
+  #screen-admin .scope-radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border-strong); margin-top: 1px; flex-shrink: 0; position: relative; }
+  #screen-admin .scope-opt.is-sel .scope-radio { border-color: var(--primary); }
+  #screen-admin .scope-opt.is-sel .scope-radio::after { content: ""; position: absolute; inset: 2px; border-radius: 50%; background: var(--primary); }
+  #screen-admin .scope-opt__title { font-size: var(--fs-13); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  #screen-admin .scope-opt.is-sel .scope-opt__title { color: var(--primary-ink); }
+  #screen-admin .scope-opt__tag { font-size: var(--fs-10); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
+  #screen-admin .scope-opt__sub { font-size: var(--fs-12); color: var(--ink-3); margin-top: 3px; line-height: 1.45; }
+  #screen-admin .scope-foot { font-size: var(--fs-12); color: var(--ink-3); display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; }
+  #screen-admin .scope-foot svg { width: 14px; height: 14px; }
+
+  /* ---- teasers ---- */
+  #screen-admin .teaser .empty { padding: 52px 20px; }
+  #screen-admin .teaser .empty .lead { color: var(--ink-2); font-size: var(--fs-13); max-width: 460px; line-height: 1.5; }
+  #screen-admin .teaser .empty .strong { color: var(--ink); font-weight: 600; }
+  #screen-admin .teaser .empty .status-line { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-12); color: var(--ink-3); }
+
+  @media (max-width: 1120px) {
+    #screen-admin .fields-wrap, #screen-admin .wf-wrap { flex-direction: column; }
+    #screen-admin .editor, #screen-admin .wf-side { width: 100%; }
+  }
+</style>
+
+<section class="screen" id="screen-admin">
+
+  <!-- icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="adm-fields" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"/><path d="M12 12h.01"/><path d="M17 12h.01"/><path d="M7 12h.01"/></symbol>
+      <symbol id="adm-workflow" viewBox="0 0 24 24"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></symbol>
+      <symbol id="adm-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+      <symbol id="adm-zap" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+      <symbol id="adm-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+      <symbol id="adm-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+      <symbol id="adm-grip" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></symbol>
+      <symbol id="adm-type" viewBox="0 0 24 24"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></symbol>
+      <symbol id="adm-currency" viewBox="0 0 24 24"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></symbol>
+      <symbol id="adm-dropdown" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m8 10 4 4 4-4"/></symbol>
+      <symbol id="adm-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="adm-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+      <symbol id="adm-checkbox" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+      <symbol id="adm-location" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+      <symbol id="adm-fx" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.7"/></symbol>
+      <symbol id="adm-attach" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+      <symbol id="adm-emoji" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></symbol>
+      <symbol id="adm-package" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+      <symbol id="adm-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="adm-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></symbol>
+      <symbol id="adm-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+      <symbol id="adm-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+      <symbol id="adm-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
+      <symbol id="adm-pencil" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+      <symbol id="adm-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="adm-head">
+    <h1>Admin Studio</h1>
+    <p class="sub">The real schema behind 21,000+ work orders &mdash; fields, pipeline, and access.</p>
+  </header>
+
+  <div class="adm-layout">
+
+    <!-- ================= SUB-NAV RAIL ================= -->
+    <nav class="adm-nav" aria-label="Admin sections">
+      <button class="adm-nav__item is-active" data-nav="fields" aria-current="page">
+        <svg class="ic"><use href="#adm-fields"/></svg> Custom Fields <span class="badge">102</span>
+      </button>
+      <button class="adm-nav__item" data-nav="statuses">
+        <svg class="ic"><use href="#adm-workflow"/></svg> Statuses &amp; Workflow <span class="badge">19</span>
+      </button>
+      <button class="adm-nav__item" data-nav="roles">
+        <svg class="ic"><use href="#adm-shield"/></svg> Roles &amp; Permissions
+      </button>
+      <div class="adm-nav__sep"></div>
+      <button class="adm-nav__item" data-nav="automations">
+        <svg class="ic"><use href="#adm-zap"/></svg> Automations
+      </button>
+      <button class="adm-nav__item" data-nav="integrations">
+        <svg class="ic"><use href="#adm-plug"/></svg> Integrations
+      </button>
+      <button class="adm-nav__item" data-nav="notifications">
+        <svg class="ic"><use href="#adm-bell"/></svg> Notifications
+      </button>
+    </nav>
+
+    <!-- ================= CONTENT ================= -->
+    <div class="adm-content">
+
+      <!-- =========== PANEL 1 · CUSTOM FIELDS =========== -->
+      <div class="adm-panel" data-panel="fields">
+        <div class="adm-row">
+          <div class="seg" role="group" aria-label="Object">
+            <button class="seg__chip is-active">Work Order</button>
+          </div>
+          <button class="obj-new"><svg class="ic"><use href="#adm-plus"/></svg> New object</button>
+          <span class="adm-row__note">One object &mdash; every task is a WO</span>
+        </div>
+
+        <div class="sum-strip">
+          <span><b>102</b> fields</span><i>&middot;</i>
+          <span><b>13</b> types in use</span><i>&middot;</i>
+          <span>avg <b>26&ndash;39</b> filled per WO</span><i>&middot;</i>
+          <span>numbered fields <b class="mono">13.&ndash;38.</b> form the intake schema</span>
+        </div>
+
+        <div class="fields-wrap">
+          <!-- fields table -->
+          <div class="fields-main card">
+            <div class="card__header">
+              <div class="card__title">Custom fields <span class="faint">&middot; 102</span></div>
+              <span class="faint" style="font-size:var(--fs-12)">Applies to every Work Order</span>
+            </div>
+            <div class="table-scroll">
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th class="col-grip"></th>
+                    <th>Field</th>
+                    <th>Type</th>
+                    <th class="col-center">Req / fill</th>
+                    <th class="col-center">In filters</th>
+                    <th>In API</th>
+                    <th class="num">Used on</th>
+                    <th class="col-ovf"></th>
+                  </tr>
+                </thead>
+                <tbody>
+
+                  <tr data-field="wo_description">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">35. WO Description</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-type"/></svg> Text</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="req-sub">required &middot; 100%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">wo_description</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>21,239</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="client_nte" class="is-selected">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">16. Client NTE 🔴</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-currency"/></svg> Currency</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="req-sub">required &middot; 100%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">client_nte</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>21,239</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="comp">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">21. Comp</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-dropdown"/></svg> Dropdown <span class="faint">&middot; 7 options</span></span></td>
+                    <td class="col-center"><span class="fill">100%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">comp</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>21,239</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="fm">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">22. FM</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-dropdown"/></svg> Dropdown <span class="faint">&middot; 120 options</span></span></td>
+                    <td class="col-center"><span class="fill">100%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">fm</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>21,239</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="client">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">Client</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-dropdown"/></svg> Dropdown <span class="faint">&middot; 40 options</span></span></td>
+                    <td class="col-center"><span class="fill">87%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">client</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>18,402</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="state">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">State</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-dropdown"/></svg> Dropdown <span class="faint">&middot; 71 options</span></span></td>
+                    <td class="col-center"><span class="fill">100%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">state</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>21,239</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="trade">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">Trade</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-dropdown"/></svg> Dropdown <span class="faint">&middot; 16 options</span></span></td>
+                    <td class="col-center"><span class="fill">100%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">trade</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>21,239</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="am">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">AM</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-users"/></svg> People</span></td>
+                    <td class="col-center"><span class="fill">100%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">am</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>21,239</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="date_received">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">Date-Time Received</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-calendar"/></svg> Date</span></td>
+                    <td class="col-center"><span class="fill">100%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">date_received</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>21,239</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="address">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">17. Address</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-location"/></svg> Location</span></td>
+                    <td class="col-center"><span class="fill">100%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">address</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>21,239</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="profit">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">Profit</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-fx"/></svg><svg class="ic lk"><use href="#adm-lock"/></svg> Formula <span class="faint">Total Invoiced &minus; Cost</span></span></td>
+                    <td class="col-center"><span class="dash">&mdash;</span><span class="req-sub">auto</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">profit</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>17,894</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="days_since_grey_flag">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">Days Since Grey Flag</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-fx"/></svg><svg class="ic lk"><use href="#adm-lock"/></svg> Formula <span class="faint">SLA aging</span></span></td>
+                    <td class="col-center"><span class="dash">&mdash;</span><span class="req-sub">auto</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">days_since_grey_flag</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>20,061</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="total_invoiced">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">Total Invoiced</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-currency"/></svg> Currency</span></td>
+                    <td class="col-center"><span class="fill">84%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">total_invoiced</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>17,770</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="missed_eta">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">14. Missed ETA</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-checkbox"/></svg> Checkbox</span></td>
+                    <td class="col-center"><span class="fill">15%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">missed_eta</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>3,214</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="wo_pdf">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">WO PDF</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-attach"/></svg> Attachment</span></td>
+                    <td class="col-center"><span class="fill">92%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">wo_pdf</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>19,548</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                  <tr data-field="tech_rating">
+                    <td class="col-grip"><svg class="ic"><use href="#adm-grip"/></svg></td>
+                    <td><span class="fname">Tech Rating</span></td>
+                    <td><span class="ty"><svg class="ic"><use href="#adm-emoji"/></svg> Emoji</span></td>
+                    <td class="col-center"><span class="fill">32%</span></td>
+                    <td class="col-center"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                    <td class="col-api"><span class="ck"><svg class="ic"><use href="#adm-check"/></svg></span><span class="fkey mono">tech_rating</span></td>
+                    <td class="num"><button class="rec" data-goto="workorders" title="View work orders using this field"><b>6,882</b> <span class="faint">WOs</span></button></td>
+                    <td><button class="icon-btn" aria-label="Field options"><svg class="ic"><use href="#adm-more"/></svg></button></td>
+                  </tr>
+
+                </tbody>
+              </table>
+            </div>
+            <div class="fields-foot">
+              <span class="note">&hellip;and 86 more fields. Every field is filterable, reportable, and API-exposed automatically.</span>
+              <button class="btn btn--ghost btn--sm"><svg class="ic btn__icon"><use href="#adm-plus"/></svg> Add field</button>
+            </div>
+          </div>
+
+          <!-- field editor -->
+          <div class="editor card">
+            <div class="card__header">
+              <div class="card__title">Field editor</div>
+              <span class="pill pill--teal" style="height:20px">Currency</span>
+            </div>
+            <div class="card__body">
+              <div class="field">
+                <label class="label" for="ed-label">Label</label>
+                <input class="input" id="ed-label" type="text" value="16. Client NTE 🔴">
+              </div>
+
+              <div class="field">
+                <label class="label" for="ed-key">Field key</label>
+                <div class="ed-key">
+                  <input class="input mono" id="ed-key" type="text" value="client_nte" readonly aria-readonly="true">
+                  <span class="lock"><svg class="ic"><use href="#adm-lock"/></svg></span>
+                </div>
+                <span class="help">Immutable once created &mdash; keeps the API &amp; reports stable.</span>
+              </div>
+
+              <div class="field">
+                <label class="label" for="ed-type">Type</label>
+                <select class="select" id="ed-type">
+                  <option selected>Currency</option>
+                  <option>Text</option>
+                  <option>Number</option>
+                  <option>Dropdown</option>
+                  <option>Date</option>
+                  <option>Checkbox</option>
+                  <option>People</option>
+                  <option>Location</option>
+                  <option>Formula</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label class="label" for="ed-object">Object</label>
+                <input class="input" id="ed-object" type="text" value="Work Order" readonly aria-readonly="true">
+              </div>
+
+              <div class="tog-list">
+                <div class="tog-row">
+                  <div><div class="tog-row__label">Required</div><div class="tog-row__sub">Blocks save until set</div></div>
+                  <label class="toggle"><input type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <div class="tog-row">
+                  <div><div class="tog-row__label">Show in filters</div><div class="tog-row__sub">Available in every view &amp; report</div></div>
+                  <label class="toggle"><input type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <div class="tog-row">
+                  <div><div class="tog-row__label">Expose in API</div><div class="tog-row__sub">Readable &amp; writable via REST</div></div>
+                  <label class="toggle"><input type="checkbox" checked><span class="track"></span></label>
+                </div>
+                <div class="tog-row">
+                  <div><div class="tog-row__label">Show on intake form</div><div class="tog-row__sub">Part of the numbered WO intake schema</div></div>
+                  <label class="toggle"><input type="checkbox" checked><span class="track"></span></label>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="label" for="ed-help">Help text</label>
+                <input class="input" id="ed-help" type="text" value="Client's not-to-exceed. Quotes above NTE trigger re-approval.">
+              </div>
+
+              <div class="ed-foot">
+                <button class="btn btn--danger btn--sm"><svg class="ic btn__icon"><use href="#adm-trash"/></svg> Delete</button>
+                <span class="sp"></span>
+                <button class="btn btn--primary btn--sm">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========== PANEL 2 · STATUSES & WORKFLOW =========== -->
+      <div class="adm-panel" data-panel="statuses" hidden>
+        <div class="adm-row">
+          <span class="adm-row__note"><svg class="ic"><use href="#adm-lock"/></svg> One pipeline, every list &mdash; 19 statuses, identical across all 163 lists (per-list overrides off).</span>
+        </div>
+
+        <div class="wf-wrap">
+          <!-- status pipeline -->
+          <div class="wf-main card">
+            <div class="card__header">
+              <div class="card__title">Status pipeline <span class="faint">&middot; 19 statuses</span></div>
+              <span class="faint" style="font-size:var(--fs-12)">Drag to reorder</span>
+            </div>
+
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--red"></span>
+              <span class="st-name mono">Open</span>
+              <span class="st-phase">Intake</span>
+              <span class="st-type">open</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--red"></span>
+              <span class="st-name mono">emergency</span>
+              <span class="st-phase">Intake</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--red"></span>
+              <span class="st-name mono">waiting for quote</span>
+              <span class="st-phase">Quote</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--violet"></span>
+              <span class="st-name mono">approved</span>
+              <span class="st-phase">Approval</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--red"></span>
+              <span class="st-name mono">return trip needed</span>
+              <span class="st-phase">Assessment</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--amber"></span>
+              <span class="st-name mono">assessment ongoing</span>
+              <span class="st-phase">Assessment</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--amber"></span>
+              <span class="st-name mono">job ongoing</span>
+              <span class="st-phase">In Progress</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--violet"></span>
+              <span class="st-name mono">assessment scheduled</span>
+              <span class="st-phase">Assessment</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--violet"></span>
+              <span class="st-name mono">job scheduled</span>
+              <span class="st-phase">Scheduled</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--indigo"></span>
+              <span class="st-name mono">pm scheduled</span>
+              <span class="st-phase">Scheduled</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--blue"></span>
+              <span class="st-name mono">quote ready</span>
+              <span class="st-phase">Quote</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--indigo"></span>
+              <span class="st-name mono">please order parts</span>
+              <span class="st-phase">Parts</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--gray"></span>
+              <span class="st-name mono">waiting for parts</span>
+              <span class="st-phase">Parts</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--cyan"></span>
+              <span class="st-name mono">!! waiting for advice</span>
+              <span class="st-phase">Approval</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--teal"></span>
+              <span class="st-name mono">!! waiting for approval</span>
+              <span class="st-phase">Approval</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--gray"></span>
+              <span class="st-name mono">&lt;&lt; invoiced not paid &gt;&gt;</span>
+              <span class="st-phase">Invoiced</span>
+              <span class="st-type">custom</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--green"></span>
+              <span class="st-name mono">!! ready to invoice</span>
+              <span class="st-phase">Done</span>
+              <span class="st-type">done</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--green"></span>
+              <span class="st-name mono">done/incurred</span>
+              <span class="st-phase">Done</span>
+              <span class="st-type">done</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+            <div class="st-row">
+              <span class="st-grip"><svg class="ic"><use href="#adm-grip"/></svg></span>
+              <span class="sdot sdot--gray"></span>
+              <span class="st-name mono">!! canceled/postponed</span>
+              <span class="st-phase">Off-ramp</span>
+              <span class="st-type">closed</span>
+              <button class="icon-btn" aria-label="Status options"><svg class="ic"><use href="#adm-more"/></svg></button>
+            </div>
+
+            <button class="st-add"><svg class="ic"><use href="#adm-plus"/></svg> Add status</button>
+          </div>
+
+          <!-- transition rules -->
+          <div class="wf-side card">
+            <div class="card__header">
+              <div class="card__title">Transition rules</div>
+            </div>
+            <div class="card__body" style="padding-top:2px;padding-bottom:2px">
+              <div class="rule">
+                <div class="rule__txt"><b class="mono">quote ready</b> + FM approves &rarr; <b class="mono">approved</b></div>
+                <div class="rule__actions">
+                  <label class="toggle"><input type="checkbox" checked><span class="track"></span></label>
+                  <button class="icon-btn" aria-label="Edit rule"><svg class="ic"><use href="#adm-pencil"/></svg></button>
+                </div>
+              </div>
+              <div class="rule">
+                <div class="rule__txt"><b class="mono">done/incurred</b> &rarr; move to <b>Ready To Invoice</b></div>
+                <div class="rule__actions">
+                  <label class="toggle"><input type="checkbox" checked><span class="track"></span></label>
+                  <button class="icon-btn" aria-label="Edit rule"><svg class="ic"><use href="#adm-pencil"/></svg></button>
+                </div>
+              </div>
+              <div class="rule">
+                <div class="rule__txt">invoice sent &rarr; <b class="mono">&lt;&lt; invoiced not paid &gt;&gt;</b></div>
+                <div class="rule__actions">
+                  <label class="toggle"><input type="checkbox" checked><span class="track"></span></label>
+                  <button class="icon-btn" aria-label="Edit rule"><svg class="ic"><use href="#adm-pencil"/></svg></button>
+                </div>
+              </div>
+              <div class="rule">
+                <div class="rule__txt">paid &rarr; archive to <b>Invoiced</b> <span class="faint num">(17,770)</span></div>
+                <div class="rule__actions">
+                  <label class="toggle"><input type="checkbox" checked><span class="track"></span></label>
+                  <button class="icon-btn" aria-label="Edit rule"><svg class="ic"><use href="#adm-pencil"/></svg></button>
+                </div>
+              </div>
+            </div>
+            <div class="fields-foot" style="padding:10px 16px">
+              <button class="btn btn--ghost btn--sm"><svg class="ic btn__icon"><use href="#adm-plus"/></svg> Add rule</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- parts tags -->
+        <div class="tags-block">
+          <span class="overline">Parts tags &mdash; the only tag vocabulary</span>
+          <div class="tags-strip">
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> tech will order</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> tech ordered</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> ap will order</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> ap ordered</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> client ordered</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> vendor will order</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> vendor ordered</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> sourcing parts</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> dispatcher ordered part</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> dispatcher ordered door</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> corporate will order</span>
+            <span class="tag-chip"><svg class="ic"><use href="#adm-package"/></svg> efs</span>
+            <span class="tags-note">used on 2&ndash;17% of WOs</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========== PANEL 3 · ROLES & PERMISSIONS =========== -->
+      <div class="adm-panel" data-panel="roles" hidden>
+        <div class="roles">
+          <button class="role-chip" title="Workspace owner — full access, cannot be edited">
+            <span class="role-chip__name"><svg class="ic"><use href="#adm-lock"/></svg> Owner</span>
+            <span class="role-chip__sub">Michael Khoury</span>
+          </button>
+          <button class="role-chip" data-role>
+            <span class="role-chip__name">Admin</span>
+            <span class="role-chip__sub">8 users</span>
+          </button>
+          <button class="role-chip is-active" data-role>
+            <span class="role-chip__name">Member</span>
+            <span class="role-chip__sub">84 users &middot; tech / AM</span>
+          </button>
+          <button class="role-chip" data-role>
+            <span class="role-chip__name">Read-only guest</span>
+            <span class="role-chip__sub">5 users</span>
+          </button>
+          <button class="role-new"><svg class="ic"><use href="#adm-plus"/></svg> New role</button>
+        </div>
+
+        <div class="card">
+          <div class="card__header">
+            <div class="card__title">Permissions &mdash; Member <span class="faint">(tech / AM)</span></div>
+            <span class="faint" style="font-size:var(--fs-12)">Green check = allowed</span>
+          </div>
+          <div class="table-scroll">
+            <table class="data perm">
+              <thead>
+                <tr>
+                  <th>Area</th>
+                  <th class="pcol">View</th>
+                  <th class="pcol">Create</th>
+                  <th class="pcol">Edit</th>
+                  <th class="pcol">Move</th>
+                  <th class="pcol">Approve</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mod">Work Orders</td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                </tr>
+                <tr>
+                  <td class="mod">Own list <span class="sub">e.g. Matt Hammond</span></td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                </tr>
+                <tr>
+                  <td class="mod">Other lists</td>
+                  <td class="pcell"><span class="perm-no" title="cross-list visibility off by default">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                </tr>
+                <tr>
+                  <td class="mod">Quotes &amp; NTE</td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-yes"><svg class="ic"><use href="#adm-check"/></svg></span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no" title="approvals route to AM / admin">&mdash;</span></td>
+                </tr>
+                <tr>
+                  <td class="mod">Invoicing</td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                </tr>
+                <tr>
+                  <td class="mod">Admin Studio</td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                  <td class="pcell"><span class="perm-no">&mdash;</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="scope card">
+          <div class="card__body">
+            <div class="overline" style="margin-bottom:10px">Data scope</div>
+            <div class="scope-opt is-sel" data-scope>
+              <span class="scope-radio"></span>
+              <div>
+                <div class="scope-opt__title">Own list only</div>
+                <div class="scope-opt__sub">e.g. Matt Hammond sees list <b>Matt Hammond</b> (112 WOs)</div>
+              </div>
+            </div>
+            <div class="scope-opt" data-scope>
+              <span class="scope-radio"></span>
+              <div>
+                <div class="scope-opt__title">All lists <span class="scope-opt__tag">Admins</span></div>
+              </div>
+            </div>
+            <div class="scope-opt" data-scope>
+              <span class="scope-radio"></span>
+              <div>
+                <div class="scope-opt__title">Curated rollup <span class="scope-opt__tag">Guests</span></div>
+                <div class="scope-opt__sub">Teresa &amp; Ro see <b>Seamless FM Executive View</b> &mdash; 2,056 multi-homed WOs, no cost/profit fields</div>
+              </div>
+            </div>
+            <div class="scope-foot"><svg class="ic"><use href="#adm-lock"/></svg> 8 admins bypass scoping &middot; guests are read-only.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========== TEASER · AUTOMATIONS =========== -->
+      <div class="adm-panel teaser" data-panel="automations" hidden>
+        <div class="card">
+          <div class="empty">
+            <svg class="ic" style="width:28px;height:28px"><use href="#adm-zap"/></svg>
+            <b>Automations &mdash; 7 active</b>
+            <p class="lead"><span class="strong">Grey-flag aging, SLA nudges, list-move rules</span> &mdash; rules react to status changes and stale WOs, then re-route between lists automatically.</p>
+            <button class="btn btn--ghost"><svg class="ic btn__icon"><use href="#adm-plus"/></svg> New automation</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========== TEASER · INTEGRATIONS =========== -->
+      <div class="adm-panel teaser" data-panel="integrations" hidden>
+        <div class="card">
+          <div class="empty">
+            <svg class="ic" style="width:28px;height:28px"><use href="#adm-plug"/></svg>
+            <b>Ecotrak &middot; email-in &middot; ClickUp API (read-only mirror)</b>
+            <p class="status-line"><span class="dot dot--good"></span> Intake healthy &mdash; last WO synced 6 min ago</p>
+            <button class="btn btn--ghost"><svg class="ic btn__icon"><use href="#adm-external"/></svg> Manage integrations</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========== TEASER · NOTIFICATIONS =========== -->
+      <div class="adm-panel teaser" data-panel="notifications" hidden>
+        <div class="card">
+          <div class="empty">
+            <svg class="ic" style="width:28px;height:28px"><use href="#adm-bell"/></svg>
+            <b>Per-status routing</b>
+            <p class="lead">approvals &rarr; <span class="strong">AM</span> &middot; parts &rarr; <span class="strong">tech</span> &middot; aging &rarr; <span class="strong">ops</span> &mdash; each status fans out to the right people, no manual pings.</p>
+            <button class="btn btn--ghost"><svg class="ic btn__icon"><use href="#adm-pencil"/></svg> Edit routing</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<script>
+  (function () {
+    var root = document.getElementById('screen-admin');
+    if (!root) return;
+
+    // ---- sub-nav panel switching ----
+    var navItems = root.querySelectorAll('.adm-nav__item');
+    var panels = root.querySelectorAll('.adm-panel');
+    navItems.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var target = btn.getAttribute('data-nav');
+        navItems.forEach(function (b) {
+          var on = b === btn;
+          b.classList.toggle('is-active', on);
+          if (on) { b.setAttribute('aria-current', 'page'); } else { b.removeAttribute('aria-current'); }
+        });
+        panels.forEach(function (p) { p.hidden = p.getAttribute('data-panel') !== target; });
+      });
+    });
+
+    // ---- fields table row selection ----
+    var rows = root.querySelectorAll('tr[data-field]');
+    rows.forEach(function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('[data-goto]')) return; // let cross-nav pass through
+        rows.forEach(function (x) { x.classList.toggle('is-selected', x === r); });
+      });
+    });
+
+    // ---- role chips (Owner is locked → no data-role) ----
+    var roleChips = root.querySelectorAll('.role-chip[data-role]');
+    roleChips.forEach(function (c) {
+      c.addEventListener('click', function () {
+        roleChips.forEach(function (x) { x.classList.toggle('is-active', x === c); });
+      });
+    });
+
+    // ---- data scope radio behavior ----
+    var scopeOpts = root.querySelectorAll('.scope-opt[data-scope]');
+    scopeOpts.forEach(function (o) {
+      o.addEventListener('click', function () {
+        scopeOpts.forEach(function (x) { x.classList.toggle('is-sel', x === o); });
+      });
+    });
+  })();
+</script>

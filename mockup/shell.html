@@ -1,0 +1,230 @@
+<title>The One — Seamless FM Operations Platform</title>
+<!-- INLINE:TOKENS -->
+<style>
+  /* ---------- App shell ---------- */
+  #app {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    height: 100vh; height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  #sidebar {
+    display: flex; flex-direction: column;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+  .side-logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 16px 12px;
+  }
+  .side-logo .mark {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px;
+  }
+  .side-logo .word { font-weight: 700; font-size: var(--fs-13); letter-spacing: .12em; }
+  .side-logo .sub { font-size: var(--fs-10); color: var(--ink-3); letter-spacing: .04em; margin-top: 1px; }
+
+  .side-group { padding: 8px 8px 2px; }
+  .side-group + .side-group { margin-top: 2px; }
+  .side-group .overline { padding: 6px 10px 4px; }
+
+  .side-item {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left;
+    padding: 7px 10px; border-radius: var(--r-sm);
+    font-size: var(--fs-13); font-weight: 500; color: var(--ink-2);
+    cursor: pointer; transition: background .13s, color .13s;
+    border: 0; background: none;
+  }
+  .side-item:hover { background: var(--surface-2); color: var(--ink); }
+  .side-item.is-active { background: var(--primary-soft); color: var(--primary-ink); }
+  .side-item svg { width: 16px; height: 16px; }
+  .side-item .grow { flex: 1; }
+  .side-item .badge { font-size: var(--fs-10); }
+  .side-item.is-stub { color: var(--ink-3); }
+  .side-item.is-stub:hover { color: var(--ink-2); }
+
+  .side-foot {
+    margin-top: auto; padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .side-foot .who { flex: 1; min-width: 0; }
+  .side-foot .who b { display: block; font-size: var(--fs-13); font-weight: 600; }
+  .side-foot .who span { font-size: var(--fs-11); color: var(--ink-3); }
+
+  /* Main region */
+  #main { display: flex; flex-direction: column; min-width: 0; }
+  #topbar {
+    height: var(--topbar-h); flex-shrink: 0;
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  #topbar .search { width: min(420px, 40vw); }
+  #topbar .spacer { flex: 1; }
+  .bell { position: relative; }
+  .bell .badge {
+    position: absolute; top: -2px; right: -2px;
+    background: var(--danger); color: #fff;
+    min-width: 15px; height: 15px; font-size: 10px; padding: 0 4px;
+    border: 2px solid var(--surface);
+  }
+
+  #content { flex: 1; overflow-y: auto; position: relative; }
+  .screen[hidden] { display: none !important; }
+
+  /* Toast (stub navigation) */
+  #toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(8px);
+    z-index: var(--z-toast);
+    background: var(--ink); color: var(--bg);
+    font-size: var(--fs-12); font-weight: 500;
+    padding: 8px 14px; border-radius: var(--r-full);
+    box-shadow: var(--shadow-2);
+    opacity: 0; pointer-events: none;
+    transition: opacity .18s, transform .18s;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+
+<div id="app">
+  <nav id="sidebar" aria-label="Primary">
+    <div class="side-logo">
+      <div class="mark" aria-hidden="true">1</div>
+      <div>
+        <div class="word">THE ONE</div>
+        <div class="sub">Byblos Vista</div>
+      </div>
+    </div>
+
+    <div class="side-group">
+      <button class="side-item is-active" data-goto="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="grow">Home</span>
+      </button>
+      <button class="side-item" data-goto="workorders">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>
+        <span class="grow">Work Orders</span>
+        <span class="badge">1,273</span>
+      </button>
+      <button class="side-item" data-goto="vendors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <span class="grow">Dispatch &amp; Team</span>
+        <span class="badge">52</span>
+      </button>
+      <button class="side-item is-stub" data-stub="Clients &amp; Stores">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span class="grow">Clients &amp; Stores</span>
+      </button>
+      <button class="side-item is-stub" data-stub="Invoicing">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></svg>
+        <span class="grow">Invoicing</span>
+      </button>
+      <button class="side-item is-stub" data-stub="Reports">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span class="grow">Reports</span>
+      </button>
+    </div>
+
+    <div class="side-group">
+      <div class="overline">Configure</div>
+      <button class="side-item" data-goto="admin">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+        <span class="grow">Admin Studio</span>
+      </button>
+    </div>
+
+    <div class="side-foot">
+      <span class="avatar avatar--primary">JB</span>
+      <div class="who">
+        <b>Jordan B.</b>
+        <span>Admin · all entities</span>
+      </div>
+    </div>
+  </nav>
+
+  <div id="main">
+    <header id="topbar">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="input" type="search" placeholder="Search or jump to a work order, site, vendor…" aria-label="Global search">
+      </div>
+      <div class="spacer"></div>
+      <button class="icon-btn bell" aria-label="Notifications (3 unread)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span class="badge">3</span>
+      </button>
+      <button class="icon-btn" aria-label="Help">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </button>
+      <span class="avatar avatar--primary" title="Jordan B. — Admin">JB</span>
+    </header>
+
+    <main id="content">
+      <!-- INLINE:SCREEN:dashboard -->
+      <!-- INLINE:SCREEN:work-orders -->
+      <!-- INLINE:SCREEN:work-order-detail -->
+      <!-- INLINE:SCREEN:vendors -->
+      <!-- INLINE:SCREEN:admin -->
+    </main>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  var content = document.getElementById('content');
+  var sidebar = document.getElementById('sidebar');
+  var toast = document.getElementById('toast');
+  var toastTimer = null;
+
+  // screen id -> sidebar item that should light up
+  var sideMap = {
+    dashboard: 'dashboard',
+    workorders: 'workorders',
+    'workorder-detail': 'workorders',
+    vendors: 'vendors',
+    admin: 'admin'
+  };
+
+  function show(name) {
+    var target = document.getElementById('screen-' + name);
+    if (!target) return;
+    var screens = content.querySelectorAll('.screen');
+    for (var i = 0; i < screens.length; i++) screens[i].hidden = true;
+    target.hidden = false;
+    content.scrollTop = 0;
+    var items = sidebar.querySelectorAll('.side-item[data-goto]');
+    for (var j = 0; j < items.length; j++) {
+      items[j].classList.toggle('is-active', items[j].getAttribute('data-goto') === sideMap[name]);
+    }
+  }
+
+  function note(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2600);
+  }
+
+  document.addEventListener('click', function (e) {
+    var stub = e.target.closest('[data-stub]');
+    if (stub) { note(stub.getAttribute('data-stub') + ' isn’t part of this mockup yet'); return; }
+    var el = e.target.closest('[data-goto]');
+    if (el) show(el.getAttribute('data-goto'));
+  });
+
+  // initial state: show dashboard only
+  var screens = content.querySelectorAll('.screen');
+  for (var i = 0; i < screens.length; i++) screens[i].hidden = true;
+  show('dashboard');
+})();
+</script>

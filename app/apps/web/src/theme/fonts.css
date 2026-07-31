@@ -1,0 +1,6 @@
+/* The One — self-hosted fonts (SPRINT1-SPEC §6). Files copied into
+   public/fonts/ from the four local woff2 sources (not re-downloaded). */
+@font-face{font-family:'Barlow';font-weight:400;font-display:swap;src:url(/fonts/barlow-400.woff2) format('woff2');}
+@font-face{font-family:'Barlow';font-weight:600;font-display:swap;src:url(/fonts/barlow-600.woff2) format('woff2');}
+@font-face{font-family:'Barlow Condensed';font-weight:700;font-display:swap;src:url(/fonts/barlow-condensed-700.woff2) format('woff2');}
+@font-face{font-family:'Barlow Condensed';font-weight:800;font-display:swap;src:url(/fonts/barlow-condensed-800.woff2) format('woff2');}

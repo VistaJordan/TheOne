@@ -1,0 +1,762 @@
+/* The One — Quote builder (Sprint 4).
+   Ported 1:1 from the approved comp (scratchpad/quote-comp.tpl.html). Everything
+   is scoped under .qb so the screen's own .field/.ctx/.ro/.autosave treatments
+   cannot collide with the payment screen's (which styles the same concepts
+   differently on purpose) or with the S2 detail page. Shared S4 primitives
+   (buttons, tooltip, dismiss sheet, .req/.opt/.hint) live in s4-forms.css. */
+
+/* ══ Form primitives (§3.1 label above every field, §3.2 required + errors) ══ */
+.qb .field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.qb .lbl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  line-height: 1.3;
+}
+
+.qb .fld {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink);
+  background: var(--field-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.qb .fld::placeholder { color: var(--ink-3); }
+
+.qb .fld:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.qb textarea.fld {
+  resize: vertical;
+  line-height: 1.55;
+  padding: 9px 11px;
+  font-size: 13px;
+}
+
+.qb select.fld {
+  appearance: none;
+  padding-right: 22px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 12px) 13px, calc(100% - 8px) 13px;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+
+.qb .fld.is-err {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.qb .fld.is-err:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.qb .err {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--danger);
+  line-height: 1.3;
+  margin-top: 4px;
+}
+
+/* computed / read-only (§3.6) — dashed rail + no field chrome, distinct from
+   both an editable .fld (solid border) and a disabled control (chip fill). */
+.qb .ro {
+  display: inline-block;
+  padding: 6px 9px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.qb .ro.is-empty { color: var(--ink-3); font-weight: 400; }
+
+.qb .money-in { position: relative; display: block; }
+
+.qb .money-in .cur {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.qb .money-in .fld {
+  padding-left: 18px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* checkbox with a visible label (§3.7 — the OT flag is never a bare box) */
+.qb .ck {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+}
+
+.qb .ck input {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  /* capped: --radius-sm is 7px in day, which on a 15px box is a circle and
+     reads as a radio. */
+  border-radius: min(var(--radius-sm), 4px);
+  background: var(--field-bg);
+  display: grid;
+  place-items: center;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.qb .ck input:checked { background: var(--accent); border-color: transparent; }
+
+.qb .ck input:checked::after {
+  content: '';
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid var(--on-accent);
+  border-bottom: 2px solid var(--on-accent);
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.qb .ck input:checked ~ span { color: var(--accent-text); }
+
+/* toggle switch (include-in-summary / separate-quotes) */
+.qb .sw {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.qb .sw input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+.qb .sw-track {
+  width: 34px;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 1px solid var(--border-strong);
+  position: relative;
+  flex: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.qb .sw-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: var(--ink-3);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.qb .sw input:checked + .sw-track { background: var(--accent); border-color: transparent; }
+.qb .sw input:checked + .sw-track::after { transform: translateX(15px); background: var(--on-accent); }
+
+.qb .sw-state {
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  min-width: 20px;
+}
+
+.qb .sw input:checked ~ .sw-state { color: var(--accent-text); }
+.qb .sw input:disabled ~ span { cursor: not-allowed; }
+
+/* ══ Header band ═══════════════════════════════════════════════════════════ */
+.qb .qhead { padding: 16px 18px 14px; }
+
+.qb .qhead-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.qb .qhead-idline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.qb .q-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.qb .q-wo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 9px;
+  border-radius: var(--pill-radius);
+  background: var(--chip);
+  border: 1px solid var(--border);
+}
+
+.qb .q-wo-v {
+  font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.qb .qhead-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  flex-wrap: wrap;
+}
+
+.qb .autosave {
+  padding: 3px 9px;
+  border-radius: var(--pill-radius);
+  background: var(--chip);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.qb .dismiss-note { margin-top: 10px; }
+
+/* 4-step pipeline */
+.qb .pipe {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.qb .pstep {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--pill-radius);
+  background: var(--thead-bg);
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.qb .pstep-mark {
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.qb .pipe-link { width: 20px; height: 1px; background: var(--border-strong); flex: none; }
+
+.qb .pstep.is-done { color: var(--ink-2); }
+
+.qb .pstep.is-done .pstep-mark {
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  color: var(--accent-text);
+}
+
+.qb .pstep.is-current {
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+  color: var(--warn);
+}
+
+.qb .pstep.is-current .pstep-mark { border-color: var(--warn-border); color: var(--warn); }
+
+.qb .pstep-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--warn-solid);
+  position: relative;
+}
+
+.qb .pstep-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 1px solid var(--warn-border);
+  animation: qb-pulse 1.9s ease-out infinite;
+}
+
+@keyframes qb-pulse {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qb .pstep-pulse::after { animation: none; opacity: 0.6; }
+}
+
+/* action bar */
+.qb .actionbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--row-border);
+}
+
+.qb .ctas {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.qb .actor-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+/* margin-top clears the lock tooltip that opens above the callout */
+.qb .callout { margin-top: 14px; }
+
+/* ══ Context strip ═════════════════════════════════════════════════════════ */
+.qb .ctx {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--row-border);
+  border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
+  overflow: hidden;
+}
+
+.qb .ctx-cell { background: var(--surface); padding: 10px 16px; min-width: 0; }
+
+.qb .ctx-k {
+  display: block;
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: var(--th-size);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  margin-bottom: 3px;
+}
+
+.qb .ctx-v {
+  display: block;
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.qb .ctx-v.sub { font-weight: 400; color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+.qb .ctx-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+
+/* ══ Page grid ═════════════════════════════════════════════════════════════
+   The rail is fixed-width so the left column keeps enough room for the
+   9-column line-item table to render without a horizontal scroller at 1440. */
+.qb .q-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 342px;
+  gap: 14px;
+  margin-top: 14px;
+  align-items: start;
+}
+
+/* ══ Work sections ═════════════════════════════════════════════════════════ */
+.qb .sec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: var(--pill-radius);
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--chip);
+  color: var(--ink-2);
+}
+
+.qb .sec-badge.is-proposed { background: var(--tab-on-bg); color: var(--tab-on-ink); }
+.qb .sec-sub { font-size: 12px; color: var(--ink-3); }
+
+.qb .subtotal-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 10px;
+  border-radius: var(--pill-radius);
+  background: var(--thead-bg);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.qb .subtotal-chip b {
+  font-size: 13.5px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.qb .push { margin-left: auto; }
+
+.qb .narr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--row-border);
+}
+
+.qb .scope { display: flex; flex-direction: column; gap: 6px; }
+.qb .scope-row { display: flex; align-items: center; gap: 8px; }
+
+.qb .scope-n {
+  width: 18px;
+  flex: none;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.qb .drag {
+  width: 22px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  position: relative;
+}
+
+.qb .drag:hover { background: var(--chip); color: var(--ink-2); }
+
+.qb .rowdel {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  border-radius: var(--radius-sm);
+  position: relative;
+}
+
+.qb .rowdel:hover { background: var(--danger-bg); color: var(--danger); }
+
+/* line-item table */
+.qb .lt-wrap { overflow-x: auto; }
+.qb .lt { min-width: 660px; font-size: 12.5px; }
+
+.qb .lt th {
+  background: var(--thead-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 6px;
+  text-align: left;
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: var(--th-size);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.qb .lt th.ta-r { text-align: right; }
+.qb .lt td { padding: 7px 6px; border-bottom: 1px solid var(--row-border); vertical-align: top; }
+.qb .lt tr:last-child td { border-bottom: 0; }
+.qb .lt td.cell-tight { padding-left: 1px; padding-right: 1px; }
+.qb .lt .c-type { width: 100px; }
+.qb .lt .c-qty { width: 58px; }
+.qb .lt .c-rate { width: 94px; }
+.qb .lt .c-day { width: 76px; }
+.qb .lt .c-ot { width: 72px; }
+.qb .lt .c-amt { width: 100px; }
+.qb .lt .fld { padding: 6px 7px; }
+
+.qb .lt select.fld {
+  padding-right: 18px;
+  background-position: calc(100% - 10px) 13px, calc(100% - 6px) 13px;
+}
+
+.qb .lt .ro { padding: 6px 7px; }
+.qb .lt tr.has-err td { background: color-mix(in srgb, var(--danger) 5%, transparent); }
+.qb .lt tr.has-err td:first-child { box-shadow: inset 2px 0 0 var(--danger); }
+
+/* the 5% danger wash drops --ink-3 to 4.48:1 in day — the two muted glyphs that
+   sit on it (the currency prefix and the "no amount yet" dash) step up to
+   ink-2, which also reads correctly: this row is the one asking for attention. */
+.qb .lt tr.has-err .cur,
+.qb .lt tr.has-err .ro.is-empty { color: var(--ink-2); }
+
+.qb .lt .qty-in { text-align: right; font-variant-numeric: tabular-nums; }
+
+.qb .lt-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 16px;
+}
+
+.qb .lt-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+/* option card */
+.qb .opt-card {
+  margin: 14px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--thead-bg);
+}
+
+.qb .opt-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--row-border);
+}
+
+.qb .opt-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--pill-radius);
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+}
+
+.qb .opt-body { padding: 12px 13px; }
+.qb .opt-body .lt-wrap { margin: 12px -13px 0; border-top: 1px solid var(--row-border); }
+.qb .opt-body .lt th { background: transparent; }
+
+.qb .opt-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 13px;
+  border-top: 1px solid var(--row-border);
+}
+
+.qb .addopt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 14px;
+  padding: 13px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong);
+  color: var(--ink-2);
+  background: transparent;
+  width: calc(100% - 24px);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.qb .addopt:hover { background: var(--chip); color: var(--ink); }
+
+/* ══ Right rail ════════════════════════════════════════════════════════════ */
+.qb .money-cap {
+  padding: 0 16px 13px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.45;
+}
+
+.qb .kvblock { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.qb .kvrow.is-muted dd { color: var(--ink-2); font-weight: 400; }
+.qb .kvrow.is-total dd { font-size: 16px; }
+.qb .ntemeter-cap.is-over { color: var(--danger); }
+
+.qb .tax-in { width: 92px; }
+
+/* summary panel
+   The generated text is laid out on a fixed monospace grid so the amounts stay
+   right-aligned at the rail's width. Capped + scrollable: it is a long client
+   document living in a narrow panel, and the total that matters is repeated in
+   .sum-foot below, outside the scroller. */
+.qb .sum-body { padding: 12px 16px 14px; }
+
+.qb .sum-text {
+  max-height: 560px;
+  overflow-y: auto;
+  padding: 12px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong);
+  background: var(--thead-bg);
+  font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.qb textarea.sum-text {
+  width: 100%;
+  color: var(--ink);
+  resize: vertical;
+  min-height: 260px;
+  outline: 0;
+}
+
+.qb textarea.sum-text:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.qb .sum-text.is-none { color: var(--ink-3); white-space: normal; font-family: 'Barlow', sans-serif; font-size: 12px; }
+
+.qb .sum-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--thead-bg);
+  border: 1px solid var(--border);
+}
+
+.qb .sum-foot .k {
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: var(--th-size);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+.qb .sum-foot .v {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.qb .sum-cap {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.45;
+}
+
+.qb .sum-cap .ic { margin-top: 1px; color: var(--accent-text); flex: none; }
+
+/* ══ Quotes list page ══════════════════════════════════════════════════════ */
+.quotes-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.quotes-empty b { color: var(--ink-2); font-size: 13px; font-weight: 600; }
+
+/* ══ Responsive ════════════════════════════════════════════════════════════ */
+@media (max-width: 1320px) {
+  .qb .q-grid { grid-template-columns: minmax(0, 1fr); }
+  .qb .ctx { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .qb .ctx { grid-template-columns: minmax(0, 1fr); }
+}
