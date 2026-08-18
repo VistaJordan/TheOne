@@ -11,3 +11,12 @@ packages/db/pgdata/
 # misc
 .DS_Store
 *.log
+
+# --- Stray PGlite scratch dirs (Phase 0) ---
+# The bare `pgdata/` rule above does NOT match these: pgdata.bak/ is a manual
+# backup and pgtest-onedrive/ is a 27MB OneDrive-lock experiment. Both are
+# regenerable local scratch and must never enter git history.
+pgdata*/
+pgtest*/
+packages/db/pgdata*/
+packages/db/pgtest*/
