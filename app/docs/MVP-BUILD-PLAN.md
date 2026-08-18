@@ -179,3 +179,61 @@ Outbound is last because a bad inbound map is internal cleanup, while a bad outb
 | No ClickUp fallback at cutover | R1 gate is "one week with zero ClickUp fallback" — keep the pilot to Incoming WOs only |
 | Obligations deferred | Phase 3 instrumentation is non-negotiable; these metrics cannot be backfilled |
 | Money stays third-party | Accepted. The button is a marked pending task, not a hidden gap. |
+
+---
+
+## 8. Decisions from the Ecotrak status workflow — 2026-08-18
+
+Produced by 4 parallel research lenses, an adversarial skeptic pass (17 challenges), and a merge review. 21 statuses mapped, 6 left unsettled pending vendor answers.
+
+### 8.1 Shadow week ships with ZERO authoritative rows
+
+The skeptic's central finding, accepted. Every Ecotrak value lands as a **logged fact** during the shadow week — nothing writes status, nothing pushes outbound. Rationale: the guards those authoritative rows depend on do not exist yet (no transition allowlist on work orders, no `cmms_wo_link`, no reconciliation queue, no outbound event log for echo suppression), so "raise for human reconciliation" currently resolves to an `activity_log` append nobody reads.
+
+This costs nothing — the plan already sequenced shadow-first and outbound-last — and it answers the open semantic questions from real payloads rather than by argument.
+
+Note: `quotes.ts:844` already implements the needed pattern as `assertTransition(from, expected, to)` with an `allowed_from` allowlist. Work orders need the same thing applied, not invented.
+
+### 8.2 Rejected proposal → BFI (bill for incurred)
+
+**Decided by Jordan.** A rejected proposal is neither "job dead" nor "re-quote." It moves to **completed**, and the dispatcher is tagged **BFI — Bill For Incurred**.
+
+This maps cleanly onto the existing quote model with no new arithmetic. `RULE B` (`quotes.ts:89`) already states the incurred subtotal *"is already on the work order and bills with the job."* So:
+
+- `proposal rejected` (authoritative) → forward transition into the done group, flagged BFI
+- The invoice draws on the existing `incurred_subtotal`, **not** `grand_total`
+- The dispatcher is notified
+
+Guards required: forward-only from Approval-phase statuses; and **warn when `incurred_subtotal` is 0** rather than silently completing a zero-value job — that is either a legitimate no-visit quote or a missed diagnostic capture, and the two must not be indistinguishable.
+
+### 8.3 Canonical gains a 13th value: `approved`
+
+The 12-value set had no way to express "client authorised the work, nothing booked yet" (internal `approved`). Folding it into `scheduled` would tell a connected CMMS a visit exists when none does, and would destroy measurement of the approval-to-schedule gap — BR-OBL-010, a live 2-business-hour clock. Inserted between `awaiting_client` and `scheduled`.
+
+### 8.4 Status vocabulary changes — approved, ships as one migration
+
+**Decided by Jordan.** Every status name is a join key across obligations, KPIs, and clock history, so these land together:
+
+- **Split `!! canceled/postponed`** into `cancelled` and `postponed`. Without it a paused job and a dead job are indistinguishable in our own data, receivables cannot separate recoverable pipeline from write-offs, and the Ecotrak `deferred` mapping is unimplementable (it would need two canonicals from one sub-status, breaking the NOT NULL FK invariant).
+- **Add `declined`** — canonical `declined` is currently unreachable from any of the 19, yet BR-WRK-004 (Block level) requires every decline be recorded with decider and reason.
+- **Accept a synthesized reason** when a machine cancellation arrives from Ecotrak with none attached.
+
+Deferred: an `accepted` sub-status, until dispatch asks for hire-progress visibility. Explicitly rejected: any RMA sub-status — RMA is a property of a **part line**, not the work order, and belongs in the R1 structured-parts stage (`part_order.fulfillment_path` / `rma_state`). One WO can mix RMA and purchased parts.
+
+### 8.5 Ecotrak check-ins ARE contractually required — Phase 7 grows
+
+**Confirmed by Jordan.** This invalidates the pure projection model: strict internal → canonical → Ecotrak leaves `scheduled` and `in_progress` with no outbound target, so the client would see nothing between "proposal submitted" and "completed" on every job.
+
+Phase 7 gains an **event-driven telemetry channel**, separate from status projection:
+
+- Check-ins are **OA-confirmed or dispatcher-triggered — never automatic guesses.** A wrong "arrived" is a client-visibility incident (BR-ACC-001), a stop-the-line event.
+- Open design question: technicians have no login in v1, so the likely trigger path is the **Quo channel** — the tech texts the dispatcher, who confirms, which emits the check-in. This couples Phase 7 to the messaging module, currently out of MVP scope. Needs resolving before Phase 7 starts.
+
+### 8.6 Still blocked on Ecotrak — one email
+
+1. The full string behind `completed pending re…`
+2. Whether `rma received` = authorization arrived (wait continues) or part arrived (wait over)
+3. Whether the wire value is literally `approfved` or `proposal approved`
+4. Who triggers `rfp submitted` — them issuing to us, or our response echoed
+
+Items 1 and 2 have readings that map to opposite ends of the pipeline. Both approval spellings will be mapped to the same target regardless, with an alert when the unexpected one appears.
