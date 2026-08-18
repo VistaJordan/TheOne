@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The One — Software Development Pack</title>
+<style>
+  @font-face { font-family:'Barlow'; src:url('barlow-400.woff2') format('woff2'); font-weight:400; }
+  @font-face { font-family:'Barlow'; src:url('barlow-600.woff2') format('woff2'); font-weight:600; }
+  @font-face { font-family:'Barlow Condensed'; src:url('barlow-condensed-700.woff2') format('woff2'); font-weight:700; }
+  @font-face { font-family:'Barlow Condensed'; src:url('barlow-condensed-800.woff2') format('woff2'); font-weight:800; }
+
+  :root{
+    --navy:#0a1628; --blue:#35b8f3; --teal:#00a878;
+    --ink:#16202e; --muted:#5a6a7d; --line:#d7dee6; --wash:#f2f6fa;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  @page { size:Letter; margin:18mm 16mm 18mm 16mm; }
+  body{ font-family:'Barlow','Segoe UI',sans-serif; font-size:9.8pt; line-height:1.5; color:var(--ink); }
+
+  h1,h2,h3{ font-family:'Barlow Condensed','Segoe UI',sans-serif; color:var(--navy); line-height:1.15; }
+  h1{ font-size:22pt; font-weight:800; text-transform:uppercase; letter-spacing:.03em; border-bottom:3px solid var(--blue); padding-bottom:6px; margin:0 0 4mm 0; }
+  h1 .no{ color:var(--blue); margin-right:8px; }
+  h2{ font-size:14pt; font-weight:700; margin:6mm 0 2mm 0; }
+  h3{ font-size:11.5pt; font-weight:700; margin:4mm 0 1.5mm 0; color:#22374f; }
+  p{ margin:0 0 2.4mm 0; }
+  section{ page-break-before:always; }
+  section.flow{ page-break-before:auto; }
+
+  table{ border-collapse:collapse; width:100%; margin:2mm 0 4mm 0; font-size:8.8pt; page-break-inside:auto; }
+  th{ background:var(--navy); color:#fff; font-family:'Barlow Condensed'; font-weight:700; font-size:9.5pt; text-align:left; padding:1.6mm 2.2mm; letter-spacing:.02em; }
+  td{ border:1px solid var(--line); padding:1.5mm 2.2mm; vertical-align:top; }
+  tr:nth-child(even) td{ background:var(--wash); }
+  tr{ page-break-inside:avoid; }
+  td b{ color:var(--navy); }
+
+  ul,ol{ margin:0 0 2.5mm 5mm; }
+  li{ margin-bottom:1mm; }
+  code{ font-family:Consolas,monospace; font-size:8.6pt; background:var(--wash); border:1px solid var(--line); padding:0 3px; border-radius:3px; }
+  .kicker{ font-family:'Barlow Condensed'; font-weight:700; text-transform:uppercase; letter-spacing:.14em; color:var(--blue); font-size:9.5pt; margin-bottom:1mm; }
+  .note{ background:var(--wash); border-left:3px solid var(--blue); padding:2.2mm 3mm; margin:2.5mm 0; font-size:9.2pt; }
+  .warn{ border-left-color:#d9822b; }
+  .src{ color:var(--muted); font-size:8.3pt; font-style:italic; margin-top:-1.5mm; margin-bottom:3mm; }
+  .cols{ display:flex; gap:6mm; } .cols>div{ flex:1; }
+
+  /* Cover */
+  .cover{ page-break-after:always; display:flex; flex-direction:column; height:238mm; }
+  .cover .band{ background:var(--navy); color:#fff; padding:14mm 12mm; margin:-6mm -4mm 0 -4mm; }
+  .cover .band .t1{ font-family:'Barlow Condensed'; font-weight:800; font-size:34pt; text-transform:uppercase; letter-spacing:.02em; line-height:1.05; }
+  .cover .band .t2{ font-family:'Barlow Condensed'; font-weight:700; font-size:15pt; color:var(--blue); text-transform:uppercase; letter-spacing:.12em; margin-top:3mm; }
+  .cover .logo{ margin:16mm 0 6mm 0; } .cover .logo img{ height:16mm; }
+  .cover .meta{ margin-top:auto; border-top:2px solid var(--line); padding-top:5mm; font-size:10pt; color:var(--muted); }
+  .cover .meta b{ color:var(--navy); }
+  .cover .contents{ margin-top:10mm; }
+  .cover .contents .ci{ display:flex; border-bottom:1px solid var(--line); padding:1.6mm 0; font-size:10.5pt; }
+  .cover .contents .ci .n{ width:10mm; color:var(--blue); font-family:'Barlow Condensed'; font-weight:700; }
+
+  /* Lifecycle chips */
+  .lane{ display:flex; align-items:stretch; gap:2mm; margin:1.2mm 0; page-break-inside:avoid; }
+  .lane .lbl{ width:26mm; flex:none; background:var(--navy); color:#fff; font-family:'Barlow Condensed'; font-weight:700; font-size:9pt; text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; justify-content:center; text-align:center; border-radius:2px; padding:1mm; }
+  .chip{ flex:1; border:1.5px solid var(--navy); border-radius:3px; padding:1.4mm 2mm; font-size:8.6pt; line-height:1.3; background:#fff; }
+  .chip b{ display:block; font-family:'Barlow Condensed'; font-weight:700; font-size:9.6pt; color:var(--navy); }
+  .chip.cond{ border-style:dashed; background:var(--wash); }
+  .chip.money{ border-color:var(--teal); } .chip.money b{ color:var(--teal); }
+  .arr{ align-self:center; color:var(--blue); font-weight:600; flex:none; }
+
+  .gate{ background:var(--navy); color:#fff; border-radius:3px; padding:2mm 3mm; margin:2mm 0; font-size:9.2pt; page-break-inside:avoid; }
+  .gate b{ color:var(--blue); font-family:'Barlow Condensed'; letter-spacing:.04em; }
+
+  .jhead{ background:var(--navy); color:#fff; border-radius:3px 3px 0 0; padding:1.8mm 3mm; font-family:'Barlow Condensed'; font-weight:700; font-size:11.5pt; letter-spacing:.03em; margin-top:5mm; page-break-after:avoid; }
+  .jhead .who{ float:right; color:var(--blue); font-size:9.5pt; letter-spacing:.08em; text-transform:uppercase; }
+  .jbody{ border:1px solid var(--line); border-top:none; padding:2.5mm 3mm; margin-bottom:2mm; }
+  .jbody ol{ margin-left:5mm; }
+  .tag{ display:inline-block; background:var(--blue); color:#fff; font-family:'Barlow Condensed'; font-weight:700; font-size:8pt; padding:0 1.6mm; border-radius:2px; letter-spacing:.05em; vertical-align:1px; }
+  .tag.gray{ background:var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ============================ COVER ============================ -->
+<div class="cover">
+  <div class="band">
+    <div class="t1">The One</div>
+    <div class="t2">Software Development Pack — Prototype → Production</div>
+  </div>
+  <div class="logo"><img src="logo-black.png" alt="Seamless FM"></div>
+  <div class="contents">
+    <div class="ci"><span class="n">1</span> Executive summary</div>
+    <div class="ci"><span class="n">2</span> Product overview &amp; principles</div>
+    <div class="ci"><span class="n">3</span> Personas &amp; roles</div>
+    <div class="ci"><span class="n">4</span> Operational SOP — the work-order lifecycle</div>
+    <div class="ci"><span class="n">5</span> User journeys</div>
+    <div class="ci"><span class="n">6</span> Functional scope &amp; requirements</div>
+    <div class="ci"><span class="n">7</span> Architecture, data model &amp; API</div>
+    <div class="ci"><span class="n">8</span> Development SOP (how we build)</div>
+    <div class="ci"><span class="n">9</span> QA, acceptance &amp; release gates</div>
+    <div class="ci"><span class="n">10</span> Release plan &amp; current position</div>
+    <div class="ci"><span class="n">11</span> Risks, open decisions &amp; security notes</div>
+    <div class="ci"><span class="n">12</span> Document map</div>
+  </div>
+  <div class="meta">
+    <b>Version 1.0 · 2026-08-07</b> · Prepared for Jordan Brown — Seamless FM / Byblos Vista Consulting<br>
+    Status: <b>Draft for review.</b> This pack consolidates and extends the repository's authoritative documents; where it summarizes, the source file is cited and remains the source of truth.
+  </div>
+</div>
+
+<!-- ============================ 1 ============================ -->
+<section class="flow">
+<h1><span class="no">1</span>Executive Summary</h1>
+<p><b>The One</b> (working name) is a purpose-built operations platform that replaces the ClickUp workspace currently running <b>Seamless FM / Byblos Vista / Alpha Fixers</b> — one facilities-maintenance operation trading under multiple brands, with ~98 workspace users and ~21,000 historical work orders. Work orders arrive from client CMMS platforms (Corrigo, Ecotrak, ServiceChannel), email, and the company's own Seamgo tool; they are accepted, dispatched to external subcontractor technicians, quoted, approved by the client, fulfilled, and then paid on both sides — the technician (AP) and the client invoice (AR).</p>
+<p>A working prototype exists: a local monorepo app (React + Fastify + embedded Postgres) covering Sprints 1–5 — work-order table and record, 19-status pipeline with phase bar, quote builder with role-gated approval, technician payment requests, an AR audit/invoicing queue, and an obligation ("Pulse") engine — all seeded with real ClickUp data, including hero work order <b>WO-39403</b>.</p>
+<p><b>What this pack is.</b> The repository already contains strong primary documents (process map, roadmap, architecture proposal, sprint spec). What it lacked was the packaged layer a development effort is handed: named personas, written user journeys, a development SOP, a QA/release process, and a consolidated risk register. This document supplies those, and indexes the primary documents rather than duplicating them (§12).</p>
+<h2>Current position at a glance</h2>
+<table>
+  <tr><th style="width:34%">Dimension</th><th>State</th></tr>
+  <tr><td><b>Release stage</b></td><td>R0 Prototype (Sprints 1–4) complete and committed; Sprint 5 (obligations, Pulse, Receivables) built but <b>uncommitted</b></td></tr>
+  <tr><td><b>Working software</b></td><td>7 live screens, 30+ API endpoints, 4 SQL migrations, idempotent seed of 28 real work orders</td></tr>
+  <tr><td><b>Next gate</b></td><td>R1 Pilot (~5 users): dispatch runs the "Incoming WOs" intake for one week with zero ClickUp fallback</td></tr>
+  <tr><td><b>Biggest process gaps</b></td><td>Single git commit (no restore points); repo lives in OneDrive without a remote; 9 open process questions in the lifecycle doc; Corrigo/ServiceChannel API feasibility unproven</td></tr>
+</table>
+</section>
+
+<!-- ============================ 2 ============================ -->
+<section>
+<h1><span class="no">2</span>Product Overview &amp; Principles</h1>
+<h2>The problem</h2>
+<p>Operations run today on ClickUp plus a constellation of side tools: <b>Yoda</b> (quote builder), <b>PPR</b> (tech payment requests), <b>Argus</b> (AR completion-audit assistant), <b>Quotato</b> (Quo/OpenPhone call &amp; SMS capture with AI quote drafting), an <b>n8n escalation bot</b> watching the contact inbox, and a Teams PDF side-channel for assignments. ClickUp provides primitives (custom fields, statuses, lists, views) but no lifecycle awareness, no money model, no vendor module, and no client-sync boundary. The One rebuilds the primitives ClickUp actually uses — measured from the live workspace: 19 statuses, 102 custom fields, 163 lists — and makes the work-order lifecycle native, so the side tools can be absorbed rather than maintained separately.</p>
+<h2>Product principles</h2>
+<p class="src">Source: product/feature-roadmap.md (v1) — abbreviated.</p>
+<table>
+  <tr><th style="width:30%">Principle</th><th>Meaning</th></tr>
+  <tr><td><b>1 · API-first system of record</b></td><td>n8n, Supabase, HubSpot, QuickBooks, OpenPhone, Power BI are the constellation; The One is the sun. Every entity readable/writable via API + webhooks from day one.</td></tr>
+  <tr><td><b>2 · Primitives, not features</b></td><td>Custom fields, statuses, views, automations are configuration. Work orders, audits, vendor records are configurations of primitives.</td></tr>
+  <tr><td><b>3 · Lifecycle-native</b></td><td>The 15 stages of the WO lifecycle (§4) are the spine of the product, not an afterthought.</td></tr>
+  <tr><td><b>4 · Prototype first; the schema is the contract</b></td><td>v0 is local and minimal; what must be right early is the field engine, membership model, <code>client_visible</code>, vendor + payable entities, and the activity log.</td></tr>
+  <tr><td><b>5 · Beat Facilio where it's weak</b></td><td>Live SQL access for Power BI, escalation logic designed for external vendors, integration adapters as first-class modules. Facilio (~$25K/yr) remains the evaluated fallback — leverage, not Plan A.</td></tr>
+</table>
+<h2>What exists in the prototype today</h2>
+<table>
+  <tr><th style="width:26%">Screen</th><th>Purpose</th></tr>
+  <tr><td><b>Work Orders</b> (/)</td><td>KPI row, status-group tabs (All/Open/Active/Done/Closed), search, obligation clock chips per row, sort-by-breach.</td></tr>
+  <tr><td><b>WO Detail</b></td><td>Tabs: Overview · Messages · Audit trail · All fields. Phase bar, updates feed with <code>client_visible</code> toggle, photos, soft-close checklist, money card + NTE meter, payables, people/site/dates, obligations rail.</td></tr>
+  <tr><td><b>Quote Builder</b></td><td>The Yoda replacement: INCURRED + PROPOSED option sections, line items with drag-reorder, live money rail (cost / grand total / tax / NTE / profit / margin), auto-generated client summary, role-gated Submit and Approve &amp; Send (locked, never hidden).</td></tr>
+  <tr><td><b>Request Payment</b></td><td>The PPR replacement: payee (vendor or manual), purpose, method, alternate recipient, prior payments on the WO.</td></tr>
+  <tr><td><b>Quotes index</b></td><td>All quotes: WO, status, grand total, last touched.</td></tr>
+  <tr><td><b>Pulse</b></td><td>Triage columns: Needs me now (tier 2–3) · Due soon (tier 1) · Watching (tier 0); snooze requires a reason.</td></tr>
+  <tr><td><b>Receivables</b></td><td>Audit tab (Grey-Flag completion-audit queue, ported from Argus rules) and Invoicing tab (Ready → Sent → Paid).</td></tr>
+</table>
+<p>Navigation also shows <b>Dashboard, Vendors, Admin</b> as visible-but-disabled ("Coming in a later sprint") so the product's eventual shape is legible, and an actor switcher ("Viewing as") stands in for auth until R1.</p>
+</section>
+
+<!-- ============================ 3 ============================ -->
+<section>
+<h1><span class="no">3</span>Personas &amp; Roles</h1>
+<p class="src">Source: product/wo-lifecycle.md roles glossary; app/packages/shared/src/index.ts role enum; seed personas.</p>
+<h2>Internal personas</h2>
+<table>
+  <tr><th style="width:13%">Code</th><th style="width:24%">Role</th><th>Responsibilities &amp; authority</th><th style="width:19%">Prototype role</th></tr>
+  <tr><td><b>TL</b></td><td>Team Lead</td><td>Accept/decline authority; audits quotes; can push to client CMMS.</td><td><code>tl</code></td></tr>
+  <tr><td><b>ATL</b></td><td>Assistant Team Lead</td><td>Same touchpoints as TL; the <b>approve-and-send</b> gate on quotes.</td><td><code>atl</code></td></tr>
+  <tr><td><b>OA</b></td><td>Operations Admin</td><td>Intake into the system; performs the "TL Rep" push of curated updates to the client's CMMS.</td><td>—(R1)</td></tr>
+  <tr><td><b>AM</b></td><td>Account Manager</td><td>Accept/decline authority; owns the client relationship.</td><td><code>am</code></td></tr>
+  <tr><td><b>OM</b></td><td>Operations Manager (dispatcher)</td><td>Sources technicians, dispatches both visits, soft-closes. Tiers: Ops Coordinator (probation) → OM → <b>Senior OM</b> (quote-builder access starts here).</td><td><code>om</code> / <code>senior_om</code></td></tr>
+  <tr><td><b>HAR / AR</b></td><td>Accounts Receivable</td><td>AR audit, invoicing, collections. Tiers: AR (probation) → AR → Senior AR → HAR.</td><td>—(R1)</td></tr>
+  <tr><td><b>AP</b></td><td>Accounts Payable</td><td>Pays technicians at final soft close; orders parts (<code>ap will order</code> / <code>ap ordered</code>).</td><td>—(R1)</td></tr>
+  <tr><td><b>Exec guest</b></td><td>Executive read-only</td><td>Rollup dashboards only (e.g. Teresa, Rocio).</td><td>—(R2)</td></tr>
+  <tr><td><b>Admin</b></td><td>Platform admin</td><td>Full access; default seeded actor.</td><td><code>admin</code></td></tr>
+  <tr><td><b>Service accounts</b></td><td>Bots / n8n</td><td>First-class principals; every automated write is attributed like a human's.</td><td>seeded</td></tr>
+</table>
+<div class="note"><b>Trust tiers are a hard requirement, not a nice-to-have.</b> OM and AR both run probation → standard → senior ladders; permissions and review queues must be tier-aware (RBAC lands in R1, S5–S6).</div>
+<h2>External personas (not platform users)</h2>
+<table>
+  <tr><th style="width:22%">Persona</th><th>Relationship</th></tr>
+  <tr><td><b>Technician</b></td><td>External subcontractor, sourced per job from a pooled vendor map + per-OM "my book". Reached by SMS/call (Quo/OpenPhone); never logs in before the R3 vendor portal. Paying techs fast is a vendor-retention lever.</td></tr>
+  <tr><td><b>Client / FM company</b></td><td>Issues WOs from their CMMS (Corrigo, Ecotrak, ServiceChannel), approves quotes there, receives only <code>client_visible</code> updates — never the full internal picture.</td></tr>
+</table>
+<h2>Demo personas (seeded, for UAT)</h2>
+<p>Jordan Brown (<code>admin</code>, default actor) · Elise (<code>atl</code> — approves &amp; sends) · Matt Hammond (<code>senior_om</code> — dispatcher of hero WO-39403) · Peter Hope (<code>am</code>) · Zach Malden (<code>tl</code>) · all other seeded members default to <code>om</code>, deliberately below the quote gate so the 403 path is testable.</p>
+</section>
+
+<!-- ============================ 4 ============================ -->
+<section>
+<h1><span class="no">4</span>Operational SOP — The Work-Order Lifecycle</h1>
+<p class="src">Source of truth: product/wo-lifecycle.md (v3, 2026-07-27). The One must support every stage at parity before improving on it. Summary below; the source file carries the full narrative and its 9 open questions (§11).</p>
+
+<div class="lane"><div class="lbl">Intake</div>
+  <div class="chip"><b>1 · Birth</b>Client CMMS / email / Seamgo</div><div class="arr">→</div>
+  <div class="chip"><b>2 · Accept / Decline</b>TL · ATL · AM decide; declined ends</div><div class="arr">→</div>
+  <div class="chip"><b>3 · Intake</b>OA enters WO, assigns dispatcher</div></div>
+<div class="lane"><div class="lbl">Assess</div>
+  <div class="chip"><b>4 · Hire</b>OM sources tech (pooled map + my book)</div><div class="arr">→</div>
+  <div class="chip"><b>5 · Dispatch — assessment</b>Tech visits site to assess</div><div class="arr">→</div>
+  <div class="chip"><b>6 · Soft close pt 1</b>Quote + before photos + checkmarks</div></div>
+<div class="lane"><div class="lbl">Quote &amp; Approval</div>
+  <div class="chip"><b>7 · TL/ATL audit</b>Internal quote verification</div><div class="arr">→</div>
+  <div class="chip"><b>8 · TL Rep</b>OA pushes curated updates to client CMMS</div><div class="arr">→</div>
+  <div class="chip"><b>9 · Approval</b>Wait for client <i>or</i> approved on-site</div></div>
+<div class="lane"><div class="lbl">Fulfil</div>
+  <div class="chip cond"><b>10 · Materials (conditional)</b>Order parts if needed</div><div class="arr">→</div>
+  <div class="chip"><b>11 · Dispatch — fulfilment</b>Same tech preferred</div><div class="arr">→</div>
+  <div class="chip"><b>12 · Soft close final</b>After photos + checks + <b>AP pays tech</b></div></div>
+<div class="lane"><div class="lbl">Money</div>
+  <div class="chip money"><b>13 · AR audit</b>HAR/AR verify the WO is pristine (Argus)</div><div class="arr">→</div>
+  <div class="chip money"><b>14 · Invoice</b>Bill client via their CMMS</div><div class="arr">→</div>
+  <div class="chip money"><b>15 · Collection</b>Follow-ups until paid</div></div>
+
+<h2>Operating rules embedded in the lifecycle</h2>
+<ul>
+  <li><b>Linear with branches, not a loop.</b> Canonical shape is two visits — assess, then fulfil. On-site approval skips the wait; materials is conditional; <code>return trip needed</code> is the exception path.</li>
+  <li><b>Selective outbound sync.</b> The client's CMMS receives edits, status changes, and curated messages — never the full internal picture. Every update carries an internal-vs-client-facing flag (<code>client_visible</code>).</li>
+  <li><b>Money flows both ways on the WO.</b> AR bills clients (revenue); AP pays technicians at soft close (cost). Profit-per-WO is the two nets. Money card: NTE · quote · cost · invoiced · profit · margin.</li>
+  <li><b>The <code>!! waiting for approval</code> bottleneck is client-side</b> (46 WOs in the sample). The One tracks aging and prompts follow-ups; it cannot eliminate the wait.</li>
+</ul>
+<h2>Status pipeline</h2>
+<p>One 19-status pipeline everywhere (no per-list overrides), grouped <b>open · active · done · closed</b>, rolled up into 9 phases for the phase bar: <b>Intake · Assessment · Quote · Approval · Scheduled · In Progress · Parts · Done · Invoiced</b> (Parts conditional; <code>!! canceled/postponed</code> is off-pipeline; archive status <code>invoiced</code>).</p>
+<table>
+  <tr><th style="width:38%">Lifecycle stage</th><th>ClickUp statuses (mapping to confirm)</th></tr>
+  <tr><td>Birth / Accept</td><td><code>Open</code>, <code>emergency</code> (declined WOs never enter)</td></tr>
+  <tr><td>Intake → Hire → assessment</td><td><code>assessment scheduled</code>, <code>assessment ongoing</code>, <code>return trip needed</code></td></tr>
+  <tr><td>Soft close pt 1 / quote</td><td><code>waiting for quote</code>, <code>quote ready</code></td></tr>
+  <tr><td>TL Rep → client decision</td><td><code>!! waiting for approval</code>, <code>!! waiting for advice</code></td></tr>
+  <tr><td>Approved → materials → fulfilment</td><td><code>approved</code>, <code>please order parts</code>, <code>waiting for parts</code>, <code>job scheduled</code>, <code>job ongoing</code>, <code>pm scheduled</code></td></tr>
+  <tr><td>Final soft close → AR</td><td><code>done/incurred</code>, <code>!! ready to invoice</code></td></tr>
+  <tr><td>Invoice / Collection</td><td><code>&lt;&lt; invoiced not paid &gt;&gt;</code> → archive <code>invoiced</code></td></tr>
+  <tr><td>Off-ramp</td><td><code>!! canceled/postponed</code></td></tr>
+</table>
+</section>
+
+<!-- ============================ 5 ============================ -->
+<section>
+<h1><span class="no">5</span>User Journeys</h1>
+<p>Seven journeys cover the platform end to end. Each is written against the as-is process (§4) and annotated with what the prototype already implements <span class="tag">BUILT</span> versus what lands in a later release <span class="tag gray">R1+</span>.</p>
+
+<div class="jhead">J1 · Intake &amp; acceptance <span class="who">OA · TL · ATL · AM</span></div>
+<div class="jbody">
+  <p><b>Trigger:</b> a new WO appears on a client CMMS, in email, or in Seamgo. <b>Outcome:</b> an accepted WO sits in a dispatcher's book, or a decline is recorded.</p>
+  <ol>
+    <li>OA monitors the intake sources and surfaces the new WO (today: manual re-entry into ClickUp — the automation win is inbound adapters, Ecotrak first). <span class="tag gray">R1–R2</span></li>
+    <li>TL / ATL / AM decides accept or decline; a decline ends the flow with a reason. <span class="tag gray">R1 structured</span></li>
+    <li>OA creates the record — ordered intake form (the numbered 13.–38. fields), client, site, trade, NTE, SLA date. <span class="tag">BUILT</span> (record + fields; creation UI is R1)</li>
+    <li>The WO is routed to an OM's book — assignment, not list-moving. Emergency WOs enter as <code>emergency</code> and start a 2-hour acknowledgment clock. <span class="tag">BUILT</span> (obligation rule <code>emergency_ack</code>)</li>
+  </ol>
+  <p><b>Pain removed:</b> multi-source inbox aggregation; the Teams PDF dual-assignment channel is retired at R1–R2.</p>
+</div>
+
+<div class="jhead">J2 · Sourcing &amp; assessment dispatch <span class="who">OM (dispatcher)</span></div>
+<div class="jbody">
+  <p><b>Trigger:</b> a WO lands in the OM's book. <b>Outcome:</b> a technician has assessed the site and the OM holds photos + findings.</p>
+  <ol>
+    <li>OM searches the pooled vendor map (trade × location) alongside their own book; gaps are filled from online directories. <span class="tag gray">R1 · S6</span></li>
+    <li>OM contacts the tech by SMS/call; the Quo thread (calls, transcripts, AI summaries, MMS photos) attaches to the WO's Messages tab. <span class="tag">BUILT</span> (mirrored data; live OpenPhone sync via Quotato integration later)</li>
+    <li>OM schedules the visit: status → <code>assessment scheduled</code> → <code>assessment ongoing</code>. A schedule-owed clock (2 business hours after approval-type triggers) keeps dispatch honest. <span class="tag">BUILT</span></li>
+    <li>Tech reports back; before photos and findings land on the WO. <span class="tag">BUILT</span> (updates feed + photos)</li>
+  </ol>
+  <p><b>Exception:</b> jobs approved up front skip straight to fulfilment (J4).</p>
+</div>
+
+<div class="jhead">J3 · Quote build → approval → send <span class="who">Senior OM → ATL/TL → OA</span></div>
+<div class="jbody">
+  <p><b>Trigger:</b> assessment findings are in; status <code>waiting for quote</code> and a 2-business-day quote-owed clock is running. <b>Outcome:</b> the client's CMMS holds the quote; status <code>!! waiting for approval</code>.</p>
+  <ol>
+    <li>Senior OM opens the Quote Builder (roles below <code>senior_om</code> see the controls locked with a tooltip — never hidden). <span class="tag">BUILT</span></li>
+    <li>Builds INCURRED (work already performed — context, not billed into the total) and one or more PROPOSED options with narrative and line items (service / labor / part / material; <code>amount = qty × rate × 1.5 if OT</code>, computed never stored). Live rail shows cost, grand total, tax (by state), NTE meter, profit, margin. <span class="tag">BUILT</span></li>
+    <li>Submit → <code>pending_approval</code>. A 4-business-hour quote-review clock now sits on the ATL. <span class="tag">BUILT</span></li>
+    <li>ATL/TL audits and either rejects (back to draft, with feedback) or approves &amp; sends → <code>sent</code>. <span class="tag">BUILT</span></li>
+    <li>OA performs TL Rep: pushes the auto-generated client summary + status to the client's CMMS (only <code>client_visible</code> content). <span class="tag gray">R2 adapter; manual today</span></li>
+    <li>Waiting on the client, a 5-business-day approval-followup clock prompts chasing. On-site approvals skip the wait entirely. <span class="tag">BUILT</span></li>
+  </ol>
+</div>
+
+<div class="jhead">J4 · Parts &amp; fulfilment <span class="who">OM · AP</span></div>
+<div class="jbody">
+  <p><b>Trigger:</b> client approval (or approved on-site). <b>Outcome:</b> approved work performed on site.</p>
+  <ol>
+    <li>If materials are needed: <code>please order parts</code> → AP orders (<code>ap will order</code>/<code>ap ordered</code> tags today; structured parts stage at R1) → <code>waiting for parts</code>. <span class="tag gray">R1 · S7+</span></li>
+    <li>OM redispatches — same tech preferred: <code>job scheduled</code> → <code>job ongoing</code>. <span class="tag">BUILT</span> (status flow)</li>
+    <li>Extra visits when needed (<code>return trip needed</code>) — the exception, not the shape.</li>
+  </ol>
+</div>
+
+<div class="jhead">J5 · Final soft close &amp; technician payment <span class="who">OM · AP</span></div>
+<div class="jbody">
+  <p><b>Trigger:</b> work completed on site. <b>Outcome:</b> WO documentation complete; the tech's payable is settled.</p>
+  <ol>
+    <li>OM uploads after photos and completes the soft-close checklist. <span class="tag">BUILT</span></li>
+    <li>OM (or AP) raises a payment request: payee = vendor record or manual name+phone, purpose, amount (hardened parsing), method (Zelle, ACH, check, company card, Cash App), optional alternate recipient; prior payments on the WO are shown to prevent doubles. <span class="tag">BUILT</span></li>
+    <li>The request moves <code>requested → approved → paid</code> in the AP queue (the control point — creation is deliberately ungated); a 2-business-day payment-processing clock sits on AP. <span class="tag">BUILT</span> (model + clock; AP queue UI at R1)</li>
+    <li>Status → <code>done/incurred</code>; the WO's cost side is now real, so profit-per-WO is real.</li>
+  </ol>
+  <p><b>Why it matters:</b> paying techs fast and reliably is a vendor-retention lever — good techs go where they get paid.</p>
+</div>
+
+<div class="jhead">J6 · AR audit → invoice → collection <span class="who">HAR · Senior AR · AR</span></div>
+<div class="jbody">
+  <p><b>Trigger:</b> WO reaches final soft close. <b>Outcome:</b> cash collected; WO archived <code>invoiced</code>.</p>
+  <ol>
+    <li>The WO enters the Receivables <b>Audit</b> queue. Grey-Flag rules (ported from Argus) check the record automatically: check-in/check-out present, client quote attached, SharePoint deliverables, CO# format, Admin/Quote release gate. <span class="tag">BUILT</span></li>
+    <li>AR reviewer clears flags or bounces the WO back to the dispatcher to fix. Trust tiers decide who may release. <span class="tag gray">R1 RBAC</span></li>
+    <li>Clean WOs move to <b>Invoicing</b>: Ready → Sent (entered into the client's CMMS) → Paid. <span class="tag">BUILT</span></li>
+    <li>Collections works <code>&lt;&lt; invoiced not paid &gt;&gt;</code> with calls and follow-ups until payment; aging feeds the KPI row and (R2) a collections queue with promise-to-pay. <span class="tag gray">R2</span></li>
+  </ol>
+</div>
+
+<div class="jhead">J7 · Pulse triage — obligations <span class="who">Every role, daily</span></div>
+<div class="jbody">
+  <p><b>Trigger:</b> continuous — the obligation engine derives clocks from WO/quote/payment state (no cron; a debounced evaluator runs on reads and after relevant writes). <b>Outcome:</b> nothing owed goes silent.</p>
+  <ol>
+    <li>User opens <b>Pulse</b>: <i>Needs me now</i> (tier 2 breached / tier 3 critical) · <i>Due soon</i> (tier 1, ≥80% of clock) · <i>Watching</i> (tier 0 ambient). <span class="tag">BUILT</span></li>
+    <li>Clocks respect business hours (Mon–Fri 08:00–18:00 CT, paused outside) except emergencies, which run 24×7. Each obligation pings once per tier — ever. <span class="tag">BUILT</span></li>
+    <li>The user either <b>resolves by evidence</b> — do the owed thing (send the quote, schedule the job, pay the tech) and the obligation clears itself — or <b>snoozes</b> with a mandatory reason, max 72h. There is deliberately no dismiss. <span class="tag">BUILT</span></li>
+    <li>The bell inbox mirrors pings; read/read-all supported. <span class="tag">BUILT</span></li>
+  </ol>
+  <p><b>V1 rules (config-as-data):</b> <code>emergency_ack</code> 2h 24×7 · <code>quote_owed</code> 2 bus. days · <code>schedule_owed</code> 2 bus. hours · <code>approval_followup</code> 5 bus. days · <code>quote_review_owed</code> 4 bus. hours (ATL) · <code>payment_processing</code> 2 bus. days (AP) · <code>sla_blown</code> on SLA date passed.</p>
+</div>
+</section>
+
+<!-- ============================ 6 ============================ -->
+<section>
+<h1><span class="no">6</span>Functional Scope &amp; Requirements</h1>
+<p class="src">Source of truth: product/feature-roadmap.md (12-layer feature map, every item tagged); platform-brainstorm/clickup-feature-inventory.md (tiered T0–T3 requirements catalogue). Condensed view:</p>
+<table>
+  <tr><th style="width:26%">Layer</th><th>Scope</th><th style="width:16%">Lands</th></tr>
+  <tr><td><b>L0 · Foundation</b></td><td>Custom-field engine (13 types), 19-status pipeline + phases, WO record, task↔list M2M with home list, attributed activity log, <code>client_visible</code>, attachments, service-account principals, outbox/event stream</td><td>P → R1</td></tr>
+  <tr><td><b>L1 · Identity &amp; access</b></td><td>RBAC across all roles, trust-tier gating, per-user data scoping, outbound-push gate by role, exportable audit-log UI</td><td>R1 → R2</td></tr>
+  <tr><td><b>L2 · Portfolio</b></td><td>Clients + FM companies, billing entities (SFM/AF/BKR/TPM/RF/EDS), sites with geo, multi-entity, assets</td><td>P → R3</td></tr>
+  <tr><td><b>L3 · Lifecycle engine</b></td><td>Intake queue, accept/decline with reason, routing to books, approval fork, soft-close checklists, quote-audit gate, parts stage, NTE guardrails, SLA aging, exception paths, time-in-status metrics</td><td>P → R2</td></tr>
+  <tr><td><b>L4 · Vendor management</b></td><td>Vendor DB (trades, geo, rates), pooled map + my book, tiering, compliance docs w/ expiry gating, onboarding, scorecards, invoice capture, 1099, portal, auto-assignment</td><td>R1 → R3</td></tr>
+  <tr><td><b>L5 · Money</b></td><td>Financial tab, quote builder, approval chains, client invoicing, AP payables, AR audit (Argus absorb), collections queue, QuickBooks sync, rate cards</td><td>P → R3</td></tr>
+  <tr><td><b>L6 · Integrations</b></td><td>REST API + webhooks (n8n-friendly), Ecotrak adapter first, email-to-WO, Corrigo/ServiceChannel (pending spike), selective outbound sync, Seamgo absorb-or-bridge, client portal</td><td>R1 → R3</td></tr>
+  <tr><td><b>L7 · Views &amp; analytics</b></td><td>Table + filters, saved/shared views, board, role dashboards with drill-down, approval-aging dashboard, map view, exec dashboards, PBI read-replica, calendar/workload</td><td>P → R2</td></tr>
+  <tr><td><b>L8 · Communication</b></td><td>Notifications inbox, email digests, VoIP click-to-call + auto call-logging, Teams retirement, vendor SMS</td><td>R1 → R3</td></tr>
+  <tr><td><b>L9 · Automations</b></td><td>Rules engine (trigger→condition→action, run log, loop guards), SLA escalations, AM auto-assign; n8n external from day one</td><td>R1 → R2</td></tr>
+  <tr><td><b>L10 · AI</b></td><td>Intake triage (parse WO PDFs/emails), copilot Q&amp;A, vendor validation, outbound vendor calls</td><td>R3</td></tr>
+  <tr><td><b>L11 · PM &amp; assets</b></td><td>PM schedules, asset-linked recurring WOs, service history</td><td>R3</td></tr>
+</table>
+<h2>Decided requirements worth restating</h2>
+<ul>
+  <li><b>Quotes:</b> options are internal (client is not choosing between them); OT multiplies rate ×1.5; sales tax derives from state; the client Summary is auto-generated but text-editable. Build = Senior OM+; approve &amp; send = ATL+.</li>
+  <li><b>UX standard (from the ui-ux-pro-max audit):</b> labels above fields; required indicators; disabled ≠ enabled styling; adequate contrast; role-gated actions render locked, not hidden; tabular numerals for money.</li>
+  <li><b>Obligations:</b> resolution is evidence-only — no dismiss endpoint exists, by design; snooze is capped at 72h with a mandatory reason; one ping per (obligation, tier) enforced by a DB unique constraint.</li>
+</ul>
+</section>
+
+<!-- ============================ 7 ============================ -->
+<section>
+<h1><span class="no">7</span>Architecture, Data Model &amp; API</h1>
+<p class="src">Source of truth: platform-brainstorm/platform-architecture-proposal.md (three scored candidates); app/docs/SPRINT1-SPEC.md (stack decisions). Summary:</p>
+<h2>Architecture decision</h2>
+<p>Three candidates were scored concern-by-concern: <b>A</b> server-authoritative Postgres (≈92), <b>B</b> Zero local-first sync (≈83), <b>C</b> hybrid relational + CRDT islands (≈80). The recommendation is a <b>sequence, not a pick</b>: build A now; adopt Zero at the Phase-2 gate if realtime collaboration demands it; add CRDT islands when collaborative editing (Zeus) lands.</p>
+<h2>Prototype stack (as built)</h2>
+<table>
+  <tr><th style="width:22%">Layer</th><th>Choice</th><th style="width:34%">Rationale / upgrade path</th></tr>
+  <tr><td>Monorepo</td><td>npm workspaces — <code>apps/api</code>, <code>apps/web</code>, <code>packages/db</code>, <code>packages/shared</code></td><td>No build step for server code; <code>tsx</code> runs TS directly</td></tr>
+  <tr><td>Database</td><td><b>PGlite</b> (embedded Postgres 16 WASM), file-persisted</td><td>No Docker/cloud for v0; upgrade = connection-string swap to the committed <code>docker-compose.yml</code> Postgres</td></tr>
+  <tr><td>DB access</td><td>Plain SQL via thin <code>query()</code>; raw ordered <code>.sql</code> migrations</td><td>Migrations append-only, executed whole, numbered 0001–0004</td></tr>
+  <tr><td>API</td><td>Fastify 5 + Zod 3, TypeScript ESM, port 5174</td><td>Zod at every boundary; single error envelope</td></tr>
+  <tr><td>Web</td><td>React 18 + Vite 5, TanStack Query 5, React Router 6, port 5173</td><td><code>/api</code> proxied by Vite — no CORS</td></tr>
+  <tr><td>Styling</td><td>Plain CSS custom-property tokens; light/dark via <code>data-theme</code></td><td>No Tailwind / component library; brand kit in <code>UI Essentials/</code> is authoritative</td></tr>
+  <tr><td>Shared types</td><td><code>@theone/shared</code> — types only</td><td>Web never imports the DB runtime</td></tr>
+  <tr><td>Deferred deliberately</td><td colspan="2">Outbox/event stream, job worker, WS/SSE realtime, full-text search, ACL enforcement, formula engine, automations, ORM</td></tr>
+</table>
+<h2>Data model — what must not be gotten wrong</h2>
+<table>
+  <tr><th style="width:30%">Entity group</th><th>Notes</th></tr>
+  <tr><td><b>Hierarchy &amp; principals</b></td><td><code>container</code> (workspace→space→folder→list) · <code>principal</code> (humans + service accounts, both first-class)</td></tr>
+  <tr><td><b>Field engine</b></td><td><code>status_set</code>/<code>status</code> (groups denormalised onto task) · <code>field_def</code> (13 types; 102 real defs seeded) · promoted hot columns + <code>fields</code> JSONB with GIN index</td></tr>
+  <tr><td><b>The WO</b></td><td><code>task</code> (flat; nullable parent for future subtasks) · <code>task_list_membership</code> M2M with one home list — <b>routing = updating membership</b>, not moving rows</td></tr>
+  <tr><td><b>Audit &amp; comms</b></td><td><code>activity_log</code> append-only, every write attributed · <code>comment.client_visible</code> — the internal-vs-client boundary · Quo tables (<code>quo_conversation/call/message/job_segment</code>) have <b>no</b> <code>client_visible</code> column anywhere: that channel is never client-facing, by schema</td></tr>
+  <tr><td><b>Money</b></td><td><code>vendor</code> · <code>payable</code> · <code>quote</code> (one per task, revisions) / <code>quote_section</code> / <code>quote_line</code> (amounts computed, never stored) · <code>payment_request</code></td></tr>
+  <tr><td><b>Obligations</b></td><td><code>obligation_rule</code> (config-as-data) · <code>obligation</code> (one live per rule+subject) · <code>obligation_ping</code> (unique per tier) · <code>notification</code></td></tr>
+</table>
+<h2>API conventions (already enforced — keep them)</h2>
+<ul>
+  <li>Everything under <code>/api</code>; Zod-validated inputs; errors as <code>{ error: { code, message, details } }</code> with <code>BAD_REQUEST | FORBIDDEN | NOT_FOUND | INTERNAL</code>.</li>
+  <li>Acting principal resolved once per request from <code>X-Actor-Id</code> (pre-auth stand-in; replaced by real auth in R1). Role gates return 403; the UI renders the same gate as a locked control.</li>
+  <li>Work orders addressable by UUID or WO number. List endpoints paginate (<code>limit ≤ 200</code>).</li>
+  <li>Obligation evaluation is lazy + debounced (30s) on reads and relevant writes — no cron to deploy or forget.</li>
+</ul>
+<p>Surface today: work orders (list/detail/status/feed/comments/messages), statuses, KPIs, activity, principals, quotes (CRUD + submit/approve/send/reject), payment requests, pulse/obligations/notifications/snooze. ~30 endpoints across 8 route files.</p>
+</section>
+
+<!-- ============================ 8 ============================ -->
+<section>
+<h1><span class="no">8</span>Development SOP — How We Build</h1>
+<p>This section is new — it codifies the process already practiced in Sprints 1–5 so it survives contact with more builders, contractors, or AI agents. Cadence: <b>1-week sprints, heavily AI-assisted, every sprint ends demoable.</b> Capacity assumption: one full-time builder + AI agents; resize sprints if that changes.</p>
+
+<h2>8.1 · The sprint loop</h2>
+<table>
+  <tr><th style="width:16%">Step</th><th>What happens</th><th style="width:26%">Artifact</th></tr>
+  <tr><td><b>1 · Spec</b></td><td>Write the sprint spec before code, using <code>app/docs/SPRINT1-SPEC.md</code> as the template: scope guardrails + a single exit criterion, DDL for any new tables, the API contract endpoint-by-endpoint, the component list, and an acceptance checklist.</td><td><code>app/docs/SPRINT&lt;n&gt;-SPEC.md</code></td></tr>
+  <tr><td><b>2 · Decompose</b></td><td>Split the sprint into task cards with <b>disjoint file ownership</b> (the S1 pattern ran three parallel build agents with hard file-boundary rules). Every card carries its own verification command.</td><td>Task cards in the spec</td></tr>
+  <tr><td><b>3 · Build</b></td><td>Implement to the spec. New tables = a new numbered migration (append-only, never edit shipped SQL). Seed updates must stay idempotent. Follow the engineering standards (8.3).</td><td>Code + migration + seed</td></tr>
+  <tr><td><b>4 · Verify</b></td><td>Run the acceptance checklist top to bottom against seeded data; walk the demo script on hero WO-39403; run self-tests (e.g. business-time arithmetic).</td><td>Checked checklist</td></tr>
+  <tr><td><b>5 · Demo &amp; gate</b></td><td>Demo to the release-gate audience (§9). Capture feedback and decisions; feed the next spec.</td><td>Feedback pack</td></tr>
+  <tr><td><b>6 · Commit &amp; record</b></td><td>Commit the sprint (see 8.4), update docs: new decisions into the relevant product doc, new questions into its open-questions list.</td><td>Tagged commit + doc updates</td></tr>
+</table>
+
+<h2>8.2 · Ground truth &amp; precedence</h2>
+<ul>
+  <li><b>When documents conflict,</b> <code>platform-brainstorm/platform-build-plan-handoff.md</code> governs — its §0 realignment supersedes everything below it and defines the precedence order between documents.</li>
+  <li><b>Process truth:</b> <code>product/wo-lifecycle.md</code> (v3). Parity with it comes before improving on it.</li>
+  <li><b>Scope truth:</b> <code>product/feature-roadmap.md</code> — feature tags [P]/[1]/[2]/[3] decide what a sprint may include.</li>
+  <li><b>Decisions are recorded, not remembered.</b> Each product doc carries dated decisions and an open-questions list; specs cite them. Continue the pattern (a lightweight <code>product/decision-log.md</code> is recommended once multiple people are deciding).</li>
+</ul>
+
+<h2>8.3 · Engineering standards (as practiced — now policy)</h2>
+<ul>
+  <li>TypeScript ESM everywhere; <code>tsx</code> runs server code directly — no build step until deployment demands one.</li>
+  <li>Zod validation at every API boundary; the single error envelope; role gates return 403 and the UI renders the identical gate as a locked control with a tooltip — <b>never hidden</b>.</li>
+  <li><code>@theone/shared</code> stays types-only; the web app never imports the DB runtime.</li>
+  <li>Migrations: raw SQL, numbered, append-only. Seeds: idempotent (truncate-and-reload). Demo states are computed with real business-time arithmetic so they land on exact obligation tiers.</li>
+  <li>Derived money is computed, never stored (<code>qty × rate × OT</code>). Status groups are the one sanctioned denormalisation.</li>
+  <li>Every write is attributed in <code>activity_log</code> — humans and service accounts alike.</li>
+  <li>Plain CSS design tokens; the <code>UI Essentials/</code> brand kit is authoritative (Seamless blue #35b8f3, navy #0a1628, Barlow). The HTML mockups are layout references only.</li>
+  <li>Don't bake "The One" into identifiers — the name is a placeholder.</li>
+</ul>
+
+<h2>8.4 · Version control (tightened — current practice is the gap)</h2>
+<div class="note warn"><b>Today the entire repo is one commit, with Sprint 5 sitting uncommitted, in a OneDrive-synced folder with no remote.</b> One sync conflict or bad edit and there is no restore point. The three changes below cost minutes and remove the whole risk class.</div>
+<ol>
+  <li><b>Commit at least per sprint</b> — message pattern <code>S&lt;n&gt;: &lt;scope&gt; — &lt;exit criterion met&gt;</code>. Commit the current S5 work now.</li>
+  <li><b>Add a private remote</b> (GitHub) and push after every commit. Git inside OneDrive is a known corruption/conflict hazard; the remote is the real backup. (Optionally move the working copy out of OneDrive and let GitHub be the sync.)</li>
+  <li><b>Tag release gates</b> (<code>r0-prototype</code>, <code>r1-pilot</code>, …). Branch per sprint (<code>sprint/s6-vendors</code>) once more than one person or agent commits; PRs become mandatory at that same moment.</li>
+  <li><b>Never commit secrets.</b> <code>.env</code> stays ignored; audit before the first push (see §11 — a sibling repo has live credentials tracked in git).</li>
+</ol>
+
+<h2>8.5 · Environments</h2>
+<table>
+  <tr><th style="width:18%">Stage</th><th style="width:30%">Runtime</th><th>Promotion trigger</th></tr>
+  <tr><td><b>Dev (now)</b></td><td>Local: PGlite + Vite + Fastify (<code>127.0.0.1</code>)</td><td>—</td></tr>
+  <tr><td><b>Pilot (R1)</b></td><td>Docker-compose Postgres 16 (committed, unused today); LAN or small host; real auth replaces the actor switcher</td><td>~5 pilot users need shared state</td></tr>
+  <tr><td><b>Production (R2)</b></td><td>Hosted Postgres + API + web; backups; PBI read-replica</td><td>Cutover: the 21K-WO import (S17) and rollout waves (S18)</td></tr>
+</table>
+
+<h2>8.6 · House rules (non-negotiable)</h2>
+<ul>
+  <li><b>ClickUp is READ-ONLY, forever, from every project.</b> GET only — no writes to the live workspace under any circumstances.</li>
+  <li><b>The <code>client_visible</code> boundary is schema-critical.</b> Nothing reaches a client surface without it; the Quo channel is never client-facing by construction.</li>
+  <li><b>Obligations have no dismiss.</b> Evidence resolves them; snoozing requires a reason. Do not add a dismiss endpoint "temporarily".</li>
+  <li><b>Parity before improvement.</b> Every lifecycle stage in §4 must work at parity before the stage is redesigned.</li>
+</ul>
+</section>
+
+<!-- ============================ 9 ============================ -->
+<section>
+<h1><span class="no">9</span>QA, Acceptance &amp; Release Gates</h1>
+<h2>Per-sprint quality bar</h2>
+<ol>
+  <li><b>Acceptance checklist</b> — written in the spec before build, executed top-to-bottom against seeded data before the sprint demo. A sprint without a fully checked list does not close.</li>
+  <li><b>Scripted UAT on hero WO-39403</b> — the seeded 7-Eleven refrigeration WO walks all 15 stages (the S4 demo script). New features must appear in that walk wherever the lifecycle touches them.</li>
+  <li><b>Role-gate tests</b> — exercise both sides of every gate (e.g. an <code>om</code> actor must see locked controls and receive 403s; <code>senior_om</code>/<code>atl</code> must pass). Seeded personas exist for exactly this.</li>
+  <li><b>Deterministic demo states</b> — seed anchors are computed with the real business-time arithmetic so obligation tiers land exactly; keep them that way (no hand-set timestamps).</li>
+  <li><b>Self-tests</b> — pure logic (business-time, money math, audit rules) carries its own test file, runnable via <code>tsx</code>. Grow this set with every rule added.</li>
+  <li><b>Migration + seed drill</b> — from an empty database: migrate → seed → smoke (health, WO list, WO detail, quote, pulse). Also verify migrate-without-seed (endpoints must degrade gracefully, as the obligation routes already do).</li>
+  <li><b>UX audit rules</b> (§6) apply to every new screen: labels, required markers, disabled styling, contrast, locked-not-hidden, tabular numerals.</li>
+</ol>
+<h2>Release gates</h2>
+<table>
+  <tr><th style="width:20%">Release</th><th>Exit gate — verbatim commitments</th></tr>
+  <tr><td><b>R0 · Prototype</b> (S1–S4)</td><td>Leadership + one each of OA / OM / AR confirm "this is our process." Feedback pack goes to the builder. <b>Status: reached.</b></td></tr>
+  <tr><td><b>R1 · Pilot</b> (S5–S10)</td><td>Dispatch runs "Incoming WOs" intake for <b>one week with zero ClickUp fallback</b> (~5 users live).</td></tr>
+  <tr><td><b>R2 · Cutover</b> (S11–S18)</td><td>ClickUp Vista space goes read-only, then decommissioned. Requires: parity + money + sync + the 21K-WO import with count reconciliation.</td></tr>
+  <tr><td><b>R3 · Differentiators</b> (S19+)</td><td>Scoped per feature (vendor portal, AI triage, PM/assets, absorptions); no single gate.</td></tr>
+</table>
+<div class="note">Recommended addition at R1: a written <b>pilot incident path</b> — who a pilot user pings when something breaks, where bugs are logged (GitHub issues once the remote exists), and the rollback rule (pilot reverts to ClickUp for that WO, never edits the DB by hand).</div>
+</section>
+
+<!-- ============================ 10 ============================ -->
+<section>
+<h1><span class="no">10</span>Release Plan &amp; Current Position</h1>
+<p class="src">Source of truth: product/feature-roadmap.md release plan. Cadence: 1-week sprints.</p>
+<table>
+  <tr><th style="width:14%">Sprint</th><th>Scope</th><th style="width:14%">Status</th></tr>
+  <tr><td><b>S1–S4</b></td><td>R0 Prototype: skeleton + schema + brand shell; WO record + statuses + activity + <code>client_visible</code>; intake→hire flows + stubs; demo dashboard + scripted 15-stage demo</td><td><b>Done</b></td></tr>
+  <tr><td><b>S5</b></td><td>Obligation engine + Pulse + Receivables + notifications (built); auth + RBAC v1 (outstanding — the S5 roadmap line)</td><td><b>In progress, uncommitted</b></td></tr>
+  <tr><td><b>S6</b></td><td>Vendor DB v1: trades, geo, rates, pooled map + my book</td><td>Next</td></tr>
+  <tr><td><b>S7</b></td><td>Quote builder v1 hardening, NTE enforcement, soft-close checklists w/ photo upload</td><td>—</td></tr>
+  <tr><td><b>S8</b></td><td>Ecotrak live intake + REST API v1 + webhooks (n8n connected)</td><td>—</td></tr>
+  <tr><td><b>S9</b></td><td>Saved views, role dashboards v1, SLA aging</td><td>—</td></tr>
+  <tr><td><b>S10</b></td><td>Hardening; <b>pilot go-live</b></td><td>—</td></tr>
+  <tr><td><b>S11–S18</b></td><td>R2: automations + escalations · compliance module · invoicing + QuickBooks · outbound sync + email-to-WO · map/exec/PBI · ClickUp import (21K) · rollout waves + Teams retirement</td><td>—</td></tr>
+  <tr><td><b>S19+</b></td><td>R3: vendor portal + auto-assign escalation · VoIP · AI triage + copilot · client portal · scorecards + 1099 · PM/assets · Argus absorption · Seamgo decision</td><td>—</td></tr>
+</table>
+<h2>Immediate next actions</h2>
+<ol>
+  <li>Commit Sprint 5; add the GitHub remote; tag <code>r0-prototype</code> at the S4 point (8.4).</li>
+  <li>Write <code>SPRINT5-SPEC.md</code> retroactively-lite (scope + acceptance checklist as-built) or fold it into <code>SPRINT6-SPEC.md</code>; resume spec-first from S6.</li>
+  <li>Close the S5 roadmap line: auth + RBAC v1 to replace the actor switcher before pilot users touch the app.</li>
+  <li>Run the Corrigo/ServiceChannel API feasibility spike — R2's outbound-sync scope hangs on it.</li>
+  <li>Answer the top process questions blocking build decisions (§11): decline recording, on-site approval recording, tech payment terms/approval.</li>
+</ol>
+</section>
+
+<!-- ============================ 11 ============================ -->
+<section>
+<h1><span class="no">11</span>Risks, Open Decisions &amp; Security Notes</h1>
+<h2>Standing risks</h2>
+<table>
+  <tr><th style="width:30%">Risk</th><th>Mitigation / owner</th></tr>
+  <tr><td><b>Corrigo + ServiceChannel API feasibility unproven</b></td><td>Spike ASAP; R2 outbound-sync scope depends on it. Ecotrak (staging creds in hand) goes first.</td></tr>
+  <tr><td><b>Seamgo &amp; Argus boundaries</b></td><td>Absorb-vs-bridge decisions owed by R2; module boundaries (intake, dispatch/vendors, quoting, sync, AR, invoicing) are drawn now so absorption is a merge, not a rewrite.</td></tr>
+  <tr><td><b>Per-person ClickUp lists = OM books?</b></td><td>Confirm before S6 routing hardening and the S17 import mapping.</td></tr>
+  <tr><td><b>Build capacity = 1 builder + AI</b></td><td>Sprints are sized for this; resize the plan if capacity changes.</td></tr>
+  <tr><td><b>Single-commit repo in OneDrive, no remote</b></td><td>§8.4 — commit, push, tag. Highest-leverage 30 minutes available.</td></tr>
+  <tr><td><b>Facilio as fallback</b></td><td>Evaluation checklist ready; portfolio pricing from ~$25K/yr. Keep as leverage.</td></tr>
+</table>
+<h2>Open process questions (from the lifecycle doc — answers unblock build)</h2>
+<ol>
+  <li>Accept/decline criteria — and where is a decline recorded today?</li>
+  <li>Confirm TL/ATL Audit and TL Rep placement (between quote and approval?).</li>
+  <li>Where does an on-site approval get recorded, and who confirms it with the client?</li>
+  <li>Do emergency WOs compress/skip stages (dispatch before quote)?</li>
+  <li>Who performs collection calls — AR team or a separate role?</li>
+  <li>Per-CMMS differences in outbound sync at TL Rep?</li>
+  <li>Tech payments: per visit or on completion? Are assessment-only visits paid? Terms? Who approves the payable?</li>
+  <li>Does AP also settle parts/materials invoices?</li>
+  <li>Confirm the lifecycle-stage → status mapping table (§4).</li>
+</ol>
+<h2>Security notes</h2>
+<table>
+  <tr><th style="width:30%">Finding</th><th>Action</th></tr>
+  <tr><td><b>Quotato repo tracks <code>.mcp.json</code> with live credentials in git</b></td><td>Rotate those credentials and purge the file from history <b>before</b> any absorption into this monorepo or any push to a shared remote.</td></tr>
+  <tr><td><b>Quotato webhooks lack replay protection</b></td><td>Add timestamp + signature-window checks when the integration is consumed as a sibling service (the recommended path).</td></tr>
+  <tr><td><b>Quotato uses <code>prisma db push</code> — no migration history</b></td><td>Snapshot its schema before integrating; The One's append-only SQL migration discipline is the standard.</td></tr>
+  <tr><td><b>Pre-auth prototype (X-Actor-Id header)</b></td><td>Fine locally; must be replaced by real auth + RBAC before any network-exposed pilot (S5 roadmap line).</td></tr>
+  <tr><td><b>ClickUp API token</b></td><td>Lives outside the repo (correct); keep it out, and keep all ClickUp access GET-only per the house rule.</td></tr>
+</table>
+</section>
+
+<!-- ============================ 12 ============================ -->
+<section>
+<h1><span class="no">12</span>Document Map</h1>
+<p>This pack summarizes; these files govern. Paths are relative to the repo root.</p>
+<table>
+  <tr><th style="width:38%">Document</th><th>Role</th></tr>
+  <tr><td><code>platform-brainstorm/platform-build-plan-handoff.md</code></td><td><b>Governing handoff brief.</b> §0 realignment supersedes all older docs; defines precedence.</td></tr>
+  <tr><td><code>product/wo-lifecycle.md</code> (v3)</td><td><b>Process source of truth</b> — 15 stages, roles, status mapping, open questions.</td></tr>
+  <tr><td><code>product/feature-roadmap.md</code> (v1)</td><td><b>Scope source of truth</b> — feature map L0–L11 with release tags; sprint plan R0–R3; standing risks.</td></tr>
+  <tr><td><code>product/quotes-payments.md</code></td><td>Requirements: quote builder, tech payments, UX corrections, decided answers.</td></tr>
+  <tr><td><code>product/quo-map.md</code></td><td>Reverse-engineering map of Quotato + integration options and risks.</td></tr>
+  <tr><td><code>platform-brainstorm/PLAN.md</code></td><td>Stakeholder master plan: 11 working decisions, phases, risks, next actions.</td></tr>
+  <tr><td><code>platform-brainstorm/platform-architecture-proposal.md</code></td><td>Architecture ADR: three scored candidates; sequence recommendation; 8 open decisions.</td></tr>
+  <tr><td><code>platform-brainstorm/clickup-workspace-map.md</code> · <code>clickup-map-handoff.md</code></td><td>Measured as-is inventory of the live workspace (98 users, 163 lists, 19 statuses, 102 fields) + portable API handoff. ClickUp = read-only, forever.</td></tr>
+  <tr><td><code>platform-brainstorm/clickup-feature-inventory.md</code></td><td>Tiered T0–T3 requirements catalogue of ClickUp's own feature set.</td></tr>
+  <tr><td><code>app/docs/SPRINT1-SPEC.md</code></td><td><b>Sprint-spec template</b>: guardrails, DDL, API contract, acceptance checklist, task cards.</td></tr>
+  <tr><td><code>Support Automation/mvp plan.md</code> + <code>future full system plan.md</code></td><td>Argus (completion audit) plans — audit state machine, rules engine, graduation criteria (≥98% agreement).</td></tr>
+  <tr><td><code>Inbox Monitor/ESCALATION-BOT.md</code></td><td>Escalation/SLA rulebook — the direct source of the obligation engine's rules.</td></tr>
+  <tr><td><code>mockup/design/SPEC.md</code> · <code>UI Essentials/</code></td><td>Mockup vocabulary (layout reference only) · authoritative brand kit.</td></tr>
+  <tr><td><b>This pack</b></td><td>The packaged layer: personas, journeys, dev SOP, QA/release process, risk register, index. Update it at each release gate.</td></tr>
+</table>
+<p style="margin-top:6mm;color:var(--muted);font-size:8.5pt">Prepared 2026-08-07 with Claude Code from the repository's primary documents and the as-built prototype. Working name "The One" is a placeholder — do not bake it into identifiers.</p>
+</section>
+
+</body>
+</html>
