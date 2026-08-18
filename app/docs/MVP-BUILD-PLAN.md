@@ -237,3 +237,18 @@ Phase 7 gains an **event-driven telemetry channel**, separate from status projec
 4. Who triggers `rfp submitted` — them issuing to us, or our response echoed
 
 Items 1 and 2 have readings that map to opposite ends of the pipeline. Both approval spellings will be mapped to the same target regardless, with an alert when the unexpected one appears.
+
+### 8.7 Quote-math divergence — found, recorded, deferred to R2
+
+The Phase 0 parity test found a real disagreement between the two `computeQuoteTotals` implementations:
+
+```
+web  quoteTotals.ts:189   grandTotal  = round2(includedOptions + salesTax)   -> 4410
+api  quotes.ts:120        grand_total = round2(options sum)  [tax separate]  -> 4200
+```
+
+On a fixture of options $4,200 + tax $210, the builder shows the operator **$4,410** while the server persists **$4,200**. Because the web autosaves then re-reads the server response, the displayed figure changes after save. It cascades: profit $1,410 vs $1,200, margin 31.97% vs 28.6% — the margin also differing in precision, since web keeps full float where the API rounds to one decimal.
+
+**Deliberately NOT fixed.** Money is a link-out to the third-party tool for the MVP, so the quote builder is not in the pilot path and no user reaches this. Those three assertions are `it.skip` in `tests/quote-math-parity.test.ts` with pointers back here; the other seven stay live and guard the shared arithmetic through the Phase 1 and 2 refactors.
+
+**R2 action:** decide whether a client-facing grand total includes sales tax, then un-skip. Note the API's `buildAutoSummary` prints `GRAND TOTAL` and then `Sales tax` beneath it, which suggests the summary wants a proper `Subtotal → Sales tax → Total` structure rather than either current answer. The fix belongs with the shared-math extraction, so both sides compute from one implementation and cannot drift again.
