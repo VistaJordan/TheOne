@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { postWorkOrderComment } from '../../api/client';
+import { useInvalidateObligations } from '../../hooks/useObligations';
 import { Icon } from '../Icon';
 
 /** Matches the API's Zod bound (body: string 1..4000). */
@@ -18,6 +19,7 @@ export function UpdateComposer({ woId, woNumber }: UpdateComposerProps) {
   const [clientVisible, setClientVisible] = useState(false);
   const [body, setBody] = useState('');
   const qc = useQueryClient();
+  const invalidateObligations = useInvalidateObligations();
 
   const mutation = useMutation({
     mutationFn: () => postWorkOrderComment(woId, { body: body.trim(), client_visible: clientVisible }),
@@ -26,6 +28,9 @@ export function UpdateComposer({ woId, woNumber }: UpdateComposerProps) {
       setClientVisible(false);
       qc.invalidateQueries({ queryKey: ['wo-feed', woId] });
       qc.invalidateQueries({ queryKey: ['wo-activity', woId] });
+      // S5: a comment is EVIDENCE — it silences emergency_ack, and a
+      // client-visible one silences approval_followup.
+      invalidateObligations();
     },
   });
 

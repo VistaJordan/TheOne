@@ -9,6 +9,7 @@ import { listWorkOrders, getWorkOrderDetail, changeStatus } from '../services/wo
 import { resolveTaskId, resolveActor } from '../services/activity.js';
 import { getFeed, addComment } from '../services/feed.js';
 import { getMessages, resolveConversationId, sendMessage } from '../services/messages.js';
+import { evaluateForTask } from '../services/obligations.js';
 
 const listQuerySchema = z.object({
   status_group: z.enum(['open', 'active', 'done', 'closed']).optional(),
@@ -16,6 +17,8 @@ const listQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
+  /** S5 · the board's "Sort by breach" toggle. Anything else keeps the default. */
+  sort: z.enum(['breach']).optional(),
 });
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
@@ -76,6 +79,10 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     // Resolved outside the transaction — PGlite is single-connection (see feed.ts).
     const actor = await resolveActor(actorHeader(req.headers['x-actor-id']));
     const item = await addComment(taskId, body, client_visible, actor);
+
+    // S5 · a comment is EVIDENCE. Any comment acknowledges an emergency; a
+    // client-visible one is the chase that silences approval_followup.
+    await evaluateForTask(taskId);
     return reply.status(201).send({ item });
   });
 
@@ -103,6 +110,10 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     // Resolved outside the transaction — PGlite is single-connection (see messages.ts).
     const actor = await resolveActor(actorHeader(req.headers['x-actor-id']));
     const item = await sendMessage(taskId, conversationId, body, actor);
+
+    // S5 · texting the technician is activity on the work order, which is what
+    // acknowledging an emergency looks like in practice.
+    await evaluateForTask(taskId);
     return reply.status(201).send({ item });
   });
 }

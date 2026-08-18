@@ -32,6 +32,8 @@ import { AllFieldsList } from '../components/wo/AllFieldsList';
 import { AuditTrail } from '../components/wo/AuditTrail';
 import { MessagesPanel } from '../components/wo/messages/MessagesPanel';
 import { MessagesRail } from '../components/wo/messages/MessagesRail';
+import { ObligationsCard, OBLIGATIONS_CARD_ID } from '../components/obligations/ObligationsCard';
+import { useWoObligations } from '../hooks/useObligations';
 import { FIELD, daysSince, field, str } from '../lib/fields';
 import { plainStatus } from '../lib/quo';
 import { phaseForStatus } from '../lib/phases';
@@ -99,6 +101,11 @@ export function WorkOrderDetailPage() {
     enabled: Boolean(wo),
     retry: 0,
   });
+
+  // S5 — what this work order owes. Addressed by wo_number (the API resolves a
+  // uuid or a number), decoration-grade like the S4 cards: a failure degrades to
+  // "no clocks", never to a broken page.
+  const obligationsQuery = useWoObligations(wo ? (wo.id ?? woNumber) : undefined);
 
   // Sidebar badge parity with the list page (cached under the same key family).
   const totalQuery = useQuery({
@@ -186,9 +193,28 @@ export function WorkOrderDetailPage() {
     tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const obligations = obligationsQuery.data ?? [];
+
+  // A header clock chip points at the rail card that owns the action. The
+  // Messages tab replaces the rail wholesale, so step back to Overview first.
+  const revealObligations = () => {
+    setTab('overview');
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(OBLIGATIONS_CARD_ID)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
   return shell(
     <>
-      <WoHeader wo={wo} phase={phase} inStatusDays={inStatusDays} />
+      <WoHeader
+        wo={wo}
+        phase={phase}
+        inStatusDays={inStatusDays}
+        obligations={obligations}
+        onClockClick={revealObligations}
+      />
 
       <div className={`wo-grid${tab === 'messages' ? ' is-messages' : ''}`}>
         <div className="col-main">
@@ -277,6 +303,13 @@ export function WorkOrderDetailPage() {
             <MessagesRail conversation={conversation} items={messagesQuery.data?.items ?? []} />
           ) : (
             <>
+              {/* S5 — what is owed leads the rail: money is context, a running
+                  clock is an action. */}
+              <ObligationsCard
+                items={obligations}
+                loading={obligationsQuery.isLoading}
+                error={obligationsQuery.isError}
+              />
               <MoneyCard
                 wo={wo}
                 quoteStatus={

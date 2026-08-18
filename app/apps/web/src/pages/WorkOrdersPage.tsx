@@ -3,9 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import type { StatusGroup } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { KpiRow } from '../components/KpiRow';
-import { WorkOrdersTable } from '../components/WorkOrdersTable';
+import { WorkOrdersTable, worstFor } from '../components/WorkOrdersTable';
+import { Icon } from '../components/Icon';
 import { getKpis, listWorkOrders } from '../api/client';
 import { useDebounced } from '../hooks/useDebounced';
+import { useNow } from '../hooks/useNow';
+import { useObligationIndex } from '../hooks/useObligations';
+import { breachRank } from '../lib/obligations';
 
 type Filter = 'all' | StatusGroup;
 
@@ -20,15 +24,18 @@ const FILTERS: { key: Filter; label: string }[] = [
 export function WorkOrdersPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const [byBreach, setByBreach] = useState(false);
   const debouncedSearch = useDebounced(search, 250);
+  const now = useNow();
 
   const listParams = useMemo(
     () => ({
       status_group: filter === 'all' ? undefined : filter,
       search: debouncedSearch || undefined,
       limit: 200,
+      sort: byBreach ? ('breach' as const) : undefined,
     }),
-    [filter, debouncedSearch],
+    [filter, debouncedSearch, byBreach],
   );
 
   const woQuery = useQuery({
@@ -38,7 +45,19 @@ export function WorkOrdersPage() {
 
   const kpiQuery = useQuery({ queryKey: ['kpis'], queryFn: getKpis });
 
-  const items = woQuery.data?.items ?? [];
+  // S5 — the Clock column. `?sort=breach` is the server's ordering; the same
+  // order is applied here so the toggle still bites when the rows arrive
+  // unsorted (or without `worst_obligation` at all).
+  const { worstByWo } = useObligationIndex();
+
+  const items = useMemo(() => {
+    const rows = woQuery.data?.items ?? [];
+    if (!byBreach) return rows;
+    return [...rows].sort(
+      (a, b) => breachRank(worstFor(b, worstByWo), now) - breachRank(worstFor(a, worstByWo), now),
+    );
+  }, [woQuery.data, byBreach, worstByWo, now]);
+
   const total = woQuery.data?.total;
 
   return (
@@ -67,10 +86,24 @@ export function WorkOrdersPage() {
             </button>
           ))}
         </div>
+
+        <div className="seg" role="group" aria-label="Row order">
+          <button
+            type="button"
+            className={`seg-btn${byBreach ? ' is-on' : ''}`}
+            aria-pressed={byBreach}
+            title="Order by the worst obligation on each work order"
+            onClick={() => setByBreach((v) => !v)}
+          >
+            <Icon name="alert" size={12} />
+            Sort by breach
+          </button>
+        </div>
       </div>
 
       <WorkOrdersTable
         items={items}
+        obligationIndex={worstByWo}
         loading={woQuery.isLoading}
         error={woQuery.isError ? 'Failed to load work orders. Is the API running on :5174?' : null}
       />

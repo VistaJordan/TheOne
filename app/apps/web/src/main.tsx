@@ -8,6 +8,8 @@ import './styles/messages.css';
 import './styles/s4-forms.css';
 import './styles/quote.css';
 import './styles/payment.css';
+import './styles/pulse.css';
+import './styles/receivables.css';
 import { App } from './App';
 
 const rootEl = document.getElementById('root');

@@ -514,6 +514,160 @@ export interface PaymentRequestCreatedResponse {
   item: PaymentRequest;
 }
 
+// ── Obligations / notifications (S5) ─────────────────────────────────────────
+// An OBLIGATION is who owes what, on which work order, by when — and what
+// evidence silences it. Notifications are VIEWS of obligations.
+//
+// NOTE ON THE CONTRACT SEAM: apps/web declares its OWN, deliberately loose
+// versions of these shapes in src/api/client.ts (every field optional, so the
+// UI degrades instead of throwing while the engine is being built in parallel).
+// The types below are the API's side of the same contract — a strict superset
+// of what the web reads. They are ADDITIVE: no existing interface in this file
+// changes, in particular `WorkOrderListItem` is untouched, because apps/web
+// extends it (`WorkOrderListItemV2`) and widening a member here would break
+// that declaration. The list endpoint sends `worst_obligation` as an extra
+// member on the wire; the web's V2 type is what names it.
+
+/** 0 ambient (<80% of clock) · 1 due-soon (>=80%) · 2 breached (>100%) · 3 critical (>200% or emergency breached). */
+export type ObligationTier = 0 | 1 | 2 | 3;
+
+/** Resolution is EVIDENCE-ONLY: the engine resolves, nobody dismisses. */
+export type ObligationState = 'open' | 'snoozed' | 'resolved';
+
+/** Business clocks pause outside Mon–Fri 08:00–18:00 CT; emergencies do not. */
+export type ObligationClock = 'business' | '24x7';
+
+/** What the clock is about: the work order, a quote, or a payment request. */
+export type ObligationSubjectKind = 'wo' | 'quote' | 'payment';
+
+/** The seven V1 rules. Rules are CONFIG rows, so unknown keys stay legal. */
+export type ObligationRuleKey =
+  | 'emergency_ack'
+  | 'quote_owed'
+  | 'schedule_owed'
+  | 'approval_followup'
+  | 'quote_review_owed'
+  | 'payment_processing'
+  | 'sla_blown';
+
+/** Who owes it: a principal when the home list resolves to one, else a role. */
+export interface ObligationOwner {
+  principal_id: string | null;
+  display_name: string | null;
+  role: string | null;
+  /** Ready-to-print: "Matt Hammond" or "Any ATL". */
+  label: string;
+}
+
+/** The minimum a clock chip needs — also the shape of `worst_obligation`. */
+export interface ObligationSummary {
+  id: string;
+  rule_key: ObligationRuleKey | string;
+  /** Short chip label ("Quote owed"); the full sentence is `rule_name`. */
+  label: string;
+  tier: ObligationTier;
+  state: ObligationState;
+  due_at: string;
+  started_at: string;
+  wo_id: string | null;
+  wo_number: string | null;
+}
+
+/** A full obligation row as the Pulse and the WO rail render it. */
+export interface Obligation extends ObligationSummary {
+  rule_name: string;
+  subject_kind: ObligationSubjectKind;
+  subject_id: string;
+  clock: ObligationClock;
+  wo_title: string | null;
+  client: string | null;
+  status_name: string | null;
+  owed_by: ObligationOwner;
+  owed_role: string | null;
+  /** True when the acting principal is the one on the hook. */
+  owed_by_me: boolean;
+  overdue: boolean;
+  /** Elapsed ÷ budget on this obligation's clock. 1.0 = exactly at the deadline. */
+  progress: number;
+  /** "1d 4h" of clock time remaining; null once overdue. */
+  time_left: string | null;
+  /** "3h 12m" past the deadline; null while still inside the clock. */
+  overdue_by: string | null;
+  /** "business hours" | "24/7" — what `time_left` is measured in. */
+  clock_label: string;
+  snooze_reason: string | null;
+  snoozed_until: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** GET /api/obligations — `{ items }`; also the WO rail's source. */
+export interface ObligationsResponse {
+  items: Obligation[];
+  total: number;
+}
+
+export interface PulseCounts {
+  needs_me_now: number;
+  due_soon: number;
+  watching: number;
+  /** Obligations owed to the acting principal, any tier. */
+  mine: number;
+  breached: number;
+  critical: number;
+  open_total: number;
+  unread_notifications: number;
+}
+
+/** GET /api/pulse — the three columns, for the acting principal. */
+export interface PulseResponse {
+  actor: { id: string; display_name: string; role: string | null };
+  /** Tier 2–3 — the danger cards. */
+  needs_me_now: Obligation[];
+  /** Alias of `needs_me_now` (the brief's name for the same column). */
+  needs_me: Obligation[];
+  /** Tier 1 — the storm-front strip. */
+  due_soon: Obligation[];
+  /** Tier 0, plus other people's clocks when the actor is not leadership. */
+  watching: Obligation[];
+  counts: PulseCounts;
+  generated_at: string;
+}
+
+/** One bell entry. A notification is a TIER TRANSITION that was pinged once. */
+export interface NotificationItem {
+  id: string;
+  obligation_id: string;
+  rule_key: string;
+  tier: ObligationTier;
+  title: string;
+  body: string | null;
+  wo_id: string | null;
+  wo_number: string | null;
+  due_at: string | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+/** GET /api/notifications — newest first. `unread` and `unread_count` are the
+ *  same number under both names the web reader accepts. */
+export interface NotificationsResponse {
+  items: NotificationItem[];
+  total: number;
+  unread: number;
+  unread_count: number;
+}
+
+/** POST /api/obligations/:id/snooze — `reason` is MANDATORY, `hours` <= 72. */
+export interface SnoozeInput {
+  hours: number;
+  reason: string;
+}
+
+export interface SnoozeResponse {
+  obligation: Obligation;
+}
+
 // ── Activity log ─────────────────────────────────────────────────────────────
 export interface ActivityActor {
   id: string;

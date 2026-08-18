@@ -1,0 +1,625 @@
+/* The One — Receivables (AR): completion audit + invoicing.
+   Look and feel ported from the Support Automation shadow-audit assistant
+   (queue stat cards, green audit checkboxes, severity-striped issue cards,
+   per-WO evidence panel), translated onto the app's token system so both
+   skins hold. ONE new ramp is introduced: the audit's "clean / checked"
+   green, which no existing token covers (the ClickUp emerald the admins
+   already read as "released"). Contrast, per the §7 AA >=4.5:1 gate:
+     night  #4cd07d on #0c0d0e = 9.4:1      day  #12713f on #ffffff = 6.2:1
+   --ok-solid is a NON-TEXT fill (check squares, dots) only. */
+
+:root[data-theme='night'] {
+  --ok: #4cd07d;
+  --ok-solid: #23a45a;
+  --ok-bg: rgba(76, 208, 125, 0.12);
+  --ok-border: rgba(76, 208, 125, 0.32);
+}
+:root[data-theme='day'] {
+  --ok: #12713f;
+  --ok-solid: #17a05c;
+  --ok-bg: #e6f6ec;
+  --ok-border: #bfe4cd;
+}
+
+/* ── Subtabs + counts ─────────────────────────────────────────────────────── */
+.rcv-subtabs {
+  margin-bottom: 14px;
+}
+
+.rcv-tab-count {
+  padding: 0 6px;
+  border-radius: var(--pill-radius);
+  background: var(--chip);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+}
+
+.seg-btn.is-on .rcv-tab-count {
+  background: color-mix(in srgb, var(--tab-on-ink) 16%, transparent);
+}
+
+.rcv-lede {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 78ch;
+}
+
+/* ── Stat cards (the queue header row) ────────────────────────────────────── */
+.rcv-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 900px) {
+  .rcv-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.rcv-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px 13px;
+  min-width: 0;
+}
+
+.rcv-stat-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+}
+
+.rcv-stat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink-3);
+}
+
+.rcv-stat.is-major .rcv-stat-dot { background: var(--danger); }
+.rcv-stat.is-minor .rcv-stat-dot { background: var(--warn-solid); }
+.rcv-stat.is-clean .rcv-stat-dot { background: var(--ok-solid); }
+
+.rcv-stat-value {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--kpi-font), 'Barlow Condensed', sans-serif;
+  font-weight: var(--kpi-weight);
+  letter-spacing: var(--kpi-ls);
+  font-size: 24px;
+  line-height: 1.1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rcv-stat.is-major .rcv-stat-value { color: var(--danger); }
+.rcv-stat.is-minor .rcv-stat-value { color: var(--warn); }
+.rcv-stat.is-clean .rcv-stat-value { color: var(--ok); }
+
+/* ── Toolbar search ───────────────────────────────────────────────────────── */
+.rcv-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  background: var(--field-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+}
+
+.rcv-search input {
+  width: 210px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.rcv-search input:focus {
+  outline: none;
+}
+
+.rcv-search:focus-within {
+  border-color: var(--accent);
+}
+
+/* ── Audit queue table ────────────────────────────────────────────────────── */
+.rcv-table .rcv-ck-th,
+.rcv-table .rcv-ck-td {
+  text-align: center;
+  width: 52px;
+}
+
+.rcv-wo-cell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.rcv-wo-client {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.rcv-bfi {
+  padding: 1px 5px;
+  border-radius: var(--pill-radius);
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex: none;
+}
+
+.rcv-row.is-open td {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+/* The green audit checkbox — filled when ticked, hollow border when not. */
+.rcv-ck {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--field-bg);
+  color: transparent;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.rcv-ck:hover {
+  border-color: var(--ok-solid);
+}
+
+.rcv-ck.is-on {
+  background: var(--ok-solid);
+  border-color: var(--ok-solid);
+  color: #fff;
+}
+
+.rcv-ck:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rcv-days {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.rcv-days.is-hot {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.rcv-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--pill-radius);
+  background: var(--chip);
+  color: var(--ink-2);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rcv-co {
+  font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.rcv-none {
+  color: var(--ink-3);
+}
+
+.rcv-trunc {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Audit status chip — the dot + "2 major · 1 minor" read from the queue. */
+.rcv-status,
+.rcv-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--pill-radius);
+  border: 1px solid var(--border);
+  background: var(--chip);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rcv-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  flex: none;
+}
+
+.rcv-status.is-major,
+.rcv-stage.is-invoiced {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.rcv-status.is-major .rcv-status-dot { background: var(--danger); }
+
+.rcv-status.is-minor {
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+  color: var(--warn);
+}
+
+.rcv-status.is-minor .rcv-status-dot { background: var(--warn-solid); }
+
+.rcv-status.is-clean,
+.rcv-stage.is-ready {
+  background: var(--ok-bg);
+  border-color: var(--ok-border);
+  color: var(--ok);
+}
+
+.rcv-status.is-clean .rcv-status-dot,
+.rcv-stage.is-ready .rcv-status-dot { background: var(--ok-solid); }
+
+.rcv-stage.is-invoiced .rcv-status-dot { background: var(--danger); }
+
+.rcv-stage.is-paid .rcv-status-dot { background: var(--ink-3); }
+
+.rcv-status-extra {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+/* ── The expanded evidence panel ──────────────────────────────────────────── */
+.rcv-detail-tr > td {
+  padding: 0;
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg));
+  border-bottom: 1px solid var(--border);
+}
+
+.rcv-detail {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 1.4fr);
+  gap: 18px;
+  padding: 16px 18px 18px;
+}
+
+@media (max-width: 1050px) {
+  .rcv-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rcv-detail-h {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 9px;
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
+.rcv-detail-hn {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+.rcv-checklist ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.rcv-check-line {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--row-border);
+  font-size: 12px;
+}
+
+.rcv-check-line:last-child {
+  border-bottom: 0;
+}
+
+.rcv-mark {
+  flex: none;
+  align-self: center;
+}
+
+.rcv-mark-dash {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.rcv-check-line.is-pass .rcv-mark { color: var(--ok); }
+.rcv-check-line.is-major .rcv-mark { color: var(--danger); }
+.rcv-check-line.is-minor .rcv-mark { color: var(--warn); }
+.rcv-check-line.is-info .rcv-mark { color: var(--accent-text); }
+.rcv-check-line.is-na .rcv-mark,
+.rcv-check-line.is-offline .rcv-mark { color: var(--ink-3); }
+
+.rcv-check-label {
+  flex: none;
+  min-width: 108px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rcv-check-line.is-offline .rcv-check-label,
+.rcv-check-line.is-na .rcv-check-label {
+  color: var(--ink-2);
+}
+
+.rcv-check-detail {
+  min-width: 0;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.rcv-check-line.is-major .rcv-check-detail { color: var(--danger); }
+.rcv-check-line.is-minor .rcv-check-detail { color: var(--warn); }
+.rcv-check-line.is-offline .rcv-check-detail {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+/* Findings — severity-striped issue cards, straight from the audit app. */
+.rcv-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+.rcv-issue {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--ink-3);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 11px 13px;
+}
+
+.rcv-issue.is-major { border-left-color: var(--danger); }
+.rcv-issue.is-minor { border-left-color: var(--warn-solid); }
+.rcv-issue.is-offline { border-left-color: var(--ink-3); }
+
+.rcv-issue-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rcv-issue-top h4 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rcv-issue p {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.rcv-sev {
+  padding: 1px 7px;
+  border-radius: var(--pill-radius);
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: none;
+}
+
+.rcv-sev.is-major { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }
+.rcv-sev.is-minor { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-border); }
+.rcv-sev.is-offline { background: var(--chip); color: var(--ink-2); border: 1px solid var(--border); }
+
+.rcv-resolve {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+
+.rcv-resolve-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+.rcv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--chip);
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.rcv-chip.is-wo {
+  background: var(--tab-on-bg);
+  border-color: transparent;
+  color: var(--tab-on-ink);
+}
+
+.rcv-chip.is-wo:hover {
+  filter: brightness(1.08);
+}
+
+/* Stubbed external systems — visibly inert. */
+.rcv-chip.is-clickup,
+.rcv-chip.is-sharepoint {
+  cursor: help;
+  opacity: 0.75;
+}
+
+.rcv-nofinding {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.rcv-nofinding .ic {
+  color: var(--ok);
+}
+
+/* Recommendation — the engine's verdict, in the severity's own ramp. */
+.rcv-rec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rcv-rec.is-major { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+.rcv-rec.is-minor { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
+.rcv-rec.is-clean { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
+
+/* ── Invoicing subtab ─────────────────────────────────────────────────────── */
+.rcv-blocked {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rcv-blocked-link {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.rcv-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rcv-action-th,
+.rcv-action-td {
+  width: 160px;
+}
+
+.rcv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.rcv-btn:hover {
+  background: var(--chip);
+  color: var(--ink);
+}
+
+.rcv-btn.is-primary {
+  background: var(--btn-accent);
+  border-color: var(--btn-accent);
+  color: var(--on-btn-accent);
+}
+
+.rcv-btn.is-primary:hover {
+  filter: brightness(1.08);
+  background: var(--btn-accent);
+  color: var(--on-btn-accent);
+}
+
+.rcv-paid-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ok);
+}

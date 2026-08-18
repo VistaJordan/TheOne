@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { StatusGroup, StatusRef } from '@theone/shared';
 import type { StatusWithPhase } from '../api/client';
 import { getStatuses, patchStatus } from '../api/client';
+import { useInvalidateObligations } from '../hooks/useObligations';
 import { StatusPill, pillStyle } from './StatusPill';
 
 const GROUP_ORDER: StatusGroup[] = ['open', 'active', 'done', 'closed'];
@@ -28,6 +29,7 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
+  const invalidateObligations = useInvalidateObligations();
 
   const statusesQuery = useQuery({
     queryKey: ['statuses'],
@@ -45,6 +47,10 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
       // must re-read (S2 contract item 1).
       qc.invalidateQueries({ queryKey: ['wo-feed'] });
       qc.invalidateQueries({ queryKey: ['wo-activity'] });
+      // S5: a status change is the single biggest silencer in the rule set
+      // (schedule_owed, approval_followup, sla_blown all watch it). Re-read the
+      // engine so the clocks agree with the board within the same click.
+      invalidateObligations();
       setOpen(false);
     },
   });

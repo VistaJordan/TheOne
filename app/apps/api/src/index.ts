@@ -11,6 +11,7 @@ import activityRoutes from './routes/activity.js';
 import principalsRoutes from './routes/principals.js';
 import quoteRoutes from './routes/quotes.js';
 import paymentRoutes from './routes/payments.js';
+import obligationRoutes from './routes/obligations.js';
 
 const PORT = 5174;
 const HOST = '127.0.0.1';
@@ -46,6 +47,10 @@ async function main(): Promise<void> {
   await app.register(principalsRoutes, { prefix: '/api' });
   await app.register(quoteRoutes, { prefix: '/api' });
   await app.register(paymentRoutes, { prefix: '/api' });
+  // S5 · /pulse, /obligations, /notifications. Every handler degrades to an
+  // empty payload until migration 0004 has been applied, so registering it
+  // cannot break a running API that is still on 0003.
+  await app.register(obligationRoutes, { prefix: '/api' });
 
   await app.listen({ port: PORT, host: HOST });
 }

@@ -31,6 +31,7 @@ import { Icon } from '../components/Icon';
 import { PaymentsTable } from '../components/payments/PaymentsTable';
 import { parseMoney, usd } from '../lib/quoteTotals';
 import { deriveSite } from '../lib/woDerive';
+import { useInvalidateObligations } from '../hooks/useObligations';
 
 interface Payee {
   vendor_id: string | null;
@@ -42,6 +43,7 @@ export function RequestPaymentPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const invalidateObligations = useInvalidateObligations();
 
   const woQuery = useQuery({
     queryKey: ['work-orders', 'detail', woNumber],
@@ -139,6 +141,8 @@ export function RequestPaymentPage() {
       setSubmitError(null);
       void queryClient.invalidateQueries({ queryKey: paymentsKey });
       void queryClient.invalidateQueries({ queryKey: ['work-orders', 'detail', woNumber] });
+      // S5: a new request starts the payment_processing clock.
+      invalidateObligations();
     },
     onError: (err) =>
       setSubmitError(

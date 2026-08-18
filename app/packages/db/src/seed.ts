@@ -8,6 +8,19 @@ import { getDb, query } from './client.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { STATUS_GROUP_BY_TYPE, type StatusGroup } from '@theone/shared';
+// S5 · the demo-state anchors below are computed with the SAME business-time
+// arithmetic the obligation engine evaluates with, so the seeded tiers are
+// exact rather than approximated by calendar offsets — a 4-business-hour clock
+// has a tier-2 window only four business hours wide, which no "n days ago"
+// subtraction can hit reliably. Relative path because this is dev-only tooling
+// run by tsx; the module is dependency-free by design (see its header).
+import {
+  subBusinessMs,
+  diffBusinessMs,
+  businessHours,
+  chicagoWallToInstant,
+  toWall,
+} from '../../../apps/api/src/lib/businessTime.js';
 
 // ── Source data ──────────────────────────────────────────────────────────────
 interface ClickupStatus { name: string; type: string; order: number; color: string }
@@ -325,6 +338,138 @@ const SEED_PAYMENTS: {
   { purpose: 'Parts advance', amount: 400, method: 'ACH', status: 'paid', created_at: '2026-07-22T16:05:00Z' },
 ];
 
+// ── S5 · THE DEMO STATE ──────────────────────────────────────────────────────
+// The obligation engine derives everything from CURRENT DB STATE, so the seed
+// does not create a single obligation row — it creates the WORLD that implies
+// them, and the first read of /api/pulse materialises the lot.
+//
+// Every anchor below is expressed as "N business hours before the seed ran",
+// measured with the engine's own clock. That is what makes the demo tiers
+// deterministic on a Tuesday morning and on a Saturday night alike: a clock
+// rewound 22 business hours against a 20-business-hour budget is at 110% of its
+// budget whenever you seed it.
+//
+// Each anchor also carries HEADROOM — the ratio is placed well inside its tier
+// band so that hours of demo drift (or a founder who seeds tonight and presents
+// tomorrow) cannot tip a card into the next colour. The one deliberate
+// exception is WO-40356, parked low in tier 0 so the board visibly climbs.
+//
+//   rule                subject             ratio at seed   tier   headroom
+//   emergency_ack       WO-39422            2.5x (24/7)      3     terminal
+//   sla_blown           WO-39457            ~2.6x            3     terminal
+//   approval_followup   WO-39403            1.2x             2     40 bus. hours
+//   quote_review_owed   WO-39403's quote    1.25x            2     3 bus. hours
+//   quote_owed          WO-39457            1.1x             2     18 bus. hours
+//   payment_processing  WO-39403 parts run  1.1x             2     18 bus. hours
+//   approval_followup   WO-40127            0.82x            1     9 bus. hours
+//   schedule_owed       WO-40356            0.1x             0     1.4 bus. hours
+//   quote_owed          WO-39440            0.2x             0     12 bus. hours
+//   payment_processing  WO-39440 trip       0.1x             0     14 bus. hours
+const S5 = {
+  EMERGENCY_WO: 'WO-39422',
+  QUOTE_OWED_TIER0_WO: 'WO-39440',
+  QUOTE_OWED_TIER2_WO: 'WO-39457',
+  APPROVAL_TIER2_WO: 'WO-39403',
+  APPROVAL_TIER1_WO: 'WO-40127',
+  SCHEDULE_TIER0_WO: 'WO-40356',
+  /** 24/7 clock, 2h budget → 2.5x. Emergencies have no "mildly late" tier. */
+  EMERGENCY_AGE_HOURS: 5,
+  /** 5 business days = 50h budget → 60/50 = 1.2x. */
+  APPROVAL_TIER2_AGE: 60,
+  /** 50h budget → 41/50 = 0.82x, the storm front. */
+  APPROVAL_TIER1_AGE: 41,
+  /** 4h budget → 5/4 = 1.25x. */
+  QUOTE_REVIEW_AGE: 5,
+  /** 2 business days = 20h budget → 22/20 = 1.1x. */
+  QUOTE_OWED_TIER2_AGE: 22,
+  /** 20h budget → 4/20 = 0.2x. */
+  QUOTE_OWED_TIER0_AGE: 4,
+  /** 2h budget → 0.2/2 = 0.1x; climbs to tier 1 after ~1.4 business hours. */
+  SCHEDULE_AGE: 0.2,
+  /** 20h budget → 1.1x and 0.1x. */
+  PAYMENT_TIER2_AGE: 22,
+  PAYMENT_TIER0_AGE: 2,
+  /** Calendar days back for the blown SLA — last-resort fallback only. */
+  SLA_DAYS_AGO: 4,
+  /**
+   * Business hours the SLA's 18:00 close must already be behind us. With the
+   * rule's 10-business-hour grace this is progress = (10 + 16) / 10 = 2.6x —
+   * tier 3 with six business hours of headroom below the boundary, on every
+   * weekday and at every hour of the day.
+   */
+  SLA_PAST_DUE_HOURS: 16,
+};
+
+/** The three work orders S5 adds, so the demo has an emergency and live quotes. */
+const S5_TASKS: {
+  wo_number: string;
+  ext_name: string;
+  title: string;
+  description: string;
+  status: string;
+  list: string;
+  client: string;
+  city: string;
+  state: string;
+  trade: string;
+  nte: number;
+  priority: string;
+  extraFields?: Record<string, unknown>;
+}[] = [
+  {
+    wo_number: 'WO-39422',
+    ext_name: 'WOT0468110',
+    title: 'Walk-in cooler down — product at risk',
+    description:
+      'Walk-in cooler (back of house) is at +48°F and climbing. Store has moved what it can to the reach-ins.\n\nCalled in as an emergency by the store manager.',
+    status: 'emergency',
+    list: 'Matt Hammond',
+    client: '7-Eleven',
+    city: 'SAN ANTONIO',
+    state: 'TX',
+    trade: 'Refrigeration',
+    nte: 2500,
+    priority: 'high',
+  },
+  {
+    wo_number: 'WO-39440',
+    ext_name: 'DG-771204',
+    title: 'Reach-in freezer not holding temp — quote requested',
+    description:
+      'Reach-in freezer on the beverage aisle is running warm. Client has asked for a quote before any work is authorised.',
+    status: 'waiting for quote',
+    list: 'Zach Malden',
+    client: 'Dollar General',
+    city: 'MANKATO',
+    state: 'MN',
+    trade: 'Refrigeration',
+    nte: 1800,
+    priority: 'normal',
+  },
+  {
+    wo_number: 'WO-39457',
+    ext_name: 'ALD-55913',
+    title: 'Parking lot pole light out — quote requested',
+    description:
+      'Two pole lights on the north row of the lot are out. Client wants a quote covering both, including the lift.',
+    status: 'waiting for quote',
+    list: 'John Hayes',
+    client: 'ALDI',
+    city: 'SAINT LOUIS',
+    state: 'MO',
+    trade: 'Electric',
+    nte: 1200,
+    priority: 'high',
+  },
+];
+
+/** The Chicago calendar date of an instant, as the 'YYYY-MM-DD' fields carry. */
+function chicagoDate(at: Date): string {
+  const wall = new Date(toWall(at.getTime()));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${wall.getUTCFullYear()}-${pad(wall.getUTCMonth() + 1)}-${pad(wall.getUTCDate())}`;
+}
+
 async function main() {
   const db = getDb();
 
@@ -640,10 +785,21 @@ async function main() {
     }
   }
 
+  // S5 · this row IS the quote_review_owed clock start (the engine reads the
+  // submission, not quote.updated_at, so a reviewer's own edit cannot reset it).
+  // Back-dated 5 business hours against a 4-hour budget → 125%, tier 2, owed to
+  // the ATL desk (Elise).
+  const seededAt = new Date();
+  const quoteSubmittedAt = subBusinessMs(seededAt, businessHours(S5.QUOTE_REVIEW_AGE));
   await query(
-    `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, after)
-     VALUES ($1, 'task', $2, 'quote_submitted', 'quote.status', $3::jsonb)`,
-    [mattId, quoTaskId, JSON.stringify({ status: 'pending_approval', quote_id: quoteId })],
+    `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, after, created_at)
+     VALUES ($1, 'task', $2, 'quote_submitted', 'quote.status', $3::jsonb, $4::timestamptz)`,
+    [
+      mattId,
+      quoTaskId,
+      JSON.stringify({ status: 'pending_approval', quote_id: quoteId }),
+      quoteSubmittedAt.toISOString(),
+    ],
   );
   activityCount++;
 
@@ -653,6 +809,251 @@ async function main() {
          (task_id, vendor_id, purpose, amount, method, status, requested_by, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz)`,
       [quoTaskId, quoVendorId, p.purpose, p.amount, p.method, p.status, mattId, p.created_at],
+    );
+  }
+
+  // ── 10. S5 · the obligation demo state ─────────────────────────────────────
+  // NOTHING here writes an obligation row. The engine is a pure function of DB
+  // state; this block builds the state and the first /api/pulse read derives
+  // ten live obligations from it. See the S5 table above for the full matrix.
+
+  /** N business hours before the seed ran, on the engine's own clock. */
+  const bAgo = (hours: number) => subBusinessMs(seededAt, businessHours(hours));
+
+  /**
+   * Back-date a work order's entry into its CURRENT status.
+   *
+   * The engine derives "in this status since" from the newest `status_changed`
+   * activity row naming that status, so writing one IS how you age a clock —
+   * no column to fake, and the WO's feed tells the same story the Pulse does.
+   */
+  async function ageStatus(
+    woNumber: string,
+    statusName: string,
+    at: Date,
+    fromStatus: string | null = null,
+  ): Promise<void> {
+    const taskId = taskIdByWo.get(woNumber);
+    if (!taskId) throw new Error(`S5 demo state: task ${woNumber} not seeded`);
+    await query(
+      `INSERT INTO activity_log
+         (actor_principal_id, entity_type, entity_id, action, field, before, after, created_at)
+       VALUES ($1, 'task', $2, 'status_changed', 'status_id', $3::jsonb, $4::jsonb, $5::timestamptz)`,
+      [
+        seedBotId,
+        taskId,
+        fromStatus === null ? null : JSON.stringify({ status_name: fromStatus }),
+        JSON.stringify({ status_name: statusName }),
+        at.toISOString(),
+      ],
+    );
+    activityCount++;
+  }
+
+  // ── 10a · three new work orders ───────────────────────────────────────────
+  // The ClickUp export has no emergency and nothing in "waiting for quote", so
+  // two of the seven rules would have no subject at all. These three give the
+  // demo its emergency and its quote backlog.
+  // The blown SLA is the one anchor that cannot be expressed as "N business
+  // hours ago": the rule reads a DATE, backdates the clock to sla − grace, and
+  // lands the due moment at that date's 18:00 close. A fixed calendar offset
+  // therefore lands on a different ratio every weekday — 4 days before a
+  // Tuesday is a Friday, whose close is only 10 business hours behind Tuesday's
+  // open, i.e. exactly 200% and NOT tier 3 (the boundary is `> 2`). So walk
+  // back through Chicago dates and take the first whose close is at least
+  // SLA_PAST_DUE_HOURS business hours behind us — progress is then
+  // (grace + past_due) / grace, comfortably inside tier 3 on any weekday.
+  const slaDate = ((): string => {
+    const graceHours = 10; // mirrors obligation_rule.params.grace_business_hours
+    for (let back = 1; back <= 21; back++) {
+      const candidate = chicagoDate(new Date(seededAt.getTime() - back * 86_400_000));
+      const [y, m, d] = candidate.split('-').map(Number);
+      const close = chicagoWallToInstant(y, m, d, 18, 0);
+      if (close.getTime() >= seededAt.getTime()) continue;
+      const pastDueHours = diffBusinessMs(close, seededAt) / businessHours(1);
+      if (pastDueHours >= S5.SLA_PAST_DUE_HOURS) {
+        return candidate; // progress = (10 + pastDueHours) / 10
+      }
+    }
+    // Unreachable in practice (21 days back always clears 16 business hours);
+    // fall back to the old calendar offset rather than seeding no SLA at all.
+    return chicagoDate(new Date(seededAt.getTime() - S5.SLA_DAYS_AGO * 86_400_000));
+  })();
+  const s5ClockStart = new Map<string, Date>([
+    // 24/7 clock, 2h budget: 5 wall hours ago is 250% — tier 3, and it only
+    // ever gets worse, which is the point of an unacknowledged emergency.
+    [S5.EMERGENCY_WO, new Date(seededAt.getTime() - S5.EMERGENCY_AGE_HOURS * 3_600_000)],
+    [S5.QUOTE_OWED_TIER0_WO, bAgo(S5.QUOTE_OWED_TIER0_AGE)],
+    [S5.QUOTE_OWED_TIER2_WO, bAgo(S5.QUOTE_OWED_TIER2_AGE)],
+  ]);
+
+  for (const t of S5_TASKS) {
+    const statusId = resolveStatusId(t.status);
+    const statusGroup = statusGroupById.get(statusId)!;
+    const homeListId = listIdByName.get(t.list) ?? null;
+    if (!homeListId) throw new Error(`S5 demo state: list "${t.list}" not seeded`);
+    const openedAt = s5ClockStart.get(t.wo_number)!;
+
+    const fields: Record<string, unknown> = {
+      '35. WO Description': t.description,
+      Client: t.client,
+      City: t.city,
+      State: t.state,
+      Trade: t.trade,
+      '16. Client NTE 🔴': t.nte,
+      '21. Comp': 'SFM',
+      '22. FM': t.client,
+      'Date-Time Received': chicagoDate(openedAt),
+      ...(t.extraFields ?? {}),
+    };
+    // The blown-SLA subject. The rule reads this key out of the JSONB bag, so a
+    // promoted `task.sla_due` column can land later with no rule change.
+    if (t.wo_number === S5.QUOTE_OWED_TIER2_WO) fields['SLA Due Date'] = slaDate;
+
+    const taskId = await insertId(
+      `INSERT INTO task (
+         wo_number, ext_name, title, description, home_list_id, status_id, status_group,
+         billing_entity, client, trade, city, state, nte, date_received,
+         fields, priority, created_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7,
+         'SFM', $8, $9, $10, $11, $12, $13,
+         $14::jsonb, $15, $16::timestamptz
+       ) RETURNING id`,
+      [
+        t.wo_number,
+        t.ext_name,
+        t.title,
+        t.description,
+        homeListId,
+        statusId,
+        statusGroup,
+        t.client,
+        t.trade,
+        t.city,
+        t.state,
+        t.nte,
+        chicagoDate(openedAt),
+        JSON.stringify(fields),
+        t.priority,
+        openedAt.toISOString(),
+      ],
+    );
+    taskIdByWo.set(t.wo_number, taskId);
+    taskCount++;
+
+    await query(
+      `INSERT INTO task_list_membership (task_id, list_id, is_home) VALUES ($1, $2, true)`,
+      [taskId, homeListId],
+    );
+    membershipCount++;
+
+    // The 'created' row is the clock start for a work order that was never moved
+    // between statuses. Stamped AT the anchor, not after it: emergency_ack is
+    // silenced by any activity STRICTLY AFTER its start, and a WO must not
+    // silence itself by existing.
+    await query(
+      `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, after, created_at)
+       VALUES ($1, 'task', $2, 'created', $3::jsonb, $4::timestamptz)`,
+      [
+        seedBotId,
+        taskId,
+        JSON.stringify({ status_id: statusId, status_name: t.status, via: 'demo seed' }),
+        openedAt.toISOString(),
+      ],
+    );
+    activityCount++;
+  }
+
+  // ── 10b · age three existing work orders into their clocks ────────────────
+  // WO-39403 moves from "<< invoiced not paid >>" to "!! waiting for approval".
+  // It is the demo's centre of gravity (quote builder, Quo thread, payments) and
+  // this is what puts TWO clocks on one work order — the client chase and the
+  // quote review — which is the clearest possible statement of what an
+  // obligation is: not a property of the WO, but of who owes what on it.
+  {
+    const statusName = '!! waiting for approval';
+    const statusId = resolveStatusId(statusName);
+    const statusGroup = statusGroupById.get(statusId)!;
+    await query(`UPDATE task SET status_id = $1, status_group = $2 WHERE id = $3`, [
+      statusId,
+      statusGroup,
+      quoTaskId,
+    ]);
+    await ageStatus(
+      S5.APPROVAL_TIER2_WO,
+      statusName,
+      bAgo(S5.APPROVAL_TIER2_AGE),
+      '<< invoiced not paid >>',
+    );
+  }
+
+  // The storm front: 82% of a 5-business-day clock, tier 1 for another 9 hours.
+  await ageStatus(
+    S5.APPROVAL_TIER1_WO,
+    '!! waiting for approval',
+    bAgo(S5.APPROVAL_TIER1_AGE),
+    'quote ready',
+  );
+  // Ambient, and visibly climbing: 10% of a 2-business-hour clock.
+  await ageStatus(S5.SCHEDULE_TIER0_WO, 'approved', bAgo(S5.SCHEDULE_AGE), '!! waiting for approval');
+
+  // ── 10c · two payment requests left in the AP queue ───────────────────────
+  // The two seeded S4 rows are both `paid`, so payment_processing has no subject
+  // without these. Owed by the admin desk (§4.3 defers the real routing).
+  // The second one uses the MANUAL payee path (a tech who is not a vendor
+  // record), so the AP queue demo shows both shapes. Gulf Coast stays on
+  // WO-39403 where it is actually the tech on the job — pointing it at a
+  // Minnesota job would be wrong, though harmlessly so: the Messages tab
+  // correlates through `payable`, not `payment_request`.
+  const s5Payments: {
+    wo: string;
+    purpose: string;
+    amount: number;
+    method: string;
+    age: number;
+    vendor: boolean;
+    payee_name?: string;
+    payee_phone?: string;
+  }[] = [
+    {
+      wo: S5.APPROVAL_TIER2_WO,
+      purpose: 'Emergency parts run — condenser fan motor',
+      amount: 830,
+      method: 'Zelle',
+      age: S5.PAYMENT_TIER2_AGE,
+      vendor: true,
+    },
+    {
+      wo: S5.QUOTE_OWED_TIER0_WO,
+      purpose: 'Assessment trip charge',
+      amount: 95,
+      method: 'ACH',
+      age: S5.PAYMENT_TIER0_AGE,
+      vendor: false,
+      payee_name: 'Dale Whitaker',
+      payee_phone: '(507) 555-0168',
+    },
+  ];
+  for (const p of s5Payments) {
+    const taskId = taskIdByWo.get(p.wo);
+    if (!taskId) throw new Error(`S5 demo state: task ${p.wo} not seeded`);
+    await query(
+      `INSERT INTO payment_request
+         (task_id, vendor_id, payee_name, payee_phone, purpose, amount, method, status,
+          requested_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'requested', $8, $9::timestamptz)`,
+      [
+        taskId,
+        p.vendor ? quoVendorId : null,
+        p.payee_name ?? null,
+        p.payee_phone ?? null,
+        p.purpose,
+        p.amount,
+        p.method,
+        mattId,
+        bAgo(p.age).toISOString(),
+      ],
     );
   }
 
@@ -672,7 +1073,10 @@ async function main() {
   console.log(`  quo messages      : ${QUO_MESSAGES.length} (${QUO_MESSAGES.filter((m) => m.media.length === 0).length} SMS, ${QUO_MESSAGES.filter((m) => m.media.length > 0).length} MMS, ${QUO_MESSAGES.reduce((n, m) => n + m.media.length, 0)} photos)`);
   console.log(`  quo job segments  : 1`);
   console.log(`  quotes            : 1 (${QUO_WO_NUMBER}, pending_approval, 2 sections, ${quoteLineCount} lines)`);
-  console.log(`  payment requests  : ${SEED_PAYMENTS.length} (${SEED_PAYMENTS.filter((p) => p.status === 'paid').length} paid)`);
+  console.log(`  payment requests  : ${SEED_PAYMENTS.length + s5Payments.length} (${SEED_PAYMENTS.filter((p) => p.status === 'paid').length} paid, ${s5Payments.length} requested)`);
+  console.log(`  S5 demo state     : ${S5_TASKS.length} new WOs (${S5_TASKS.map((t) => t.wo_number).join(', ')}), 3 clocks aged, blown SLA ${slaDate}`);
+  console.log(`  S5 obligations    : 0 rows seeded — the engine derives 10 on the first /api/pulse read`);
+  console.log(`                      tier 3 x2 · tier 2 x4 · tier 1 x1 · tier 0 x3`);
 }
 
 main()

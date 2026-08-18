@@ -5,6 +5,7 @@ import type {
   Kpis,
   Status,
   WorkOrderDetail,
+  WorkOrderListItem,
   WorkOrderListResponse,
   ActivityEntry,
   ApiError,
@@ -141,6 +142,8 @@ export interface ListWorkOrdersParams {
   search?: string;
   limit?: number;
   offset?: number;
+  /** S5 — `breach` orders worst-obligation first (tier desc, then most overdue). */
+  sort?: 'breach';
 }
 
 // ── S4 contract types — Quotes & payment requests ────────────────────────────
@@ -347,10 +350,12 @@ function toQuery(params: object): string {
   return s ? `?${s}` : '';
 }
 
+/** S5: the list rows may carry `worst_obligation` (the Clock column). The type
+    is a SUPERSET of the shared one — every S1–S4 caller keeps type-checking. */
 export function listWorkOrders(
   params: ListWorkOrdersParams = {},
-): Promise<WorkOrderListResponse> {
-  return request<WorkOrderListResponse>(`/work-orders${toQuery(params)}`);
+): Promise<WorkOrderListResponseV2> {
+  return request<WorkOrderListResponseV2>(`/work-orders${toQuery(params)}`);
 }
 
 export function getWorkOrder(idOrNumber: string): Promise<WorkOrderDetailV2> {
@@ -516,6 +521,255 @@ export function postPaymentRequest(
 ): Promise<PaymentRequestCreatedResponse> {
   return request<PaymentRequestCreatedResponse>(
     `/work-orders/${encodeURIComponent(idOrNumber)}/payment-requests`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+}
+
+// ── S5 contract types — obligations, notifications, the Pulse ────────────────
+// An OBLIGATION is who owes what, on which work order, by when — and what
+// evidence silences it. Notifications are VIEWS of obligations, never a second
+// source of truth. Declared here (not in @theone/shared) for the same reason the
+// S3 block is: packages/** belongs to another agent, and the web must keep
+// type-checking whether or not the S5 routes have landed yet.
+//
+// Every optional member below is optional ON PURPOSE. The engine is being built
+// in parallel, so the reader treats anything beyond {id, rule_key, tier, due_at}
+// as a bonus and degrades to a muted chip rather than throwing.
+
+/** 0 ambient · 1 due-soon (>=80% of clock) · 2 breached · 3 critical (>200%). */
+export type ObligationTier = 0 | 1 | 2 | 3;
+
+/** Resolution is EVIDENCE-ONLY — the engine resolves, nobody dismisses. */
+export type ObligationState = 'open' | 'snoozed' | 'resolved';
+
+/** The seven V1 rules. Rules are CONFIG rows, so an unknown key is legal: the
+    UI humanises anything it does not recognise instead of dropping the row. */
+export type ObligationRuleKey =
+  | 'emergency_ack'
+  | 'quote_owed'
+  | 'schedule_owed'
+  | 'approval_followup'
+  | 'quote_review_owed'
+  | 'payment_processing'
+  | 'sla_blown';
+
+/** Who owes it: a principal when the home list resolves to one, else a role. */
+export interface ObligationOwner {
+  id?: string | null;
+  principal_id?: string | null;
+  name?: string | null;
+  display_name?: string | null;
+  role?: string | null;
+}
+
+/** The minimum a clock chip needs. `worst_obligation` on a list row is this. */
+export interface ObligationSummary {
+  id: string;
+  rule_key: ObligationRuleKey | string;
+  /** Server-supplied display label; absent → derived from `rule_key`. */
+  label?: string | null;
+  tier: ObligationTier;
+  state?: ObligationState;
+  /** The deadline the countdown counts to. Null = no clock (fires-once rules). */
+  due_at: string | null;
+  started_at?: string | null;
+  wo_id?: string | null;
+  wo_number?: string | null;
+}
+
+/** A full row as the Pulse and the WO rail render it. */
+export interface Obligation extends ObligationSummary {
+  state: ObligationState;
+  wo_title?: string | null;
+  client?: string | null;
+  /** The subject when it is not the WO itself (quote id, payment request id). */
+  subject_id?: string | null;
+  owed_by?: ObligationOwner | null;
+  /** Set instead of `owed_by` when the obligation is owed by a ROLE, not a person. */
+  owed_role?: string | null;
+  snooze_reason?: string | null;
+  snoozed_until?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/** A work-order row with its worst open obligation (S5 Clock column). */
+export interface WorkOrderListItemV2 extends WorkOrderListItem {
+  worst_obligation?: ObligationSummary | null;
+}
+
+export interface WorkOrderListResponseV2 extends Omit<WorkOrderListResponse, 'items'> {
+  items: WorkOrderListItemV2[];
+}
+
+/** One bell entry. A notification is a TIER TRANSITION that was pinged once. */
+export interface PulseNotification {
+  id: string;
+  obligation_id?: string | null;
+  rule_key?: ObligationRuleKey | string | null;
+  tier: ObligationTier;
+  title: string;
+  body?: string | null;
+  wo_id?: string | null;
+  wo_number?: string | null;
+  due_at?: string | null;
+  read_at?: string | null;
+  created_at: string;
+}
+
+export interface NotificationsResult {
+  items: PulseNotification[];
+  unread: number;
+}
+
+/** The three columns of /pulse. Grouped server-side when the route exists, and
+    client-side from the obligation list when it does not. */
+export interface PulseBoard {
+  /** Tier 2–3 — the danger cards. */
+  needs_me_now: Obligation[];
+  /** Tier 1 — the storm-front strip. */
+  due_soon: Obligation[];
+  /** Tier 0 — the compact watch list. */
+  watching: Obligation[];
+  /** True when NO obligation route answered (404) — the difference between
+      "nothing is owed" and "nobody is watching". The Pulse says which. */
+  unavailable?: boolean;
+}
+
+export interface SnoozeInput {
+  /** <= 72, enforced server-side. */
+  hours: number;
+  /** MANDATORY — a snooze with no reason is just a dismissal. */
+  reason: string;
+}
+
+// ── S5 readers ───────────────────────────────────────────────────────────────
+// Every reader below tolerates three shapes: a bare array, `{ items }`, or a
+// named envelope. A 404 is read as "this route has not shipped yet" and answers
+// empty; anything else propagates so react-query can render its error state.
+
+function pluckArray(raw: unknown, ...keys: string[]): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    for (const key of keys) {
+      if (Array.isArray(obj[key])) return obj[key] as unknown[];
+    }
+  }
+  return [];
+}
+
+async function getSoft<T>(path: string, empty: T): Promise<T> {
+  try {
+    return await request<T>(path);
+  } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 404) return empty;
+    throw err;
+  }
+}
+
+/** A list read that also reports whether the ROUTE answered at all. */
+async function getListSoft(
+  path: string,
+): Promise<{ items: unknown[]; available: boolean }> {
+  try {
+    const raw = await request<unknown>(path);
+    return { items: pluckArray(raw, 'items', 'obligations', 'notifications'), available: true };
+  } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 404) return { items: [], available: false };
+    throw err;
+  }
+}
+
+export interface ObligationQuery {
+  /** WO id or WO number — scopes the list to one work order. */
+  wo?: string;
+  state?: ObligationState;
+  limit?: number;
+}
+
+/** GET /api/obligations — open obligations (this read also nudges the lazy
+    evaluator server-side, which is why the Pulse never needs a cron). */
+export async function getObligations(params: ObligationQuery = {}): Promise<Obligation[]> {
+  const { items } = await getListSoft(`/obligations${toQuery(params)}`);
+  return items as Obligation[];
+}
+
+/** Tier → column. The ONE place the three-column split is defined, so the
+    server-grouped and client-grouped paths can never drift. */
+export function groupObligations(items: Obligation[]): PulseBoard {
+  const board: PulseBoard = { needs_me_now: [], due_soon: [], watching: [] };
+  for (const ob of items) {
+    if (ob.state === 'resolved') continue;
+    const tier = Number(ob.tier ?? 0);
+    if (tier >= 2) board.needs_me_now.push(ob);
+    else if (tier === 1) board.due_soon.push(ob);
+    else board.watching.push(ob);
+  }
+  return board;
+}
+
+/** GET /api/pulse — the three columns. Falls back to grouping /api/obligations
+    client-side when the route is absent or answers a flat list. */
+export async function getPulse(): Promise<PulseBoard> {
+  const raw = await getSoft<unknown>(`/pulse`, null);
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const obj = raw as Record<string, unknown>;
+    if (
+      Array.isArray(obj.needs_me_now) ||
+      Array.isArray(obj.due_soon) ||
+      Array.isArray(obj.watching)
+    ) {
+      return {
+        needs_me_now: (obj.needs_me_now ?? []) as Obligation[],
+        due_soon: (obj.due_soon ?? []) as Obligation[],
+        watching: (obj.watching ?? []) as Obligation[],
+      };
+    }
+  }
+  const flat = pluckArray(raw, 'items', 'obligations') as Obligation[];
+  if (flat.length > 0) return groupObligations(flat);
+
+  const fallback = await getListSoft(`/obligations${toQuery({ state: 'open', limit: 200 })}`);
+  const board = groupObligations(fallback.items as Obligation[]);
+  // Neither route exists yet → say so rather than claiming an all-clear.
+  if (!fallback.available && raw == null) board.unavailable = true;
+  return board;
+}
+
+/** GET /api/notifications — the bell. `unread` is taken from the envelope when
+    the server counts it, else derived from `read_at`. */
+export async function getNotifications(): Promise<NotificationsResult> {
+  const raw = await getSoft<unknown>(`/notifications`, { items: [] });
+  const items = pluckArray(raw, 'items', 'notifications') as PulseNotification[];
+  const envelope = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const counted = envelope.unread ?? envelope.unread_count;
+  const unread =
+    typeof counted === 'number' ? counted : items.filter((n) => !n.read_at).length;
+  return { items, unread };
+}
+
+/** POST /api/notifications/:id/read — one entry, on click. */
+export function markNotificationRead(id: string): Promise<void> {
+  return request<void>(`/notifications/${encodeURIComponent(id)}/read`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+/** POST /api/notifications/read-all — the dropdown's footer action. */
+export function markAllNotificationsRead(): Promise<void> {
+  return request<void>(`/notifications/read-all`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+/** POST /api/obligations/:id/snooze — moves due_at and logs the reason.
+    403 when a tier-3 obligation is snoozed by someone below ATL. */
+export function snoozeObligation(id: string, input: SnoozeInput): Promise<{ obligation?: Obligation }> {
+  return request<{ obligation?: Obligation }>(
+    `/obligations/${encodeURIComponent(id)}/snooze`,
     { method: 'POST', body: JSON.stringify(input) },
   );
 }

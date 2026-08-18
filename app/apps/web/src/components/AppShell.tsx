@@ -5,11 +5,12 @@ import { ThemeToggle } from '../theme/ThemeToggle';
 import { Icon, IconSprite } from './Icon';
 import type { IconName } from './Icon';
 import { ActorSwitcher, useActor } from './ActorSwitcher';
+import { PulseBell } from './obligations/PulseBell';
 import { initialsOf, roleLabel } from '../lib/actor';
 
-/** The two nav items that lead somewhere. Everything else still renders (the
+/** The nav items that lead somewhere. Everything else still renders (the
     shape of the product is part of the design) but stays inert. */
-export type NavKey = 'Work Orders' | 'Quotes';
+export type NavKey = 'Work Orders' | 'Quotes' | 'Pulse' | 'Receivables';
 
 interface NavItem {
   label: string;
@@ -51,10 +52,15 @@ export function AppShell({
 
   const nav: NavItem[] = [
     { label: 'Dashboard', icon: 'grid' },
+    // S5 — the watchdog's own screen sits ABOVE the work orders: what is owed
+    // comes before the list of everything.
+    { label: 'Pulse', icon: 'zap', to: '/pulse' },
     { label: 'Work Orders', icon: 'clipboard', to: '/', badge: total },
     { label: 'Vendors', icon: 'truck' },
     { label: 'Quotes', icon: 'file', to: '/quotes' },
-    { label: 'Invoicing', icon: 'dollar' },
+    // AR — completion audit + invoicing, ported from the Support Automation
+    // shadow-audit assistant. Subtabs live inside the page.
+    { label: 'Receivables', icon: 'dollar', to: '/receivables' },
     { label: 'Admin', icon: 'sliders' },
   ];
 
@@ -122,9 +128,7 @@ export function AppShell({
               New Work Order
             </button>
             <ActorSwitcher actor={actor} />
-            <button type="button" className="topbar-bell" aria-label="Notifications">
-              <Icon name="bell" />
-            </button>
+            <PulseBell />
             <ThemeToggle />
           </div>
         </header>

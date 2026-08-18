@@ -8,12 +8,34 @@
 // PGlite is single-writer: exactly one process may hold the dir at a time.
 // migrate/seed are short-lived (open → write → exit); the long-running holder
 // is the API. Never run db:seed while the API is up.
+//
+// OneDrive: a live datadir must NOT sit inside a OneDrive-synced folder.
+// OneDrive stamps/locks the files minutes after they are written, after which
+// PGlite can no longer open the dir (wasm "RuntimeError: unreachable" in
+// _pg_initdb). If this package resolves to a path under OneDrive, the datadir
+// is redirected to %LOCALAPPDATA%\the-one\pgdata instead. Override with
+// THEONE_PGDATA.
 
 import { PGlite } from '@electric-sql/pglite';
 import { fileURLToPath } from 'node:url';
+import { join, sep } from 'node:path';
 import type { Results } from '@electric-sql/pglite';
 
-const DATA_DIR = fileURLToPath(new URL('../pgdata', import.meta.url));
+function resolveDataDir(): string {
+  if (process.env.THEONE_PGDATA) return process.env.THEONE_PGDATA;
+  const moduleRelative = fileURLToPath(new URL('../pgdata', import.meta.url));
+  const underOneDrive = moduleRelative
+    .split(sep)
+    .some((seg) => seg.toLowerCase().startsWith('onedrive'));
+  if (underOneDrive && process.env.LOCALAPPDATA) {
+    const redirected = join(process.env.LOCALAPPDATA, 'the-one', 'pgdata');
+    console.error(`[db] repo is inside OneDrive — using datadir ${redirected}`);
+    return redirected;
+  }
+  return moduleRelative;
+}
+
+const DATA_DIR = resolveDataDir();
 
 let _db: PGlite | null = null;
 

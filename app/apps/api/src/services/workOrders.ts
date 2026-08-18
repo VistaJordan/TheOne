@@ -8,6 +8,7 @@ import type {
   WorkOrderListItem,
   WorkOrderListResponse,
   WorkOrderDetail,
+  ObligationSummary,
   Status,
   StatusRef,
   Phase,
@@ -17,6 +18,7 @@ import { ApiError } from '../errors.js';
 import { UUID_RE, CREATED_AT_SQL, resolveActorId, getActivityForTask } from './activity.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
+import { obligationsReady, worstObligationsByTask, evaluateForTask } from './obligations.js';
 
 /**
  * Status name → lifecycle phase (S2 contract item 3). The map is a code-level
@@ -33,6 +35,24 @@ export interface ListFilters {
   search?: string;
   limit: number;
   offset: number;
+  /** S5 · `breach` = worst obligation first (tier desc, then closest to breach). */
+  sort?: 'breach';
+}
+
+/**
+ * S5 · a list row carrying its worst live obligation — the table's Clock column.
+ *
+ * Declared HERE, not by widening `WorkOrderListItem` in @theone/shared: apps/web
+ * already extends that interface (`WorkOrderListItemV2`) with an OPTIONAL member
+ * of its own, and adding a required one upstream would make its declaration
+ * illegal. The extra key simply rides on the wire.
+ */
+export interface WorkOrderListItemS5 extends WorkOrderListItem {
+  worst_obligation: ObligationSummary | null;
+}
+
+export interface WorkOrderListResponseS5 extends Omit<WorkOrderListResponse, 'items'> {
+  items: WorkOrderListItemS5[];
 }
 
 interface WoRow {
@@ -92,7 +112,7 @@ const WO_FROM = `
   LEFT JOIN container hl ON hl.id = t.home_list_id
 `;
 
-export async function listWorkOrders(f: ListFilters): Promise<WorkOrderListResponse> {
+export async function listWorkOrders(f: ListFilters): Promise<WorkOrderListResponseS5> {
   const where: string[] = ['t.deleted_at IS NULL'];
   const params: unknown[] = [];
 
@@ -120,16 +140,64 @@ export async function listWorkOrders(f: ListFilters): Promise<WorkOrderListRespo
   );
   const total = Number(totalRes.rows[0].total);
 
+  // S5 · `?sort=breach`. The ordering has to happen in SQL, not after the fact:
+  // sorting the current page would only reorder 50 arbitrary rows, whereas the
+  // point of the toggle is to bring the worst work orders in the WHOLE list to
+  // the top of page one. The LATERAL join picks each task's worst live
+  // obligation; rows with none sort last, then the previous default ordering
+  // breaks every remaining tie so the sequence stays deterministic.
+  //
+  // Guarded by obligationsReady(): before migration 0004 the `obligation` table
+  // does not exist, and a running API must keep answering this endpoint.
+  const ready = await obligationsReady();
+  const breachSort = f.sort === 'breach' && ready;
+  const breachJoin = breachSort
+    ? `LEFT JOIN LATERAL (
+         SELECT o.tier, o.due_at
+           FROM obligation o
+          WHERE o.task_id = t.id AND o.status <> 'resolved'
+          ORDER BY o.tier DESC, o.due_at ASC
+          LIMIT 1
+       ) ob ON true`
+    : '';
+  const orderSql = breachSort
+    ? `ORDER BY (ob.tier IS NULL) ASC, ob.tier DESC, ob.due_at ASC, t.created_at DESC, t.wo_number ASC`
+    : `ORDER BY t.created_at DESC, t.wo_number ASC`;
+
   const limitParam = `$${params.length + 1}`;
   const offsetParam = `$${params.length + 2}`;
   const rows = await query<WoRow>(
-    `SELECT ${WO_SELECT} ${WO_FROM} ${whereSql}
-     ORDER BY t.created_at DESC, t.wo_number ASC
+    `SELECT ${WO_SELECT} ${WO_FROM} ${breachJoin} ${whereSql}
+     ${orderSql}
      LIMIT ${limitParam} OFFSET ${offsetParam}`,
     [...params, f.limit, f.offset],
   );
 
-  return { items: rows.rows.map(mapListItem), total, limit: f.limit, offset: f.offset };
+  // The Clock column is decorated with a SECOND, small query rather than folded
+  // into the projection above: one `IN (…)` over the page's ids is cheaper than
+  // a correlated subquery per row, and it keeps the S1 projection untouched.
+  const worst = await worstObligationsByTask(rows.rows.map((r) => r.id));
+  const items: WorkOrderListItemS5[] = rows.rows.map((r) => {
+    const w = worst.get(r.id);
+    return {
+      ...mapListItem(r),
+      worst_obligation: w
+        ? {
+            id: w.id,
+            rule_key: w.rule_key,
+            label: w.label,
+            tier: w.tier,
+            state: w.state,
+            due_at: w.due_at,
+            started_at: w.started_at,
+            wo_id: r.id,
+            wo_number: r.wo_number,
+          }
+        : null,
+    };
+  });
+
+  return { items, total, limit: f.limit, offset: f.offset };
 }
 
 interface DetailBaseRow extends WoRow {
@@ -289,5 +357,12 @@ export async function changeStatus(
   // Return the fresh detail object (same shape as GET /:id).
   const detail = await getWorkOrderDetail(idOrWo);
   if (!detail) throw new ApiError('NOT_FOUND', 'Work order not found');
+
+  // S5 · a status change is the single biggest silencer in the engine — it ends
+  // schedule_owed, approval_followup, quote_owed and sla_blown, and starts
+  // whatever the new status owes. Re-evaluate this work order inline, AFTER the
+  // transaction has committed (PGlite is single-connection). evaluateForTask
+  // never throws, so the status change cannot fail because of a clock.
+  await evaluateForTask(detail.id);
   return detail;
 }

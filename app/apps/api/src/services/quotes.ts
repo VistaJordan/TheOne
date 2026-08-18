@@ -30,6 +30,7 @@ import type {
 import { QUOTE_EDIT_ROLES, QUOTE_APPROVE_ROLES } from '@theone/shared';
 import { ApiError, badRequest, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
+import { evaluateForTask } from './obligations.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -714,6 +715,9 @@ export async function createQuote(taskId: string, actor: ActingPrincipal): Promi
     await logQuoteActivity(tx, actor.id, taskId, 'quote_created', null, { status: 'draft' });
   });
 
+  // S5 · the existence of a quote — even an empty draft — silences quote_owed.
+  await evaluateForTask(taskId);
+
   const quote = await getQuote(taskId, actor);
   if (!quote) throw new ApiError('INTERNAL', 'Quote insert produced no row');
   return quote;
@@ -881,6 +885,11 @@ async function transition(
       quote_id: cur.id,
     });
   });
+
+  // S5 · every quote transition moves a clock: submit STARTS quote_review_owed
+  // (its `quote_submitted` activity row is the clock's start), while approve,
+  // send and reject all leave pending_approval and therefore silence it.
+  await evaluateForTask(taskId);
 
   const quote = await getQuote(taskId, actor);
   if (!quote) throw new ApiError('INTERNAL', 'Quote vanished mid-transition');

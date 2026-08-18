@@ -1,0 +1,774 @@
+/* The One — S5 · Smart notifications (obligations, clocks, the Pulse).
+   Plain CSS over the existing tokens. NO new hex is introduced: tier 1 reuses
+   the S2 warn ramp, tiers 2–3 the S1/S4 danger ramp, tier 0 the neutral chip.
+   Every tier-coloured surface reads the same four custom properties, set once
+   below and consumed everywhere, so the ramp can never drift between the board
+   chip, the rail card, the bell and the Pulse. */
+
+.tier-0 {
+  --tier-ink: var(--ink-2);
+  --tier-bg: var(--chip);
+  --tier-border: transparent;
+  --tier-dot: var(--ink-3);
+}
+
+.tier-1 {
+  --tier-ink: var(--warn);
+  --tier-bg: var(--warn-bg);
+  --tier-border: var(--warn-border);
+  --tier-dot: var(--warn-solid);
+}
+
+.tier-2,
+.tier-3 {
+  --tier-ink: var(--danger);
+  --tier-bg: var(--danger-bg);
+  --tier-border: var(--danger-border);
+  --tier-dot: var(--danger);
+}
+
+/* ── Clock chip ───────────────────────────────────────────────────────────── */
+.clock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: var(--pill-radius);
+  border: 1px solid var(--tier-border);
+  background: var(--tier-bg);
+  color: var(--tier-ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.clock-chip .ic {
+  flex: none;
+}
+
+.clock-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clock-chip-time {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  padding-left: 4px;
+  border-left: 1px solid color-mix(in srgb, currentColor 26%, transparent);
+}
+
+.clock-chip.is-compact {
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+.clock-chip.is-button {
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+
+.clock-chip.is-button:hover {
+  filter: brightness(1.08);
+}
+
+.clock-chip.is-snoozed {
+  opacity: 0.75;
+  font-style: italic;
+}
+
+/* Tier 3 is the only thing on the screen that moves — it has earned it. */
+.clock-chip.tier-3,
+.pulse-card.tier-3,
+.obl-row.tier-3 .obl-dot {
+  animation: tier3-pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes tier3-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 40%, transparent);
+  }
+  55% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clock-chip.tier-3,
+  .pulse-card.tier-3,
+  .obl-row.tier-3 .obl-dot {
+    animation: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 26%, transparent);
+  }
+}
+
+/* Header cluster + board column */
+.clock-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: none;
+}
+
+.col-clock {
+  white-space: nowrap;
+}
+
+.clock-none {
+  color: var(--ink-3);
+}
+
+/* ── Obligations card (WO rail) ───────────────────────────────────────────── */
+.obl-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 16px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.obl-clear .ic {
+  color: var(--accent-text);
+}
+
+.obl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.obl-row {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--row-border);
+}
+
+.obl-row:last-child {
+  border-bottom: 0;
+}
+
+.obl-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.obl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tier-dot);
+  flex: none;
+}
+
+.obl-rule {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.obl-clock {
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tier-ink);
+}
+
+.obl-clock.is-over {
+  text-transform: lowercase;
+}
+
+.obl-row-mid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  flex-wrap: wrap;
+}
+
+.obl-tier {
+  padding: 1px 7px;
+  border-radius: var(--pill-radius);
+  border: 1px solid var(--tier-border);
+  background: var(--tier-bg);
+  color: var(--tier-ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.obl-owner,
+.pulse-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.obl-avatar,
+.pulse-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--chip);
+  color: var(--ink-2);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex: none;
+}
+
+.obl-snooze {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: background 0.12s, color 0.12s;
+}
+
+.obl-snooze:hover {
+  background: var(--chip);
+  color: var(--ink);
+}
+
+.obl-why {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+/* ── Snooze dialog (extends the S4 .sheet) ────────────────────────────────── */
+.snooze-sheet {
+  width: min(470px, 100%);
+}
+
+.snooze-field {
+  display: block;
+  margin-top: 14px;
+}
+
+.snooze-field .overline {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.snooze-req {
+  color: var(--danger);
+  letter-spacing: 0.04em;
+}
+
+.snooze-hours {
+  flex-wrap: wrap;
+}
+
+.snooze-reason {
+  width: 100%;
+  min-height: 74px;
+  resize: vertical;
+}
+
+.snooze-note,
+.snooze-err {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.snooze-note {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  color: var(--warn);
+}
+
+.snooze-err {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+}
+
+/* ── The bell + its dropdown ──────────────────────────────────────────────── */
+.pulse-bell-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The count sits on a --danger fill; --surface is the theme's own light-on-dark
+   / dark-on-light counterpart, so the pair stays legible in both skins without
+   introducing a colour. */
+.pulse-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--danger);
+  color: var(--surface);
+  font-size: 9.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.pulse-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 360px;
+  max-height: 460px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.34);
+  padding: 6px;
+}
+
+.pulse-pop-head,
+.pulse-pop-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+}
+
+.pulse-pop-head {
+  border-bottom: 1px solid var(--row-border);
+}
+
+.pulse-pop-foot {
+  border-top: 1px solid var(--row-border);
+}
+
+.pulse-linkbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.pulse-linkbtn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.pulse-linkbtn:disabled {
+  color: var(--ink-3);
+}
+
+.pulse-pop-note {
+  padding: 16px 10px;
+  font-size: 12px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.pulse-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.pulse-row:hover {
+  background: var(--chip);
+}
+
+.pulse-row-stripe {
+  width: 3px;
+  align-self: stretch;
+  border-radius: 2px;
+  background: var(--tier-dot);
+  flex: none;
+}
+
+.pulse-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pulse-row-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.pulse-row.is-unread .pulse-row-title {
+  font-weight: 700;
+}
+
+.pulse-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.pulse-row-wo {
+  font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--accent-text);
+}
+
+.pulse-row-tier {
+  padding: 0 6px;
+  border-radius: var(--pill-radius);
+  background: var(--tier-bg);
+  color: var(--tier-ink);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pulse-row-ago {
+  font-variant-numeric: tabular-nums;
+}
+
+.pulse-row-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+  margin-top: 5px;
+}
+
+/* ── The Pulse page ───────────────────────────────────────────────────────── */
+.pulse-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .pulse-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pulse-col {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px 12px 14px;
+  min-width: 0;
+}
+
+.pulse-col.is-now {
+  border-color: var(--danger-border);
+}
+
+.pulse-col.is-soon {
+  border-color: var(--warn-border);
+}
+
+.pulse-col-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pulse-col-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+.pulse-col-count {
+  font-family: var(--kpi-font), 'Barlow Condensed', sans-serif;
+  font-weight: var(--kpi-weight);
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.pulse-col.is-now .pulse-col-count {
+  color: var(--danger);
+}
+
+.pulse-col.is-soon .pulse-col-count {
+  color: var(--warn);
+}
+
+.pulse-col-hint {
+  margin: 4px 0 10px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.pulse-col-note {
+  padding: 14px 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.pulse-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.pulse-card {
+  border: 1px solid var(--tier-border);
+  border-left: 3px solid var(--tier-dot);
+  border-radius: var(--radius-sm);
+  background: var(--tier-bg);
+  padding: 10px 11px;
+}
+
+.pulse-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pulse-card-tier {
+  padding: 1px 7px;
+  border-radius: var(--pill-radius);
+  background: color-mix(in srgb, var(--tier-ink) 14%, transparent);
+  color: var(--tier-ink);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pulse-card-clock {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tier-ink);
+}
+
+.pulse-card-rule {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.pulse-card-wo {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 5px;
+  font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.pulse-card-wo:hover {
+  text-decoration: underline;
+}
+
+.pulse-card-wo.is-none {
+  color: var(--ink-3);
+  font-family: inherit;
+}
+
+.pulse-card-client {
+  font-family: 'Barlow', sans-serif;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.pulse-card-why {
+  margin: 7px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.pulse-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pulse-owner-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pulse-card-foot .obl-snooze {
+  background: var(--surface);
+}
+
+/* Watching — one line each */
+.pulse-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.pulse-mini-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tier-dot);
+  flex: none;
+}
+
+.pulse-mini-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pulse-mini-rule {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pulse-mini-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.pulse-mini-wo {
+  font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.pulse-mini-wo:hover {
+  text-decoration: underline;
+}
+
+.pulse-mini-clock {
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tier-ink);
+  flex: none;
+}
+
+.pulse-mini-clock.is-over {
+  color: var(--danger);
+}
+
+.pulse-mini-snooze {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-3);
+}
+
+.pulse-mini-snooze:hover {
+  background: var(--chip);
+  color: var(--ink);
+}
+
+/* All clear */
+.pulse-clear {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 46px 24px 54px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.pulse-mascot {
+  width: 92px;
+  height: auto;
+  opacity: 0.95;
+  margin-bottom: 4px;
+}
+
+.pulse-clear b {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.pulse-clear span {
+  max-width: 46ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}

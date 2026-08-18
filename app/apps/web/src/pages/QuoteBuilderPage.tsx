@@ -51,6 +51,7 @@ import {
 } from '../lib/quoteTotals';
 import { FIELD, field, str } from '../lib/fields';
 import { deriveSite } from '../lib/woDerive';
+import { useInvalidateObligations } from '../hooks/useObligations';
 
 /** How long the form sits still before the draft is flushed (§3.9 autosave). */
 const AUTOSAVE_MS = 900;
@@ -59,6 +60,7 @@ export function QuoteBuilderPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const invalidateObligations = useInvalidateObligations();
 
   const woQuery = useQuery({
     queryKey: ['work-orders', 'detail', woNumber],
@@ -163,6 +165,9 @@ export function QuoteBuilderPage() {
         // A transition changes status (and reject bumps rev) → the effect above
         // re-seeds the form from the returned quote.
         void queryClient.invalidateQueries({ queryKey: ['work-orders', 'detail', woNumber] });
+        // S5: submit starts quote_review_owed; approve/reject silences it; send
+        // silences quote_owed. One re-read covers every transition.
+        invalidateObligations();
       })
       .catch((err) => setActionError(errorText(err, 'The action failed.')));
   };

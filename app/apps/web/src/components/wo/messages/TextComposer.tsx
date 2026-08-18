@@ -4,6 +4,7 @@ import type { MessagesResponse, QuoConversation } from '../../../api/client';
 import { MESSAGE_MAX, postWorkOrderMessage } from '../../../api/client';
 import { Icon } from '../../Icon';
 import { optimisticMessage, smsSegments } from '../../../lib/quo';
+import { useInvalidateObligations } from '../../../hooks/useObligations';
 
 interface TextComposerProps {
   woId: string;
@@ -18,6 +19,7 @@ interface TextComposerProps {
 export function TextComposer({ woId, conversation, queryKey }: TextComposerProps) {
   const [body, setBody] = useState('');
   const qc = useQueryClient();
+  const invalidateObligations = useInvalidateObligations();
   const vendor = conversation.vendor;
 
   const mutation = useMutation({
@@ -41,6 +43,8 @@ export function TextComposer({ woId, conversation, queryKey }: TextComposerProps
       // The write also lands a `tech_message_sent` activity row.
       qc.invalidateQueries({ queryKey: ['wo-activity', woId] });
       qc.invalidateQueries({ queryKey: ['wo-feed', woId] });
+      // S5: an outbound text is activity on the WO — it silences emergency_ack.
+      invalidateObligations();
     },
   });
 

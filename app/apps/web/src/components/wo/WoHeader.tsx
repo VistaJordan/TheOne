@@ -1,8 +1,9 @@
-import type { Phase, WorkOrderDetailV2 } from '../../api/client';
+import type { ObligationSummary, Phase, WorkOrderDetailV2 } from '../../api/client';
 import { DASH, FIELD, dateVal, daysSince, field, numericDate } from '../../lib/fields';
 import { deriveHeaderMeta } from '../../lib/woDerive';
 import { CopyButton } from '../CopyButton';
 import { Icon } from '../Icon';
+import { ClockChipCluster } from '../obligations/ClockChip';
 import { StatusChangeMenu } from '../StatusChangeMenu';
 import { StatusPill } from '../StatusPill';
 import { PhaseBar } from './PhaseBar';
@@ -15,9 +16,13 @@ interface WoHeaderProps {
   phase: Phase | null;
   /** Days the WO has sat in its current status, from the newest status change. */
   inStatusDays: number | null;
+  /** S5 — open obligations on this WO, rendered as clocks beside the aging cells. */
+  obligations?: ObligationSummary[];
+  /** Clicking a clock chip scrolls the rail's Obligations card into view. */
+  onClockClick?: () => void;
 }
 
-export function WoHeader({ wo, phase, inStatusDays }: WoHeaderProps) {
+export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick }: WoHeaderProps) {
   const meta = deriveHeaderMeta(wo);
   const f = wo.fields ?? {};
   const age = daysSince(wo.date_received);
@@ -94,6 +99,8 @@ export function WoHeader({ wo, phase, inStatusDays }: WoHeaderProps) {
             </span>
           )}
         </div>
+
+        <ClockChipCluster items={obligations ?? []} onSelect={onClockClick} />
 
         <div className="aging">
           <div className="aging-cell">

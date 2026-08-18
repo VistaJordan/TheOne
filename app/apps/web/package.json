@@ -11,6 +11,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5",
     "@theone/shared": "*",
+    "playwright-core": "^1.62.1",
     "react": "^18",
     "react-dom": "^18",
     "react-router-dom": "^6"
@@ -20,5 +21,10 @@
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^4",
     "vite": "^5"
-  }
+  },
+  "description": "",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

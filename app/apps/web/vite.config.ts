@@ -6,6 +6,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
+    // host:true binds 0.0.0.0 so other devices on the LAN can open the app.
+    // The API stays loopback-only — remote /api calls ride through this proxy.
+    host: true,
     port: 5173,
     strictPort: true,
     proxy: {

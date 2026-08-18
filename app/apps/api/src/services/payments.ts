@@ -15,6 +15,7 @@ import { query, getDb } from '../db.js';
 import type { PaymentRequest, PaymentRequestsResponse } from '@theone/shared';
 import { ApiError, badRequest } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
+import { evaluateForTask } from './obligations.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -195,6 +196,11 @@ export async function createPaymentRequest(
   });
 
   if (!createdId) throw new ApiError('INTERNAL', 'Payment request insert produced no row');
+
+  // S5 · a request entering the AP queue starts the payment_processing clock
+  // (2 business days), owed by the admin desk until the routing lands (§4.3).
+  await evaluateForTask(taskId);
+
   const res = await query<PaymentRow>(`${SELECT_SQL} WHERE pr.id = $1`, [createdId]);
   if (res.rows.length === 0) throw new ApiError('INTERNAL', 'Payment request vanished after insert');
   return mapPayment(res.rows[0]);
