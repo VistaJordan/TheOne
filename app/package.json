@@ -1,11 +1,15 @@
 {
   "name": "the-one",
   "private": true,
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "db:migrate": "npm -w @theone/db run migrate",
     "db:seed": "npm -w @theone/db run seed",
     "setup": "npm run db:migrate && npm run db:seed",
+    "typecheck": "tsc -p packages/shared --noEmit && tsc -p packages/db --noEmit && tsc -p apps/api --noEmit && tsc -b apps/web --force",
     "dev:api": "npm -w @theone/api run dev",
     "dev:web": "npm -w @theone/web run dev",
     "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\""

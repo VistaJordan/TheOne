@@ -47,8 +47,15 @@ export function getDb(): PGlite {
   return _db;
 }
 
+/* NOTE: T is deliberately UNCONSTRAINED. A `T extends Record<string, unknown>`
+   bound rejects every `interface XRow {...}` in the services — interfaces have
+   no implicit index signature, only `type` aliases do — which is what the 18
+   TS2344 errors were when this package was first typechecked. PGlite's own
+   query<T> is unconstrained too, and node-postgres bounds R by
+   `{[column: string]: any}`, which interfaces DO satisfy. So this stays valid
+   through the Phase 1 Postgres swap. */
 /** Parameterized query helper. `$1, $2, …` placeholders. */
-export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
+export async function query<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<Results<T>> {
