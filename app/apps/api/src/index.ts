@@ -12,6 +12,7 @@ import principalsRoutes from './routes/principals.js';
 import quoteRoutes from './routes/quotes.js';
 import paymentRoutes from './routes/payments.js';
 import obligationRoutes from './routes/obligations.js';
+import integrationRoutes from './routes/integrations.js';
 
 const PORT = 5174;
 const HOST = '127.0.0.1';
@@ -51,6 +52,8 @@ async function main(): Promise<void> {
   // empty payload until migration 0004 has been applied, so registering it
   // cannot break a running API that is still on 0003.
   await app.register(obligationRoutes, { prefix: '/api' });
+  // Ecotrak ingestion — manual trigger; the worker polls on the same service.
+  await app.register(integrationRoutes, { prefix: '/api' });
 
   await app.listen({ port: PORT, host: HOST });
 }
