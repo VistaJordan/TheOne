@@ -12,7 +12,7 @@
 // messages, job segments) with a UNION ALL, so ordering is the database's job.
 // Oldest-first — unlike the feed — because a chat log reads DOWN the page.
 
-import { query, getDb } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import type {
   Conversation,
   MessagesResponse,
@@ -244,10 +244,9 @@ export async function sendMessage(
   body: string,
   actor: FeedActor,
 ): Promise<ThreadMessage> {
-  const db = getDb();
   let created: { id: string; occurred_at: string } | null = null;
 
-  await db.transaction(async (tx) => {
+  await withTransaction(async (tx) => {
     const ins = await tx.query<{ id: string; occurred_at: string }>(
       `INSERT INTO quo_message
          (conversation_id, direction, body, media, delivered, pending_sync)

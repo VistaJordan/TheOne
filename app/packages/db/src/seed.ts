@@ -4,7 +4,7 @@
 // Single-writer: run via `npm run db:seed` (short-lived; opens pgdata, writes, exits).
 // Never run while the API is up.
 
-import { getDb, query } from './client.js';
+import { exec, query, closePool } from './client.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { STATUS_GROUP_BY_TYPE, type StatusGroup } from '@theone/shared';
@@ -471,10 +471,10 @@ function chicagoDate(at: Date): string {
 }
 
 async function main() {
-  const db = getDb();
+
 
   // ── 0. Idempotent reset ────────────────────────────────────────────────────
-  await db.exec(`
+  await exec(`
     TRUNCATE TABLE
       quote_line, quote_section, quote, payment_request,
       quo_message, quo_call, quo_job_segment, quo_conversation,
@@ -1080,6 +1080,7 @@ async function main() {
 }
 
 main()
+  .finally(() => closePool())
   .then(() => process.exit(0))
   .catch((err) => {
     console.error('seed: FAILED');

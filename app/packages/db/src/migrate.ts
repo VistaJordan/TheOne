@@ -1,4 +1,4 @@
-// Migration runner — passes each migrations/*.sql WHOLE to db.exec() in
+// Migration runner — passes each migrations/*.sql WHOLE to exec() in
 // filename order. NO semicolon-splitting: a split runner dies on the
 // dollar-quoted plpgsql body of set_updated_at() ("unterminated dollar-quoted
 // string at or near \"$$\"") and migration 0001 fails before any table exists.
@@ -7,16 +7,16 @@
 // `npm run setup` against an existing pgdata is a no-op (CREATE TYPE would
 // otherwise error "already exists").
 
-import { getDb } from './client.js';
+import { exec, query, closePool } from './client.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
 
 async function main() {
-  const db = getDb();
 
-  await db.exec(`
+
+  await exec(`
     CREATE TABLE IF NOT EXISTS _migrations (
       filename   text PRIMARY KEY,
       applied_at timestamptz NOT NULL DEFAULT now()
@@ -24,7 +24,7 @@ async function main() {
   `);
 
   const applied = new Set(
-    (await db.query<{ filename: string }>('SELECT filename FROM _migrations')).rows.map(
+    (await query<{ filename: string }>('SELECT filename FROM _migrations')).rows.map(
       (r) => r.filename,
     ),
   );
@@ -48,8 +48,8 @@ async function main() {
     const sql = readFileSync(path, 'utf8');
     process.stdout.write(`migrate: applying ${file} … `);
     // WHOLE file, one call — never split on ';'.
-    await db.exec(sql);
-    await db.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
+    await exec(sql);
+    await query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
     count++;
     console.log('ok');
   }
@@ -58,6 +58,7 @@ async function main() {
 }
 
 main()
+  .finally(() => closePool())
   .then(() => process.exit(0))
   .catch((err) => {
     console.error('migrate: FAILED');

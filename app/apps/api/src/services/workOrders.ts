@@ -3,7 +3,7 @@
 // cast so the JSON matches the §5 contract (numbers not strings, dates as
 // 'YYYY-MM-DD', timestamps as ISO-8601 UTC).
 
-import { query, getDb } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import type {
   WorkOrderListItem,
   WorkOrderListResponse,
@@ -302,14 +302,13 @@ export async function changeStatus(
   actorHeader: string | undefined,
 ): Promise<WorkOrderDetail> {
   const col = UUID_RE.test(idOrWo) ? 'id' : 'wo_number';
-  const db = getDb();
 
   // Resolve the actor BEFORE opening the transaction. PGlite is single-connection:
   // calling the non-transactional query() from inside db.transaction() would queue
   // behind the open transaction and self-deadlock.
   const actorId = await resolveActorId(actorHeader);
 
-  await db.transaction(async (tx) => {
+  await withTransaction(async (tx) => {
     // Current task + status.
     const cur = await tx.query<{ task_id: string; status_id: string; status_name: string }>(
       `SELECT t.id AS task_id, t.status_id, s.name AS status_name

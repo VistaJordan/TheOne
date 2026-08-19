@@ -15,7 +15,7 @@
 // db.transaction() opens (a plain query() issued inside a transaction queues
 // behind it and self-deadlocks — same note as S1's changeStatus).
 
-import { query, getDb } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import type {
   Quote,
   QuoteLine,
@@ -699,8 +699,7 @@ export async function createQuote(taskId: string, actor: ActingPrincipal): Promi
     throw badRequest('A quote already exists for this work order');
   }
 
-  const db = getDb();
-  await db.transaction(async (tx) => {
+  await withTransaction(async (tx) => {
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO quote (task_id, status, created_by) VALUES ($1, 'draft', $2) RETURNING id::text AS id`,
       [taskId, actor.id],
@@ -744,8 +743,7 @@ export async function updateQuote(
     });
   }
 
-  const db = getDb();
-  await db.transaction(async (tx) => {
+  await withTransaction(async (tx) => {
     const sets: string[] = [];
     const params: unknown[] = [];
     const set = (col: string, value: unknown) => {
@@ -873,8 +871,7 @@ async function transition(
   if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');
   assertTransition(cur.status, from, to);
 
-  const db = getDb();
-  await db.transaction(async (tx) => {
+  await withTransaction(async (tx) => {
     await tx.query(
       `UPDATE quote SET status = $1${extraSet ? `, ${extraSet}` : ''} WHERE id = $2`,
       [to, cur.id, ...extraParams],

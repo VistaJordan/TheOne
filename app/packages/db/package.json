@@ -12,6 +12,10 @@
     "seed": "tsx src/seed.ts"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.2"
+    "@electric-sql/pglite": "^0.2",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
   }
 }

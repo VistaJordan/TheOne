@@ -1,3 +1,7 @@
-// Re-export the DB runtime from @theone/db (read-only consumer per spec §2/§8 Card B).
-// The API is the long-running single-writer holder of pgdata.
-export { query, getDb } from '@theone/db';
+// Re-export the DB runtime from @theone/db.
+//
+// Phase 1: the API no longer "holds" a datadir — it opens a pool against the
+// Postgres server, and the worker opens its own alongside it. That concurrency
+// is the entire point of the swap.
+export { query, withTransaction, exec, getPool, closePool } from '@theone/db';
+export type { Queryable, QueryResult } from '@theone/db';

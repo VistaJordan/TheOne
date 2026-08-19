@@ -9,7 +9,7 @@
 // 'comment_added' audit row written alongside every comment) are deliberately
 // NOT surfaced — the comment itself is the feed item; the log row is audit.
 
-import { query, getDb } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import type { FeedItem, FeedComment, FeedResponse, FeedActor } from '@theone/shared';
 import { ApiError } from '../errors.js';
 
@@ -126,10 +126,9 @@ export async function addComment(
   clientVisible: boolean,
   actor: FeedActor,
 ): Promise<FeedComment> {
-  const db = getDb();
   let created: { id: string; created_at: string } | null = null;
 
-  await db.transaction(async (tx) => {
+  await withTransaction(async (tx) => {
     const ins = await tx.query<{ id: string; created_at: string }>(
       `INSERT INTO comment (task_id, author_principal_id, body, client_visible)
        VALUES ($1, $2, $3, $4)

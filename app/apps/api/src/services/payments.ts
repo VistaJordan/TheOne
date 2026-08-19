@@ -11,7 +11,7 @@
 // is not in the vendor list). The DB does not CHECK across the two shapes — the
 // rule is enforced here, where a useful 400 can be produced.
 
-import { query, getDb } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import type { PaymentRequest, PaymentRequestsResponse } from '@theone/shared';
 import { ApiError, badRequest } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -153,10 +153,9 @@ export async function createPaymentRequest(
     if (v.rows.length === 0) throw badRequest('Unknown vendor_id', { vendor_id: vendorId });
   }
 
-  const db = getDb();
   let createdId: string | null = null;
 
-  await db.transaction(async (tx) => {
+  await withTransaction(async (tx) => {
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO payment_request
          (task_id, vendor_id, payee_name, payee_phone, purpose, amount, method, note,
