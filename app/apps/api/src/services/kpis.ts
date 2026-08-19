@@ -1,5 +1,9 @@
 // KPI service (§5 GET /api/kpis) — all computed live from the DB.
-//  - active.count        : status_group IN ('open','active')
+//  - active.count        : status_group IN ('open','active','pending')
+//    'pending' joined the enum in migration 0006. It is INCLUDED here on
+//    purpose: a WO waiting on client approval is still in flight, and
+//    excluding it would make this headline number silently drop the day the
+//    group was introduced.
 //  - waitingApproval     : status name '!! waiting for approval' (+ oldest age)
 //  - readyToInvoice      : status name '!! ready to invoice'     (+ sum(nte))
 //  - margin              : from invoiced WOs' fields; else fallback placeholder.
@@ -14,7 +18,7 @@ export async function getKpis(): Promise<Kpis> {
   const activeRes = await query<{ count: number | string }>(
     `SELECT COUNT(*)::int AS count
        FROM task
-      WHERE deleted_at IS NULL AND status_group IN ('open','active')`,
+      WHERE deleted_at IS NULL AND status_group IN ('open','active','pending')`,
   );
 
   const waitRes = await query<{ count: number | string; oldest: number | string | null }>(

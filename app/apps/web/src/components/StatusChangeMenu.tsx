@@ -7,11 +7,12 @@ import { getStatuses, patchStatus } from '../api/client';
 import { useInvalidateObligations } from '../hooks/useObligations';
 import { StatusPill, pillStyle } from './StatusPill';
 
-const GROUP_ORDER: StatusGroup[] = ['open', 'active', 'done', 'closed'];
+const GROUP_ORDER: StatusGroup[] = ['open', 'active', 'pending', 'done', 'closed'];
 const GROUP_LABEL: Record<StatusGroup, string> = {
   open: 'Open',
   active: 'Active',
   done: 'Done',
+  pending: 'Pending',
   closed: 'Closed',
 };
 
@@ -127,7 +128,7 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
 }
 
 function groupStatuses(statuses: StatusWithPhase[]): Record<StatusGroup, StatusWithPhase[]> {
-  const out: Record<StatusGroup, StatusWithPhase[]> = { open: [], active: [], done: [], closed: [] };
+  const out: Record<StatusGroup, StatusWithPhase[]> = { open: [], active: [], pending: [], done: [], closed: [] };
   for (const s of [...statuses].sort((a, b) => a.position - b.position)) {
     out[s.group].push(s);
   }

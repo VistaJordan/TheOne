@@ -4,7 +4,7 @@
 // imports the DB runtime.
 
 // ── Status groups ────────────────────────────────────────────────────────────
-export type StatusGroup = 'open' | 'active' | 'done' | 'closed';
+export type StatusGroup = 'open' | 'active' | 'pending' | 'done' | 'closed';
 
 /**
  * Maps a ClickUp status `type` to our `status_group`.

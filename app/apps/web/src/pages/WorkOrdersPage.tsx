@@ -17,6 +17,7 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'open', label: 'Open' },
   { key: 'active', label: 'Active' },
+  { key: 'pending', label: 'Pending' },
   { key: 'done', label: 'Done' },
   { key: 'closed', label: 'Closed' },
 ];

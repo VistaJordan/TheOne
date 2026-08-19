@@ -12,7 +12,7 @@ import { getMessages, resolveConversationId, sendMessage } from '../services/mes
 import { evaluateForTask } from '../services/obligations.js';
 
 const listQuerySchema = z.object({
-  status_group: z.enum(['open', 'active', 'done', 'closed']).optional(),
+  status_group: z.enum(['open', 'active', 'pending', 'done', 'closed']).optional(),
   status_id: z.string().uuid().optional(),
   search: z.string().trim().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),

@@ -137,7 +137,7 @@ export interface MessageCreatedResponse { item: ThreadMessage }
 export const MESSAGE_MAX = 1600;
 
 export interface ListWorkOrdersParams {
-  status_group?: 'open' | 'active' | 'done' | 'closed';
+  status_group?: 'open' | 'active' | 'pending' | 'done' | 'closed';
   status_id?: string;
   search?: string;
   limit?: number;
