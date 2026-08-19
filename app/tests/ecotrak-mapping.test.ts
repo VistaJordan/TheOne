@@ -14,10 +14,22 @@ import {
 } from '../apps/api/src/modules/integrations/ecotrak/statusMap';
 import {
   TRADE_MAP,
-  TRADES,
+  GENERAL_TRADES,
   resolveTrade,
   unconfirmedTrades,
+  subtradesOf,
+  volumeByGeneral,
+  tradeLabel,
 } from '../apps/api/src/modules/integrations/ecotrak/tradeMap';
+import {
+  planFolder,
+  woFolderName,
+  clientFolderName,
+  sanitizeFolderName,
+  stateAbbr,
+  baseFolderPath,
+  encodeGraphPath,
+} from '../apps/api/src/modules/integrations/ecotrak/sharepointPath';
 
 /** Statuses observed in the production read, with counts. Sums to 232. */
 const PRODUCTION_STATUSES: Record<string, number> = {
@@ -184,22 +196,23 @@ describe('ecotrak trades: production coverage', () => {
     expect(covered).toBe(232);
   });
 
-  it('fixes the two exact-match misses in the current live sync', () => {
-    // Both fall back to "Handyman" today despite exact options existing.
-    expect(resolveTrade('Refrigeration - Walk-in')?.trade).toBe('Refrigeration');
-    expect(resolveTrade('Locksmith')?.trade).toBe('Locksmith');
+  it('fixes the walk-in refrigeration mis-classification in the live sync', () => {
+    // 10 WOs become "Handyman" today. Walk-in is refrigeration work.
+    const r = resolveTrade('Refrigeration - Walk-in');
+    expect(r?.general).toBe('Refrigeration');
+    expect(r?.sub).toBe('Walk-in');
   });
 
-  it('every destination is a real option', () => {
+  it('every general trade is one of the five', () => {
     for (const [src, rule] of Object.entries(TRADE_MAP)) {
-      expect(TRADES, `${src} -> ${rule.trade}`).toContain(rule.trade);
+      expect(GENERAL_TRADES, `${src} -> ${rule.general}`).toContain(rule.general);
     }
   });
 
   it('matches case- and whitespace-insensitively (production has trailing spaces)', () => {
-    expect(resolveTrade('  HVAC  ')?.trade).toBe('HVAC');
-    expect(resolveTrade('hvac')?.trade).toBe('HVAC');
-    expect(resolveTrade('PLUMBER')?.trade).toBe('Plumbing');
+    expect(resolveTrade('  HVAC  ')?.general).toBe('HVAC');
+    expect(resolveTrade('hvac')?.general).toBe('HVAC');
+    expect(resolveTrade('PLUMBER')?.general).toBe('Plumbing');
   });
 
   it('returns null for unknown trades rather than defaulting to Handyman', () => {
@@ -215,5 +228,117 @@ describe('ecotrak trades: production coverage', () => {
     expect(pending).toContain('Painter');
     // Highest-volume unconfirmed first, so the ops review is ordered by impact.
     expect(pending[0]).toBe('Windows and Storefront');
+  });
+});
+
+// ── The two-level hierarchy ─────────────────────────────────────────────────
+
+describe('trades: general + subtrade hierarchy', () => {
+  it('has exactly the five general trades', () => {
+    expect([...GENERAL_TRADES]).toEqual([
+      'Handyman', 'Electric', 'Plumbing', 'HVAC', 'Refrigeration',
+    ]);
+  });
+
+  it('every production WO lands under a general trade — 232 accounted for', () => {
+    const v = volumeByGeneral();
+    expect(v.HVAC).toBe(61);
+    expect(v.Handyman).toBe(113);
+    expect(v.Plumbing).toBe(29);
+    expect(v.Electric).toBe(16);
+    expect(v.Refrigeration).toBe(13);
+    expect(Object.values(v).reduce((a, b) => a + b, 0)).toBe(232);
+  });
+
+  it('keeps the detail that changes who you dispatch', () => {
+    expect(subtradesOf('Refrigeration')).toEqual(['Walk-in']);
+    expect(subtradesOf('Plumbing')).toEqual(['Water Heater']);
+    expect(subtradesOf('HVAC')).toEqual(['Preventative Maintenance', 'Test and Balance']);
+    expect(subtradesOf('Electric')).toEqual([]); // no detail in production yet
+  });
+
+  it('collapses variants onto one subtrade', () => {
+    // Three Ecotrak strings, one dispatch reality.
+    for (const s of ['Safe / Locksmith', 'Locksmith', 'Door Key Program']) {
+      expect(resolveTrade(s)?.sub, s).toBe('Locksmith');
+    }
+    for (const s of ['Cooking Equipment', 'Tea Brewer', 'Appliance']) {
+      expect(resolveTrade(s)?.sub, s).toBe('Appliance');
+    }
+  });
+
+  it('renders a single display label', () => {
+    expect(tradeLabel(resolveTrade('Refrigeration - Walk-in')!)).toBe('Refrigeration / Walk-in');
+    expect(tradeLabel(resolveTrade('HVAC')!)).toBe('HVAC');
+  });
+});
+
+// ── SharePoint folder naming ────────────────────────────────────────────────
+
+describe('sharepoint: folder naming matches the live tree', () => {
+  const wo = {
+    id: 6339414,
+    work_order_id: null,
+    customer: { customer_name: 'Flynn Restaurant Group' },
+    location: { city: 'Phoenix', state: 'Arizona' },
+  };
+
+  it('builds the documented WO folder name', () => {
+    expect(woFolderName(wo)).toBe('WO#6339414, Phoenix, AZ');
+  });
+
+  it('falls back to the Ecotrak id — work_order_id is null on 100% of production', () => {
+    expect(woFolderName({ ...wo, work_order_id: null })).toContain('WO#6339414');
+    expect(woFolderName({ ...wo, work_order_id: 90210 })).toContain('WO#90210');
+  });
+
+  it('drops missing city/state rather than rendering blanks', () => {
+    expect(woFolderName({ id: 1, location: { city: null, state: null } })).toBe('WO#1');
+    expect(woFolderName({ id: 2, location: { city: 'Tulsa', state: null } })).toBe('WO#2, Tulsa');
+  });
+
+  it('abbreviates state names and passes through existing abbreviations', () => {
+    expect(stateAbbr('Indiana')).toBe('IN');
+    expect(stateAbbr('north carolina')).toBe('NC');
+    expect(stateAbbr('AZ')).toBe('AZ');
+    expect(stateAbbr('Freedonia')).toBeNull();
+  });
+
+  it('resolves client aliases to the folders that already exist', () => {
+    expect(clientFolderName(wo)).toBe('Flynn');
+    // Ecotrak sends U+2019; the live folder uses a straight apostrophe.
+    expect(clientFolderName({ id: 1, customer: { customer_name: 'Mimi’s Cafe' } })).toBe("Mimi's Cafe");
+    expect(clientFolderName({ id: 1, customer: { customer_name: 'Green Thumb Industries (GTI)' } }))
+      .toBe('Green Thumb Industries');
+    // Unaliased customers pass through unchanged.
+    expect(clientFolderName({ id: 1, customer: { customer_name: 'MOD Pizza' } })).toBe('MOD Pizza');
+  });
+
+  it('strips characters SharePoint rejects', () => {
+    expect(sanitizeFolderName('a/b\\c:d*e?f"g<h>i|j')).toBe('a-b-c-d-e-f-g-h-i-j');
+    expect(sanitizeFolderName('trailing dots...')).toBe('trailing dots');
+    expect(sanitizeFolderName('  spaced   out  ')).toBe('spaced out');
+  });
+
+  it('rolls the base path over by year', () => {
+    expect(baseFolderPath(2026)).toBe('General/Work Orders - 2026/2026 - SFM');
+    expect(baseFolderPath(2027)).toBe('General/Work Orders - 2027/2027 - SFM');
+  });
+
+  it('assembles the full path', () => {
+    expect(planFolder(wo, 2026).fullPath)
+      .toBe('General/Work Orders - 2026/2026 - SFM/Flynn/WO#6339414, Phoenix, AZ');
+  });
+
+  it('REFUSES to guess an unknown client — that would fork the live tree', () => {
+    expect(() => planFolder({ id: 7, location: { city: 'Tulsa', state: 'OK' } }, 2026))
+      .toThrow(/no customer name/);
+  });
+
+  it('encodes # and & per segment while keeping / as the separator', () => {
+    const enc = encodeGraphPath('General/Work Orders - 2026/Flynn/WO#123, Phoenix, AZ');
+    expect(enc).toContain('WO%23123');
+    expect(enc.split('/')).toHaveLength(4);
+    expect(encodeGraphPath('a/B & C/d')).toContain('%26');
   });
 });
