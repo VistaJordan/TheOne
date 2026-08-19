@@ -238,6 +238,23 @@ Phase 7 gains an **event-driven telemetry channel**, separate from status projec
 
 Items 1 and 2 have readings that map to opposite ends of the pipeline. Both approval spellings will be mapped to the same target regardless, with an alert when the unexpected one appears.
 
+### 8.6b Ecotrak staging probe — 2026-08-19
+
+Authenticated successfully against staging (OAuth2 client-credentials, `stage-auth.ecotrak.com/oauth2/token`, Bearer, 3600s). Read-only; no writes issued.
+
+**The staging tenant holds ZERO work orders.** `GET /v1/workorders/search` answers `{"work_orders":{"content":[],"totalPages":0,"numberOfElements":0,"empty":true}}`. Eleven filter variants were tried — account header, `accountId`/`account_id`/`customerId` params, `pageSize`/`limit`/`size`+`page`, `createdAfter`, `startDate`+`endDate`, `status=all`, `includeAll` — all returned 0. `totalPages: 0` makes this a data problem, not a query problem.
+
+Consequences:
+
+- **Add a fifth item to the Ecotrak request (§8.6): ask them to seed staging with sample work orders, or supply read-only production credentials.** Without one of these the shadow week has nothing to observe, and the four semantic questions cannot be answered empirically.
+- The shadow week cannot start on a schedule until this clears. It is now the single longest-lead item in the plan.
+
+Useful findings regardless:
+
+- The work-order endpoint is **`GET /v1/workorders/search`** — *not* the `/v1/invoices/search` currently in `.env` as `ECOTRAK_EXAMPLE_ENDPOINT_STAGING`. `/v1/workOrders/search` and `/v1/workorders` are aliases of the same handler.
+- The envelope is a **Spring Data page**: `{work_orders: {content[], pageable{}, totalPages, numberOfElements, size, number, first, last, empty}}`. Paging is `page` + `size`, default size 10. The adapter's pagination contract is settled.
+- No OpenAPI spec is exposed — eight conventional paths all 404. The status enum cannot be obtained from the API either, only from Ecotrak directly.
+
 ### 8.7 Quote-math divergence — found, recorded, deferred to R2
 
 The Phase 0 parity test found a real disagreement between the two `computeQuoteTotals` implementations:
