@@ -45,6 +45,13 @@ export interface EcotrakWorkOrder {
   trade?: string | null;
   problem_type?: string | null;
   asset_type_name?: string | null;
+  asset?: {
+    id?: number | string | null;
+    name?: string | null;
+    model_number?: string | null;
+    description?: string | null;
+    alt_description?: string | null;
+  } | null;
   description?: string | null;
   requested_by?: string | null;
   not_to_exceed?: number | string | null;

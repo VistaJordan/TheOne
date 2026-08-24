@@ -48,8 +48,10 @@ const INTERNAL_STATUS_BY_ECOTRAK: Record<string, string> = {
   CANCELLED: '!! canceled/postponed',
 };
 
-/** L1-L8 and P2-P7 both occur in production; only L1 drives urgency today. */
-function mapPriority(raw: string | null | undefined): string | null {
+/** L1-L8 and P2-P7 both occur in production; only L1 drives urgency today.
+ *  Exported for test: 45% of production WOs carry a code outside L1-L4, which
+ *  the legacy field-mapping proposal did not anticipate. */
+export function mapPriority(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const token = raw.trim().split(/\s|-/)[0]?.toUpperCase();
   switch (token) {
@@ -189,6 +191,12 @@ async function upsertOne(
     res.unmappedTrade.push(wo.trade);
   }
 
+  // Site and asset are upserted BEFORE the task so both foreign keys are
+  // available whether this is a create or a refresh. Both are keyed on Ecotrak's
+  // stable ids, so re-running the poll cannot duplicate them.
+  const siteId = await upsertSite(tx, wo);
+  const assetId = await upsertAsset(tx, wo, siteId);
+
   const existing = await tx.query<{ task_id: string; last_seen_external_status: string | null }>(
     `SELECT task_id, last_seen_external_status FROM cmms_wo_link
       WHERE connection_id = $1 AND external_id = $2`,
@@ -227,10 +235,11 @@ async function upsertOne(
     const created = await tx.query<{ id: string }>(
       `INSERT INTO task
          (wo_number, ext_name, title, description, status_id, status_group,
-          client, trade, city, state, nte, date_received, fields, priority)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14)
+          client, trade, city, state, nte, date_received, fields, priority,
+          site_id, asset_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16)
        RETURNING id`,
-      [`ECO-${externalId}`, externalId, ...common],
+      [`ECO-${externalId}`, externalId, ...common, siteId, assetId],
     );
     const taskId = created.rows[0].id;
 
@@ -264,19 +273,20 @@ async function upsertOne(
   if (externalUnchanged) {
     await tx.query(
       `UPDATE task SET title=$2, description=$3, client=$4, trade=$5, city=$6,
-              state=$7, nte=$8, date_received=$9, fields=$10::jsonb, priority=$11
+              state=$7, nte=$8, date_received=$9, fields=$10::jsonb, priority=$11,
+              site_id=$12, asset_id=$13
          WHERE id=$1`,
       [taskId, common[0], common[1], common[4], common[5], common[6],
-       common[7], common[8], common[9], common[10], common[11]],
+       common[7], common[8], common[9], common[10], common[11], siteId, assetId],
     );
     res.skippedHumanMoved++;
   } else {
     await tx.query(
       `UPDATE task SET title=$2, description=$3, status_id=$4, status_group=$5,
               client=$6, trade=$7, city=$8, state=$9, nte=$10, date_received=$11,
-              fields=$12::jsonb, priority=$13
+              fields=$12::jsonb, priority=$13, site_id=$14, asset_id=$15
          WHERE id=$1`,
-      [taskId, ...common],
+      [taskId, ...common, siteId, assetId],
     );
     res.updated++;
   }
@@ -299,4 +309,82 @@ async function markProcessed(tx: Queryable, connectionId: string, externalId: st
       WHERE connection_id = $1 AND external_id = $2 AND processed_at IS NULL`,
     [connectionId, externalId],
   );
+}
+
+/**
+ * Upsert the site this work order happened at.
+ *
+ * Keyed on Ecotrak's `location.id`, which is stable — never on store number or
+ * name, both of which are display strings that clients edit. Details refresh on
+ * every sighting so a re-addressed store stays current.
+ */
+async function upsertSite(tx: Queryable, wo: EcotrakWorkOrder): Promise<string | null> {
+  const loc = wo.location;
+  const extId = loc?.id != null ? String(loc.id) : null;
+  if (!extId) return null;
+
+  const r = await tx.query<{ id: string }>(
+    `INSERT INTO site (external_source, external_id, client, name, store_number,
+                       address1, address2, city, state, zip)
+     VALUES ('ecotrak', $1, $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT (external_source, external_id) DO UPDATE
+        SET client = EXCLUDED.client, name = EXCLUDED.name,
+            store_number = EXCLUDED.store_number, address1 = EXCLUDED.address1,
+            address2 = EXCLUDED.address2, city = EXCLUDED.city,
+            state = EXCLUDED.state, zip = EXCLUDED.zip
+     RETURNING id`,
+    [
+      extId,
+      wo.customer?.customer_name ?? null,
+      loc?.name ?? null,
+      loc?.store_number ?? null,
+      loc?.address1 ?? null,
+      loc?.address2 ?? null,
+      loc?.city ?? null,
+      loc?.state ?? null,
+      loc?.zip ?? null,
+    ],
+  );
+  return r.rows[0]?.id ?? null;
+}
+
+/**
+ * Upsert the asset the work order was raised against.
+ *
+ * `site_id` is set on first sight and NOT overwritten afterwards — the same
+ * asset id appearing at a second location is a vendor data conflict, and
+ * silently relocating equipment would destroy the service history that having
+ * assets exists to build.
+ */
+async function upsertAsset(
+  tx: Queryable,
+  wo: EcotrakWorkOrder,
+  siteId: string | null,
+): Promise<string | null> {
+  const a = wo.asset;
+  const extId = a?.id != null ? String(a.id) : null;
+  if (!extId) return null;
+
+  const r = await tx.query<{ id: string }>(
+    `INSERT INTO asset (external_source, external_id, site_id, name, asset_type,
+                        model_number, description, alt_description)
+     VALUES ('ecotrak', $1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (external_source, external_id) DO UPDATE
+        SET name = EXCLUDED.name, asset_type = EXCLUDED.asset_type,
+            model_number = COALESCE(EXCLUDED.model_number, asset.model_number),
+            description = COALESCE(EXCLUDED.description, asset.description),
+            alt_description = COALESCE(EXCLUDED.alt_description, asset.alt_description),
+            site_id = COALESCE(asset.site_id, EXCLUDED.site_id)
+     RETURNING id`,
+    [
+      extId,
+      siteId,
+      (a?.name ?? '').trim() || 'Unnamed asset',
+      wo.asset_type_name ?? null,
+      (a?.model_number ?? '') || null,
+      (a?.description ?? '') || null,
+      (a?.alt_description ?? '') || null,
+    ],
+  );
+  return r.rows[0]?.id ?? null;
 }

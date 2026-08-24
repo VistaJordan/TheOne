@@ -30,6 +30,7 @@ import {
   baseFolderPath,
   encodeGraphPath,
 } from '../apps/api/src/modules/integrations/ecotrak/sharepointPath';
+import { mapPriority } from '../apps/api/src/modules/integrations/ecotrak/ingest';
 
 /** Statuses observed in the production read, with counts. Sums to 232. */
 const PRODUCTION_STATUSES: Record<string, number> = {
@@ -340,5 +341,46 @@ describe('sharepoint: folder naming matches the live tree', () => {
     expect(enc).toContain('WO%23123');
     expect(enc.split('/')).toHaveLength(4);
     expect(encodeGraphPath('a/B & C/d')).toContain('%26');
+  });
+});
+
+// ── Priority: two schemes coexist in production ─────────────────────────────
+
+describe('ecotrak priority: L-scheme and P-scheme', () => {
+  it('maps the L-scheme across its full range, not just L1-L4', () => {
+    // The legacy field-mapping proposal only anticipated L1-L4. Production
+    // carries L5 (39 WOs), L6 (13), L7 (15) and L8 (1) as well — 68 records
+    // that a four-value map would drop on the floor.
+    expect(mapPriority('L1 - Emergency')).toBe('urgent');
+    expect(mapPriority('L2 - Same Day')).toBe('high');
+    expect(mapPriority('L3 - 24 Hours')).toBe('normal');
+    for (const p of ['L4 - 48 Hours', 'L5 - One Week', 'L6 - Two Weeks', 'L7 - 30 Days', 'L8 - Low Priority']) {
+      expect(mapPriority(p), p).toBe('low');
+    }
+  });
+
+  it('maps the P-scheme — 36 of 232 production WOs use it', () => {
+    expect(mapPriority('P2 - Urgent - 8-24 hours')).toBe('normal');
+    for (const p of ['P3 - Normal - 48 hours', 'P4 - Small Project', 'P5 - Large Project', 'P7 - Scheduled Maintenance ']) {
+      expect(mapPriority(p), p).toBe('low');
+    }
+  });
+
+  it('tolerates the trailing space production actually sends', () => {
+    // "P7 - Scheduled Maintenance " ships with a trailing space.
+    expect(mapPriority('P7 - Scheduled Maintenance ')).toBe('low');
+    expect(mapPriority('  L1 - Emergency  ')).toBe('urgent');
+  });
+
+  it('returns null for an unknown scheme rather than guessing', () => {
+    expect(mapPriority('X9 - Something New')).toBeNull();
+    expect(mapPriority(null)).toBeNull();
+    expect(mapPriority('')).toBeNull();
+  });
+
+  it('only L1 is urgent — emergency is a priority, not a status', () => {
+    const urgent = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8', 'P2', 'P3', 'P4', 'P5', 'P7']
+      .filter((c) => mapPriority(`${c} - x`) === 'urgent');
+    expect(urgent).toEqual(['L1']);
   });
 });
