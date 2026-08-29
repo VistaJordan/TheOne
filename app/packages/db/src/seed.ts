@@ -251,6 +251,27 @@ const ROLE_BY_NAME: Record<string, string> = {
  *  builder gate, which is what makes the 403 path testable. 'owner' is admin. */
 const ROLE_BY_CLICKUP_ROLE: Record<string, string> = { member: 'om', owner: 'admin' };
 
+// ── S5 · SUPER ADMINS ────────────────────────────────────────────────────────
+// The four accounts that can reach the admin console. Migration 0004 carries
+// the SAME statements for a pgdata that is migrated but never re-seeded; this
+// seed TRUNCATEs principal, so without this block a fresh `npm run setup`
+// would boot with no super admin at all and nobody could ever create one.
+// Keep the two in step.
+//
+// Elise and Jordan come from the ClickUp export, so their rows are adjusted in
+// place (real address, admin role, super-admin flag) rather than duplicated.
+const SUPER_ADMIN_BY_NAME: Record<string, { email: string }> = {
+  Elise: { email: 'eliseam@byblosvista.com' },
+  'Jordan Brown': { email: 'jordan@byblosvista.com' },
+};
+// Jeff and Jack have no seeded counterpart. They land as 'invited': the row is
+// the invitation, and the display names are placeholders the Users screen can
+// correct — better than inventing surnames.
+const EXTRA_SUPER_ADMINS: { name: string; email: string; initials: string }[] = [
+  { name: 'Jeff S', email: 'jeffs@byblosvista.com', initials: 'JS' },
+  { name: 'Jack', email: 'jack@byblosvista.com', initials: 'J' },
+];
+
 // ── S4 · the demo QUOTE for WO-39403 (copy VERBATIM from the approved comp,
 //    quote-comp.tpl.html) ─────────────────────────────────────────────────────
 //
@@ -368,16 +389,36 @@ async function main() {
 
   // ── 2. Principals (§4.6) ───────────────────────────────────────────────────
   const principalIdByName = new Map<string, string>();
+  let superAdminCount = 0;
   for (const p of data.people) {
-    const email = `${slug(p.name)}${p.email}`;
+    const superAdmin = SUPER_ADMIN_BY_NAME[p.name];
+    const email = superAdmin?.email ?? `${slug(p.name)}${p.email}`;
     // S4: the operating role, not the ClickUp seat type (see ROLE_BY_NAME).
-    const role = ROLE_BY_NAME[p.name] ?? ROLE_BY_CLICKUP_ROLE[p.role] ?? p.role;
+    // S5: a super admin is always 'admin' — mirrors migration 0004.
+    const role = superAdmin
+      ? 'admin'
+      : (ROLE_BY_NAME[p.name] ?? ROLE_BY_CLICKUP_ROLE[p.role] ?? p.role);
+    // Nobody seeded has ever signed in, so every human starts 'invited' —
+    // sign-in flips it to 'active' (see 0004 / services/auth.ts).
     const id = await insertId(
-      `INSERT INTO principal (kind, display_name, email, role, initials)
-       VALUES ('human', $1, $2, $3, $4) RETURNING id`,
-      [p.name, email, role, p.initials],
+      `INSERT INTO principal (kind, display_name, email, role, initials, status, is_super_admin)
+       VALUES ('human', $1, $2, $3, $4, 'invited', $5) RETURNING id`,
+      [p.name, email, role, p.initials, Boolean(superAdmin)],
     );
     principalIdByName.set(p.name, id);
+    if (superAdmin) superAdminCount++;
+  }
+  for (const missing of Object.keys(SUPER_ADMIN_BY_NAME).filter((n) => !principalIdByName.has(n))) {
+    throw new Error(`Super admin "${missing}" not found in the ClickUp export — seed data drifted`);
+  }
+  for (const a of EXTRA_SUPER_ADMINS) {
+    const id = await insertId(
+      `INSERT INTO principal (kind, display_name, email, role, initials, status, is_super_admin)
+       VALUES ('human', $1, $2, 'admin', $3, 'invited', true) RETURNING id`,
+      [a.name, a.email, a.initials],
+    );
+    principalIdByName.set(a.name, id);
+    superAdminCount++;
   }
   const seedBotId = await insertId(
     `INSERT INTO principal (kind, display_name, role, initials) VALUES ('service', $1, 'service', 'SB') RETURNING id`,
@@ -659,7 +700,8 @@ async function main() {
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log('seed: done');
   console.log(`  containers        : ${2 + data.routing.length + listCount} (1 workspace, 1 space, ${data.routing.length} folders, ${listCount} lists)`);
-  console.log(`  principals        : ${data.people.length + 2} (${data.people.length} human, 2 service)`);
+  console.log(`  principals        : ${data.people.length + EXTRA_SUPER_ADMINS.length + 2} (${data.people.length + EXTRA_SUPER_ADMINS.length} human, 2 service)`);
+  console.log(`  super admins      : ${superAdminCount} (${[...Object.keys(SUPER_ADMIN_BY_NAME), ...EXTRA_SUPER_ADMINS.map((a) => a.name)].join(', ')})`);
   console.log(`  statuses          : ${data.statuses.length + 1} (19 pipeline + 1 archive)`);
   console.log(`  field_defs        : ${fieldCount}`);
   console.log(`  tasks             : ${taskCount}`);
