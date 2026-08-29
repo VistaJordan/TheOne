@@ -11,7 +11,11 @@
   --ink:#f2f3f5;          --ink-2:#9aa0ab;      --ink-3:#7f838c;  /* darkened from template #6b7078 (3.90:1) → 5.12:1 on #0c0d0e, clears AA */
   --side-bg:#000;          --side-border:rgba(53,184,243,.16);   --side-ink:#8b9098;
   --side-active-bg:rgba(53,184,243,.12);        --side-active-ink:#fff;
-  --topbar-bg:#000;        --field-bg:#0c0d0e;
+  /* S5 — the topbar is white in BOTH themes now, so its ink no longer follows
+     the theme: these five carry the bar's own light-ground palette. */
+  --topbar-bg:#ffffff;     --field-bg:#0c0d0e;
+  --topbar-ink:#191c21;    --topbar-ink-2:#555c68;   --topbar-line:#e3e6ea;
+  --topbar-field:#f2f4f6;  --topbar-hover:#e5e9ed;  --topbar-warn:#7c5700;
   --accent:#35b8f3;        --on-accent:#00121c;  --accent-text:#35b8f3;
   --tab-on-bg:rgba(53,184,243,.14);             --tab-on-ink:#7fd5f8;
   --chip:rgba(255,255,255,.08);
@@ -26,7 +30,9 @@
   --ink:#191c21;          --ink-2:#555c68;      --ink-3:#6c727b;  /* darkened from template #8a919d (3.17:1) → 4.85:1 on #ffffff, 4.68:1 on #fafbfc, clears AA */
   --side-bg:#ffffff;       --side-border:#e3e6ea;      --side-ink:#555c68;
   --side-active-bg:#e5f5fd;                     --side-active-ink:#0d6e97;
-  --topbar-bg:#000;        --field-bg:#ffffff;         /* topbar stays black in BOTH themes */
+  --topbar-bg:#ffffff;     --field-bg:#ffffff;
+  --topbar-ink:#191c21;    --topbar-ink-2:#555c68;   --topbar-line:#e3e6ea;
+  --topbar-field:#f2f4f6;  --topbar-hover:#e5e9ed;  --topbar-warn:#7c5700;
   --accent:#1a9fd4;        --on-accent:#ffffff;  --accent-text:#0d6e97;
   --tab-on-bg:#e5f5fd;                          --tab-on-ink:#0d6e97;
   --chip:#eceff2;

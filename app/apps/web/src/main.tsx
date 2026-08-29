@@ -6,8 +6,11 @@ import './styles/app.css';
 import './styles/wo-detail.css';
 import './styles/messages.css';
 import './styles/s4-forms.css';
+import './styles/forms.css';
 import './styles/quote.css';
 import './styles/payment.css';
+import './styles/auth.css';
+import './styles/wo-list.css';
 import { App } from './App';
 
 const rootEl = document.getElementById('root');

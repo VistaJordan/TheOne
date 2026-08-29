@@ -27,7 +27,6 @@ import type {
   QuotePermissions,
   ActivityActor,
 } from '@theone/shared';
-import { QUOTE_EDIT_ROLES, QUOTE_APPROVE_ROLES } from '@theone/shared';
 import { ApiError, badRequest, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 
@@ -306,31 +305,37 @@ export function buildAutoSummary(
 // 3 · ROLE GATES
 // ═══════════════════════════════════════════════════════════════════════════
 
+// S5 — these read the capability the SESSION carries, resolved from the `role`
+// table at sign-in (migration 0005). They used to test membership of the
+// hardcoded QUOTE_EDIT_ROLES / QUOTE_APPROVE_ROLES arrays, which meant creating
+// a role that could approve a quote required editing TypeScript. Renaming a
+// role or changing what it may do is now an admin-console action.
+
 export function canEditQuote(actor: ActingPrincipal): boolean {
-  return QUOTE_EDIT_ROLES.includes(actor.role ?? '');
+  return actor.can.quoteEdit;
 }
 
 export function canApproveQuote(actor: ActingPrincipal): boolean {
-  return QUOTE_APPROVE_ROLES.includes(actor.role ?? '');
+  return actor.can.quoteApprove;
 }
 
 /** 403 FORBIDDEN — the actor exists, the route exists, the role is below the bar. */
 export function assertCanEdit(actor: ActingPrincipal): void {
   if (!canEditQuote(actor)) {
-    throw forbidden('Building and editing quotes requires Senior OM or above', {
+    throw forbidden('Your role cannot build or edit quotes', {
       actor: actor.name,
-      role: actor.role,
-      required_roles: QUOTE_EDIT_ROLES,
+      role: actor.roleLabel ?? actor.role,
+      required_capability: 'can_edit_quote',
     });
   }
 }
 
 export function assertCanApprove(actor: ActingPrincipal): void {
   if (!canApproveQuote(actor)) {
-    throw forbidden('Approving and sending a quote requires ATL or above', {
+    throw forbidden('Your role cannot approve or send quotes', {
       actor: actor.name,
-      role: actor.role,
-      required_roles: QUOTE_APPROVE_ROLES,
+      role: actor.roleLabel ?? actor.role,
+      required_capability: 'can_approve_quote',
     });
   }
 }

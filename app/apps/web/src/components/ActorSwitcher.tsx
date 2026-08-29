@@ -1,95 +1,92 @@
-// "Viewing as" — the pre-auth role switcher (S4.1).
-//
-// Until auth lands (S5) `principal.role` IS the permission, and every gate the
-// UI renders (quote edit/approve, payment requests) is resolved SERVER-SIDE
-// against X-Actor-Id. So switching the actor has to (a) repin the header for
-// every subsequent request and (b) throw away every cached answer, because each
-// one embedded the previous actor's permissions.
+/* "Viewing as" — S5: real impersonation, super admins only.
 
-import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PrincipalListItem } from '@theone/shared';
+   Before auth this was an unguarded dropdown that set an X-Actor-Id header, so
+   anyone could act as anyone. It survives because testing the role gates
+   (Senior OM builds a quote, ATL approves it) otherwise needs four Microsoft
+   accounts — but it is now a server-side, audited, super-admin-only capability.
+
+   Two invariants:
+     · the SESSION still belongs to the real human, so every write records who
+       actually did it; only the effective role changes.
+     · starting and stopping are written to activity_log as their own events. */
+
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { getPrincipals } from '../api/client';
-import { DEFAULT_ACTOR_NAME, readActorId, roleLabel, writeActorId } from '../lib/actor';
+import { useAuth } from '../auth/AuthProvider';
+import { Icon } from './Icon';
+import { roleLabel } from '../lib/actor';
 
-export interface ActorState {
-  /** Every human principal, name-ordered. Empty until the query resolves. */
-  principals: PrincipalListItem[];
-  /** Who the API will attribute requests to; null only before the list loads. */
-  acting: PrincipalListItem | null;
-  select: (id: string) => void;
+export function ActorSwitcher() {
+  const { user, actingAs, isImpersonating, impersonate, stopImpersonating } = useAuth();
+  const [busy, setBusy] = useState(false);
+
+  // Non-super-admins never see the control at all: unlike a role-gated action,
+  // there is nothing here for them to discover or request.
+  if (!user?.is_super_admin) return null;
+
+  return (
+    <ImpersonationPicker
+      selfId={user.id}
+      actingId={actingAs?.id ?? user.id}
+      isImpersonating={isImpersonating}
+      busy={busy}
+      onPick={async (id) => {
+        setBusy(true);
+        try {
+          if (id === user.id) await stopImpersonating();
+          else await impersonate(id);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    />
+  );
 }
 
-/**
- * Owns the acting principal. Call ONCE per shell and hand the state to both
- * consumers (the topbar select and the sidebar identity chip) so they can never
- * disagree.
- */
-export function useActor(): ActorState {
-  const queryClient = useQueryClient();
-  const [actorId, setActorId] = useState<string | null>(() => readActorId());
-
-  const { data } = useQuery({
+function ImpersonationPicker({
+  selfId,
+  actingId,
+  isImpersonating,
+  busy,
+  onPick,
+}: {
+  selfId: string;
+  actingId: string;
+  isImpersonating: boolean;
+  busy: boolean;
+  onPick: (id: string) => void;
+}) {
+  const principals = useQuery({
     queryKey: ['principals'],
     queryFn: getPrincipals,
     staleTime: 5 * 60 * 1000,
   });
-  const principals = data?.items ?? [];
 
-  /** No pin → the API's own default (Jordan Brown, admin); show the same. */
-  const fallback =
-    principals.find((p) => p.name === DEFAULT_ACTOR_NAME) ??
-    principals.find((p) => p.role === 'admin') ??
-    principals[0] ??
-    null;
-  const matched = actorId ? (principals.find((p) => p.id === actorId) ?? null) : null;
-
-  // A persisted id the CURRENT database does not know (pgdata re-seeded → all
-  // new uuids) resolves SILENTLY to the default admin server-side, which would
-  // leave this switcher confidently lying about who is acting. Detect it here
-  // and fall back to the default explicitly.
-  useEffect(() => {
-    if (principals.length === 0) return;
-    if (actorId && !matched) {
-      writeActorId(null);
-      setActorId(null);
-      void queryClient.invalidateQueries();
-    }
-  }, [principals.length, actorId, matched, queryClient]);
-
-  const select = (id: string) => {
-    if (id === actorId) return;
-    writeActorId(id);
-    setActorId(id);
-    // Every cached payload carries the OLD actor's permissions — drop them all.
-    void queryClient.invalidateQueries();
-  };
-
-  return { principals, acting: matched ?? fallback, select };
-}
-
-/** Compact topbar control, styled with the other black-topbar controls. */
-export function ActorSwitcher({ actor }: { actor: ActorState }) {
-  const { principals, acting, select } = actor;
-  const loading = principals.length === 0;
+  const items = principals.data?.items ?? [];
 
   return (
-    <label className="topbar-actor">
-      <span className="topbar-actor-label">Viewing as</span>
+    <label className={`topbar-actor${isImpersonating ? ' is-impersonating' : ''}`}>
+      <span className="topbar-actor-label">
+        {isImpersonating && <Icon name="swap" size={12} />}
+        Viewing as
+      </span>
       <select
         className="topbar-actor-select"
-        aria-label="Viewing as (acting principal)"
-        title="Every request is attributed to this principal (X-Actor-Id)"
-        value={acting?.id ?? ''}
-        disabled={loading}
-        onChange={(e) => select(e.target.value)}
+        aria-label="View as another user (super admin)"
+        title="Impersonation is recorded in the activity log"
+        value={actingId}
+        disabled={busy || principals.isLoading}
+        onChange={(e) => onPick(e.target.value)}
       >
-        {loading && <option value="">Loading…</option>}
-        {principals.map((p) => (
-          <option key={p.id} value={p.id}>
-            {`${p.name} · ${roleLabel(p.role)}`}
-          </option>
-        ))}
+        <option value={selfId}>Myself</option>
+        {items
+          .filter((p) => p.id !== selfId)
+          .map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} · {roleLabel(p.role)}
+            </option>
+          ))}
       </select>
     </label>
   );

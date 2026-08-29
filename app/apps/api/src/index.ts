@@ -1,9 +1,22 @@
-// Fastify bootstrap — The One API (SPRINT1-SPEC §5). Port 5174, all routes /api.
-// No CORS in S1: the browser reaches this only via the Vite dev proxy (§5).
+// Fastify bootstrap — The One API. All routes under /api.
+//
+// No CORS: the browser reaches this only through the Vite dev proxy, so every
+// request is same-origin. That is also what makes a SameSite=Lax session cookie
+// work without any cross-site relaxation.
+//
 // This process is the long-running single-writer holder of PGlite's pgdata (§2).
+//
+// ORDER MATTERS BELOW. Cookies must be parsed before the auth guard can read
+// one; the guard must be registered before any business route so that no route
+// can ever be added and accidentally left unauthenticated.
 
 import Fastify from 'fastify';
+import cookie from '@fastify/cookie';
+import { config, describeAuth } from './config.js';
 import { registerErrorHandler, badRequest } from './errors.js';
+import authGuard from './plugins/authGuard.js';
+import authRoutes from './routes/auth.js';
+import adminRoutes from './routes/admin.js';
 import workOrdersRoutes from './routes/workOrders.js';
 import statusesRoutes from './routes/statuses.js';
 import kpisRoutes from './routes/kpis.js';
@@ -11,9 +24,7 @@ import activityRoutes from './routes/activity.js';
 import principalsRoutes from './routes/principals.js';
 import quoteRoutes from './routes/quotes.js';
 import paymentRoutes from './routes/payments.js';
-
-const PORT = 5174;
-const HOST = '127.0.0.1';
+import viewRoutes from './routes/views.js';
 
 async function main(): Promise<void> {
   const app = Fastify({ logger: true });
@@ -37,8 +48,19 @@ async function main(): Promise<void> {
     },
   );
 
-  app.get('/api/health', async () => ({ ok: true }));
+  await app.register(cookie);
 
+  // Liveness only — deliberately says nothing about who is asking.
+  app.get('/api/health', async () => ({ ok: true, auth_mode: config.authMode }));
+
+  // 1 · the guard, before anything it protects
+  await app.register(authGuard);
+
+  // 2 · sign-in surface (allowlisted inside the guard)
+  await app.register(authRoutes, { prefix: '/api' });
+
+  // 3 · everything else — now unreachable without a session
+  await app.register(adminRoutes, { prefix: '/api' });
   await app.register(workOrdersRoutes, { prefix: '/api' });
   await app.register(statusesRoutes, { prefix: '/api' });
   await app.register(kpisRoutes, { prefix: '/api' });
@@ -46,11 +68,20 @@ async function main(): Promise<void> {
   await app.register(principalsRoutes, { prefix: '/api' });
   await app.register(quoteRoutes, { prefix: '/api' });
   await app.register(paymentRoutes, { prefix: '/api' });
+  await app.register(viewRoutes, { prefix: '/api' });
 
-  await app.listen({ port: PORT, host: HOST });
+  await app.listen({ port: config.port, host: config.host });
+
+  app.log.info(describeAuth());
+  if (config.authMode === 'bypass') {
+    app.log.warn(
+      'DEV BYPASS ACTIVE — anyone who can reach this port can sign in as any user. ' +
+        'Set ENTRA_* credentials to switch on Microsoft sign-in.',
+    );
+  }
 }
 
 main().catch((err) => {
-  console.error('API failed to start:', err);
+  console.error('API failed to start:', err instanceof Error ? err.message : err);
   process.exit(1);
 });

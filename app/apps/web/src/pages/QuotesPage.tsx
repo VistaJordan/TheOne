@@ -25,7 +25,6 @@ export function QuotesPage() {
   return (
     <AppShell active="Quotes">
       <div className="page-head">
-        <h1 className="page-title">Quotes</h1>
         <p className="page-sub">
           {quotesQuery.isLoading
             ? 'Loading…'

@@ -126,6 +126,11 @@
 
 .pay .frow { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 14px; }
 
+/* This screen's own field rhythm: label margin + help margin, NOT the flex-gap
+   column forms.css gives .field elsewhere. Restated so promoting that base out
+   of the comps left the payment request rendering byte-identical. */
+.pay .field { display: block; gap: 0; }
+
 .pay .field + .field,
 .pay .frow + .field,
 .pay .field + .frow,
@@ -330,22 +335,6 @@
 }
 
 .pay .fallback { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-
-.pay .linkbtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: var(--accent-text);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.pay .linkbtn:hover { text-decoration-thickness: 2px; }
 
 /* ── dropzone (3) ── */
 .pay .drop {

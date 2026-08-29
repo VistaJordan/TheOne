@@ -15,7 +15,11 @@ export type IconName =
   | 'chev-d' | 'check-check' | 'clock' | 'info'
   // S4 — Quote builder + payment request (ported verbatim from those comps)
   | 'user' | 'user-plus' | 'grip' | 'trash' | 'pencil' | 'refresh' | 'x'
-  | 'tag' | 'upload' | 'card' | 'alert-circle' | 'sort' | 'sort-down' | 'history';
+  | 'tag' | 'upload' | 'card' | 'alert-circle' | 'sort' | 'sort-down' | 'history'
+  // S5 — sidebar chrome: collapse control + group disclosure
+  | 'chevs-l' | 'chevs-r' | 'chev-u'
+  // S6 — the work-order list toolbar: filters, columns, grouping, import/export
+  | 'filter' | 'columns' | 'layers' | 'download';
 
 type IconSize = 12 | 14 | 16 | 18 | 22;
 
@@ -94,6 +98,13 @@ export function IconSprite() {
         <symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3.5 6 20.5 6" /><path d="M8.5 6V4.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5V6" /><path d="M18.5 6v13a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2V6" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></symbol>
         <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7.5 18.5 3 20l1.5-4.5Z" /></symbol>
         <symbol id="i-refresh" viewBox="0 0 24 24"><polyline points="21 4 21 10 15 10" /><polyline points="3 20 3 14 9 14" /><path d="M20 10a8 8 0 0 0-14.1-3.4L3 10" /><path d="M4 14a8 8 0 0 0 14.1 3.4L21 14" /></symbol>
+        <symbol id="i-chevs-l" viewBox="0 0 24 24"><polyline points="11 18 5 12 11 6" /><polyline points="18 18 12 12 18 6" /></symbol>
+        <symbol id="i-chevs-r" viewBox="0 0 24 24"><polyline points="13 18 19 12 13 6" /><polyline points="6 18 12 12 6 6" /></symbol>
+        <symbol id="i-chev-u" viewBox="0 0 24 24"><polyline points="6 15 12 9 18 15" /></symbol>
+        <symbol id="i-filter" viewBox="0 0 24 24"><polygon points="3 4 21 4 14 12.5 14 20 10 18 10 12.5" /></symbol>
+        <symbol id="i-columns" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" /><line x1="15" y1="4" x2="15" y2="20" /></symbol>
+        <symbol id="i-layers" viewBox="0 0 24 24"><polygon points="12 3 21 8 12 13 3 8" /><polyline points="3 13 12 18 21 13" /><polyline points="3 17.5 12 22 21 17.5" /></symbol>
+        <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></symbol>
         <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></symbol>
         <symbol id="i-tag" viewBox="0 0 24 24"><path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z" /><circle cx="7.5" cy="7.5" r="1.4" /></symbol>
         <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7.5 8.5 12 4 16.5 8.5" /><line x1="12" y1="4" x2="12" y2="15.5" /></symbol>

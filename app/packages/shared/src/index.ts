@@ -120,6 +120,22 @@ export interface WorkOrderListItem {
   home_list: string | null;
   status: StatusRef;
   age_days: number | null;
+  /** ISO-8601 UTC. Selectable as a list column, hence on the list item. */
+  created_at?: string | null;
+  updated_at?: string | null;
+  /**
+   * Values for the CUSTOM columns the caller asked for, keyed `fields.<key>`.
+   * Projected on demand rather than shipping the whole `fields` bag: a row can
+   * carry ~100 custom keys and the table renders the two that were chosen.
+   */
+  custom?: Record<string, string | null>;
+}
+
+/** One bucket of a grouped list, counted across the whole filtered set (not
+    just the page). `key === null` is the "(empty)" bucket. */
+export interface WorkOrderGroupCount {
+  key: string | null;
+  count: number;
 }
 
 export interface WorkOrderListResponse {
@@ -127,6 +143,121 @@ export interface WorkOrderListResponse {
   total: number;
   limit: number;
   offset: number;
+  /** Present only when the request asked for a `group_by`. */
+  groups?: WorkOrderGroupCount[];
+}
+
+// ── The list's field catalogue, filters and saved views (S6) ─────────────────
+// The list is no longer a fixed table: columns, filters, grouping and sorting
+// are chosen by the user, so the set of addressable FIELDS is data the API
+// serves rather than a union the client can hardcode. See
+// apps/api/src/services/woFields.ts — that module is the authority; these types
+// are the wire shapes both sides agree on.
+
+export type WoFieldType = 'text' | 'number' | 'money' | 'date' | 'select' | 'boolean';
+
+export interface WoFieldOption {
+  value: string;
+  label: string;
+  color?: string;
+}
+
+export interface WoFieldDescriptor {
+  /** A promoted column (`client`) or a custom field (`fields.<key>`). */
+  key: string;
+  label: string;
+  type: WoFieldType;
+  /** Section heading in the field picker. */
+  group: string;
+  options?: WoFieldOption[];
+  custom?: boolean;
+  sortable: boolean;
+  numeric?: boolean;
+}
+
+export interface WoFieldCatalogue {
+  fields: WoFieldDescriptor[];
+  default_columns: string[];
+}
+
+/** Every test the filter builder offers. `is_set`/`is_not_set` take no value;
+    `between` takes two; `in`/`not_in` take a list. */
+export type WoFilterOp =
+  | 'is_set'
+  | 'is_not_set'
+  | 'eq'
+  | 'neq'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'between'
+  | 'in'
+  | 'not_in'
+  | 'is_true'
+  | 'is_false';
+
+export interface WoFilterRule {
+  field: string;
+  op: WoFilterOp;
+  value?: string | number | boolean | string[] | null;
+}
+
+export interface WoFilterSet {
+  match: 'all' | 'any';
+  rules: WoFilterRule[];
+}
+
+export interface WoSort {
+  field: string;
+  dir: 'asc' | 'desc';
+}
+
+/** A saved arrangement of the list: columns, filters, grouping, sorting. */
+export interface SavedView {
+  id: string;
+  name: string;
+  entity: string;
+  columns: string[];
+  filters: WoFilterSet;
+  group_by: string | null;
+  sort: WoSort | null;
+  is_shared: boolean;
+  position: number;
+  owner: { id: string; name: string };
+  /** False when the view is somebody else's shared view — read-only here. */
+  can_edit: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Result of a bulk edit: how many rows actually changed, and what was asked. */
+export interface BulkUpdateResult {
+  requested: number;
+  updated: number;
+  /** WO numbers the patch could not be applied to, with the reason. */
+  skipped: { wo_number: string; reason: string }[];
+}
+
+/** One row's outcome from an import run (including a dry run). */
+export interface ImportRowResult {
+  row: number;
+  wo_number: string | null;
+  action: 'create' | 'update' | 'skip' | 'error';
+  message?: string;
+}
+
+export interface ImportResult {
+  dry_run: boolean;
+  created: number;
+  updated: number;
+  skipped: number;
+  errored: number;
+  rows: ImportRowResult[];
 }
 
 export interface Membership {
@@ -333,6 +464,68 @@ export const QUOTE_EDIT_ROLES: readonly string[] = ['senior_om', 'atl', 'tl', 'a
 
 /** Approve, reject and send a quote to the client CMMS — ATL and above (§1). */
 export const QUOTE_APPROVE_ROLES: readonly string[] = ['atl', 'tl', 'am', 'admin'];
+
+// ── S5 · the role vocabulary ────────────────────────────────────────────────
+// Still free text on `principal.role`, but no longer arbitrary: the admin
+// console validates every assignment against this list, so a typo cannot
+// silently create a role that passes no gate and is impossible to debug.
+// A future migration turns this into a table; the codes are the contract.
+
+export const ROLE_CODES: readonly string[] = [
+  'om',
+  'senior_om',
+  'atl',
+  'tl',
+  'am',
+  'admin',
+];
+
+export const ROLE_LABELS: Record<string, string> = {
+  om: 'OM (dispatcher)',
+  senior_om: 'Senior OM',
+  atl: 'ATL',
+  tl: 'Team Lead',
+  am: 'Account Manager',
+  admin: 'Admin',
+  service: 'Service account',
+};
+
+// ── S5 · authentication ─────────────────────────────────────────────────────
+
+export type AuthMode = 'entra' | 'bypass';
+export type UserStatus = 'invited' | 'active' | 'disabled';
+
+/** A principal as the session endpoints describe it. */
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  is_super_admin: boolean;
+  status: UserStatus;
+}
+
+export interface MeResponse {
+  authenticated: boolean;
+  auth_mode: AuthMode;
+  user: SessionUser | null;
+  acting_as: SessionUser | null;
+  is_impersonating?: boolean;
+}
+
+/** One row in Admin › Users. */
+export interface AdminUserItem extends SessionUser {
+  initials: string | null;
+  last_login_at: string | null;
+  has_signed_in: boolean;
+  active_sessions: number;
+}
+
+export interface RoleInfo {
+  code: string;
+  label: string;
+  capabilities: { quote_edit: boolean; quote_approve: boolean };
+}
 
 // ── Principals (S4.1 · "Viewing as" switcher) ────────────────────────────────
 // GET /api/principals is the pre-auth read surface behind the role switcher:
@@ -542,7 +735,12 @@ export interface Kpis {
 // ── Error shape ──────────────────────────────────────────────────────────────
 // FORBIDDEN (403) is the S4 role gate: the actor exists, the route exists, but
 // principal.role is below the bar (QUOTE_EDIT_ROLES / QUOTE_APPROVE_ROLES).
-export type ApiErrorCode = 'BAD_REQUEST' | 'FORBIDDEN' | 'NOT_FOUND' | 'INTERNAL';
+export type ApiErrorCode =
+  | 'BAD_REQUEST'
+  | 'UNAUTHORIZED'   // 401 — no valid session (S5 auth)
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'INTERNAL';
 
 export interface ApiError {
   error: {

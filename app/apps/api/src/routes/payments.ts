@@ -9,7 +9,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { parse, notFound } from '../errors.js';
-import { resolveTaskId, resolveActingPrincipal } from '../services/activity.js';
+import { resolveTaskId, actingPrincipalFromRequest } from '../services/activity.js';
 import { listPaymentRequests, createPaymentRequest } from '../services/payments.js';
 import { assertRawMoney, zMoney } from '../validation.js';
 
@@ -30,9 +30,6 @@ const createSchema = z
   })
   .strict();
 
-function actorHeader(raw: string | string[] | undefined): string | undefined {
-  return Array.isArray(raw) ? raw[0] : raw;
-}
 
 async function taskIdOf(req: FastifyRequest): Promise<string> {
   const { id } = parse(idParamsSchema, req.params);
@@ -51,7 +48,7 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
     const taskId = await taskIdOf(req);
     assertRawMoney(req.rawBody);
     const input = parse(createSchema, req.body);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     const item = await createPaymentRequest(taskId, input, actor);
     return reply.status(201).send({ item });
   });
