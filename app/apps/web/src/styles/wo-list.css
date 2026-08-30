@@ -66,6 +66,25 @@
   flex: none;
 }
 
+/* The match count, on the active tab only. Same chip as `.tool-count` on the
+   Columns button, but it always sits on the tinted tab so it takes the surface
+   colour to stay legible against it. */
+.view-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--tab-on-ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
 .view-actions {
   display: flex;
   align-items: center;
@@ -77,6 +96,18 @@
   color: var(--danger);
   font-size: 11.5px;
   max-width: 320px;
+}
+
+/* The mode label while a view is being edited. */
+.view-mode {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 /* ── Toolbar controls ───────────────────────────────────────────────────── */
@@ -226,6 +257,19 @@
 .btn-sm.is-ghost:hover:not(:disabled) {
   color: var(--ink);
   border-color: var(--border-strong);
+}
+
+/* Destructive confirm. Outlined, like `.bulk-btn.is-danger`, so the accent
+   stays the only filled button in the product. */
+.btn-sm.is-danger {
+  background: var(--surface);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.btn-sm.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  border-color: var(--danger);
 }
 
 .icon-btn {
@@ -921,6 +965,95 @@
 
 .modal.is-wide {
   width: min(760px, 100%);
+}
+
+/* Confirmations: a question and two buttons, nothing to scroll. The colour
+   comes from the tone — `--tone` is the danger red or the accent — used at low
+   opacity in the icon chip, the header wash and the note strip, so a
+   destructive dialog reads as such before a word is read. */
+.modal.is-narrow {
+  width: min(440px, 100%);
+}
+
+.confirm {
+  --tone: var(--accent);
+  --tone-ink: var(--accent-text);
+  --tone-border: color-mix(in srgb, var(--accent) 35%, transparent);
+  overflow: hidden;
+}
+
+.confirm.is-danger {
+  --tone: var(--danger);
+  --tone-ink: var(--danger);
+  --tone-border: var(--danger-border);
+}
+
+.modal-head.confirm-head {
+  justify-content: flex-start;
+  background: color-mix(in srgb, var(--tone) 6%, var(--surface));
+}
+
+.confirm-head h2 {
+  flex: 1;
+  min-width: 0;
+}
+
+.confirm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tone) 14%, var(--surface));
+  color: var(--tone-ink);
+}
+
+.confirm-message {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.confirm-message b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.confirm-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.confirm-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.confirm-note.is-danger {
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.confirm-note.is-info {
+  background: var(--tab-on-bg);
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--tab-on-ink);
+}
+
+.confirm-note b {
+  font-weight: 700;
 }
 
 .modal-head {

@@ -9,14 +9,35 @@ interface ViewBarProps {
   activeId: string | null;
   /** True when the on-screen arrangement differs from the saved one. */
   dirty: boolean;
+  /**
+   * A saved view opens read-only: you can filter and sort it to look around
+   * and nothing asks to be saved. `editing` is the mode entered with the
+   * pencil, where those same changes track against the view and can be saved.
+   */
+  editing: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
   state: ViewState;
   onSelect: (view: SavedView | null) => void;
   onSaveNew: (name: string, shared: boolean) => void;
   onSaveExisting: () => void;
   onDelete: (view: SavedView) => void;
   onResetToSaved: () => void;
+  /**
+   * Rows matching the active tab under the current status group, filters and
+   * search. Shown as a badge on that tab only; null while loading.
+   */
+  count?: number | null;
   busy?: boolean;
   error?: string | null;
+}
+
+function CountBadge({ count }: { count: number }) {
+  return (
+    <span className="view-count" title={`${count.toLocaleString()} work order${count === 1 ? '' : 's'}`}>
+      {count.toLocaleString()}
+    </span>
+  );
 }
 
 /**
@@ -30,16 +51,21 @@ export function ViewBar({
   views,
   activeId,
   dirty,
+  editing,
+  onEdit,
+  onCancelEdit,
   state,
   onSelect,
   onSaveNew,
   onSaveExisting,
   onDelete,
   onResetToSaved,
+  count,
   busy,
   error,
 }: ViewBarProps) {
   const active = views.find((v) => v.id === activeId) ?? null;
+  const badge = count != null ? <CountBadge count={count} /> : null;
 
   return (
     <div className="viewbar">
@@ -52,7 +78,7 @@ export function ViewBar({
           onClick={() => onSelect(null)}
         >
           All work orders
-          {activeId === null && dirty && <span className="view-dot" title="Unsaved changes" />}
+          {activeId === null && badge}
         </button>
 
         {views.map((v) => (
@@ -68,7 +94,10 @@ export function ViewBar({
             {!v.can_edit && <Icon name="user" size={12} />}
             {v.name}
             {v.is_shared && v.can_edit && <Icon name="globe" size={12} />}
-            {v.id === activeId && dirty && <span className="view-dot" title="Unsaved changes" />}
+            {v.id === activeId && badge}
+            {v.id === activeId && editing && dirty && (
+              <span className="view-dot" title="Unsaved changes" />
+            )}
           </button>
         ))}
       </div>
@@ -76,17 +105,38 @@ export function ViewBar({
       <div className="view-actions">
         {error && <span className="view-error">{error}</span>}
 
-        {dirty && active && (
-          <button type="button" className="link-btn" onClick={onResetToSaved} disabled={busy}>
-            Discard changes
-          </button>
-        )}
-
-        {dirty && active?.can_edit && (
-          <button type="button" className="btn-sm" onClick={onSaveExisting} disabled={busy}>
-            <Icon name="check" size={14} />
-            Save “{active.name}”
-          </button>
+        {active && editing ? (
+          <>
+            <span className="view-mode">Editing</span>
+            <button type="button" className="link-btn" onClick={onCancelEdit} disabled={busy}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-sm"
+              onClick={onSaveExisting}
+              disabled={busy || !dirty}
+              title={dirty ? undefined : 'No changes yet'}
+            >
+              <Icon name="check" size={14} />
+              Save “{active.name}”
+            </button>
+          </>
+        ) : (
+          dirty && (
+            // Just looking: the tweaks are yours for now and go nowhere. This
+            // is the way back to the view as saved (or to the plain list).
+            <button
+              type="button"
+              className="link-btn"
+              onClick={onResetToSaved}
+              disabled={busy}
+              title={active ? `Back to “${active.name}” as saved` : 'Back to the default list'}
+            >
+              <Icon name="refresh" size={12} />
+              Reset
+            </button>
+          )
         )}
 
         <SaveAsMenu
@@ -95,6 +145,18 @@ export function ViewBar({
           onSave={onSaveNew}
           busy={busy}
         />
+
+        {active?.can_edit && !editing && (
+          <button
+            type="button"
+            className="icon-btn"
+            title={`Edit “${active.name}”`}
+            onClick={onEdit}
+            disabled={busy}
+          >
+            <Icon name="pencil" size={14} />
+          </button>
+        )}
 
         {active?.can_edit && (
           <button

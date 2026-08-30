@@ -19,7 +19,7 @@ import type {
   WoFilterSet,
   WoSort,
 } from '../api/client';
-import type { WorkOrderListItem } from '@theone/shared';
+import type { StatusGroup, WorkOrderListItem } from '@theone/shared';
 
 export interface ViewState {
   columns: string[];
@@ -46,6 +46,57 @@ export function viewOf(v: SavedView): ViewState {
     group_by: v.group_by,
     sort: v.sort,
   };
+}
+
+// ── The status tabs (All / Open / Active / Done / Closed) ────────────────────
+// The tabs are not a separate control layered on top of the view: they are a
+// shortcut for one filter rule on `status_group` — `eq done` for one group,
+// `in [done, closed]` for several. That is what makes "save this view while
+// on Done" mean what people expect, and what lets the Filter menu show the
+// same constraint the tabs do. The tabs are toggles that ADD to whatever the
+// rule already says; they never swap one group for another.
+
+export type StatusTab = 'all' | StatusGroup;
+
+const STATUS_GROUPS: readonly StatusGroup[] = ['open', 'active', 'done', 'closed'];
+
+function isStatusGroupRule(r: WoFilterRule): boolean {
+  return r.field === 'status_group';
+}
+
+function isStatusGroup(v: unknown): v is StatusGroup {
+  return typeof v === 'string' && (STATUS_GROUPS as readonly string[]).includes(v);
+}
+
+/**
+ * The set of groups the current rules amount to. Empty means no restriction
+ * (the All tab). `null` means the rules say something the tabs cannot show
+ * (e.g. "is not closed", or two separate status-group rules) — the constraint
+ * is then visible in the Filter menu instead, and no tab lights up.
+ */
+export function statusGroupsOf(filters: WoFilterSet): ReadonlySet<StatusGroup> | null {
+  const rules = filters.rules.filter(isStatusGroupRule);
+  if (rules.length === 0) return new Set();
+  if (rules.length > 1) return null;
+  const [r] = rules;
+  const raw = r.op === 'eq' ? [r.value] : r.op === 'in' && Array.isArray(r.value) ? r.value : null;
+  if (!raw || !raw.every(isStatusGroup)) return null;
+  return new Set(raw);
+}
+
+/** The rules with the status-group constraint set to exactly `groups` (none
+    = All). Other rules are untouched; the status rule goes first so the
+    Filter menu lists it where the tabs are. */
+export function withStatusGroups(filters: WoFilterSet, groups: Iterable<StatusGroup>): WoFilterSet {
+  const others = filters.rules.filter((r) => !isStatusGroupRule(r));
+  const wanted = new Set(groups);
+  const list = STATUS_GROUPS.filter((g) => wanted.has(g)); // canonical order, so equality is stable
+  if (list.length === 0) return { match: filters.match, rules: others };
+  const rule: WoFilterRule =
+    list.length === 1
+      ? { field: 'status_group', op: 'eq' as WoFilterOp, value: list[0] }
+      : { field: 'status_group', op: 'in' as WoFilterOp, value: list };
+  return { match: filters.match, rules: [rule, ...others] };
 }
 
 /** Structural equality, used for the "unsaved changes" dot on a view tab.

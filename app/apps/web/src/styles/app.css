@@ -1100,6 +1100,20 @@ input {
   color: var(--tab-on-ink);
 }
 
+/* A group the saved view is defined by: on, and not a toggle. */
+.seg-btn.is-locked {
+  cursor: default;
+}
+
+.seg-btn.is-locked svg {
+  opacity: 0.6;
+}
+
+.seg-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ── Table ────────────────────────────────────────────────────────────────── */
 .table-wrap {
   background: var(--surface);

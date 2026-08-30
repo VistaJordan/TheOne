@@ -9,6 +9,7 @@ import {
   listRoutingLists,
 } from '../../../api/client';
 import { Icon } from '../../Icon';
+import { ConfirmDialog } from '../../ConfirmDialog';
 import { pillStyle } from '../../StatusPill';
 import { Popover } from './Popover';
 import { FieldPicker } from './FieldPicker';
@@ -52,6 +53,7 @@ export function BulkBar({
   const qc = useQueryClient();
   const [result, setResult] = useState<BulkUpdateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['work-orders'] });
@@ -100,22 +102,33 @@ export function BulkBar({
         type="button"
         className="bulk-btn is-danger"
         disabled={busy}
-        onClick={() => {
-          // Soft delete, and Admin → Trash restores it — but it still removes
-          // rows from everyone's list, so it asks first.
-          if (
-            window.confirm(
-              `Move ${ids.length} work order${ids.length === 1 ? '' : 's'} to Trash? ` +
-                'An administrator can restore them from Admin → Trash.',
-            )
-          ) {
-            remove.mutate();
-          }
-        }}
+        // Soft delete, and Admin → Trash restores it — but it still removes
+        // rows from everyone's list, so it asks first.
+        onClick={() => setConfirmDelete(true)}
       >
         <Icon name="trash" size={14} />
         Delete
       </button>
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Move ${ids.length === 1 ? 'this work order' : `${ids.length.toLocaleString()} work orders`} to Trash?`}
+          message={`${ids.length === 1 ? 'It disappears' : 'They disappear'} from everyone's list.`}
+          note={
+            <>
+              An administrator can restore {ids.length === 1 ? 'it' : 'them'} from{' '}
+              <b>Admin → Trash</b>.
+            </>
+          }
+          noteTone="info"
+          confirmLabel="Move to Trash"
+          busyLabel="Moving…"
+          danger
+          busy={remove.isPending}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => remove.mutate(undefined, { onSettled: () => setConfirmDelete(false) })}
+        />
+      )}
 
       {/* The page holds up to 500 rows; the filters can match more. Acting on
           "everything that matches" has to be an explicit second step. */}

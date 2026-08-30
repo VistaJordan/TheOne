@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { StatusGroup } from '@theone/shared';
 import type { SavedView } from '../api/client';
 import { AppShell } from '../components/AppShell';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { WorkOrdersTable } from '../components/WorkOrdersTable';
 import { Icon } from '../components/Icon';
 import {
@@ -29,13 +30,14 @@ import {
   sameView,
   saveStoredView,
   sendableFilters,
+  statusGroupsOf,
   viewOf,
+  withStatusGroups,
+  type StatusTab,
   type ViewState,
 } from '../lib/woView';
 
-type Filter = 'all' | StatusGroup;
-
-const FILTERS: { key: Filter; label: string }[] = [
+const FILTERS: { key: StatusTab; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'open', label: 'Open' },
   { key: 'active', label: 'Active' },
@@ -51,7 +53,6 @@ const PAGE_SIZE = 200;
 export function WorkOrdersPage() {
   const qc = useQueryClient();
 
-  const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounced(search, 250);
 
@@ -60,10 +61,15 @@ export function WorkOrdersPage() {
   const stored = useMemo(loadStoredView, []);
   const [view, setView] = useState<ViewState>(stored?.state ?? DEFAULT_VIEW);
   const [activeViewId, setActiveViewId] = useState<string | null>(stored?.viewId ?? null);
+  // A saved view opens read-only; the pencil turns this on. Never persisted:
+  // a reload lands back in "just looking".
+  const [editing, setEditing] = useState(false);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allMatchingSelected, setAllMatchingSelected] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  // The view whose deletion is awaiting confirmation, if any.
+  const [pendingDelete, setPendingDelete] = useState<SavedView | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -102,17 +108,43 @@ export function WorkOrdersPage() {
   // ── The query ──────────────────────────────────────────────────────────────
   // `criteria` is what the list, the id sweep and the CSV export all send, so
   // the three can never disagree about which rows the user is looking at.
+  // The status tabs are not a separate criterion: they read and write a
+  // `status_group` rule inside `view.filters`, so they travel with the view.
   const criteria = useMemo(
     () => ({
-      status_group: filter === 'all' ? undefined : filter,
       search: debouncedSearch || undefined,
       filters: sendableFilters(view.filters),
       sort: view.sort ?? undefined,
       group_by: view.group_by ?? undefined,
       columns: view.columns,
     }),
-    [filter, debouncedSearch, view],
+    [debouncedSearch, view],
   );
+
+  // ── The status tabs ────────────────────────────────────────────────────────
+  // `groups` is what the working rules say; `lockedGroups` is what the SAVED
+  // view says. While just looking, a view's own groups are its identity: the
+  // tabs can add to them (Done view + Closed tab = done or closed) but not
+  // take them away. In edit mode nothing is locked — that is what edit is for.
+  const groups = statusGroupsOf(view.filters);
+  const lockedGroups = useMemo<ReadonlySet<StatusGroup>>(
+    () =>
+      activeView && !editing
+        ? (statusGroupsOf(viewOf(activeView).filters) ?? new Set())
+        : new Set(),
+    [activeView, editing],
+  );
+  const onStatusTab = (key: StatusTab) => {
+    if (key === 'all') {
+      setView({ ...view, filters: withStatusGroups(view.filters, []) });
+      return;
+    }
+    if (lockedGroups.has(key)) return;
+    const next = new Set(groups ?? lockedGroups);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setView({ ...view, filters: withStatusGroups(view.filters, next) });
+  };
 
   const woQuery = useQuery({
     queryKey: ['work-orders', criteria, PAGE_SIZE],
@@ -143,6 +175,7 @@ export function WorkOrdersPage() {
     setViewError(null);
     setActiveViewId(v?.id ?? null);
     setView(v ? viewOf(v) : DEFAULT_VIEW);
+    setEditing(false);
   }, []);
 
   const saveNew = useMutation({
@@ -157,7 +190,13 @@ export function WorkOrdersPage() {
       }),
     onSuccess: ({ view: created }) => {
       setViewError(null);
+      // Put the new view in the list before selecting it; otherwise the
+      // "unknown id" guard below sees a stale list and bounces back to All.
+      qc.setQueryData<{ items: SavedView[] }>(['saved-views'], (old) =>
+        old ? { ...old, items: [...old.items, created] } : old,
+      );
       setActiveViewId(created.id);
+      setEditing(false);
       qc.invalidateQueries({ queryKey: ['saved-views'] });
     },
     onError: (e: Error) => setViewError(e.message || 'Could not save that view'),
@@ -173,6 +212,7 @@ export function WorkOrdersPage() {
       }),
     onSuccess: () => {
       setViewError(null);
+      setEditing(false);
       qc.invalidateQueries({ queryKey: ['saved-views'] });
     },
     onError: (e: Error) => setViewError(e.message || 'Could not save that view'),
@@ -184,6 +224,7 @@ export function WorkOrdersPage() {
       setViewError(null);
       setActiveViewId(null);
       setView(DEFAULT_VIEW);
+      setEditing(false);
       qc.invalidateQueries({ queryKey: ['saved-views'] });
     },
     onError: (e: Error) => setViewError(e.message || 'Could not delete that view'),
@@ -193,45 +234,57 @@ export function WorkOrdersPage() {
 
   return (
     <AppShell total={total}>
-      <div className="page-head">
-        <p className="page-sub">
-          {total != null ? `${total.toLocaleString()} work order${total === 1 ? '' : 's'}` : 'Loading…'}
-          {selected.size > 0 && ` · ${selected.size} selected`}
-        </p>
-      </div>
-
+      {/* The match count lives on the active view tab (the sidebar badge has the
+          unfiltered total; the bulk bar restates the selection). */}
       <ViewBar
         views={views}
         activeId={activeViewId}
         dirty={dirty}
+        editing={editing}
+        onEdit={() => setEditing(true)}
+        onCancelEdit={() => {
+          if (activeView) setView(viewOf(activeView));
+          setEditing(false);
+        }}
         state={view}
+        count={total}
         onSelect={onSelectView}
         onSaveNew={(name, shared) => saveNew.mutate({ name, shared })}
         onSaveExisting={() => saveExisting.mutate()}
-        onDelete={(v) => {
-          if (window.confirm(`Delete the view “${v.name}”? This cannot be undone.`)) {
-            removeView.mutate(v);
-          }
-        }}
-        onResetToSaved={() => activeView && setView(viewOf(activeView))}
+        onDelete={setPendingDelete}
+        onResetToSaved={() => setView(activeView ? viewOf(activeView) : DEFAULT_VIEW)}
         busy={viewBusy}
         error={viewError}
       />
 
       <div className="toolbar">
-        <div className="seg" role="tablist" aria-label="Filter by status group">
-          {FILTERS.map((f) => (
-            <button
-              type="button"
-              key={f.key}
-              role="tab"
-              aria-selected={filter === f.key}
-              className={`seg-btn${filter === f.key ? ' is-on' : ''}`}
-              onClick={() => setFilter(f.key)}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="seg" role="group" aria-label="Status groups">
+          {FILTERS.map((f) => {
+            const on = f.key === 'all' ? groups?.size === 0 : (groups?.has(f.key) ?? false);
+            const locked = f.key !== 'all' && lockedGroups.has(f.key);
+            // "All" cannot be honoured without changing a view that is
+            // filtered by status, so it is greyed out rather than lying.
+            const disabled = f.key === 'all' && lockedGroups.size > 0;
+            const title = locked
+              ? `Part of the “${activeView?.name}” view — change it under Filter`
+              : disabled
+                ? `“${activeView?.name}” is filtered by status — change that under Filter`
+                : undefined;
+            return (
+              <button
+                type="button"
+                key={f.key}
+                aria-pressed={on}
+                disabled={disabled}
+                title={title}
+                className={`seg-btn${on ? ' is-on' : ''}${locked ? ' is-locked' : ''}`}
+                onClick={() => onStatusTab(f.key)}
+              >
+                {f.label}
+                {locked && <Icon name="lock" size={12} />}
+              </button>
+            );
+          })}
         </div>
 
         {/* The bulk bar sits right here, beside the status tabs, because that is
@@ -335,6 +388,28 @@ export function WorkOrdersPage() {
       )}
 
       {showImport && <ImportDialog fields={fields} onClose={() => setShowImport(false)} />}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete this view?"
+          message={
+            <>
+              <b>{pendingDelete.name}</b> will be removed
+              {pendingDelete.is_shared ? ' for everyone it is shared with' : ''}. The work orders
+              themselves are not affected.
+            </>
+          }
+          note="This cannot be undone."
+          confirmLabel="Delete view"
+          busyLabel="Deleting…"
+          danger
+          busy={removeView.isPending}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() =>
+            removeView.mutate(pendingDelete, { onSettled: () => setPendingDelete(null) })
+          }
+        />
+      )}
     </AppShell>
   );
 }
