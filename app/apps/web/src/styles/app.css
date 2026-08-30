@@ -389,13 +389,6 @@ input {
   color: var(--ink);
 }
 
-.side-flyout-note {
-  margin: 0;
-  padding: 2px 9px 7px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .side-flyout {
     animation: side-flyout-in 0.1s ease-out;
@@ -477,6 +470,11 @@ input {
   gap: 24px;
   min-width: 0;
   overflow: hidden;
+  /* Owns the bar's left padding (pulled in, then given back), so the brand slot
+     can extend into it when the sidebar is collapsed without being clipped by
+     this overflow: the stack centres on the 64px rail, which starts at 0. */
+  margin-left: -18px;
+  padding-left: 18px;
 }
 
 /* Fixed to the rail width so the trail beside it lines up with the nav below,
@@ -494,12 +492,16 @@ input {
      All boxes are in image pixels; re-measure if the asset changes.
        canvas  2096×756
        artwork x 42–2046, y 70–637 (the PNG carries transparent padding)
-       "The"   246×103 at (141, 70)
-       "One"   680×340 at (1367, 234)  — the ring plus "ne" */
+       "The"   246×103 at (141, 70)   → window padded 20px: 286×143 at (121, 50)
+       "One"   680×340 at (1367, 234)  → window padded 6px left (the curve's
+               tail runs right up to the ring there), 20px elsewhere:
+               706×380 at (1361, 214)
+     The padding keeps sub-pixel rounding of the background position from
+     ever trimming the first pixel of a glyph. */
   --logo-canvas-w: 2096;
   --crop-x: 42;   --crop-y: 70;   --crop-w: 2005;  --crop-h: 568;
-  --the-x: 141;   --the-y: 70;    --the-w: 246;    --the-h: 103;
-  --one-x: 1367;  --one-y: 234;   --one-w: 680;    --one-h: 340;
+  --the-x: 121;   --the-y: 50;    --the-w: 286;    --the-h: 143;
+  --one-x: 1361;  --one-y: 214;   --one-w: 706;    --one-h: 380;
 
   /* Open: the artwork renders --brand-w wide, flush left, in a slot that spans
      the sidebar column (232px minus the bar's 18px padding) so the title beside
@@ -509,8 +511,8 @@ input {
   --logo-scale: calc(var(--brand-w) / var(--crop-w));
 
   /* Collapsed: how wide each word renders in the stack, and the gap between. */
-  --the-cw: 26px;  --the-s: calc(var(--the-cw) / var(--the-w));
-  --one-cw: 44px;  --one-s: calc(var(--one-cw) / var(--one-w));
+  --the-cw: 25px;  --the-s: calc(var(--the-cw) / var(--the-w));
+  --one-cw: 37px;  --one-s: calc(var(--one-cw) / var(--one-w));
   --stack-gap: 3px;
   --stack-h: calc(var(--the-h) * var(--the-s) + var(--stack-gap) + var(--one-h) * var(--one-s));
 
@@ -521,9 +523,12 @@ input {
   flex: none;
   width: var(--brand-slot);
   height: calc(var(--crop-h) * var(--logo-scale) * (1 - var(--c)) + var(--stack-h) * var(--c));
+  /* Collapsed, the slot is the rail itself (64px), so the stack centres on the
+     icon column beneath it; the bar's 18px padding is pulled back to do that. */
+  margin-left: calc(-18px * var(--c));
   min-width: 0;
   overflow: hidden;
-  transition: width 0.22s ease, height 0.22s ease;
+  transition: width 0.22s ease, height 0.22s ease, margin-left 0.22s ease;
 }
 
 /* The full artwork. Fades as the words leave it. */
@@ -581,11 +586,11 @@ input {
   background-position: calc(-1 * var(--one-x) * var(--s)) calc(-1 * var(--one-y) * var(--s));
 }
 
-/* Collapsed: flip the switch and narrow the slot to the 46px the rail leaves
-   beside the bar's padding. Same clock as the sidebar (.shell-body). */
+/* Collapsed: flip the switch and make the slot the rail's full 64px so the
+   stack sits centred over the nav icons. Same clock as the sidebar. */
 .shell.is-collapsed .topbar-brand {
   --c: 1;
-  --brand-slot: 46px;
+  --brand-slot: 64px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1379,7 +1384,7 @@ input {
   /* The rail is pinned to 64px here, so the bar shows the collapsed stack. */
   .topbar-brand {
     --c: 1;
-    --brand-slot: 46px;
+    --brand-slot: 64px;
   }
   .side-group.is-open {
     background: transparent;

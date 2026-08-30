@@ -19,6 +19,19 @@ import { initialsOf, roleLabel } from '../lib/actor';
     first super admin, then the first account, if this address is not seeded. */
 const DEV_DEFAULT_EMAIL = 'eliseam@byblosvista.com';
 
+/** Where a sign-in lands when nothing more specific was asked for. */
+const HOME = '/dashboard';
+
+/** The page to return to after sign-in: the ?redirect_to RequireAuth set when
+    it bounced someone here, if it is a same-origin path — never an absolute
+    URL, so the parameter cannot be abused to send people off-site. A bare "/"
+    means nobody asked for anything in particular (they just opened the app),
+    so that lands on HOME too. */
+function landingFrom(params: URLSearchParams): string {
+  const to = params.get('redirect_to');
+  return to && to !== '/' && to.startsWith('/') && !to.startsWith('//') ? to : HOME;
+}
+
 export function SignInPage() {
   const { authMode, refresh, loading } = useAuth();
   const [params] = useSearchParams();
@@ -62,8 +75,8 @@ export function SignInPage() {
   // the app, not staring at a login form.
   const { authenticated } = useAuth();
   useEffect(() => {
-    if (authenticated) window.location.replace('/');
-  }, [authenticated]);
+    if (authenticated) window.location.replace(landingFrom(params));
+  }, [authenticated, params]);
 
   const devUsers = candidates.data?.items ?? [];
   const devDefault =
@@ -77,7 +90,7 @@ export function SignInPage() {
     try {
       await devSignIn(id);
       await refresh();
-      window.location.replace('/');
+      window.location.replace(landingFrom(params));
     } catch (err) {
       setLocalError((err as Error).message || 'Could not sign in as that user.');
       setBusy(null);
@@ -155,7 +168,7 @@ export function SignInPage() {
               disabled={busy !== null || (authMode === 'bypass' && !devDefault)}
               onClick={() =>
                 authMode === 'entra'
-                  ? startMicrosoftSignIn(params.get('redirect_to') ?? '/')
+                  ? startMicrosoftSignIn(landingFrom(params))
                   : devDefault && pick(devDefault.id)
               }
             >
@@ -234,7 +247,7 @@ export function SignInPage() {
 const ROUTE_STOPS: { x: number; y: number; icon: IconName; depth: string }[] = [
   { x: 420, y: 290, icon: 'wrench', depth: '22px' },
   { x: 860, y: 690, icon: 'file', depth: '14px' },
-  { x: 1290, y: 280, icon: 'dollar', depth: '28px' },
+  { x: 1290, y: 280, icon: 'user-cog', depth: '28px' },
 ];
 
 /** The four-square Microsoft mark. Brand-mandated flat colours — not themed. */

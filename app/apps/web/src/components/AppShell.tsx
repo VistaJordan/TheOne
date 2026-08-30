@@ -319,11 +319,7 @@ export function AppShell({
                     {child.label}
                   </button>
                 ))
-              ) : (
-                // A leaf on the rail needs its name back, nothing more — the
-                // icon under the pointer is already the way in.
-                !flyoutItem.to && <p className="side-flyout-note">Coming in a later sprint</p>
-              )}
+              ) : null}
             </div>
           )}
 

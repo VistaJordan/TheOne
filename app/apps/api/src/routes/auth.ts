@@ -41,7 +41,9 @@ import { recordAuthEvent } from '../services/activity.js';
 
 /** Only ever redirect somewhere inside our own app — never to a supplied URL. */
 function safeRedirect(raw: string | undefined): string {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/';
+  // Same default as the web sign-in page: the dashboard. A bare "/" means no
+  // particular page was asked for, so it lands there too.
+  if (!raw || raw === '/' || !raw.startsWith('/') || raw.startsWith('//')) return '/dashboard';
   return raw;
 }
 
