@@ -19,7 +19,9 @@ export type IconName =
   // S5 — sidebar chrome: collapse control + group disclosure
   | 'chevs-l' | 'chevs-r' | 'chev-u'
   // S6 — the work-order list toolbar: filters, columns, grouping, import/export
-  | 'filter' | 'columns' | 'layers' | 'download';
+  | 'filter' | 'columns' | 'layers' | 'download'
+  // S7 — sign-in route stops (work orders · quotes · payments)
+  | 'wrench';
 
 type IconSize = 12 | 14 | 16 | 18 | 22;
 
@@ -44,6 +46,7 @@ export function IconSprite() {
   return (
     <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true" focusable="false">
       <defs>
+        <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></symbol>
         <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></symbol>
         <symbol id="i-clipboard" viewBox="0 0 24 24"><path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1Z" /><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2" /><path d="M8 11h8M8 15h5" /></symbol>
         <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 6h11v9H3z" /><path d="M14 9h4l3 3v3h-7z" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></symbol>

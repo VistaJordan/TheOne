@@ -1,6 +1,10 @@
-/* Admin › Users — two tabs.
+/* Admin › Users and Admin › Roles — two sections, one module.
      Users  · who exists, what role they hold, whether they can sign in
-     Roles  · what roles exist, what each may do, and creating new ones */
+     Roles  · what roles exist, what each may do, and creating new ones
+
+   They used to share one page behind a Users/Roles toggle. Each is now its own
+   route so the Admin rail lists them side by side (Users first) and each one
+   is seen alone. The tables and forms below are shared as before. */
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,30 +25,40 @@ import {
 } from '../../api/client';
 import { initialsOf } from '../../lib/actor';
 
-type Tab = 'users' | 'roles';
-
 const STATUS_COPY: Record<UserStatus, { label: string; tone: string; hint: string }> = {
   active: { label: 'Active', tone: 'ok', hint: 'Has signed in at least once' },
   invited: { label: 'Invited', tone: 'warn', hint: 'Can sign in, but never has' },
   disabled: { label: 'Disabled', tone: 'off', hint: 'Blocked from signing in' },
 };
 
-export function AdminUsersPage() {
-  const { user } = useAuth();
+/** One error strip + cache invalidation, shared by both sections. */
+function useAdminFeedback() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>('users');
   const [error, setError] = useState<string | null>(null);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [newRoleOpen, setNewRoleOpen] = useState(false);
-
-  const isAdmin = Boolean(user?.is_super_admin);
   const fail = (e: Error) => setError(e.message || 'Something went wrong.');
   const done = (keys: string[]) => {
     setError(null);
     keys.forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
   };
+  const strip = error ? (
+    <div className="callout callout-lock" role="alert" style={{ marginBottom: 16 }}>
+      <Icon name="alert" size={14} />
+      <span>{error}</span>
+    </div>
+  ) : null;
+  return { fail, done, strip };
+}
 
+// ── Admin › Users ────────────────────────────────────────────────────────────
+
+export function AdminUsersPage() {
+  const { user } = useAuth();
+  const { fail, done, strip } = useAdminFeedback();
+  const [inviteOpen, setInviteOpen] = useState(false);
+
+  const isAdmin = Boolean(user?.is_super_admin);
   const usersQuery = useQuery({ queryKey: ['admin-users'], queryFn: listAdminUsers, enabled: isAdmin, retry: 0 });
+  // Roles feed the role <select> on every row and in the invite form.
   const rolesQuery = useQuery({ queryKey: ['admin-roles'], queryFn: listRoles, enabled: isAdmin, retry: 0 });
 
   const users = usersQuery.data?.items ?? [];
@@ -60,6 +74,65 @@ export function AdminUsersPage() {
     onSuccess: () => { setInviteOpen(false); done(['admin-users', 'admin-roles']); },
     onError: fail,
   });
+
+  const superAdmins = users.filter((u) => u.is_super_admin && u.status !== 'disabled').length;
+
+  return (
+    <AdminShell
+      title="Users"
+      subtitle={`${users.length} user${users.length === 1 ? '' : 's'} · ${superAdmins} super admin${superAdmins === 1 ? '' : 's'}`}
+    >
+      {strip}
+
+      <div className="callout" style={{ marginBottom: 16 }}>
+        <Icon name="info" size={14} />
+        <span>
+          Sign-in is <b>invitation only</b>. Adding somebody here <i>is</i> the invitation —
+          there is no email to send. They sign in with the Microsoft account matching the
+          address below, and nobody who is not on this list can get in.
+        </span>
+      </div>
+
+      <div className="toolbar">
+        <button type="button" className="btn btn-primary" onClick={() => setInviteOpen((v) => !v)}>
+          <Icon name="user-plus" size={14} />
+          Invite a user
+        </button>
+      </div>
+
+      {inviteOpen && (
+        <InviteForm
+          roles={roles}
+          busy={invite.isPending}
+          onCancel={() => setInviteOpen(false)}
+          onSubmit={(v) => invite.mutate(v)}
+        />
+      )}
+
+      <UsersTable
+        items={users}
+        roles={roles}
+        selfId={user?.id}
+        loading={usersQuery.isLoading}
+        error={usersQuery.isError}
+        busy={patchUser.isPending}
+        onChange={(id, input) => patchUser.mutate({ id, input })}
+      />
+    </AdminShell>
+  );
+}
+
+// ── Admin › Roles ────────────────────────────────────────────────────────────
+
+export function AdminRolesPage() {
+  const { user } = useAuth();
+  const { fail, done, strip } = useAdminFeedback();
+  const [newRoleOpen, setNewRoleOpen] = useState(false);
+
+  const isAdmin = Boolean(user?.is_super_admin);
+  const rolesQuery = useQuery({ queryKey: ['admin-roles'], queryFn: listRoles, enabled: isAdmin, retry: 0 });
+  const roles = rolesQuery.data?.items ?? [];
+
   const addRole = useMutation({
     mutationFn: createRole,
     onSuccess: () => { setNewRoleOpen(false); done(['admin-roles']); },
@@ -76,102 +149,36 @@ export function AdminUsersPage() {
     onError: fail,
   });
 
-  const superAdmins = users.filter((u) => u.is_super_admin && u.status !== 'disabled').length;
-
-  const tabs = (
-    <div className="seg" role="tablist" aria-label="Users sections">
-      <button type="button" role="tab" aria-selected={tab === 'users'}
-        className={`seg-btn${tab === 'users' ? ' is-on' : ''}`} onClick={() => setTab('users')}>
-        Users <span className="seg-count">{users.length}</span>
-      </button>
-      <button type="button" role="tab" aria-selected={tab === 'roles'}
-        className={`seg-btn${tab === 'roles' ? ' is-on' : ''}`} onClick={() => setTab('roles')}>
-        Roles <span className="seg-count">{roles.length}</span>
-      </button>
-    </div>
-  );
-
   return (
     <AdminShell
-      title={tab === 'users' ? 'Users' : 'Roles'}
-      subtitle={
-        tab === 'users'
-          ? `${users.length} user${users.length === 1 ? '' : 's'} · ${superAdmins} super admin${superAdmins === 1 ? '' : 's'}`
-          : 'What each role may do. Capabilities here are the ones the server actually enforces.'
-      }
-      actions={tabs}
+      title="Roles"
+      subtitle={`${roles.length} role${roles.length === 1 ? '' : 's'} · capabilities here are the ones the server actually enforces`}
     >
-      {error && (
-        <div className="callout callout-lock" role="alert" style={{ marginBottom: 16 }}>
-          <Icon name="alert" size={14} />
-          <span>{error}</span>
-        </div>
+      {strip}
+
+      <div className="toolbar">
+        <button type="button" className="btn btn-primary" onClick={() => setNewRoleOpen((v) => !v)}>
+          <Icon name="plus" size={14} />
+          New role
+        </button>
+      </div>
+
+      {newRoleOpen && (
+        <RoleForm
+          busy={addRole.isPending}
+          onCancel={() => setNewRoleOpen(false)}
+          onSubmit={(v) => addRole.mutate(v)}
+        />
       )}
 
-      {tab === 'users' ? (
-        <>
-          <div className="callout" style={{ marginBottom: 16 }}>
-            <Icon name="info" size={14} />
-            <span>
-              Sign-in is <b>invitation only</b>. Adding somebody here <i>is</i> the invitation —
-              there is no email to send. They sign in with the Microsoft account matching the
-              address below, and nobody who is not on this list can get in.
-            </span>
-          </div>
-
-          <div className="toolbar">
-            <button type="button" className="btn btn-primary" onClick={() => setInviteOpen((v) => !v)}>
-              <Icon name="user-plus" size={14} />
-              Invite a user
-            </button>
-          </div>
-
-          {inviteOpen && (
-            <InviteForm
-              roles={roles}
-              busy={invite.isPending}
-              onCancel={() => setInviteOpen(false)}
-              onSubmit={(v) => invite.mutate(v)}
-            />
-          )}
-
-          <UsersTable
-            items={users}
-            roles={roles}
-            selfId={user?.id}
-            loading={usersQuery.isLoading}
-            error={usersQuery.isError}
-            busy={patchUser.isPending}
-            onChange={(id, input) => patchUser.mutate({ id, input })}
-          />
-        </>
-      ) : (
-        <>
-          <div className="toolbar">
-            <button type="button" className="btn btn-primary" onClick={() => setNewRoleOpen((v) => !v)}>
-              <Icon name="plus" size={14} />
-              New role
-            </button>
-          </div>
-
-          {newRoleOpen && (
-            <RoleForm
-              busy={addRole.isPending}
-              onCancel={() => setNewRoleOpen(false)}
-              onSubmit={(v) => addRole.mutate(v)}
-            />
-          )}
-
-          <RolesTable
-            items={roles}
-            loading={rolesQuery.isLoading}
-            error={rolesQuery.isError}
-            busy={patchRole.isPending || removeRole.isPending}
-            onChange={(id, input) => patchRole.mutate({ id, input })}
-            onDelete={(id) => removeRole.mutate(id)}
-          />
-        </>
-      )}
+      <RolesTable
+        items={roles}
+        loading={rolesQuery.isLoading}
+        error={rolesQuery.isError}
+        busy={patchRole.isPending || removeRole.isPending}
+        onChange={(id, input) => patchRole.mutate({ id, input })}
+        onDelete={(id) => removeRole.mutate(id)}
+      />
     </AdminShell>
   );
 }

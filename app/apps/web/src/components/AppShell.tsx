@@ -1,9 +1,10 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LOGO } from '../lib/brand';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { Icon, IconSprite } from './Icon';
+import { NavIcon } from './NavIcon';
 import type { IconName } from './Icon';
 import { ActorSwitcher } from './ActorSwitcher';
 import { GlobalSearch } from './GlobalSearch';
@@ -164,7 +165,9 @@ export function AppShell({
           the trail happens to end. */}
       <header className="topbar">
         <div className="topbar-left">
-          <div className="topbar-brand">
+          {/* --brand-url lets app.css draw the collapsed "the"/"One" pieces
+              from the same asset without repeating its path. */}
+          <div className="topbar-brand" style={{ '--brand-url': `url(${LOGO})` } as CSSProperties}>
             <img src={LOGO} alt="The One" />
           </div>
           {/* Detail routes pass their own trail; list routes get the nav item
@@ -224,7 +227,7 @@ export function AppShell({
                       onClick={() => toggleGroup(item.label)}
                     >
                       <span className="side-icon">
-                        <Icon name={item.icon} size={18} />
+                        <NavIcon name={item.icon} />
                       </span>
                       <span className="side-label">{item.label}</span>
                       <span className="side-caret" aria-hidden="true">
@@ -278,7 +281,7 @@ export function AppShell({
                     onClick={item.to ? () => navigate(item.to as string) : undefined}
                   >
                     <span className="side-icon">
-                      <Icon name={item.icon} size={18} />
+                      <NavIcon name={item.icon} />
                     </span>
                     <span className="side-label">{item.label}</span>
                     {count != null && (

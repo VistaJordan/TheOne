@@ -14,30 +14,128 @@
   animation: boot-pulse 1.1s ease-in-out infinite;
 }
 @keyframes boot-pulse { 0%,100% { opacity:.25 } 50% { opacity:1 } }
-@media (prefers-reduced-motion: reduce) { .boot-dot { animation: none; opacity:.7 } }
+@media (prefers-reduced-motion: reduce) { .boot-dot { animation: none; opacity:.7 } .signin-stop { transition: none; } }
 
 /* ── Sign-in ───────────────────────────────────────────────────────────── */
 .signin {
+  position: relative;
+  overflow: hidden;
   min-height: 100vh;
   display: flex; align-items: center; justify-content: center;
   background: var(--bg); padding: 32px 20px;
 }
+
+/* ── The route ──────────────────────────────────────────────────────────────
+   One large, faint pass of the brand's line across the page, in the theme's
+   accent. Stops are hollow so the background shows through them, the way the
+   wordmark's "O" does. Drawn in over ~1.5s on load; the stops pop as the line
+   reaches each one. Static for anyone who asked the OS for less motion. */
+.signin-route {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  color: var(--accent);
+}
+.signin-route-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: .2;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+/* Stops: filled accent bubbles with a white glyph, like the wordmark's own.
+   The outer group drifts with the pointer; the inner one pops in on load. */
+.signin-stop {
+  --depth: 20px;
+  transform: translate(calc(var(--mx, 0) * var(--depth)), calc(var(--my, 0) * var(--depth)));
+  transition: transform .55s cubic-bezier(.2, .7, .2, 1);
+  will-change: transform;
+}
+.signin-stop-in {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.signin-stop circle {
+  /* The pale sky blue the active sidebar item uses, with the same accent ink
+     for the glyph — the bubbles read as "selected stops" on the route. */
+  fill: #e5f5fd;
+  stroke: var(--bg);
+  stroke-width: 4;
+}
+.signin-stop-icon {
+  overflow: visible;
+  fill: none;
+  stroke: #0d6e97;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:root[data-theme="night"] .signin-route-line { opacity: .26; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .signin-route-line { animation: signin-route-draw 1.5s cubic-bezier(.45, 0, .2, 1) both; }
+  .signin-stop-in { animation: signin-stop-in .35s cubic-bezier(.2, .9, .3, 1.3) both; }
+  .signin-stop:nth-child(1) .signin-stop-in { animation-delay: .42s; }
+  .signin-stop:nth-child(2) .signin-stop-in { animation-delay: .85s; }
+  .signin-stop:nth-child(3) .signin-stop-in { animation-delay: 1.25s; }
+  .signin-card { animation: signin-card-in .45s ease-out both; }
+}
+@keyframes signin-route-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes signin-stop-in   { from { transform: scale(0); } to { transform: scale(1); } }
+@keyframes signin-card-in   { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
 .signin-card {
+  position: relative; z-index: 1;
   width: 100%; max-width: 420px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 34px 30px 30px;
+  /* Lifted a little further than a canvas card — it is the only thing on the
+     page and sits over the route. Night keeps its flat, edged look. */
+  box-shadow: 0 14px 44px rgba(20, 25, 35, .08), var(--shadow);
+  padding: 36px 30px 30px;
   display: flex; flex-direction: column; gap: 14px;
 }
-.signin-logo { height: 30px; width: auto; object-fit: contain; align-self: flex-start; }
-.signin-title {
-  font-family: var(--kpi-font), 'Barlow', sans-serif;
-  font-weight: var(--kpi-weight); letter-spacing: var(--kpi-ls);
-  font-size: 30px; line-height: 1.1; margin: 4px 0 0; color: var(--ink);
+/* The wordmark, cropped the same way the topbar crops it (app.css .topbar-brand):
+   a window onto the PNG (2096×756) sized to the artwork's visible box
+   (x 42–2046, y 70–637 → 2005×568) so its transparent padding does not eat the
+   space. --w is the rendered width of the visible artwork. */
+.signin-logo {
+  --logo-canvas-w: 2096;
+  --w: 300px;
+  --s: calc(var(--w) / 2005);
+  position: relative;
+  width: var(--w);
+  height: calc(568 * var(--s));
+  overflow: hidden;
+  align-self: center;
+  margin: 2px 0 10px;
 }
-.signin-sub { margin: 0 0 4px; color: var(--ink-2); font-size: 14px; }
+.signin-logo img {
+  position: absolute;
+  width: calc(var(--logo-canvas-w) * var(--s));
+  height: auto;
+  max-width: none;
+  left: calc(-42 * var(--s));
+  top: calc(-70 * var(--s));
+}
+/* Navy on the night card would vanish; same inversion the topbar uses. */
+:root[data-theme="night"] .signin-logo img { filter: invert(1) hue-rotate(180deg); }
+:root[data-theme="night"] .signin-card { box-shadow: none; }
+
+/* Dev-bypass footnote under the Microsoft button: quiet, but it must still be
+   read — it names the account the button will use and says never to ship it. */
+.signin-dev {
+  display: flex; gap: 8px; align-items: flex-start;
+  margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border);
+  color: var(--ink-3); font-size: 12px; line-height: 1.45;
+}
+.signin-dev .ic { flex: none; margin-top: 2px; color: var(--warn); }
+.signin-dev b { color: var(--ink-2); font-weight: 600; }
+.signin-dev .linkbtn { font-size: 12px; padding: 0; margin-left: 4px; }
+.signin-dev + .signin-users { margin-top: 8px; }
 
 .signin-ms {
   display: flex; align-items: center; justify-content: center; gap: 10px;

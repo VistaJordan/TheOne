@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { ThemeProvider } from './theme/ThemeProvider';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { SignInPage } from './pages/SignInPage';
-import { AdminUsersPage } from './pages/admin/AdminUsersPage';
+import { AdminUsersPage, AdminRolesPage } from './pages/admin/AdminUsersPage';
 import {
   AdminSettingsPage,
   AdminWorkflowsPage,
@@ -88,6 +88,7 @@ export function App() {
                   gates every one of them on super admin. */}
               <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
               <Route path="/admin/users" element={<RequireAuth><AdminUsersPage /></RequireAuth>} />
+              <Route path="/admin/roles" element={<RequireAuth><AdminRolesPage /></RequireAuth>} />
               <Route path="/admin/settings" element={<RequireAuth><AdminSettingsPage /></RequireAuth>} />
               <Route path="/admin/workflows" element={<RequireAuth><AdminWorkflowsPage /></RequireAuth>} />
               <Route path="/admin/fields" element={<RequireAuth><AdminFieldsPage /></RequireAuth>} />
