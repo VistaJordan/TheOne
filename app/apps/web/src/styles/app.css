@@ -979,11 +979,151 @@ input {
 }
 
 /* ── Canvas / page ────────────────────────────────────────────────────────── */
-.canvas {
+/* The wrap is the shell-body grid cell; the canvas fills it and scrolls with
+   its native bar hidden, because the O-knob rail (below) replaces it. */
+.canvas-wrap {
+  position: relative;
   min-width: 0;
   min-height: 0;
+}
+
+.canvas {
+  height: 100%;
+  min-width: 0;
   overflow-y: auto;
   padding: 22px 24px 40px;
+}
+
+/* ── The "O knob" scrollbar ────────────────────────────────────────────────
+   Design option 1c, app-wide: the thumb is the logo's "O" — a surface-filled
+   ring in the accent — travelling a hairline node line. EVERY native bar is
+   hidden; the replacement rails come from two places:
+     · the canvas — a sibling overlay (components/OKnobScrollbar.tsx), pinned
+       by the .canvas-wrap rules below, z above the sticky table heads (1–5)
+       and below every popover/menu (40+);
+     · everything else — lib/oknob.ts mounts a rail INSIDE each scrollable
+       (filter popovers, menus, modal bodies, global search, sidebar…) with
+       inline geometry, re-pinned on scroll.
+   Textareas can't host a child rail, so they alone keep a native bar, thinned
+   and tinted to the accent. */
+*:not(textarea) {
+  scrollbar-width: none;
+}
+
+*:not(textarea)::-webkit-scrollbar {
+  display: none;
+}
+
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+
+.oknob {
+  position: absolute;
+  z-index: 10;
+  cursor: pointer;
+  /* Knob diameter and ring weight; is-sm is the compact cut for short
+     containers (dropdown lists, tab strips). */
+  --okn: 18px;
+  --okr: 5px;
+}
+
+.oknob.is-sm {
+  --okn: 14px;
+  --okr: 4px;
+}
+
+/* Manager-mounted rails sit inside their own surface and should beat any
+   sticky chrome that surface contains. */
+.oknob-in {
+  z-index: 50;
+}
+
+/* The canvas rail is positioned by CSS (its geometry never changes); manager
+   rails carry inline geometry instead. */
+.canvas-wrap > .oknob {
+  top: 8px;
+  bottom: 8px;
+  right: 3px;
+  width: 18px;
+}
+
+.oknob.is-dragging {
+  cursor: grabbing;
+}
+
+.oknob-track {
+  position: absolute;
+  inset: 0;
+}
+
+.oknob-line {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.oknob.is-y .oknob-line {
+  left: calc(50% - 1px);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+.oknob.is-x .oknob-line {
+  top: calc(50% - 1px);
+  left: 0;
+  right: 0;
+  height: 2px;
+}
+
+.oknob-node {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.oknob.is-y .oknob-node { left: calc(50% - 3px); }
+.oknob.is-y .oknob-node.is-top { top: -2px; }
+.oknob.is-y .oknob-node.is-end { bottom: -2px; }
+.oknob.is-x .oknob-node { top: calc(50% - 3px); }
+.oknob.is-x .oknob-node.is-top { left: -2px; }
+.oknob.is-x .oknob-node.is-end { right: -2px; }
+
+.oknob-thumb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--okn);
+  height: var(--okn);
+  border-radius: 50%;
+  background: var(--surface);
+  border: var(--okr) solid var(--accent);
+  box-shadow: var(--shadow);
+  cursor: grab;
+  touch-action: none;
+}
+
+/* Hover/drag: the ring swells a touch and takes the pressed accent — in night
+   --accent-text equals --accent, so only the swell reads there, which is the
+   quieter thing on black anyway. */
+.oknob:hover .oknob-thumb,
+.oknob.is-dragging .oknob-thumb {
+  transform: scale(1.12);
+  border-color: var(--accent-text);
+}
+
+.oknob.is-dragging .oknob-thumb {
+  cursor: grabbing;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .oknob-thumb {
+    transition: transform 0.12s ease, border-color 0.12s ease;
+  }
 }
 
 .page-head {

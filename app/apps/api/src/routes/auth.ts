@@ -65,6 +65,15 @@ function publicPrincipal(p: SessionPrincipal) {
     role: p.role,
     is_super_admin: p.isSuperAdmin,
     status: p.status,
+    // The resolved capability set (0005/0007), so the web can gate UI on the
+    // same booleans the server enforces instead of guessing from the role code.
+    can: {
+      edit_quote: p.can.quoteEdit,
+      approve_quote: p.can.quoteApprove,
+      manage_users: p.can.manageUsers,
+      edit_wo_fields: p.can.editWoFields,
+      view_field_history: p.can.viewFieldHistory,
+    },
   };
 }
 

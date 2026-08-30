@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import type { SavedView } from '../../../api/client';
 import { Icon } from '../../Icon';
 import { Popover } from './Popover';
@@ -30,6 +31,10 @@ interface ViewBarProps {
   count?: number | null;
   busy?: boolean;
   error?: string | null;
+  /** Controls that move data in and out of the list (Import, Export). They
+      sit beside "Save view" because all three act on the list as a whole,
+      not on the rows in it. */
+  actions?: ReactNode;
 }
 
 function CountBadge({ count }: { count: number }) {
@@ -63,6 +68,7 @@ export function ViewBar({
   count,
   busy,
   error,
+  actions,
 }: ViewBarProps) {
   const active = views.find((v) => v.id === activeId) ?? null;
   const badge = count != null ? <CountBadge count={count} /> : null;
@@ -138,6 +144,8 @@ export function ViewBar({
             </button>
           )
         )}
+
+        {actions}
 
         <SaveAsMenu
           suggestion={active ? `${active.name} copy` : ''}

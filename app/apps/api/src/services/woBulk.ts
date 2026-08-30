@@ -15,6 +15,7 @@ import { getDb, query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { listWorkOrders, type ListFilters } from './workOrders.js';
 import { listCustomFields, resolveField } from './woFields.js';
+import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import type { WorkOrderListItem } from '@theone/shared';
 
 /** `$1, $2, …` for a list of values. PGlite's parameter serialisation for
@@ -119,6 +120,7 @@ export async function bulkUpdate(
     status_id: string;
     status_name: string;
     home_list_id: string | null;
+    home_list_name: string | null;
     client: string | null;
     trade: string | null;
     city: string | null;
@@ -129,10 +131,13 @@ export async function bulkUpdate(
     date_received: string | null;
     fields: Record<string, unknown>;
   }>(
-    `SELECT t.id, t.wo_number, t.status_id, s.name AS status_name, t.home_list_id,
+    `SELECT t.id, t.wo_number, t.status_id, s.name AS status_name,
+            t.home_list_id, hl.name AS home_list_name,
             t.client, t.trade, t.city, t.state, t.billing_entity, t.priority,
             t.nte::text AS nte, t.date_received::text AS date_received, t.fields
-       FROM task t JOIN status s ON s.id = t.status_id
+       FROM task t
+       JOIN status s ON s.id = t.status_id
+       LEFT JOIN container hl ON hl.id = t.home_list_id
       WHERE t.id IN (${placeholders(ids.length)}) AND t.deleted_at IS NULL`,
     ids,
   );
@@ -150,8 +155,8 @@ export async function bulkUpdate(
     for (const row of rows.rows) {
       const sets: string[] = [];
       const params: unknown[] = [];
-      // [field, before, after] — one activity row each, written after the UPDATE.
-      const log: [string, unknown, unknown][] = [];
+      // One activity row per entry, written after the UPDATE (see woAudit.ts).
+      const log: TaskChange[] = [];
 
       const push = (col: string, value: unknown) => {
         params.push(value);
@@ -161,29 +166,31 @@ export async function bulkUpdate(
       if (targetStatus && targetStatus.id !== row.status_id) {
         push('status_id', targetStatus.id);
         push('status_group', targetStatus.status_group);
-        log.push([
-          'status_id',
-          { status_id: row.status_id, status_name: row.status_name },
-          { status_id: targetStatus.id, status_name: targetStatus.name },
-        ]);
+        log.push({
+          field: 'status_id',
+          before: { status_id: row.status_id, status_name: row.status_name },
+          after: { status_id: targetStatus.id, status_name: targetStatus.name },
+        });
       }
 
       if (targetList && targetList.id !== row.home_list_id) {
         push('home_list_id', targetList.id);
-        log.push(['home_list_id', row.home_list_id, targetList.id]);
+        log.push({
+          field: 'home_list_id',
+          before: { list_id: row.home_list_id, list_name: row.home_list_name },
+          after: { list_id: targetList.id, list_name: targetList.name },
+        });
       }
 
       for (const col of Object.keys(BULK_COLUMNS) as BulkColumn[]) {
         if (!(col in patch)) continue;
         const next = patch[col] ?? null;
         const before = row[col];
-        // Compare as text: `nte` comes back as a string and `date_received` as
-        // 'YYYY-MM-DD', so a numeric/string mismatch would log a phantom change.
-        if (String(before ?? '') === String(next ?? '')) continue;
+        if (!changed(before, next)) continue;
         const cast = BULK_COLUMNS[col];
         params.push(next);
         sets.push(`${col} = $${params.length}::${cast}`);
-        log.push([col, before, next]);
+        log.push({ field: col, before, after: next });
       }
 
       if (customPatch.length > 0) {
@@ -197,7 +204,7 @@ export async function bulkUpdate(
           for (const c of changed) {
             if (c.value === null || c.value === '') delete merged[c.key];
             else merged[c.key] = c.value;
-            log.push([`fields.${c.key}`, row.fields?.[c.key] ?? null, c.value]);
+            log.push({ field: `fields.${c.key}`, before: row.fields?.[c.key] ?? null, after: c.value });
           }
           params.push(JSON.stringify(merged));
           sets.push(`fields = $${params.length}::jsonb`);
@@ -214,21 +221,7 @@ export async function bulkUpdate(
         params,
       );
 
-      for (const [field, before, after] of log) {
-        await tx.query(
-          `INSERT INTO activity_log
-             (actor_principal_id, entity_type, entity_id, action, field, before, after)
-           VALUES ($1, 'task', $2, $3, $4, $5::jsonb, $6::jsonb)`,
-          [
-            actorId,
-            row.id,
-            field === 'status_id' ? 'status_changed' : 'field_updated',
-            field,
-            JSON.stringify(before ?? null),
-            JSON.stringify(after ?? null),
-          ],
-        );
-      }
+      await logTaskChanges(tx, actorId, row.id, log, 'bulk');
       updated += 1;
     }
   });
@@ -357,6 +350,27 @@ export interface ImportResult {
 
 export const IMPORT_CAP = 2000;
 
+/** A matched work order as it stands before the import touches it. */
+interface ExistingRow {
+  id: string;
+  wo_number: string;
+  fields: Record<string, unknown>;
+  status_id: string;
+  status_name: string;
+  status_group: string;
+  ext_name: string | null;
+  title: string | null;
+  description: string | null;
+  client: string | null;
+  city: string | null;
+  state: string | null;
+  trade: string | null;
+  billing_entity: string | null;
+  nte: string | null;
+  priority: string | null;
+  date_received: string | null;
+}
+
 /** Columns an import may write directly. `wo_number` is the match key, not a
     value, and `age_days` is derived — neither is settable. */
 const IMPORTABLE = new Set([
@@ -439,12 +453,18 @@ export async function importWorkOrders(
   // A file with no WO numbers at all is pure creation — skip the lookup rather
   // than send `IN ()`, which is a syntax error.
   const existing = numbers.length
-    ? await query<{ id: string; wo_number: string; fields: Record<string, unknown> }>(
-        `SELECT id, wo_number, fields FROM task
-          WHERE wo_number IN (${placeholders(numbers.length)})`,
+    ? await query<ExistingRow>(
+        // Everything the import may overwrite, so an update can be diffed
+        // column by column and logged as what actually changed.
+        `SELECT t.id, t.wo_number, t.fields, t.status_id, s.name AS status_name, s.status_group,
+                t.ext_name, t.title, t.description, t.client, t.city, t.state, t.trade,
+                t.billing_entity, t.nte::text AS nte, t.priority,
+                t.date_received::text AS date_received
+           FROM task t JOIN status s ON s.id = t.status_id
+          WHERE t.wo_number IN (${placeholders(numbers.length)})`,
         numbers,
       )
-    : { rows: [] as { id: string; wo_number: string; fields: Record<string, unknown> }[] };
+    : { rows: [] as ExistingRow[] };
   const existingByNumber = new Map(existing.rows.map((r) => [r.wo_number, r]));
 
   // New WO numbers continue the existing WO-#### series rather than restarting
@@ -461,8 +481,12 @@ export async function importWorkOrders(
     id?: string;
     wo_number: string;
     cols: Record<string, unknown>;
+    /** The full bag to write (existing keys merged with the file's). */
     fields: Record<string, unknown>;
+    /** Only the keys the file supplied — what an update is diffed against. */
+    fieldPatch: Record<string, unknown>;
     status_id: string;
+    status_name: string;
     status_group: string;
     home_list_id: string | null;
   }
@@ -494,8 +518,12 @@ export async function importWorkOrders(
     }
     seenNumbers.add(woNumber);
 
-    // Status by name, falling back to the first open status for a create.
-    let status = defaultStatus;
+    // Status by name. Without one, a create starts in the first open status and
+    // an update keeps the status it has — a file that lists only NTEs must not
+    // quietly reopen every work order it touches.
+    let status = match
+      ? { id: match.status_id, name: match.status_name, status_group: match.status_group }
+      : defaultStatus;
     const statusName = (row.status ?? '').toString().trim();
     if (statusName) {
       const found = statusByName.get(statusName.toLowerCase());
@@ -581,7 +609,9 @@ export async function importWorkOrders(
       wo_number: woNumber,
       cols,
       fields: match ? { ...(match.fields ?? {}), ...fields } : fields,
+      fieldPatch: fields,
       status_id: status.id,
+      status_name: status.name,
       status_group: status.status_group,
       home_list_id: homeList?.id ?? null,
     });
@@ -651,6 +681,28 @@ export async function importWorkOrders(
           [actorId, id, JSON.stringify({ wo_number: plan.wo_number, source: 'import' })],
         );
       } else {
+        // Diff against the row as it is now, so the trail records the change
+        // that happened — not the list of columns the file happened to have.
+        const cur = existingByNumber.get(plan.wo_number) as ExistingRow;
+        const changes: TaskChange[] = [];
+        for (const [col, value] of Object.entries(plan.cols)) {
+          const before = cur[col as keyof ExistingRow] ?? null;
+          if (changed(before, value)) changes.push({ field: col, before, after: value });
+        }
+        for (const [key, value] of Object.entries(plan.fieldPatch)) {
+          const before = cur.fields?.[key] ?? null;
+          if (changed(before, value)) changes.push({ field: `fields.${key}`, before, after: value });
+        }
+        if (plan.status_id !== cur.status_id) {
+          changes.push({
+            field: 'status_id',
+            before: { status_id: cur.status_id, status_name: cur.status_name },
+            after: { status_id: plan.status_id, status_name: plan.status_name },
+          });
+        }
+        // The row already holds every value in the file: nothing to write.
+        if (changes.length === 0) continue;
+
         const sets: string[] = [];
         const params: unknown[] = [];
         for (const [col, value] of Object.entries(plan.cols)) {
@@ -670,12 +722,7 @@ export async function importWorkOrders(
           `UPDATE task SET ${sets.join(', ')}, updated_at = now() WHERE id = $${params.length}`,
           params,
         );
-        await tx.query(
-          `INSERT INTO activity_log
-             (actor_principal_id, entity_type, entity_id, action, field, before, after)
-           VALUES ($1, 'task', $2, 'field_updated', 'import', NULL, $3::jsonb)`,
-          [actorId, plan.id, JSON.stringify({ columns: Object.keys(plan.cols), source: 'import' })],
-        );
+        await logTaskChanges(tx, actorId, plan.id as string, changes, 'import');
       }
     }
   });

@@ -6,6 +6,54 @@
    except the two rgba() tints that need a colour-mix against --accent.
    ========================================================================= */
 
+/* ── Page frame ─────────────────────────────────────────────────────────── */
+/*
+   The chrome is pinned. The frame fills the canvas cell exactly, so the page
+   itself never scrolls; the rows scroll inside .table-wrap instead, which
+   both keeps the view strip and toolbar in place and finally lets the
+   table's sticky header row (app.css `.ct thead th`) engage — its nearest
+   scroll container is .table-wrap (overflow-x on the card makes it one), so
+   it can only pin when the card is what scrolls. The O-knob manager
+   (lib/oknob.ts) already binds .table-wrap and mounts the vertical rail by
+   itself once the card overflows.
+*/
+.wo-list {
+  position: relative; /* anchors the page-edge rail below */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.wo-list > * {
+  flex: none;
+}
+
+.wo-list > .table-wrap {
+  /* Hug a short list, shrink for a long one — past this the card scrolls.
+     The floor keeps some rows in reach on stunted viewports; below it the
+     frame overflows and the canvas takes over scrolling as before. */
+  flex: 0 1 auto;
+  min-height: 180px;
+  overflow-y: auto;
+}
+
+/* The card's vertical rail keeps the spot the canvas rail held before the
+   chrome was pinned: the page's right edge, full height. The offsets undo the
+   canvas padding (22/24/40) down to the canvas-wrap rail geometry in app.css
+   (top/bottom 8, right 3) — they stay inside the padding, so no overflow. */
+.wo-list > .oknob {
+  top: -14px;
+  bottom: -32px;
+  right: -21px;
+  width: 18px;
+}
+
+/* …so the manager's own y rail inside the card would be a second, competing
+   knob. The card keeps its x rail for wide column sets. */
+.wo-list > .table-wrap > .oknob.is-y {
+  display: none;
+}
+
 /* ── Saved-view strip ───────────────────────────────────────────────────── */
 .viewbar {
   display: flex;
@@ -23,8 +71,7 @@
   gap: 2px;
   flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  overflow-x: auto; /* bar itself is the app-wide O-knob rail (lib/oknob.ts) */
 }
 
 .view-tab {
@@ -113,10 +160,9 @@
 /* ── Toolbar controls ───────────────────────────────────────────────────── */
 /*
    The toolbar is a flex row, and flex items shrink before they wrap. Left to
-   the default `flex-shrink: 1`, "Filter" compresses to "Fi" and the Columns /
-   Import / Export cluster overlaps itself rather than moving to a second line.
-   So every control here is `flex: none` and the SEARCH FIELD is the only thing
-   that gives — it is the one control that still works at any width.
+   the default `flex-shrink: 1`, "Filter" compresses to "Fi" and neighbouring
+   controls overlap rather than moving to a second line. So every control here
+   is `flex: none`; nothing gives, and the row wraps instead.
 */
 .toolbar {
   flex-wrap: wrap;
@@ -127,31 +173,36 @@
   flex: none;
 }
 
-/* The search field absorbs the slack, which is also what puts the right-hand
-   cluster against the right edge — no `margin-left: auto` needed, and the one
-   inherited from .filter-field in app.css would fight the cluster's own. */
-.toolbar .filter-field {
-  flex: 1 1 200px;
-  min-width: 160px;
-  margin-left: 0;
+/* The chips beside the status tabs. Tighter than the toolbar's own gap so the
+   four read as one group — the "narrow by whom" cluster — and the status
+   tabs as another. */
+.quick-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
+/* A chip's chosen value: the label stays as the field name, the value sits
+   after it in stronger ink, so "AM  Peter Hope" scans as name -> value. */
+.qf-value {
+  color: var(--ink);
+  font-weight: 700;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-btn.is-active .qf-value {
+  color: var(--tab-on-ink);
+}
+
+/* Nothing in the row stretches, so the right-hand cluster pushes itself to
+   the edge. */
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* A hairline separating the controls that reshape the view (filter, group)
-     from the ones that move data in and out of it. */
-  padding-left: 12px;
-  border-left: 1px solid var(--border);
-}
-
-/* Below the wrap point the divider is a stray vertical line, so it goes. */
-@media (max-width: 1100px) {
-  .toolbar-right {
-    padding-left: 0;
-    border-left: 0;
-  }
+  margin-left: auto;
 }
 
 /*
@@ -623,13 +674,20 @@
   overflow-y: auto;
 }
 
+/* `.opt` is also the "(optional)" form marker in s4-forms.css — condensed,
+   uppercase, letter-spaced. This is a checklist row of names, so it puts the
+   body face back explicitly. */
 .opt {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 5px 6px;
   border-radius: var(--radius-sm);
+  font-family: inherit;
   font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--ink);
 }
 

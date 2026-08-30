@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { StatusGroup } from '@theone/shared';
 import type { SavedView } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { WorkOrdersTable } from '../components/WorkOrdersTable';
+import { OKnobScrollbar } from '../components/OKnobScrollbar';
 import { Icon } from '../components/Icon';
 import {
   createSavedView,
@@ -16,11 +17,11 @@ import {
   updateSavedView,
   workOrdersExportUrl,
 } from '../api/client';
-import { useDebounced } from '../hooks/useDebounced';
 import { ViewBar } from '../components/wo/list/ViewBar';
 import { FilterMenu } from '../components/wo/list/FilterMenu';
 import { ColumnsMenu } from '../components/wo/list/ColumnsMenu';
 import { GroupMenu } from '../components/wo/list/GroupMenu';
+import { QuickFilter } from '../components/wo/list/QuickFilter';
 import { BulkBar } from '../components/wo/list/BulkBar';
 import { ImportDialog } from '../components/wo/list/ImportDialog';
 import { ToolButton } from '../components/wo/list/Popover';
@@ -45,6 +46,15 @@ const FILTERS: { key: StatusTab; label: string }[] = [
   { key: 'closed', label: 'Closed' },
 ];
 
+/** The chips beside the status tabs: the fields the team narrows by all day.
+    `key` is a catalogue key — a promoted column or `fields.<custom key>`. */
+const QUICK_FILTERS: { key: string; label: string }[] = [
+  { key: 'fields.Assignee', label: 'Assignee' },
+  { key: 'fields.22. FM', label: 'FM' },
+  { key: 'billing_entity', label: 'Comp' },
+  { key: 'fields.AM', label: 'AM' },
+];
+
 /** One page holds this many rows. Grouping renders every bucket at once, so it
     is well above a screenful — but not unbounded; "act on everything that
     matches" is a separate, explicit request (`/work-orders/ids`). */
@@ -52,9 +62,6 @@ const PAGE_SIZE = 200;
 
 export function WorkOrdersPage() {
   const qc = useQueryClient();
-
-  const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounced(search, 250);
 
   // The arrangement on screen, and which saved view it came from. Restored from
   // the last session so a reload does not throw away the columns you set up.
@@ -84,6 +91,7 @@ export function WorkOrdersPage() {
     staleTime: 5 * 60 * 1000,
   });
   const fields = fieldsQuery.data?.fields ?? [];
+  const fieldByKey = useMemo(() => new Map(fields.map((f) => [f.key, f])), [fields]);
   const opsByType = fieldsQuery.data?.ops_by_type ?? {
     text: [],
     select: [],
@@ -108,17 +116,17 @@ export function WorkOrdersPage() {
   // ── The query ──────────────────────────────────────────────────────────────
   // `criteria` is what the list, the id sweep and the CSV export all send, so
   // the three can never disagree about which rows the user is looking at.
-  // The status tabs are not a separate criterion: they read and write a
-  // `status_group` rule inside `view.filters`, so they travel with the view.
+  // The status tabs and the quick-filter chips are not separate criteria:
+  // they read and write rules inside `view.filters`, so they travel with the
+  // view. (Text search is the topbar's job — it searches the whole product.)
   const criteria = useMemo(
     () => ({
-      search: debouncedSearch || undefined,
       filters: sendableFilters(view.filters),
       sort: view.sort ?? undefined,
       group_by: view.group_by ?? undefined,
       columns: view.columns,
     }),
-    [debouncedSearch, view],
+    [view],
   );
 
   // ── The status tabs ────────────────────────────────────────────────────────
@@ -232,112 +240,39 @@ export function WorkOrdersPage() {
 
   const viewBusy = saveNew.isPending || saveExisting.isPending || removeView.isPending;
 
+  // The scrolling card. Its vertical rail renders at the page edge — where the
+  // canvas rail used to sit before the chrome was pinned — not inside the card.
+  const cardRef = useRef<HTMLDivElement>(null);
+
   return (
     <AppShell total={total}>
-      {/* The match count lives on the active view tab (the sidebar badge has the
-          unfiltered total; the bulk bar restates the selection). */}
-      <ViewBar
-        views={views}
-        activeId={activeViewId}
-        dirty={dirty}
-        editing={editing}
-        onEdit={() => setEditing(true)}
-        onCancelEdit={() => {
-          if (activeView) setView(viewOf(activeView));
-          setEditing(false);
-        }}
-        state={view}
-        count={total}
-        onSelect={onSelectView}
-        onSaveNew={(name, shared) => saveNew.mutate({ name, shared })}
-        onSaveExisting={() => saveExisting.mutate()}
-        onDelete={setPendingDelete}
-        onResetToSaved={() => setView(activeView ? viewOf(activeView) : DEFAULT_VIEW)}
-        busy={viewBusy}
-        error={viewError}
-      />
-
-      <div className="toolbar">
-        <div className="seg" role="group" aria-label="Status groups">
-          {FILTERS.map((f) => {
-            const on = f.key === 'all' ? groups?.size === 0 : (groups?.has(f.key) ?? false);
-            const locked = f.key !== 'all' && lockedGroups.has(f.key);
-            // "All" cannot be honoured without changing a view that is
-            // filtered by status, so it is greyed out rather than lying.
-            const disabled = f.key === 'all' && lockedGroups.size > 0;
-            const title = locked
-              ? `Part of the “${activeView?.name}” view — change it under Filter`
-              : disabled
-                ? `“${activeView?.name}” is filtered by status — change that under Filter`
-                : undefined;
-            return (
-              <button
-                type="button"
-                key={f.key}
-                aria-pressed={on}
-                disabled={disabled}
-                title={title}
-                className={`seg-btn${on ? ' is-on' : ''}${locked ? ' is-locked' : ''}`}
-                onClick={() => onStatusTab(f.key)}
-              >
-                {f.label}
-                {locked && <Icon name="lock" size={12} />}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* The bulk bar sits right here, beside the status tabs, because that is
-            where the eye already is when a selection is made. */}
-        {selected.size > 0 ? (
-          <BulkBar
-            ids={[...selected]}
-            matchTotal={total ?? 0}
-            allMatchingSelected={allMatchingSelected}
-            selectingAll={selectAllMatching.isPending}
-            onSelectAllMatching={() => selectAllMatching.mutate()}
-            onClear={() => {
-              setSelected(new Set());
-              setAllMatchingSelected(false);
-            }}
-            fields={fields}
-          />
-        ) : (
-          <>
-            <FilterMenu
-              fields={fields}
-              opsByType={opsByType}
-              value={view.filters}
-              onChange={(filters) => setView({ ...view, filters })}
-            />
-            <GroupMenu
-              fields={fields}
-              value={view.group_by}
-              onChange={(group_by) => setView({ ...view, group_by })}
-            />
-
-            {/* The topbar field searches the whole product and NAVIGATES, so
-                the list keeps a filter of its own: this one narrows the table
-                in place, inside whatever status group is selected. */}
-            <label className="filter-field">
-              <span className="filter-field-icon" aria-hidden="true">
-                <Icon name="search" size={14} />
-              </span>
-              <input
-                type="search"
-                placeholder="Filter these work orders…"
-                aria-label="Filter work orders"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-
-            <div className="toolbar-right">
-              <ColumnsMenu
-                fields={fields}
-                columns={view.columns}
-                onChange={(columns) => setView({ ...view, columns })}
-              />
+      {/* The frame fills the canvas cell exactly and hands scrolling to the
+          table card (.wo-list in wo-list.css), so the view strip, the toolbar
+          and the column headers stay pinned while the rows move. */}
+      <div className="wo-list">
+        {/* The match count lives on the active view tab (the sidebar badge has
+            the unfiltered total; the bulk bar restates the selection). */}
+        <ViewBar
+          views={views}
+          activeId={activeViewId}
+          dirty={dirty}
+          editing={editing}
+          onEdit={() => setEditing(true)}
+          onCancelEdit={() => {
+            if (activeView) setView(viewOf(activeView));
+            setEditing(false);
+          }}
+          state={view}
+          count={total}
+          onSelect={onSelectView}
+          onSaveNew={(name, shared) => saveNew.mutate({ name, shared })}
+          onSaveExisting={() => saveExisting.mutate()}
+          onDelete={setPendingDelete}
+          onResetToSaved={() => setView(activeView ? viewOf(activeView) : DEFAULT_VIEW)}
+          busy={viewBusy}
+          error={viewError}
+          actions={
+            <>
               <ToolButton onClick={() => setShowImport(true)} title="Import work orders from a CSV">
                 <Icon name="upload" size={14} />
                 Import
@@ -352,40 +287,126 @@ export function WorkOrdersPage() {
                 <Icon name="download" size={14} />
                 Export
               </a>
-            </div>
-          </>
+            </>
+          }
+        />
+
+        <div className="toolbar">
+          <div className="seg" role="group" aria-label="Status groups">
+            {FILTERS.map((f) => {
+              const on = f.key === 'all' ? groups?.size === 0 : (groups?.has(f.key) ?? false);
+              const locked = f.key !== 'all' && lockedGroups.has(f.key);
+              // "All" cannot be honoured without changing a view that is
+              // filtered by status, so it is greyed out rather than lying.
+              const disabled = f.key === 'all' && lockedGroups.size > 0;
+              const title = locked
+                ? `Part of the “${activeView?.name}” view — change it under Filter`
+                : disabled
+                  ? `“${activeView?.name}” is filtered by status — change that under Filter`
+                  : undefined;
+              return (
+                <button
+                  type="button"
+                  key={f.key}
+                  aria-pressed={on}
+                  disabled={disabled}
+                  title={title}
+                  className={`seg-btn${on ? ' is-on' : ''}${locked ? ' is-locked' : ''}`}
+                  onClick={() => onStatusTab(f.key)}
+                >
+                  {f.label}
+                  {locked && <Icon name="lock" size={12} />}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="quick-filters" role="group" aria-label="Quick filters">
+            {QUICK_FILTERS.map((qf) => (
+              <QuickFilter
+                key={qf.key}
+                field={fieldByKey.get(qf.key)}
+                label={qf.label}
+                value={view.filters}
+                onChange={(filters) => setView({ ...view, filters })}
+              />
+            ))}
+          </div>
+
+          {/* The bulk bar sits right here, beside the status tabs, because that
+              is where the eye already is when a selection is made. */}
+          {selected.size > 0 ? (
+            <BulkBar
+              ids={[...selected]}
+              matchTotal={total ?? 0}
+              allMatchingSelected={allMatchingSelected}
+              selectingAll={selectAllMatching.isPending}
+              onSelectAllMatching={() => selectAllMatching.mutate()}
+              onClear={() => {
+                setSelected(new Set());
+                setAllMatchingSelected(false);
+              }}
+              fields={fields}
+            />
+          ) : (
+            <>
+              <FilterMenu
+                fields={fields}
+                opsByType={opsByType}
+                value={view.filters}
+                onChange={(filters) => setView({ ...view, filters })}
+              />
+              <GroupMenu
+                fields={fields}
+                value={view.group_by}
+                onChange={(group_by) => setView({ ...view, group_by })}
+              />
+
+              <div className="toolbar-right">
+                <ColumnsMenu
+                  fields={fields}
+                  columns={view.columns}
+                  onChange={(columns) => setView({ ...view, columns })}
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        <WorkOrdersTable
+          items={items}
+          columns={view.columns}
+          fields={fields}
+          loading={woQuery.isLoading || fieldsQuery.isLoading}
+          error={
+            woQuery.isError
+              ? 'Failed to load work orders. Is the API running on :5174?'
+              : fieldsQuery.isError
+                ? 'Failed to load the field list.'
+                : null
+          }
+          selected={selected}
+          onSelectedChange={(next) => {
+            setSelected(next);
+            setAllMatchingSelected(false);
+          }}
+          sort={view.sort}
+          onSortChange={(sort) => setView({ ...view, sort })}
+          groupBy={view.group_by}
+          groupCounts={woQuery.data?.groups}
+          wrapRef={cardRef}
+        />
+        {/* The card's vertical O-knob, parked on the page's right edge (the
+            spot the canvas rail held before the chrome was pinned). */}
+        <OKnobScrollbar scrollRef={cardRef} />
+
+        {total != null && items.length < total && (
+          <p className="table-more">
+            Showing {items.length.toLocaleString()} of {total.toLocaleString()}. Narrow the filters
+            to see the rest, or export the full set.
+          </p>
         )}
       </div>
-
-      <WorkOrdersTable
-        items={items}
-        columns={view.columns}
-        fields={fields}
-        loading={woQuery.isLoading || fieldsQuery.isLoading}
-        error={
-          woQuery.isError
-            ? 'Failed to load work orders. Is the API running on :5174?'
-            : fieldsQuery.isError
-              ? 'Failed to load the field list.'
-              : null
-        }
-        selected={selected}
-        onSelectedChange={(next) => {
-          setSelected(next);
-          setAllMatchingSelected(false);
-        }}
-        sort={view.sort}
-        onSortChange={(sort) => setView({ ...view, sort })}
-        groupBy={view.group_by}
-        groupCounts={woQuery.data?.groups}
-      />
-
-      {total != null && items.length < total && (
-        <p className="table-more">
-          Showing {items.length.toLocaleString()} of {total.toLocaleString()}. Narrow the filters to
-          see the rest, or export the full set.
-        </p>
-      )}
 
       {showImport && <ImportDialog fields={fields} onClose={() => setShowImport(false)} />}
 

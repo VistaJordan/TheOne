@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -27,27 +27,23 @@ import { SiteCard } from '../components/wo/SiteCard';
 import { DatesCard } from '../components/wo/DatesCard';
 import { PartsCard } from '../components/wo/PartsCard';
 import { FlagsRow } from '../components/wo/FlagsRow';
-import { AllFieldsRow } from '../components/wo/AllFieldsRow';
-import { AllFieldsList } from '../components/wo/AllFieldsList';
+import { AllFieldsPanel } from '../components/wo/AllFieldsPanel';
 import { AuditTrail } from '../components/wo/AuditTrail';
 import { MessagesPanel } from '../components/wo/messages/MessagesPanel';
 import { MessagesRail } from '../components/wo/messages/MessagesRail';
-import { FIELD, daysSince, field, str } from '../lib/fields';
+import { daysSince } from '../lib/fields';
 import { plainStatus } from '../lib/quo';
 import { phaseForStatus } from '../lib/phases';
 
-type Tab = 'overview' | 'messages' | 'audit' | 'fields';
-
-/** Turn literal "\n"/"\r\n" escape sequences from the intake export into real breaks. */
-function unescapeBreaks(text: string | null): string | null {
-  return text == null ? text : text.replace(/\\r\\n|\\n|\\r/g, '\n');
-}
+type Tab =
+  | 'fields' | 'money' | 'payables' | 'people' | 'site' | 'dates' | 'parts' | 'flags'
+  | 'overview' | 'messages' | 'audit';
 
 export function WorkOrderDetailPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>('overview');
-  const tabsRef = useRef<HTMLDivElement>(null);
+  // "All fields" is the landing tab — the record itself before the commentary.
+  const [tab, setTab] = useState<Tab>('fields');
 
   const woQuery = useQuery({
     queryKey: ['work-orders', 'detail', woNumber],
@@ -167,42 +163,31 @@ export function WorkOrderDetailPage() {
     );
   }
 
-  const fields = wo.fields ?? {};
-  const fieldCount = Object.keys(fields).length;
-  // The intake export carries LITERAL two-character "\n" escapes inside the
-  // free-text fields (27 of 28 seeded WOs). `.desc` is already `pre-wrap`, so
-  // real newlines lay out correctly — only these escapes leak through as text.
-  const description = unescapeBreaks(wo.description ?? str(field(fields, FIELD.description)));
-  const lastUpdate = unescapeBreaks(str(field(fields, '20. Last Update')));
-
   const conversation = messagesQuery.data?.conversation ?? null;
   // The comp's badge counts logged calls + texts (segments are dividers).
   const threadCount = conversation
     ? conversation.counts.calls + conversation.counts.texts
     : null;
 
-  const openFieldsTab = () => {
-    setTab('fields');
-    tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   return shell(
     <>
       <WoHeader wo={wo} phase={phase} inStatusDays={inStatusDays} />
 
-      <div className={`wo-grid${tab === 'messages' ? ' is-messages' : ''}`}>
+      <div
+        className={`wo-grid${tab === 'messages' ? ' is-messages' : ''}${
+          tab === 'messages' && conversation ? '' : ' no-rail'
+        }`}
+      >
         <div className="col-main">
-          <section className="card card-pad">
-            <div className="overline">35. WO Description</div>
-            {description ? (
-              <p className="desc">{description}</p>
-            ) : (
-              <p className="desc is-none">No description was supplied with this work order.</p>
-            )}
-            {lastUpdate && <p className="desc">{lastUpdate}</p>}
-          </section>
-
-          <div className="seg tabs" role="tablist" aria-label="Work order sections" ref={tabsRef}>
+          <div className="seg tabs" role="tablist" aria-label="Work order sections">
+            <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>
+            <TabButton id="money" tab={tab} onSelect={setTab}>Money</TabButton>
+            <TabButton id="payables" tab={tab} onSelect={setTab}>Payables</TabButton>
+            <TabButton id="people" tab={tab} onSelect={setTab}>People</TabButton>
+            <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>
+            <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>
+            <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>
+            <TabButton id="flags" tab={tab} onSelect={setTab}>Flags</TabButton>
             <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>
             <TabButton id="messages" tab={tab} onSelect={setTab}>
               <Icon name="msg" size={12} />
@@ -210,9 +195,6 @@ export function WorkOrderDetailPage() {
               {threadCount !== null && <span className="seg-count">{threadCount}</span>}
             </TabButton>
             <TabButton id="audit" tab={tab} onSelect={setTab}>Audit trail</TabButton>
-            <TabButton id="fields" tab={tab} onSelect={setTab}>
-              All fields <span className="seg-count">{fieldCount}</span>
-            </TabButton>
           </div>
 
           {tab === 'overview' && (
@@ -263,41 +245,58 @@ export function WorkOrderDetailPage() {
 
           {tab === 'fields' && (
             <div className="card" role="tabpanel" aria-label="All fields">
-              <div className="card-head">
-                <h2 className="card-title">All fields</h2>
-                <span className="card-meta">{fieldCount} recorded</span>
-              </div>
-              <AllFieldsList fields={fields} />
+              <AllFieldsPanel wo={wo} detailKey={['work-orders', 'detail', woNumber]} />
             </div>
           )}
-        </div>
 
-        <aside className="rail">
-          {tab === 'messages' && conversation ? (
-            <MessagesRail conversation={conversation} items={messagesQuery.data?.items ?? []} />
-          ) : (
-            <>
+          {tab === 'money' && (
+            <div role="tabpanel" aria-label="Money">
               <MoneyCard
                 wo={wo}
                 quoteStatus={
                   quoteQuery.isSuccess ? (quoteQuery.data.quote?.status ?? null) : undefined
                 }
               />
+            </div>
+          )}
+
+          {tab === 'payables' && (
+            <div role="tabpanel" aria-label="Payables">
               <PayablesCard
                 woNumber={wo.wo_number}
                 items={paymentsQuery.data?.items ?? []}
                 totalPaid={paymentsQuery.data?.total_paid ?? null}
                 loading={paymentsQuery.isLoading}
               />
-              <PeopleCard wo={wo} />
-              <SiteCard wo={wo} />
-              <DatesCard wo={wo} />
-              <PartsCard wo={wo} />
-              <FlagsRow wo={wo} />
-              <AllFieldsRow count={fieldCount} onOpen={openFieldsTab} />
-            </>
+            </div>
           )}
-        </aside>
+
+          {tab === 'people' && (
+            <div role="tabpanel" aria-label="People"><PeopleCard wo={wo} /></div>
+          )}
+
+          {tab === 'site' && (
+            <div role="tabpanel" aria-label="Site"><SiteCard wo={wo} /></div>
+          )}
+
+          {tab === 'dates' && (
+            <div role="tabpanel" aria-label="Dates"><DatesCard wo={wo} /></div>
+          )}
+
+          {tab === 'parts' && (
+            <div role="tabpanel" aria-label="Parts"><PartsCard wo={wo} /></div>
+          )}
+
+          {tab === 'flags' && (
+            <div role="tabpanel" aria-label="Flags"><FlagsRow wo={wo} /></div>
+          )}
+        </div>
+
+        {tab === 'messages' && conversation && (
+          <aside className="rail">
+            <MessagesRail conversation={conversation} items={messagesQuery.data?.items ?? []} />
+          </aside>
+        )}
       </div>
     </>,
   );

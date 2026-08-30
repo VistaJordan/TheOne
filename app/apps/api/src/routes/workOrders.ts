@@ -20,7 +20,14 @@ import {
   changeStatus,
   type ListFilters,
 } from '../services/workOrders.js';
-import { resolveTaskId, actorFromRequest, actorIdFromRequest } from '../services/activity.js';
+import {
+  resolveTaskId,
+  actorFromRequest,
+  actorIdFromRequest,
+  actingPrincipalFromRequest,
+} from '../services/activity.js';
+import { updateWorkOrderFields, getFieldHistory } from '../services/woFieldValues.js';
+import { ApiError } from '../errors.js';
 import { getFeed, addComment } from '../services/feed.js';
 import { getMessages, resolveConversationId, sendMessage } from '../services/messages.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
@@ -118,6 +125,31 @@ const idParamsSchema = z.object({ id: z.string().min(1) });
 
 const statusBodySchema = z.object({ status_id: z.string().uuid() });
 
+// S7 · inline field edit: values keyed by CATALOGUE key (`fields.<json key>`).
+const fieldValuesSchema = z.object({
+  values: z.record(z.string().min(1).max(200), z.unknown()).refine(
+    (v) => Object.keys(v).length > 0 && Object.keys(v).length <= 50,
+    'Send between 1 and 50 field values',
+  ),
+});
+
+const fieldHistoryQuerySchema = z.object({
+  field: z.string().min(1).max(200),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+/** 403 helpers for the 0007 field gates — checked on the ACTING principal, the
+    same choice the quote gates make: viewing as a read-only role behaves as one. */
+function requireFieldEdit(req: Parameters<typeof actingPrincipalFromRequest>[0]): string {
+  const p = actingPrincipalFromRequest(req);
+  if (!p.can.editWoFields) {
+    throw new ApiError('FORBIDDEN', 'Your role cannot edit work-order fields', {
+      required_capability: 'can_edit_wo_fields',
+    });
+  }
+  return p.id;
+}
+
 // S2: an update is 1..4000 chars of real text (whitespace-only is empty).
 const commentBodySchema = z.object({
   body: z.string().trim().min(1).max(4000),
@@ -165,6 +197,14 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
 
   app.post('/work-orders/bulk', async (req) => {
     const { ids, patch } = parse(bulkBodySchema, req.body);
+    // Status moves and routing stay open to every signed-in operator (they
+    // always were); writing field VALUES now needs the 0007 capability, the
+    // same gate the detail page's inline editor enforces.
+    const { status_id: _s, home_list_id: _h, ...fieldWrites } = patch;
+    const touchesFields =
+      Object.keys(fieldWrites).some((k) => k !== 'fields') ||
+      Object.keys(patch.fields ?? {}).length > 0;
+    if (touchesFields) requireFieldEdit(req);
     return bulkUpdate(ids, patch, actorIdFromRequest(req));
   });
 
@@ -192,6 +232,30 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { id } = parse(idParamsSchema, req.params);
     const { status_id } = parse(statusBodySchema, req.body);
     return changeStatus(id, status_id, actorIdFromRequest(req));
+  });
+
+  // S7 · the inline editor on the All-fields tab. One or many values, typed
+  // coercion + mirror sync in the service, fresh detail back.
+  app.patch('/work-orders/:id/fields', async (req) => {
+    const { id } = parse(idParamsSchema, req.params);
+    const { values } = parse(fieldValuesSchema, req.body);
+    const actorId = requireFieldEdit(req);
+    return updateWorkOrderFields(id, values, actorId);
+  });
+
+  // S7 · one field's change history, capability-gated.
+  app.get('/work-orders/:id/field-history', async (req) => {
+    const { id } = parse(idParamsSchema, req.params);
+    const { field, limit } = parse(fieldHistoryQuerySchema, req.query);
+    const p = actingPrincipalFromRequest(req);
+    if (!p.can.viewFieldHistory) {
+      throw new ApiError('FORBIDDEN', 'Your role cannot view field history', {
+        required_capability: 'can_view_field_history',
+      });
+    }
+    const taskId = await resolveTaskId(id);
+    if (!taskId) throw notFound('Work order not found');
+    return { items: await getFieldHistory(taskId, field, limit) };
   });
 
   // S2 · the merged updates+activity stream, newest-first.

@@ -2,16 +2,23 @@
    All read from real data. Where a section is read-only it says so and says
    why, rather than showing controls that would not take effect. */
 
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminShell, AdminEmpty } from './AdminShell';
 import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useReorder } from '../../hooks/useReorder';
 import {
+  ApiRequestError,
+  createAdminField,
   getAdminSettings,
   listAdminFields,
   listAdminWorkflow,
   listTrash,
+  reorderAdminFields,
   restoreFromTrash,
+  updateAdminField,
+  type AdminFieldItem,
 } from '../../api/client';
 
 // ══ SETTINGS ═════════════════════════════════════════════════════════════════
@@ -157,55 +164,394 @@ export function AdminWorkflowsPage() {
   );
 }
 
-// ══ CUSTOM FIELDS ════════════════════════════════════════════════════════════
+// ══ CUSTOM FIELDS (S7 — the field engine) ════════════════════════════════════
+
+/** Every type an admin can pick. Labels are the operator's vocabulary; values
+    are the field_type enum. `formula` and `attachment` stay creatable but the
+    detail page renders them read-only until their engines land. */
+const FIELD_TYPE_CHOICES: { value: string; label: string }[] = [
+  { value: 'short_text', label: 'Text' },
+  { value: 'long_text', label: 'Long text' },
+  { value: 'dropdown', label: 'Dropdown' },
+  { value: 'checkbox', label: 'Checkbox' },
+  { value: 'date', label: 'Date' },
+  { value: 'currency', label: '$ amount' },
+  { value: 'number', label: 'Number' },
+  { value: 'users', label: 'People' },
+  { value: 'phone', label: 'Phone number' },
+  { value: 'url', label: 'Link' },
+  { value: 'location', label: 'Address' },
+  { value: 'attachment', label: 'Attachment' },
+  { value: 'formula', label: 'Function' },
+  { value: 'rating', label: 'Rating' },
+];
+
+const typeLabelOf = (v: string) =>
+  FIELD_TYPE_CHOICES.find((c) => c.value === v)?.label ?? v;
 
 export function AdminFieldsPage() {
+  const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-fields'], queryFn: listAdminFields, retry: 0 });
   const items = q.data?.items ?? [];
   const unused = items.filter((f) => f.used_by === 0).length;
 
+  const [adding, setAdding] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [optionsFor, setOptionsFor] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const done = () => {
+    setError(null);
+    // The catalogue feeds the list page and the detail page too.
+    void qc.invalidateQueries({ queryKey: ['admin-fields'] });
+    void qc.invalidateQueries({ queryKey: ['wo-fields'] });
+  };
+  const fail = (err: unknown) =>
+    setError(err instanceof ApiRequestError ? err.message : 'The change did not save');
+
+  const update = useMutation({
+    mutationFn: (v: { id: string; input: Parameters<typeof updateAdminField>[1] }) =>
+      updateAdminField(v.id, v.input),
+    onSuccess: () => { done(); setRenaming(null); },
+    onError: fail,
+  });
+
+  const create = useMutation({
+    mutationFn: createAdminField,
+    onSuccess: () => { done(); setAdding(false); },
+    onError: fail,
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: reorderAdminFields,
+    onSuccess: done,
+    onError: fail,
+  });
+
+  const reorder = useReorder((from, to) => {
+    if (to < 0 || to >= items.length) return;
+    const ids = items.map((f) => f.id);
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    // Optimistic: paint the new order instantly, let the PUT confirm it.
+    qc.setQueryData(['admin-fields'], {
+      items: ids.map((id) => items.find((f) => f.id === id)!),
+    });
+    reorderMutation.mutate(ids);
+  });
+
+  const busy = update.isPending || create.isPending || reorderMutation.isPending;
+
   return (
     <AdminShell
       title="Custom fields"
-      subtitle={`${items.length} definitions carried over from ClickUp${unused ? ` · ${unused} not used by any work order` : ''}`}
+      subtitle={`The work-order record: ${items.length} fields, in the default order every user starts from${unused ? ` · ${unused} unused` : ''}`}
+      actions={
+        <button type="button" className="btn btn-primary" onClick={() => setAdding((v) => !v)}>
+          <Icon name="plus" size={14} />
+          New field
+        </button>
+      }
     >
       <div className="callout" style={{ marginBottom: 16 }}>
         <Icon name="info" size={14} />
         <span>
-          Read-only for now. These keys are how the work-order record reads its values, so adding
-          and renaming waits on the field engine (roadmap L0). The <b>Used by</b> column is live —
-          a field at zero is a candidate to retire.
+          Renaming changes the <b>label</b> everywhere (lists, filters, the audit trail — old
+          entries included); the mono <b>key</b> underneath is the storage address and never
+          changes. Drag rows to set the default field order — each user can still arrange their
+          own order on the work-order page.
         </span>
       </div>
+
+      {error && (
+        <div className="callout" style={{ marginBottom: 16 }} role="alert">
+          <Icon name="alert" size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {adding && (
+        <NewFieldForm
+          busy={create.isPending}
+          onCancel={() => setAdding(false)}
+          onSubmit={(v) => create.mutate(v)}
+        />
+      )}
 
       {q.isLoading && <AdminEmpty icon="list" title="Loading fields…" />}
       {q.isError && <AdminEmpty icon="alert" title="Could not load fields" />}
 
       {items.length > 0 && (
         <div className="table-wrap">
-          <table className="ct">
+          <table className="ct fields-ct">
             <thead>
               <tr>
-                <th className="num">#</th><th>Field</th><th>Type</th>
-                <th className="num">Options</th><th className="num">Used by</th><th>Container</th>
+                <th aria-label="Reorder" />
+                <th>Field</th>
+                <th>Type</th>
+                <th>Options</th>
+                <th className="num">Used by</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((f) => (
-                <tr key={f.id} className={f.used_by === 0 ? 'is-dim' : undefined}>
-                  <td className="num">{f.position ?? '—'}</td>
-                  <td><div className="site"><strong>{f.label}</strong><small className="mono">{f.key}</small></div></td>
-                  <td><span className="chip chip-sm">{f.type}</span></td>
-                  <td className="num">{f.option_count || '—'}</td>
-                  <td className="num">{f.used_by || '—'}</td>
-                  <td>{f.container ?? '—'}</td>
-                </tr>
+              {items.map((f, i) => (
+                <FieldRow
+                  key={f.id}
+                  field={f}
+                  index={i}
+                  busy={busy}
+                  renaming={renaming === f.id}
+                  renameDraft={renameDraft}
+                  onRenameDraft={setRenameDraft}
+                  onStartRename={() => { setRenaming(f.id); setRenameDraft(f.label); }}
+                  onCancelRename={() => setRenaming(null)}
+                  onCommitRename={() => {
+                    const label = renameDraft.trim();
+                    if (label && label !== f.label) update.mutate({ id: f.id, input: { label } });
+                    else setRenaming(null);
+                  }}
+                  onType={(type) => update.mutate({ id: f.id, input: { type } })}
+                  optionsOpen={optionsFor === f.id}
+                  onToggleOptions={() => setOptionsFor(optionsFor === f.id ? null : f.id)}
+                  onOptions={(options) => update.mutate({ id: f.id, input: { options } })}
+                  reorder={reorder}
+                />
               ))}
             </tbody>
           </table>
         </div>
       )}
     </AdminShell>
+  );
+}
+
+function FieldRow({
+  field: f, index, busy, renaming, renameDraft, onRenameDraft, onStartRename,
+  onCancelRename, onCommitRename, onType, optionsOpen, onToggleOptions, onOptions, reorder,
+}: {
+  field: AdminFieldItem;
+  index: number;
+  busy: boolean;
+  renaming: boolean;
+  renameDraft: string;
+  onRenameDraft: (v: string) => void;
+  onStartRename: () => void;
+  onCancelRename: () => void;
+  onCommitRename: () => void;
+  onType: (type: string) => void;
+  optionsOpen: boolean;
+  onToggleOptions: () => void;
+  onOptions: (options: string[]) => void;
+  reorder: ReturnType<typeof useReorder>;
+}) {
+  const isDropdown = f.type === 'dropdown';
+  return (
+    <>
+      <tr
+        className={`${f.used_by === 0 ? 'is-dim ' : ''}${reorder.dragging === index ? 'is-dragging' : ''}`}
+        {...reorder.rowProps(index)}
+      >
+        <td className="fgrip-cell">
+          <button
+            type="button"
+            className="fgrip"
+            aria-label={`Move ${f.label} (position ${index + 1})`}
+            {...reorder.gripProps(index)}
+          >
+            <Icon name="grip" size={12} />
+          </button>
+        </td>
+        <td>
+          {renaming ? (
+            <span className="frename">
+              <input
+                className="fld"
+                value={renameDraft}
+                autoFocus
+                onChange={(e) => onRenameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onCommitRename();
+                  if (e.key === 'Escape') onCancelRename();
+                }}
+              />
+              <button type="button" className="linkbtn" disabled={busy} onClick={onCommitRename}>Save</button>
+              <button type="button" className="linkbtn" onClick={onCancelRename}>Cancel</button>
+            </span>
+          ) : (
+            <div className="site">
+              <strong>
+                {f.label}
+                <button type="button" className="fedit" title={`Rename ${f.label}`} onClick={onStartRename}>
+                  <Icon name="pencil" size={12} />
+                </button>
+              </strong>
+              <small className="mono">{f.key}</small>
+            </div>
+          )}
+        </td>
+        <td>
+          <select
+            className="fld fld-sm"
+            value={f.type}
+            disabled={busy}
+            aria-label={`Type of ${f.label}`}
+            onChange={(e) => onType(e.target.value)}
+          >
+            {FIELD_TYPE_CHOICES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+        </td>
+        <td>
+          {isDropdown ? (
+            <button type="button" className="linkbtn" aria-expanded={optionsOpen} onClick={onToggleOptions}>
+              {f.option_count} value{f.option_count === 1 ? '' : 's'} {optionsOpen ? '▴' : '▾'}
+            </button>
+          ) : (
+            <span className="faint">—</span>
+          )}
+        </td>
+        <td className="num">{f.used_by || '—'}</td>
+      </tr>
+      {isDropdown && optionsOpen && (
+        <tr className="foptions-row">
+          <td />
+          <td colSpan={4}>
+            <OptionsEditor
+              label={f.label}
+              options={f.options}
+              busy={busy}
+              onSave={onOptions}
+            />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/** The dropdown vocabulary: remove with ×, add from the input, Save commits the
+    whole list. Removing a value never touches work orders that already hold it —
+    they keep it, and the editors keep it selectable. */
+function OptionsEditor({ label, options, busy, onSave }: {
+  label: string;
+  options: string[];
+  busy: boolean;
+  onSave: (options: string[]) => void;
+}) {
+  const [draft, setDraft] = useState<string[]>(options);
+  const [add, setAdd] = useState('');
+  const dirty = JSON.stringify(draft) !== JSON.stringify(options);
+
+  const addValue = () => {
+    const v = add.trim();
+    if (!v || draft.includes(v)) return;
+    setDraft([...draft, v]);
+    setAdd('');
+  };
+
+  return (
+    <div className="foptions">
+      <div className="foptions-chips">
+        {draft.map((o) => (
+          <span key={o} className="chip chip-sm foption">
+            {o}
+            <button
+              type="button"
+              aria-label={`Remove ${o} from ${label}`}
+              onClick={() => setDraft(draft.filter((d) => d !== o))}
+            >
+              <Icon name="x" size={12} />
+            </button>
+          </span>
+        ))}
+        {draft.length === 0 && <span className="faint">No values yet — add the first one below.</span>}
+      </div>
+      <div className="foptions-add">
+        <input
+          className="fld fld-sm"
+          placeholder={`Add a ${label} value…`}
+          value={add}
+          onChange={(e) => setAdd(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addValue(); } }}
+        />
+        <button type="button" className="btn btn-sm" onClick={addValue} disabled={add.trim() === ''}>
+          <Icon name="plus" size={12} />
+          Add
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm btn-primary"
+          disabled={!dirty || busy}
+          onClick={() => onSave(draft)}
+        >
+          {busy ? 'Saving…' : 'Save values'}
+        </button>
+        {dirty && !busy && (
+          <button type="button" className="linkbtn" onClick={() => setDraft(options)}>Reset</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NewFieldForm({ busy, onCancel, onSubmit }: {
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (v: { label: string; type: string; options?: string[] }) => void;
+}) {
+  const [label, setLabel] = useState('');
+  const [type, setType] = useState('short_text');
+  const [optionsText, setOptionsText] = useState('');
+  const valid = label.trim().length > 0;
+
+  return (
+    <section className="card adm-form">
+      <div className="card-head">
+        <h3 className="card-title">New field</h3>
+        <span className="card-meta">Appears on every work order immediately</span>
+      </div>
+      <div className="card-pad">
+        <div className="frow">
+          <div className="field">
+            <label className="lbl" htmlFor="nf-label">Name <span className="req">*</span></label>
+            <input className="fld" id="nf-label" type="text" placeholder="Warranty Expiry"
+              value={label} onChange={(e) => setLabel(e.target.value)} />
+            <span className="hint">Also becomes the field's permanent storage key.</span>
+          </div>
+          <div className="field">
+            <label className="lbl" htmlFor="nf-type">Type</label>
+            <select className="fld" id="nf-type" value={type} onChange={(e) => setType(e.target.value)}>
+              {FIELD_TYPE_CHOICES.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {type === 'dropdown' && (
+          <div className="field">
+            <label className="lbl" htmlFor="nf-options">Dropdown values <span className="opt">one per line</span></label>
+            <textarea className="fld" id="nf-options" rows={4} placeholder={'Value A\nValue B'}
+              value={optionsText} onChange={(e) => setOptionsText(e.target.value)} />
+          </div>
+        )}
+        <div className="sheet-f">
+          <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+          <button type="button" className="btn btn-primary" disabled={!valid || busy}
+            onClick={() => onSubmit({
+              label: label.trim(),
+              type,
+              options: type === 'dropdown'
+                ? optionsText.split('\n').map((s) => s.trim()).filter(Boolean)
+                : undefined,
+            })}>
+            <Icon name="plus" size={14} />
+            {busy ? 'Creating…' : `Create ${typeLabelOf(type).toLowerCase()} field`}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -348,3 +694,4 @@ export function AdminTrashPage() {
     </AdminShell>
   );
 }
+

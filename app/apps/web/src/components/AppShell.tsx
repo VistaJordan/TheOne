@@ -8,6 +8,7 @@ import { NavIcon } from './NavIcon';
 import type { IconName } from './Icon';
 import { ActorSwitcher } from './ActorSwitcher';
 import { GlobalSearch } from './GlobalSearch';
+import { OKnobScrollbar } from './OKnobScrollbar';
 import { useAuth } from '../auth/AuthProvider';
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed';
 import { ADMIN_SECTIONS } from '../lib/adminSections';
@@ -74,6 +75,8 @@ export function AppShell({
   // persists across routes and reloads, and answers to Cmd/Ctrl+B.
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const { pathname } = useLocation();
+  // The canvas scroller, handed to the O-knob overlay that replaces its bar.
+  const canvasRef = useRef<HTMLElement>(null);
   // A group opens itself when the route you are on lives inside it, so a deep
   // link never lands you next to a nav that looks unrelated to the page.
   const [openGroups, setOpenGroups] = useState<string[]>(() =>
@@ -348,7 +351,15 @@ export function AppShell({
           </div>
         </aside>
 
-        <main className="canvas">{children}</main>
+        {/* The wrap is the grid cell so the O-knob rail (the 1c scrollbar —
+            the logo's ring riding a node line) can pin to the cell's edge
+            while the canvas underneath scrolls with its native bar hidden. */}
+        <div className="canvas-wrap">
+          {/* data-oknob-own: the canvas rail is this sibling component, so the
+              app-wide manager (lib/oknob.ts) must not mount a second one. */}
+          <main className="canvas" ref={canvasRef} data-oknob-own="">{children}</main>
+          <OKnobScrollbar scrollRef={canvasRef} />
+        </div>
       </div>
     </div>
   );

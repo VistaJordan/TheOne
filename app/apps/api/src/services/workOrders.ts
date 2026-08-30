@@ -14,6 +14,7 @@ import type {
 } from '@theone/shared';
 import { PHASE_BY_STATUS_NAME } from '@theone/shared';
 import { ApiError } from '../errors.js';
+import { logTaskChanges } from './woAudit.js';
 import { UUID_RE, CREATED_AT_SQL, getActivityForTask } from './activity.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
@@ -396,17 +397,13 @@ export async function changeStatus(
       [statusId, newGroup, task_id],
     );
 
-    await tx.query(
-      `INSERT INTO activity_log
-         (actor_principal_id, entity_type, entity_id, action, field, before, after)
-       VALUES ($1, 'task', $2, 'status_changed', 'status_id', $3::jsonb, $4::jsonb)`,
-      [
-        actorId,
-        task_id,
-        JSON.stringify({ status_id: currentStatusId, status_name: currentStatusName }),
-        JSON.stringify({ status_id: statusId, status_name: newStatusName }),
-      ],
-    );
+    await logTaskChanges(tx, actorId, task_id, [
+      {
+        field: 'status_id',
+        before: { status_id: currentStatusId, status_name: currentStatusName },
+        after: { status_id: statusId, status_name: newStatusName },
+      },
+    ]);
   });
 
   // Return the fresh detail object (same shape as GET /:id).

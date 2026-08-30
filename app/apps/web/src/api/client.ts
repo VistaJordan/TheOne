@@ -568,6 +568,16 @@ export function postPaymentRequest(
 export type AuthMode = 'entra' | 'bypass';
 export type UserStatus = 'invited' | 'active' | 'disabled';
 
+/** The resolved capability set (/auth/me `can`, S7). Mirrors what the server
+    enforces — the UI gates on these instead of guessing from the role code. */
+export interface SessionCapabilities {
+  edit_quote: boolean;
+  approve_quote: boolean;
+  manage_users: boolean;
+  edit_wo_fields: boolean;
+  view_field_history: boolean;
+}
+
 export interface SessionUser {
   id: string;
   name: string;
@@ -575,6 +585,8 @@ export interface SessionUser {
   role: string | null;
   is_super_admin: boolean;
   status: UserStatus;
+  /** Optional so the dev-candidates list (which has no session) still types. */
+  can?: SessionCapabilities;
 }
 
 export interface MeResponse {
@@ -583,6 +595,41 @@ export interface MeResponse {
   user: SessionUser | null;
   acting_as: SessionUser | null;
   is_impersonating?: boolean;
+}
+
+// ── Admin › Audit log ────────────────────────────────────────────────────────
+
+export interface AuditLogEntry extends ActivityEntry {
+  entity_type: string;
+  wo_number: string | null;
+  ext_name: string | null;
+}
+
+export interface AuditLogFilters {
+  from?: string;
+  to?: string;
+  actor_id?: string;
+  action?: string;
+  field?: string;
+  q?: string;
+}
+
+export interface AuditLogPage {
+  items: AuditLogEntry[];
+  total: number;
+  facets: { actors: { id: string; name: string }[]; actions: string[] };
+}
+
+export function listAuditLog(
+  params: AuditLogFilters & { limit?: number; offset?: number },
+): Promise<AuditLogPage> {
+  return request<AuditLogPage>(`/admin/audit${toQuery(params)}`);
+}
+
+/** A real link, so the browser handles the download (same pattern as the
+    work-order export). */
+export function auditLogExportUrl(params: AuditLogFilters): string {
+  return `/api/admin/audit/export${toQuery(params)}`;
 }
 
 export interface AdminUserItem extends SessionUser {
@@ -601,6 +648,8 @@ export interface RoleRecord {
   can_edit_quote: boolean;
   can_approve_quote: boolean;
   can_manage_users: boolean;
+  can_edit_wo_fields: boolean;
+  can_view_field_history: boolean;
   position: number;
   user_count: number;
 }
@@ -659,6 +708,8 @@ export interface RoleInput {
   can_edit_quote?: boolean;
   can_approve_quote?: boolean;
   can_manage_users?: boolean;
+  can_edit_wo_fields?: boolean;
+  can_view_field_history?: boolean;
 }
 
 export function createRole(input: RoleInput): Promise<{ role: RoleRecord }> {
@@ -736,11 +787,38 @@ export interface AdminFieldItem {
   container: string | null;
   position: number | null;
   option_count: number;
+  /** The dropdown vocabulary, for the options editor (S7). */
+  options: string[];
   used_by: number;
 }
 
 export function listAdminFields(): Promise<{ items: AdminFieldItem[] }> {
   return request('/admin/fields');
+}
+
+// ── S7 · admin › custom fields — the field engine's writes ───────────────────
+
+export interface AdminFieldInput {
+  label?: string;
+  type?: string;
+  options?: string[];
+}
+
+export function createAdminField(
+  input: AdminFieldInput & { label: string; type: string },
+): Promise<{ field: AdminFieldItem }> {
+  return request('/admin/fields', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateAdminField(
+  id: string,
+  input: AdminFieldInput,
+): Promise<{ field: AdminFieldItem }> {
+  return request(`/admin/fields/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function reorderAdminFields(ids: string[]): Promise<{ items: AdminFieldItem[] }> {
+  return request('/admin/fields/order', { method: 'PUT', body: JSON.stringify({ ids }) });
 }
 
 export interface TrashItem {
@@ -850,6 +928,44 @@ export function updateSavedView(
 
 export function deleteSavedView(id: string): Promise<{ ok: true }> {
   return request(`/views/${id}`, { method: 'DELETE' });
+}
+
+// ── S7 · inline field edit, field history, per-account prefs ─────────────────
+
+/** PATCH /api/work-orders/:id/fields — values keyed by CATALOGUE key
+    (`fields.<json key>`). Needs the can_edit_wo_fields capability. */
+export function patchWorkOrderFields(
+  idOrNumber: string,
+  values: Record<string, unknown>,
+): Promise<{ changed: number; detail: WorkOrderDetailV2 }> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/fields`, {
+    method: 'PATCH',
+    body: JSON.stringify({ values }),
+  });
+}
+
+/** GET /api/work-orders/:id/field-history?field= — one field's trail, newest
+    first. Needs the can_view_field_history capability. */
+export function getFieldHistory(
+  idOrNumber: string,
+  field: string,
+): Promise<{ items: ActivityEntry[] }> {
+  return request(
+    `/work-orders/${encodeURIComponent(idOrNumber)}/field-history${toQuery({ field })}`,
+  );
+}
+
+/** Per-ACCOUNT preferences (user_pref) — unlike localStorage these follow the
+    signed-in person across machines. First tenant: the All-fields tab order. */
+export function getUserPref<T>(key: string): Promise<{ key: string; value: T | null }> {
+  return request(`/prefs/${encodeURIComponent(key)}`);
+}
+
+export function setUserPref(key: string, value: unknown): Promise<{ ok: true }> {
+  return request(`/prefs/${encodeURIComponent(key)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+  });
 }
 
 /** GET /api/lists — the routing lists a work order can be homed in. Reference

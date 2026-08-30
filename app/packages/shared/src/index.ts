@@ -173,6 +173,10 @@ export interface WoFieldDescriptor {
   custom?: boolean;
   sortable: boolean;
   numeric?: boolean;
+  /** Custom fields only: the raw field_def type ('short_text', 'long_text',
+      'phone', 'url', 'formula', 'attachment', …). `type` says how a value
+      COMPARES; the subtype says how it should be EDITED. */
+  subtype?: string;
 }
 
 export interface WoFieldCatalogue {

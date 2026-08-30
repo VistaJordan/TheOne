@@ -5,6 +5,7 @@ import { ThemeProvider } from './theme/ThemeProvider';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { SignInPage } from './pages/SignInPage';
 import { AdminUsersPage, AdminRolesPage } from './pages/admin/AdminUsersPage';
+import { AdminAuditPage } from './pages/admin/AdminAuditPage';
 import {
   AdminSettingsPage,
   AdminWorkflowsPage,
@@ -93,6 +94,7 @@ export function App() {
               <Route path="/admin/workflows" element={<RequireAuth><AdminWorkflowsPage /></RequireAuth>} />
               <Route path="/admin/fields" element={<RequireAuth><AdminFieldsPage /></RequireAuth>} />
               <Route path="/admin/themes" element={<RequireAuth><AdminThemesPage /></RequireAuth>} />
+              <Route path="/admin/audit" element={<RequireAuth><AdminAuditPage /></RequireAuth>} />
               <Route path="/admin/trash" element={<RequireAuth><AdminTrashPage /></RequireAuth>} />
             </Routes>
           </AuthProvider>

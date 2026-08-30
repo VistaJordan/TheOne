@@ -39,6 +39,10 @@ export interface FieldDescriptor {
   sortable: boolean;
   /** Right-align in the table, and format as a number. */
   numeric?: boolean;
+  /** The raw field_def type for custom fields ('long_text', 'phone', 'formula',
+      'attachment', …). The 6-value `type` says how to COMPARE a value; the
+      subtype says how to EDIT one — textarea vs input, or not at all. */
+  subtype?: string;
 }
 
 // ── Core (promoted column) fields ────────────────────────────────────────────
@@ -109,7 +113,9 @@ const CUSTOM_TYPE_MAP: Record<string, FieldType> = {
   long_text: 'text',
   dropdown: 'select',
   date: 'date',
-  users: 'text',
+  // A person field (Assignee, AM, …) is a picker like a dropdown: its choices
+  // are the people in the system, not free text (see `customDistinctOptions`).
+  users: 'select',
   formula: 'text',
   currency: 'money',
   attachment: 'text',
@@ -117,6 +123,7 @@ const CUSTOM_TYPE_MAP: Record<string, FieldType> = {
   rating: 'number',
   url: 'text',
   number: 'number',
+  phone: 'text',
 };
 
 interface FieldDefRow {
@@ -128,6 +135,16 @@ interface FieldDefRow {
 
 let customCache: { at: number; fields: FieldDescriptor[] } | null = null;
 const CUSTOM_TTL_MS = 30_000;
+
+/** Called by the admin field-def writes: without this, a rename or a new field
+    would take up to 30 s to reach the catalogue. */
+export function invalidateFieldCache(): void {
+  customCache = null;
+}
+
+/** Select-typed custom fields with NO declared vocabulary (the `users` ones):
+    their choices are read from the data instead. Rebuilt with the cache. */
+let distinctCustomKeys: string[] = [];
 
 /** Custom fields, keyed as they appear inside `task.fields`. Cached briefly:
     the catalogue is read on every list render and changes only when an
@@ -146,6 +163,7 @@ export async function listCustomFields(): Promise<FieldDescriptor[]> {
   // so the first definition of a key wins and the duplicate is dropped.
   const seen = new Set<string>();
   const fields: FieldDescriptor[] = [];
+  distinctCustomKeys = [];
   for (const r of res.rows) {
     if (seen.has(r.key)) continue;
     seen.add(r.key);
@@ -163,7 +181,9 @@ export async function listCustomFields(): Promise<FieldDescriptor[]> {
       custom: true,
       sortable: true,
       numeric: type === 'number' || type === 'money',
+      subtype: r.type,
     });
+    if (type === 'select' && !options) distinctCustomKeys.push(r.key);
   }
 
   customCache = { at: now, fields };
@@ -204,6 +224,41 @@ async function distinctOptions(): Promise<Record<string, FieldOption[]>> {
   return out;
 }
 
+/**
+ * The choices for a person field: EVERY user in the system — the assignee
+ * (the dispatcher / operations manager handling the work order) can be anyone
+ * on the team, whether or not they hold a work order today — plus any name
+ * already written on a work order that is not a user (an ex-colleague, an
+ * import), so no existing value is unreachable. Users are matched by display
+ * name because that is what the JSONB bag stores.
+ */
+async function customDistinctOptions(): Promise<Record<string, FieldOption[]>> {
+  const out: Record<string, FieldOption[]> = {};
+  if (distinctCustomKeys.length === 0) return out;
+  const users = await query<{ v: string }>(
+    `SELECT display_name AS v
+       FROM principal
+      WHERE kind = 'human' AND status <> 'disabled'
+      ORDER BY display_name ASC`,
+  );
+  for (const key of distinctCustomKeys) {
+    const onTasks = await query<{ v: string }>(
+      `SELECT DISTINCT (t.fields->>$1) AS v
+         FROM task t
+        WHERE t.deleted_at IS NULL AND (t.fields->>$1) IS NOT NULL AND (t.fields->>$1) <> ''
+        ORDER BY v ASC
+        LIMIT 300`,
+      [key],
+    );
+    const names = new Set(users.rows.map((r) => r.v));
+    for (const r of onTasks.rows) names.add(r.v);
+    out[`fields.${key}`] = [...names]
+      .sort((a, b) => a.localeCompare(b))
+      .map((v) => ({ value: v, label: v }));
+  }
+  return out;
+}
+
 export interface FieldCatalogue {
   fields: FieldDescriptor[];
   default_columns: string[];
@@ -216,6 +271,8 @@ export async function getFieldCatalogue(): Promise<FieldCatalogue> {
     distinctOptions(),
     query<{ name: string; color: string }>(`SELECT name, color FROM status ORDER BY position ASC`),
   ]);
+  // After `listCustomFields`, which is what decides the keys to read.
+  const customDistinct = await customDistinctOptions();
 
   const core: FieldDescriptor[] = CORE_FIELDS.map((f) => {
     const { sql: _sql, distinct: _distinct, ...rest } = f;
@@ -226,7 +283,11 @@ export async function getFieldCatalogue(): Promise<FieldCatalogue> {
     return { ...rest, options };
   });
 
-  return { fields: [...core, ...custom], default_columns: [...DEFAULT_COLUMNS] };
+  const customWithOptions = custom.map((f) =>
+    customDistinct[f.key] ? { ...f, options: customDistinct[f.key] } : f,
+  );
+
+  return { fields: [...core, ...customWithOptions], default_columns: [...DEFAULT_COLUMNS] };
 }
 
 // ── Resolution ───────────────────────────────────────────────────────────────
@@ -418,7 +479,10 @@ function compileRule(f: ResolvedField, rule: FilterRule, p: Params): string {
 
   if (rule.op === 'is_true' || rule.op === 'is_false') {
     const e = exprFor(f, p);
-    return `${e} IS ${rule.op === 'is_true' ? 'TRUE' : 'FALSE'}`;
+    // A checkbox nobody has touched is unchecked: "is false" must match the
+    // rows where the key was never written, or filtering "Not Fully Paid is
+    // unchecked" would hide most of the list. IS NOT TRUE covers NULL.
+    return rule.op === 'is_true' ? `${e} IS TRUE` : `${e} IS NOT TRUE`;
   }
 
   if (rule.op === 'between') {

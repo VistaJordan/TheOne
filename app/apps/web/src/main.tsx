@@ -12,9 +12,14 @@ import './styles/payment.css';
 import './styles/auth.css';
 import './styles/wo-list.css';
 import { App } from './App';
+import { initOKnob } from './lib/oknob';
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Root element #root not found');
+
+// Native scrollbars are hidden app-wide (app.css); the O-knob manager mounts
+// the branded replacement on every scrollable that ever appears.
+initOKnob();
 
 createRoot(rootEl).render(
   <StrictMode>

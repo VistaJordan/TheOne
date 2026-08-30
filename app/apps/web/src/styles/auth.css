@@ -363,3 +363,64 @@ td.pcell .sw { justify-content: center; }
 .swatch-meta { display: flex; flex-direction: column; }
 .swatch-meta b { font-size: 12px; }
 .swatch-meta code { font-size: 10.5px; color: var(--ink-3); }
+
+/* == S7 . Admin > Custom fields - the field engine's editor ================= */
+.fields-ct th:first-child { width: 28px; }
+.fields-ct tr.is-dragging { opacity: 0.45; }
+
+.fgrip-cell { padding-right: 0 !important; }
+.fgrip {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+}
+.fgrip:hover, .fgrip:focus-visible { color: var(--ink); background: var(--chip); }
+
+.fedit {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  vertical-align: -3px;
+}
+.fields-ct tr:hover .fedit, .fedit:focus-visible { opacity: 1; }
+.fedit:hover { color: var(--ink); background: var(--chip); }
+
+.frename { display: flex; align-items: center; gap: 8px; }
+.frename .fld { max-width: 260px; }
+
+.fld-sm { padding: 4px 8px; font-size: 12px; }
+
+.foptions-row > td { background: var(--thead-bg, var(--chip)); }
+.foptions { display: flex; flex-direction: column; gap: 10px; padding: 8px 0; }
+.foptions-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow-y: auto; }
+.foption { display: inline-flex; align-items: center; gap: 5px; }
+.foption button {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  border-radius: 999px;
+}
+.foption button:hover { color: var(--danger); }
+.foptions-add { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.foptions-add .fld { max-width: 240px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .fedit { transition: opacity 120ms ease; }
+}

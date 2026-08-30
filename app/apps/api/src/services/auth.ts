@@ -22,6 +22,8 @@ export interface Capabilities {
   quoteEdit: boolean;
   quoteApprove: boolean;
   manageUsers: boolean;
+  editWoFields: boolean;
+  viewFieldHistory: boolean;
 }
 
 export interface SessionPrincipal {
@@ -52,9 +54,11 @@ export interface AuthContext {
 const PRINCIPAL_COLUMNS = `
   p.id, p.display_name, p.email, p.role, p.kind, p.is_super_admin, p.status,
   r.label AS role_label,
-  COALESCE(r.can_edit_quote,    false) AS can_edit_quote,
-  COALESCE(r.can_approve_quote, false) AS can_approve_quote,
-  COALESCE(r.can_manage_users,  false) AS can_manage_users`;
+  COALESCE(r.can_edit_quote,         false) AS can_edit_quote,
+  COALESCE(r.can_approve_quote,      false) AS can_approve_quote,
+  COALESCE(r.can_manage_users,       false) AS can_manage_users,
+  COALESCE(r.can_edit_wo_fields,     false) AS can_edit_wo_fields,
+  COALESCE(r.can_view_field_history, false) AS can_view_field_history`;
 
 const PRINCIPAL_FROM = `FROM principal p LEFT JOIN role r ON r.code = p.role`;
 
@@ -70,6 +74,8 @@ interface PrincipalRow {
   can_edit_quote: boolean;
   can_approve_quote: boolean;
   can_manage_users: boolean;
+  can_edit_wo_fields: boolean;
+  can_view_field_history: boolean;
 }
 
 function toPrincipal(r: PrincipalRow): SessionPrincipal {
@@ -87,7 +93,11 @@ function toPrincipal(r: PrincipalRow): SessionPrincipal {
       quoteApprove: r.can_approve_quote,
       // A super admin can always reach the admin console regardless of which
       // operating role they hold — the two grants are orthogonal (see 0005).
+      // The same reasoning covers the 0007 field gates: an account trusted to
+      // manage every user is trusted to edit a field and read its history.
       manageUsers: r.can_manage_users || r.is_super_admin,
+      editWoFields: r.can_edit_wo_fields || r.is_super_admin,
+      viewFieldHistory: r.can_view_field_history || r.is_super_admin,
     },
   };
 }

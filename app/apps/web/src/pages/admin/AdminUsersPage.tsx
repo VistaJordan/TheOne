@@ -287,12 +287,14 @@ function RolesTable({
             <th className="pcol">Build quotes</th>
             <th className="pcol">Approve &amp; send</th>
             <th className="pcol">Manage users</th>
+            <th className="pcol">Edit WO fields</th>
+            <th className="pcol">Field history</th>
             <th />
           </tr>
         </thead>
         <tbody>
-          {loading && <tr className="ct-empty"><td colSpan={6}>Loading roles…</td></tr>}
-          {error && !loading && <tr className="ct-empty"><td colSpan={6}>Could not load roles.</td></tr>}
+          {loading && <tr className="ct-empty"><td colSpan={8}>Loading roles…</td></tr>}
+          {error && !loading && <tr className="ct-empty"><td colSpan={8}>Could not load roles.</td></tr>}
           {items.map((r) => (
             <tr key={r.id}>
               <td>
@@ -312,6 +314,10 @@ function RolesTable({
                 onToggle={(v) => onChange(r.id, { can_approve_quote: v })} />
               <Cap on={r.can_manage_users} busy={busy} label={`${r.label} can manage users`}
                 onToggle={(v) => onChange(r.id, { can_manage_users: v })} />
+              <Cap on={r.can_edit_wo_fields} busy={busy} label={`${r.label} can edit work-order fields`}
+                onToggle={(v) => onChange(r.id, { can_edit_wo_fields: v })} />
+              <Cap on={r.can_view_field_history} busy={busy} label={`${r.label} can view field history`}
+                onToggle={(v) => onChange(r.id, { can_view_field_history: v })} />
               <td className="num">
                 {r.is_system ? (
                   <span className="faint" title="Built-in roles are referenced by the seed and by migrations">
@@ -424,6 +430,7 @@ function RoleForm({ busy, onCancel, onSubmit }: {
   onSubmit: (v: {
     label: string; description: string | null;
     can_edit_quote: boolean; can_approve_quote: boolean; can_manage_users: boolean;
+    can_edit_wo_fields: boolean; can_view_field_history: boolean;
   }) => void;
 }) {
   const [label, setLabel] = useState('');
@@ -431,6 +438,8 @@ function RoleForm({ busy, onCancel, onSubmit }: {
   const [edit, setEdit] = useState(false);
   const [approve, setApprove] = useState(false);
   const [manage, setManage] = useState(false);
+  const [editFields, setEditFields] = useState(false);
+  const [viewHistory, setViewHistory] = useState(false);
 
   const valid = label.trim().length >= 2;
   // Mirrors the server's normalizeCode so the operator sees the identifier they
@@ -463,7 +472,7 @@ function RoleForm({ busy, onCancel, onSubmit }: {
         <div className="field">
           <span className="lbl">Capabilities</span>
           <span className="hint" style={{ marginBottom: 8 }}>
-            Only the three gates the server enforces today. More appear here as modules land — a
+            Only the gates the server enforces today. More appear here as modules land — a
             checkbox for a permission nothing checks would be worse than none.
           </span>
           <div className="cap-list">
@@ -473,6 +482,10 @@ function RoleForm({ busy, onCancel, onSubmit }: {
               note="Approve, reject with a note, push the summary to the client CMMS." />
             <CapRow on={manage} set={setManage} title="Manage users"
               note="Full access to this admin console." />
+            <CapRow on={editFields} set={setEditFields} title="Edit work-order fields"
+              note="Change field values inline on the detail page, and in bulk from the list." />
+            <CapRow on={viewHistory} set={setViewHistory} title="View field history"
+              note="Open any field's change trail on the detail page." />
           </div>
         </div>
 
@@ -483,6 +496,7 @@ function RoleForm({ busy, onCancel, onSubmit }: {
               label: label.trim(),
               description: description.trim() || null,
               can_edit_quote: edit, can_approve_quote: approve, can_manage_users: manage,
+              can_edit_wo_fields: editFields, can_view_field_history: viewHistory,
             })}>
             <Icon name="plus" size={14} />
             {busy ? 'Creating…' : 'Create role'}

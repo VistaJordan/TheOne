@@ -48,23 +48,6 @@ function slug(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, '.');
 }
 
-/** ClickUp field type → our field_type enum. */
-const FIELD_TYPE_MAP: Record<string, string> = {
-  attachment: 'attachment',
-  checkbox: 'checkbox',
-  drop_down: 'dropdown',
-  short_text: 'short_text',
-  text: 'long_text',
-  date: 'date',
-  users: 'users',
-  formula: 'formula',
-  number: 'number',
-  currency: 'currency',
-  location: 'location',
-  url: 'url',
-  emoji: 'rating',
-};
-
 /** Non-canonical sample status strings → canonical status name. */
 const STATUS_ALIAS: Record<string, string> = {
   '!! approved': 'approved',
@@ -272,6 +255,131 @@ const EXTRA_SUPER_ADMINS: { name: string; email: string; initials: string }[] = 
   { name: 'Jack', email: 'jack@byblosvista.com', initials: 'J' },
 ];
 
+// ── S7 · THE CURATED FIELD CATALOGUE ─────────────────────────────────────────
+// The field_def table used to mirror the ClickUp export verbatim: 102 defs whose
+// key AND label were the raw ClickUp name ("16. Client NTE 🔴"). The catalogue is
+// now curated: the fields the team actually runs on, in the order the admin wants
+// them shown (position = array index = the admin default order; user_pref lets
+// each user override it for themselves).
+//
+// THE KEY NEVER CHANGES. `key` is the address inside task.fields — the detail
+// cards (web lib/fields.ts FIELD), saved views and the audit trail all hold it —
+// so a curated field that existed in ClickUp keeps its ugly key and gets a clean
+// LABEL. Only genuinely new fields get clean keys. Renaming in the admin console
+// edits the label for the same reason.
+//
+// Types use OUR field_type enum directly (no FIELD_TYPE_MAP hop):
+//   text → short_text · long text → long_text · $ → currency · link → url
+//   people → users · function → formula · address → location · phone (0007)
+//
+// `options: null` on a dropdown = vocabulary comes from the ClickUp export
+// (Client, Trade — the founder will refine them in Admin › Custom fields).
+// `options: []` = deliberately empty until the founder supplies values (MoD Call).
+interface CuratedField {
+  key: string;
+  label: string;
+  type: string;
+  options?: string[] | null;
+}
+
+// FM companies — transcribed from the founder's ClickUp dropdown screenshots
+// (2026-08). One entry at the top of the sixth screenshot was cut off and is
+// missing here; it can be re-added in Admin › Custom fields.
+const FM_OPTIONS = [
+  'JDE', 'RCS', 'FmUSA', 'RSM365', 'Envirousa', 'Broadway National', 'DMG',
+  'AAFM', 'Trillium', 'Safety', 'RKB', 'MaintenX', 'Titan', 'Davaco', 'KFM24',
+  'Nest', 'MRA', 'Brandpoint', 'Branded', 'PRS', 'Powerhouse', 'Vanguard',
+  'FrontStreet', 'HFS', 'TrueSource', 'EMCOR', "Grimaldi's", 'RMM', 'Laser',
+  'Vixxo', 'Ferrandino & Son', 'Advanced', 'ED Shelman', 'Pet Supermarket',
+  'Lessen', 'Outback Steakhouse', 'Dynamic', 'Vuori', 'RESQ', 'POWEER', 'TCG',
+  'KBS', 'TFG', 'DWM', 'AG', 'FEON', 'OS', 'AllSystems', 'EVO', 'KINDERCARE',
+  'ONO-BBQ', 'AMERCO', 'HMCB', 'OAP', 'MACYS', 'Board room salon', 'REPI',
+  'Toy Factory', 'CSH', 'Extra Space', 'CCC', 'CHEESECAKE FACTORY', 'HERO',
+  'Bashas', 'FedEx', 'JRSK', 'Rural King', '23rd Goup', 'Ralph Lauren', 'RMH',
+  'COLT', 'EMM', 'Charter Foods', 'Freshco', 'Baldor Foods', 'Patriot',
+  'Honeywell', 'Impact', 'GHC', 'BOSS', 'Uncommon Brands', 'Swig Stores', 'AFS',
+  'First Watch', 'MOD Pizza', 'PCRK', 'TDS', 'Flynn', 'Riser Fitness', 'solt',
+  'SeamGo', 'Portland Leather', 'Mobettahs', 'Puttshack', 'Habit Burger', 'WKS',
+  'AMC', 'Giant Oil', 'RedRoof', 'SizzlingPlatter', 'Learning', 'SunHoldings',
+  '7-Eleven', 'Canteen', "Mimi'sCafe", 'OReilly', "Wendy's", 'DinTai',
+  'NETLeaseCapital', 'CarMart', 'Avolta', 'InnovativeRenalCare', 'Biscuitville',
+  'QDOBA', 'AMP', 'SHEER', 'rf', 'irc', 'BKR', 'FiveGuys', 'nets',
+  'GreenThumbIndustries', 'emc', 'riser', 'DoorDash', 'irz', 'bia',
+  'PlannedParentHood', 'OXXO', 'RFM',
+];
+
+const US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL',
+  'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT',
+  'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI',
+  'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC',
+];
+
+const CURATED_FIELDS: CuratedField[] = [
+  { key: '✅ Client AFM',            label: 'Client AFM',           type: 'short_text' },
+  { key: '1. Not Fully Paid',        label: 'Not Fully Paid',       type: 'checkbox' },
+  { key: '12. Bad quote',            label: 'Bad Quote',            type: 'checkbox' },
+  { key: '16. Client NTE 🔴',        label: 'Client NTE',           type: 'currency' },
+  { key: '17. Address',              label: 'Address',              type: 'location' },
+  { key: '20. Last Update',          label: 'Last Update',          type: 'short_text' },
+  { key: '21. Comp',                 label: 'Comp',                 type: 'dropdown', options: ['AF', 'SFM', 'BKR', 'TPM', 'EDS', 'RF'] },
+  { key: '22. FM',                   label: 'FM',                   type: 'dropdown', options: FM_OPTIONS },
+  { key: '24. Sign-Off Link',        label: 'Sign-Off Link',        type: 'short_text' },
+  { key: '25. IVR Link',             label: 'IVR Link',             type: 'short_text' },
+  { key: '26. PPR Link',             label: 'PPR Link',             type: 'short_text' },
+  { key: '27. Yoda Link',            label: 'Yoda Link',            type: 'short_text' },
+  { key: '29. PDF Link',             label: 'PDF Link',             type: 'short_text' },
+  { key: '34. Cost',                 label: 'Cost',                 type: 'currency' },
+  { key: 'Admin Comment',            label: 'Admin Comment',        type: 'long_text' },
+  { key: '18. Check-in/out Status',  label: 'Check-in/out Status',  type: 'dropdown', options: ['Checked-in', 'Checked-out', 'Checked-out - RTN'] },
+  { key: 'Client Quote',             label: 'Client Quote',         type: 'long_text' },
+  { key: '28. Sharepoint Link',      label: 'Sharepoint Link',      type: 'url' },
+  { key: 'Days since Done',          label: 'Days Since Done',      type: 'formula' },
+  { key: 'Grey Flag Date',           label: 'Grey Flag Date',       type: 'date' },
+  { key: 'Invoice #',                label: 'Invoice #',            type: 'short_text' },
+  { key: 'Invoice Date',             label: 'Invoice Date',         type: 'date' },
+  { key: 'MoD Call',                 label: 'MoD Call',             type: 'dropdown', options: [] },
+  { key: 'MoD Call Notes',           label: 'MoD Call Notes',       type: 'long_text' },
+  { key: 'QC Date',                  label: 'QC Date',              type: 'date' },
+  { key: 'Quote Check',              label: 'Quote Check',          type: 'checkbox' },
+  { key: 'Total Invoiced',           label: 'Total Invoiced',       type: 'currency' },
+  { key: '❌Today',                  label: 'Today',                type: 'checkbox' },
+  { key: '🚨 SLA Requested',         label: 'SLA Requested',        type: 'checkbox' },
+  { key: '🚨 SLA Updated',           label: 'SLA Updated',          type: 'checkbox' },
+  { key: '30. IVR Pin',              label: 'IVR Pin',              type: 'short_text' },
+  { key: 'Tech Name',                label: 'Tech Name',            type: 'short_text' },
+  { key: 'Tech Phone Number',        label: 'Tech Phone Number',    type: 'phone' },
+  { key: '35. WO Description',       label: 'WO Description',       type: 'long_text' },
+  { key: '37. PDF',                  label: 'PDF',                  type: 'attachment' },
+  { key: 'AM',                       label: 'AM',                   type: 'users' },
+  { key: 'Audited',                  label: 'Audited',              type: 'checkbox' },
+  { key: 'CICO Method',              label: 'CICO Method',          type: 'short_text' },
+  { key: 'City',                     label: 'City',                 type: 'short_text' },
+  { key: 'Client',                   label: 'Client',               type: 'dropdown', options: null },
+  { key: 'Date-Time Received',       label: 'Date-Time Received',   type: 'date' },
+  { key: 'Days since Invoiced',      label: 'Days Since Invoiced',  type: 'formula' },
+  { key: 'Days Since QC',            label: 'Days Since QC',        type: 'formula' },
+  { key: 'Discount',                 label: 'Discount',             type: 'currency' },
+  { key: 'Ecotrak ID',               label: 'Ecotrak ID',           type: 'short_text' },
+  { key: 'GTG',                      label: 'GTG',                  type: 'checkbox' },
+  { key: 'MOD Date',                 label: 'MOD Date',             type: 'date' },
+  { key: 'Previous Assignees',       label: 'Previous Assignees',   type: 'users' },
+  { key: 'Profit',                   label: 'Profit',               type: 'formula' },
+  { key: 'Sales Owner',              label: 'Sales Owner',          type: 'dropdown', options: ['Ro', 'Teresa'] },
+  { key: 'Show in CA',               label: 'Show in CA',           type: 'checkbox' },
+  { key: 'State',                    label: 'State',                type: 'dropdown', options: US_STATES },
+  { key: 'Store',                    label: 'Store',                type: 'short_text' },
+  { key: 'TL',                       label: 'Team Lead',            type: 'users' },
+  { key: 'Tech Map',                 label: 'Tech Map',             type: 'short_text' },
+  { key: 'Tech Quote',               label: 'Tech Quote',           type: 'long_text' },
+  { key: 'Zip Code',                 label: 'Zip Code',             type: 'short_text' },
+  { key: 'Trade',                    label: 'Trade',                type: 'dropdown', options: null },
+  // System field, kept OUT of the founder's curated order: the dispatcher
+  // handling the WO. The header chip, the list's Assignee quick filter and
+  // saved views all address fields.Assignee (see the ASSIGNEE_FIELD note below).
+  { key: 'Assignee',                 label: 'Assignee',             type: 'users' },
+];
+
 // ── S4 · the demo QUOTE for WO-39403 (copy VERBATIM from the approved comp,
 //    quote-comp.tpl.html) ─────────────────────────────────────────────────────
 //
@@ -468,19 +576,31 @@ async function main() {
     return id;
   }
 
-  // ── 4. Field definitions (§4.3) ────────────────────────────────────────────
+  // ── 4. Field definitions (§4.3 → S7 curated catalogue) ─────────────────────
+  // The CURATED list replaces the verbatim ClickUp mirror: clean labels + the
+  // founder's types/vocabularies over the SAME task.fields keys (see the
+  // CURATED_FIELDS note). ClickUp fields not in the curated list keep their
+  // values in the bag but get no definition — invisible to the catalogue until
+  // an admin re-adds them in Admin › Custom fields.
   let fieldCount = 0;
   let position = 0;
-  for (const f of data.fields) {
-    const type = FIELD_TYPE_MAP[f.type];
-    if (!type) throw new Error(`Unknown ClickUp field type: ${f.type}`);
+  // ClickUp keeps the task's ASSIGNEE outside the custom-field bag; the list
+  // filters and groups on custom fields, so it stays promoted to one here (a
+  // `users` field, same shape as "AM").
+  const ASSIGNEE_FIELD = 'Assignee';
+  const exportOptionsByName = new Map(data.fields.map((f) => [f.name, f.options ?? []]));
+  for (const f of CURATED_FIELDS) {
     let typeConfig: Record<string, unknown> = {};
-    if (f.type === 'drop_down' && f.options) typeConfig = { options: f.options };
-    else if (f.type === 'formula') typeConfig = { formula: true };
+    if (f.type === 'dropdown') {
+      // `null` = inherit the ClickUp export's vocabulary; an array = curated.
+      typeConfig = { options: f.options ?? exportOptionsByName.get(f.key) ?? [] };
+    } else if (f.type === 'formula') {
+      typeConfig = { formula: true };
+    }
     await query(
       `INSERT INTO field_def (container_id, key, label, type, type_config, position)
-       VALUES ($1, $2, $2, $3, $4::jsonb, $5)`,
-      [spaceId, f.name, type, JSON.stringify(typeConfig), position++],
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+      [spaceId, f.key, f.label, f.type, JSON.stringify(typeConfig), position++],
     );
     fieldCount++;
   }
@@ -493,7 +613,8 @@ async function main() {
   const taskMeta = new Map<string, { statusName: string; fields: Record<string, unknown> }>();
 
   for (const t of data.taskSamples) {
-    const f = t.fields ?? {};
+    const f: Record<string, unknown> = { ...(t.fields ?? {}) };
+    if (t.assignees?.length && f[ASSIGNEE_FIELD] == null) f[ASSIGNEE_FIELD] = t.assignees.join(', ');
     const description = str(f['35. WO Description']);
     const title = firstLine(description ?? undefined, t.name);
     const canonicalStatus = STATUS_ALIAS[t.status] ?? t.status;
@@ -703,7 +824,7 @@ async function main() {
   console.log(`  principals        : ${data.people.length + EXTRA_SUPER_ADMINS.length + 2} (${data.people.length + EXTRA_SUPER_ADMINS.length} human, 2 service)`);
   console.log(`  super admins      : ${superAdminCount} (${[...Object.keys(SUPER_ADMIN_BY_NAME), ...EXTRA_SUPER_ADMINS.map((a) => a.name)].join(', ')})`);
   console.log(`  statuses          : ${data.statuses.length + 1} (19 pipeline + 1 archive)`);
-  console.log(`  field_defs        : ${fieldCount}`);
+  console.log(`  field_defs        : ${fieldCount} (curated catalogue, S7)`);
   console.log(`  tasks             : ${taskCount}`);
   console.log(`  memberships       : ${membershipCount}`);
   console.log(`  vendors           : ${VENDORS.length}`);

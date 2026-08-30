@@ -26,24 +26,41 @@ export interface FieldDefItem {
   position: number | null;
   /** Dropdown option count, when the type config carries one. */
   option_count: number;
+  /** The dropdown vocabulary itself, for the S7 options editor. */
+  options: string[];
   /** How many work orders actually carry a value for this key. */
   used_by: number;
 }
 
 export async function listFieldDefs(): Promise<FieldDefItem[]> {
-  const res = await query<FieldDefItem>(
+  const res = await query<Omit<FieldDefItem, 'options'> & { options: unknown }>(
     `SELECT f.id, f.key, f.label, f.type::text AS type, f.position,
             c.name AS container,
             COALESCE(jsonb_array_length(
               CASE WHEN jsonb_typeof(f.type_config->'options') = 'array'
                    THEN f.type_config->'options' END), 0) AS option_count,
+            CASE WHEN jsonb_typeof(f.type_config->'options') = 'array'
+                 THEN f.type_config->'options' ELSE '[]'::jsonb END AS options,
             (SELECT COUNT(*)::int FROM task t
               WHERE t.deleted_at IS NULL AND t.fields ? f.key) AS used_by
        FROM field_def f
        LEFT JOIN container c ON c.id = f.container_id
       ORDER BY f.position NULLS LAST, f.key ASC`,
   );
-  return res.rows;
+  // Older exports stored options as {name,color} objects; the editor works on
+  // plain strings, so both shapes collapse to the display string here.
+  return res.rows.map((r) => ({
+    ...r,
+    options: Array.isArray(r.options)
+      ? (r.options as unknown[])
+          .map((o) =>
+            typeof o === 'string'
+              ? o
+              : String((o as Record<string, unknown>)?.name ?? (o as Record<string, unknown>)?.label ?? ''),
+          )
+          .filter((s) => s.length > 0)
+      : [],
+  }));
 }
 
 // ── Statuses & workflow ──────────────────────────────────────────────────────

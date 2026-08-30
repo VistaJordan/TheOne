@@ -17,6 +17,8 @@ export interface RoleRecord {
   can_edit_quote: boolean;
   can_approve_quote: boolean;
   can_manage_users: boolean;
+  can_edit_wo_fields: boolean;
+  can_view_field_history: boolean;
   position: number;
   /** How many non-disabled humans currently hold it. */
   user_count: number;
@@ -24,7 +26,8 @@ export interface RoleRecord {
 
 const SELECT_ROLE = `
   SELECT r.id, r.code, r.label, r.description, r.is_system,
-         r.can_edit_quote, r.can_approve_quote, r.can_manage_users, r.position,
+         r.can_edit_quote, r.can_approve_quote, r.can_manage_users,
+         r.can_edit_wo_fields, r.can_view_field_history, r.position,
          (SELECT COUNT(*)::int FROM principal p
            WHERE p.role = r.code AND p.status <> 'disabled') AS user_count
     FROM role r`;
@@ -60,6 +63,8 @@ export interface RoleInput {
   can_edit_quote?: boolean;
   can_approve_quote?: boolean;
   can_manage_users?: boolean;
+  can_edit_wo_fields?: boolean;
+  can_view_field_history?: boolean;
 }
 
 export async function createRole(input: RoleInput): Promise<RoleRecord> {
@@ -75,8 +80,9 @@ export async function createRole(input: RoleInput): Promise<RoleRecord> {
 
   const res = await query<{ id: string }>(
     `INSERT INTO role (code, label, description, is_system,
-                       can_edit_quote, can_approve_quote, can_manage_users, position)
-     VALUES ($1, $2, $3, false, $4, $5, $6,
+                       can_edit_quote, can_approve_quote, can_manage_users,
+                       can_edit_wo_fields, can_view_field_history, position)
+     VALUES ($1, $2, $3, false, $4, $5, $6, $7, $8,
              (SELECT COALESCE(MAX(position), 100) + 10 FROM role))
      RETURNING id`,
     [
@@ -86,6 +92,8 @@ export async function createRole(input: RoleInput): Promise<RoleRecord> {
       input.can_edit_quote ?? false,
       input.can_approve_quote ?? false,
       input.can_manage_users ?? false,
+      input.can_edit_wo_fields ?? false,
+      input.can_view_field_history ?? false,
     ],
   );
   return getRole(res.rows[0].id);
@@ -121,12 +129,14 @@ export async function updateRole(id: string, input: Partial<RoleInput>): Promise
 
   await query(
     `UPDATE role
-        SET code              = COALESCE($2, code),
-            label             = COALESCE($3, label),
-            description       = COALESCE($4, description),
-            can_edit_quote    = COALESCE($5, can_edit_quote),
-            can_approve_quote = COALESCE($6, can_approve_quote),
-            can_manage_users  = COALESCE($7, can_manage_users)
+        SET code                   = COALESCE($2, code),
+            label                  = COALESCE($3, label),
+            description            = COALESCE($4, description),
+            can_edit_quote         = COALESCE($5, can_edit_quote),
+            can_approve_quote      = COALESCE($6, can_approve_quote),
+            can_manage_users       = COALESCE($7, can_manage_users),
+            can_edit_wo_fields     = COALESCE($8, can_edit_wo_fields),
+            can_view_field_history = COALESCE($9, can_view_field_history)
       WHERE id = $1`,
     [
       id,
@@ -136,6 +146,8 @@ export async function updateRole(id: string, input: Partial<RoleInput>): Promise
       input.can_edit_quote ?? null,
       input.can_approve_quote ?? null,
       input.can_manage_users ?? null,
+      input.can_edit_wo_fields ?? null,
+      input.can_view_field_history ?? null,
     ],
   );
   // principal.role carries ON UPDATE CASCADE, so a code change follows through

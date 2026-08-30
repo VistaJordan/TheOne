@@ -21,6 +21,8 @@ export const FIELD = {
   fm: '22. FM',
   comp: '21. Comp',
   am: 'AM',
+  /** The dispatcher / operations manager handling the WO (see seed.ts). */
+  assignee: 'Assignee',
   salesOwner: 'Sales Owner',
   completionAssignee: 'Completion Assignee',
   assigneeName: 'Assignee Name TXT',

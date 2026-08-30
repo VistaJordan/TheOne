@@ -25,6 +25,7 @@ import principalsRoutes from './routes/principals.js';
 import quoteRoutes from './routes/quotes.js';
 import paymentRoutes from './routes/payments.js';
 import viewRoutes from './routes/views.js';
+import prefsRoutes from './routes/prefs.js';
 
 async function main(): Promise<void> {
   const app = Fastify({ logger: true });
@@ -69,6 +70,7 @@ async function main(): Promise<void> {
   await app.register(quoteRoutes, { prefix: '/api' });
   await app.register(paymentRoutes, { prefix: '/api' });
   await app.register(viewRoutes, { prefix: '/api' });
+  await app.register(prefsRoutes, { prefix: '/api' });
 
   await app.listen({ port: config.port, host: config.host });
 
