@@ -305,6 +305,9 @@ export interface AutomationTrigger {
   /** Only fire when the field changed TO this value (string-compared,
       case-insensitive). Null/absent = any new value. */
   to?: string | null;
+  /** How the new value is tested against `to`. 'eq'/absent = exact match; the
+      comparisons are for money/number fields ("changed to more than 500"). */
+  to_op?: 'eq' | 'gt' | 'gte' | 'lt' | 'lte' | null;
   /** Wait this long after the trigger before acting (0/absent = immediately).
       Conditions are evaluated AFTER the wait — "if the quote is still not
       ready" — and another matching change restarts the clock. Timers are DB

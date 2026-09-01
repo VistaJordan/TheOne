@@ -246,6 +246,9 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       kind: z.enum(['created', 'changed', 'manual']),
       field: z.string().trim().min(1).max(200).nullish(),
       to: z.string().trim().min(1).max(400).nullish(),
+      // How the new value is tested against `to` — the comparisons are for
+      // money/number fields ("changed to more than 500"); eq/absent = exact.
+      to_op: z.enum(['eq', 'gt', 'gte', 'lt', 'lte']).nullish(),
       // Wait N minutes after the trigger; conditions run when the wait ends.
       delay_minutes: z.number().int().min(0).max(43200).nullish(),
     })

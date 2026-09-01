@@ -3,7 +3,7 @@
    read-only it says so and says why, rather than showing controls that would
    not take effect. */
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminShell, AdminEmpty } from './AdminShell';
@@ -313,16 +313,27 @@ function fmtDelay(minutes: number): string {
   return `${minutes} min`;
 }
 
+/** How the trigger's numeric "to" comparison reads in a sentence. */
+const TO_OP_PHRASE: Record<string, string> = {
+  gt: 'to more than',
+  gte: 'to at least',
+  lt: 'to less than',
+  lte: 'to at most',
+};
+
 /** The card's one-line reading of a rule: when — if — then. */
 function summarize(a: AutomationItem, fields: WoFieldDescriptor[]): string {
   const t = a.trigger;
+  const toPhrase = t.to
+    ? ` ${TO_OP_PHRASE[t.to_op ?? ''] ?? 'to'} “${t.to}”`
+    : '';
   const base =
     t.kind === 'manual'
       ? 'When work orders are enrolled from the list'
       : t.kind === 'created'
         ? 'When a work order is created'
         : t.field
-          ? `When ${fieldLabel(t.field, fields)} changes${t.to ? ` to “${t.to}”` : ''}`
+          ? `When ${fieldLabel(t.field, fields)} changes${toPhrase}`
           : 'When any field changes';
   const when = t.delay_minutes ? `${base} — wait ${fmtDelay(t.delay_minutes)}` : base;
   const n = a.conditions?.rules?.length ?? 0;
@@ -590,6 +601,7 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
   const [kind, setKind] = useState<AutomationTriggerKind>(initial?.trigger.kind ?? 'changed');
   const [trigField, setTrigField] = useState(initial?.trigger.field ?? '');
   const [trigTo, setTrigTo] = useState(initial?.trigger.to ?? '');
+  const [trigToOp, setTrigToOp] = useState<string>(initial?.trigger.to_op ?? 'eq');
   // The wait, split into amount + unit for editing; stored as whole minutes.
   const initDelay = initial?.trigger.delay_minutes ?? 0;
   const initUnit: DelayUnit =
@@ -635,15 +647,24 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
       : 0;
   })();
 
-  const build = (): AutomationInput => ({
-    name: name.trim(),
-    entity,
-    trigger: {
-      kind,
-      field: kind === 'changed' && trigField ? trigField : null,
-      to: kind === 'changed' && trigField && trigTo.trim() ? trigTo.trim() : null,
-      delay_minutes: delayMinutes > 0 ? delayMinutes : null,
-    },
+  // The numeric "to" comparison only means something on a money/number field.
+  const trigFieldType = fields.find((f) => f.key === trigField)?.type;
+  const trigIsNumeric = trigFieldType === 'money' || trigFieldType === 'number';
+
+  const build = (): AutomationInput => {
+    const hasTo = kind === 'changed' && trigField && trigTo.trim() !== '';
+    return {
+      name: name.trim(),
+      entity,
+      trigger: {
+        kind,
+        field: kind === 'changed' && trigField ? trigField : null,
+        to: hasTo ? trigTo.trim() : null,
+        to_op: hasTo && trigIsNumeric && trigToOp !== 'eq'
+          ? (trigToOp as 'gt' | 'gte' | 'lt' | 'lte')
+          : null,
+        delay_minutes: delayMinutes > 0 ? delayMinutes : null,
+      },
     conditions: {
       match,
       rules: rules
@@ -661,10 +682,11 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
         })
         .filter(isComplete),
     },
-    actions: actions
-      .filter((a) => a.field)
-      .map((a) => ({ field: a.field, value: a.value.trim() === '' ? null : a.value })),
-  });
+      actions: actions
+        .filter((a) => a.field)
+        .map((a) => ({ field: a.field, value: a.value.trim() === '' ? null : a.value })),
+    };
+  };
 
   const actionsValid =
     actions.some((a) => a.field) &&
@@ -728,14 +750,27 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
                   value={trigField}
                   anyLabel="Any field"
                   ariaLabel="Which field"
-                  onChange={(v) => { setTrigField(v); setTrigTo(''); }}
+                  onChange={(v) => { setTrigField(v); setTrigTo(''); setTrigToOp('eq'); }}
                 />
+                {trigField && trigIsNumeric && (
+                  <select
+                    className="fld fld-sm" value={trigToOp}
+                    aria-label="How the new value compares"
+                    onChange={(e) => setTrigToOp(e.target.value)}
+                  >
+                    <option value="eq">to exactly</option>
+                    <option value="gt">to more than</option>
+                    <option value="gte">to at least</option>
+                    <option value="lt">to less than</option>
+                    <option value="lte">to at most</option>
+                  </select>
+                )}
                 {trigField && (
                   <ValueControl
                     desc={byKey(trigField)}
                     value={trigTo}
                     emptyLabel="to any value"
-                    placeholder="to any value"
+                    placeholder={trigIsNumeric ? 'any amount' : 'to any value'}
                     onChange={setTrigTo}
                   />
                 )}
@@ -1105,7 +1140,7 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
               const key = f ? f.key : ANY_KEY;
               const current = key === value;
               return (
-                <div key={f ? f.key : '__any'}>
+                <Fragment key={f ? f.key : '__any'}>
                   {head && <div className="fpick-group">{head}</div>}
                   <button
                     type="button"
@@ -1120,7 +1155,7 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
                     {f && <span className="fpick-type">{FIELD_TYPE_WORD[f.type]}</span>}
                     {current && <Icon name="check" size={12} />}
                   </button>
-                </div>
+                </Fragment>
               );
             })}
           </div>

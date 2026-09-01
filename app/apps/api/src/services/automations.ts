@@ -101,6 +101,31 @@ function afterValueOf(change: TaskChange): string {
 
 const norm = (s: string) => s.trim().toLowerCase();
 
+/** A value as a number, currency chrome stripped ("$1,500.00" → 1500), or null
+    when it does not read as one — the same tolerance the filter coercion has. */
+function numOf(s: string): number | null {
+  const digits = s.replace(/[^0-9.-]/g, '');
+  if (!/^-?\d*\.?\d+$/.test(digits)) return null;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Does a change's new value satisfy the trigger's `to` test? */
+function toValueMatches(trigger: AutomationTrigger, after: string): boolean {
+  const op = trigger.to_op ?? 'eq';
+  if (op === 'eq') return norm(after) === norm(String(trigger.to));
+  const a = numOf(after);
+  const b = numOf(String(trigger.to));
+  if (a === null || b === null) return false;
+  switch (op) {
+    case 'gt': return a > b;
+    case 'gte': return a >= b;
+    case 'lt': return a < b;
+    case 'lte': return a <= b;
+    default: return false;
+  }
+}
+
 // ── The service principal automations act as ─────────────────────────────────
 // Resolved lazily and (re)created if missing: seed.ts truncates principal, and
 // a rules engine that dies after every re-seed would be a support ticket.
@@ -152,6 +177,28 @@ async function validateTrigger(trigger: AutomationTrigger): Promise<void> {
   }
   if (trigger.kind === 'changed' && trigger.field) {
     await resolveField(trigger.field); // throws on an unknown key
+  }
+  const op = trigger.to_op;
+  if (op != null && op !== 'eq') {
+    if (!['gt', 'gte', 'lt', 'lte'].includes(op)) {
+      throw new ApiError('BAD_REQUEST', `Unknown "to" comparison "${op}"`);
+    }
+    if (trigger.kind !== 'changed' || !trigger.field || trigger.to == null) {
+      throw new ApiError(
+        'BAD_REQUEST',
+        'A more-than/less-than trigger needs a specific field and a value to compare against',
+      );
+    }
+    const f = await resolveField(trigger.field);
+    if (f.type !== 'money' && f.type !== 'number') {
+      throw new ApiError(
+        'BAD_REQUEST',
+        `"${f.label}" is not a number — more-than/less-than triggers apply to money and number fields`,
+      );
+    }
+    if (numOf(String(trigger.to)) === null) {
+      throw new ApiError('BAD_REQUEST', `"${trigger.to}" is not a number to compare against`);
+    }
   }
   const d = trigger.delay_minutes;
   if (d != null && (!Number.isInteger(d) || d < 0 || d > MAX_DELAY_MINUTES)) {
@@ -363,7 +410,7 @@ function triggerMatches(trigger: AutomationTrigger, event: AutomationEvent): Tas
   if (event.kind !== 'changed') return null;
   for (const change of event.changes ?? []) {
     if (trigger.field && !matchKeysOf(change).includes(trigger.field)) continue;
-    if (trigger.to != null && norm(afterValueOf(change)) !== norm(trigger.to)) continue;
+    if (trigger.to != null && !toValueMatches(trigger, afterValueOf(change))) continue;
     return change;
   }
   return null;
