@@ -1055,49 +1055,6 @@ input {
   padding: 22px 24px 40px;
 }
 
-/* ── Canvas backdrop ─ the brand's route, ghosted (CanvasBackdrop.tsx) ─────
-   The sign-in page's waves-with-stops, dialled down to a watermark and pinned
-   behind the canvas on every tab. It does not scroll with the page — the
-   content slides over it like weather over a map. The stop bubbles fill with
-   --bg at full opacity ON PURPOSE: that blanks the wave under the bubble (the
-   gap the sign-in route cuts with its --bg circle stroke) while the ring and
-   glyph stay translucent. */
-.canvas-backdrop {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  color: var(--accent);
-}
-.canvas-backdrop-line {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  opacity: 0.07;
-}
-.canvas-backdrop-stop circle {
-  fill: var(--bg);
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-opacity: 0.16;
-}
-.canvas-backdrop-icon {
-  overflow: visible;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.2;
-}
-/* Night's near-black ground swallows low alphas; nudge them the way the
-   sign-in route does (.2 → .26). */
-:root[data-theme='night'] .canvas-backdrop-line { opacity: 0.09; }
-:root[data-theme='night'] .canvas-backdrop-stop circle { stroke-opacity: 0.2; }
-:root[data-theme='night'] .canvas-backdrop-icon { opacity: 0.24; }
-
 /* ── The "O knob" scrollbar ────────────────────────────────────────────────
    Design option 1c, app-wide: the thumb is the logo's "O" — a surface-filled
    ring in the accent — travelling a hairline node line. EVERY native bar is
@@ -1403,6 +1360,41 @@ textarea {
 
 :root[data-theme="night"] .kpi.hot {
   box-shadow: 0 0 0 1px var(--danger-border), 0 0 20px rgba(255, 107, 106, 0.22);
+}
+
+/* ── Dashboard pages (Needs Attention / Main Dashboard) ───────────────────── */
+.dash-tabs { margin-bottom: 16px; }
+
+/* Needs Attention cards size to their content (unlike the KPI grid): each is
+   a LINK into the list pre-filtered to the rows it counted, so it gets link
+   affordances. min-width keeps a low count from shrinking to a chip. */
+.attn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+a.kpi.attn {
+  display: block;
+  flex: none;
+  min-width: 200px;
+  max-width: 340px; /* a long meta line wraps instead of widening the card */
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.kpi.attn:hover,
+a.kpi.attn:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a.kpi.attn { transition: border-color 0.15s ease, transform 0.15s ease; }
+  a.kpi.attn:hover { transform: translateY(-1px); }
 }
 
 /* ── Toolbar (segmented status-group filter) ──────────────────────────────── */

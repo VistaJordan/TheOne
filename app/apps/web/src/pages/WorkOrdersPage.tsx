@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { StatusGroup } from '@theone/shared';
 import type { SavedView } from '../api/client';
@@ -32,6 +33,7 @@ import { useStatusGroups } from '../lib/statusGroups';
 import {
   DEFAULT_VIEW,
   loadStoredView,
+  parseFilterParam,
   sameView,
   saveStoredView,
   sendableFilters,
@@ -69,11 +71,28 @@ const PIN_PREF_KEY = 'wo.views.pinned';
 export function WorkOrdersPage() {
   const qc = useQueryClient();
 
+  // A `/?filter=<json>` link (a dashboard Needs Attention card) opens the list
+  // on those working filters, beating the restored session and the pinned
+  // view — the person clicked the card to see exactly those rows. Read once on
+  // mount; the param is stripped from the address bar just below.
+  const [searchParams, setSearchParams] = useSearchParams();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only snapshot
+  const linkedFilters = useMemo(() => parseFilterParam(searchParams.get('filter')), []);
+
   // The arrangement on screen, and which saved view it came from. Restored from
   // the last session so a reload does not throw away the columns you set up.
   const stored = useMemo(loadStoredView, []);
-  const [view, setView] = useState<ViewState>(stored?.state ?? DEFAULT_VIEW);
-  const [activeViewId, setActiveViewId] = useState<string | null>(stored?.viewId ?? null);
+  const [view, setView] = useState<ViewState>(
+    linkedFilters ? { ...DEFAULT_VIEW, filters: linkedFilters } : (stored?.state ?? DEFAULT_VIEW),
+  );
+  const [activeViewId, setActiveViewId] = useState<string | null>(
+    linkedFilters ? null : (stored?.viewId ?? null),
+  );
+
+  useEffect(() => {
+    if (linkedFilters) setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount
+  }, []);
   // A saved view opens read-only; the pencil turns this on. Never persisted:
   // a reload lands back in "just looking".
   const [editing, setEditing] = useState(false);
@@ -230,8 +249,9 @@ export function WorkOrdersPage() {
   // Opening the page lands on the pinned view — applied ONCE, when the pref
   // and the view list have both arrived. Landing already on it (session
   // restore) keeps any working tweaks, and pinning something mid-session
-  // never yanks the current tab away.
-  const pinApplied = useRef(false);
+  // never yanks the current tab away. A filter link already chose what to
+  // show, so it counts as applied.
+  const pinApplied = useRef(Boolean(linkedFilters));
   useEffect(() => {
     if (pinApplied.current || !pinPref.isSuccess || !viewsQuery.isSuccess) return;
     pinApplied.current = true;

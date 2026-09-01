@@ -1679,6 +1679,16 @@ textarea {
 
 .afp-comp select:focus-visible { outline: none; border-color: var(--accent); }
 
+/* Visit Type unset — the control wears the danger ramp until a value lands
+   (AllFieldsPanel flags it via .is-missing; the Needs Attention dashboard
+   counts the WOs in this state). */
+.afp-comp.is-missing span { color: var(--danger); }
+.afp-comp.is-missing select {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
 /* ── All fields · sections (default mode — lib/woFieldSections.ts) ────────── */
 /* Each section is a card of its own (like the tab panels around it); two share
    a row to save height, Overview (.is-wide) gets the full width. */

@@ -273,6 +273,35 @@ export function groupLabel(key: string | null, field: WoFieldDescriptor | undefi
   return formatCell(key, field);
 }
 
+// ── Filters in the URL ───────────────────────────────────────────────────────
+// A link can open the list pre-narrowed: `/?filter=<json WoFilterSet>`. That is
+// how the dashboard's Needs Attention cards land on exactly the rows they
+// counted. The param is applied as WORKING filters (no saved view, pin
+// ignored) and then stripped from the address bar.
+
+/** The list URL that opens on `filters`. */
+export function filterUrl(filters: WoFilterSet): string {
+  return `/?filter=${encodeURIComponent(JSON.stringify(filters))}`;
+}
+
+/** The `filter` param parsed back, or null — anything malformed is ignored
+    rather than crashing the list on a hand-edited address. */
+export function parseFilterParam(raw: string | null): WoFilterSet | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as WoFilterSet;
+    if (parsed?.match !== 'all' && parsed?.match !== 'any') return null;
+    if (!Array.isArray(parsed.rules)) return null;
+    const rules = parsed.rules.filter(
+      (r) => r && typeof r.field === 'string' && typeof r.op === 'string',
+    );
+    if (rules.length === 0) return null;
+    return { match: parsed.match, rules };
+  } catch {
+    return null;
+  }
+}
+
 // ── The working view, per browser ────────────────────────────────────────────
 // Which SAVED view you had open, and any edits you had not saved, are a
 // property of the tab you are working in — not of the account. They belong in

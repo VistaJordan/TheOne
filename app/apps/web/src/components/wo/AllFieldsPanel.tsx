@@ -41,6 +41,7 @@ import {
   FIELD_SECTIONS,
   MORE_SECTION_ICON,
   MORE_SECTION_TITLE,
+  VISIT_TYPE_FIELD_KEY,
 } from '../../lib/woFieldSections';
 import type { IconName } from '../Icon';
 import { DASH, bool, feedTime, fieldValueToString, initials } from '../../lib/fields';
@@ -87,14 +88,21 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   });
 
   // Every custom (bag-backed) field, in ADMIN order — the catalogue is already
-  // sorted by field_def.position. Comp is pulled out of the list: it renders
-  // as a toolbar control beside the search box instead.
+  // sorted by field_def.position. Comp and Visit Type are pulled out of the
+  // list: they render as toolbar controls beside the search box instead.
   const fields = useMemo(
-    () => (catalogue.data?.fields ?? []).filter((f) => f.custom && f.key !== COMP_FIELD_KEY),
+    () =>
+      (catalogue.data?.fields ?? []).filter(
+        (f) => f.custom && f.key !== COMP_FIELD_KEY && f.key !== VISIT_TYPE_FIELD_KEY,
+      ),
     [catalogue.data],
   );
   const compField = useMemo(
     () => (catalogue.data?.fields ?? []).find((f) => f.key === COMP_FIELD_KEY) ?? null,
+    [catalogue.data],
+  );
+  const visitTypeField = useMemo(
+    () => (catalogue.data?.fields ?? []).find((f) => f.key === VISIT_TYPE_FIELD_KEY) ?? null,
     [catalogue.data],
   );
 
@@ -338,6 +346,45 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     );
   };
 
+  // One toolbar select, shared by Comp and Visit Type — a dropdown rendered as
+  // a control beside the search box rather than as a list row. `flagEmpty`
+  // paints the control in the danger ramp while no value is set.
+  const renderBarSelect = (
+    f: WoFieldDescriptor,
+    label: string,
+    opts?: { flagEmpty?: boolean },
+  ) => {
+    const v = valueOf(f);
+    const cur = v == null ? '' : String(v);
+    const missing = Boolean(opts?.flagEmpty) && cur === '';
+    const options = f.options ?? [];
+    return (
+      <label
+        className={`afp-comp${missing ? ' is-missing' : ''}`}
+        title={missing ? `${label} has not been set for this work order` : undefined}
+      >
+        <span>{label}</span>
+        <select
+          value={cur}
+          disabled={!canEdit || save.isPending}
+          onChange={(e) =>
+            save.mutate({ key: f.key, value: e.target.value === '' ? null : e.target.value })
+          }
+          aria-label={label}
+        >
+          <option value="">—</option>
+          {/* A value that predates the current vocabulary must stay selectable. */}
+          {cur !== '' && !options.some((o) => o.value === cur) && (
+            <option value={cur}>{cur}</option>
+          )}
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </label>
+    );
+  };
+
   if (catalogue.isLoading) {
     return <div className="tab-empty"><span>Loading the field catalogue…</span></div>;
   }
@@ -364,37 +411,11 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
             aria-label="Search fields"
           />
         </label>
-        {compField && (
-          <label className="afp-comp">
-            <span>Comp</span>
-            <select
-              value={(() => { const v = valueOf(compField); return v == null ? '' : String(v); })()}
-              disabled={!canEdit || save.isPending}
-              onChange={(e) =>
-                save.mutate({ key: compField.key, value: e.target.value === '' ? null : e.target.value })
-              }
-              aria-label="Comp"
-            >
-              <option value="">—</option>
-              {(() => {
-                const v = valueOf(compField);
-                const cur = v == null ? '' : String(v);
-                const options = compField.options ?? [];
-                // A value that predates the current vocabulary must stay selectable.
-                return (
-                  <>
-                    {cur !== '' && !options.some((o) => o.value === cur) && (
-                      <option value={cur}>{cur}</option>
-                    )}
-                    {options.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </>
-                );
-              })()}
-            </select>
-          </label>
-        )}
+        {compField && renderBarSelect(compField, 'Comp')}
+        {/* Visit Type must be filled on every WO — empty renders in the danger
+            ramp until someone sets it (the dashboard's Needs Attention page
+            counts these). */}
+        {visitTypeField && renderBarSelect(visitTypeField, 'Visit Type', { flagEmpty: true })}
         <div className="seg afp-order" role="group" aria-label="Field order">
           <OrderButton mode="default" current={pref.mode} onSelect={setMode}>Default</OrderButton>
           <OrderButton mode="alpha" current={pref.mode} onSelect={setMode}>A–Z</OrderButton>
