@@ -20,3 +20,6 @@ pgdata*/
 pgtest*/
 packages/db/pgdata*/
 packages/db/pgtest*/
+
+.vercel
+.env*

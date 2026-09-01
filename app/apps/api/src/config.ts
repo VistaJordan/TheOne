@@ -15,9 +15,12 @@ import { fileURLToPath } from 'node:url';
 // Node 24 built-in; loads app/.env into process.env if the file exists. Values
 // already in the real environment win, so a deployed process is never
 // overridden by a stray committed file.
-const ENV_PATH = fileURLToPath(new URL('../../../.env', import.meta.url));
+//
+// The URL construction sits INSIDE the try: in the bundled Vercel lambda,
+// `import.meta.url` is undefined (CJS output) and `new URL` throws — and a
+// lambda has no .env file to load anyway.
 try {
-  process.loadEnvFile(ENV_PATH);
+  process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url)));
 } catch {
   /* no .env — expected in production, and in a fresh clone before setup */
 }
@@ -54,6 +57,14 @@ export interface Config {
   sessionTtlHours: number;
   /** Cookies go Secure only over HTTPS; localhost is plain http in dev. */
   cookieSecure: boolean;
+  /**
+   * DEMO_MODE=true — a deliberately public demo running on SEED DATA ONLY.
+   * It is the one sanctioned way to run the dev bypass on a server, and it
+   * disables every integration that could pull production data into the
+   * demo (see routes/integrations.ts). Never combine it with a database
+   * that holds real work orders.
+   */
+  demoMode: boolean;
 }
 
 function buildEntra(): EntraConfig | null {
@@ -71,15 +82,20 @@ function buildEntra(): EntraConfig | null {
 
 function build(): Config {
   const devBypass = bool('AUTH_DEV_BYPASS');
+  const demoMode = bool('DEMO_MODE');
   const entra = buildEntra();
 
   // ── The one refusal. A bypass in production is not a misconfiguration to
-  //    warn about, it is an open front door. ────────────────────────────────
-  if (devBypass && IS_PRODUCTION) {
+  //    warn about, it is an open front door. DEMO_MODE is the single, explicit
+  //    exception: a public demo that runs on seed data only, with every
+  //    production integration disabled — anyone may walk through the door
+  //    because there is nothing real behind it. ───────────────────────────────
+  if (devBypass && IS_PRODUCTION && !demoMode) {
     throw new Error(
       'AUTH_DEV_BYPASS=true with NODE_ENV=production. The dev bypass lets anyone ' +
         'sign in as any user without a password — it must never run on a server. ' +
-        'Remove AUTH_DEV_BYPASS from the environment, or unset NODE_ENV=production.',
+        'Remove AUTH_DEV_BYPASS from the environment, or unset NODE_ENV=production. ' +
+        '(A public demo on seed data only may set DEMO_MODE=true instead.)',
     );
   }
 
@@ -107,6 +123,7 @@ function build(): Config {
     entra,
     sessionTtlHours: Number(str('SESSION_TTL_HOURS') ?? 12),
     cookieSecure: webOrigin.startsWith('https://'),
+    demoMode,
   };
 }
 

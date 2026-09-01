@@ -299,7 +299,9 @@ export async function consumeAuthTransaction(state: string): Promise<AuthTransac
  * refuses again at call time. Two locks on a door that must never open.
  */
 export async function devBypassSignIn(principalId: string): Promise<SessionPrincipal> {
-  if (config.authMode !== 'bypass' || config.isProduction) {
+  // DEMO_MODE opens the production lock the same way it does in config.ts —
+  // a deliberately public demo on seed data only (never real work orders).
+  if (config.authMode !== 'bypass' || (config.isProduction && !config.demoMode)) {
     throw new ApiError('FORBIDDEN', 'The development sign-in bypass is not enabled');
   }
   const touched = await query<{ id: string }>(

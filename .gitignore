@@ -27,3 +27,7 @@ Thumbs.db
 # Root has a scripts-only package.json (a shim to app/); an `npm install` here
 # would only write an empty lockfile.
 /package-lock.json
+
+# Vercel build artifact (scripts/bundle-api.mjs output)
+app/api/_bundle.cjs
+.vercel
