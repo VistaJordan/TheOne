@@ -3,7 +3,8 @@
    read-only it says so and says why, rather than showing controls that would
    not take effect. */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminShell, AdminEmpty } from './AdminShell';
 import { Icon } from '../../components/Icon';
@@ -959,6 +960,19 @@ function TileBtn({ icon, label, hint, active, disabled, onClick }: {
 }
 
 /** Grouped field picker (optgroups mirror the list's filter builder). */
+/** Short type word shown beside each row so two same-named fields are telling apart. */
+const FIELD_TYPE_WORD: Record<WoFieldType, string> = {
+  text: 'text', number: 'number', money: 'money', date: 'date',
+  datetime: 'date + time', select: 'choice', boolean: 'yes / no',
+};
+
+/** The empty choice, carried through the same list as the fields so the
+    keyboard can reach it. */
+const ANY_KEY = '';
+
+/** A searchable field picker. The native <select> it replaces opened a list as
+    tall as the screen with no way to filter; this one filters as you type,
+    moves with ↑/↓ and closes on Escape. */
 function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
   fields: WoFieldDescriptor[];
   value: string;
@@ -966,21 +980,141 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
   ariaLabel: string;
   onChange: (v: string) => void;
 }) {
-  const groups = [...new Set(fields.map((f) => f.group))];
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [active, setActive] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const selected = fields.find((f) => f.key === value);
+  const q = search.trim().toLowerCase();
+  const matches = fields.filter(
+    (f) => !q || f.label.toLowerCase().includes(q) || f.group.toLowerCase().includes(q),
+  );
+  // Searching means you want a field, so the "any" row drops out of a filtered list.
+  const rows: (WoFieldDescriptor | null)[] = q ? matches : [null, ...matches];
+
+  useEffect(() => {
+    if (open) return;
+    setSearch('');
+    setActive(0);
+  }, [open]);
+
+  // Open on the current choice so ↑/↓ start from where the value already is.
+  useEffect(() => {
+    if (!open) return;
+    const i = rows.findIndex((r) => (r ? r.key : ANY_KEY) === value);
+    setActive(i < 0 ? 0 : i);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the panel opens
+  }, [open]);
+
+  useEffect(() => setActive(0), [search]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  // Keep the highlighted row in view while the arrows walk past the fold.
+  useEffect(() => {
+    listRef.current?.querySelector(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
+  const choose = (k: string) => {
+    onChange(k);
+    setOpen(false);
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === 'Escape') { setOpen(false); return; }
+    if (e.key === 'Tab') { setOpen(false); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) { setOpen(true); return; }
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      setActive((i) => Math.min(rows.length - 1, Math.max(0, i + step)));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!open) { setOpen(true); return; }
+      const row = rows[active];
+      if (row || !q) choose(row ? row.key : ANY_KEY);
+    }
+  };
+
+  let lastGroup: string | null = null;
+
   return (
-    <select
-      className="fld fld-sm" value={value} aria-label={ariaLabel}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">{anyLabel}</option>
-      {groups.map((g) => (
-        <optgroup key={g} label={g}>
-          {fields.filter((f) => f.group === g).map((f) => (
-            <option key={f.key} value={f.key}>{f.label}</option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
+    <div className="fpick" ref={rootRef}>
+      <button
+        type="button"
+        className={`fld fld-sm fpick-btn${open ? ' is-open' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={onKey}
+      >
+        <span className={`fpick-val${selected ? '' : ' is-empty'}`}>
+          {selected ? selected.label : anyLabel}
+        </span>
+        {selected && <span className="fpick-btn-group">{selected.group}</span>}
+        <Icon name="chev-d" size={12} />
+      </button>
+
+      {open && (
+        <div className="fpick-pop" role="dialog" aria-label={ariaLabel}>
+          <div className="fpick-search">
+            <Icon name="search" size={14} />
+            <input
+              type="text"
+              autoFocus
+              value={search}
+              placeholder="Search fields…"
+              aria-label={`Search fields — ${ariaLabel}`}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={onKey}
+            />
+          </div>
+
+          {/* data-oknob-own: no app-wide scrollbar rail inside a popover. */}
+          <div className="fpick-list" role="listbox" ref={listRef} data-oknob-own="">
+            {rows.length === 0 && (
+              <p className="fpick-none">No field matches “{search.trim()}”</p>
+            )}
+            {rows.map((f, i) => {
+              const head = f && f.group !== lastGroup ? f.group : null;
+              if (f) lastGroup = f.group;
+              const key = f ? f.key : ANY_KEY;
+              const current = key === value;
+              return (
+                <div key={f ? f.key : '__any'}>
+                  {head && <div className="fpick-group">{head}</div>}
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={current}
+                    data-i={i}
+                    className={`fpick-item${i === active ? ' is-active' : ''}${current ? ' is-current' : ''}${f ? '' : ' fpick-any'}`}
+                    onMouseMove={() => setActive(i)}
+                    onClick={() => choose(key)}
+                  >
+                    <span className="fpick-item-label">{f ? f.label : anyLabel}</span>
+                    {f && <span className="fpick-type">{FIELD_TYPE_WORD[f.type]}</span>}
+                    {current && <Icon name="check" size={12} />}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
