@@ -7,7 +7,6 @@ import { Icon, IconSprite } from './Icon';
 import { NavIcon } from './NavIcon';
 import type { IconName } from './Icon';
 import { ActorSwitcher } from './ActorSwitcher';
-import { CanvasBackdrop } from './CanvasBackdrop';
 import { SidebarScribble } from './SidebarScribble';
 import { GlobalSearch } from './GlobalSearch';
 import { OKnobScrollbar } from './OKnobScrollbar';
@@ -365,10 +364,6 @@ export function AppShell({
             the logo's ring riding a node line) can pin to the cell's edge
             while the canvas underneath scrolls with its native bar hidden. */}
         <div className="canvas-wrap">
-          {/* Behind the canvas, not inside it: the waves stay put while the
-              page scrolls over them, the way the sign-in route sits behind the
-              card. Same backdrop on every tab — it belongs to the shell. */}
-          <CanvasBackdrop />
           {/* data-oknob-own: the canvas rail is this sibling component, so the
               app-wide manager (lib/oknob.ts) must not mount a second one. */}
           <main className="canvas" ref={canvasRef} data-oknob-own="">{children}</main>

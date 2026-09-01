@@ -108,8 +108,8 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   registration existed at build time); the code path is complete and typed.
 - Vendors and Invoicing appear in the sidebar but are inert placeholders.
 - React Router prints v7 future-flag warnings in the console; harmless.
-- `public/brand/logo-the-one-2.png` is an untracked leftover of the previous
-  logo — safe to delete.
+- `public/brand/logo-the-one-2.png` is an unused leftover of the previous
+  logo (committed for safekeeping, referenced nowhere) — safe to delete.
 - Product roadmap and open decisions: `product/feature-roadmap.md` (§ "Standing
   risks / open decisions").
 
