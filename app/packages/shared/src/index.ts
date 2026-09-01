@@ -4,7 +4,22 @@
 // imports the DB runtime.
 
 // ── Status groups ────────────────────────────────────────────────────────────
-export type StatusGroup = 'open' | 'active' | 'done' | 'closed';
+// Since 0008 the phase groups live in the `status_group_def` table (admins can
+// add their own), so the type is an open string. The four every install starts
+// with are below; code that needs an order or a fallback uses that list.
+export type StatusGroup = string;
+
+export const DEFAULT_STATUS_GROUPS = ['open', 'active', 'done', 'closed'] as const;
+
+/** One row of `status_group_def` — the vocabulary behind tabs and menus. */
+export interface StatusGroupDef {
+  code: string;
+  label: string;
+  position: number;
+  is_builtin: boolean;
+  /** Statuses currently in the group; present on the admin read. */
+  status_count?: number;
+}
 
 /**
  * Maps a ClickUp status `type` to our `status_group`.
@@ -154,7 +169,7 @@ export interface WorkOrderListResponse {
 // apps/api/src/services/woFields.ts — that module is the authority; these types
 // are the wire shapes both sides agree on.
 
-export type WoFieldType = 'text' | 'number' | 'money' | 'date' | 'select' | 'boolean';
+export type WoFieldType = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'boolean';
 
 export interface WoFieldOption {
   value: string;

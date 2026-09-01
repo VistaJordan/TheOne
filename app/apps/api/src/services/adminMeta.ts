@@ -1,15 +1,9 @@
 // Read models behind the Admin Studio's non-user sections.
 //
-// Fields, Workflow and Trash are READ-ONLY on purpose. All three describe data
-// that already exists and that other parts of the app depend on — 102 field
-// definitions the WO record renders from, 19 statuses the pipeline and the KPIs
-// key off, and the soft-delete column. Showing them is immediately useful;
-// letting them be edited before the WO-create and field-engine work lands would
-// let somebody rename a status out from under `getKpis()`, which matches on
-// status NAME.
-//
-// Trash is the exception that already writes: restoring a soft-deleted work
-// order is safe and reversible.
+// The writes live elsewhere: fields in services/fieldDefs.ts (S7), statuses and
+// phase groups in services/statusAdmin.ts. Trash's restore is below — it is
+// safe and reversible. Note the KPI tiles still match two statuses by NAME
+// (services/kpis.ts); the Workflows page warns before those are renamed.
 
 import { query } from '../db.js';
 import { config } from '../config.js';
@@ -68,7 +62,8 @@ export async function listFieldDefs(): Promise<FieldDefItem[]> {
 export interface WorkflowItem {
   id: string;
   name: string;
-  status_group: 'open' | 'active' | 'done' | 'closed';
+  /** A status_group_def code — the four built-ins plus admin-added groups. */
+  status_group: string;
   color: string;
   position: number;
   is_archive: boolean;

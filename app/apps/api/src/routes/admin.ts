@@ -4,7 +4,8 @@
 //   Users     GET/POST  /admin/users · PATCH /admin/users/:id
 //   Roles     GET/POST  /admin/roles · PATCH/DELETE /admin/roles/:id
 //   Fields    GET       /admin/fields
-//   Workflow  GET       /admin/workflow
+//   Workflow  GET       /admin/workflow · POST/PATCH/DELETE /admin/workflow/statuses[/:id]
+//                       POST/PATCH/DELETE /admin/workflow/groups[/:code]
 //   Trash     GET       /admin/trash · POST /admin/trash/:id/restore
 //   Settings  GET       /admin/settings
 //
@@ -19,6 +20,15 @@ import { disableUser, inviteUser, listUsers, updateUser } from '../services/user
 import { createRole, deleteRole, listRoles, updateRole } from '../services/roles.js';
 import { listFieldDefs, listWorkflow, listTrash, restoreTask, getSettings } from '../services/adminMeta.js';
 import { createFieldDef, updateFieldDef, reorderFieldDefs, FIELD_DEF_TYPES } from '../services/fieldDefs.js';
+import {
+  createStatus,
+  createStatusGroup,
+  deleteStatus,
+  deleteStatusGroup,
+  listStatusGroups,
+  renameStatusGroup,
+  updateStatus,
+} from '../services/statusAdmin.js';
 import { listAuditLog, exportAuditCsv } from '../services/auditLog.js';
 
 function requireAdmin(req: FastifyRequest): string {
@@ -157,10 +167,63 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { items: await reorderFieldDefs(ids) };
   });
 
-  // ── Statuses & workflow ────────────────────────────────────────────────────
+  // ── Statuses & workflow (the status engine's writes) ───────────────────────
+  const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'a #rrggbb hex color');
+  const createStatusSchema = z
+    .object({
+      name: z.string().trim().min(1).max(80),
+      group: z.string().trim().min(1).max(60),
+      color: colorSchema.optional(),
+    })
+    .strict();
+  const updateStatusSchema = z
+    .object({ name: z.string().trim().min(1).max(80).optional(), color: colorSchema.optional() })
+    .strict();
+  const groupLabelSchema = z.object({ label: z.string().trim().min(1).max(60) }).strict();
+  const groupParams = z.object({ code: z.string().trim().min(1).max(60) });
+
   app.get('/admin/workflow', async (req) => {
     requireAdmin(req);
-    return { items: await listWorkflow() };
+    return { items: await listWorkflow(), groups: await listStatusGroups() };
+  });
+
+  app.post('/admin/workflow/statuses', async (req, reply) => {
+    requireAdmin(req);
+    const item = await createStatus(parse(createStatusSchema, req.body));
+    return reply.status(201).send({ item });
+  });
+
+  app.patch('/admin/workflow/statuses/:id', async (req) => {
+    requireAdmin(req);
+    const { id } = parse(idParams, req.params);
+    return { item: await updateStatus(id, parse(updateStatusSchema, req.body)) };
+  });
+
+  app.delete('/admin/workflow/statuses/:id', async (req) => {
+    requireAdmin(req);
+    const { id } = parse(idParams, req.params);
+    await deleteStatus(id);
+    return { ok: true };
+  });
+
+  app.post('/admin/workflow/groups', async (req, reply) => {
+    requireAdmin(req);
+    const { label } = parse(groupLabelSchema, req.body);
+    return reply.status(201).send({ item: await createStatusGroup(label) });
+  });
+
+  app.patch('/admin/workflow/groups/:code', async (req) => {
+    requireAdmin(req);
+    const { code } = parse(groupParams, req.params);
+    const { label } = parse(groupLabelSchema, req.body);
+    return { item: await renameStatusGroup(code, label) };
+  });
+
+  app.delete('/admin/workflow/groups/:code', async (req) => {
+    requireAdmin(req);
+    const { code } = parse(groupParams, req.params);
+    await deleteStatusGroup(code);
+    return { ok: true };
   });
 
   // ── Trash ──────────────────────────────────────────────────────────────────

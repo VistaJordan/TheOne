@@ -58,7 +58,9 @@ const csvParam = z.preprocess(
 // matches". They must read the same parameters or the three would disagree
 // about which rows the user is looking at.
 const listCriteriaSchema = z.object({
-  status_group: z.enum(['open', 'active', 'done', 'closed']).optional(),
+  // A status_group_def code; since 0008 admins can add groups, so no enum here.
+  // An unknown code simply matches nothing.
+  status_group: z.string().trim().min(1).max(60).optional(),
   status_id: z.string().uuid().optional(),
   search: z.string().trim().min(1).optional(),
   filters: jsonParam(filterSetSchema).optional(),

@@ -10,10 +10,12 @@ import { Icon } from '../components/Icon';
 import {
   createSavedView,
   deleteSavedView,
+  getUserPref,
   getWoFields,
   listMatchingWorkOrderIds,
   listSavedViews,
   listWorkOrders,
+  setUserPref,
   updateSavedView,
   workOrdersExportUrl,
 } from '../api/client';
@@ -24,7 +26,9 @@ import { GroupMenu } from '../components/wo/list/GroupMenu';
 import { QuickFilter } from '../components/wo/list/QuickFilter';
 import { BulkBar } from '../components/wo/list/BulkBar';
 import { ImportDialog } from '../components/wo/list/ImportDialog';
+import { ListPagination, PAGE_SIZES } from '../components/ListPagination';
 import { ToolButton } from '../components/wo/list/Popover';
+import { useStatusGroups } from '../lib/statusGroups';
 import {
   DEFAULT_VIEW,
   loadStoredView,
@@ -38,27 +42,29 @@ import {
   type ViewState,
 } from '../lib/woView';
 
-const FILTERS: { key: StatusTab; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'open', label: 'Open' },
-  { key: 'active', label: 'Active' },
-  { key: 'done', label: 'Done' },
-  { key: 'closed', label: 'Closed' },
-];
+// The status tabs come from the live phase-group list (status_group_def) —
+// see the `filters` memo in the component; only the All tab is fixed.
 
 /** The chips beside the status tabs: the fields the team narrows by all day.
     `key` is a catalogue key — a promoted column or `fields.<custom key>`. */
 const QUICK_FILTERS: { key: string; label: string }[] = [
+  // Status leads: unlike the group tabs beside it, this narrows to EXACT
+  // statuses ("invoiced", "quote sent"), and it writes the same one rule the
+  // Filter menu would.
+  { key: 'status', label: 'Status' },
   { key: 'fields.Assignee', label: 'Assignee' },
   { key: 'fields.22. FM', label: 'FM' },
   { key: 'billing_entity', label: 'Comp' },
   { key: 'fields.AM', label: 'AM' },
 ];
 
-/** One page holds this many rows. Grouping renders every bucket at once, so it
-    is well above a screenful — but not unbounded; "act on everything that
-    matches" is a separate, explicit request (`/work-orders/ids`). */
-const PAGE_SIZE = 200;
+// Pagination is the footer bar (ListPagination); PAGE_SIZES[0] = 25 is the
+// default page. Grouping groups the PAGE it loaded — "act on everything that
+// matches" is still a separate, explicit request (`/work-orders/ids`).
+
+/** The pinned view (user_pref, so it follows the account across machines):
+    its tab leads the strip and the page opens on it. */
+const PIN_PREF_KEY = 'wo.views.pinned';
 
 export function WorkOrdersPage() {
   const qc = useQueryClient();
@@ -97,6 +103,7 @@ export function WorkOrdersPage() {
     select: [],
     number: [],
     money: [],
+    datetime: [],
     date: [],
     boolean: [],
   };
@@ -135,6 +142,12 @@ export function WorkOrdersPage() {
   // tabs can add to them (Done view + Closed tab = done or closed) but not
   // take them away. In edit mode nothing is locked — that is what edit is for.
   const groups = statusGroupsOf(view.filters);
+  const { groups: groupDefs } = useStatusGroups();
+  const filters = useMemo<{ key: StatusTab; label: string }[]>(
+    () => [{ key: 'all', label: 'All' }, ...groupDefs.map((g) => ({ key: g.code, label: g.label }))],
+    [groupDefs],
+  );
+  const groupOrder = useMemo(() => groupDefs.map((g) => g.code), [groupDefs]);
   const lockedGroups = useMemo<ReadonlySet<StatusGroup>>(
     () =>
       activeView && !editing
@@ -144,19 +157,25 @@ export function WorkOrdersPage() {
   );
   const onStatusTab = (key: StatusTab) => {
     if (key === 'all') {
-      setView({ ...view, filters: withStatusGroups(view.filters, []) });
+      setView({ ...view, filters: withStatusGroups(view.filters, [], groupOrder) });
       return;
     }
     if (lockedGroups.has(key)) return;
     const next = new Set(groups ?? lockedGroups);
     if (next.has(key)) next.delete(key);
     else next.add(key);
-    setView({ ...view, filters: withStatusGroups(view.filters, next) });
+    setView({ ...view, filters: withStatusGroups(view.filters, next, groupOrder) });
   };
 
+  // ── Pagination ─────────────────────────────────────────────────────────────
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
+  const [offset, setOffset] = useState(0);
+
   const woQuery = useQuery({
-    queryKey: ['work-orders', criteria, PAGE_SIZE],
-    queryFn: () => listWorkOrders({ ...criteria, limit: PAGE_SIZE }),
+    queryKey: ['work-orders', criteria, pageSize, offset],
+    queryFn: () => listWorkOrders({ ...criteria, limit: pageSize, offset }),
+    // A page flip redraws in place instead of flashing the loading row.
+    placeholderData: (prev) => prev,
   });
 
   const items = woQuery.data?.items ?? [];
@@ -164,10 +183,13 @@ export function WorkOrdersPage() {
 
   // Changing what the list SHOWS must not silently change what a bulk edit will
   // act on — so a new result set drops the selection rather than keeping ids
-  // the user can no longer see.
+  // the user can no longer see. New criteria also land back on page 1: keeping
+  // an offset into a result set that no longer exists strands the user on an
+  // empty page.
   useEffect(() => {
     setSelected(new Set());
     setAllMatchingSelected(false);
+    setOffset(0);
   }, [criteria]);
 
   const selectAllMatching = useMutation({
@@ -185,6 +207,38 @@ export function WorkOrdersPage() {
     setView(v ? viewOf(v) : DEFAULT_VIEW);
     setEditing(false);
   }, []);
+
+  // ── Pinned view ────────────────────────────────────────────────────────────
+  // The local value wins the moment the pin is toggled; the server pref is the
+  // cross-machine copy (the All-fields order pattern).
+  const pinPref = useQuery({
+    queryKey: ['user-pref', PIN_PREF_KEY],
+    queryFn: () => getUserPref<{ id: string }>(PIN_PREF_KEY),
+    staleTime: 5 * 60 * 1000,
+  });
+  const [localPin, setLocalPin] = useState<string | null | undefined>(undefined);
+  const pinnedId = localPin !== undefined ? localPin : (pinPref.data?.value?.id ?? null);
+
+  const togglePin = (v: SavedView) => {
+    const next = pinnedId === v.id ? null : v.id;
+    setLocalPin(next);
+    void setUserPref(PIN_PREF_KEY, next ? { id: next } : null).catch(() => {
+      /* a failed pref write only costs cross-machine sync — never block the UI */
+    });
+  };
+
+  // Opening the page lands on the pinned view — applied ONCE, when the pref
+  // and the view list have both arrived. Landing already on it (session
+  // restore) keeps any working tweaks, and pinning something mid-session
+  // never yanks the current tab away.
+  const pinApplied = useRef(false);
+  useEffect(() => {
+    if (pinApplied.current || !pinPref.isSuccess || !viewsQuery.isSuccess) return;
+    pinApplied.current = true;
+    const id = pinPref.data?.value?.id;
+    const pinned = id ? views.find((x) => x.id === id) : undefined;
+    if (pinned && activeViewId !== pinned.id) onSelectView(pinned);
+  }, [pinPref.isSuccess, pinPref.data, viewsQuery.isSuccess, views, activeViewId, onSelectView]);
 
   const saveNew = useMutation({
     mutationFn: (input: { name: string; shared: boolean }) =>
@@ -271,8 +325,22 @@ export function WorkOrdersPage() {
           onResetToSaved={() => setView(activeView ? viewOf(activeView) : DEFAULT_VIEW)}
           busy={viewBusy}
           error={viewError}
+          pinnedId={pinnedId}
+          onTogglePin={togglePin}
           actions={
             <>
+              {/* The comp's accent CTA leads the cluster. There is no create
+                  API or form yet, so like Vendors in the nav it renders inert
+                  until that sprint lands. */}
+              <button
+                type="button"
+                className="tool-btn is-primary"
+                disabled
+                title="Creating work orders in-app is coming — Import a CSV meanwhile"
+              >
+                <Icon name="plus" size={14} />
+                Add work order
+              </button>
               <ToolButton onClick={() => setShowImport(true)} title="Import work orders from a CSV">
                 <Icon name="upload" size={14} />
                 Import
@@ -293,7 +361,7 @@ export function WorkOrdersPage() {
 
         <div className="toolbar">
           <div className="seg" role="group" aria-label="Status groups">
-            {FILTERS.map((f) => {
+            {filters.map((f) => {
               const on = f.key === 'all' ? groups?.size === 0 : (groups?.has(f.key) ?? false);
               const locked = f.key !== 'all' && lockedGroups.has(f.key);
               // "All" cannot be honoured without changing a view that is
@@ -396,16 +464,20 @@ export function WorkOrdersPage() {
           groupCounts={woQuery.data?.groups}
           wrapRef={cardRef}
         />
+        <ListPagination
+          total={total}
+          offset={offset}
+          limit={pageSize}
+          noun="work orders"
+          onOffsetChange={setOffset}
+          onLimitChange={(n) => {
+            setPageSize(n);
+            setOffset(0);
+          }}
+        />
         {/* The card's vertical O-knob, parked on the page's right edge (the
             spot the canvas rail held before the chrome was pinned). */}
         <OKnobScrollbar scrollRef={cardRef} />
-
-        {total != null && items.length < total && (
-          <p className="table-more">
-            Showing {items.length.toLocaleString()} of {total.toLocaleString()}. Narrow the filters
-            to see the rest, or export the full set.
-          </p>
-        )}
       </div>
 
       {showImport && <ImportDialog fields={fields} onClose={() => setShowImport(false)} />}

@@ -18,7 +18,7 @@
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 
-export type FieldType = 'text' | 'number' | 'money' | 'date' | 'select' | 'boolean';
+export type FieldType = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'boolean';
 
 export interface FieldOption {
   value: string;
@@ -62,6 +62,7 @@ const PRIORITY_OPTIONS: FieldOption[] = [
   { value: 'low', label: 'Low' },
 ];
 
+/** Fallback only — the catalogue reads the live list from status_group_def. */
 const GROUP_OPTIONS: FieldOption[] = [
   { value: 'open', label: 'Open' },
   { value: 'active', label: 'Active' },
@@ -113,6 +114,7 @@ const CUSTOM_TYPE_MAP: Record<string, FieldType> = {
   long_text: 'text',
   dropdown: 'select',
   date: 'date',
+  datetime: 'datetime',
   // A person field (Assignee, AM, …) is a picker like a dropdown: its choices
   // are the people in the system, not free text (see `customDistinctOptions`).
   users: 'select',
@@ -266,10 +268,13 @@ export interface FieldCatalogue {
 
 /** Everything the filter builder and column picker need, in one round trip. */
 export async function getFieldCatalogue(): Promise<FieldCatalogue> {
-  const [custom, distinct, statuses] = await Promise.all([
+  const [custom, distinct, statuses, groups] = await Promise.all([
     listCustomFields(),
     distinctOptions(),
     query<{ name: string; color: string }>(`SELECT name, color FROM status ORDER BY position ASC`),
+    query<{ code: string; label: string }>(
+      `SELECT code, label FROM status_group_def ORDER BY position ASC`,
+    ),
   ]);
   // After `listCustomFields`, which is what decides the keys to read.
   const customDistinct = await customDistinctOptions();
@@ -279,7 +284,9 @@ export async function getFieldCatalogue(): Promise<FieldCatalogue> {
     const options =
       f.key === 'status'
         ? statuses.rows.map((s) => ({ value: s.name, label: s.name, color: s.color }))
-        : (distinct[f.key] ?? f.options);
+        : f.key === 'status_group'
+          ? groups.rows.map((g) => ({ value: g.code, label: g.label }))
+          : (distinct[f.key] ?? f.options);
     return { ...rest, options };
   });
 
@@ -355,6 +362,9 @@ export const OPS_BY_TYPE: Record<FieldType, FilterOp[]> = {
   number: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between', 'is_set', 'is_not_set'],
   money: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between', 'is_set', 'is_not_set'],
   date: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between', 'is_set', 'is_not_set'],
+  // A datetime FILTERS like a date (whole days — see dateExpr); the extra
+  // precision only shows in display and sorting.
+  datetime: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between', 'is_set', 'is_not_set'],
   boolean: ['is_true', 'is_false', 'is_set', 'is_not_set'],
 };
 
@@ -400,6 +410,10 @@ function exprFor(f: ResolvedField, p: Params, forceText = false): string {
       return `CASE WHEN ${raw} ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN ${raw}::numeric END`;
     case 'date':
       return `CASE WHEN ${raw} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN substring(${raw} from 1 for 10)::date END`;
+    case 'datetime':
+      // Full precision, so sorting keeps the time; a date-only value casts to
+      // midnight. Filters go through dateExpr, which truncates back to days.
+      return `CASE WHEN ${raw} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN ${raw}::timestamp END`;
     case 'boolean':
       return `CASE WHEN lower(${raw}) IN ('true','yes','1') THEN true
                    WHEN lower(${raw}) IN ('false','no','0') THEN false END`;
@@ -424,7 +438,7 @@ function coerce(f: ResolvedField, v: unknown): unknown {
     }
     return Number(digits);
   }
-  if (f.type === 'date') {
+  if (f.type === 'date' || f.type === 'datetime') {
     const s = String(v).slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
       throw new ApiError('BAD_REQUEST', `"${f.label}" needs a date (YYYY-MM-DD)`);
@@ -440,6 +454,8 @@ function coerce(f: ResolvedField, v: unknown): unknown {
 function dateExpr(f: ResolvedField, p: Params): string {
   const base = exprFor(f, p);
   if (!f.custom && (f.key === 'created_at' || f.key === 'updated_at')) return `(${base})::date`;
+  // Custom datetimes compare the same way: the filter UI hands over days.
+  if (f.custom && f.type === 'datetime') return `(${base})::date`;
   return base;
 }
 
@@ -492,7 +508,7 @@ function compileRule(f: ResolvedField, rule: FilterRule, p: Params): string {
         field: rule.field,
       });
     }
-    const e = f.type === 'date' ? dateExpr(f, p) : exprFor(f, p);
+    const e = f.type === 'date' || f.type === 'datetime' ? dateExpr(f, p) : exprFor(f, p);
     return `${e} BETWEEN ${p.add(coerce(f, pair[0]))} AND ${p.add(coerce(f, pair[1]))}`;
   }
 
@@ -531,7 +547,7 @@ function compileRule(f: ResolvedField, rule: FilterRule, p: Params): string {
       : `${e} ILIKE ${hole}`;
   }
 
-  const e = f.type === 'date' ? dateExpr(f, p) : exprFor(f, p);
+  const e = f.type === 'date' || f.type === 'datetime' ? dateExpr(f, p) : exprFor(f, p);
   const hole = p.add(coerce(f, rule.value));
   switch (rule.op) {
     case 'eq':

@@ -26,7 +26,13 @@ export function resolveMoney(wo: WorkOrderDetailV2): Money {
   const nte = wo.nte ?? num(field(f, FIELD.nte));
   const cost = num(field(f, FIELD.cost));
   const invoiced = num(field(f, FIELD.invoiced));
-  const profit = num(field(f, FIELD.profit));
+  // Profit is a FORMULA: always Total Invoiced − Cost (the stored field is a
+  // snapshot the server keeps in step but display never trusts). An absent
+  // input counts as $0; both absent → no profit to show.
+  const profit =
+    cost == null && invoiced == null
+      ? null
+      : Math.round(((invoiced ?? 0) - (cost ?? 0)) * 100) / 100;
   // There is no dedicated quote field in the bag — null unless the API supplies it.
   const quote = null;
   const marginPct =
@@ -53,37 +59,72 @@ export interface Person {
   name: string;
   role: string;
   accent?: boolean;
+  /** Catalogue key when a single editable bag field backs the row. */
+  fieldKey?: string;
 }
 
-export function derivePeople(wo: WorkOrderDetailV2): Person[] {
+/** One of the named seats on a work order. The slot exists whether or not it
+    is filled: "who is the team lead?" deserves the answer "nobody yet", and a
+    row that simply vanishes when empty cannot give it. */
+export interface PersonSlot {
+  role: string;
+  /** Everyone in the seat — these bag fields are comma-joined name lists. */
+  names: string[];
+  accent?: boolean;
+  fieldKey?: string;
+}
+
+export interface WoPeople {
+  /** The six seats, always in this order. */
+  slots: PersonSlot[];
+  /** Lists and client-side contacts — attached to the WO, not seated on it. */
+  attached: Person[];
+}
+
+/** A `users`-type bag value ("Matt Hammond, Bob Sanders") as separate names. */
+function names(v: unknown): string[] {
+  const raw = str(v);
+  if (!raw) return [];
+  return raw.split(',').map((n) => n.trim()).filter(Boolean);
+}
+
+export function derivePeople(wo: WorkOrderDetailV2): WoPeople {
   const f = wo.fields ?? {};
-  const out: Person[] = [];
-  const seen = new Set<string>();
 
-  const push = (name: string | null, role: string, accent = false) => {
-    if (!name) return;
-    const key = name.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push({ name, role, accent });
+  // Deliberately NOT de-duplicated across slots. The previous version dropped
+  // a name it had already printed, which meant the common case — the assignee
+  // is also the only previous assignee — silently erased the whole Previous
+  // assignees row. Each seat answers for itself.
+  const slots: PersonSlot[] = [
+    { role: 'Account manager', names: names(field(f, FIELD.am)), accent: true,
+      fieldKey: `fields.${FIELD.am}` },
+    { role: 'Team lead', names: names(field(f, FIELD.teamLead)),
+      fieldKey: `fields.${FIELD.teamLead}` },
+    // The dropdown is the field the list filters on; the older free-text
+    // 'Assignee Name TXT' backstops WOs imported before it existed. The editor
+    // writes the dropdown either way (same rule as the header).
+    { role: 'Assignee',
+      names: names(field(f, FIELD.assignee) ?? field(f, FIELD.assigneeName)),
+      fieldKey: `fields.${FIELD.assignee}` },
+    { role: 'Completion assignee', names: names(field(f, FIELD.completionAssignee)),
+      fieldKey: `fields.${FIELD.completionAssignee}` },
+    { role: 'Previous assignees', names: names(field(f, FIELD.previousAssignees)),
+      fieldKey: `fields.${FIELD.previousAssignees}` },
+    { role: 'Sales owner', names: names(field(f, FIELD.salesOwner)),
+      fieldKey: `fields.${FIELD.salesOwner}` },
+  ];
+
+  const attached: Person[] = [];
+  const push = (name: string | null, role: string, fieldKey?: string) => {
+    if (name) attached.push({ name, role, fieldKey });
   };
-
-  push(str(field(f, FIELD.am)), 'AM · account manager', true);
 
   const home = wo.memberships?.find((m) => m.is_home);
   if (home) push(home.list_name, 'OM book · home list');
+  for (const m of wo.memberships ?? []) if (!m.is_home) push(m.list_name, 'Routed list');
+  push(str(field(f, FIELD.facilityManager)), 'Facility manager (client side)');
 
-  push(str(field(f, FIELD.assigneeName)), 'Assignee');
-  push(str(field(f, FIELD.completionAssignee)), 'Completion assignee');
-  push(str(field(f, FIELD.previousAssignees)), 'Previous assignee');
-  push(str(field(f, FIELD.salesOwner)), 'Sales owner');
-  push(str(field(f, FIELD.facilityManager)), 'Facility manager');
-
-  for (const m of wo.memberships ?? []) {
-    if (!m.is_home) push(m.list_name, 'Routed list');
-  }
-
-  return out;
+  return { slots, attached };
 }
 
 // ── Site ─────────────────────────────────────────────────────────────────────
@@ -145,26 +186,29 @@ export interface DateRow {
   key: string;
   value: string | null;
   warn?: boolean;
+  /** Catalogue key (`fields.<bag key>`) when an editable bag field backs the
+      row — the card wires an inline editor to it. Received has none: it comes
+      from the promoted import column. */
+  fieldKey?: string;
+  /** Anchors that render even when empty, so the card keeps a stable shape. */
+  always?: boolean;
 }
 
-/** Three anchors always render (so the card keeps a stable minimum shape);
-    the rest appear only when dated — a card of six em-dashes reads as broken
-    rather than as "not yet". */
+/** Returns every row; the card decides which empty ones to show (anchors for
+    everyone, all of them for editors — an empty row is how a date gets set). */
 export function deriveDates(wo: WorkOrderDetailV2): DateRow[] {
   const f = wo.fields ?? {};
   const sla = dateVal(field(f, FIELD.slaDue));
   const slaOverdue = sla != null && Date.parse(sla) < Date.now();
 
-  const rows: (DateRow & { always?: boolean })[] = [
+  return [
     { key: 'Received', value: numericDate(wo.date_received ?? dateVal(field(f, FIELD.dateReceived))), always: true },
-    { key: 'ETA', value: numericDate(dateVal(field(f, FIELD.actEta))) },
-    { key: 'SLA due', value: numericDate(sla), warn: slaOverdue, always: true },
-    { key: 'Grey flag', value: numericDate(dateVal(field(f, FIELD.greyFlag))) },
-    { key: 'Parts ordered', value: numericDate(dateVal(field(f, FIELD.partsOrderDate))) },
-    { key: 'Invoiced', value: numericDate(dateVal(field(f, FIELD.invoiceDate))), always: true },
+    { key: 'ETA', value: numericDate(dateVal(field(f, FIELD.actEta))), fieldKey: `fields.${FIELD.actEta}` },
+    { key: 'SLA due', value: numericDate(sla), warn: slaOverdue, always: true, fieldKey: `fields.${FIELD.slaDue}` },
+    { key: 'Grey flag', value: numericDate(dateVal(field(f, FIELD.greyFlag))), fieldKey: `fields.${FIELD.greyFlag}` },
+    { key: 'Parts ordered', value: numericDate(dateVal(field(f, FIELD.partsOrderDate))), fieldKey: `fields.${FIELD.partsOrderDate}` },
+    { key: 'Invoiced', value: numericDate(dateVal(field(f, FIELD.invoiceDate))), always: true, fieldKey: `fields.${FIELD.invoiceDate}` },
   ];
-
-  return rows.filter((r) => r.always || r.value != null).map(({ key, value, warn }) => ({ key, value, warn }));
 }
 
 // ── Parts ────────────────────────────────────────────────────────────────────

@@ -24,13 +24,15 @@ import { invalidateFieldCache } from './woFields.js';
 import type { FieldDefItem } from './adminMeta.js';
 import { listFieldDefs } from './adminMeta.js';
 
-/** Everything the field_type enum accepts (0001 + phone from 0007). */
+/** Everything the field_type enum accepts (0001 + phone from 0007 + datetime
+    from 0009). */
 export const FIELD_DEF_TYPES = [
   'short_text',
   'long_text',
   'dropdown',
   'checkbox',
   'date',
+  'datetime',
   'currency',
   'number',
   'users',

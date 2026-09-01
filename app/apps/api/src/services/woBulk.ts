@@ -16,6 +16,7 @@ import { ApiError } from '../errors.js';
 import { listWorkOrders, type ListFilters } from './workOrders.js';
 import { listCustomFields, resolveField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
+import { applyProfitFormula } from './money.js';
 import type { WorkOrderListItem } from '@theone/shared';
 
 /** `$1, $2, …` for a list of values. PGlite's parameter serialisation for
@@ -206,6 +207,8 @@ export async function bulkUpdate(
             else merged[c.key] = c.value;
             log.push({ field: `fields.${c.key}`, before: row.fields?.[c.key] ?? null, after: c.value });
           }
+          // Profit = Total Invoiced − Cost, kept in step on every bag write.
+          applyProfitFormula(merged);
           params.push(JSON.stringify(merged));
           sets.push(`fields = $${params.length}::jsonb`);
         }
@@ -602,13 +605,25 @@ export async function importWorkOrders(
       cols.title = fallback.slice(0, 200);
     }
 
+    // A new work order stamps its own creation date into the record — 'Date
+    // Created' is a real field the operators read, not just task.created_at.
+    // A CSV that supplies the column keeps its value (a backdated import).
+    if (!match && fields['Date Created'] === undefined) {
+      // The field is a datetime — stamp to the minute (UTC).
+      fields['Date Created'] = new Date().toISOString().slice(0, 16);
+    }
+
+    // Profit = Total Invoiced − Cost, kept in step whatever the file said.
+    const mergedBag = match ? { ...(match.fields ?? {}), ...fields } : fields;
+    applyProfitFormula(mergedBag);
+
     plans.push({
       index: rowNo,
       action: match ? 'update' : 'create',
       id: match?.id,
       wo_number: woNumber,
       cols,
-      fields: match ? { ...(match.fields ?? {}), ...fields } : fields,
+      fields: mergedBag,
       fieldPatch: fields,
       status_id: status.id,
       status_name: status.name,

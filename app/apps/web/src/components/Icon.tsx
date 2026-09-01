@@ -5,7 +5,7 @@
 
 export type IconName =
   | 'grid' | 'clipboard' | 'truck' | 'file' | 'dollar' | 'sliders'
-  | 'search' | 'bell' | 'sun' | 'moon' | 'chev-r' | 'arrow-l' | 'arrow-r'
+  | 'search' | 'bell' | 'sun' | 'moon' | 'chev-r' | 'chev-l' | 'arrow-l' | 'arrow-r'
   | 'copy' | 'check' | 'check-circle' | 'circle' | 'alert' | 'package'
   | 'phone' | 'pin' | 'lock' | 'globe' | 'send' | 'clip' | 'image'
   | 'camera' | 'dots' | 'swap' | 'snow' | 'flag' | 'list' | 'inbox'
@@ -21,7 +21,11 @@ export type IconName =
   // S6 — the work-order list toolbar: filters, columns, grouping, import/export
   | 'filter' | 'columns' | 'layers' | 'download'
   // S7 — sign-in route stops (work orders · quotes · operations)
-  | 'wrench' | 'user-cog';
+  | 'wrench' | 'user-cog'
+  // Trade glyphs for the work-orders list (plumbing · appliance · roofing)
+  | 'droplet' | 'plug' | 'home'
+  // Saved-view pinning ('pin' is the map pin — this is the pushpin)
+  | 'pushpin';
 
 type IconSize = 12 | 14 | 16 | 18 | 22;
 
@@ -59,6 +63,7 @@ export function IconSprite() {
         <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></symbol>
         <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></symbol>
         <symbol id="i-chev-r" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></symbol>
+        <symbol id="i-chev-l" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" /></symbol>
         <symbol id="i-arrow-l" viewBox="0 0 24 24"><line x1="20" y1="12" x2="5" y2="12" /><polyline points="11 5 5 12 11 19" /></symbol>
         <symbol id="i-arrow-r" viewBox="0 0 24 24"><line x1="4" y1="12" x2="19" y2="12" /><polyline points="13 6 19 12 13 18" /></symbol>
         <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></symbol>
@@ -117,6 +122,11 @@ export function IconSprite() {
         <symbol id="i-sort" viewBox="0 0 24 24"><polyline points="8 9.5 12 5.5 16 9.5" /><polyline points="8 14.5 12 18.5 16 14.5" /></symbol>
         <symbol id="i-sort-down" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" /><polyline points="7 14 12 19 17 14" /></symbol>
         <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" /><polyline points="3 4 3 9 8 9" /><polyline points="12 7.5 12 12 15.2 13.8" /></symbol>
+        {/* ── Trade glyphs (work-orders list Trade column) ──────────────── */}
+        <symbol id="i-droplet" viewBox="0 0 24 24"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" /></symbol>
+        <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z" /></symbol>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></symbol>
+        <symbol id="i-pushpin" viewBox="0 0 24 24"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z" /></symbol>
       </defs>
     </svg>
   );

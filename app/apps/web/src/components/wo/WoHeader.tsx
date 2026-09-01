@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Phase, WorkOrderDetailV2 } from '../../api/client';
 import { DASH, FIELD, dateVal, daysSince, field, money, numericDate, str } from '../../lib/fields';
 import { deriveHeaderMeta } from '../../lib/woDerive';
+import { tradeIcon } from '../../lib/tradeIcon';
 import { CopyButton } from '../CopyButton';
 import { Icon } from '../Icon';
 import { StatusChangeMenu } from '../StatusChangeMenu';
@@ -147,7 +148,7 @@ export function WoHeader({ wo, phase, inStatusDays }: WoHeaderProps) {
           )}
           {meta.trade && (
             <span className="chip">
-              <Icon name="snow" size={12} />
+              <Icon name={tradeIcon(meta.trade)} size={12} />
               {meta.trade}
             </span>
           )}

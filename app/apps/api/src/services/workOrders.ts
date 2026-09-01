@@ -293,6 +293,13 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
   const quoteTotal = await getBindableQuoteTotal(r.id);
   if (quoteTotal !== null) money.quote = quoteTotal;
 
+  // The bag the page sees carries the FORMULA's Profit (invoiced − cost), not
+  // whatever snapshot an old export stored — so the All-fields tab and the
+  // Finances card can never disagree.
+  const fieldsOut: Record<string, unknown> = { ...(r.fields ?? {}) };
+  if (money.profit === null) delete fieldsOut['Profit'];
+  else fieldsOut['Profit'] = money.profit;
+
   return {
     id: r.id,
     wo_number: r.wo_number,
@@ -313,7 +320,7 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
       group: r.status_group,
       color: r.status_color,
     },
-    fields: r.fields ?? {},
+    fields: fieldsOut,
     money,
     memberships: memRes.rows.map((m) => ({
       list_id: m.list_id,

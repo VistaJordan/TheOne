@@ -247,6 +247,63 @@ input {
   font-size: 11px;
 }
 
+/* ── Sidebar scribble (SidebarScribble.tsx) ────────────────────────────────
+   The route at the rail's empty foot. Absolute, above the user card and
+   outside the nav's scroll area, so it costs no layout. Coloured like the
+   wordmark: the line in the accent, the stops as solid active-nav-item
+   bubbles (sky tint + certified ink) so they read as the logo's own. A
+   --side-bg circle under each bubble punches its gap in the line, because
+   night's sky tint is translucent. Gone from the collapsed rail and from
+   viewports short enough for the nav to reach it. */
+.side-scribble {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 58px;
+  height: 340px;
+  pointer-events: none;
+  color: var(--accent);
+}
+
+.side-scribble-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.35;
+}
+
+.side-scribble-punch {
+  fill: var(--side-bg);
+}
+
+.side-scribble-tint {
+  fill: var(--side-active-bg);
+}
+
+.side-scribble-icon {
+  overflow: visible;
+  fill: none;
+  stroke: var(--side-active-ink);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+}
+
+:root[data-theme='night'] .side-scribble-line { opacity: 0.4; }
+
+.shell.is-collapsed .side-scribble {
+  display: none;
+}
+
+@media (max-height: 700px) {
+  .side-scribble {
+    display: none;
+  }
+}
+
 /* ── Nav groups (Admin) ───────────────────────────────────────────────────── */
 .side-group {
   display: flex;
@@ -988,11 +1045,58 @@ input {
 }
 
 .canvas {
+  /* Positioned so it paints over the absolutely-positioned backdrop below —
+     tree order settles it, no z-index (which would open a stacking context
+     under the flyouts). */
+  position: relative;
   height: 100%;
   min-width: 0;
   overflow-y: auto;
   padding: 22px 24px 40px;
 }
+
+/* ── Canvas backdrop ─ the brand's route, ghosted (CanvasBackdrop.tsx) ─────
+   The sign-in page's waves-with-stops, dialled down to a watermark and pinned
+   behind the canvas on every tab. It does not scroll with the page — the
+   content slides over it like weather over a map. The stop bubbles fill with
+   --bg at full opacity ON PURPOSE: that blanks the wave under the bubble (the
+   gap the sign-in route cuts with its --bg circle stroke) while the ring and
+   glyph stay translucent. */
+.canvas-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  color: var(--accent);
+}
+.canvas-backdrop-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  opacity: 0.07;
+}
+.canvas-backdrop-stop circle {
+  fill: var(--bg);
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-opacity: 0.16;
+}
+.canvas-backdrop-icon {
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.2;
+}
+/* Night's near-black ground swallows low alphas; nudge them the way the
+   sign-in route does (.2 → .26). */
+:root[data-theme='night'] .canvas-backdrop-line { opacity: 0.09; }
+:root[data-theme='night'] .canvas-backdrop-stop circle { stroke-opacity: 0.2; }
+:root[data-theme='night'] .canvas-backdrop-icon { opacity: 0.24; }
 
 /* ── The "O knob" scrollbar ────────────────────────────────────────────────
    Design option 1c, app-wide: the thumb is the logo's "O" — a surface-filled
@@ -1107,6 +1211,17 @@ textarea {
   touch-action: none;
 }
 
+/* A knob wearing a glyph instead of the O (OKnobScrollbar's `icon` — the WO
+   detail page passes its trade's). The thick ring thins to a hairline so the
+   glyph, not the border, is the mark; --accent-text keeps the glyph AA on the
+   surface in day. */
+.oknob-thumb.has-icon {
+  display: grid;
+  place-items: center;
+  border-width: 1.5px;
+  color: var(--accent-text);
+}
+
 /* Hover/drag: the ring swells a touch and takes the pressed accent — in night
    --accent-text equals --accent, so only the swell reads there, which is the
    quieter thing on black anyway. */
@@ -1124,6 +1239,91 @@ textarea {
   .oknob-thumb {
     transition: transform 0.12s ease, border-color 0.12s ease;
   }
+}
+
+/* ── List pagination (ListPagination.tsx) ─ the footer under every list ──── */
+.list-pgn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 7px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* Summary and picker flank the pager on equal fractions, so the page numbers
+   sit on the bar's own centre line (the topbar-search trick). */
+.pgn-sum {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pgn-pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pgn-btn {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s, color 0.12s;
+}
+
+.pgn-btn:hover:not(:disabled) {
+  background: var(--chip);
+  color: var(--ink);
+}
+
+.pgn-btn:disabled {
+  opacity: 0.45;
+}
+
+.pgn-btn.is-on {
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+}
+
+.pgn-gap {
+  padding: 0 2px;
+  color: var(--ink-3);
+}
+
+.pgn-size {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.pgn-size select {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
 }
 
 .page-head {
@@ -1311,15 +1511,6 @@ textarea {
   cursor: pointer;
 }
 
-.wo-num-link {
-  color: var(--accent-text);
-  text-decoration: none;
-}
-
-.wo-num-link:hover {
-  text-decoration: underline;
-}
-
 .ct .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -1330,6 +1521,29 @@ textarea {
   font-size: 12px;
   color: var(--ink-2);
   white-space: nowrap;
+}
+
+/* After .wo-num so the accent wins the cascade on cells that carry both classes. */
+.wo-num-link {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.wo-num-link:hover {
+  text-decoration: underline;
+}
+
+/* Trade cell — a small muted glyph keyed to the trade name (WorkOrdersTable). */
+.trade-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.trade-cell .ic {
+  flex: none;
+  color: var(--accent-text);
 }
 
 .site {
@@ -1371,14 +1585,27 @@ textarea {
   font-weight: 600;
   line-height: 1.3;
   border-radius: var(--pill-radius);
-  background: color-mix(in srgb, var(--pill) 14%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--pill) 32%, transparent);
+  /* A pastel of the status's own hex (--pill, from the DB — the same color the
+     status-menu circles draw), strong enough that yellow reads yellow. */
+  background: color-mix(in srgb, var(--pill) 26%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--pill) 46%, transparent);
 }
 
 .pill-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Status names are stored lowercase (ClickUp heritage); presentation leads
+   with a capital. All four spans are flex items, so ::first-letter applies.
+   .group-name covers every group header, statuses included — harmless for the
+   rest. Names opening with punctuation («…») are left as they are. */
+.pill-label::first-letter,
+.status-menu-name::first-letter,
+.wf-name::first-letter,
+.group-name::first-letter {
+  text-transform: uppercase;
 }
 
 .pill-caret {
@@ -1401,7 +1628,9 @@ textarea {
 }
 
 :root[data-theme="day"] .pill {
-  color: var(--pill-ink-day, color-mix(in srgb, var(--pill) 72%, #000000));
+  /* 66% (not 72%) since the 26% pastel background landed — keeps every seeded
+     color ≥4.5:1 (packages/db/scripts/check-contrast.ts is the proof). */
+  color: var(--pill-ink-day, color-mix(in srgb, var(--pill) 66%, #000000));
 }
 
 /* ── Status change menu ───────────────────────────────────────────────────── */
@@ -1415,14 +1644,53 @@ textarea {
   top: calc(100% + 6px);
   left: 0;
   z-index: 100;
-  min-width: 230px;
-  max-height: 360px;
-  overflow-y: auto;
-  padding: 6px;
+  min-width: 250px;
+  /* Fallback only — the component measures the trigger and sets an inline
+     max-height that reaches ~5cm above the viewport's bottom edge. */
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px;
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+}
+
+/* The search stays put; only the list below it scrolls — and since the panel
+   reaches almost to the bottom of the viewport it rarely needs to, so no
+   scrollbar is drawn when it does. */
+.status-menu-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.status-menu-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.status-menu-search {
+  flex: none;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--chip);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.status-menu-search::placeholder {
+  color: var(--ink-3);
+}
+
+.status-menu-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .status-menu-pop.is-right {
@@ -1441,13 +1709,13 @@ textarea {
 }
 
 .status-menu-group + .status-menu-group {
-  margin-top: 4px;
-  padding-top: 4px;
+  margin-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid var(--row-border);
 }
 
 .status-menu-group-label {
-  padding: 5px 10px 3px;
+  padding: 4px 4px 5px;
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 10.5px;
   font-weight: 700;
@@ -1456,26 +1724,35 @@ textarea {
   color: var(--ink-3);
 }
 
+/* One rounded card per status: circle icon + name, no prose. */
 .status-menu-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
   color: var(--ink);
   font-size: 12.5px;
+  font-weight: 600;
   text-align: left;
+}
+
+.status-menu-item + .status-menu-item {
+  margin-top: 5px;
 }
 
 .status-menu-item:not(:disabled):hover {
   background: var(--chip);
+  border-color: var(--border-strong);
+  cursor: pointer;
 }
 
 .status-menu-item.is-current {
   background: var(--tab-on-bg);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .status-menu-item:disabled {
@@ -1483,13 +1760,9 @@ textarea {
   cursor: default;
 }
 
-.status-menu-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
+.status-circle {
   flex: none;
-  background: var(--pill);
-  border: 1px solid color-mix(in srgb, var(--pill) 60%, transparent);
+  display: block;
 }
 
 .status-menu-name {

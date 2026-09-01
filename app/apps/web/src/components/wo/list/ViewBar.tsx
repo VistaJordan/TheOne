@@ -35,6 +35,10 @@ interface ViewBarProps {
       sit beside "Save view" because all three act on the list as a whole,
       not on the rows in it. */
   actions?: ReactNode;
+  /** The PERSONAL pinned view (user_pref): its tab leads the strip and the
+      page opens on it. Null = nothing pinned. */
+  pinnedId?: string | null;
+  onTogglePin?: (view: SavedView) => void;
 }
 
 function CountBadge({ count }: { count: number }) {
@@ -69,13 +73,42 @@ export function ViewBar({
   busy,
   error,
   actions,
+  pinnedId = null,
+  onTogglePin,
 }: ViewBarProps) {
   const active = views.find((v) => v.id === activeId) ?? null;
   const badge = count != null ? <CountBadge count={count} /> : null;
 
+  const viewTab = (v: SavedView) => (
+    <button
+      type="button"
+      role="tab"
+      key={v.id}
+      aria-selected={v.id === activeId}
+      className={`view-tab${v.id === activeId ? ' is-on' : ''}`}
+      onClick={() => onSelect(v)}
+      title={v.can_edit ? undefined : `Shared by ${v.owner.name}`}
+    >
+      {v.id === pinnedId && <Icon name="pushpin" size={12} />}
+      {!v.can_edit && <Icon name="user" size={12} />}
+      {v.name}
+      {v.is_shared && v.can_edit && <Icon name="globe" size={12} />}
+      {v.id === activeId && badge}
+      {v.id === activeId && editing && dirty && (
+        <span className="view-dot" title="Unsaved changes" />
+      )}
+    </button>
+  );
+
+  // The pinned tab leads the whole strip — ahead even of "All work orders" —
+  // because it is where the page opens.
+  const pinned = views.find((v) => v.id === pinnedId) ?? null;
+  const rest = pinned ? views.filter((v) => v.id !== pinned.id) : views;
+
   return (
     <div className="viewbar">
       <div className="view-tabs" role="tablist" aria-label="Saved views">
+        {pinned && viewTab(pinned)}
         <button
           type="button"
           role="tab"
@@ -87,25 +120,7 @@ export function ViewBar({
           {activeId === null && badge}
         </button>
 
-        {views.map((v) => (
-          <button
-            type="button"
-            role="tab"
-            key={v.id}
-            aria-selected={v.id === activeId}
-            className={`view-tab${v.id === activeId ? ' is-on' : ''}`}
-            onClick={() => onSelect(v)}
-            title={v.can_edit ? undefined : `Shared by ${v.owner.name}`}
-          >
-            {!v.can_edit && <Icon name="user" size={12} />}
-            {v.name}
-            {v.is_shared && v.can_edit && <Icon name="globe" size={12} />}
-            {v.id === activeId && badge}
-            {v.id === activeId && editing && dirty && (
-              <span className="view-dot" title="Unsaved changes" />
-            )}
-          </button>
-        ))}
+        {rest.map(viewTab)}
       </div>
 
       <div className="view-actions">
@@ -153,6 +168,24 @@ export function ViewBar({
           onSave={onSaveNew}
           busy={busy}
         />
+
+        {/* Pinning is personal (user_pref), so a shared colleague's view can
+            be pinned too — it changes where YOUR page opens, not their view. */}
+        {active && onTogglePin && (
+          <button
+            type="button"
+            className={`icon-btn${active.id === pinnedId ? ' is-pinned' : ''}`}
+            title={
+              active.id === pinnedId
+                ? `Unpin “${active.name}” — open on the plain list again`
+                : `Pin “${active.name}” — Work Orders opens on this view`
+            }
+            onClick={() => onTogglePin(active)}
+            disabled={busy}
+          >
+            <Icon name="pushpin" size={14} />
+          </button>
+        )}
 
         {active?.can_edit && !editing && (
           <button

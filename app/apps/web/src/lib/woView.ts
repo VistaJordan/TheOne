@@ -58,14 +58,12 @@ export function viewOf(v: SavedView): ViewState {
 
 export type StatusTab = 'all' | StatusGroup;
 
+/** Default order — callers with the live status_group_def list pass their own
+    (admins can add groups beyond these four). */
 const STATUS_GROUPS: readonly StatusGroup[] = ['open', 'active', 'done', 'closed'];
 
 function isStatusGroupRule(r: WoFilterRule): boolean {
   return r.field === 'status_group';
-}
-
-function isStatusGroup(v: unknown): v is StatusGroup {
-  return typeof v === 'string' && (STATUS_GROUPS as readonly string[]).includes(v);
 }
 
 /**
@@ -80,17 +78,26 @@ export function statusGroupsOf(filters: WoFilterSet): ReadonlySet<StatusGroup> |
   if (rules.length > 1) return null;
   const [r] = rules;
   const raw = r.op === 'eq' ? [r.value] : r.op === 'in' && Array.isArray(r.value) ? r.value : null;
-  if (!raw || !raw.every(isStatusGroup)) return null;
+  if (!raw || !raw.every((v): v is string => typeof v === 'string')) return null;
   return new Set(raw);
 }
 
 /** The rules with the status-group constraint set to exactly `groups` (none
     = All). Other rules are untouched; the status rule goes first so the
-    Filter menu lists it where the tabs are. */
-export function withStatusGroups(filters: WoFilterSet, groups: Iterable<StatusGroup>): WoFilterSet {
+    Filter menu lists it where the tabs are. `order` is the tab order (the
+    live group list); codes it does not know sort after it, so equality is
+    stable either way. */
+export function withStatusGroups(
+  filters: WoFilterSet,
+  groups: Iterable<StatusGroup>,
+  order: readonly StatusGroup[] = STATUS_GROUPS,
+): WoFilterSet {
   const others = filters.rules.filter((r) => !isStatusGroupRule(r));
   const wanted = new Set(groups);
-  const list = STATUS_GROUPS.filter((g) => wanted.has(g)); // canonical order, so equality is stable
+  const list = [
+    ...order.filter((g) => wanted.has(g)), // canonical order, so equality is stable
+    ...[...wanted].filter((g) => !order.includes(g)).sort(),
+  ];
   if (list.length === 0) return { match: filters.match, rules: others };
   const rule: WoFilterRule =
     list.length === 1
@@ -151,7 +158,9 @@ const DATE_OP_LABEL: Partial<Record<WoFilterOp, string>> = {
 };
 
 export function opLabel(op: WoFilterOp, type: WoFieldType): string {
-  if (type === 'date' && DATE_OP_LABEL[op]) return DATE_OP_LABEL[op] as string;
+  if ((type === 'date' || type === 'datetime') && DATE_OP_LABEL[op]) {
+    return DATE_OP_LABEL[op] as string;
+  }
   return OP_LABEL[op];
 }
 
@@ -201,6 +210,7 @@ export function defaultOp(type: WoFieldType, allowed: WoFilterOp[]): WoFilterOp 
     number: 'eq',
     money: 'gte',
     date: 'gte',
+    datetime: 'gte',
     boolean: 'is_true',
   };
   const want = preferred[type];
@@ -242,6 +252,13 @@ export function formatCell(value: unknown, field: WoFieldDescriptor | undefined)
   if (type === 'date') {
     const s = String(value).slice(0, 10);
     return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : String(value);
+  }
+  if (type === 'datetime') {
+    // '2026-07-21T14:30' → '2026-07-21 14:30'; a bare date stays a bare date.
+    const s = String(value).replace(' ', 'T');
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return `${s.slice(0, 10)} ${s.slice(11, 16)}`;
+    const day = s.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : String(value);
   }
   if (type === 'boolean') {
     if (value === true || value === 'true' || value === 'yes' || value === '1') return 'Yes';

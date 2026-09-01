@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { StatusGroup } from '@theone/shared';
-import type { BulkUpdateResult, StatusWithPhase, WoFieldDescriptor } from '../../../api/client';
+import type { BulkUpdateResult, WoFieldDescriptor } from '../../../api/client';
 import {
   bulkDeleteWorkOrders,
   bulkUpdateWorkOrders,
@@ -10,17 +9,10 @@ import {
 } from '../../../api/client';
 import { Icon } from '../../Icon';
 import { ConfirmDialog } from '../../ConfirmDialog';
-import { pillStyle } from '../../StatusPill';
+import { StatusCircle } from '../../StatusCircle';
+import { bucketStatuses, useStatusGroups } from '../../../lib/statusGroups';
 import { Popover } from './Popover';
 import { FieldPicker } from './FieldPicker';
-
-const GROUP_ORDER: StatusGroup[] = ['open', 'active', 'done', 'closed'];
-const GROUP_LABEL: Record<StatusGroup, string> = {
-  open: 'Open',
-  active: 'Active',
-  done: 'Done',
-  closed: 'Closed',
-};
 
 interface BulkBarProps {
   ids: string[];
@@ -166,14 +158,12 @@ function BulkStatusMenu({
     queryFn: getStatuses,
     staleTime: 5 * 60 * 1000,
   });
+  const { groups } = useStatusGroups();
 
-  const grouped = useMemo(() => {
-    const out: Record<StatusGroup, StatusWithPhase[]> = { open: [], active: [], done: [], closed: [] };
-    for (const s of [...(statuses.data ?? [])].sort((a, b) => a.position - b.position)) {
-      out[s.group].push(s);
-    }
-    return out;
-  }, [statuses.data]);
+  const buckets = useMemo(
+    () => bucketStatuses(statuses.data ?? [], groups),
+    [statuses.data, groups],
+  );
 
   return (
     <Popover
@@ -194,28 +184,25 @@ function BulkStatusMenu({
       {({ close }) => (
         <>
           {statuses.isLoading && <p className="pop-empty">Loading…</p>}
-          {GROUP_ORDER.map((g) =>
-            grouped[g].length ? (
-              <div className="status-menu-group" key={g}>
-                <div className="status-menu-group-label">{GROUP_LABEL[g]}</div>
-                {grouped[g].map((s) => (
-                  <button
-                    type="button"
-                    key={s.id}
-                    className="status-menu-item"
-                    style={pillStyle(s.color)}
-                    onClick={() => {
-                      onPick(s.id);
-                      close();
-                    }}
-                  >
-                    <span className="status-menu-dot" aria-hidden="true" />
-                    <span className="status-menu-name">{s.name}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null,
-          )}
+          {buckets.map((b) => (
+            <div className="status-menu-group" key={b.code}>
+              <div className="status-menu-group-label">{b.label}</div>
+              {b.statuses.map((s) => (
+                <button
+                  type="button"
+                  key={s.id}
+                  className="status-menu-item"
+                  onClick={() => {
+                    onPick(s.id);
+                    close();
+                  }}
+                >
+                  <StatusCircle group={b.code} color={s.color} fraction={s.fraction} size={16} />
+                  <span className="status-menu-name">{s.name}</span>
+                </button>
+              ))}
+            </div>
+          ))}
         </>
       )}
     </Popover>
@@ -353,9 +340,11 @@ function BulkEditMenu({
                       type={
                         f?.type === 'date'
                           ? 'date'
-                          : f?.type === 'number' || f?.type === 'money'
-                            ? 'number'
-                            : 'text'
+                          : f?.type === 'datetime'
+                            ? 'datetime-local'
+                            : f?.type === 'number' || f?.type === 'money'
+                              ? 'number'
+                              : 'text'
                       }
                       value={value ?? ''}
                       placeholder="— clear —"

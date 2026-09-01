@@ -255,6 +255,28 @@
   color: var(--ink);
 }
 
+/* The accent CTA at the head of the action cluster (Add work order).
+   --btn-accent, not --accent: the S2 pair certified for solid button fills in
+   both themes — the same hexes as the WO # links (--accent-text). It keeps its
+   FULL fill even while disabled (founder call: the washed-out 0.5 opacity read
+   as a different blue); the default cursor and the tooltip say "not yet". */
+.tool-btn.is-primary {
+  background: var(--btn-accent);
+  border-color: transparent;
+  color: var(--on-btn-accent);
+}
+
+.tool-btn.is-primary:disabled {
+  opacity: 1;
+}
+
+.tool-btn.is-primary:hover:not(:disabled) {
+  background: var(--btn-accent);
+  border-color: transparent;
+  color: var(--on-btn-accent);
+  filter: brightness(1.06);
+}
+
 /* "This control is carrying a setting" — filters applied, list grouped. */
 .tool-btn.is-active {
   background: var(--tab-on-bg);
@@ -340,6 +362,13 @@
   border-color: var(--border-strong);
 }
 
+/* The pin toggle while its view IS the pinned one — inked in the accent so
+   pinned/unpinned reads at a glance. */
+.icon-btn.is-pinned {
+  color: var(--accent-text);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
 .link-btn {
   display: inline-flex;
   align-items: center;
@@ -391,7 +420,15 @@
 .pop-columns { width: min(360px, 88vw); }
 .pop-fields  { width: min(340px, 88vw); }
 .pop-group   { width: min(320px, 88vw); }
-.pop-options { width: min(280px, 88vw); }
+/* The name checklists size to their content — a column of first names has no
+   business being as wide as the filter builder. `max-content` beats the
+   .pop-panel floor above; the clamp keeps a lone "Ion" from making a stub and
+   a long vendor name from running off the toolbar. */
+.pop-options {
+  width: max-content;
+  min-width: 176px;
+  max-width: min(300px, 88vw);
+}
 .pop-saveview { width: min(340px, 88vw); }
 .pop-bulk-edit { width: min(460px, 90vw); }
 .pop-bulk-status { width: min(280px, 88vw); }
@@ -692,7 +729,25 @@
 }
 
 .opt:hover {
-  background: var(--chip);
+  background: var(--tab-on-bg);
+}
+
+/* Tick every name, then untick the one you meant to leave out — the short way
+   round for "everyone but Alan". It sits outside .opt-list so it stays put
+   while the names scroll under it. */
+.opt-all {
+  margin-bottom: 4px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+/* The O-knob rail floats over the right edge of the scroller (lib/oknob.ts),
+   so a content-width panel has to leave it a lane of its own. */
+.pop-options .opt-list {
+  padding-right: 18px;
 }
 
 /* ── Columns menu ───────────────────────────────────────────────────────── */

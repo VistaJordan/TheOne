@@ -12,6 +12,7 @@ import { getDb, query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { resolveField, type ResolvedField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
+import { applyProfitFormula } from './money.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import type { ActivityEntry } from '@theone/shared';
@@ -58,6 +59,18 @@ function coerceValue(f: ResolvedField, raw: unknown): unknown {
       const s = String(raw).slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
         throw new ApiError('BAD_REQUEST', `"${f.label}" needs a date (YYYY-MM-DD)`);
+      }
+      return s;
+    }
+    case 'datetime': {
+      // The editor sends datetime-local's 'YYYY-MM-DDTHH:MM'; a bare date is
+      // fine too (an operator may only know the day). Normalized to minutes.
+      const s = String(raw).trim().replace(' ', 'T').slice(0, 16);
+      if (!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(s)) {
+        throw new ApiError(
+          'BAD_REQUEST',
+          `"${f.label}" needs a date and time (YYYY-MM-DDTHH:MM)`,
+        );
       }
       return s;
     }
@@ -125,6 +138,10 @@ export async function updateWorkOrderFields(
   }
 
   if (log.length > 0) {
+    // Profit = Total Invoiced − Cost, recomputed on every write. Derived, so
+    // no activity row of its own (the mirror-column rule) — the trail shows
+    // the input that moved.
+    applyProfitFormula(merged);
     const db = getDb();
     await db.transaction(async (tx) => {
       const sets = [`fields = $1::jsonb`];

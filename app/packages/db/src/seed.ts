@@ -73,6 +73,15 @@ function toDate(v: unknown): string | null {
   return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
 }
 
+/** For datetime bag fields: keep the time when the export has one ('YYYY-MM-
+    DDTHH:MM'), fall back to the bare date when it does not. */
+function toDateTime(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null;
+  const s = String(v).replace(' ', 'T');
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return s.slice(0, 16);
+  return toDate(s);
+}
+
 function str(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v);
@@ -356,7 +365,17 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: 'CICO Method',              label: 'CICO Method',          type: 'short_text' },
   { key: 'City',                     label: 'City',                 type: 'short_text' },
   { key: 'Client',                   label: 'Client',               type: 'dropdown', options: null },
-  { key: 'Date-Time Received',       label: 'Date-Time Received',   type: 'date' },
+  // `users`, like AM/Assignee/TL: the editor then picks from the people in
+  // the system (woFields.customDistinctOptions) instead of free text.
+  { key: 'Completion Assignee',      label: 'Completion Assignee',  type: 'users' },
+  // datetime, not date (0009/0010 — keep in step): these three carry a time of
+  // day. Export values without one ('2026-06-25') stay valid — no time part.
+  { key: 'Date-Time Received',       label: 'Date-Time Received',   type: 'datetime' },
+  // Genuinely new (no ClickUp ancestor), so clean keys. 'Date Created' is
+  // stamped automatically when a work order is created (seed below; the
+  // import path in apps/api woBulk.ts does the same for live creates).
+  { key: 'Date Created',             label: 'Date Created',         type: 'datetime' },
+  { key: 'Due Date',                 label: 'Due Date',             type: 'datetime' },
   { key: 'Days since Invoiced',      label: 'Days Since Invoiced',  type: 'formula' },
   { key: 'Days Since QC',            label: 'Days Since QC',        type: 'formula' },
   { key: 'Discount',                 label: 'Discount',             type: 'currency' },
@@ -540,6 +559,18 @@ async function main() {
   if (!defaultActorId) throw new Error('Jordan Brown principal not found — default actor missing');
 
   // ── 3. Statuses (§4.2) ─────────────────────────────────────────────────────
+  // The four built-in phase groups, kept in step with migration 0008 (the seed
+  // never truncates status_group_def, so admin-added groups survive a re-seed;
+  // the upsert only guarantees the built-ins exist on a fresh DB).
+  await db.exec(`
+    INSERT INTO status_group_def (code, label, position, is_builtin) VALUES
+      ('open',   'Open',   0, true),
+      ('active', 'Active', 1, true),
+      ('done',   'Done',   2, true),
+      ('closed', 'Closed', 3, true)
+    ON CONFLICT (code) DO NOTHING;
+  `);
+
   const statusSetId = await insertId(
     `INSERT INTO status_set (container_id, name) VALUES ($1, $2) RETURNING id`,
     [spaceId, 'Vista WO Pipeline'],
@@ -558,11 +589,12 @@ async function main() {
     statusIdByName.set(s.name, id);
     statusGroupById.set(id, group);
   }
-  // Archive terminal status "invoiced" (20th) — §4.2 / §10 decision.
+  // Archive terminal status "invoiced" (20th) — §4.2 / §10 decision. Purple
+  // (the palette's #b660e0) rather than the spec's grey, per founder request.
   {
     const id = await insertId(
       `INSERT INTO status (status_set_id, name, status_group, color, position, is_archive)
-       VALUES ($1, 'invoiced', 'done', '#656f7d', 19, true) RETURNING id`,
+       VALUES ($1, 'invoiced', 'done', '#b660e0', 19, true) RETURNING id`,
       [statusSetId],
     );
     statusIdByName.set('invoiced', id);
@@ -615,6 +647,10 @@ async function main() {
   for (const t of data.taskSamples) {
     const f: Record<string, unknown> = { ...(t.fields ?? {}) };
     if (t.assignees?.length && f[ASSIGNEE_FIELD] == null) f[ASSIGNEE_FIELD] = t.assignees.join(', ');
+    // The two clean-key datetime fields, filled from the sample's own
+    // timestamps — to the minute when the export carries one.
+    if (f['Date Created'] == null && toDateTime(t.created)) f['Date Created'] = toDateTime(t.created);
+    if (f['Due Date'] == null && toDateTime(t.due)) f['Due Date'] = toDateTime(t.due);
     const description = str(f['35. WO Description']);
     const title = firstLine(description ?? undefined, t.name);
     const canonicalStatus = STATUS_ALIAS[t.status] ?? t.status;

@@ -158,7 +158,8 @@ export interface MessageCreatedResponse { item: ThreadMessage }
 export const MESSAGE_MAX = 1600;
 
 export interface ListWorkOrdersParams {
-  status_group?: 'open' | 'active' | 'done' | 'closed';
+  /** A status_group_def code (admins can add groups beyond the four). */
+  status_group?: string;
   status_id?: string;
   search?: string;
   /** S6 — serialised as JSON in the query string (see `toQuery`). */
@@ -446,6 +447,19 @@ export function patchStatus(
 
 export function getStatuses(): Promise<StatusWithPhase[]> {
   return request<StatusWithPhase[]>(`/statuses`);
+}
+
+/** One phase group (status_group_def row) — tabs, menus and admin read these. */
+export interface StatusGroupItem {
+  code: string;
+  label: string;
+  position: number;
+  is_builtin: boolean;
+  status_count?: number;
+}
+
+export function getStatusGroups(): Promise<{ items: StatusGroupItem[] }> {
+  return request(`/status-groups`);
 }
 
 export function getKpis(): Promise<Kpis> {
@@ -768,15 +782,55 @@ export function getAdminSettings(): Promise<AdminSettings> {
 export interface AdminWorkflowItem {
   id: string;
   name: string;
-  status_group: 'open' | 'active' | 'done' | 'closed';
+  /** A status_group_def code — built-ins plus admin-added groups. */
+  status_group: string;
   color: string;
   position: number;
   is_archive: boolean;
   wo_count: number;
 }
 
-export function listAdminWorkflow(): Promise<{ items: AdminWorkflowItem[] }> {
+export function listAdminWorkflow(): Promise<{
+  items: AdminWorkflowItem[];
+  groups: StatusGroupItem[];
+}> {
   return request('/admin/workflow');
+}
+
+// ── Admin › workflows — the status engine's writes ───────────────────────────
+
+export function createAdminStatus(input: {
+  name: string;
+  group: string;
+  color?: string;
+}): Promise<{ item: AdminWorkflowItem }> {
+  return request('/admin/workflow/statuses', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateAdminStatus(
+  id: string,
+  input: { name?: string; color?: string },
+): Promise<{ item: AdminWorkflowItem }> {
+  return request(`/admin/workflow/statuses/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteAdminStatus(id: string): Promise<{ ok: true }> {
+  return request(`/admin/workflow/statuses/${id}`, { method: 'DELETE' });
+}
+
+export function createAdminGroup(label: string): Promise<{ item: StatusGroupItem }> {
+  return request('/admin/workflow/groups', { method: 'POST', body: JSON.stringify({ label }) });
+}
+
+export function updateAdminGroup(code: string, label: string): Promise<{ item: StatusGroupItem }> {
+  return request(`/admin/workflow/groups/${encodeURIComponent(code)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ label }),
+  });
+}
+
+export function deleteAdminGroup(code: string): Promise<{ ok: true }> {
+  return request(`/admin/workflow/groups/${encodeURIComponent(code)}`, { method: 'DELETE' });
 }
 
 export interface AdminFieldItem {

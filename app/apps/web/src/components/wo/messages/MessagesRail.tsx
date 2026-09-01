@@ -2,6 +2,7 @@ import type { QuoConversation, ThreadItem, ThreadSegment } from '../../../api/cl
 import { Icon } from '../../Icon';
 import { DASH, feedTime, initials, shortDate } from '../../../lib/fields';
 import { dialHref } from '../../../lib/quo';
+import { tradeIcon } from '../../../lib/tradeIcon';
 
 interface MessagesRailProps {
   conversation: QuoConversation;
@@ -49,7 +50,7 @@ export function MessagesRail({ conversation, items }: MessagesRailProps) {
             )}
             {(trade || assigned) && (
               <div className="vendor-trade">
-                {trade && <span className="chip chip-sm"><Icon name="snow" size={12} />{trade}</span>}
+                {trade && <span className="chip chip-sm"><Icon name={tradeIcon(trade)} size={12} />{trade}</span>}
                 {assigned && <span className="p-role">Assigned {assigned}</span>}
               </div>
             )}

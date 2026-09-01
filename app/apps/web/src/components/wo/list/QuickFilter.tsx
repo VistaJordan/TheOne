@@ -68,15 +68,33 @@ export function QuickFilter({ field, label, value, onChange }: QuickFilterProps)
   const options = field?.options ?? [];
   const byValue = useMemo(() => new Map(options.map((o) => [o.value, o.label])), [options]);
 
-  const shown = useMemo(() => {
+  // Everything the search leaves standing, and the slice of it the list draws.
+  // "Select all" works on the whole match set, not the drawn slice, so a long
+  // vocabulary does not silently pick only the first 200.
+  const matches = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const list = needle ? options.filter((o) => o.label.toLowerCase().includes(needle)) : options;
-    return list.slice(0, 200);
+    return needle ? options.filter((o) => o.label.toLowerCase().includes(needle)) : options;
   }, [options, q]);
+  const shown = useMemo(() => matches.slice(0, 200), [matches]);
 
   const toggle = (v: string) => {
     if (!selected) return;
     const next = selected.includes(v) ? selected.filter((s) => s !== v) : [...selected, v];
+    onChange(withQuickValues(value, key, next));
+  };
+
+  // Narrowing to "everyone but Alan" is the common shape of this menu, and
+  // ticking twelve boxes to get there is worse than ticking one and unticking
+  // one. Select-all takes the matches in, clear-all takes only those back out
+  // — names hidden by the search keep whatever state they had.
+  const chosen = useMemo(() => new Set(selected ?? []), [selected]);
+  const hit = matches.filter((o) => chosen.has(o.value)).length;
+  const allOn = matches.length > 0 && hit === matches.length;
+  const toggleAll = () => {
+    if (!selected) return;
+    const next = allOn
+      ? selected.filter((s) => !matches.some((o) => o.value === s))
+      : [...selected, ...matches.filter((o) => !chosen.has(o.value)).map((o) => o.value)];
     onChange(withQuickValues(value, key, next));
   };
 
@@ -130,19 +148,35 @@ export function QuickFilter({ field, label, value, onChange }: QuickFilterProps)
           )}
 
           {selected !== null && options.length > 0 && (
-            <div className="opt-list">
-              {shown.map((o) => (
-                <label key={o.value} className="opt">
+            <>
+              {matches.length > 1 && (
+                <label className="opt opt-all">
                   <input
                     type="checkbox"
-                    checked={selected.includes(o.value)}
-                    onChange={() => toggle(o.value)}
+                    checked={allOn}
+                    ref={(el) => {
+                      if (el) el.indeterminate = hit > 0 && !allOn;
+                    }}
+                    onChange={toggleAll}
                   />
-                  <span className="ellipsis">{o.label}</span>
+                  <span className="ellipsis">{allOn ? 'Clear all' : 'Select all'}</span>
                 </label>
-              ))}
-              {shown.length === 0 && <p className="pop-empty">No matches.</p>}
-            </div>
+              )}
+
+              <div className="opt-list">
+                {shown.map((o) => (
+                  <label key={o.value} className="opt">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(o.value)}
+                      onChange={() => toggle(o.value)}
+                    />
+                    <span className="ellipsis">{o.label}</span>
+                  </label>
+                ))}
+                {shown.length === 0 && <p className="pop-empty">No matches.</p>}
+              </div>
+            </>
           )}
 
           {count > 0 && (

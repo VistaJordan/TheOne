@@ -210,7 +210,14 @@ function RuleValue({
   if (isValueless(rule.op)) return <span className="rule-value-none" aria-hidden="true" />;
 
   const type = field?.type ?? 'text';
-  const inputType = type === 'date' ? 'date' : type === 'number' || type === 'money' ? 'number' : 'text';
+  // A datetime filters by whole days (the server truncates), so its rule value
+  // is picked with the plain date input too.
+  const inputType =
+    type === 'date' || type === 'datetime'
+      ? 'date'
+      : type === 'number' || type === 'money'
+        ? 'number'
+        : 'text';
 
   if (rule.op === 'between') {
     const pair = Array.isArray(rule.value) ? rule.value : ['', ''];

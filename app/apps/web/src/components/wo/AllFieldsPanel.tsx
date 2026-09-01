@@ -7,9 +7,12 @@
 // Admin › Custom fields.
 //
 // Ordering has three modes:
-//   default   the admin's order (field_def.position — Admin › Custom fields)
-//   alpha     A→Z by label
-//   manual    the user's own drag order
+//   default   the operator's SECTIONS (lib/woFieldSections.ts — Client,
+//             Finances, Site, …), each section's fields in the specified order
+//   alpha     A→Z by label, one flat list
+//   manual    the user's own drag order, one flat list
+// Comp is in no section and no list: it renders as a control beside the
+// search box, always visible.
 // The choice + the manual order persist server-side per ACCOUNT (user_pref,
 // key 'wo.fields.order'), so it follows the person to any machine and applies
 // to every work order — and to nobody else.
@@ -18,7 +21,7 @@
 //   can.edit_wo_fields     → inline editors
 //   can.view_field_history → the per-row history drawer
 
-import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
 import type { ActivityEntry, WoFieldDescriptor } from '@theone/shared';
@@ -33,9 +36,18 @@ import {
 } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
 import { useReorder } from '../../hooks/useReorder';
-import { DASH, bool, feedTime, fieldValueToString, initials, money, num, shortDate } from '../../lib/fields';
+import {
+  COMP_FIELD_KEY,
+  FIELD_SECTIONS,
+  MORE_SECTION_ICON,
+  MORE_SECTION_TITLE,
+} from '../../lib/woFieldSections';
+import type { IconName } from '../Icon';
+import { DASH, bool, feedTime, fieldValueToString, initials } from '../../lib/fields';
 import { formatValue, unwrap } from '../../lib/auditFormat';
 import { Icon } from '../Icon';
+
+import { FieldEditor, displayValue as display, draftOf } from './fieldEdit';
 
 const ORDER_PREF_KEY = 'wo.fields.order';
 
@@ -53,43 +65,8 @@ interface AllFieldsPanelProps {
   detailKey: QueryKey;
 }
 
-const isUrlValue = (s: string) => /^https?:\/\//i.test(s);
-
-/** Read-only rendering of one value, typed by its descriptor. */
-function display(f: WoFieldDescriptor, raw: unknown): ReactNode {
-  if (f.type === 'boolean') {
-    return <span className={bool(raw) ? 'afp-yes' : 'afp-no'}>{bool(raw) ? 'Yes' : 'No'}</span>;
-  }
-  if (raw === null || raw === undefined || raw === '') return DASH;
-  if (f.type === 'money') {
-    const n = num(raw);
-    return n === null ? fieldValueToString(raw) : money(n);
-  }
-  if (f.type === 'date') {
-    const s = String(raw);
-    return shortDate(s) ?? fieldValueToString(raw);
-  }
-  const text = fieldValueToString(raw);
-  if (isUrlValue(text)) {
-    return (
-      <a href={text} target="_blank" rel="noreferrer">
-        {text}
-      </a>
-    );
-  }
-  return text;
-}
-
-/** The value an editor starts from, as a string the input can hold. */
-function draftOf(f: WoFieldDescriptor, raw: unknown): string {
-  if (raw === null || raw === undefined) return '';
-  if (f.type === 'date') return String(raw).slice(0, 10);
-  if (f.type === 'money' || f.type === 'number') {
-    const n = num(raw);
-    return n === null ? '' : String(n);
-  }
-  return String(raw);
-}
+// display/draftOf/FieldEditor/ComboSelect moved to ./fieldEdit so every tab
+// card can reuse them — this panel keeps the ordering, search and history.
 
 export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   const { actingAs } = useAuth();
@@ -110,9 +87,14 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   });
 
   // Every custom (bag-backed) field, in ADMIN order — the catalogue is already
-  // sorted by field_def.position.
+  // sorted by field_def.position. Comp is pulled out of the list: it renders
+  // as a toolbar control beside the search box instead.
   const fields = useMemo(
-    () => (catalogue.data?.fields ?? []).filter((f) => f.custom),
+    () => (catalogue.data?.fields ?? []).filter((f) => f.custom && f.key !== COMP_FIELD_KEY),
+    [catalogue.data],
+  );
+  const compField = useMemo(
+    () => (catalogue.data?.fields ?? []).find((f) => f.key === COMP_FIELD_KEY) ?? null,
     [catalogue.data],
   );
 
@@ -152,11 +134,30 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   }, [fields, pref]);
 
   const needle = q.trim().toLowerCase();
-  const shown = needle
-    ? ordered.filter(
-        (f) => f.label.toLowerCase().includes(needle) || f.key.toLowerCase().includes(needle),
-      )
-    : ordered;
+  const matches = (f: WoFieldDescriptor) =>
+    !needle || f.label.toLowerCase().includes(needle) || f.key.toLowerCase().includes(needle);
+  const shown = ordered.filter(matches);
+
+  // Default mode renders the operator's sections; a field the config does not
+  // name still shows, under a trailing catch-all heading.
+  const sections = useMemo(() => {
+    const byKey = new Map(fields.map((f) => [f.key, f]));
+    const used = new Set<string>();
+    const out: { title: string; icon: IconName; wide?: boolean; fields: WoFieldDescriptor[] }[] = [];
+    for (const s of FIELD_SECTIONS) {
+      const members = s.keys
+        .map((k) => byKey.get(k))
+        .filter((f): f is WoFieldDescriptor => Boolean(f));
+      for (const f of members) used.add(f.key);
+      if (members.length > 0) out.push({ title: s.title, icon: s.icon, wide: s.wide, fields: members });
+    }
+    const rest = fields.filter((f) => !used.has(f.key));
+    if (rest.length > 0) out.push({ title: MORE_SECTION_TITLE, icon: MORE_SECTION_ICON, fields: rest });
+    return out;
+  }, [fields]);
+  const shownSections = sections
+    .map((s) => ({ ...s, fields: s.fields.filter(matches) }))
+    .filter((s) => s.fields.length > 0);
 
   const setMode = (mode: OrderMode) => {
     if (mode === 'manual') {
@@ -212,6 +213,131 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     save.mutate({ key: f.key, value: draft.trim() === '' ? null : draft });
   };
 
+  // One row, shared by the sectioned (default) and flat (alpha/manual) paths.
+  // `i` only matters when dragging is possible — the sectioned path passes -1.
+  const renderRow = (f: WoFieldDescriptor, i: number) => {
+    const raw = valueOf(f);
+    const readOnly = f.subtype === 'formula' || f.subtype === 'attachment';
+    const isEditing = editing === f.key;
+    const rowProps = dragEnabled ? reorder.rowProps(i) : {};
+    // Click-to-edit: the value itself opens the editor (links inside a value
+    // still open the link); the pencil stays as the visible affordance.
+    // EXCEPT long text: there a click expands/collapses the 2-line preview
+    // instead — editing a paragraph stays on the pencil so the two gestures
+    // don't collide.
+    const isLongText =
+      f.subtype === 'long_text' && raw !== null && raw !== undefined && String(raw) !== '';
+    const canEditField = canEdit && !readOnly && f.type !== 'boolean';
+    const editable = canEditField && !isLongText;
+    return (
+      <div key={f.key}>
+        <div
+          className={`fieldrow afp-row${dragEnabled ? ' has-grip' : ''}${reorder.dragging === i && dragEnabled ? ' is-dragging' : ''}`}
+          {...rowProps}
+        >
+          {dragEnabled && (
+            <button
+              type="button"
+              className="afp-grip"
+              aria-label={`Move ${f.label}`}
+              {...reorder.gripProps(i)}
+            >
+              <Icon name="grip" size={12} />
+            </button>
+          )}
+          <dt>
+            {f.label}
+            {f.subtype === 'formula' && (
+              <span className="afp-fx" title="Computed field — the formula is not wired up yet">ƒ</span>
+            )}
+          </dt>
+          <dd>
+            {f.type === 'boolean' && !readOnly ? (
+              <label className="afp-check">
+                <input
+                  type="checkbox"
+                  checked={bool(raw)}
+                  disabled={!canEdit || save.isPending}
+                  onChange={(e) => save.mutate({ key: f.key, value: e.target.checked })}
+                />
+                <span>{bool(raw) ? 'Yes' : 'No'}</span>
+              </label>
+            ) : isEditing ? (
+              <FieldEditor
+                field={f}
+                draft={draft}
+                onDraft={setDraft}
+                onSave={() => commit(f)}
+                onPick={(v) => save.mutate({ key: f.key, value: v === '' ? null : v })}
+                onCancel={() => { setEditing(null); setSaveError(null); }}
+                saving={save.isPending}
+              />
+            ) : isLongText ? (
+              <LongTextValue text={fieldValueToString(raw)} />
+            ) : (
+              <span
+                className={`afp-val${editable ? ' is-editable' : ''}`}
+                role={editable ? 'button' : undefined}
+                tabIndex={editable ? 0 : undefined}
+                title={editable ? `Click to edit ${f.label}` : undefined}
+                onClick={
+                  editable
+                    ? (e) => {
+                        if ((e.target as HTMLElement).closest('a')) return;
+                        startEdit(f);
+                      }
+                    : undefined
+                }
+                onKeyDown={
+                  editable
+                    ? (e) => {
+                        if ((e.target as HTMLElement).closest('a')) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          startEdit(f);
+                        }
+                      }
+                    : undefined
+                }
+              >
+                {display(f, raw)}
+              </span>
+            )}
+
+            {!isEditing && (
+              <span className="afp-actions">
+                {canEditField && (
+                  <button
+                    type="button"
+                    className="afp-act"
+                    title={`Edit ${f.label}`}
+                    onClick={() => startEdit(f)}
+                  >
+                    <Icon name="pencil" size={12} />
+                  </button>
+                )}
+                {canHistory && (
+                  <button
+                    type="button"
+                    className={`afp-act${historyFor === f.key ? ' is-on' : ''}`}
+                    title={`History of ${f.label}`}
+                    aria-expanded={historyFor === f.key}
+                    onClick={() => setHistoryFor(historyFor === f.key ? null : f.key)}
+                  >
+                    <Icon name="history" size={12} />
+                  </button>
+                )}
+              </span>
+            )}
+          </dd>
+        </div>
+        {historyFor === f.key && canHistory && (
+          <FieldHistory woId={wo.id} field={f} />
+        )}
+      </div>
+    );
+  };
+
   if (catalogue.isLoading) {
     return <div className="tab-empty"><span>Loading the field catalogue…</span></div>;
   }
@@ -227,7 +353,7 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
 
   return (
     <>
-      <div className="afp-bar">
+      <div className="card afp-bar">
         <label className="afp-search">
           <Icon name="search" size={12} />
           <input
@@ -238,6 +364,37 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
             aria-label="Search fields"
           />
         </label>
+        {compField && (
+          <label className="afp-comp">
+            <span>Comp</span>
+            <select
+              value={(() => { const v = valueOf(compField); return v == null ? '' : String(v); })()}
+              disabled={!canEdit || save.isPending}
+              onChange={(e) =>
+                save.mutate({ key: compField.key, value: e.target.value === '' ? null : e.target.value })
+              }
+              aria-label="Comp"
+            >
+              <option value="">—</option>
+              {(() => {
+                const v = valueOf(compField);
+                const cur = v == null ? '' : String(v);
+                const options = compField.options ?? [];
+                // A value that predates the current vocabulary must stay selectable.
+                return (
+                  <>
+                    {cur !== '' && !options.some((o) => o.value === cur) && (
+                      <option value={cur}>{cur}</option>
+                    )}
+                    {options.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </>
+                );
+              })()}
+            </select>
+          </label>
+        )}
         <div className="seg afp-order" role="group" aria-label="Field order">
           <OrderButton mode="default" current={pref.mode} onSelect={setMode}>Default</OrderButton>
           <OrderButton mode="alpha" current={pref.mode} onSelect={setMode}>A–Z</OrderButton>
@@ -253,95 +410,29 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
       )}
       {saveError && <p className="afp-error" role="alert">{saveError}</p>}
 
-      <dl className="fieldlist afp">
-        {shown.map((f, i) => {
-          const raw = valueOf(f);
-          const readOnly = f.subtype === 'formula' || f.subtype === 'attachment';
-          const isEditing = editing === f.key;
-          const rowProps = dragEnabled ? reorder.rowProps(i) : {};
-          return (
-            <div key={f.key}>
-              <div
-                className={`fieldrow afp-row${dragEnabled ? ' has-grip' : ''}${reorder.dragging === i && dragEnabled ? ' is-dragging' : ''}`}
-                {...rowProps}
-              >
-                {dragEnabled && (
-                  <button
-                    type="button"
-                    className="afp-grip"
-                    aria-label={`Move ${f.label}`}
-                    {...reorder.gripProps(i)}
-                  >
-                    <Icon name="grip" size={12} />
-                  </button>
-                )}
-                <dt>
-                  {f.label}
-                  {f.subtype === 'formula' && (
-                    <span className="afp-fx" title="Computed field — the formula is not wired up yet">ƒ</span>
-                  )}
-                </dt>
-                <dd>
-                  {f.type === 'boolean' && !readOnly ? (
-                    <label className="afp-check">
-                      <input
-                        type="checkbox"
-                        checked={bool(raw)}
-                        disabled={!canEdit || save.isPending}
-                        onChange={(e) => save.mutate({ key: f.key, value: e.target.checked })}
-                      />
-                      <span>{bool(raw) ? 'Yes' : 'No'}</span>
-                    </label>
-                  ) : isEditing ? (
-                    <FieldEditor
-                      field={f}
-                      draft={draft}
-                      onDraft={setDraft}
-                      onSave={() => commit(f)}
-                      onCancel={() => { setEditing(null); setSaveError(null); }}
-                      saving={save.isPending}
-                    />
-                  ) : (
-                    <span className="afp-val">{display(f, raw)}</span>
-                  )}
-
-                  {!isEditing && (
-                    <span className="afp-actions">
-                      {canEdit && !readOnly && f.type !== 'boolean' && (
-                        <button
-                          type="button"
-                          className="afp-act"
-                          title={`Edit ${f.label}`}
-                          onClick={() => startEdit(f)}
-                        >
-                          <Icon name="pencil" size={12} />
-                        </button>
-                      )}
-                      {canHistory && (
-                        <button
-                          type="button"
-                          className={`afp-act${historyFor === f.key ? ' is-on' : ''}`}
-                          title={`History of ${f.label}`}
-                          aria-expanded={historyFor === f.key}
-                          onClick={() => setHistoryFor(historyFor === f.key ? null : f.key)}
-                        >
-                          <Icon name="history" size={12} />
-                        </button>
-                      )}
-                    </span>
-                  )}
-                </dd>
-              </div>
-              {historyFor === f.key && canHistory && (
-                <FieldHistory woId={wo.id} field={f} />
-              )}
-            </div>
-          );
-        })}
-        {shown.length === 0 && (
-          <p className="afp-none">No field matches “{q}”.</p>
-        )}
-      </dl>
+      {pref.mode === 'default' ? (
+        <div className="afp-sections">
+          {shownSections.map((s) => (
+            <section className={`card afp-sect${s.wide ? ' is-wide' : ''}`} key={s.title}>
+              <h3 className="afp-sect-title">
+                <Icon name={s.icon} size={14} />
+                {s.title}
+              </h3>
+              <dl className="fieldlist afp">{s.fields.map((f) => renderRow(f, -1))}</dl>
+            </section>
+          ))}
+          {shownSections.length === 0 && (
+            <p className="afp-none">No field matches “{q}”.</p>
+          )}
+        </div>
+      ) : (
+        <dl className="card fieldlist afp afp-flat">
+          {shown.map((f, i) => renderRow(f, i))}
+          {shown.length === 0 && (
+            <p className="afp-none">No field matches “{q}”.</p>
+          )}
+        </dl>
+      )}
     </>
   );
 }
@@ -371,83 +462,38 @@ function OrderButton({
   );
 }
 
-// ── Inline editor, typed by subtype ──────────────────────────────────────────
+// ── Long text: a 2-line preview that clicks open ─────────────────────────────
+// Clicking the text (or "View all") expands it; editing stays on the pencil so
+// a click can never accidentally start an edit on a paragraph.
 
-function FieldEditor({
-  field,
-  draft,
-  onDraft,
-  onSave,
-  onCancel,
-  saving,
-}: {
-  field: WoFieldDescriptor;
-  draft: string;
-  onDraft: (v: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  saving: boolean;
-}) {
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && field.subtype !== 'long_text') {
-      e.preventDefault();
-      onSave();
-    }
-    if (e.key === 'Escape') onCancel();
-  };
+function LongTextValue({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
 
-  let input: ReactNode;
-  if (field.type === 'select') {
-    const options = field.options ?? [];
-    const hasCurrent = draft === '' || options.some((o) => o.value === draft);
-    input = (
-      <select value={draft} onChange={(e) => onDraft(e.target.value)} onKeyDown={onKeyDown} autoFocus>
-        <option value="">—</option>
-        {/* A value that predates the current vocabulary must stay selectable. */}
-        {!hasCurrent && <option value={draft}>{draft}</option>}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    );
-  } else if (field.subtype === 'long_text') {
-    input = (
-      <textarea
-        rows={4}
-        value={draft}
-        onChange={(e) => onDraft(e.target.value)}
-        onKeyDown={onKeyDown}
-        autoFocus
-      />
-    );
-  } else {
-    const type =
-      field.type === 'date' ? 'date'
-      : field.type === 'money' || field.type === 'number' ? 'number'
-      : field.subtype === 'phone' ? 'tel'
-      : field.subtype === 'url' ? 'url'
-      : 'text';
-    input = (
-      <input
-        type={type}
-        step={field.type === 'money' ? '0.01' : undefined}
-        value={draft}
-        onChange={(e) => onDraft(e.target.value)}
-        onKeyDown={onKeyDown}
-        autoFocus
-      />
-    );
-  }
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    setClamped(el.scrollHeight > el.clientHeight + 1);
+  }, [text, open]);
+
+  const canToggle = clamped || open;
 
   return (
-    <span className="afp-editor">
-      {input}
-      <button type="button" className="afp-act is-save" title="Save" onClick={onSave} disabled={saving}>
-        <Icon name="check" size={12} />
-      </button>
-      <button type="button" className="afp-act" title="Cancel" onClick={onCancel} disabled={saving}>
-        <Icon name="x" size={12} />
-      </button>
+    <span className="afp-val afp-longwrap">
+      <span
+        ref={ref}
+        className={`afp-long${open ? '' : ' is-clamped'}${canToggle ? ' can-toggle' : ''}`}
+        title={!open && clamped ? 'Click to view all' : undefined}
+        onClick={canToggle ? () => setOpen((v) => !v) : undefined}
+      >
+        {text}
+      </span>
+      {canToggle && (
+        <button type="button" className="linkbtn afp-more" onClick={() => setOpen((v) => !v)}>
+          {open ? 'Show less' : 'View all'}
+        </button>
+      )}
     </span>
   );
 }

@@ -203,14 +203,35 @@ textarea {
 .seg-count { font-variant-numeric: tabular-nums; opacity: 0.85; }
 
 /* ══ B. Header band ═══════════════════════════════════════════════════════ */
-/* Pinned: the WO number, status, who has it and the phase bar stay in view
-   while the description, feed and cards scroll underneath. `.canvas` is the
-   scrollport, so `top: 0` is its top edge; the z-index clears the sticky
-   table headers (1) below without reaching the topbar menus. */
-.wohead {
+/* Pinned: .wo-pin wraps the header card AND the tab strip so they stick as
+   one opaque block — full column width, --bg fill — while the panels scroll
+   underneath and re-emerge below its bottom edge. `.canvas` is the scrollport,
+   so `top: 0` is its top edge; the z-index clears the sticky table headers (1)
+   below without reaching the topbar menus (40+). The padding-bottom is the
+   "space under the last pinned item": opaque, so content never peeks through
+   a gap inside the block. */
+.wo-pin {
   position: sticky;
   top: 0;
   z-index: 5;
+  background: var(--bg);
+  padding-bottom: 12px;
+}
+
+/* The canvas keeps 22px of padding above the block; once pinned, content
+   would slide through that strip. This paints it over in the canvas colour so
+   the block reads as sitting on the page, not floating over it. */
+.wo-pin::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: 100%;
+  height: 25px;
+  background: var(--bg);
+}
+
+.wohead {
   padding: 16px 18px 4px;
 }
 
@@ -232,21 +253,6 @@ textarea {
   .wohead-fold svg {
     transition: transform 0.15s ease;
   }
-}
-
-/* The canvas keeps 22px of padding above the card; once pinned, content would
-   slide through that strip. This paints it over in the canvas colour so the
-   header reads as sitting on the page, not floating over it. */
-.wohead::before {
-  content: '';
-  position: absolute;
-  left: -1px;
-  right: -1px;
-  bottom: 100%;
-  /* 22px of canvas padding plus the card's own top border, with a pixel to
-     spare so no sliver of scrolling content survives at the seam. */
-  height: 25px;
-  background: var(--bg);
 }
 
 .wohead-top {
@@ -504,7 +510,8 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
   gap: 14px;
-  margin-top: 14px;
+  /* 2px + .wo-pin's 12px opaque padding = the original 14px gap under the tabs. */
+  margin-top: 2px;
   align-items: start;
 }
 
@@ -527,7 +534,23 @@ textarea {
 .desc + .desc { margin-top: 9px; color: var(--ink-2); font-size: 13px; }
 .desc.is-none { color: var(--ink-3); font-style: italic; }
 
-.tabs { margin: 14px 0; width: 100%; justify-content: flex-start; }
+/* The strip is a card in its own right, so it ends where the last tab ends —
+   a full-width bar would trail white space past "Audit trail". `max-content`
+   over the .seg inline-flex keeps that explicit; below ~900px the eleven tabs
+   outrun the column and the strip becomes its own O-knob rail (lib/oknob.ts)
+   rather than squeezing the labels. */
+.tabs {
+  /* Pinned by way of the .wo-pin wrapper — no sticky of its own. The bottom
+     margin lives on the wrapper (its padding-bottom), not here, so the strip
+     is the wrapper's last visual row. */
+  margin: 14px 0 0;
+  width: max-content;
+  max-width: 100%;
+  justify-content: flex-start;
+  overflow-x: auto;
+}
+
+.tabs .seg-btn { flex: none; }
 
 .tab-empty {
   display: flex;
@@ -911,19 +934,9 @@ textarea {
 .nte-k {
   display: flex;
   align-items: center;
-  gap: 7px;
   font-size: 12px;
   color: var(--ink-2);
   font-weight: 600;
-}
-
-.reddot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--danger);
-  flex: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
 .nte-v {
@@ -980,6 +993,23 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+/* The share of the NTE the bar stands for, spelled out — the bar shows it,
+   this says it. It rides the fill's three states so the number and the colour
+   never disagree. */
+.ntemeter-pct {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 6px;
+  border-radius: var(--pill-radius);
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+}
+
+.ntemeter-pct.is-warn { background: var(--warn-bg); color: var(--warn); }
+.ntemeter-pct.is-over { background: var(--danger-bg); color: var(--danger); }
+
 .ntemeter-cap {
   display: flex;
   align-items: center;
@@ -1026,6 +1056,192 @@ textarea {
 .kvrow.is-total dd { font-size: 15px; }
 .kvrow.is-total dd.is-neg { color: var(--danger); }
 
+/* ── The Finances tab card ─ compact: a column of figures reads best hugging
+   them, not stretched across the whole canvas. */
+.card-fin { max-width: 520px; }
+.card-fin .card-head { padding: 9px 14px; }
+.card-fin .nte-row { padding: 10px 14px 8px; }
+.card-fin .kvlist { padding: 2px 14px 10px; }
+.card-fin .kvrow { padding: 5px 0; }
+/* The meter is a row of this card like any other — it carried the rail's 16px
+   inset, which the dot in front of "Client NTE" used to hide. */
+.card-fin .ntemeter { padding: 2px 14px 12px; }
+
+/* One scale down the card: 11 caption · 12.5 label · 13 value · 15 total ·
+   21 headline. The NTE was 30px — a rail size, in a 520px card it read as a
+   different document from the rows under it. */
+.card-fin .nte-k { font-size: 12.5px; }
+.card-fin .nte-v { font-size: 21px; }
+
+/* The Finances tab: the money card and the Client Quote card side by side —
+   the quote used to be a 2-line footnote inside the money card. */
+.fin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 520px) minmax(0, 620px);
+  gap: 14px;
+  align-items: start;
+}
+
+/* The grid's gap is the only spacing — undo the app-wide `.card + .card`
+   margin so the quote card's top lines up with the money card's. */
+.fin-grid > .card { margin-top: 0; }
+
+/* Blue titles, matching the All-fields section cards. */
+/* Every tab card's title wears the accent — scoped to the detail tabs
+   (.wo-grid) so the quote builder, admin and payment pages keep theirs. */
+.wo-grid .card > .card-head > .card-title { color: var(--accent-text); }
+
+@media (max-width: 1100px) {
+  .fin-grid {
+    grid-template-columns: minmax(0, 520px);
+  }
+}
+
+/* The Payables tab: the Payments fields beside the payment-request ledger. */
+.pay-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 480px) minmax(0, 640px);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .pay-grid {
+    grid-template-columns: minmax(0, 520px);
+  }
+}
+
+.payh {
+  list-style: none;
+  margin: 0;
+  padding: 4px 16px;
+}
+
+.payh-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--row-border);
+}
+
+.payh-row:last-child { border-bottom: 0; }
+
+.payh-when {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.payh-who {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.payh-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.payh-sub {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.payh-amt {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.quote-card-body {
+  padding: 12px 16px 14px;
+}
+
+.quote-card-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.quote-card-none {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+/* ── Inline field editing on the tab cards (fieldEdit.tsx) ─────────────────
+   The pencil borrows the All-fields .afp-act chrome; here the hover scope is
+   the .ife wrapper itself (there is no .afp-row). */
+.ife {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ife.is-editing {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.ife:hover .ife-pencil,
+.ife .ife-pencil:focus-visible {
+  opacity: 1;
+}
+
+.ife .ife-pencil {
+  align-self: center;
+}
+
+.ife-err {
+  font-size: 11px;
+  color: var(--danger);
+}
+
+/* Editable flags read as the same chip, plus a pointer and a hover nudge. */
+.flag-btn {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  border-radius: var(--radius-sm);
+}
+
+.flag-btn:hover:not(:disabled) {
+  background: var(--chip);
+  color: var(--ink);
+}
+
+.flag-btn.is-on:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.site-addr-line {
+  display: block;
+}
+
 .margin-chip {
   margin-left: 7px;
   font-size: 11px;
@@ -1038,7 +1254,88 @@ textarea {
 
 .margin-chip.is-neg { background: var(--warn-bg); color: var(--warn); }
 
+/* ── CICO ─────────────────────────────────────────────────────────────────
+   Check-in/out is the state the rest of the section explains, so it leads the
+   card as a chip rather than as the first of five identical rows. */
+.card-cico { max-width: 620px; }
+
+.cico-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--row-border);
+}
+
+.cico-state-k {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.card-cico .fieldlist { padding-top: 8px; }
+
 /* ── People ───────────────────────────────────────────────────────────────── */
+/* The six named seats. Label left, who is in it right — the same row grammar
+   as .fieldrow and the All-fields panel, so the People tab reads like the rest
+   of the record rather than like its own invention. */
+/* Hugs its longest row (role column + widest name) instead of a fixed span;
+   the floor keeps the head legible when every seat is short or empty. */
+.card-people {
+  width: fit-content;
+  min-width: 340px;
+  max-width: 100%;
+}
+
+.seats { padding: 4px 16px 14px; }
+
+.seat {
+  display: grid;
+  grid-template-columns: minmax(140px, 30%) 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--row-border);
+}
+
+.seat:last-child { border-bottom: 0; }
+
+.seat-role {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* .seat-who is the InlineField wrapper: several people wrap onto new lines
+   rather than squeezing, and the pencil trails the last of them. */
+.seat-who {
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: center;
+}
+
+.seat-person { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.seat-person .p-name { display: inline; overflow: hidden; text-overflow: ellipsis; }
+
+.avatar.av-sm { width: 26px; height: 26px; font-size: 10px; }
+
+/* An unfilled seat still draws its avatar well, so the column of faces stays a
+   column and the row keeps the height it will have once somebody is in it. */
+.avatar.is-blank {
+  background: transparent;
+  border-style: dashed;
+}
+
+.seat-none { font-size: 13px; color: var(--ink-3); font-style: italic; }
+
+/* The routing block under the seats — same chrome as the card's own head. */
+.card-head.as-sub {
+  margin-top: 2px;
+  border-top: 1px solid var(--row-border);
+}
+
 .people { padding: 10px 16px 14px; }
 .person { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
 .person + .person { border-top: 1px solid var(--row-border); }
@@ -1170,6 +1467,11 @@ textarea {
 
 /* ── Dates ────────────────────────────────────────────────────────────────── */
 .dates { padding: 6px 16px 12px; }
+
+/* The Dates tab card: six fixed rows, kept tight and narrow. */
+.dates-card { max-width: 460px; }
+.dates-card .dates { padding: 2px 16px 8px; }
+.dates-card .date-row { padding: 5px 0; }
 
 .date-row {
   display: flex;
@@ -1306,16 +1608,27 @@ textarea {
 .fieldrow dd.is-bool { font-weight: 600; color: var(--accent-text); }
 
 /* ── S7 · All-fields panel: search + order bar, inline edit, history ───────── */
+/* The bar pins itself directly under the .wo-pin block (whose live height the
+   detail page measures into --wo-pin-h), so search/Comp/order stay reachable
+   however far the sections scroll. Opaque + bordered so rows slide under it. */
+/* A card of its own (the .card class supplies surface/border/radius). */
 .afp-bar {
+  position: sticky;
+  top: var(--wo-pin-h, 0px);
+  /* Cancels .wo-grid's 2px top margin so the bar's resting position equals
+     its stuck position — zero drift when scrolling starts. */
+  margin-top: -2px;
+  z-index: 4;
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 12px 16px 4px;
+  padding: 11px 14px;
 }
 
 .afp-search {
-  flex: 1;
+  /* Short on purpose — a field name is a couple of words, not a sentence. */
+  flex: 0 1 300px;
   min-width: 180px;
   display: flex;
   align-items: center;
@@ -1340,7 +1653,91 @@ textarea {
 .afp-search input:focus { outline: none; }
 .afp-search:focus-within { border-color: var(--accent); }
 
-.afp-order { flex: none; }
+/* The order toggle keeps the right edge now that the search no longer grows. */
+.afp-order { flex: none; margin-left: auto; }
+
+/* Comp lives in the toolbar, beside the search — never as a list row. */
+.afp-comp {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.afp-comp select {
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--field-bg, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.afp-comp select:focus-visible { outline: none; border-color: var(--accent); }
+
+/* ── All fields · sections (default mode — lib/woFieldSections.ts) ────────── */
+/* Each section is a card of its own (like the tab panels around it); two share
+   a row to save height, Overview (.is-wide) gets the full width. */
+.afp-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  /* No align-items: start — the two cards of a row stretch to the same
+     height, so a pair always reads as one band. */
+  margin-top: 14px;
+  padding-bottom: 14px;
+}
+
+.afp-sect { min-width: 0; }
+
+/* The grid's gap is the only spacing — undo the app-wide `.card + .card`
+   margin, which otherwise pushes the second card of each pair 14px down. */
+.afp-sections > .afp-sect { margin-top: 0; }
+
+.afp-sect.is-wide { grid-column: 1 / -1; }
+
+.afp-sections > .afp-none { grid-column: 1 / -1; }
+
+/* Card header: blue icon + blue title, hairline under — no tinted band. */
+.afp-sect-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px 9px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--accent-text);
+  border-bottom: 1px solid var(--row-border);
+}
+
+.afp-sect-title .ic { flex: none; }
+
+/* Rows inside the fields cards: zebra striping tells the lines apart, so the
+   per-row border goes; the rows carry their own side padding full-bleed. */
+.fieldlist.afp { padding: 4px 0 6px; }
+.fieldlist.afp .fieldrow { padding: 7px 14px; border-bottom: 0; }
+.fieldlist.afp > div:nth-child(even) > .fieldrow {
+  /* A whisper of the accent blue — enough to tell the lines apart. */
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+/* The flat A–Z / My-order list is one card of the same cloth. */
+.afp-flat { margin-top: 14px; }
+
+/* Half-width columns squeeze the label share a little less than the flat list. */
+.afp-sect:not(.is-wide) .fieldrow { grid-template-columns: minmax(120px, 38%) 1fr; }
+
+@media (max-width: 1280px) {
+  .afp-sections { grid-template-columns: minmax(0, 1fr); }
+}
 
 .afp-hint,
 .afp-error,
@@ -1380,6 +1777,23 @@ textarea {
 }
 
 .afp-val { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+/* Click-to-edit: the value doubles as the edit trigger, so it hovers like one.
+   Padding + negative margin give the highlight breathing room without moving
+   the text. */
+.afp-val.is-editable {
+  cursor: pointer;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: var(--radius-sm);
+}
+
+.afp-val.is-editable:hover { background: var(--chip); }
+
+.afp-val.is-editable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
 .afp-yes { font-weight: 600; color: var(--accent-text); }
 .afp-no { color: var(--ink-3); }
 
@@ -1419,6 +1833,81 @@ textarea {
 
 @media (prefers-reduced-motion: no-preference) {
   .afp-act { transition: opacity 120ms ease, background 120ms ease; }
+}
+
+/* ── Long text: 2-line preview, click (or View all) to expand ─────────────── */
+.afp-longwrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.afp-long {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.afp-long.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.afp-long.can-toggle { cursor: pointer; }
+
+.afp-more {
+  font-size: 11.5px;
+  padding: 0;
+}
+
+/* ── Searchable option picker (dropdown fields) ───────────────────────────── */
+.combo { position: relative; flex: 1; min-width: 0; display: flex; }
+
+.combo-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
+}
+
+.combo-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.combo-opt.is-active { background: var(--chip); }
+.combo-opt.is-current { color: var(--accent-text); font-weight: 600; }
+.combo-opt.is-clear { color: var(--ink-3); }
+.combo-opt:disabled { opacity: 0.6; cursor: default; }
+.combo-check { margin-left: auto; }
+
+.combo-none {
+  padding: 8px 9px;
+  font-size: 12px;
+  color: var(--ink-3);
 }
 
 .afp-check { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; }
@@ -1479,6 +1968,15 @@ textarea {
 .afp-htext b { color: var(--ink); font-weight: 600; }
 
 /* ── Audit-trail tab ──────────────────────────────────────────────────────── */
+/* The card hugs its longest sentence rather than spanning the column — but
+   never ends short of the tab strip above it (--wo-tabs-w, measured by the
+   detail page), and never grows past the full width it used to have. */
+.audit-card {
+  width: fit-content;
+  min-width: min(100%, var(--wo-tabs-w, 420px));
+  max-width: 100%;
+}
+
 .audit { padding: 4px 16px 12px; margin: 0; list-style: none; }
 
 /* One sentence per change: avatar · "who did what, from → to" · when. */

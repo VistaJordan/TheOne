@@ -1,13 +1,23 @@
 import { useEffect, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent, RefObject } from 'react';
+import { Icon, type IconName } from './Icon';
 
 /** The "O knob" scrollbar (design option 1c): the target element hides its
     native bar in CSS and this overlay draws the replacement — the logo's "O"
     ring riding a hairline node line. It is a pointer affordance only; wheel,
     trackpad and keyboard keep scrolling the element natively, which is why the
     rail stays aria-hidden. Render it as a sibling of the scroll element inside
-    a `position: relative` wrapper. */
-export function OKnobScrollbar({ scrollRef }: { scrollRef: RefObject<HTMLElement | null> }) {
+    a `position: relative` wrapper.
+
+    `icon` swaps the O for a glyph — the WO detail page passes its trade's, so
+    the knob wears the job (a wrench on a handyman order). Absent, the O. */
+export function OKnobScrollbar({
+  scrollRef,
+  icon,
+}: {
+  scrollRef: RefObject<HTMLElement | null>;
+  icon?: IconName;
+}) {
   const railRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
@@ -117,7 +127,9 @@ export function OKnobScrollbar({ scrollRef }: { scrollRef: RefObject<HTMLElement
         <span className="oknob-line" />
         <span className="oknob-node is-top" />
         <span className="oknob-node is-end" />
-        <div className="oknob-thumb" ref={thumbRef} />
+        <div className={`oknob-thumb${icon ? ' has-icon' : ''}`} ref={thumbRef}>
+          {icon && <Icon name={icon} size={12} />}
+        </div>
       </div>
     </div>
   );

@@ -45,10 +45,10 @@ function round2(n: number): number {
 /**
  * Build the `money` block for a work order.
  *
- * - `profit` prefers the source `Profit` formula field; when it is absent but
- *   both `invoiced` and `cost` are known, profit is derived as invoiced − cost
- *   (this is exactly what the ClickUp formula computes, and it is what makes
- *   the not-yet-closed WOs show a sensible number instead of a blank).
+ * - `profit` is a FORMULA: always Total Invoiced − Cost (founder-specified).
+ *   The stored `Profit` bag value is never trusted for display — it is kept in
+ *   step by applyProfitFormula() on the write paths, but an old export may
+ *   hold a drifted snapshot. An absent input counts as $0; both absent → null.
  * - `marginPct` is profit / invoiced × 100, only when both are present and
  *   invoiced is non-zero (a $0 invoice has no meaningful margin).
  */
@@ -63,13 +63,8 @@ export function computeMoney(
   const cost = num(f[K_COST]);
   const invoiced = num(f[K_INVOICED]);
 
-  const rawProfit = num(f[K_PROFIT]);
   const profit =
-    rawProfit !== null
-      ? round2(rawProfit)
-      : invoiced !== null && cost !== null
-        ? round2(invoiced - cost)
-        : null;
+    cost === null && invoiced === null ? null : round2((invoiced ?? 0) - (cost ?? 0));
 
   const marginPct =
     profit !== null && invoiced !== null && invoiced !== 0
@@ -84,4 +79,20 @@ export function computeMoney(
     profit,
     marginPct,
   };
+}
+
+/**
+ * The Profit formula applied to a task's field bag IN PLACE: always
+ * Total Invoiced − Cost. Every write path that can touch either input calls
+ * this (inline editor, bulk edit, CSV import), so the STORED value — what the
+ * list column, filters and exports read straight from the bag — never drifts
+ * from the formula the detail page computes. Both inputs absent clears the
+ * key. The field itself is write-guarded (subtype 'formula'), so this is the
+ * only way it moves.
+ */
+export function applyProfitFormula(bag: Record<string, unknown>): void {
+  const cost = num(bag[K_COST]);
+  const invoiced = num(bag[K_INVOICED]);
+  if (cost === null && invoiced === null) delete bag[K_PROFIT];
+  else bag[K_PROFIT] = round2((invoiced ?? 0) - (cost ?? 0));
 }

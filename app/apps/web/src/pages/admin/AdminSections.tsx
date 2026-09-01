@@ -6,11 +6,17 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminShell, AdminEmpty } from './AdminShell';
 import { Icon } from '../../components/Icon';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { StatusCircle } from '../../components/StatusCircle';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useReorder } from '../../hooks/useReorder';
 import {
   ApiRequestError,
   createAdminField,
+  createAdminGroup,
+  createAdminStatus,
+  deleteAdminGroup,
+  deleteAdminStatus,
   getAdminSettings,
   listAdminFields,
   listAdminWorkflow,
@@ -18,7 +24,11 @@ import {
   reorderAdminFields,
   restoreFromTrash,
   updateAdminField,
+  updateAdminGroup,
+  updateAdminStatus,
   type AdminFieldItem,
+  type AdminWorkflowItem,
+  type StatusGroupItem,
 } from '../../api/client';
 
 // ══ SETTINGS ═════════════════════════════════════════════════════════════════
@@ -108,59 +118,401 @@ function Row({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?
   );
 }
 
-// ══ WORKFLOWS ════════════════════════════════════════════════════════════════
+// ══ WORKFLOWS — the status engine (rename / add / delete, plus phases) ═══════
 
-const GROUP_LABEL: Record<string, string> = {
-  open: 'Open', active: 'Active', done: 'Done', closed: 'Closed',
-};
+/** The two statuses the dashboard KPI tiles still match by NAME (kpis.ts). */
+const KPI_STATUS_NAMES = ['!! waiting for approval', '!! ready to invoice'];
 
 export function AdminWorkflowsPage() {
+  const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-workflow'], queryFn: listAdminWorkflow, retry: 0 });
   const items = q.data?.items ?? [];
-  const groups = ['open', 'active', 'done', 'closed'] as const;
+  const groups = q.data?.groups ?? [];
+
+  const [error, setError] = useState<string | null>(null);
+  const [addingPhase, setAddingPhase] = useState(false);
+  const [confirm, setConfirm] = useState<
+    | { kind: 'status'; id: string; name: string }
+    | { kind: 'group'; code: string; label: string }
+    | null
+  >(null);
+
+  const done = () => {
+    setError(null);
+    // Every surface that renders statuses re-reads: this page, the change-status
+    // menus, the list tabs, the filter catalogue, the pills, the KPI tiles.
+    for (const key of ['admin-workflow', 'statuses', 'status-groups', 'wo-fields', 'work-orders', 'kpis']) {
+      void qc.invalidateQueries({ queryKey: [key] });
+    }
+  };
+  const fail = (err: unknown) =>
+    setError(err instanceof ApiRequestError ? err.message : 'The change did not save');
+
+  const patchStatusM = useMutation({
+    mutationFn: (v: { id: string; input: { name?: string; color?: string } }) =>
+      updateAdminStatus(v.id, v.input),
+    onSuccess: done,
+    onError: fail,
+  });
+  const createStatusM = useMutation({
+    mutationFn: (v: { name: string; group: string; color: string }) => createAdminStatus(v),
+    onSuccess: done,
+    onError: fail,
+  });
+  const deleteStatusM = useMutation({
+    mutationFn: (id: string) => deleteAdminStatus(id),
+    onSuccess: done,
+    onError: fail,
+    onSettled: () => setConfirm(null),
+  });
+  const createGroupM = useMutation({
+    mutationFn: (label: string) => createAdminGroup(label),
+    onSuccess: () => { done(); setAddingPhase(false); },
+    onError: fail,
+  });
+  const renameGroupM = useMutation({
+    mutationFn: (v: { code: string; label: string }) => updateAdminGroup(v.code, v.label),
+    onSuccess: done,
+    onError: fail,
+  });
+  const deleteGroupM = useMutation({
+    mutationFn: (code: string) => deleteAdminGroup(code),
+    onSuccess: done,
+    onError: fail,
+    onSettled: () => setConfirm(null),
+  });
+
+  const busy =
+    patchStatusM.isPending || createStatusM.isPending || deleteStatusM.isPending ||
+    createGroupM.isPending || renameGroupM.isPending || deleteGroupM.isPending;
 
   return (
     <AdminShell
       title="Workflows"
-      subtitle={`The ${items.length}-status pipeline every work order moves through, in order.`}
+      subtitle={`The ${items.length}-status pipeline every work order moves through, in order — rename, recolor, add or retire statuses per phase.`}
+      actions={
+        <button type="button" className="btn btn-primary" onClick={() => setAddingPhase((v) => !v)}>
+          <Icon name="plus" size={14} />
+          New phase
+        </button>
+      }
     >
       <div className="callout" style={{ marginBottom: 16 }}>
         <Icon name="info" size={14} />
         <span>
-          Read-only for now. The KPI tiles match statuses by <b>name</b>, so renaming one here
-          would silently break them — editing lands with the rules engine.
+          Changes apply everywhere immediately — menus, tabs, filters, pills. Two dashboard
+          tiles still match statuses by <b>name</b> (<i>!! waiting for approval</i>,{' '}
+          <i>!! ready to invoice</i>), so renaming those empties their tiles.
         </span>
       </div>
+
+      {error && (
+        <div className="callout" style={{ marginBottom: 16 }} role="alert">
+          <Icon name="alert" size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {addingPhase && (
+        <NewPhaseForm
+          busy={createGroupM.isPending}
+          onCancel={() => setAddingPhase(false)}
+          onSubmit={(label) => createGroupM.mutate(label)}
+        />
+      )}
 
       {q.isLoading && <AdminEmpty icon="swap" title="Loading pipeline…" />}
       {q.isError && <AdminEmpty icon="alert" title="Could not load the pipeline" />}
 
-      {groups.map((g) => {
-        const rows = items.filter((s) => s.status_group === g);
-        if (rows.length === 0) return null;
-        const total = rows.reduce((n, r) => n + r.wo_count, 0);
-        return (
-          <section className="card wf-group" key={g}>
-            <div className="card-head">
-              <span className={`sec-badge is-${g}`}>{GROUP_LABEL[g]}</span>
-              <span className="sec-sub">{rows.length} status{rows.length === 1 ? '' : 'es'}</span>
-              <span className="subtotal-chip push">{total} work order{total === 1 ? '' : 's'}</span>
-            </div>
-            <ul className="wf-list">
-              {rows.map((s) => (
-                <li className="wf-row" key={s.id}>
-                  <span className="wf-pos">{s.position}</span>
-                  <span className="wf-dot" style={{ background: s.color }} aria-hidden="true" />
-                  <span className="wf-name">{s.name}</span>
-                  {s.is_archive && <span className="chip chip-sm">Archive</span>}
-                  <span className="wf-count">{s.wo_count || '—'}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        );
-      })}
+      {groups.map((g) => (
+        <WfGroupCard
+          key={g.code}
+          group={g}
+          rows={items.filter((s) => s.status_group === g.code)}
+          busy={busy}
+          onRenameGroup={(label) => renameGroupM.mutate({ code: g.code, label })}
+          onDeleteGroup={() => setConfirm({ kind: 'group', code: g.code, label: g.label })}
+          onRenameStatus={(id, name) => patchStatusM.mutate({ id, input: { name } })}
+          onRecolorStatus={(id, color) => patchStatusM.mutate({ id, input: { color } })}
+          onDeleteStatus={(id, name) => setConfirm({ kind: 'status', id, name })}
+          onAddStatus={(name, color) => createStatusM.mutate({ name, group: g.code, color })}
+        />
+      ))}
+
+      {confirm?.kind === 'status' && (
+        <ConfirmDialog
+          title={`Delete the “${confirm.name}” status?`}
+          message="It disappears from every status menu. Work orders are unaffected — a status can only be deleted while none sit at it."
+          confirmLabel="Delete status"
+          busyLabel="Deleting…"
+          danger
+          busy={deleteStatusM.isPending}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => deleteStatusM.mutate(confirm.id)}
+        />
+      )}
+      {confirm?.kind === 'group' && (
+        <ConfirmDialog
+          title={`Delete the “${confirm.label}” phase?`}
+          message="Only an empty phase can be deleted; the built-in four cannot."
+          confirmLabel="Delete phase"
+          busyLabel="Deleting…"
+          danger
+          busy={deleteGroupM.isPending}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => deleteGroupM.mutate(confirm.code)}
+        />
+      )}
     </AdminShell>
+  );
+}
+
+function WfGroupCard({
+  group: g, rows, busy, onRenameGroup, onDeleteGroup,
+  onRenameStatus, onRecolorStatus, onDeleteStatus, onAddStatus,
+}: {
+  group: StatusGroupItem;
+  rows: AdminWorkflowItem[];
+  busy: boolean;
+  onRenameGroup: (label: string) => void;
+  onDeleteGroup: () => void;
+  onRenameStatus: (id: string, name: string) => void;
+  onRecolorStatus: (id: string, color: string) => void;
+  onDeleteStatus: (id: string, name: string) => void;
+  onAddStatus: (name: string, color: string) => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(g.label);
+  const total = rows.reduce((n, r) => n + r.wo_count, 0);
+  const badgeClass = ['open', 'active', 'done', 'closed'].includes(g.code) ? ` is-${g.code}` : '';
+
+  const commitLabel = () => {
+    const label = draft.trim();
+    if (label && label !== g.label) onRenameGroup(label);
+    setRenaming(false);
+  };
+
+  return (
+    <section className="card wf-group">
+      <div className="card-head">
+        {renaming ? (
+          <span className="frename">
+            <input
+              className="fld fld-sm"
+              value={draft}
+              autoFocus
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitLabel();
+                if (e.key === 'Escape') setRenaming(false);
+              }}
+            />
+            <button type="button" className="linkbtn" disabled={busy} onClick={commitLabel}>Save</button>
+            <button type="button" className="linkbtn" onClick={() => setRenaming(false)}>Cancel</button>
+          </span>
+        ) : (
+          <>
+            <span className={`sec-badge${badgeClass}`}>{g.label}</span>
+            <button
+              type="button"
+              className="fedit wf-headedit"
+              title={`Rename the ${g.label} phase`}
+              onClick={() => { setDraft(g.label); setRenaming(true); }}
+            >
+              <Icon name="pencil" size={12} />
+            </button>
+          </>
+        )}
+        <span className="sec-sub">{rows.length} status{rows.length === 1 ? '' : 'es'}</span>
+        <span className="subtotal-chip push">{total} work order{total === 1 ? '' : 's'}</span>
+        {!g.is_builtin && rows.length === 0 && (
+          <button
+            type="button"
+            className="wf-x"
+            title={`Delete the ${g.label} phase`}
+            disabled={busy}
+            onClick={onDeleteGroup}
+          >
+            <Icon name="trash" size={14} />
+          </button>
+        )}
+      </div>
+      <ul className="wf-list">
+        {rows.map((s, i) => (
+          <WfStatusRow
+            key={s.id}
+            status={s}
+            group={g.code}
+            fraction={(i + 1) / (rows.length + 1)}
+            busy={busy}
+            onRename={(name) => onRenameStatus(s.id, name)}
+            onRecolor={(color) => onRecolorStatus(s.id, color)}
+            onDelete={() => onDeleteStatus(s.id, s.name)}
+          />
+        ))}
+      </ul>
+      <AddStatusRow groupLabel={g.label} busy={busy} onAdd={onAddStatus} />
+    </section>
+  );
+}
+
+function WfStatusRow({ status: s, group, fraction, busy, onRename, onRecolor, onDelete }: {
+  status: AdminWorkflowItem;
+  group: string;
+  fraction: number;
+  busy: boolean;
+  onRename: (name: string) => void;
+  onRecolor: (color: string) => void;
+  onDelete: () => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(s.name);
+  const kpiCoupled = KPI_STATUS_NAMES.includes(s.name);
+
+  const commit = () => {
+    const name = draft.trim();
+    if (name && name !== s.name) onRename(name);
+    setRenaming(false);
+  };
+
+  return (
+    <li className="wf-row">
+      <span className="wf-pos">{s.position}</span>
+      <StatusCircle group={group} color={s.color} fraction={fraction} size={16} />
+      {renaming ? (
+        <span className="frename">
+          <input
+            className="fld fld-sm"
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit();
+              if (e.key === 'Escape') setRenaming(false);
+            }}
+          />
+          <button type="button" className="linkbtn" disabled={busy} onClick={commit}>Save</button>
+          <button type="button" className="linkbtn" onClick={() => setRenaming(false)}>Cancel</button>
+        </span>
+      ) : (
+        <span className="wf-name">
+          {s.name}
+          <button
+            type="button"
+            className="fedit"
+            title={
+              kpiCoupled
+                ? `Rename ${s.name} — careful: a dashboard tile matches this exact name`
+                : `Rename ${s.name}`
+            }
+            onClick={() => { setDraft(s.name); setRenaming(true); }}
+          >
+            <Icon name="pencil" size={12} />
+          </button>
+        </span>
+      )}
+      {s.is_archive && <span className="chip chip-sm">Archive</span>}
+      {/* Keyed on the saved color so an outside refresh resets the swatch. */}
+      <input
+        key={`${s.id}-${s.color}`}
+        type="color"
+        className="wf-color"
+        defaultValue={s.color}
+        disabled={busy}
+        aria-label={`Color of ${s.name}`}
+        onBlur={(e) => {
+          const v = e.target.value;
+          if (v && v.toLowerCase() !== s.color.toLowerCase()) onRecolor(v);
+        }}
+      />
+      <span className="wf-count">{s.wo_count || '—'}</span>
+      <button
+        type="button"
+        className="wf-x"
+        disabled={busy || s.wo_count > 0}
+        title={
+          s.wo_count > 0
+            ? `${s.wo_count} work order${s.wo_count === 1 ? ' is' : 's are'} at this status — move them first`
+            : `Delete ${s.name}`
+        }
+        onClick={onDelete}
+      >
+        <Icon name="trash" size={14} />
+      </button>
+    </li>
+  );
+}
+
+function AddStatusRow({ groupLabel, busy, onAdd }: {
+  groupLabel: string;
+  busy: boolean;
+  onAdd: (name: string, color: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const [color, setColor] = useState('#656f7d');
+
+  const submit = () => {
+    const v = name.trim();
+    if (!v) return;
+    onAdd(v, color);
+    setName('');
+  };
+
+  return (
+    <div className="wf-add">
+      <input
+        type="color"
+        className="wf-color"
+        value={color}
+        aria-label={`Color of the new ${groupLabel} status`}
+        onChange={(e) => setColor(e.target.value)}
+      />
+      <input
+        className="fld fld-sm"
+        placeholder={`Add a status to ${groupLabel}…`}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
+      />
+      <button type="button" className="btn btn-sm" disabled={busy || name.trim() === ''} onClick={submit}>
+        <Icon name="plus" size={12} />
+        Add
+      </button>
+    </div>
+  );
+}
+
+function NewPhaseForm({ busy, onCancel, onSubmit }: {
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (label: string) => void;
+}) {
+  const [label, setLabel] = useState('');
+  const valid = label.trim().length > 0;
+
+  return (
+    <section className="card adm-form">
+      <div className="card-head">
+        <h3 className="card-title">New phase</h3>
+        <span className="card-meta">A new group of statuses — it becomes a tab on the work-orders list</span>
+      </div>
+      <div className="card-pad">
+        <div className="field">
+          <label className="lbl" htmlFor="np-label">Name <span className="req">*</span></label>
+          <input className="fld" id="np-label" type="text" placeholder="On hold"
+            value={label} onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && valid) onSubmit(label.trim()); }} />
+        </div>
+        <div className="sheet-f">
+          <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+          <button type="button" className="btn btn-primary" disabled={!valid || busy}
+            onClick={() => onSubmit(label.trim())}>
+            <Icon name="plus" size={14} />
+            {busy ? 'Creating…' : 'Create phase'}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -175,6 +527,7 @@ const FIELD_TYPE_CHOICES: { value: string; label: string }[] = [
   { value: 'dropdown', label: 'Dropdown' },
   { value: 'checkbox', label: 'Checkbox' },
   { value: 'date', label: 'Date' },
+  { value: 'datetime', label: 'Date & time' },
   { value: 'currency', label: '$ amount' },
   { value: 'number', label: 'Number' },
   { value: 'users', label: 'People' },
