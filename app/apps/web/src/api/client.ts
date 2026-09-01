@@ -29,6 +29,18 @@ import type {
   SavedView,
   BulkUpdateResult,
   ImportResult,
+  // Automations — the admin rules engine.
+  AutomationItem,
+  AutomationRunItem,
+  AutomationTrigger,
+  AutomationAction,
+  AutomationEntity,
+  AutomationEnrollResult,
+  // Metrics — dashboard cards over any field, durations between two events.
+  MetricEvent,
+  MetricBreakdown,
+  MetricDuration,
+  WoFieldTime,
 } from '@theone/shared';
 
 // ── S2 contract types ────────────────────────────────────────────────────────
@@ -58,6 +70,19 @@ export type {
   FeedItem,
   FeedResponse,
   CommentCreatedResponse,
+  AutomationItem,
+  AutomationRunItem,
+  AutomationTrigger,
+  AutomationTriggerKind,
+  AutomationAction,
+  AutomationEntity,
+  AutomationEnrollResult,
+  MetricEvent,
+  MetricBreakdown,
+  MetricBreakdownBucket,
+  MetricDuration,
+  MetricDurationSample,
+  WoFieldTime,
 } from '@theone/shared';
 
 /** GET /api/statuses items — `phase` is part of Status as of S2. */
@@ -466,6 +491,34 @@ export function getKpis(): Promise<Kpis> {
   return request<Kpis>(`/kpis`);
 }
 
+// ── Metrics — the dashboard's card engine ────────────────────────────────────
+
+/** GET /api/metrics/breakdown — the filtered set bucketed by any field. */
+export function getMetricBreakdown(
+  field: string,
+  filters?: WoFilterSet,
+  limit?: number,
+): Promise<MetricBreakdown> {
+  return request<MetricBreakdown>(`/metrics/breakdown${toQuery({ field, filters, limit })}`);
+}
+
+/** GET /api/metrics/duration — per work order, first `from` event → next `to`
+    event after it, aggregated. Events are field changes the audit trail
+    recorded, so only in-app edits are measured. */
+export function getMetricDuration(
+  from: MetricEvent,
+  to: MetricEvent,
+  filters?: WoFilterSet,
+): Promise<MetricDuration> {
+  return request<MetricDuration>(`/metrics/duration${toQuery({ from, to, filters })}`);
+}
+
+/** GET /api/work-orders/:id/field-times — when each field first/last changed
+    on one work order, whether or not any page displays it. */
+export function getWorkOrderFieldTimes(idOrNumber: string): Promise<{ items: WoFieldTime[] }> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/field-times`);
+}
+
 export function getActivity(wo: string): Promise<ActivityEntry[]> {
   return request<ActivityEntry[]>(`/activity${toQuery({ wo })}`);
 }
@@ -831,6 +884,66 @@ export function updateAdminGroup(code: string, label: string): Promise<{ item: S
 
 export function deleteAdminGroup(code: string): Promise<{ ok: true }> {
   return request(`/admin/workflow/groups/${encodeURIComponent(code)}`, { method: 'DELETE' });
+}
+
+// ── Admin › automations — the rules engine ───────────────────────────────────
+
+export interface AutomationInput {
+  name: string;
+  enabled?: boolean;
+  entity?: AutomationEntity;
+  trigger: AutomationTrigger;
+  conditions?: WoFilterSet;
+  actions: AutomationAction[];
+}
+
+export function listAutomations(): Promise<{ items: AutomationItem[] }> {
+  return request('/admin/automations');
+}
+
+export function createAutomation(input: AutomationInput): Promise<{ item: AutomationItem }> {
+  return request('/admin/automations', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateAutomation(
+  id: string,
+  input: Partial<AutomationInput>,
+): Promise<{ item: AutomationItem }> {
+  return request(`/admin/automations/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteAutomation(id: string): Promise<{ ok: true }> {
+  return request(`/admin/automations/${id}`, { method: 'DELETE' });
+}
+
+export function listAutomationRuns(id: string): Promise<{ items: AutomationRunItem[] }> {
+  return request(`/admin/automations/${id}/runs`);
+}
+
+// The operator-facing side: the Enroll menu on the work-orders bulk bar.
+
+/** An enabled work-order rule, as the Enroll menu needs it. */
+export interface EnrollableAutomation {
+  id: string;
+  name: string;
+  entity: AutomationEntity;
+  trigger: AutomationTrigger;
+}
+
+export function listEnrollableAutomations(): Promise<{ items: EnrollableAutomation[] }> {
+  return request('/automations');
+}
+
+/** Run one rule over the selected work orders (a rule with a wait arms its
+    timers instead of acting now). Needs can_edit_wo_fields. */
+export function enrollWorkOrders(
+  automationId: string,
+  ids: string[],
+): Promise<AutomationEnrollResult> {
+  return request(`/automations/${automationId}/enroll`, {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
 }
 
 export interface AdminFieldItem {

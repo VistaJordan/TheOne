@@ -349,6 +349,103 @@ td.pcell .sw { justify-content: center; }
 .sec-badge.is-done   { background: var(--tab-on-bg);  color: var(--tab-on-ink); }
 .sec-badge.is-closed { background: var(--chip);       color: var(--ink-3); }
 
+/* The status editor now sits at the bottom of Custom fields — this is its
+   in-page section header (title + New phase, where the shell head used to be). */
+.adm-subsec { display: flex; align-items: flex-start; gap: 16px; margin-top: 10px; }
+.adm-subsec-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.adm-subsec-title {
+  font-family: var(--kpi-font), 'Barlow', sans-serif;
+  font-weight: var(--kpi-weight); letter-spacing: var(--kpi-ls);
+  font-size: 17px; margin: 0; color: var(--ink);
+}
+.adm-subsec .btn { flex: none; }
+
+/* ── Automations (the rules engine) ────────────────────────────────────── */
+.auto-list { display: flex; flex-direction: column; gap: 12px; }
+.auto-card .card-head { gap: 12px; align-items: center; }
+.auto-card.is-off .auto-title { opacity: .55; }
+.auto-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.auto-title strong { font-size: 13.5px; color: var(--ink); }
+.auto-title small { font-size: 12px; color: var(--ink-3); line-height: 1.5; overflow-wrap: anywhere; }
+.auto-card .fedit { opacity: 1; } /* .fedit hides until hover elsewhere; here it is a primary control */
+.auto-runs { border-top: 1px solid var(--row-border); padding: 10px 16px 12px; }
+.auto-run-err { color: var(--danger); }
+
+/* The builder: one block per step (When / If / Then), rows of pickers. */
+.auto-builder .auto-step {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--row-border);
+}
+.auto-kicker {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.auto-kicker .auto-match { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.auto-row {
+  display: grid; align-self: stretch; align-items: center; gap: 8px;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(120px, .9fr) minmax(150px, 1.1fr) 26px;
+}
+.auto-row-when { grid-template-columns: minmax(170px, .9fr) minmax(150px, 1fr) minmax(150px, 1.1fr); }
+.auto-row-then { grid-template-columns: minmax(150px, 1fr) minmax(150px, 1.2fr) 26px; }
+.auto-add { align-self: flex-start; }
+/* The wizard chrome: numbered stepper, live preview sentence, choice tiles. */
+.auto-stepper {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  list-style: none; margin: 4px 0 0; padding: 0;
+}
+.auto-stepper li { display: flex; align-items: center; }
+.auto-stepper li:not(:last-child)::after {
+  content: ''; width: 26px; height: 1px; background: var(--border-strong); margin: 0 4px;
+}
+.auto-stepper button {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 0; background: transparent; padding: 5px 7px; border-radius: var(--radius-sm);
+  font: inherit; font-size: 12.5px; color: var(--ink-3); cursor: pointer;
+}
+.auto-stepper button:disabled { cursor: default; opacity: .6; }
+.auto-stepper .is-current button { color: var(--ink); font-weight: 600; }
+.auto-stepper .is-done button { color: var(--tab-on-ink); }
+.auto-stepper .is-done button:hover { background: var(--chip); }
+.auto-step-dot {
+  display: inline-grid; place-items: center; width: 20px; height: 20px;
+  border-radius: 50%; border: 1px solid var(--border-strong);
+  font-size: 11px; font-variant-numeric: tabular-nums;
+}
+.auto-stepper .is-current .auto-step-dot {
+  border-color: var(--accent); background: var(--accent); color: var(--accent-ink, #fff);
+}
+.auto-stepper .is-done .auto-step-dot { border-color: var(--tab-on-ink); color: var(--tab-on-ink); }
+.auto-tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px;
+  margin-top: 14px;
+}
+.auto-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  padding: 12px 13px; text-align: left; font: inherit; cursor: pointer;
+  background: var(--field-bg); color: var(--ink);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.auto-tile:not(:disabled):hover { border-color: var(--border-strong); }
+.auto-tile.is-active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.auto-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.auto-tile:disabled { opacity: .55; cursor: default; }
+.auto-tile-head { display: inline-flex; align-items: center; gap: 8px; }
+.auto-tile-head b { font-size: 13px; }
+.auto-tile small { font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
+.auto-chip { margin-left: 8px; vertical-align: 1px; }
+.auto-builder .auto-row-when { margin-top: 12px; }
+.auto-builder .auto-wait { margin-top: 12px; }
+
+.auto-wait { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.auto-wait-label { font-size: 12.5px; color: var(--ink-2); flex: none; }
+/* .fld is 100%-wide by default; here the inputs size to their content. */
+.auto-wait .fld { width: auto; flex: none; }
+.auto-wait-n.fld { width: 76px; }
+@media (max-width: 700px) {
+  .auto-row, .auto-row-when, .auto-row-then { grid-template-columns: 1fr; }
+}
+
 /* ── Themes ────────────────────────────────────────────────────────────── */
 .theme-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .theme-card {

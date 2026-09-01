@@ -13,7 +13,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/admin/users', label: 'Users', icon: 'user' },
   { to: '/admin/roles', label: 'Roles', icon: 'layers' },
   { to: '/admin/settings', label: 'Settings', icon: 'sliders' },
-  { to: '/admin/workflows', label: 'Workflows', icon: 'swap' },
+  { to: '/admin/automations', label: 'Automations', icon: 'zap' },
   { to: '/admin/fields', label: 'Custom fields', icon: 'list' },
   { to: '/admin/themes', label: 'Themes', icon: 'sun' },
   { to: '/admin/audit', label: 'Audit log', icon: 'history' },

@@ -8,7 +8,7 @@ import { AdminUsersPage, AdminRolesPage } from './pages/admin/AdminUsersPage';
 import { AdminAuditPage } from './pages/admin/AdminAuditPage';
 import {
   AdminSettingsPage,
-  AdminWorkflowsPage,
+  AdminAutomationsPage,
   AdminFieldsPage,
   AdminThemesPage,
   AdminTrashPage,
@@ -91,7 +91,9 @@ export function App() {
               <Route path="/admin/users" element={<RequireAuth><AdminUsersPage /></RequireAuth>} />
               <Route path="/admin/roles" element={<RequireAuth><AdminRolesPage /></RequireAuth>} />
               <Route path="/admin/settings" element={<RequireAuth><AdminSettingsPage /></RequireAuth>} />
-              <Route path="/admin/workflows" element={<RequireAuth><AdminWorkflowsPage /></RequireAuth>} />
+              <Route path="/admin/automations" element={<RequireAuth><AdminAutomationsPage /></RequireAuth>} />
+              {/* The status editor that lived here moved into Custom fields. */}
+              <Route path="/admin/workflows" element={<Navigate to="/admin/automations" replace />} />
               <Route path="/admin/fields" element={<RequireAuth><AdminFieldsPage /></RequireAuth>} />
               <Route path="/admin/themes" element={<RequireAuth><AdminThemesPage /></RequireAuth>} />
               <Route path="/admin/audit" element={<RequireAuth><AdminAuditPage /></RequireAuth>} />

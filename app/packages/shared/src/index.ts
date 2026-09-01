@@ -277,6 +277,78 @@ export interface ImportResult {
   rows: ImportRowResult[];
 }
 
+// ── Automations (the rules engine) ───────────────────────────────────────────
+// A rule is When (trigger) → If (conditions) → Then (actions). Conditions reuse
+// the list's WoFilterSet verbatim — one filter vocabulary for the whole app.
+// The server (apps/api/src/services/automations.ts) is the authority; these are
+// the wire shapes.
+
+/** 'manual' = the rule never fires on its own — operators enroll selected
+    records from the list (the HubSpot "trigger manually" model). */
+export type AutomationTriggerKind = 'created' | 'changed' | 'manual';
+
+/** What kind of record a rule runs over. Work orders are live; the other three
+    are reserved for their modules (Vendors/Invoicing are placeholders today). */
+export type AutomationEntity = 'work_order' | 'vendor' | 'quote' | 'invoice';
+
+export interface AutomationTrigger {
+  kind: AutomationTriggerKind;
+  /** Catalogue key ('status', 'priority', 'fields.<key>', …) for 'changed'.
+      Null/absent = ANY field changing fires the rule. */
+  field?: string | null;
+  /** Only fire when the field changed TO this value (string-compared,
+      case-insensitive). Null/absent = any new value. */
+  to?: string | null;
+  /** Wait this long after the trigger before acting (0/absent = immediately).
+      Conditions are evaluated AFTER the wait — "if the quote is still not
+      ready" — and another matching change restarts the clock. Timers are DB
+      rows (automation_pending), so they survive an API restart. */
+  delay_minutes?: number | null;
+}
+
+/** One write the rule performs: set a field to a value (null clears it). */
+export interface AutomationAction {
+  field: string;
+  value: string | null;
+}
+
+export interface AutomationItem {
+  id: string;
+  name: string;
+  enabled: boolean;
+  entity: AutomationEntity;
+  trigger: AutomationTrigger;
+  conditions: WoFilterSet;
+  actions: AutomationAction[];
+  run_count: number;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** What POST /automations/:id/enroll did with the selection. */
+export interface AutomationEnrollResult {
+  requested: number;
+  /** Conditions held; actions were applied now. */
+  applied: number;
+  /** The rule has a wait — a timer was armed instead of acting now. */
+  queued: number;
+  /** Conditions did not match, or the work order was gone. */
+  skipped: number;
+  errored: number;
+}
+
+export interface AutomationRunItem {
+  id: number;
+  automation_id: string;
+  wo_number: string | null;
+  /** 'skipped' = a delayed rule came due but its conditions no longer held. */
+  outcome: 'applied' | 'error' | 'skipped';
+  /** What happened, for the run log: fields written, or the error message. */
+  detail: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface Membership {
   list_id: string;
   list_name: string;
@@ -747,6 +819,75 @@ export interface Kpis {
   waitingApproval: { count: number; oldestAgeDays: number | null };
   readyToInvoice: { count: number; queuedAmount: number };
   margin: { pct: number; avgProfit: number; placeholder: boolean };
+}
+
+// ── Metrics ──────────────────────────────────────────────────────────────────
+// The audit trail (activity_log) timestamps every field change; these shapes
+// turn those timestamps into dashboard numbers. A MetricEvent names a moment in
+// a work order's life: "<field> changed", or "<field> became <value>".
+
+export interface MetricEvent {
+  /** A catalogue key: 'status', 'priority', 'fields.<custom key>', … */
+  field: string;
+  /** Match only changes TO this value (compared case-insensitively). Absent or
+      null = any change of the field counts. */
+  value?: string | null;
+}
+
+export interface MetricBreakdownBucket {
+  /** Null = the rows where the field is blank. */
+  value: string | null;
+  count: number;
+}
+
+/** GET /api/metrics/breakdown — the filtered set bucketed by one field. */
+export interface MetricBreakdown {
+  field: string;
+  label: string;
+  /** Every matching work order — items may cover only the top buckets. */
+  total: number;
+  /** Rows in buckets beyond the returned items. */
+  other: number;
+  items: MetricBreakdownBucket[];
+}
+
+export interface MetricDurationSample {
+  id: string;
+  wo_number: string;
+  title: string | null;
+  from_at: string;
+  to_at: string;
+  seconds: number;
+}
+
+/** GET /api/metrics/duration — for each work order, the FIRST time the `from`
+    event was recorded and the NEXT `to` event after it; aggregated. Only
+    changes made through the app are measured: imported/seeded values carry no
+    change history. */
+export interface MetricDuration {
+  from: MetricEvent;
+  to: MetricEvent;
+  /** Work orders where both events were found, in order. */
+  count: number;
+  avg_seconds: number | null;
+  median_seconds: number | null;
+  min_seconds: number | null;
+  max_seconds: number | null;
+  /** Newest pairs first, capped — the drill-in list. */
+  samples: MetricDurationSample[];
+}
+
+/** GET /api/work-orders/:id/field-times — one row per field ever changed on
+    the work order. The timestamps exist whether or not any page displays the
+    field; this is how another screen asks "when did X last change". */
+export interface WoFieldTime {
+  /** Catalogue key ('status', 'home_list', 'priority', 'fields.<key>', …). */
+  field: string;
+  changes: number;
+  first_at: string;
+  last_at: string;
+  /** Display value the field last changed to (status name, list name, value). */
+  last_value: string | null;
 }
 
 // ── Error shape ──────────────────────────────────────────────────────────────

@@ -30,6 +30,14 @@ import {
   updateStatus,
 } from '../services/statusAdmin.js';
 import { listAuditLog, exportAuditCsv } from '../services/auditLog.js';
+import {
+  createAutomation,
+  deleteAutomation,
+  listAutomations,
+  listRuns,
+  updateAutomation,
+} from '../services/automations.js';
+import { filterSetSchema } from './views.js';
 
 function requireAdmin(req: FastifyRequest): string {
   if (!req.auth) throw unauthorized();
@@ -224,6 +232,80 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     const { code } = parse(groupParams, req.params);
     await deleteStatusGroup(code);
     return { ok: true };
+  });
+
+  // ── Automations (the rules engine) ─────────────────────────────────────────
+  // GET/POST /admin/automations · PATCH/DELETE /admin/automations/:id
+  // GET      /admin/automations/:id/runs
+  // Field keys, operators and action targets are validated in the service
+  // against the live field catalogue — the schemas here only shape the JSON.
+
+  const triggerSchema = z
+    .object({
+      // 'manual' = enrolled from the work-orders list only, never event-fired.
+      kind: z.enum(['created', 'changed', 'manual']),
+      field: z.string().trim().min(1).max(200).nullish(),
+      to: z.string().trim().min(1).max(400).nullish(),
+      // Wait N minutes after the trigger; conditions run when the wait ends.
+      delay_minutes: z.number().int().min(0).max(43200).nullish(),
+    })
+    .strict();
+
+  const actionSchema = z
+    .object({
+      field: z.string().trim().min(1).max(200),
+      value: z.string().max(4000).nullable(),
+    })
+    .strict();
+
+  const createAutomationSchema = z
+    .object({
+      name: z.string().trim().min(1).max(120),
+      enabled: z.boolean().optional(),
+      // All four are schema-valid; the service rejects the not-yet-live ones
+      // with a message the builder shows verbatim.
+      entity: z.enum(['work_order', 'vendor', 'quote', 'invoice']).optional(),
+      trigger: triggerSchema,
+      conditions: filterSetSchema.optional(),
+      actions: z.array(actionSchema).min(1).max(10),
+    })
+    .strict();
+
+  const updateAutomationSchema = createAutomationSchema.partial().strict();
+
+  const runsQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+  });
+
+  app.get('/admin/automations', async (req) => {
+    requireAdmin(req);
+    return { items: await listAutomations() };
+  });
+
+  app.post('/admin/automations', async (req, reply) => {
+    const actorId = requireAdmin(req);
+    const body = parse(createAutomationSchema, req.body);
+    return reply.status(201).send({ item: await createAutomation(body, actorId) });
+  });
+
+  app.patch('/admin/automations/:id', async (req) => {
+    requireAdmin(req);
+    const { id } = parse(idParams, req.params);
+    return { item: await updateAutomation(id, parse(updateAutomationSchema, req.body)) };
+  });
+
+  app.delete('/admin/automations/:id', async (req) => {
+    requireAdmin(req);
+    const { id } = parse(idParams, req.params);
+    await deleteAutomation(id);
+    return { ok: true };
+  });
+
+  app.get('/admin/automations/:id/runs', async (req) => {
+    requireAdmin(req);
+    const { id } = parse(idParams, req.params);
+    const { limit } = parse(runsQuerySchema, req.query);
+    return { items: await listRuns(id, limit) };
   });
 
   // ── Trash ──────────────────────────────────────────────────────────────────

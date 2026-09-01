@@ -16,6 +16,7 @@ import { ApiError } from '../errors.js';
 import { listWorkOrders, type ListFilters } from './workOrders.js';
 import { listCustomFields, resolveField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
+import { dispatchAutomations } from './automations.js';
 import { applyProfitFormula } from './money.js';
 import type { WorkOrderListItem } from '@theone/shared';
 
@@ -151,6 +152,8 @@ export async function bulkUpdate(
 
   const db = getDb();
   let updated = 0;
+  // What each row's write logged, for the automations engine (post-commit).
+  const firedRows: { id: string; log: TaskChange[] }[] = [];
 
   await db.transaction(async (tx) => {
     for (const row of rows.rows) {
@@ -225,9 +228,15 @@ export async function bulkUpdate(
       );
 
       await logTaskChanges(tx, actorId, row.id, log, 'bulk');
+      firedRows.push({ id: row.id, log });
       updated += 1;
     }
   });
+
+  // Automations react per row, after the whole batch has committed.
+  for (const r of firedRows) {
+    await dispatchAutomations({ taskId: r.id, kind: 'changed', changes: r.log });
+  }
 
   return { requested: ids.length, updated, skipped };
 }
@@ -649,6 +658,9 @@ export async function importWorkOrders(
   // One transaction for the whole file: a half-imported spreadsheet is worse
   // than a rejected one, because nobody can tell which half landed.
   const db = getDb();
+  // For the automations engine, dispatched after the whole file commits.
+  const createdIds: string[] = [];
+  const updatedRows: { id: string; changes: TaskChange[] }[] = [];
   await db.transaction(async (tx) => {
     for (const plan of plans) {
       if (plan.action === 'create') {
@@ -695,6 +707,7 @@ export async function importWorkOrders(
            VALUES ($1, 'task', $2, 'created', NULL, NULL, $3::jsonb)`,
           [actorId, id, JSON.stringify({ wo_number: plan.wo_number, source: 'import' })],
         );
+        createdIds.push(id);
       } else {
         // Diff against the row as it is now, so the trail records the change
         // that happened — not the list of columns the file happened to have.
@@ -738,9 +751,17 @@ export async function importWorkOrders(
           params,
         );
         await logTaskChanges(tx, actorId, plan.id as string, changes, 'import');
+        updatedRows.push({ id: plan.id as string, changes });
       }
     }
   });
+
+  for (const id of createdIds) {
+    await dispatchAutomations({ taskId: id, kind: 'created' });
+  }
+  for (const r of updatedRows) {
+    await dispatchAutomations({ taskId: r.id, kind: 'changed', changes: r.changes });
+  }
 
   return summary;
 }

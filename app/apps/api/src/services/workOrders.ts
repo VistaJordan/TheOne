@@ -14,7 +14,8 @@ import type {
 } from '@theone/shared';
 import { PHASE_BY_STATUS_NAME } from '@theone/shared';
 import { ApiError } from '../errors.js';
-import { logTaskChanges } from './woAudit.js';
+import { logTaskChanges, type TaskChange } from './woAudit.js';
+import { dispatchAutomations, type AutoCtx } from './automations.js';
 import { UUID_RE, CREATED_AT_SQL, getActivityForTask } from './activity.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
@@ -364,6 +365,7 @@ export async function changeStatus(
   idOrWo: string,
   statusId: string,
   actorId: string,
+  auto?: AutoCtx,
 ): Promise<WorkOrderDetail> {
   const col = UUID_RE.test(idOrWo) ? 'id' : 'wo_number';
   const db = getDb();
@@ -371,6 +373,9 @@ export async function changeStatus(
   // Resolve the actor BEFORE opening the transaction. PGlite is single-connection:
   // calling the non-transactional query() from inside db.transaction() would queue
   // behind the open transaction and self-deadlock.
+
+  // Captured for the automations engine, which runs AFTER the commit.
+  let fired: { taskId: string; change: TaskChange } | null = null;
 
   await db.transaction(async (tx) => {
     // Current task + status.
@@ -404,14 +409,21 @@ export async function changeStatus(
       [statusId, newGroup, task_id],
     );
 
-    await logTaskChanges(tx, actorId, task_id, [
-      {
-        field: 'status_id',
-        before: { status_id: currentStatusId, status_name: currentStatusName },
-        after: { status_id: statusId, status_name: newStatusName },
-      },
-    ]);
+    const change: TaskChange = {
+      field: 'status_id',
+      before: { status_id: currentStatusId, status_name: currentStatusName },
+      after: { status_id: statusId, status_name: newStatusName },
+    };
+    await logTaskChanges(tx, actorId, task_id, [change]);
+    fired = { taskId: task_id, change };
   });
+
+  // Automations react after the commit and before the detail is re-read, so the
+  // caller sees the rule's effect (e.g. an auto-assign) in the response.
+  if (fired !== null) {
+    const f: { taskId: string; change: TaskChange } = fired;
+    await dispatchAutomations({ taskId: f.taskId, kind: 'changed', changes: [f.change] }, auto);
+  }
 
   // Return the fresh detail object (same shape as GET /:id).
   const detail = await getWorkOrderDetail(idOrWo);

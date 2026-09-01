@@ -4,7 +4,9 @@ import type { BulkUpdateResult, WoFieldDescriptor } from '../../../api/client';
 import {
   bulkDeleteWorkOrders,
   bulkUpdateWorkOrders,
+  enrollWorkOrders,
   getStatuses,
+  listEnrollableAutomations,
   listRoutingLists,
 } from '../../../api/client';
 import { Icon } from '../../Icon';
@@ -46,6 +48,7 @@ export function BulkBar({
   const [result, setResult] = useState<BulkUpdateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [enrollNote, setEnrollNote] = useState<{ text: string; ok: boolean } | null>(null);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['work-orders'] });
@@ -89,6 +92,15 @@ export function BulkBar({
       />
 
       <BulkEditMenu fields={fields} disabled={busy} onApply={(patch) => apply.mutate(patch)} />
+
+      <BulkEnrollMenu
+        ids={ids}
+        disabled={busy}
+        onDone={(text, ok) => {
+          setEnrollNote({ text, ok });
+          if (ok) invalidate();
+        }}
+      />
 
       <button
         type="button"
@@ -142,7 +154,102 @@ export function BulkBar({
           {result.skipped.length > 0 && `, ${result.skipped.length} skipped`}
         </span>
       )}
+      {enrollNote && !busy && (
+        <span className={`bulk-note ${enrollNote.ok ? 'is-ok' : 'is-err'}`}>{enrollNote.text}</span>
+      )}
     </div>
+  );
+}
+
+/**
+ * Enroll the selection in an automation — the manual-trigger half of the
+ * HubSpot model. A "Manual" rule can ONLY start here; the automatic rules are
+ * offered too, for re-running one over records that already exist.
+ */
+function BulkEnrollMenu({ ids, disabled, onDone }: {
+  ids: string[];
+  disabled?: boolean;
+  onDone: (text: string, ok: boolean) => void;
+}) {
+  const autos = useQuery({
+    queryKey: ['automations'],
+    queryFn: listEnrollableAutomations,
+    staleTime: 60 * 1000,
+  });
+
+  const enroll = useMutation({
+    mutationFn: (automationId: string) => enrollWorkOrders(automationId, ids),
+    onSuccess: (res) => {
+      const parts: string[] = [];
+      if (res.applied) parts.push(`${res.applied} applied`);
+      if (res.queued) parts.push(`${res.queued} waiting on the rule's timer`);
+      if (res.skipped) parts.push(`${res.skipped} skipped (conditions did not match)`);
+      if (res.errored) parts.push(`${res.errored} failed — see the rule's run log`);
+      onDone(parts.join(', ') || 'Nothing to do', res.errored === 0);
+    },
+    onError: (e: Error) => onDone(e.message || 'The enrollment failed', false),
+  });
+
+  const items = autos.data?.items ?? [];
+  const manual = items.filter((a) => a.trigger.kind === 'manual');
+  const automatic = items.filter((a) => a.trigger.kind !== 'manual');
+
+  return (
+    <Popover
+      panelClassName="pop-bulk-status"
+      trigger={({ open, toggle }) => (
+        <button
+          type="button"
+          className={`bulk-btn${open ? ' is-open' : ''}`}
+          onClick={toggle}
+          disabled={disabled || enroll.isPending}
+        >
+          <Icon name="zap" size={14} />
+          Enroll
+          <Icon name="chev-d" size={12} />
+        </button>
+      )}
+    >
+      {({ close }) => (
+        <>
+          <div className="pop-head">
+            <span className="pop-title">
+              Enroll {ids.length === 1 ? 'this work order' : `${ids.length.toLocaleString()} work orders`} in…
+            </span>
+          </div>
+          {autos.isLoading && <p className="pop-empty">Loading…</p>}
+          {!autos.isLoading && items.length === 0 && (
+            <p className="pop-empty">
+              No automations are turned on. A super admin can build one in Admin → Automations.
+            </p>
+          )}
+          {[
+            { label: 'Manual', list: manual },
+            { label: 'Automatic (re-run by hand)', list: automatic },
+          ]
+            .filter((g) => g.list.length > 0)
+            .map((g) => (
+              <div className="status-menu-group" key={g.label}>
+                <div className="status-menu-group-label">{g.label}</div>
+                {g.list.map((a) => (
+                  <button
+                    type="button"
+                    key={a.id}
+                    className="status-menu-item"
+                    onClick={() => {
+                      enroll.mutate(a.id);
+                      close();
+                    }}
+                  >
+                    <Icon name="zap" size={14} />
+                    <span className="status-menu-name">{a.name}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+        </>
+      )}
+    </Popover>
   );
 }
 

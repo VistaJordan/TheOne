@@ -27,6 +27,7 @@ import {
   actingPrincipalFromRequest,
 } from '../services/activity.js';
 import { updateWorkOrderFields, getFieldHistory } from '../services/woFieldValues.js';
+import { getFieldTimes } from '../services/woMetrics.js';
 import { ApiError } from '../errors.js';
 import { getFeed, addComment } from '../services/feed.js';
 import { getMessages, resolveConversationId, sendMessage } from '../services/messages.js';
@@ -37,7 +38,7 @@ import { filterSetSchema, sortSchema } from './views.js';
     rather than inventing a flat encoding keeps ONE representation of a filter
     set: the same object the saved view stores, the browser holds, and the
     compiler in woFields.ts reads. */
-const jsonParam = <S extends z.ZodTypeAny>(schema: S) =>
+export const jsonParam = <S extends z.ZodTypeAny>(schema: S) =>
   z.preprocess((v) => {
     if (typeof v !== 'string') return v;
     if (v.trim() === '') return undefined;
@@ -258,6 +259,17 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const taskId = await resolveTaskId(id);
     if (!taskId) throw notFound('Work order not found');
     return { items: await getFieldHistory(taskId, field, limit) };
+  });
+
+  // Per-field change timestamps — the audit trail as data. Unlike
+  // /field-history this carries no before/after trail (and no capability
+  // gate): just when each field first/last changed and what it became, for
+  // any page that needs the timestamps without displaying the history.
+  app.get('/work-orders/:id/field-times', async (req) => {
+    const { id } = parse(idParamsSchema, req.params);
+    const taskId = await resolveTaskId(id);
+    if (!taskId) throw notFound('Work order not found');
+    return { items: await getFieldTimes(taskId) };
   });
 
   // S2 · the merged updates+activity stream, newest-first.

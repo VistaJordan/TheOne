@@ -12,27 +12,17 @@ import { getDb, query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { resolveField, type ResolvedField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
+import { dispatchAutomations, type AutoCtx } from './automations.js';
 import { applyProfitFormula } from './money.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import type { ActivityEntry } from '@theone/shared';
 
 // ── Promoted-column mirrors ──────────────────────────────────────────────────
-// Seven bag keys are ALSO promoted task columns (seed §5 writes both). A write
-// through this service keeps the mirror in step, or the list page would keep
-// showing the old Comp/NTE after the detail page changed it. The activity log
-// records the FIELD change only — the mirror is derived, and two rows for one
-// edit would read as two edits.
-const MIRROR_BY_JSON_KEY: Record<string, { column: string; cast: 'text' | 'numeric' | 'date' }> = {
-  '21. Comp':            { column: 'billing_entity', cast: 'text' },
-  'Client':              { column: 'client',         cast: 'text' },
-  'Trade':               { column: 'trade',          cast: 'text' },
-  'City':                { column: 'city',           cast: 'text' },
-  'State':               { column: 'state',          cast: 'text' },
-  '16. Client NTE 🔴':   { column: 'nte',            cast: 'numeric' },
-  'Date-Time Received':  { column: 'date_received',  cast: 'date' },
-  '35. WO Description':  { column: 'description',    cast: 'text' },
-};
+// The map moved to woMirrors.ts (the automations engine reads it too). The
+// activity log records the FIELD change only — the mirror is derived, and two
+// rows for one edit would read as two edits.
+import { MIRROR_BY_JSON_KEY } from './woMirrors.js';
 
 /** Coerce an inline-editor value to what the bag should hold for this field's
     type. `null` means "clear the key". Throws on a value that would corrupt a
@@ -93,6 +83,7 @@ export async function updateWorkOrderFields(
   idOrWo: string,
   values: Record<string, unknown>,
   actorId: string,
+  auto?: AutoCtx,
 ) {
   const entries = Object.entries(values);
   if (entries.length === 0) throw new ApiError('BAD_REQUEST', 'Nothing to change');
@@ -157,6 +148,8 @@ export async function updateWorkOrderFields(
       );
       await logTaskChanges(tx, actorId, task.id, log);
     });
+    // Automations react after the commit, before the fresh detail is read.
+    await dispatchAutomations({ taskId: task.id, kind: 'changed', changes: log }, auto);
   }
 
   // The fresh detail, whether or not anything changed — saving the value a

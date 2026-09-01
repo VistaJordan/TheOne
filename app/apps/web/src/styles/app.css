@@ -247,63 +247,6 @@ input {
   font-size: 11px;
 }
 
-/* ── Sidebar scribble (SidebarScribble.tsx) ────────────────────────────────
-   The route at the rail's empty foot. Absolute, above the user card and
-   outside the nav's scroll area, so it costs no layout. Coloured like the
-   wordmark: the line in the accent, the stops as solid active-nav-item
-   bubbles (sky tint + certified ink) so they read as the logo's own. A
-   --side-bg circle under each bubble punches its gap in the line, because
-   night's sky tint is translucent. Gone from the collapsed rail and from
-   viewports short enough for the nav to reach it. */
-.side-scribble {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 58px;
-  height: 340px;
-  pointer-events: none;
-  color: var(--accent);
-}
-
-.side-scribble-line {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.35;
-}
-
-.side-scribble-punch {
-  fill: var(--side-bg);
-}
-
-.side-scribble-tint {
-  fill: var(--side-active-bg);
-}
-
-.side-scribble-icon {
-  overflow: visible;
-  fill: none;
-  stroke: var(--side-active-ink);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.9;
-}
-
-:root[data-theme='night'] .side-scribble-line { opacity: 0.4; }
-
-.shell.is-collapsed .side-scribble {
-  display: none;
-}
-
-@media (max-height: 700px) {
-  .side-scribble {
-    display: none;
-  }
-}
-
 /* ── Nav groups (Admin) ───────────────────────────────────────────────────── */
 .side-group {
   display: flex;
@@ -1055,6 +998,49 @@ input {
   padding: 22px 24px 40px;
 }
 
+/* ── Canvas backdrop ─ the brand's route, ghosted (CanvasBackdrop.tsx) ─────
+   The sign-in page's waves-with-stops, dialled down to a watermark and pinned
+   behind the canvas on every tab. It does not scroll with the page — the
+   content slides over it like weather over a map. The stop bubbles fill with
+   --bg at full opacity ON PURPOSE: that blanks the wave under the bubble (the
+   gap the sign-in route cuts with its --bg circle stroke) while the ring and
+   glyph stay translucent. */
+.canvas-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  color: var(--accent);
+}
+.canvas-backdrop-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  opacity: 0.07;
+}
+.canvas-backdrop-stop circle {
+  fill: var(--bg);
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-opacity: 0.16;
+}
+.canvas-backdrop-icon {
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.2;
+}
+/* Night's near-black ground swallows low alphas; nudge them the way the
+   sign-in route does (.2 → .26). */
+:root[data-theme='night'] .canvas-backdrop-line { opacity: 0.09; }
+:root[data-theme='night'] .canvas-backdrop-stop circle { stroke-opacity: 0.2; }
+:root[data-theme='night'] .canvas-backdrop-icon { opacity: 0.24; }
+
 /* ── The "O knob" scrollbar ────────────────────────────────────────────────
    Design option 1c, app-wide: the thumb is the logo's "O" — a surface-filled
    ring in the accent — travelling a hairline node line. EVERY native bar is
@@ -1396,6 +1382,129 @@ a.kpi.attn:focus-visible {
   a.kpi.attn { transition: border-color 0.15s ease, transform 0.15s ease; }
   a.kpi.attn:hover { transform: translateY(-1px); }
 }
+
+/* ── Main Dashboard · build-your-own cards (dash/DashCards.tsx) ───────────── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+.dash-cell { position: relative; display: flex; }
+.dash-cell > .dash-card { flex: 1; min-width: 0; }
+/* Inside the grid a count card fills its cell; the attn link's flow sizing
+   (min/max width, centered text) is for the Needs Attention row only. */
+.dash-cell a.kpi.attn.dash-card { max-width: none; min-width: 0; text-align: left; }
+
+.dash-tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+}
+.dash-cell:hover .dash-tools,
+.dash-cell:focus-within .dash-tools { opacity: 1; }
+.dash-tools button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.dash-tools button:hover { color: var(--ink); border-color: var(--border-strong); }
+@media (prefers-reduced-motion: no-preference) {
+  .dash-tools { transition: opacity 0.12s ease; }
+}
+
+.dash-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 92px;
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dash-add:hover,
+.dash-add:focus-visible { color: var(--accent-text); border-color: var(--accent); outline: none; }
+.dash-add-hint { font-size: 11px; font-weight: 400; color: var(--ink-3); max-width: 220px; text-align: center; }
+
+/* Breakdown card: label · bar · count rows. Length carries the magnitude and
+   the printed count carries the value, so the bar is a single accent hue —
+   color encodes nothing and needs no legend. Each row links to the list
+   pre-filtered to exactly the rows its bucket counted. */
+.bd-rows { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
+.bd-row {
+  display: grid;
+  grid-template-columns: minmax(60px, 42%) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+.bd-name { font-size: 11.5px; color: var(--ink-2); }
+a.bd-row:hover .bd-name,
+a.bd-row:focus-visible .bd-name { color: var(--accent-text); }
+a.bd-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+.bd-bar { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
+.bd-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); min-width: 2px; }
+.bd-n { font-size: 11.5px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bd-row.is-other .bd-name,
+.bd-row.is-other .bd-n { color: var(--ink-3); font-weight: 400; }
+
+.dash-card .kl svg { vertical-align: -1px; margin-right: 2px; }
+
+/* The card editor dialog */
+.dash-editor .seg { margin-bottom: 8px; }
+.dash-ed-hint { margin: 0 0 12px; font-size: 11.5px; color: var(--ink-3); }
+.dash-ed-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.dash-ed-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dash-ed-leg {
+  width: 36px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.dash-ed-word { font-size: 11.5px; color: var(--ink-3); }
+.dash-ed-op,
+.dash-ed-value,
+.dash-ed-label input {
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+.dash-ed-value { flex: 1; min-width: 130px; }
+.dash-ed-op,
+.dash-ed-value,
+.dash-ed-label input { outline: none; }
+.dash-ed-op:focus-visible,
+.dash-ed-value:focus-visible,
+.dash-ed-label input:focus-visible { border-color: var(--accent); }
+.dash-ed-note { margin: 0; font-size: 11px; color: var(--ink-3); }
+.dash-ed-label { display: flex; flex-direction: column; gap: 4px; }
+.dash-ed-label > span { font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
 
 /* ── Toolbar (segmented status-group filter) ──────────────────────────────── */
 .toolbar {

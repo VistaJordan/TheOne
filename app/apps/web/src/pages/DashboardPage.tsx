@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { WoFilterSet } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { KpiRow } from '../components/KpiRow';
+import { DashCards } from '../components/dash/DashCards';
 import { getKpis, listWorkOrders } from '../api/client';
 import { filterUrl } from '../lib/woView';
 import { VISIT_TYPE_FIELD_KEY } from '../lib/woFieldSections';
@@ -11,8 +12,9 @@ import { VISIT_TYPE_FIELD_KEY } from '../lib/woFieldSections';
 /** The at-a-glance page, in two views: Needs Attention (the default — the
     work-order hygiene problems worth fixing today, each card a link into the
     list pre-filtered to the offending rows) and the Main Dashboard (the four
-    KPI cards). The KPIs live here rather than on the Work Orders list — that
-    page is a working table, this one is the summary. */
+    KPI cards plus the user's own cards — components/dash/DashCards.tsx). The
+    KPIs live here rather than on the Work Orders list — that page is a
+    working table, this one is the summary. */
 
 type DashTab = 'attention' | 'main';
 
@@ -73,7 +75,12 @@ export function DashboardPage() {
           />
         </div>
       ) : (
-        <KpiRow kpis={kpiQuery.data} loading={kpiQuery.isLoading} />
+        <>
+          <KpiRow kpis={kpiQuery.data} loading={kpiQuery.isLoading} />
+          {/* The build-your-own half: cards over any catalogue field, plus
+              durations measured from the audit trail's change timestamps. */}
+          <DashCards />
+        </>
       )}
     </AppShell>
   );

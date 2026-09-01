@@ -20,12 +20,15 @@ import adminRoutes from './routes/admin.js';
 import workOrdersRoutes from './routes/workOrders.js';
 import statusesRoutes from './routes/statuses.js';
 import kpisRoutes from './routes/kpis.js';
+import metricsRoutes from './routes/metrics.js';
 import activityRoutes from './routes/activity.js';
 import principalsRoutes from './routes/principals.js';
 import quoteRoutes from './routes/quotes.js';
 import paymentRoutes from './routes/payments.js';
 import viewRoutes from './routes/views.js';
 import prefsRoutes from './routes/prefs.js';
+import automationsRoutes from './routes/automations.js';
+import { startAutomationScheduler } from './services/automations.js';
 
 async function main(): Promise<void> {
   const app = Fastify({ logger: true });
@@ -65,14 +68,20 @@ async function main(): Promise<void> {
   await app.register(workOrdersRoutes, { prefix: '/api' });
   await app.register(statusesRoutes, { prefix: '/api' });
   await app.register(kpisRoutes, { prefix: '/api' });
+  await app.register(metricsRoutes, { prefix: '/api' });
   await app.register(activityRoutes, { prefix: '/api' });
   await app.register(principalsRoutes, { prefix: '/api' });
   await app.register(quoteRoutes, { prefix: '/api' });
   await app.register(paymentRoutes, { prefix: '/api' });
   await app.register(viewRoutes, { prefix: '/api' });
   await app.register(prefsRoutes, { prefix: '/api' });
+  await app.register(automationsRoutes, { prefix: '/api' });
 
   await app.listen({ port: config.port, host: config.host });
+
+  // Delayed automations: sweep the DB-backed timer queue (catches anything
+  // that came due while the process was down, then polls every 30 s).
+  startAutomationScheduler();
 
   app.log.info(describeAuth());
   if (config.authMode === 'bypass') {
