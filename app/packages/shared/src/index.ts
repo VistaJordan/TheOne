@@ -41,7 +41,7 @@ export const STATUS_GROUP_BY_CLICKUP_TYPE = STATUS_GROUP_BY_TYPE;
 /**
  * The nine lifecycle phases rendered by the WO-detail phase bar. A status maps
  * to exactly one phase, or to `null` for off-pipeline terminal states
- * (`!! canceled/postponed`), which the bar renders as "no phase".
+ * (`Cancelled / Postponed`), which the bar renders as "no phase".
  */
 export type Phase =
   | 'Intake'
@@ -68,32 +68,30 @@ export const PHASE_ORDER: readonly Phase[] = [
 ];
 
 /**
- * Status name → phase. Keyed by the seeded `status.name` verbatim (the 19
- * pipeline statuses plus the archive `invoiced`). The API is the authority:
+ * Status name → phase. Keyed by the seeded `status.name` verbatim (the 17
+ * pipeline statuses plus the archive `Invoiced`). The API is the authority:
  * it stamps `phase` onto every `Status` it returns, so the web never needs to
  * import this map — it exists here so both sides agree on the vocabulary.
  */
 export const PHASE_BY_STATUS_NAME: Record<string, Phase | null> = {
   'Open': 'Intake',
-  'emergency': 'Intake',
-  'assessment scheduled': 'Assessment',
-  'assessment ongoing': 'Assessment',
-  'return trip needed': 'Assessment',
-  'waiting for quote': 'Quote',
-  'quote ready': 'Quote',
-  'approved': 'Approval',
-  '!! waiting for advice': 'Approval',
-  '!! waiting for approval': 'Approval',
-  'job scheduled': 'Scheduled',
-  'pm scheduled': 'Scheduled',
-  'job ongoing': 'In Progress',
-  'please order parts': 'Parts',
-  'waiting for parts': 'Parts',
-  '!! ready to invoice': 'Done',
-  'done/incurred': 'Done',
-  '<< invoiced not paid >>': 'Invoiced',
-  'invoiced': 'Invoiced',
-  '!! canceled/postponed': null,
+  'Assessment Sched': 'Assessment',
+  'On Site (Assessment)': 'Assessment',
+  'Return Trip Needed': 'Assessment',
+  'Waiting for Quote': 'Quote',
+  'Quote Ready': 'Quote',
+  'Waiting for Advice': 'Approval',
+  'Waiting for Approval': 'Approval',
+  'Job Sched': 'Scheduled',
+  'PM Sched': 'Scheduled',
+  'On Site (Job)': 'In Progress',
+  'Please Order Parts': 'Parts',
+  'Waiting for Parts': 'Parts',
+  'Ready to Invoice': 'Done',
+  'Done / Incurred': 'Done',
+  'Invoiced Not Paid': 'Invoiced',
+  'Invoiced': 'Invoiced',
+  'Cancelled / Postponed': null,
 };
 
 // ── Status ───────────────────────────────────────────────────────────────────

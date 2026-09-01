@@ -48,7 +48,7 @@
    S1 shipped no "warn" ramp (it only ever needed --danger). The detail page
    needs a third, NON-FATAL severity for aging / NTE-pressure. Both values are
    lifted from the product's OWN palette: the real ClickUp amber #f8ae00
-   (assessment ongoing / job ongoing) for night, and its already-certified day
+   (On Site (Assessment) / On Site (Job)) for night, and its already-certified day
    ink #7c5700 (SPRINT1-SPEC §6 pill override table) for day.
      night  #f8ae00 on #0c0d0e = 10.23:1     day  #7c5700 on #ffffff = 6.52:1
    --warn-solid is a NON-TEXT fill (meter bars, dots) only.                  */

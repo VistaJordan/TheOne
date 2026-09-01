@@ -1,7 +1,7 @@
 // KPI service (§5 GET /api/kpis) — all computed live from the DB.
 //  - active.count        : status_group IN ('open','active')
-//  - waitingApproval     : status name '!! waiting for approval' (+ oldest age)
-//  - readyToInvoice      : status name '!! ready to invoice'     (+ sum(nte))
+//  - waitingApproval     : status name 'Waiting for Approval' (+ oldest age)
+//  - readyToInvoice      : status name 'Ready to Invoice'     (+ sum(nte))
 //  - margin              : from invoiced WOs' fields; else fallback placeholder.
 
 import { query } from '../db.js';
@@ -21,14 +21,14 @@ export async function getKpis(): Promise<Kpis> {
     `SELECT COUNT(*)::int AS count,
             MAX(now()::date - t.date_received) AS oldest
        FROM task t JOIN status s ON s.id = t.status_id
-      WHERE t.deleted_at IS NULL AND s.name = '!! waiting for approval'`,
+      WHERE t.deleted_at IS NULL AND s.name = 'Waiting for Approval'`,
   );
 
   const readyRes = await query<{ count: number | string; queued: number | string | null }>(
     `SELECT COUNT(*)::int AS count,
             COALESCE(SUM(t.nte), 0)::float8 AS queued
        FROM task t JOIN status s ON s.id = t.status_id
-      WHERE t.deleted_at IS NULL AND s.name = '!! ready to invoice'`,
+      WHERE t.deleted_at IS NULL AND s.name = 'Ready to Invoice'`,
   );
 
   // Margin from invoiced WOs: sum(total_invoiced - cost) / sum(total_invoiced).

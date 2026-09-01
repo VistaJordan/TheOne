@@ -7,111 +7,99 @@
    "color": "#ff3f48"
   },
   {
-   "name": "emergency",
+   "name": "Assessment Sched",
    "type": "custom",
    "order": 1,
-   "color": "#ff3f48"
-  },
-  {
-   "name": "waiting for quote",
-   "type": "custom",
-   "order": 2,
-   "color": "#ff3f48"
-  },
-  {
-   "name": "approved",
-   "type": "custom",
-   "order": 3,
    "color": "#ee5e99"
   },
   {
-   "name": "return trip needed",
+   "name": "Job Sched",
    "type": "custom",
-   "order": 4,
-   "color": "#ff3f48"
+   "order": 2,
+   "color": "#ee5e99"
   },
   {
-   "name": "assessment ongoing",
+   "name": "PM Sched",
+   "type": "custom",
+   "order": 3,
+   "color": "#b660e0"
+  },
+  {
+   "name": "On Site (Assessment)",
+   "type": "custom",
+   "order": 4,
+   "color": "#f8ae00"
+  },
+  {
+   "name": "On Site (Job)",
    "type": "custom",
    "order": 5,
    "color": "#f8ae00"
   },
   {
-   "name": "job ongoing",
+   "name": "Return Trip Needed",
    "type": "custom",
    "order": 6,
-   "color": "#f8ae00"
+   "color": "#ff3f48"
   },
   {
-   "name": "assessment scheduled",
+   "name": "Waiting for Quote",
    "type": "custom",
    "order": 7,
-   "color": "#ee5e99"
+   "color": "#ff3f48"
   },
   {
-   "name": "job scheduled",
+   "name": "Quote Ready",
    "type": "custom",
    "order": 8,
-   "color": "#ee5e99"
-  },
-  {
-   "name": "pm scheduled",
-   "type": "custom",
-   "order": 9,
-   "color": "#b660e0"
-  },
-  {
-   "name": "quote ready",
-   "type": "custom",
-   "order": 10,
    "color": "#4466ff"
   },
   {
-   "name": "please order parts",
+   "name": "Waiting for Parts",
    "type": "custom",
-   "order": 11,
-   "color": "#b660e0"
-  },
-  {
-   "name": "waiting for parts",
-   "type": "custom",
-   "order": 12,
+   "order": 9,
    "color": "#aa8d80"
   },
   {
-   "name": "!! waiting for advice",
+   "name": "Please Order Parts",
    "type": "custom",
-   "order": 13,
+   "order": 10,
+   "color": "#b660e0"
+  },
+  {
+   "name": "Waiting for Advice",
+   "type": "custom",
+   "order": 11,
    "color": "#1090e0"
   },
   {
-   "name": "!! waiting for approval",
+   "name": "Waiting for Approval",
    "type": "custom",
-   "order": 14,
+   "order": 12,
    "color": "#0f9d9f"
   },
   {
-   "name": "<< invoiced not paid >>",
-   "type": "custom",
-   "order": 15,
-   "color": "#656f7d"
-  },
-  {
-   "name": "!! ready to invoice",
+   "name": "Ready to Invoice",
    "type": "done",
-   "order": 16,
+   "order": 13,
    "color": "#6bed5e"
   },
   {
-   "name": "done/incurred",
+   "name": "Done / Incurred",
    "type": "done",
-   "order": 17,
+   "order": 14,
    "color": "#64c6a2"
   },
   {
-   "name": "!! canceled/postponed",
+   "name": "Invoiced Not Paid",
+   "type": "custom",
+   "order": 16,
+   "color": "#656f7d"
+  },
+  {
+   "name": "Cancelled / Postponed",
    "type": "closed",
-   "order": 18,
+   "order": 17,
    "color": "#008844"
   }
  ],
@@ -958,7 +946,7 @@
   {
    "id": "WO-39403",
    "name": "WOT0452814",
-   "status": "<< invoiced not paid >>",
+   "status": "Invoiced Not Paid",
    "list": "Matt Hammond",
    "created": "2026-06-25",
    "due": "2026-06-25",
@@ -1014,7 +1002,7 @@
   {
    "id": "WO-38787",
    "name": "6296859",
-   "status": "<< invoiced not paid >>",
+   "status": "Invoiced Not Paid",
    "list": "Matt Hammond",
    "created": "2026-06-17",
    "due": "2026-06-18",
@@ -1067,7 +1055,7 @@
   {
    "id": "WO-38893",
    "name": "072200862",
-   "status": "<< invoiced not paid >>",
+   "status": "Invoiced Not Paid",
    "list": "Matt Hammond",
    "created": "2026-06-19",
    "due": "2026-06-19",
@@ -1119,7 +1107,7 @@
   {
    "id": "WO-41061",
    "name": "357699062",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-21",
    "due": "2026-07-21",
@@ -1169,7 +1157,7 @@
   {
    "id": "WO-41066",
    "name": "357712341",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-21",
    "due": "2026-07-22",
@@ -1217,7 +1205,7 @@
   {
    "id": "WO-40801",
    "name": "239166-01",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-17",
    "due": "2026-07-20",
@@ -1265,7 +1253,7 @@
   {
    "id": "WO-40656",
    "name": "239119-01",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-15",
    "due": "2026-07-16",
@@ -1313,7 +1301,7 @@
   {
    "id": "WO-37597",
    "name": "450000086",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "Matt Hammond",
    "created": "2026-05-26",
    "due": "2026-05-27",
@@ -1361,7 +1349,7 @@
   {
    "id": "WO-37579",
    "name": "351801398",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "Matt Hammond",
    "created": "2026-05-26",
    "due": "2026-05-27",
@@ -1409,7 +1397,7 @@
   {
    "id": "WO-41027",
    "name": "97100-01",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-21",
    "due": "2026-07-22",
@@ -1456,7 +1444,7 @@
   {
    "id": "WO-40782",
    "name": "356855539",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-17",
    "due": "2026-07-17",
@@ -1503,7 +1491,7 @@
   {
    "id": "WO-40356",
    "name": "106271-01",
-   "status": "!! approved",
+   "status": "Job Sched",
    "list": "AM Peter",
    "created": "2026-07-10",
    "due": "2026-07-14",
@@ -1550,7 +1538,7 @@
   {
    "id": "WO-36500",
    "name": "RFP430202620428",
-   "status": "!! ready to invoice",
+   "status": "Ready to Invoice",
    "list": "Matt Hammond",
    "created": "2026-04-30",
    "due": "2026-05-04",
@@ -1597,7 +1585,7 @@
   {
    "id": "WO-40970",
    "name": "239161-01",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-20",
    "due": "2026-07-21",
@@ -1643,7 +1631,7 @@
   {
    "id": "WO-40845",
    "name": "1-6605403792",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-18",
    "due": "2026-07-21",
@@ -1689,7 +1677,7 @@
   {
    "id": "WO-40611",
    "name": "2984757-01",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-14",
    "due": "2026-07-15",
@@ -1735,7 +1723,7 @@
   {
    "id": "WO-40374",
    "name": "239048-01",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-10",
    "due": "2026-07-10",
@@ -1781,7 +1769,7 @@
   {
    "id": "WO-40172",
    "name": "239004-01",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-07",
    "due": "2026-07-09",
@@ -1827,7 +1815,7 @@
   {
    "id": "WO-40818",
    "name": "254350-01",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-17",
    "due": "2026-07-20",
@@ -1872,7 +1860,7 @@
   {
    "id": "WO-40379",
    "name": "96817-01",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-10",
    "due": "2026-07-14",
@@ -1917,7 +1905,7 @@
   {
    "id": "WO-40127",
    "name": "238998-01",
-   "status": "!! waiting for approval",
+   "status": "Waiting for Approval",
    "list": "AM Peter",
    "created": "2026-07-07",
    "due": "2026-07-08",
@@ -1962,7 +1950,7 @@
   {
    "id": "WO-41037",
    "name": "6062-0047",
-   "status": "done/incurred",
+   "status": "Done / Incurred",
    "list": "AM Peter",
    "created": "2026-07-21",
    "due": "2026-07-21",
@@ -2006,7 +1994,7 @@
   {
    "id": "WO-40668",
    "name": "WOT0779478",
-   "status": "invoiced",
+   "status": "Invoiced",
    "list": "Invoiced",
    "created": "2026-07-15",
    "due": "2026-07-15",
@@ -2066,7 +2054,7 @@
   {
    "id": "WO-40947",
    "name": "SUN-8401-248",
-   "status": "invoiced",
+   "status": "Invoiced",
    "list": "Invoiced",
    "created": "2026-07-20",
    "due": "2026-07-22",
@@ -2125,7 +2113,7 @@
   {
    "id": "WO-40948",
    "name": "1084679-00000006",
-   "status": "invoiced",
+   "status": "Invoiced",
    "list": "Invoiced",
    "created": "2026-07-20",
    "due": "2026-07-24",
@@ -2183,7 +2171,7 @@
   {
    "id": "WO-40652",
    "name": "1085513-00000003",
-   "status": "invoiced",
+   "status": "Invoiced",
    "list": "Invoiced",
    "created": "2026-07-15",
    "due": "2026-07-15",
@@ -2241,7 +2229,7 @@
   {
    "id": "WO-41017",
    "name": "1084067-00000011",
-   "status": "invoiced",
+   "status": "Invoiced",
    "list": "Invoiced",
    "created": "2026-07-21",
    "due": "2026-07-21",
@@ -2298,7 +2286,7 @@
   {
    "id": "WO-40999",
    "name": "1082932-00000002",
-   "status": "invoiced",
+   "status": "Invoiced",
    "list": "Invoiced",
    "created": "2026-07-20",
    "due": "2026-07-21",

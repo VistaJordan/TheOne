@@ -48,11 +48,9 @@ function slug(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, '.');
 }
 
-/** Non-canonical sample status strings → canonical status name. */
-const STATUS_ALIAS: Record<string, string> = {
-  '!! approved': 'approved',
-  invoiced: 'invoiced', // the archive terminal status seeded below
-};
+/** Non-canonical sample status strings → canonical status name. Empty since
+    the S8 rename normalised the sample data; the seam stays for future data. */
+const STATUS_ALIAS: Record<string, string> = {};
 
 function firstLine(text: string | undefined, fallback: string): string {
   if (!text) return fallback;
@@ -332,6 +330,9 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: '17. Address',              label: 'Address',              type: 'location' },
   { key: '20. Last Update',          label: 'Last Update',          type: 'short_text' },
   { key: '21. Comp',                 label: 'Comp',                 type: 'dropdown', options: ['AF', 'SFM', 'BKR', 'TPM', 'EDS', 'RF'] },
+  // Beside Comp in the All-fields toolbar (never a list row); empty renders in
+  // the danger ramp and feeds the dashboard's "Visit Type not set" card.
+  { key: 'Visit Type',               label: 'Visit Type',           type: 'dropdown', options: ['Assessment', 'Job'] },
   { key: '22. FM',                   label: 'FM',                   type: 'dropdown', options: FM_OPTIONS },
   { key: '24. Sign-Off Link',        label: 'Sign-Off Link',        type: 'short_text' },
   { key: '25. IVR Link',             label: 'IVR Link',             type: 'short_text' },
@@ -589,15 +590,17 @@ async function main() {
     statusIdByName.set(s.name, id);
     statusGroupById.set(id, group);
   }
-  // Archive terminal status "invoiced" (20th) — §4.2 / §10 decision. Purple
-  // (the palette's #b660e0) rather than the spec's grey, per founder request.
+  // Archive terminal status "Invoiced" (18th, slotted between Done / Incurred
+  // and Invoiced Not Paid — the JSON skips order 15 for it) — §4.2 / §10
+  // decision. Purple (the palette's #b660e0) rather than the spec's grey, per
+  // founder request.
   {
     const id = await insertId(
       `INSERT INTO status (status_set_id, name, status_group, color, position, is_archive)
-       VALUES ($1, 'invoiced', 'done', '#b660e0', 19, true) RETURNING id`,
+       VALUES ($1, 'Invoiced', 'done', '#b660e0', 15, true) RETURNING id`,
       [statusSetId],
     );
-    statusIdByName.set('invoiced', id);
+    statusIdByName.set('Invoiced', id);
     statusGroupById.set(id, 'done');
   }
 
@@ -726,18 +729,18 @@ async function main() {
     if (v.name !== QUO_VENDOR_NAME) vendorIds.push(id);
   }
 
-  // ── 7. Payables (§4.8) — a handful for done/incurred|invoiced with cost>0 ──
+  // ── 7. Payables (§4.8) — a handful for Done / Incurred|Invoiced with cost>0 ──
   let payableCount = 0;
   let vi = 0;
   for (const t of data.taskSamples) {
     if (payableCount >= 6) break;
     const meta = taskMeta.get(t.id)!;
-    if (meta.statusName !== 'done/incurred' && meta.statusName !== 'invoiced') continue;
+    if (meta.statusName !== 'Done / Incurred' && meta.statusName !== 'Invoiced') continue;
     const cost = toNumber(meta.fields['34. Cost']);
     if (cost === null || cost <= 0) continue;
     const vendorId = vendorIds[vi % vendorIds.length];
     vi++;
-    const payStatus = meta.statusName === 'invoiced' ? 'paid' : 'approved';
+    const payStatus = meta.statusName === 'Invoiced' ? 'paid' : 'approved';
     await query(
       `INSERT INTO payable (task_id, vendor_id, amount, status)
        VALUES ($1, $2, $3, $4)`,
@@ -859,7 +862,7 @@ async function main() {
   console.log(`  containers        : ${2 + data.routing.length + listCount} (1 workspace, 1 space, ${data.routing.length} folders, ${listCount} lists)`);
   console.log(`  principals        : ${data.people.length + EXTRA_SUPER_ADMINS.length + 2} (${data.people.length + EXTRA_SUPER_ADMINS.length} human, 2 service)`);
   console.log(`  super admins      : ${superAdminCount} (${[...Object.keys(SUPER_ADMIN_BY_NAME), ...EXTRA_SUPER_ADMINS.map((a) => a.name)].join(', ')})`);
-  console.log(`  statuses          : ${data.statuses.length + 1} (19 pipeline + 1 archive)`);
+  console.log(`  statuses          : ${data.statuses.length + 1} (17 pipeline + 1 archive)`);
   console.log(`  field_defs        : ${fieldCount} (curated catalogue, S7)`);
   console.log(`  tasks             : ${taskCount}`);
   console.log(`  memberships       : ${membershipCount}`);

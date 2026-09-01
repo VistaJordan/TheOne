@@ -31,7 +31,7 @@ interface BulkBarProps {
  *
  * "Set status" is its own control rather than one entry in the edit menu
  * because it is the change that actually happens all day — an operator moving
- * eleven work orders to `job scheduled` should not have to open a form to do it.
+ * eleven work orders to `Job Sched` should not have to open a form to do it.
  */
 export function BulkBar({
   ids,

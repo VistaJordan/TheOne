@@ -121,7 +121,7 @@ function Row({ k, v, mono, tone }: { k: string; v: string; mono?: boolean; tone?
 // ══ WORKFLOWS — the status engine (rename / add / delete, plus phases) ═══════
 
 /** The two statuses the dashboard KPI tiles still match by NAME (kpis.ts). */
-const KPI_STATUS_NAMES = ['!! waiting for approval', '!! ready to invoice'];
+const KPI_STATUS_NAMES = ['Waiting for Approval', 'Ready to Invoice'];
 
 export function AdminWorkflowsPage() {
   const qc = useQueryClient();
@@ -201,8 +201,8 @@ export function AdminWorkflowsPage() {
         <Icon name="info" size={14} />
         <span>
           Changes apply everywhere immediately — menus, tabs, filters, pills. Two dashboard
-          tiles still match statuses by <b>name</b> (<i>!! waiting for approval</i>,{' '}
-          <i>!! ready to invoice</i>), so renaming those empties their tiles.
+          tiles still match statuses by <b>name</b> (<i>Waiting for Approval</i>,{' '}
+          <i>Ready to Invoice</i>), so renaming those empties their tiles.
         </span>
       </div>
 
