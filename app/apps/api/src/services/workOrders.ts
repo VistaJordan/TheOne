@@ -479,7 +479,7 @@ export async function changeStatus(
       before: { status_id: currentStatusId, status_name: currentStatusName },
       after: { status_id: statusId, status_name: newStatusName },
     };
-    await logTaskChanges(tx, actorId, task_id, [change]);
+    await logTaskChanges(tx, actorId, task_id, [change], auto?.by);
     fired = { taskId: task_id, change };
   });
 

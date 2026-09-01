@@ -11,8 +11,11 @@
 //   routed          field='home_list_id'  before/after = { list_id, list_name }
 //   field_updated   field=<column> | 'fields.<custom key>'
 //                                         before = { value }, after = { value, via? }
-// `via` names a non-interactive source ('import', 'bulk') so the trail can say
-// "via import" — the actor is still the person who ran it.
+// `via` names a non-interactive source ('import', 'bulk', 'automation') so the
+// trail can say "via import" — the actor is still the person who ran it. An
+// automation also stamps `automation_id`/`automation_name`, so the trail can
+// name the rule that fired and link to it; the name is copied rather than
+// looked up later so a renamed or deleted rule still reads truthfully.
 
 type Tx = { query: (sql: string, params?: unknown[]) => Promise<unknown> };
 
@@ -22,7 +25,21 @@ export interface TaskChange {
   after: unknown;
 }
 
-export type ChangeSource = 'import' | 'bulk';
+export type ChangeSource = 'import' | 'bulk' | AutomationSource;
+
+/** The rule that made this change, when an automation did. */
+export interface AutomationSource {
+  kind: 'automation';
+  id: string;
+  name: string;
+}
+
+/** The `via` stamp merged into `after`. Automations carry the rule with them. */
+function viaStamp(source: ChangeSource | undefined): Record<string, unknown> {
+  if (!source) return {};
+  if (typeof source === 'string') return { via: source };
+  return { via: 'automation', automation_id: source.id, automation_name: source.name };
+}
 
 export function actionFor(field: string): 'status_changed' | 'routed' | 'field_updated' {
   if (field === 'status_id') return 'status_changed';
@@ -43,13 +60,18 @@ export async function logTaskChanges(
   changes: TaskChange[],
   source?: ChangeSource,
 ): Promise<void> {
+  const stamp = viaStamp(source);
   for (const c of changes) {
     const action = actionFor(c.field);
     const before = action === 'field_updated' ? { value: c.before ?? null } : c.before;
+    // status_changed / routed carry their own object; the stamp rides along
+    // with it so those rows name the rule too, not only field edits.
     const after =
       action === 'field_updated'
-        ? { value: c.after ?? null, ...(source ? { via: source } : {}) }
-        : c.after;
+        ? { value: c.after ?? null, ...stamp }
+        : c.after && typeof c.after === 'object'
+          ? { ...(c.after as Record<string, unknown>), ...stamp }
+          : c.after;
     await tx.query(
       `INSERT INTO activity_log
          (actor_principal_id, entity_type, entity_id, action, field, before, after)

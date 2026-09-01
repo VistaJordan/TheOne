@@ -2050,6 +2050,14 @@ textarea {
   color: var(--ink-3);
 }
 
+/* The automation that made the change, linked to its rule in Admin. Keeps the
+   caps-label shape of the line it sits in; only the colour says it is a link. */
+.audit-via-link {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+.audit-via-link:hover { text-decoration: underline; }
+
 .audit-time {
   padding-top: 4px;
   font-size: 11.5px;

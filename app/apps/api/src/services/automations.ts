@@ -56,6 +56,10 @@ export interface AutoCtx {
   depth: number;
   /** Rule ids that already fired for this root event (per work order). */
   fired: Set<string>;
+  /** The rule whose actions are being applied, stamped onto the audit rows it
+      writes so the trail can name it. Set per rule, so a rule fired by another
+      rule's write is attributed to itself, not to the one that woke it. */
+  by?: AutomationSource;
 }
 
 // ── Mirror translation ───────────────────────────────────────────────────────
@@ -65,6 +69,7 @@ export interface AutoCtx {
 // runs.
 
 import { MIRROR_BY_JSON_KEY } from './woMirrors.js';
+import type { AutomationSource } from './woAudit.js';
 
 const CORE_BY_JSON_KEY = new Map(
   Object.entries(MIRROR_BY_JSON_KEY).map(([jsonKey, m]) => [jsonKey, m.column]),
@@ -488,7 +493,7 @@ async function setPriority(
   const { logTaskChanges } = await import('./woAudit.js');
   await withTransaction(async (tx) => {
     await tx.query(`UPDATE task SET priority = $1, updated_at = now() WHERE id = $2`, [value, taskId]);
-    await logTaskChanges(tx, actorId, taskId, [{ field: 'priority', before, after: value }]);
+    await logTaskChanges(tx, actorId, taskId, [{ field: 'priority', before, after: value }], ctx.by);
   });
   await dispatchAutomations(
     { taskId, kind: 'changed', changes: [{ field: 'priority', before, after: value }] },
@@ -550,7 +555,11 @@ export async function dispatchAutomations(event: AutomationEvent, ctx?: AutoCtx)
       if (!holds) continue;
 
       c.fired.add(rule.id);
-      const child: AutoCtx = { depth: c.depth + 1, fired: c.fired };
+      const child: AutoCtx = {
+        depth: c.depth + 1,
+        fired: c.fired,
+        by: { kind: 'automation', id: rule.id, name: rule.name },
+      };
       try {
         const applied = await applyActions(event.taskId, rule.actions, actorId, child);
         await recordRun(rule.id, event.taskId, woNumber, 'applied', { applied });
@@ -664,7 +673,11 @@ async function evaluateAndApply(
     const actorId = await automationActorId();
     // Its own writes must not re-fire or re-arm the same rule, hence the
     // pre-fired id.
-    const ctx: AutoCtx = { depth: 1, fired: new Set([rule.id]) };
+    const ctx: AutoCtx = {
+      depth: 1,
+      fired: new Set([rule.id]),
+      by: { kind: 'automation', id: rule.id, name: rule.name },
+    };
     const applied = await applyActions(taskId, rule.actions, actorId, ctx);
     await recordRun(rule.id, taskId, woNumber, 'applied', {
       applied,

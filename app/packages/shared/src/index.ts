@@ -228,6 +228,11 @@ export interface WoFilterRule {
   op: WoFilterOp;
   /** `between` takes a pair, `in`/`not_in` a list, the rest a scalar. */
   value?: string | number | boolean | Array<string | number> | null;
+  /** How this rule joins the one before it. Absent on every rule = the set's
+      `match` governs the whole list, which is what the saved-view filter UI
+      still writes. AND binds tighter than OR, so a run of ANDs is one group
+      and OR separates the groups — see compileFilters. Ignored on rule 0. */
+  join?: 'and' | 'or';
 }
 
 export interface WoFilterSet {

@@ -361,7 +361,12 @@ td.pcell .sw { justify-content: center; }
 .adm-subsec .btn { flex: none; }
 
 /* ── Automations (the rules engine) ────────────────────────────────────── */
-.auto-list { display: flex; flex-direction: column; gap: 12px; }
+/* The list shares the builder's 1040px cap, and both sit centred on the
+   canvas so the page keeps one column line whichever view is open. */
+.auto-list {
+  display: flex; flex-direction: column; gap: 12px;
+  width: 100%; max-width: 1040px; margin-inline: auto;
+}
 .auto-card .card-head { gap: 12px; align-items: center; }
 .auto-card.is-off .auto-title { opacity: .55; }
 .auto-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -370,6 +375,27 @@ td.pcell .sw { justify-content: center; }
 .auto-card .fedit { opacity: 1; } /* .fedit hides until hover elsewhere; here it is a primary control */
 .auto-runs { border-top: 1px solid var(--row-border); padding: 10px 16px 12px; }
 .auto-run-err { color: var(--danger); }
+
+/* Arrived from an audit entry that named this rule (?rule=<id>): the card is
+   scrolled to and held ringed for a couple of seconds, then fades back. The
+   ring is drawn on top of the card's own border, so nothing moves. */
+.auto-card.is-focused {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .auto-card.is-focused { transition: box-shadow 220ms ease; }
+  .auto-card { transition: box-shadow 600ms ease; }
+}
+
+/* The whole Automations page shares one column. Capped rather than page-wide:
+   three pickers stretched across a 1700px monitor put the field, the test and
+   the value so far apart they stop reading as one sentence, and the card ends
+   up mostly empty. The list and the empty state inherit the width from this
+   wrapper, so no card can end up a different size to the builder. */
+.auto-col {
+  width: 100%; max-width: 1040px; margin-inline: auto; min-width: 0;
+  display: flex; flex-direction: column; gap: 16px;
+}
 
 /* The builder: one block per step (When / If / Then), rows of pickers. */
 .auto-builder .auto-step {
@@ -381,7 +407,36 @@ td.pcell .sw { justify-content: center; }
   font-size: 10.5px; font-weight: 700; letter-spacing: .09em;
   text-transform: uppercase; color: var(--ink-3);
 }
-.auto-kicker .auto-match { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.auto-match-note {
+  text-transform: none; letter-spacing: normal; font-weight: 400; color: var(--ink-3);
+}
+/* A bracket around a run of ANDs. Rows joined by OR each sit in their own, and
+   a bracket of one is left undrawn — a box around a single row says nothing. */
+.auto-cgroup { align-self: stretch; display: flex; flex-direction: column; gap: 8px; }
+.auto-cgroup.is-multi {
+  position: relative; padding: 9px 10px 9px 12px;
+  background: var(--chip); border-radius: var(--radius);
+}
+.auto-cgroup.is-multi::before {
+  content: ''; position: absolute; left: 0; top: 6px; bottom: 6px;
+  width: 2px; border-radius: 2px; background: var(--border-strong);
+}
+/* The connector between two rows, and the control that sets it. */
+.auto-join { align-self: flex-start; display: inline-flex; margin-left: 2px; }
+.auto-join-btn {
+  position: relative; padding: 2px 9px; font: inherit; font-size: 10px;
+  font-weight: 700; letter-spacing: .08em; color: var(--ink-3);
+  background: var(--surface); border: 1px solid var(--border); cursor: pointer;
+}
+.auto-join-btn:first-of-type { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.auto-join-btn:last-of-type {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-left: -1px;
+}
+.auto-join-btn:hover { color: var(--ink); }
+/* z-index so the chosen side owns the shared 1px edge between the two. */
+.auto-join-btn.is-on {
+  z-index: 1; color: var(--tab-on-ink); background: var(--tab-on-bg); border-color: var(--accent);
+}
 .auto-row {
   display: grid; align-self: stretch; align-items: center; gap: 8px;
   grid-template-columns: minmax(150px, 1.1fr) minmax(120px, .9fr) minmax(150px, 1.1fr) 26px;
@@ -435,13 +490,6 @@ td.pcell .sw { justify-content: center; }
 .auto-tile small { font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
 .auto-chip { margin-left: 8px; vertical-align: 1px; }
 .auto-builder .auto-row-when { margin-top: 12px; }
-.auto-builder .auto-wait { margin-top: 12px; }
-
-.auto-wait { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.auto-wait-label { font-size: 12.5px; color: var(--ink-2); flex: none; }
-/* .fld is 100%-wide by default; here the inputs size to their content. */
-.auto-wait .fld { width: auto; flex: none; }
-.auto-wait-n.fld { width: 76px; }
 @media (max-width: 700px) {
   .auto-row, .auto-row-when, .auto-row-then { grid-template-columns: 1fr; }
 }
@@ -463,14 +511,17 @@ td.pcell .sw { justify-content: center; }
 }
 
 .fpick-pop {
-  position: absolute; z-index: 100; top: calc(100% + 5px); left: 0;
-  width: max(100%, 290px); max-height: 340px;
+  position: absolute; z-index: 100; top: calc(100% + 6px); left: 0;
+  width: max(100%, 300px); max-height: 340px;
   display: flex; flex-direction: column; overflow: hidden;
   padding: 8px; background: var(--surface);
   border: 1px solid var(--border-strong); border-radius: var(--radius);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, .28);
+  /* Two layers: a tight contact shadow so the edge reads against the card it
+     covers, and a wide soft one for the lift. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .18), 0 14px 38px rgba(0, 0, 0, .30);
 }
-.fpick-pop.is-up { top: auto; bottom: calc(100% + 5px); }
+/* Only when the space below cannot hold FPICK_MIN_H — see AdminSections.tsx. */
+.fpick-pop.is-up { top: auto; bottom: calc(100% + 6px); }
 .fpick-search {
   flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px;
   background: var(--field-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -482,31 +533,58 @@ td.pcell .sw { justify-content: center; }
 }
 .fpick-search:focus-within { border-color: var(--accent); }
 
-.fpick-list { min-height: 0; margin-top: 7px; overflow-y: auto; scrollbar-width: none; }
+/* The rule is what makes rows read as scrolling UNDER the search box instead of
+   floating loose beneath it. */
+.fpick-list {
+  min-height: 0; margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--row-border);
+  overflow-y: auto; scrollbar-width: none;
+}
+/* A short option list shows no search box, so there is nothing to rule off. */
+.fpick-list.is-bare { margin-top: 0; padding-top: 0; border-top: 0; }
+.fpick-list.is-bare:focus-visible { outline: none; }
+/* The status colour, carried through from the catalogue so the menu matches
+   the chips everywhere else. */
+.fpick-dot {
+  flex: none; width: 8px; height: 8px; border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .18) inset;
+}
 .fpick-list::-webkit-scrollbar { display: none; }
-/* Headings ride along with the scroll so the section stays named. */
+/* Headings ride along with the scroll so the section stays named — each one
+   clamped to its own .fpick-sect (see AdminSections.tsx) so they never stack. */
+.fpick-sect { position: relative; }
 .fpick-group {
-  position: sticky; top: 0; z-index: 1; padding: 6px 4px 4px;
+  position: sticky; top: 0; z-index: 2; padding: 8px 5px 4px;
   font-family: 'Barlow Condensed', sans-serif; font-size: 10.5px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2);
   background: var(--surface);
 }
+.fpick-sect:first-child .fpick-group { padding-top: 2px; }
 .fpick-item {
   display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 6px 9px; text-align: left; font: inherit; font-size: 12.5px;
+  padding: 7px 9px; text-align: left; font: inherit; font-size: 12.5px;
   color: var(--ink); background: none; border: 0;
   border-radius: var(--radius-sm); cursor: pointer;
 }
 .fpick-item.is-active { background: var(--chip); }
-.fpick-item.is-current { font-weight: 600; }
+/* Declared after .is-active on purpose: the chosen row keeps its tint while the
+   keyboard walks past it, so "what is set" never hides behind "what is hovered". */
+.fpick-item.is-current {
+  font-weight: 600; color: var(--tab-on-ink); background: var(--tab-on-bg);
+}
+.fpick-item.is-current .fpick-type { color: var(--tab-on-ink); opacity: .75; }
 .fpick-item.is-current .ic { color: var(--accent); }
 .fpick-item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fpick-any { color: var(--ink-2); font-style: italic; }
+/* "Any field" clears the choice rather than being one, so it is ruled off from
+   the groups — otherwise the first heading reads as its category. */
+.fpick-any + .fpick-sect .fpick-group { margin-top: 7px; border-top: 1px solid var(--row-border); }
 /* The type word is a hint, not a value — it yields the row's width first. */
 .fpick-type { flex: none; margin-left: auto; font-size: 11px; color: var(--ink-3); }
 .fpick-item .ic { flex: none; margin-left: 3px; }
-/* No type word on the "any" row — the tick still finishes at the right edge. */
-.fpick-any .ic { margin-left: auto; }
+/* No type word on the "any" row, nor on any option row — the tick still
+   finishes at the right edge rather than trailing the label. */
+.fpick-any .ic, .fpick-opt .ic { margin-left: auto; }
 .fpick-none { margin: 10px 4px; font-size: 12px; color: var(--ink-3); }
 
 /* ── Themes ────────────────────────────────────────────────────────────── */

@@ -1,10 +1,12 @@
 import { useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import type { ActivityEntry, WoFieldDescriptor } from '@theone/shared';
 import { getWoFields } from '../../api/client';
 import { DASH, feedTime, initials } from '../../lib/fields';
-import { formatValue, labelOf, nameOf, unwrap, viaLabel } from '../../lib/auditFormat';
+import { automationRef, formatValue, labelOf, nameOf, unwrap, viaLabel } from '../../lib/auditFormat';
 import { Icon } from '../Icon';
+import { useAuth } from '../../auth/AuthProvider';
 
 interface AuditTrailProps {
   entries: ActivityEntry[];
@@ -20,6 +22,8 @@ interface AuditTrailProps {
  * is the same data across every work order.
  */
 export function AuditTrail({ entries, loading, error }: AuditTrailProps) {
+  const { user } = useAuth();
+  const isAdmin = Boolean(user?.is_super_admin);
   const catalogue = useQuery({
     queryKey: ['wo-fields'],
     queryFn: getWoFields,
@@ -62,7 +66,7 @@ export function AuditTrail({ entries, loading, error }: AuditTrailProps) {
               {initials(who)}
             </span>
             <p className="audit-text">
-              <b>{who}</b> {describe(e, byKey)}
+              <b>{who}</b> {describe(e, byKey, isAdmin)}
             </p>
             <time className="audit-time" dateTime={e.created_at}>{feedTime(e.created_at)}</time>
           </li>
@@ -74,8 +78,8 @@ export function AuditTrail({ entries, loading, error }: AuditTrailProps) {
 
 // ── Sentences ────────────────────────────────────────────────────────────────
 
-function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): ReactNode {
-  const via = viaOf(e.after);
+function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>, isAdmin: boolean): ReactNode {
+  const via = viaOf(e.after, isAdmin);
 
   switch (e.action) {
     case 'status_changed':
@@ -165,7 +169,29 @@ function Val({ children }: { children: ReactNode }) {
   return <span className="audit-val">{children}</span>;
 }
 
-function viaOf(after: ActivityEntry['after']): ReactNode {
+/**
+ * "via import" / "via bulk", and for the automations engine the rule's own
+ * name, linked to it in Admin › Automations so a reader can see the trigger
+ * and conditions that produced the change. Only super admins get the link —
+ * everyone else meets the console's lock screen — but everyone sees the name.
+ */
+function viaOf(after: ActivityEntry['after'], isAdmin: boolean): ReactNode {
+  const auto = automationRef(after);
+  if (auto) {
+    if (!auto.name) return <span className="audit-via">via an automation</span>;
+    return (
+      <span className="audit-via">
+        via{' '}
+        {isAdmin && auto.id
+          ? (
+            <Link className="audit-via-link" to={`/admin/automations?rule=${encodeURIComponent(auto.id)}`}>
+              {auto.name}
+            </Link>
+          )
+          : auto.name}
+      </span>
+    );
+  }
   const via = viaLabel(after);
   return via ? <span className="audit-via">via {via}</span> : null;
 }

@@ -3,9 +3,10 @@
    read-only it says so and says why, rather than showing controls that would
    not take effect. */
 
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AdminShell, AdminEmpty } from './AdminShell';
 import { Icon } from '../../components/Icon';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -13,6 +14,7 @@ import { StatusCircle } from '../../components/StatusCircle';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useReorder } from '../../hooks/useReorder';
 import { defaultOp, isComplete, isMulti, isValueless, opLabel } from '../../lib/woView';
+import { withFieldSections } from '../../lib/woFieldSections';
 import {
   ApiRequestError,
   createAdminField,
@@ -43,6 +45,7 @@ import {
   type AutomationTriggerKind,
   type StatusGroupItem,
   type WoFieldDescriptor,
+  type WoFieldOption,
   type WoFilterOp,
   type WoFilterRule,
   type WoFieldType,
@@ -353,12 +356,21 @@ export function AdminAutomationsPage() {
   const q = useQuery({ queryKey: ['admin-automations'], queryFn: listAutomations, retry: 0 });
   const catQ = useQuery({ queryKey: ['wo-fields'], queryFn: getWoFields, retry: 0 });
   const items = q.data?.items ?? [];
-  const fields = catQ.data?.fields ?? [];
+  // Custom fields arrive from the API as one flat "Custom field" group. Regroup
+  // them under the All-fields tab's own sections so a field is looked for in
+  // the same place here as on the work order.
+  const fields = useMemo(() => withFieldSections(catQ.data?.fields ?? []), [catQ.data]);
   const opsByType = catQ.data?.ops_by_type;
 
   const [editing, setEditing] = useState<AutomationItem | 'new' | null>(null);
   const [confirm, setConfirm] = useState<AutomationItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // ?rule=<id> — where an audit-trail entry that names an automation lands.
+  // The card is scrolled to, flashed, and opened on its run log, so arriving
+  // here answers "which rule did that, and what else has it done".
+  const [params, setParams] = useSearchParams();
+  const focusId = params.get('rule');
 
   const done = () => {
     setError(null);
@@ -407,8 +419,12 @@ export function AdminAutomationsPage() {
         </button>
       }
     >
+      {/* One column for every part of the page — the builder, the empty state
+          and the list are the same width because they share it, rather than
+          each carrying a cap of its own to keep in step. */}
+      <div className="auto-col">
       {error && (
-        <div className="callout" style={{ marginBottom: 16 }} role="alert">
+        <div className="callout" role="alert">
           <Icon name="alert" size={14} />
           <span>{error}</span>
         </div>
@@ -442,12 +458,20 @@ export function AdminAutomationsPage() {
             key={a.id}
             a={a}
             fields={fields}
+            focused={a.id === focusId}
+            onFocused={() => {
+              // Consume the parameter once the card has taken it, so a reload
+              // (or a later toggle) does not re-flash.
+              params.delete('rule');
+              setParams(params, { replace: true });
+            }}
             busy={toggleM.isPending}
             onToggle={(enabled) => toggleM.mutate({ id: a.id, enabled })}
             onEdit={() => setEditing(a)}
             onDelete={() => setConfirm(a)}
           />
         ))}
+      </div>
       </div>
 
       {confirm && (
@@ -466,18 +490,37 @@ export function AdminAutomationsPage() {
   );
 }
 
-function AutomationCard({ a, fields, busy, onToggle, onEdit, onDelete }: {
+function AutomationCard({ a, fields, busy, focused, onFocused, onToggle, onEdit, onDelete }: {
   a: AutomationItem;
   fields: WoFieldDescriptor[];
   busy: boolean;
+  /** Arrived here from an audit entry naming this rule. */
+  focused?: boolean;
+  onFocused?: () => void;
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const [showRuns, setShowRuns] = useState(false);
+  // The highlight outlives the ?rule= parameter — that is cleared as soon as it
+  // is read, so the flash is held here instead and fades on its own.
+  const [flash, setFlash] = useState(false);
+  const ref = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!focused) return;
+    setShowRuns(true);
+    setFlash(true);
+    ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    onFocused?.();
+    const t = window.setTimeout(() => setFlash(false), 2400);
+    return () => window.clearTimeout(t);
+    // Only on arrival: onFocused clears the parameter, so this cannot loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused]);
 
   return (
-    <section className={`card auto-card${a.enabled ? '' : ' is-off'}`}>
+    <section ref={ref} className={`card auto-card${a.enabled ? '' : ' is-off'}${flash ? ' is-focused' : ''}`}>
       <div className="card-head">
         <label className="sw" title={a.enabled ? 'On — click to pause' : 'Paused — click to enable'}>
           <input
@@ -557,7 +600,18 @@ function RunLog({ id, fields }: { id: string; fields: WoFieldDescriptor[] }) {
               {items.map((r) => (
                 <tr key={r.id}>
                   <td className="faint">{new Date(r.created_at).toLocaleString()}</td>
-                  <td><span className="wo-num">{r.wo_number ?? '—'}</span></td>
+                  <td>
+                    {r.wo_number
+                      ? (
+                        <Link
+                          className="wo-num wo-num-link"
+                          to={`/work-orders/${encodeURIComponent(r.wo_number)}`}
+                        >
+                          {r.wo_number}
+                        </Link>
+                      )
+                      : <span className="wo-num">—</span>}
+                  </td>
                   <td className={
                     r.outcome === 'error' ? 'auto-run-err'
                       : r.outcome === 'skipped' ? 'faint'
@@ -579,11 +633,51 @@ function RunLog({ id, fields }: { id: string; fields: WoFieldDescriptor[] }) {
 // Trigger → Applies to → Conditions → Actions. Completed steps are clickable
 // in the stepper.
 
-interface RuleDraft { field: string; op: WoFilterOp; value: string }
-interface ActionDraft { field: string; value: string }
+interface RuleDraft { field: string; op: WoFilterOp; value: string; join: 'and' | 'or' }
 
-type DelayUnit = 'minutes' | 'hours' | 'days';
-const DELAY_UNIT_MINUTES: Record<DelayUnit, number> = { minutes: 1, hours: 60, days: 1440 };
+/** Drafts → the wire shape. Incomplete rows are dropped, so the joins that
+    survive are the survivors' own; the first one is ignored either way (it has
+    nothing before it). `match` is derived rather than stored: the joins are the
+    truth now, but anything reading only `match` still gets a fair answer. */
+function condsOf(rules: RuleDraft[]): { match: 'all' | 'any'; rules: WoFilterRule[] } {
+  const kept = rules
+    .filter((r) => r.field)
+    .map((r): WoFilterRule => {
+      const base = { field: r.field, op: r.op, join: r.join };
+      if (isValueless(r.op)) return base;
+      if (isMulti(r.op) || r.op === 'between') {
+        return { ...base, value: r.value.split(',').map((s) => s.trim()).filter(Boolean) };
+      }
+      return { ...base, value: r.value };
+    })
+    .filter(isComplete);
+  const allOr = kept.length > 1 && kept.slice(1).every((r) => r.join === 'or');
+  return { match: allOr ? 'any' : 'all', rules: kept };
+}
+
+/** The connector between two condition rows, and the control that sets it. */
+function JoinToggle({ value, onChange }: {
+  value: 'and' | 'or';
+  onChange: (v: 'and' | 'or') => void;
+}) {
+  return (
+    <span className="auto-join" role="radiogroup" aria-label="Join with the condition above">
+      {(['and', 'or'] as const).map((j) => (
+        <button
+          key={j}
+          type="button"
+          role="radio"
+          aria-checked={value === j}
+          className={`auto-join-btn${value === j ? ' is-on' : ''}`}
+          onClick={() => onChange(j)}
+        >
+          {j.toUpperCase()}
+        </button>
+      ))}
+    </span>
+  );
+}
+interface ActionDraft { field: string; value: string }
 
 const BUILDER_STEPS = ['Trigger', 'Applies to', 'Conditions', 'Actions'] as const;
 
@@ -602,22 +696,14 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
   const [trigField, setTrigField] = useState(initial?.trigger.field ?? '');
   const [trigTo, setTrigTo] = useState(initial?.trigger.to ?? '');
   const [trigToOp, setTrigToOp] = useState<string>(initial?.trigger.to_op ?? 'eq');
-  // The wait, split into amount + unit for editing; stored as whole minutes.
-  const initDelay = initial?.trigger.delay_minutes ?? 0;
-  const initUnit: DelayUnit =
-    initDelay > 0 && initDelay % 1440 === 0 ? 'days'
-      : initDelay > 0 && initDelay % 60 === 0 ? 'hours'
-        : 'minutes';
-  const [delayAmount, setDelayAmount] = useState(
-    initDelay > 0 ? String(initDelay / DELAY_UNIT_MINUTES[initUnit]) : '',
-  );
-  const [delayUnit, setDelayUnit] = useState<DelayUnit>(initUnit);
-  const [match, setMatch] = useState<'all' | 'any'>(initial?.conditions?.match ?? 'all');
   const [rules, setRules] = useState<RuleDraft[]>(
     (initial?.conditions?.rules ?? []).map((r) => ({
       field: r.field,
       op: r.op,
       value: Array.isArray(r.value) ? r.value.join(', ') : String(r.value ?? ''),
+      // Rules saved before mixed conditions existed carry no join of their own:
+      // the set-wide `match` was the connector, so it becomes every row's.
+      join: r.join ?? (initial?.conditions?.match === 'any' ? 'or' : 'and'),
     })),
   );
   const [actions, setActions] = useState<ActionDraft[]>(
@@ -637,15 +723,17 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
 
   const setRule = (i: number, patch: Partial<RuleDraft>) =>
     setRules(rules.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+  // Consecutive ANDs are one bracket; an OR starts the next. The same grouping
+  // the compiler applies (woFields.ts compileFilters), so the brackets drawn
+  // here are the brackets that run.
+  const condGroups: number[][] = [];
+  rules.forEach((r, i) => {
+    if (i === 0 || r.join === 'or') condGroups.push([i]);
+    else condGroups[condGroups.length - 1].push(i);
+  });
   const setAction = (i: number, patch: Partial<ActionDraft>) =>
     setActions(actions.map((a, j) => (j === i ? { ...a, ...patch } : a)));
-
-  const delayMinutes = (() => {
-    const n = Number(delayAmount);
-    return delayAmount.trim() !== '' && Number.isFinite(n) && n > 0
-      ? Math.round(n * DELAY_UNIT_MINUTES[delayUnit])
-      : 0;
-  })();
 
   // The numeric "to" comparison only means something on a money/number field.
   const trigFieldType = fields.find((f) => f.key === trigField)?.type;
@@ -663,25 +751,9 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
         to_op: hasTo && trigIsNumeric && trigToOp !== 'eq'
           ? (trigToOp as 'gt' | 'gte' | 'lt' | 'lte')
           : null,
-        delay_minutes: delayMinutes > 0 ? delayMinutes : null,
+        delay_minutes: null,
       },
-    conditions: {
-      match,
-      rules: rules
-        .filter((r) => r.field)
-        .map((r): WoFilterRule => {
-          if (isValueless(r.op)) return { field: r.field, op: r.op };
-          if (isMulti(r.op) || r.op === 'between') {
-            return {
-              field: r.field,
-              op: r.op,
-              value: r.value.split(',').map((s) => s.trim()).filter(Boolean),
-            };
-          }
-          return { field: r.field, op: r.op, value: r.value };
-        })
-        .filter(isComplete),
-    },
+    conditions: condsOf(rules),
       actions: actions
         .filter((a) => a.field)
         .map((a) => ({ field: a.field, value: a.value.trim() === '' ? null : a.value })),
@@ -776,29 +848,6 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
                 )}
               </div>
             )}
-
-            <div className="auto-wait">
-              <span className="auto-wait-label">then wait</span>
-              <input
-                className="fld fld-sm auto-wait-n" type="number" min={0} step={1}
-                value={delayAmount} placeholder="0"
-                aria-label="How long to wait before acting"
-                onChange={(e) => setDelayAmount(e.target.value)}
-              />
-              <select
-                className="fld fld-sm" value={delayUnit} aria-label="Wait unit"
-                onChange={(e) => setDelayUnit(e.target.value as DelayUnit)}
-              >
-                <option value="minutes">minutes</option>
-                <option value="hours">hours</option>
-                <option value="days">days</option>
-              </select>
-              <span className="faint">
-                {delayMinutes > 0
-                  ? 'before acting — conditions are checked when the wait ends, and another matching change restarts the clock'
-                  : 'leave at 0 to act immediately'}
-              </span>
-            </div>
           </>
         )}
 
@@ -819,21 +868,29 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
         <div className="auto-step">
           <span className="auto-kicker">
             If
-            {rules.length > 1 && (
-              <select
-                className="fld fld-sm auto-match" value={match} aria-label="Match"
-                onChange={(e) => setMatch(e.target.value as 'all' | 'any')}
-              >
-                <option value="all">all conditions match</option>
-                <option value="any">any condition matches</option>
-              </select>
+            {condGroups.length > 1 && (
+              <span className="auto-match-note">
+                AND binds before OR — the brackets show what runs
+              </span>
             )}
           </span>
-          {rules.map((r, i) => {
-            const f = byKey(r.field);
-            const allowed = f && opsByType ? opsByType[f.type] : [];
-            return (
-              <div className="auto-row" key={i}>
+          {condGroups.map((g, gi) => (
+            <Fragment key={`g${gi}`}>
+              {/* Between brackets the connector is always OR; flipping it to
+                  AND merges this row back into the bracket above. */}
+              {gi > 0 && <JoinToggle value="or" onChange={(v) => setRule(g[0], { join: v })} />}
+              {/* A bracket is only drawn where there is something to bracket. */}
+              <div className={`auto-cgroup${g.length > 1 ? ' is-multi' : ''}`}>
+                {g.map((i, j) => {
+                  const r = rules[i];
+                  const f = byKey(r.field);
+                  const allowed = f && opsByType ? opsByType[f.type] : [];
+                  return (
+                    <Fragment key={i}>
+                      {j > 0 && (
+                        <JoinToggle value="and" onChange={(v) => setRule(i, { join: v })} />
+                      )}
+                <div className="auto-row">
                 <FieldSelect
                   fields={fields}
                   value={r.field}
@@ -883,12 +940,16 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
                 >
                   <Icon name="x" size={14} />
                 </button>
+                </div>
+                    </Fragment>
+                  );
+                })}
               </div>
-            );
-          })}
+            </Fragment>
+          ))}
           <button
             type="button" className="linkbtn auto-add"
-            onClick={() => setRules([...rules, { field: '', op: 'eq', value: '' }])}
+            onClick={() => setRules([...rules, { field: '', op: 'eq', value: '', join: 'and' }])}
           >
             + Add a condition{rules.length === 0 ? ' (optional — no conditions means always)' : ''}
           </button>
@@ -944,6 +1005,21 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
             <button type="button" className="btn" onClick={() => setStep(step - 1)}>
               <Icon name="arrow-l" size={14} />
               Back
+            </button>
+          )}
+          {/* Editing an automation that already exists is usually a one-field
+              change on one step, so Save is offered throughout rather than at
+              the end of a walk back through all four. Secondary next to Next:
+              the wizard is still the path for a new rule, and every step's
+              state is in `build()` regardless of which one is on screen. */}
+          {initial && !last && (
+            <button
+              type="button" className="btn" disabled={!valid || busy}
+              title={!valid && actionsValid ? 'Give the automation a name first' : undefined}
+              onClick={() => onSave(build())}
+            >
+              <Icon name="check" size={14} />
+              {busy ? 'Saving…' : 'Save changes'}
             </button>
           )}
           {!last ? (
@@ -1007,6 +1083,49 @@ const ANY_KEY = '';
 
 /** Keep in step with .fpick-pop's max-height in styles/auth.css. */
 const FPICK_MAX_H = 340;
+/** Below this a downward panel shows barely two rows, so it flips instead. */
+const FPICK_MIN_H = 176;
+/** Breathing room kept between the panel and the viewport edge. */
+const FPICK_GAP = 12;
+
+/**
+ * Where a picker panel opens and how tall it may be.
+ *
+ * Downwards by default: flipping above the control hides the card the picker
+ * belongs to, which is worse than a shorter list. Height gives way first — the
+ * panel shrinks to the room available and scrolls — and only a genuinely
+ * cramped bottom edge flips it.
+ */
+function usePickerPlacement(open: boolean, ref: { current: HTMLElement | null }) {
+  const [place, setPlace] = useState<{ up: boolean; maxH: number }>({
+    up: false,
+    maxH: FPICK_MAX_H,
+  });
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      const r = ref.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom - FPICK_GAP;
+      const above = r.top - FPICK_GAP;
+      const up = below < FPICK_MIN_H && above > below;
+      setPlace({ up, maxH: Math.min(FPICK_MAX_H, Math.max(FPICK_MIN_H, up ? above : below)) });
+    };
+    measure();
+    // The builder scrolls inside the page, so the room below changes while the
+    // panel is open. Capture phase catches the ancestor's scroll, not just the
+    // window's.
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [open, ref]);
+
+  return place;
+}
 
 /** A searchable field picker. The native <select> it replaces opened a list as
     tall as the screen with no way to filter; this one filters as you type,
@@ -1021,10 +1140,10 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [active, setActive] = useState(0);
-  // Rows below the fold open upwards — a <select> flips on its own, this does not.
-  const [up, setUp] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  const place = usePickerPlacement(open, rootRef);
 
   const selected = fields.find((f) => f.key === value);
   const q = search.trim().toLowerCase();
@@ -1059,13 +1178,6 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  useLayoutEffect(() => {
-    if (!open) return;
-    const r = rootRef.current?.getBoundingClientRect();
-    if (!r) return;
-    setUp(window.innerHeight - r.bottom < FPICK_MAX_H && r.top > window.innerHeight - r.bottom);
-  }, [open]);
-
   // Keep the highlighted row in view while the arrows walk past the fold.
   useEffect(() => {
     listRef.current?.querySelector(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -1094,7 +1206,40 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
     }
   };
 
-  let lastGroup: string | null = null;
+  // Rows are gathered into sections so each heading sticks only while its OWN
+  // rows are on screen. As flat siblings every heading pins to top: 0 and the
+  // stuck ones pile up on each other, which is what garbles the text midway
+  // through a scroll. Consecutive runs, not a map keyed by name: a group that
+  // legitimately appears twice keeps both of its headings.
+  const sections: { group: string; rows: { f: WoFieldDescriptor; i: number }[] }[] = [];
+  rows.forEach((f, i) => {
+    if (!f) return;
+    const last = sections[sections.length - 1];
+    if (last && last.group === f.group) last.rows.push({ f, i });
+    else sections.push({ group: f.group, rows: [{ f, i }] });
+  });
+
+  /** One option row. Shared by the "any" row and the sectioned field rows. */
+  const renderRow = (f: WoFieldDescriptor | null, i: number) => {
+    const key = f ? f.key : ANY_KEY;
+    const current = key === value;
+    return (
+      <button
+        key={f ? f.key : '__any'}
+        type="button"
+        role="option"
+        aria-selected={current}
+        data-i={i}
+        className={`fpick-item${i === active ? ' is-active' : ''}${current ? ' is-current' : ''}${f ? '' : ' fpick-any'}`}
+        onMouseMove={() => setActive(i)}
+        onClick={() => choose(key)}
+      >
+        <span className="fpick-item-label">{f ? f.label : anyLabel}</span>
+        {f && <span className="fpick-type">{FIELD_TYPE_WORD[f.type]}</span>}
+        {current && <Icon name="check" size={12} />}
+      </button>
+    );
+  };
 
   return (
     <div className="fpick" ref={rootRef}>
@@ -1115,7 +1260,12 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
       </button>
 
       {open && (
-        <div className={`fpick-pop${up ? ' is-up' : ''}`} role="dialog" aria-label={ariaLabel}>
+        <div
+          className={`fpick-pop${place.up ? ' is-up' : ''}`}
+          style={{ maxHeight: place.maxH }}
+          role="dialog"
+          aria-label={ariaLabel}
+        >
           <div className="fpick-search">
             <Icon name="search" size={14} />
             <input
@@ -1134,28 +1284,178 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
             {rows.length === 0 && (
               <p className="fpick-none">No field matches “{search.trim()}”</p>
             )}
-            {rows.map((f, i) => {
-              const head = f && f.group !== lastGroup ? f.group : null;
-              if (f) lastGroup = f.group;
-              const key = f ? f.key : ANY_KEY;
-              const current = key === value;
+            {rows[0] === null && renderRow(null, 0)}
+            {sections.map((sec) => (
+              /* The wrapper is the point: sticky is clamped to its parent, so a
+                 heading releases when its own rows end instead of stacking. */
+              <div className="fpick-sect" key={`${sec.group}-${sec.rows[0].i}`}>
+                <div className="fpick-group">{sec.group}</div>
+                {sec.rows.map(({ f, i }) => renderRow(f, i))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Below this many options a search box is noise, so the picker omits it. */
+const OPTION_SEARCH_MIN = 8;
+
+/**
+ * A searchable picker for a field's own options — the value half of a condition
+ * or an action.
+ *
+ * The native <select> it replaces has two faults at the foot of a card: the
+ * browser decides where the list opens (upwards, over the form), and a
+ * twenty-status list cannot be typed into. Same panel, keys and placement as
+ * FieldSelect, over a flat list instead of grouped fields.
+ */
+function OptionSelect({ options, value, emptyLabel, ariaLabel, onChange }: {
+  options: WoFieldOption[];
+  value: string;
+  /** The leading '' choice — "pick a status…", "— clear the field —". */
+  emptyLabel: string;
+  ariaLabel: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [active, setActive] = useState(0);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const place = usePickerPlacement(open, rootRef);
+
+  const selected = options.find((o) => o.value === value);
+  const q = search.trim().toLowerCase();
+  const matches = options.filter((o) => !q || o.label.toLowerCase().includes(q));
+  // Searching means you want a value, so the empty row drops out of a filtered
+  // list — the same rule the field picker uses for "Any field".
+  const rows: (WoFieldOption | null)[] = q ? matches : [null, ...matches];
+  const searchable = options.length >= OPTION_SEARCH_MIN;
+
+  useEffect(() => {
+    if (open) return;
+    setSearch('');
+    setActive(0);
+  }, [open]);
+
+  // Open on the current choice so ↑/↓ start from where the value already is.
+  useEffect(() => {
+    if (!open) return;
+    const i = rows.findIndex((r) => (r ? r.value : '') === value);
+    setActive(i < 0 ? 0 : i);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the panel opens
+  }, [open]);
+
+  useEffect(() => setActive(0), [search]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  useEffect(() => {
+    listRef.current?.querySelector(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
+  const choose = (v: string) => {
+    onChange(v);
+    setOpen(false);
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === 'Escape' || e.key === 'Tab') { setOpen(false); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) { setOpen(true); return; }
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      setActive((i) => Math.min(rows.length - 1, Math.max(0, i + step)));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!open) { setOpen(true); return; }
+      const row = rows[active];
+      if (row || !q) choose(row ? row.value : '');
+    }
+  };
+
+  return (
+    <div className="fpick" ref={rootRef}>
+      <button
+        type="button"
+        className={`fld fld-sm fpick-btn${open ? ' is-open' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={onKey}
+      >
+        {selected?.color && <span className="fpick-dot" style={{ background: selected.color }} />}
+        <span className={`fpick-val${selected ? '' : ' is-empty'}`}>
+          {selected ? selected.label : emptyLabel}
+        </span>
+        <Icon name="chev-d" size={12} />
+      </button>
+
+      {open && (
+        <div
+          className={`fpick-pop${place.up ? ' is-up' : ''}`}
+          style={{ maxHeight: place.maxH }}
+          role="dialog"
+          aria-label={ariaLabel}
+        >
+          {searchable && (
+            <div className="fpick-search">
+              <Icon name="search" size={14} />
+              <input
+                type="text"
+                autoFocus
+                value={search}
+                placeholder="Search…"
+                aria-label={`Search — ${ariaLabel}`}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={onKey}
+              />
+            </div>
+          )}
+
+          {/* data-oknob-own: no app-wide scrollbar rail inside a popover. */}
+          <div
+            className={`fpick-list${searchable ? '' : ' is-bare'}`}
+            role="listbox"
+            ref={listRef}
+            data-oknob-own=""
+            onKeyDown={onKey}
+            tabIndex={searchable ? -1 : 0}
+          >
+            {rows.length === 0 && (
+              <p className="fpick-none">Nothing matches “{search.trim()}”</p>
+            )}
+            {rows.map((o, i) => {
+              const v = o ? o.value : '';
+              const current = v === value;
               return (
-                <Fragment key={f ? f.key : '__any'}>
-                  {head && <div className="fpick-group">{head}</div>}
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={current}
-                    data-i={i}
-                    className={`fpick-item${i === active ? ' is-active' : ''}${current ? ' is-current' : ''}${f ? '' : ' fpick-any'}`}
-                    onMouseMove={() => setActive(i)}
-                    onClick={() => choose(key)}
-                  >
-                    <span className="fpick-item-label">{f ? f.label : anyLabel}</span>
-                    {f && <span className="fpick-type">{FIELD_TYPE_WORD[f.type]}</span>}
-                    {current && <Icon name="check" size={12} />}
-                  </button>
-                </Fragment>
+                <button
+                  key={o ? o.value : '__empty'}
+                  type="button"
+                  role="option"
+                  aria-selected={current}
+                  data-i={i}
+                  className={`fpick-item fpick-opt${i === active ? ' is-active' : ''}${current ? ' is-current' : ''}${o ? '' : ' fpick-any'}`}
+                  onMouseMove={() => setActive(i)}
+                  onClick={() => choose(v)}
+                >
+                  {o?.color && <span className="fpick-dot" style={{ background: o.color }} />}
+                  <span className="fpick-item-label">{o ? o.label : emptyLabel}</span>
+                  {current && <Icon name="check" size={12} />}
+                </button>
               );
             })}
           </div>
@@ -1190,15 +1490,13 @@ function ValueControl({ desc, value, onChange, emptyLabel, placeholder, ariaLabe
   }
   if (desc?.type === 'select' && (desc.options?.length ?? 0) > 0) {
     return (
-      <select
-        className="fld fld-sm" value={value} aria-label={ariaLabel ?? desc.label}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="">{emptyLabel ?? 'pick a value…'}</option>
-        {desc.options!.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      <OptionSelect
+        options={desc.options!}
+        value={value}
+        emptyLabel={emptyLabel ?? 'pick a value…'}
+        ariaLabel={ariaLabel ?? desc.label}
+        onChange={onChange}
+      />
     );
   }
   const inputType =

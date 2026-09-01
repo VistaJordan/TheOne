@@ -20,11 +20,29 @@ export function nameOf(blob: unknown, key: string): string {
   return typeof v === 'string' && v.trim() ? v : DASH;
 }
 
-/** Where a change came from, when not typed by hand ('bulk' | 'import'). */
+/** Where a change came from, when not typed by hand ('bulk' | 'import' |
+    'automation'). For an automation prefer automationRef(), which also carries
+    the rule's name. */
 export function viaLabel(after: unknown): string | null {
   const via =
     after && typeof after === 'object' ? (after as Record<string, unknown>).via : undefined;
   return typeof via === 'string' ? via : null;
+}
+
+/** The automation that made the change, for rows written by the engine. The id
+    and name are copied into the row at write time, so a rule that was since
+    renamed or deleted still reads as it did then (the link may then find
+    nothing, which is honest). Rows written before this was stamped say only
+    'automation' — the name comes back null and the trail falls back to that. */
+export function automationRef(after: unknown): { id: string | null; name: string | null } | null {
+  if (viaLabel(after) !== 'automation') return null;
+  const a = after as Record<string, unknown>;
+  return {
+    id: typeof a.automation_id === 'string' ? a.automation_id : null,
+    name: typeof a.automation_name === 'string' && a.automation_name.trim()
+      ? a.automation_name
+      : null,
+  };
 }
 
 const CORE_LABELS: Record<string, string> = {

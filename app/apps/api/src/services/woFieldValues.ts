@@ -145,7 +145,7 @@ export async function updateWorkOrderFields(
         `UPDATE task SET ${sets.join(', ')}, updated_at = now() WHERE id = $${params.length}`,
         params,
       );
-      await logTaskChanges(tx, actorId, task.id, log);
+      await logTaskChanges(tx, actorId, task.id, log, auto?.by);
     });
     // Automations react after the commit, before the fresh detail is read.
     await dispatchAutomations({ taskId: task.id, kind: 'changed', changes: log }, auto);

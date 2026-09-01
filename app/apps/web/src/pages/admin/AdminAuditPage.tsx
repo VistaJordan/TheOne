@@ -18,7 +18,15 @@ import {
 } from '../../api/client';
 import { useDebounced } from '../../hooks/useDebounced';
 import { DASH, feedTime, initials } from '../../lib/fields';
-import { actionLabel, formatValue, labelOf, nameOf, unwrap, viaLabel } from '../../lib/auditFormat';
+import {
+  actionLabel,
+  automationRef,
+  formatValue,
+  labelOf,
+  nameOf,
+  unwrap,
+  viaLabel,
+} from '../../lib/auditFormat';
 
 const PAGE = 100;
 
@@ -194,7 +202,8 @@ export function AdminAuditPage() {
 
 function AuditRow({ e, byKey }: { e: AuditLogEntry; byKey: Map<string, WoFieldDescriptor> }) {
   const change = changeOf(e, byKey);
-  const via = viaLabel(e.after);
+  const auto = automationRef(e.after);
+  const via = auto ? null : viaLabel(e.after);
   return (
     <tr>
       <td className="audit-t">{feedTime(e.created_at)}</td>
@@ -209,6 +218,21 @@ function AuditRow({ e, byKey }: { e: AuditLogEntry; byKey: Map<string, WoFieldDe
       <td>
         <span className="audit-kind">{actionLabel(e.action)}</span>
         {via && <span className="audit-via">via {via}</span>}
+        {auto && (
+          <span className="audit-via">
+            via{' '}
+            {auto.id && auto.name
+              ? (
+                <Link
+                  className="audit-via-link"
+                  to={`/admin/automations?rule=${encodeURIComponent(auto.id)}`}
+                >
+                  {auto.name}
+                </Link>
+              )
+              : auto.name ?? 'an automation'}
+          </span>
+        )}
       </td>
       <td>
         {e.wo_number ? (
