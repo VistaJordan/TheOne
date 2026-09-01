@@ -446,6 +446,69 @@ td.pcell .sw { justify-content: center; }
   .auto-row, .auto-row-when, .auto-row-then { grid-template-columns: 1fr; }
 }
 
+/* ── Field picker (searchable replacement for the grouped <select>) ────── */
+.fpick { position: relative; min-width: 0; }
+.fpick-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; font: inherit; font-size: 12px; cursor: pointer;
+}
+.fpick-btn.is-open { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.fpick-btn .ic { flex: none; margin-left: auto; color: var(--ink-3); }
+.fpick-val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fpick-val.is-empty { color: var(--ink-3); }
+/* The group a chosen field came from, so "Status" and "City" read in context. */
+.fpick-btn-group {
+  flex: none; padding: 1px 6px; font-size: 10.5px; letter-spacing: .02em;
+  color: var(--ink-3); background: var(--chip); border-radius: var(--pill-radius);
+}
+
+.fpick-pop {
+  position: absolute; z-index: 100; top: calc(100% + 5px); left: 0;
+  width: max(100%, 290px); max-height: 340px;
+  display: flex; flex-direction: column; overflow: hidden;
+  padding: 8px; background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .28);
+}
+.fpick-pop.is-up { top: auto; bottom: calc(100% + 5px); }
+.fpick-search {
+  flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px;
+  background: var(--field-bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.fpick-search .ic { flex: none; color: var(--ink-3); }
+.fpick-search input {
+  width: 100%; padding: 7px 0; font: inherit; font-size: 12.5px;
+  color: var(--ink); background: none; border: 0; outline: none;
+}
+.fpick-search:focus-within { border-color: var(--accent); }
+
+.fpick-list { min-height: 0; margin-top: 7px; overflow-y: auto; scrollbar-width: none; }
+.fpick-list::-webkit-scrollbar { display: none; }
+/* Headings ride along with the scroll so the section stays named. */
+.fpick-group {
+  position: sticky; top: 0; z-index: 1; padding: 6px 4px 4px;
+  font-family: 'Barlow Condensed', sans-serif; font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3);
+  background: var(--surface);
+}
+.fpick-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 9px; text-align: left; font: inherit; font-size: 12.5px;
+  color: var(--ink); background: none; border: 0;
+  border-radius: var(--radius-sm); cursor: pointer;
+}
+.fpick-item.is-active { background: var(--chip); }
+.fpick-item.is-current { font-weight: 600; }
+.fpick-item.is-current .ic { color: var(--accent); }
+.fpick-item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fpick-any { color: var(--ink-2); font-style: italic; }
+/* The type word is a hint, not a value — it yields the row's width first. */
+.fpick-type { flex: none; margin-left: auto; font-size: 11px; color: var(--ink-3); }
+.fpick-item .ic { flex: none; margin-left: 3px; }
+/* No type word on the "any" row — the tick still finishes at the right edge. */
+.fpick-any .ic { margin-left: auto; }
+.fpick-none { margin: 10px 4px; font-size: 12px; color: var(--ink-3); }
+
 /* ── Themes ────────────────────────────────────────────────────────────── */
 .theme-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .theme-card {
