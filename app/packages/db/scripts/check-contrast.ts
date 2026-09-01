@@ -8,15 +8,15 @@ const hx = (h: string) => [0, 2, 4].map((i) => parseInt(h.replace('#', '').slice
 const mix = (c: number[], p: number, o: number[]) => c.map((x, i) => Math.round(x * p + o[i] * (1 - p)));
 const WHITE = [255, 255, 255], BLACK = [0, 0, 0];
 const NIGHT_SURFACE = hx('0c0d0e'), DAY_SURFACE = hx('ffffff');
-// 19 pipeline colors + archive invoiced #656f7d:
-const colors = ['ff3f48', 'ff3f48', 'ff3f48', 'ee5e99', 'ff3f48', 'f8ae00', 'f8ae00', 'ee5e99', 'ee5e99', 'b660e0', '4466ff', 'b660e0', 'aa8d80', '1090e0', '0f9d9f', '656f7d', '6bed5e', '64c6a2', '008844', '656f7d'];
+// 17 pipeline colors (seed order) + archive Invoiced #b660e0 in slot 15:
+const colors = ['ff3f48', 'ee5e99', 'ee5e99', 'b660e0', 'f8ae00', 'f8ae00', 'ff3f48', 'ff3f48', '4466ff', 'aa8d80', 'b660e0', '1090e0', '0f9d9f', '6bed5e', '64c6a2', 'b660e0', '656f7d', '008844'];
 const DAY_OVERRIDE: Record<string, string> = { 'f8ae00': '#7c5700', '6bed5e': '#36772f', '64c6a2': '#326351' };
 let fail = 0;
 for (const h of colors) {
   const c = hx(h);
-  const nightBg = mix(c, 0.14, NIGHT_SURFACE), nightTxt = mix(c, 0.78, WHITE);
-  const dayBg = mix(c, 0.14, DAY_SURFACE);
-  const dayTxt = DAY_OVERRIDE[h] ? hx(DAY_OVERRIDE[h]) : mix(c, 0.72, BLACK);
+  const nightBg = mix(c, 0.26, NIGHT_SURFACE), nightTxt = mix(c, 0.78, WHITE);
+  const dayBg = mix(c, 0.26, DAY_SURFACE);
+  const dayTxt = DAY_OVERRIDE[h] ? hx(DAY_OVERRIDE[h]) : mix(c, 0.66, BLACK);
   const rn = ratio(nightTxt, nightBg), rd = ratio(dayTxt, dayBg);
   if (rn < 4.5 || rd < 4.5) { fail++; console.log(`FAIL #${h}  night=${rn.toFixed(2)} day=${rd.toFixed(2)}`); }
 }

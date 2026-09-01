@@ -1,6 +1,6 @@
 import { useTheme } from './ThemeProvider';
 
-/** Sun/moon button in the (always-black) topbar; flips night/day, persists. */
+/** Sun/moon button in the topbar; flips night/day, persists. */
 export function ThemeToggle() {
   const { theme, toggle } = useTheme();
   const isNight = theme === 'night';

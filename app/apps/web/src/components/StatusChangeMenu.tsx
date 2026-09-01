@@ -1,20 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { StatusGroup, StatusRef } from '@theone/shared';
-import type { StatusWithPhase } from '../api/client';
+import type { StatusRef } from '@theone/shared';
 import { getStatuses, patchStatus } from '../api/client';
 import { useInvalidateObligations } from '../hooks/useObligations';
-import { StatusPill, pillStyle } from './StatusPill';
+import { bucketStatuses, useStatusGroups } from '../lib/statusGroups';
+import { StatusCircle } from './StatusCircle';
+import { StatusPill } from './StatusPill';
 
-const GROUP_ORDER: StatusGroup[] = ['open', 'active', 'pending', 'done', 'closed'];
-const GROUP_LABEL: Record<StatusGroup, string> = {
-  open: 'Open',
-  active: 'Active',
-  done: 'Done',
-  pending: 'Pending',
-  closed: 'Closed',
-};
+/** The panel stops ~5 cm (≈190 px at 96 dpi) above the bottom of the viewport. */
+const BOTTOM_GAP_PX = 190;
+const MIN_HEIGHT_PX = 240;
 
 interface StatusChangeMenuProps {
   woId: string;
@@ -28,9 +24,15 @@ interface StatusChangeMenuProps {
 /** Click the trigger → dropdown of all statuses (grouped) → PATCH → invalidate. */
 export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' }: StatusChangeMenuProps) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
   const invalidateObligations = useInvalidateObligations();
+
+  useEffect(() => {
+    if (!open) setSearch('');
+  }, [open]);
 
   const statusesQuery = useQuery({
     queryKey: ['statuses'],
@@ -38,6 +40,7 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
     staleTime: 5 * 60 * 1000,
     enabled: open,
   });
+  const { groups } = useStatusGroups(open);
 
   const mutation = useMutation({
     mutationFn: (status_id: string) => patchStatus(woId, status_id),
@@ -72,7 +75,28 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
     };
   }, [open]);
 
-  const grouped = groupStatuses(statusesQuery.data ?? []);
+  // Size the panel to reach BOTTOM_GAP_PX above the viewport's bottom edge —
+  // measured, because the trigger scrolls with the page.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const el = popRef.current;
+    if (!el) return;
+    const fit = () => {
+      const top = el.getBoundingClientRect().top;
+      el.style.maxHeight = `${Math.max(MIN_HEIGHT_PX, window.innerHeight - top - BOTTOM_GAP_PX)}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [open]);
+
+  // Fractions are computed on the FULL group first, so a filtered list keeps
+  // each status's own circle rather than re-spreading the wedges.
+  const q = search.trim().toLowerCase();
+  const buckets = bucketStatuses(statusesQuery.data ?? [], groups)
+    .map((b) => ({ ...b, statuses: b.statuses.filter((s) => !q || s.name.toLowerCase().includes(q)) }))
+    .filter((b) => b.statuses.length > 0);
+  const noMatch = q.length > 0 && buckets.length === 0 && !statusesQuery.isLoading;
 
   return (
     <div className="status-menu" ref={rootRef}>
@@ -86,15 +110,31 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
         />
       )}
       {open && (
-        <div className={`status-menu-pop${align === 'right' ? ' is-right' : ''}`} role="menu">
+        <div
+          className={`status-menu-pop${align === 'right' ? ' is-right' : ''}`}
+          role="menu"
+          ref={popRef}
+        >
+          <input
+            className="status-menu-search"
+            type="search"
+            placeholder="Search statuses…"
+            aria-label="Search statuses"
+            value={search}
+            autoFocus
+            onChange={(e) => setSearch(e.target.value)}
+          />
           {statusesQuery.isLoading && <div className="status-menu-note">Loading…</div>}
           {statusesQuery.isError && <div className="status-menu-note">Failed to load statuses</div>}
           {mutation.isError && <div className="status-menu-note err">Update failed</div>}
-          {GROUP_ORDER.map((g) =>
-            grouped[g].length ? (
-              <div className="status-menu-group" key={g}>
-                <div className="status-menu-group-label">{GROUP_LABEL[g]}</div>
-                {grouped[g].map((s) => {
+          {noMatch && <div className="status-menu-note">No status matches “{search.trim()}”</div>}
+          {/* data-oknob-own: keep the app-wide O-knob manager (lib/oknob.ts)
+              from mounting a rail here — this menu scrolls bare, no bar. */}
+          <div className="status-menu-scroll" data-oknob-own="">
+            {buckets.map((b) => (
+              <div className="status-menu-group" key={b.code}>
+                <div className="status-menu-group-label">{b.label}</div>
+                {b.statuses.map((s) => {
                   const active = s.id === current.id;
                   return (
                     <button
@@ -102,7 +142,6 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
                       role="menuitem"
                       key={s.id}
                       className={`status-menu-item${active ? ' is-current' : ''}`}
-                      style={pillStyle(s.color)}
                       disabled={mutation.isPending}
                       onClick={() => {
                         if (active) {
@@ -112,25 +151,17 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
                         mutation.mutate(s.id);
                       }}
                     >
-                      <span className="status-menu-dot" aria-hidden="true" />
+                      <StatusCircle group={b.code} color={s.color} fraction={s.fraction} size={16} />
                       <span className="status-menu-name">{s.name}</span>
                       {active && <span className="status-menu-check" aria-hidden="true">✓</span>}
                     </button>
                   );
                 })}
               </div>
-            ) : null,
-          )}
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
-}
-
-function groupStatuses(statuses: StatusWithPhase[]): Record<StatusGroup, StatusWithPhase[]> {
-  const out: Record<StatusGroup, StatusWithPhase[]> = { open: [], active: [], pending: [], done: [], closed: [] };
-  for (const s of [...statuses].sort((a, b) => a.position - b.position)) {
-    out[s.group].push(s);
-  }
-  return out;
 }

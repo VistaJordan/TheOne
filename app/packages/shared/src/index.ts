@@ -4,7 +4,25 @@
 // imports the DB runtime.
 
 // ── Status groups ────────────────────────────────────────────────────────────
-export type StatusGroup = 'open' | 'active' | 'pending' | 'done' | 'closed';
+// Since 0013 the phase groups live in the `status_group_def` table (admins can
+// add their own), so the type is an open string. The five every install starts
+// with are below; code that needs an order or a fallback uses that list.
+// 'pending' (between active and done) means we are blocked on a party outside
+// dispatch — client decision, supplier delivery — and no dispatcher effort
+// advances the WO.
+export type StatusGroup = string;
+
+export const DEFAULT_STATUS_GROUPS = ['open', 'active', 'pending', 'done', 'closed'] as const;
+
+/** One row of `status_group_def` — the vocabulary behind tabs and menus. */
+export interface StatusGroupDef {
+  code: string;
+  label: string;
+  position: number;
+  is_builtin: boolean;
+  /** Statuses currently in the group; present on the admin read. */
+  status_count?: number;
+}
 
 /**
  * Maps a ClickUp status `type` to our `status_group`.
@@ -26,7 +44,7 @@ export const STATUS_GROUP_BY_CLICKUP_TYPE = STATUS_GROUP_BY_TYPE;
 /**
  * The nine lifecycle phases rendered by the WO-detail phase bar. A status maps
  * to exactly one phase, or to `null` for off-pipeline terminal states
- * (`!! canceled/postponed`), which the bar renders as "no phase".
+ * (`Cancelled / Postponed`), which the bar renders as "no phase".
  */
 export type Phase =
   | 'Intake'
@@ -53,32 +71,32 @@ export const PHASE_ORDER: readonly Phase[] = [
 ];
 
 /**
- * Status name → phase. Keyed by the seeded `status.name` verbatim (the 19
- * pipeline statuses plus the archive `invoiced`). The API is the authority:
+ * Status name → phase. Keyed by the seeded `status.name` verbatim (the 17
+ * pipeline statuses plus the archive `Invoiced`). The API is the authority:
  * it stamps `phase` onto every `Status` it returns, so the web never needs to
  * import this map — it exists here so both sides agree on the vocabulary.
  */
 export const PHASE_BY_STATUS_NAME: Record<string, Phase | null> = {
   'Open': 'Intake',
-  'emergency': 'Intake',
-  'assessment scheduled': 'Assessment',
-  'assessment ongoing': 'Assessment',
-  'return trip needed': 'Assessment',
-  'waiting for quote': 'Quote',
-  'quote ready': 'Quote',
-  'approved': 'Approval',
-  '!! waiting for advice': 'Approval',
-  '!! waiting for approval': 'Approval',
-  'job scheduled': 'Scheduled',
-  'pm scheduled': 'Scheduled',
-  'job ongoing': 'In Progress',
-  'please order parts': 'Parts',
-  'waiting for parts': 'Parts',
-  '!! ready to invoice': 'Done',
-  'done/incurred': 'Done',
-  '<< invoiced not paid >>': 'Invoiced',
-  'invoiced': 'Invoiced',
-  '!! canceled/postponed': null,
+  'Emergency': 'Intake',
+  'Assessment Sched': 'Assessment',
+  'On Site (Assessment)': 'Assessment',
+  'Return Trip Needed': 'Assessment',
+  'Waiting for Quote': 'Quote',
+  'Quote Ready': 'Quote',
+  'Waiting for Advice': 'Approval',
+  'Waiting for Approval': 'Approval',
+  'Approved': 'Approval',
+  'Job Sched': 'Scheduled',
+  'PM Sched': 'Scheduled',
+  'On Site (Job)': 'In Progress',
+  'Please Order Parts': 'Parts',
+  'Waiting for Parts': 'Parts',
+  'Ready to Invoice': 'Done',
+  'Done / Incurred': 'Done',
+  'Invoiced Not Paid': 'Invoiced',
+  'Invoiced': 'Invoiced',
+  'Cancelled / Postponed': null,
 };
 
 // ── Status ───────────────────────────────────────────────────────────────────
@@ -120,6 +138,22 @@ export interface WorkOrderListItem {
   home_list: string | null;
   status: StatusRef;
   age_days: number | null;
+  /** ISO-8601 UTC. Selectable as a list column, hence on the list item. */
+  created_at?: string | null;
+  updated_at?: string | null;
+  /**
+   * Values for the CUSTOM columns the caller asked for, keyed `fields.<key>`.
+   * Projected on demand rather than shipping the whole `fields` bag: a row can
+   * carry ~100 custom keys and the table renders the two that were chosen.
+   */
+  custom?: Record<string, string | null>;
+}
+
+/** One bucket of a grouped list, counted across the whole filtered set (not
+    just the page). `key === null` is the "(empty)" bucket. */
+export interface WorkOrderGroupCount {
+  key: string | null;
+  count: number;
 }
 
 export interface WorkOrderListResponse {
@@ -127,6 +161,198 @@ export interface WorkOrderListResponse {
   total: number;
   limit: number;
   offset: number;
+  /** Present only when the request asked for a `group_by`. */
+  groups?: WorkOrderGroupCount[];
+}
+
+// ── The list's field catalogue, filters and saved views (S6) ─────────────────
+// The list is no longer a fixed table: columns, filters, grouping and sorting
+// are chosen by the user, so the set of addressable FIELDS is data the API
+// serves rather than a union the client can hardcode. See
+// apps/api/src/services/woFields.ts — that module is the authority; these types
+// are the wire shapes both sides agree on.
+
+export type WoFieldType = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'boolean';
+
+export interface WoFieldOption {
+  value: string;
+  label: string;
+  color?: string;
+}
+
+export interface WoFieldDescriptor {
+  /** A promoted column (`client`) or a custom field (`fields.<key>`). */
+  key: string;
+  label: string;
+  type: WoFieldType;
+  /** Section heading in the field picker. */
+  group: string;
+  options?: WoFieldOption[];
+  custom?: boolean;
+  sortable: boolean;
+  numeric?: boolean;
+  /** Custom fields only: the raw field_def type ('short_text', 'long_text',
+      'phone', 'url', 'formula', 'attachment', …). `type` says how a value
+      COMPARES; the subtype says how it should be EDITED. */
+  subtype?: string;
+}
+
+export interface WoFieldCatalogue {
+  fields: WoFieldDescriptor[];
+  default_columns: string[];
+}
+
+/** Every test the filter builder offers. `is_set`/`is_not_set` take no value;
+    `between` takes two; `in`/`not_in` take a list. */
+export type WoFilterOp =
+  | 'is_set'
+  | 'is_not_set'
+  | 'eq'
+  | 'neq'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'between'
+  | 'in'
+  | 'not_in'
+  | 'is_true'
+  | 'is_false';
+
+export interface WoFilterRule {
+  field: string;
+  op: WoFilterOp;
+  /** `between` takes a pair, `in`/`not_in` a list, the rest a scalar. */
+  value?: string | number | boolean | Array<string | number> | null;
+}
+
+export interface WoFilterSet {
+  match: 'all' | 'any';
+  rules: WoFilterRule[];
+}
+
+export interface WoSort {
+  field: string;
+  dir: 'asc' | 'desc';
+}
+
+/** A saved arrangement of the list: columns, filters, grouping, sorting. */
+export interface SavedView {
+  id: string;
+  name: string;
+  entity: string;
+  columns: string[];
+  filters: WoFilterSet;
+  group_by: string | null;
+  sort: WoSort | null;
+  is_shared: boolean;
+  position: number;
+  owner: { id: string; name: string };
+  /** False when the view is somebody else's shared view — read-only here. */
+  can_edit: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Result of a bulk edit: how many rows actually changed, and what was asked. */
+export interface BulkUpdateResult {
+  requested: number;
+  updated: number;
+  /** WO numbers the patch could not be applied to, with the reason. */
+  skipped: { wo_number: string; reason: string }[];
+}
+
+/** One row's outcome from an import run (including a dry run). */
+export interface ImportRowResult {
+  row: number;
+  wo_number: string | null;
+  action: 'create' | 'update' | 'skip' | 'error';
+  message?: string;
+}
+
+export interface ImportResult {
+  dry_run: boolean;
+  created: number;
+  updated: number;
+  skipped: number;
+  errored: number;
+  rows: ImportRowResult[];
+}
+
+// ── Automations (the rules engine) ───────────────────────────────────────────
+// A rule is When (trigger) → If (conditions) → Then (actions). Conditions reuse
+// the list's WoFilterSet verbatim — one filter vocabulary for the whole app.
+// The server (apps/api/src/services/automations.ts) is the authority; these are
+// the wire shapes.
+
+/** 'manual' = the rule never fires on its own — operators enroll selected
+    records from the list (the HubSpot "trigger manually" model). */
+export type AutomationTriggerKind = 'created' | 'changed' | 'manual';
+
+/** What kind of record a rule runs over. Work orders are live; the other three
+    are reserved for their modules (Vendors/Invoicing are placeholders today). */
+export type AutomationEntity = 'work_order' | 'vendor' | 'quote' | 'invoice';
+
+export interface AutomationTrigger {
+  kind: AutomationTriggerKind;
+  /** Catalogue key ('status', 'priority', 'fields.<key>', …) for 'changed'.
+      Null/absent = ANY field changing fires the rule. */
+  field?: string | null;
+  /** Only fire when the field changed TO this value (string-compared,
+      case-insensitive). Null/absent = any new value. */
+  to?: string | null;
+  /** Wait this long after the trigger before acting (0/absent = immediately).
+      Conditions are evaluated AFTER the wait — "if the quote is still not
+      ready" — and another matching change restarts the clock. Timers are DB
+      rows (automation_pending), so they survive an API restart. */
+  delay_minutes?: number | null;
+}
+
+/** One write the rule performs: set a field to a value (null clears it). */
+export interface AutomationAction {
+  field: string;
+  value: string | null;
+}
+
+export interface AutomationItem {
+  id: string;
+  name: string;
+  enabled: boolean;
+  entity: AutomationEntity;
+  trigger: AutomationTrigger;
+  conditions: WoFilterSet;
+  actions: AutomationAction[];
+  run_count: number;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** What POST /automations/:id/enroll did with the selection. */
+export interface AutomationEnrollResult {
+  requested: number;
+  /** Conditions held; actions were applied now. */
+  applied: number;
+  /** The rule has a wait — a timer was armed instead of acting now. */
+  queued: number;
+  /** Conditions did not match, or the work order was gone. */
+  skipped: number;
+  errored: number;
+}
+
+export interface AutomationRunItem {
+  id: number;
+  automation_id: string;
+  wo_number: string | null;
+  /** 'skipped' = a delayed rule came due but its conditions no longer held. */
+  outcome: 'applied' | 'error' | 'skipped';
+  /** What happened, for the run log: fields written, or the error message. */
+  detail: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export interface Membership {
@@ -333,6 +559,68 @@ export const QUOTE_EDIT_ROLES: readonly string[] = ['senior_om', 'atl', 'tl', 'a
 
 /** Approve, reject and send a quote to the client CMMS — ATL and above (§1). */
 export const QUOTE_APPROVE_ROLES: readonly string[] = ['atl', 'tl', 'am', 'admin'];
+
+// ── S5 · the role vocabulary ────────────────────────────────────────────────
+// Still free text on `principal.role`, but no longer arbitrary: the admin
+// console validates every assignment against this list, so a typo cannot
+// silently create a role that passes no gate and is impossible to debug.
+// A future migration turns this into a table; the codes are the contract.
+
+export const ROLE_CODES: readonly string[] = [
+  'om',
+  'senior_om',
+  'atl',
+  'tl',
+  'am',
+  'admin',
+];
+
+export const ROLE_LABELS: Record<string, string> = {
+  om: 'OM (dispatcher)',
+  senior_om: 'Senior OM',
+  atl: 'ATL',
+  tl: 'Team Lead',
+  am: 'Account Manager',
+  admin: 'Admin',
+  service: 'Service account',
+};
+
+// ── S5 · authentication ─────────────────────────────────────────────────────
+
+export type AuthMode = 'entra' | 'bypass';
+export type UserStatus = 'invited' | 'active' | 'disabled';
+
+/** A principal as the session endpoints describe it. */
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  is_super_admin: boolean;
+  status: UserStatus;
+}
+
+export interface MeResponse {
+  authenticated: boolean;
+  auth_mode: AuthMode;
+  user: SessionUser | null;
+  acting_as: SessionUser | null;
+  is_impersonating?: boolean;
+}
+
+/** One row in Admin › Users. */
+export interface AdminUserItem extends SessionUser {
+  initials: string | null;
+  last_login_at: string | null;
+  has_signed_in: boolean;
+  active_sessions: number;
+}
+
+export interface RoleInfo {
+  code: string;
+  label: string;
+  capabilities: { quote_edit: boolean; quote_approve: boolean };
+}
 
 // ── Principals (S4.1 · "Viewing as" switcher) ────────────────────────────────
 // GET /api/principals is the pre-auth read surface behind the role switcher:
@@ -693,10 +981,84 @@ export interface Kpis {
   margin: { pct: number; avgProfit: number; placeholder: boolean };
 }
 
+// ── Metrics ──────────────────────────────────────────────────────────────────
+// The audit trail (activity_log) timestamps every field change; these shapes
+// turn those timestamps into dashboard numbers. A MetricEvent names a moment in
+// a work order's life: "<field> changed", or "<field> became <value>".
+
+export interface MetricEvent {
+  /** A catalogue key: 'status', 'priority', 'fields.<custom key>', … */
+  field: string;
+  /** Match only changes TO this value (compared case-insensitively). Absent or
+      null = any change of the field counts. */
+  value?: string | null;
+}
+
+export interface MetricBreakdownBucket {
+  /** Null = the rows where the field is blank. */
+  value: string | null;
+  count: number;
+}
+
+/** GET /api/metrics/breakdown — the filtered set bucketed by one field. */
+export interface MetricBreakdown {
+  field: string;
+  label: string;
+  /** Every matching work order — items may cover only the top buckets. */
+  total: number;
+  /** Rows in buckets beyond the returned items. */
+  other: number;
+  items: MetricBreakdownBucket[];
+}
+
+export interface MetricDurationSample {
+  id: string;
+  wo_number: string;
+  title: string | null;
+  from_at: string;
+  to_at: string;
+  seconds: number;
+}
+
+/** GET /api/metrics/duration — for each work order, the FIRST time the `from`
+    event was recorded and the NEXT `to` event after it; aggregated. Only
+    changes made through the app are measured: imported/seeded values carry no
+    change history. */
+export interface MetricDuration {
+  from: MetricEvent;
+  to: MetricEvent;
+  /** Work orders where both events were found, in order. */
+  count: number;
+  avg_seconds: number | null;
+  median_seconds: number | null;
+  min_seconds: number | null;
+  max_seconds: number | null;
+  /** Newest pairs first, capped — the drill-in list. */
+  samples: MetricDurationSample[];
+}
+
+/** GET /api/work-orders/:id/field-times — one row per field ever changed on
+    the work order. The timestamps exist whether or not any page displays the
+    field; this is how another screen asks "when did X last change". */
+export interface WoFieldTime {
+  /** Catalogue key ('status', 'home_list', 'priority', 'fields.<key>', …). */
+  field: string;
+  changes: number;
+  first_at: string;
+  last_at: string;
+  /** Display value the field last changed to (status name, list name, value). */
+  last_value: string | null;
+}
+
 // ── Error shape ──────────────────────────────────────────────────────────────
 // FORBIDDEN (403) is the S4 role gate: the actor exists, the route exists, but
 // principal.role is below the bar (QUOTE_EDIT_ROLES / QUOTE_APPROVE_ROLES).
-export type ApiErrorCode = 'BAD_REQUEST' | 'FORBIDDEN' | 'NOT_FOUND' | 'INTERNAL';
+export type ApiErrorCode =
+  | 'BAD_REQUEST'
+  | 'UNAUTHORIZED'   // 401 — no valid session (S5 auth)
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'INTERNAL';
 
 export interface ApiError {
   error: {

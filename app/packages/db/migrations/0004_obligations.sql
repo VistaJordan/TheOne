@@ -147,22 +147,22 @@ INSERT INTO obligation_rule (rule_key, name, description, params) VALUES
   ('emergency_ack',
    'Emergency not acknowledged',
    'An emergency work order with nobody on it. Two hours, around the clock — emergencies do not keep business hours.',
-   '{"clock":"24x7","hours":2,"statuses":["Open","emergency"],"priorities":["high"],"critical_on_breach":true,"chip_label":"Ack emergency"}'::jsonb),
+   '{"clock":"24x7","hours":2,"statuses":["Open","Emergency"],"priorities":["high"],"critical_on_breach":true,"chip_label":"Ack emergency"}'::jsonb),
 
   ('quote_owed',
    'Quote owed to the client',
-   'The work order has been sitting in "waiting for quote" for two business days and no quote exists.',
-   '{"clock":"business","business_days":2,"statuses":["waiting for quote"],"chip_label":"Quote owed"}'::jsonb),
+   'The work order has been sitting in "Waiting for Quote" for two business days and no quote exists.',
+   '{"clock":"business","business_days":2,"statuses":["Waiting for Quote"],"chip_label":"Quote owed"}'::jsonb),
 
   ('schedule_owed',
    'ETA owed after approval',
    'The client approved and nobody has scheduled it. Two business hours to put a date on it.',
-   '{"clock":"business","business_hours":2,"statuses":["approved","!! approved"],"chip_label":"ETA owed"}'::jsonb),
+   '{"clock":"business","business_hours":2,"statuses":["Approved"],"chip_label":"ETA owed"}'::jsonb),
 
   ('approval_followup',
    'Client approval needs chasing',
    'Five business days waiting on the client with no client-visible update from us. Chase it.',
-   '{"clock":"business","business_days":5,"statuses":["!! waiting for approval"],"chip_label":"Chase client"}'::jsonb),
+   '{"clock":"business","business_days":5,"statuses":["Waiting for Approval"],"chip_label":"Chase client"}'::jsonb),
 
   ('quote_review_owed',
    'Quote waiting on review',

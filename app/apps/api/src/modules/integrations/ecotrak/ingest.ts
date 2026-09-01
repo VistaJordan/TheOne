@@ -15,7 +15,7 @@ import { classifyInbound } from './statusMap.js';
 import { resolveTrade } from './tradeMap.js';
 import { planFolder, stateAbbr } from './sharepointPath.js';
 
-export const MAP_VERSION = '2026-08-19.1';
+export const MAP_VERSION = '2026-09-01.1';
 
 /**
  * Ecotrak status -> the internal status NAME on the seeded pipeline.
@@ -24,28 +24,27 @@ export const MAP_VERSION = '2026-08-19.1';
  * a rejected proposal is BFI (Bill For Incurred), so the job completes and
  * bills the incurred work.
  */
+// Targets the S8 operational vocabulary (the 20-status pipeline in the seed —
+// the legacy lowercase/'!!'-prefixed names were renamed wholesale; existing
+// databases converge via migration 0020). Lookup is lowercased on both sides.
 const INTERNAL_STATUS_BY_ECOTRAK: Record<string, string> = {
   PENDING_SP_ACCEPTANCE: 'Open',
   UNASSIGNED: 'Open',
   ACCEPTED: 'Open',
   REASSIGN: 'Open',
-  SUBMITTING_PROPOSAL: 'waiting for quote',
-  PROPOSAL_SUBMITTED: 'quote ready',
-  // NOT "!! approved" — field-mapping.md in the legacy sync lists it with the
-  // "!!" prefix, but the seeded pipeline has a bare "approved". The prefix is
-  // real on "!! waiting for advice/approval", "!! ready to invoice" and
-  // "!! canceled/postponed" only. Verified against the status table.
-  PROPOSAL_APPROVED: 'approved',
-  PROPOSAL_REJECTED: 'done/incurred',
-  ENROUTE: 'job ongoing',
-  ARRIVED: 'job ongoing',
-  PENDING_PARTS: 'waiting for parts',
-  RETURN_VISIT_REQUIRED: 'return trip needed',
-  NOT_FIXED: '!! waiting for advice',
-  SOFT_COMPLETED: 'done/incurred',
-  COMPLETED: '!! ready to invoice',
-  REJECTED: '!! canceled/postponed',
-  CANCELLED: '!! canceled/postponed',
+  SUBMITTING_PROPOSAL: 'Waiting for Quote',
+  PROPOSAL_SUBMITTED: 'Quote Ready',
+  PROPOSAL_APPROVED: 'Approved',
+  PROPOSAL_REJECTED: 'Done / Incurred',
+  ENROUTE: 'On Site (Job)',
+  ARRIVED: 'On Site (Job)',
+  PENDING_PARTS: 'Waiting for Parts',
+  RETURN_VISIT_REQUIRED: 'Return Trip Needed',
+  NOT_FIXED: 'Waiting for Advice',
+  SOFT_COMPLETED: 'Done / Incurred',
+  COMPLETED: 'Ready to Invoice',
+  REJECTED: 'Cancelled / Postponed',
+  CANCELLED: 'Cancelled / Postponed',
 };
 
 /** L1-L8 and P2-P7 both occur in production; only L1 drives urgency today.

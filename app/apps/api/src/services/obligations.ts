@@ -433,7 +433,7 @@ async function collectDesired(
     const rule = active('emergency_ack');
     if (rule) {
       const rows = await statusCandidates(
-        rule.params.statuses ?? ['Open', 'emergency'],
+        rule.params.statuses ?? ['Open', 'Emergency'],
         rule.params.priorities ?? ['high'],
         `NOT EXISTS (SELECT 1 FROM activity_log a
                       WHERE a.entity_type = 'task' AND a.entity_id = b.task_id
@@ -455,7 +455,7 @@ async function collectDesired(
     const rule = active('quote_owed');
     if (rule) {
       const rows = await statusCandidates(
-        rule.params.statuses ?? ['waiting for quote'],
+        rule.params.statuses ?? ['Waiting for Quote'],
         undefined,
         `NOT EXISTS (SELECT 1 FROM quote q WHERE q.task_id = b.task_id)`,
         scopeTaskId,
@@ -473,7 +473,7 @@ async function collectDesired(
     const rule = active('schedule_owed');
     if (rule) {
       const rows = await statusCandidates(
-        rule.params.statuses ?? ['approved'],
+        rule.params.statuses ?? ['Approved'],
         undefined,
         '',
         scopeTaskId,
@@ -491,7 +491,7 @@ async function collectDesired(
     const rule = active('approval_followup');
     if (rule) {
       const rows = await statusCandidates(
-        rule.params.statuses ?? ['!! waiting for approval'],
+        rule.params.statuses ?? ['Waiting for Approval'],
         undefined,
         `NOT EXISTS (SELECT 1 FROM comment c
                       WHERE c.task_id = b.task_id AND c.client_visible

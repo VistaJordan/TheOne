@@ -21,13 +21,47 @@ import type {
   PaymentRequestsResponse as SharedPaymentRequestsResponse,
   // S4.1 — the "Viewing as" list.
   PrincipalsResponse as SharedPrincipalsResponse,
+  // S6 — the list's field catalogue, filter vocabulary and saved views.
+  WoFieldCatalogue,
+  WoFilterSet,
+  WoFilterOp,
+  WoFieldType,
+  WoSort,
+  SavedView,
+  BulkUpdateResult,
+  ImportResult,
+  // Automations — the admin rules engine.
+  AutomationItem,
+  AutomationRunItem,
+  AutomationTrigger,
+  AutomationAction,
+  AutomationEntity,
+  AutomationEnrollResult,
+  // Metrics — dashboard cards over any field, durations between two events.
+  MetricEvent,
+  MetricBreakdown,
+  MetricDuration,
+  WoFieldTime,
 } from '@theone/shared';
-import { readActorId, writeActorId } from '../lib/actor';
 
 // ── S2 contract types ────────────────────────────────────────────────────────
 // The Sprint-2 shapes are authored in @theone/shared alongside the S1 ones.
 // Re-exported here so page/component modules keep importing from one place.
 export type {
+  // S6 — the work-order list's own contract.
+  WoFieldCatalogue,
+  WoFieldDescriptor,
+  WoFieldOption,
+  WoFieldType,
+  WoFilterOp,
+  WoFilterRule,
+  WoFilterSet,
+  WoSort,
+  WorkOrderGroupCount,
+  SavedView,
+  BulkUpdateResult,
+  ImportResult,
+  ImportRowResult,
   Phase,
   Money,
   FeedActor,
@@ -37,6 +71,19 @@ export type {
   FeedItem,
   FeedResponse,
   CommentCreatedResponse,
+  AutomationItem,
+  AutomationRunItem,
+  AutomationTrigger,
+  AutomationTriggerKind,
+  AutomationAction,
+  AutomationEntity,
+  AutomationEnrollResult,
+  MetricEvent,
+  MetricBreakdown,
+  MetricBreakdownBucket,
+  MetricDuration,
+  MetricDurationSample,
+  WoFieldTime,
 } from '@theone/shared';
 
 /** GET /api/statuses items — `phase` is part of Status as of S2. */
@@ -137,13 +184,20 @@ export interface MessageCreatedResponse { item: ThreadMessage }
 export const MESSAGE_MAX = 1600;
 
 export interface ListWorkOrdersParams {
-  status_group?: 'open' | 'active' | 'pending' | 'done' | 'closed';
+  /** A status_group_def code (admins can add groups beyond the built-in five). */
+  status_group?: string;
   status_id?: string;
   search?: string;
+  /** S6 — serialised as JSON in the query string (see `toQuery`). */
+  filters?: WoFilterSet;
+  sort?: WoSort | null;
+  group_by?: string | null;
+  /** Which columns to project. Custom fields arrive on `item.custom`. */
+  columns?: string[];
   limit?: number;
   offset?: number;
-  /** S5 — `breach` orders worst-obligation first (tier desc, then most overdue). */
-  sort?: 'breach';
+  /** S5 — orders worst-obligation first (tier desc, then most overdue), ahead of `sort`. */
+  breach?: boolean;
 }
 
 // ── S4 contract types — Quotes & payment requests ────────────────────────────
@@ -301,28 +355,30 @@ export class ApiRequestError extends Error {
   }
 }
 
-/** S4.1 — acting principal override.
-    There is no auth until S5: the API resolves the actor from an optional
-    `X-Actor-Id` header and falls back to the seeded Jordan Brown (admin). The
-    topbar "Viewing as" switcher pins one (lib/actor.ts owns the storage), and
-    the header rides on EVERY request below — not just the mutations — because
-    the quote GET's `permissions{}` is resolved per-actor server-side. Absent a
-    pin the header is never sent and the API's default applies.
+/** S5 — the acting principal now comes from the SESSION, not from the client.
+    Until S5 this module read a pinned uuid out of localStorage and sent it as an
+    `X-Actor-Id` header, which meant the browser chose its own identity and
+    therefore its own permissions. The API ignores that header entirely now.
 
-    `?actor_id=<uuid>` stays as the deep-link escape hatch, but it is applied
-    ONCE at module load (empty value = clear the pin): re-reading it per request
-    would let a stale URL fight the switcher on every fetch. */
-if (typeof window !== 'undefined') {
-  const fromUrl = new URLSearchParams(window.location.search).get('actor_id');
-  if (fromUrl !== null) writeActorId(fromUrl === '' ? null : fromUrl);
+    `credentials: 'same-origin'` is what carries the httpOnly session cookie.
+    Vite proxies /api to :5174 so every call here is same-origin by construction.
+
+    A 401 anywhere means the session is gone — expired, signed out in another
+    tab, or the account was disabled. Rather than let each caller invent its own
+    recovery, one listener bounces to the sign-in screen. */
+
+type UnauthorizedHandler = () => void;
+let onUnauthorized: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(fn: UnauthorizedHandler | null): void {
+  onUnauthorized = fn;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const actor = readActorId();
   const res = await fetch(`/api${path}`, {
+    credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
-      ...(actor ? { 'X-Actor-Id': actor } : {}),
       ...(init?.headers ?? {}),
     },
     ...init,
@@ -334,6 +390,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* non-JSON error body */
     }
+    // /auth/me answers "not signed in" with a 200, so a 401 here is always a
+    // session that died mid-flight — never the initial unauthenticated load.
+    if (res.status === 401 && onUnauthorized) onUnauthorized();
     throw new ApiRequestError(res.status, body, `Request failed: ${res.status}`);
   }
   if (res.status === 204) return undefined as T;
@@ -344,7 +403,17 @@ function toQuery(params: object): string {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null || v === '') continue;
-    q.set(k, String(v));
+    // S6 — `filters`/`sort` travel as JSON and `columns` as a comma list, so
+    // the browser and the API exchange exactly the object a saved view stores
+    // rather than a flattened encoding each side has to reassemble.
+    if (Array.isArray(v)) {
+      if (v.length === 0) continue;
+      q.set(k, v.join(','));
+    } else if (typeof v === 'object') {
+      q.set(k, JSON.stringify(v));
+    } else {
+      q.set(k, String(v));
+    }
   }
   const s = q.toString();
   return s ? `?${s}` : '';
@@ -410,8 +479,49 @@ export function getStatuses(): Promise<StatusWithPhase[]> {
   return request<StatusWithPhase[]>(`/statuses`);
 }
 
+/** One phase group (status_group_def row) — tabs, menus and admin read these. */
+export interface StatusGroupItem {
+  code: string;
+  label: string;
+  position: number;
+  is_builtin: boolean;
+  status_count?: number;
+}
+
+export function getStatusGroups(): Promise<{ items: StatusGroupItem[] }> {
+  return request(`/status-groups`);
+}
+
 export function getKpis(): Promise<Kpis> {
   return request<Kpis>(`/kpis`);
+}
+
+// ── Metrics — the dashboard's card engine ────────────────────────────────────
+
+/** GET /api/metrics/breakdown — the filtered set bucketed by any field. */
+export function getMetricBreakdown(
+  field: string,
+  filters?: WoFilterSet,
+  limit?: number,
+): Promise<MetricBreakdown> {
+  return request<MetricBreakdown>(`/metrics/breakdown${toQuery({ field, filters, limit })}`);
+}
+
+/** GET /api/metrics/duration — per work order, first `from` event → next `to`
+    event after it, aggregated. Events are field changes the audit trail
+    recorded, so only in-app edits are measured. */
+export function getMetricDuration(
+  from: MetricEvent,
+  to: MetricEvent,
+  filters?: WoFilterSet,
+): Promise<MetricDuration> {
+  return request<MetricDuration>(`/metrics/duration${toQuery({ from, to, filters })}`);
+}
+
+/** GET /api/work-orders/:id/field-times — when each field first/last changed
+    on one work order, whether or not any page displays it. */
+export function getWorkOrderFieldTimes(idOrNumber: string): Promise<{ items: WoFieldTime[] }> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/field-times`);
 }
 
 export function getActivity(wo: string): Promise<ActivityEntry[]> {
@@ -772,4 +882,521 @@ export function snoozeObligation(id: string, input: SnoozeInput): Promise<{ obli
     `/obligations/${encodeURIComponent(id)}/snooze`,
     { method: 'POST', body: JSON.stringify(input) },
   );
+}
+
+// ── S5 · authentication ──────────────────────────────────────────────────────
+
+export type AuthMode = 'entra' | 'bypass';
+export type UserStatus = 'invited' | 'active' | 'disabled';
+
+/** The resolved capability set (/auth/me `can`, S7). Mirrors what the server
+    enforces — the UI gates on these instead of guessing from the role code. */
+export interface SessionCapabilities {
+  edit_quote: boolean;
+  approve_quote: boolean;
+  manage_users: boolean;
+  edit_wo_fields: boolean;
+  view_field_history: boolean;
+}
+
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  is_super_admin: boolean;
+  status: UserStatus;
+  /** Optional so the dev-candidates list (which has no session) still types. */
+  can?: SessionCapabilities;
+}
+
+export interface MeResponse {
+  authenticated: boolean;
+  auth_mode: AuthMode;
+  user: SessionUser | null;
+  acting_as: SessionUser | null;
+  is_impersonating?: boolean;
+}
+
+// ── Admin › Audit log ────────────────────────────────────────────────────────
+
+export interface AuditLogEntry extends ActivityEntry {
+  entity_type: string;
+  wo_number: string | null;
+  ext_name: string | null;
+}
+
+export interface AuditLogFilters {
+  from?: string;
+  to?: string;
+  actor_id?: string;
+  action?: string;
+  field?: string;
+  q?: string;
+}
+
+export interface AuditLogPage {
+  items: AuditLogEntry[];
+  total: number;
+  facets: { actors: { id: string; name: string }[]; actions: string[] };
+}
+
+export function listAuditLog(
+  params: AuditLogFilters & { limit?: number; offset?: number },
+): Promise<AuditLogPage> {
+  return request<AuditLogPage>(`/admin/audit${toQuery(params)}`);
+}
+
+/** A real link, so the browser handles the download (same pattern as the
+    work-order export). */
+export function auditLogExportUrl(params: AuditLogFilters): string {
+  return `/api/admin/audit/export${toQuery(params)}`;
+}
+
+export interface AdminUserItem extends SessionUser {
+  role_label: string | null;
+  initials: string | null;
+  last_login_at: string | null;
+  has_signed_in: boolean;
+}
+
+export interface RoleRecord {
+  id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  is_system: boolean;
+  can_edit_quote: boolean;
+  can_approve_quote: boolean;
+  can_manage_users: boolean;
+  can_edit_wo_fields: boolean;
+  can_view_field_history: boolean;
+  position: number;
+  user_count: number;
+}
+
+/** Who am I. Answers `authenticated: false` with a 200 — never throws on a
+    signed-out visitor, because that is the normal first load, not an error. */
+export function getMe(): Promise<MeResponse> {
+  return request<MeResponse>('/auth/me');
+}
+
+/** Full-page navigation, not fetch: the Entra round trip is a browser redirect. */
+export function startMicrosoftSignIn(redirectTo = '/'): void {
+  window.location.href = `/api/auth/login?redirect_to=${encodeURIComponent(redirectTo)}`;
+}
+
+export function listDevCandidates(): Promise<{ items: SessionUser[] }> {
+  return request<{ items: SessionUser[] }>('/auth/dev-candidates');
+}
+
+export function devSignIn(principalId: string): Promise<{ user: SessionUser }> {
+  return request<{ user: SessionUser }>('/auth/dev-login', {
+    method: 'POST',
+    body: JSON.stringify({ principal_id: principalId }),
+  });
+}
+
+export function signOut(): Promise<{ ok: true; microsoft_logout_url: string | null }> {
+  return request('/auth/logout', { method: 'POST' });
+}
+
+export function startImpersonating(principalId: string): Promise<{ impersonating: string | null }> {
+  return request('/auth/impersonate', {
+    method: 'POST',
+    body: JSON.stringify({ principal_id: principalId }),
+  });
+}
+
+export function stopImpersonating(): Promise<{ impersonating: null }> {
+  return request('/auth/impersonate', { method: 'DELETE' });
+}
+
+// ── S5 · admin › users ───────────────────────────────────────────────────────
+
+export function listAdminUsers(): Promise<{ items: AdminUserItem[] }> {
+  return request('/admin/users');
+}
+
+export function listRoles(): Promise<{ items: RoleRecord[] }> {
+  return request('/admin/roles');
+}
+
+export interface RoleInput {
+  code?: string;
+  label: string;
+  description?: string | null;
+  can_edit_quote?: boolean;
+  can_approve_quote?: boolean;
+  can_manage_users?: boolean;
+  can_edit_wo_fields?: boolean;
+  can_view_field_history?: boolean;
+}
+
+export function createRole(input: RoleInput): Promise<{ role: RoleRecord }> {
+  return request('/admin/roles', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateRole(id: string, input: Partial<RoleInput>): Promise<{ role: RoleRecord }> {
+  return request(`/admin/roles/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteRole(id: string): Promise<{ ok: true }> {
+  return request(`/admin/roles/${id}`, { method: 'DELETE' });
+}
+
+export interface InviteUserInput {
+  email: string;
+  name: string;
+  role: string;
+  is_super_admin?: boolean;
+}
+
+export function inviteUser(input: InviteUserInput): Promise<{ user: AdminUserItem }> {
+  return request('/admin/users', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export interface UpdateUserInput {
+  name?: string;
+  role?: string;
+  is_super_admin?: boolean;
+  status?: UserStatus;
+}
+
+export function updateUser(id: string, input: UpdateUserInput): Promise<{ user: AdminUserItem }> {
+  return request(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+// ── S5 · admin studio — settings, workflow, fields, trash ────────────────────
+
+export interface AdminSettings {
+  auth: {
+    mode: AuthMode;
+    tenant_id: string | null;
+    redirect_uri: string | null;
+    session_ttl_hours: number;
+    invite_only: true;
+  };
+  server: { node_env: string; web_origin: string; api_port: number; cookie_secure: boolean };
+  database: { engine: string; migrations_applied: number; latest_migration: string | null };
+  counts: { users: number; roles: number; work_orders: number; statuses: number; fields: number };
+}
+
+export function getAdminSettings(): Promise<AdminSettings> {
+  return request('/admin/settings');
+}
+
+export interface AdminWorkflowItem {
+  id: string;
+  name: string;
+  /** A status_group_def code — built-ins plus admin-added groups. */
+  status_group: string;
+  color: string;
+  position: number;
+  is_archive: boolean;
+  wo_count: number;
+}
+
+export function listAdminWorkflow(): Promise<{
+  items: AdminWorkflowItem[];
+  groups: StatusGroupItem[];
+}> {
+  return request('/admin/workflow');
+}
+
+// ── Admin › workflows — the status engine's writes ───────────────────────────
+
+export function createAdminStatus(input: {
+  name: string;
+  group: string;
+  color?: string;
+}): Promise<{ item: AdminWorkflowItem }> {
+  return request('/admin/workflow/statuses', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateAdminStatus(
+  id: string,
+  input: { name?: string; color?: string },
+): Promise<{ item: AdminWorkflowItem }> {
+  return request(`/admin/workflow/statuses/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteAdminStatus(id: string): Promise<{ ok: true }> {
+  return request(`/admin/workflow/statuses/${id}`, { method: 'DELETE' });
+}
+
+export function createAdminGroup(label: string): Promise<{ item: StatusGroupItem }> {
+  return request('/admin/workflow/groups', { method: 'POST', body: JSON.stringify({ label }) });
+}
+
+export function updateAdminGroup(code: string, label: string): Promise<{ item: StatusGroupItem }> {
+  return request(`/admin/workflow/groups/${encodeURIComponent(code)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ label }),
+  });
+}
+
+export function deleteAdminGroup(code: string): Promise<{ ok: true }> {
+  return request(`/admin/workflow/groups/${encodeURIComponent(code)}`, { method: 'DELETE' });
+}
+
+// ── Admin › automations — the rules engine ───────────────────────────────────
+
+export interface AutomationInput {
+  name: string;
+  enabled?: boolean;
+  entity?: AutomationEntity;
+  trigger: AutomationTrigger;
+  conditions?: WoFilterSet;
+  actions: AutomationAction[];
+}
+
+export function listAutomations(): Promise<{ items: AutomationItem[] }> {
+  return request('/admin/automations');
+}
+
+export function createAutomation(input: AutomationInput): Promise<{ item: AutomationItem }> {
+  return request('/admin/automations', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateAutomation(
+  id: string,
+  input: Partial<AutomationInput>,
+): Promise<{ item: AutomationItem }> {
+  return request(`/admin/automations/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteAutomation(id: string): Promise<{ ok: true }> {
+  return request(`/admin/automations/${id}`, { method: 'DELETE' });
+}
+
+export function listAutomationRuns(id: string): Promise<{ items: AutomationRunItem[] }> {
+  return request(`/admin/automations/${id}/runs`);
+}
+
+// The operator-facing side: the Enroll menu on the work-orders bulk bar.
+
+/** An enabled work-order rule, as the Enroll menu needs it. */
+export interface EnrollableAutomation {
+  id: string;
+  name: string;
+  entity: AutomationEntity;
+  trigger: AutomationTrigger;
+}
+
+export function listEnrollableAutomations(): Promise<{ items: EnrollableAutomation[] }> {
+  return request('/automations');
+}
+
+/** Run one rule over the selected work orders (a rule with a wait arms its
+    timers instead of acting now). Needs can_edit_wo_fields. */
+export function enrollWorkOrders(
+  automationId: string,
+  ids: string[],
+): Promise<AutomationEnrollResult> {
+  return request(`/automations/${automationId}/enroll`, {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
+}
+
+export interface AdminFieldItem {
+  id: string;
+  key: string;
+  label: string;
+  type: string;
+  container: string | null;
+  position: number | null;
+  option_count: number;
+  /** The dropdown vocabulary, for the options editor (S7). */
+  options: string[];
+  used_by: number;
+}
+
+export function listAdminFields(): Promise<{ items: AdminFieldItem[] }> {
+  return request('/admin/fields');
+}
+
+// ── S7 · admin › custom fields — the field engine's writes ───────────────────
+
+export interface AdminFieldInput {
+  label?: string;
+  type?: string;
+  options?: string[];
+}
+
+export function createAdminField(
+  input: AdminFieldInput & { label: string; type: string },
+): Promise<{ field: AdminFieldItem }> {
+  return request('/admin/fields', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateAdminField(
+  id: string,
+  input: AdminFieldInput,
+): Promise<{ field: AdminFieldItem }> {
+  return request(`/admin/fields/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function reorderAdminFields(ids: string[]): Promise<{ items: AdminFieldItem[] }> {
+  return request('/admin/fields/order', { method: 'PUT', body: JSON.stringify({ ids }) });
+}
+
+export interface TrashItem {
+  id: string;
+  wo_number: string;
+  title: string;
+  client: string | null;
+  status: string;
+  deleted_at: string;
+}
+
+export function listTrash(): Promise<{ items: TrashItem[] }> {
+  return request('/admin/trash');
+}
+
+export function restoreFromTrash(id: string): Promise<{ item: { wo_number: string } }> {
+  return request(`/admin/trash/${id}/restore`, { method: 'POST' });
+}
+
+// ── S6 — the work-order list: fields, saved views, bulk, import/export ───────
+// The list stopped being a fixed table. Which columns it shows, what it filters
+// on, how it groups and sorts are now the user's choices, so the FIELD
+// CATALOGUE has to come from the server: roughly a hundred of the addressable
+// fields are custom-field definitions an administrator can add to at any time.
+
+/** GET /api/wo-fields — every filterable/sortable/displayable field, plus the
+    operator table (which tests apply to which field type). */
+export function getWoFields(): Promise<WoFieldCatalogue & {
+  ops_by_type: Record<WoFieldType, WoFilterOp[]>;
+}> {
+  return request('/wo-fields');
+}
+
+/** GET /api/work-orders/ids — every id the current filters match, so that
+    "select all" acts on the whole result set rather than the loaded page. */
+export function listMatchingWorkOrderIds(
+  params: Omit<ListWorkOrdersParams, 'limit' | 'offset'>,
+): Promise<{ ids: string[]; total: number }> {
+  return request(`/work-orders/ids${toQuery(params)}`);
+}
+
+/** The CSV export is a plain same-origin link, not a fetch: letting the browser
+    handle the download is what gives the user a real Save dialog and a filename
+    from Content-Disposition. The session cookie rides along automatically. */
+export function workOrdersExportUrl(
+  params: Omit<ListWorkOrdersParams, 'limit' | 'offset'>,
+): string {
+  return `/api/work-orders/export${toQuery(params)}`;
+}
+
+/** One patch applied to many work orders. Every field it changes writes its own
+    activity row, exactly as a single-row edit does. */
+export function bulkUpdateWorkOrders(
+  ids: string[],
+  patch: Record<string, unknown>,
+): Promise<BulkUpdateResult> {
+  return request('/work-orders/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ ids, patch }),
+  });
+}
+
+/** Soft delete — the rows land in Admin → Trash, which can restore them. */
+export function bulkDeleteWorkOrders(ids: string[]): Promise<BulkUpdateResult> {
+  return request('/work-orders/bulk/delete', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
+}
+
+/** POST /api/work-orders/import — rows keyed by FIELD KEY, already mapped from
+    the CSV headers in the browser. `dry_run` reports what would happen and
+    writes nothing; the dialog always runs it before the real thing. */
+export function importWorkOrders(input: {
+  rows: Record<string, string | null>[];
+  mode: 'create' | 'upsert';
+  dry_run: boolean;
+}): Promise<ImportResult> {
+  return request('/work-orders/import', { method: 'POST', body: JSON.stringify(input) });
+}
+
+// ── Saved views ──────────────────────────────────────────────────────────────
+
+export interface SavedViewInput {
+  name: string;
+  columns?: string[];
+  filters?: WoFilterSet;
+  group_by?: string | null;
+  sort?: WoSort | null;
+  is_shared?: boolean;
+}
+
+export function listSavedViews(): Promise<{ items: SavedView[] }> {
+  return request('/views');
+}
+
+export function createSavedView(input: SavedViewInput): Promise<{ view: SavedView }> {
+  return request('/views', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateSavedView(
+  id: string,
+  input: Partial<SavedViewInput>,
+): Promise<{ view: SavedView }> {
+  return request(`/views/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteSavedView(id: string): Promise<{ ok: true }> {
+  return request(`/views/${id}`, { method: 'DELETE' });
+}
+
+// ── S7 · inline field edit, field history, per-account prefs ─────────────────
+
+/** PATCH /api/work-orders/:id/fields — values keyed by CATALOGUE key
+    (`fields.<json key>`). Needs the can_edit_wo_fields capability. */
+export function patchWorkOrderFields(
+  idOrNumber: string,
+  values: Record<string, unknown>,
+): Promise<{ changed: number; detail: WorkOrderDetailV2 }> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/fields`, {
+    method: 'PATCH',
+    body: JSON.stringify({ values }),
+  });
+}
+
+/** GET /api/work-orders/:id/field-history?field= — one field's trail, newest
+    first. Needs the can_view_field_history capability. */
+export function getFieldHistory(
+  idOrNumber: string,
+  field: string,
+): Promise<{ items: ActivityEntry[] }> {
+  return request(
+    `/work-orders/${encodeURIComponent(idOrNumber)}/field-history${toQuery({ field })}`,
+  );
+}
+
+/** Per-ACCOUNT preferences (user_pref) — unlike localStorage these follow the
+    signed-in person across machines. First tenant: the All-fields tab order. */
+export function getUserPref<T>(key: string): Promise<{ key: string; value: T | null }> {
+  return request(`/prefs/${encodeURIComponent(key)}`);
+}
+
+export function setUserPref(key: string, value: unknown): Promise<{ ok: true }> {
+  return request(`/prefs/${encodeURIComponent(key)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+  });
+}
+
+/** GET /api/lists — the routing lists a work order can be homed in. Reference
+    data for the bulk "move to a list" action, which sends an id, not a name. */
+export interface RoutingList {
+  id: string;
+  name: string;
+  wo_count: number;
+}
+
+export function listRoutingLists(): Promise<{ items: RoutingList[] }> {
+  return request('/lists');
 }

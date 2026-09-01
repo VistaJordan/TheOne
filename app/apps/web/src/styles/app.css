@@ -39,16 +39,54 @@ input {
   font-family: inherit;
 }
 
+/* Present to assistive tech, absent from the layout — for headings the chrome
+   already states (the topbar trail) but the document still needs. */
+.u-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ── Shell layout ─────────────────────────────────────────────────────────── */
 .shell {
-  display: grid;
-  grid-template-columns: 232px 1fr;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   min-height: 0;
 }
 
+/* The topbar spans the whole viewport; only this row is split into the nav
+   rail and the canvas, so the sidebar starts below the bar. */
+.shell-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  min-height: 0;
+  transition: grid-template-columns 0.16s ease;
+}
+
+/* Collapsed = the same icon rail the <=900px breakpoint already falls back to,
+   only chosen by the user instead of by the viewport. */
+.shell.is-collapsed .shell-body {
+  grid-template-columns: 64px 1fr;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-body {
+    transition: none;
+  }
+}
+
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
 .sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--side-bg);
@@ -56,18 +94,44 @@ input {
   min-height: 0;
 }
 
-.side-logo {
-  padding: 18px 18px 14px;
+/* Only the collapse toggle lives here now — the logo moved into the topbar.
+   Expanded there is room beside the first nav item, so it is lifted out of the
+   flow and parked on that row: 12px = the nav's 8px top pad plus half the 36px
+   row, less half the 28px button. The rail has no such room — see below. */
+.side-head {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
   display: flex;
   align-items: center;
 }
 
-.side-logo img {
-  height: 40px;
-  width: auto;
-  max-width: 100%;
-  object-fit: contain;
+.side-collapse {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-3);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
+
+.side-collapse:hover {
+  background: var(--chip);
+  color: var(--ink);
+  border-color: var(--side-border);
+}
+
+.side-collapse:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 
 .side-nav {
   display: flex;
@@ -110,8 +174,15 @@ input {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+/* Disabled controls swallow pointer events, so the hover has to reach the
+   .side-leaf wrapper for the flyout to fire on the inert items too. */
 .side-item:disabled {
   opacity: 0.72;
+  pointer-events: none;
+}
+
+.side-leaf {
+  display: flex;
 }
 
 .side-icon {
@@ -176,68 +247,607 @@ input {
   font-size: 11px;
 }
 
-/* ── Main column ──────────────────────────────────────────────────────────── */
-.main {
+/* ── Nav groups (Admin) ───────────────────────────────────────────────────── */
+.side-group {
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  min-height: 0;
+  border-radius: var(--radius-sm);
 }
 
-/* ── Topbar (black in BOTH themes → light ink + translucent borders) ──────── */
-.topbar {
+/* Open groups sit on a tinted panel so the children read as belonging to the
+   header rather than as five more top-level destinations. */
+.side-group.is-open {
+  background: var(--side-active-bg);
+  padding-bottom: 4px;
+}
+
+.side-item-group .side-label {
+  flex: 1;
+}
+
+.side-caret {
+  display: grid;
+  place-items: center;
+  flex: none;
+  opacity: 0.7;
+}
+
+.side-sub {
   display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 8px 2px;
+}
+
+.side-subitem {
+  border: 0;
+  background: transparent;
+  color: var(--side-ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  /* Indented to the header's label, not its icon — the icon column is the
+     header's, and lining up under it would read as a sibling. */
+  padding: 7px 10px 7px 33px;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s, color 0.12s;
+}
+
+.side-subitem:hover {
+  background: var(--chip);
+  color: var(--ink);
+}
+
+.side-subitem.is-active {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.side-item:focus-visible,
+.side-subitem:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ── Hover flyout ─────────────────────────────────────────────────────────── */
+/* Fixed, so the scrolling nav cannot clip it. The ::before bridges the 8px gap
+   to the rail — without it the pointer "leaves" mid-travel. */
+.side-flyout {
+  position: fixed;
+  z-index: 60;
+  min-width: 186px;
+  max-width: 260px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+}
+
+.side-flyout::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -10px;
+  width: 10px;
+}
+
+.side-flyout-head {
+  margin: 0;
+  padding: 5px 9px 6px;
+  font-family: var(--th-font), system-ui, sans-serif;
+  font-size: var(--th-size);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.side-flyout-item {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.side-flyout-item:hover {
+  background: var(--chip);
+}
+
+.side-flyout-item.is-active {
+  background: var(--side-active-bg);
+  color: var(--side-active-ink);
+  font-weight: 600;
+}
+
+.side-flyout-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* No rows to line up, so it shrinks to the name it carries. */
+.side-flyout.is-tag {
+  min-width: 0;
+}
+
+/* A rail leaf borrows the panel as a name tag — no rows under it, so the head
+   carries the full padding and drops the label treatment. */
+.side-flyout-head.is-solo {
+  padding: 4px 9px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .side-flyout {
+    animation: side-flyout-in 0.1s ease-out;
+  }
+}
+
+@keyframes side-flyout-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+
+/* ── Collapsed rail ───────────────────────────────────────────────────────── */
+.shell.is-collapsed .side-label,
+.shell.is-collapsed .side-user-meta,
+.shell.is-collapsed .side-badge,
+.shell.is-collapsed .side-caret {
+  display: none;
+}
+
+/* No panel tint on the rail — the group is just its icon there. */
+.shell.is-collapsed .side-group.is-open {
+  background: transparent;
+  padding-bottom: 0;
+}
+
+/* Collapsed the rail is too narrow to share a row, so the toggle returns to
+   the flow and sits above the icons — one row's worth of gap, no more. */
+.shell.is-collapsed .side-head {
+  position: static;
+  justify-content: center;
+  padding: 18px 8px 0;
+}
+
+.shell.is-collapsed .side-nav {
+  padding: 5px 8px 8px;
+}
+
+.shell.is-collapsed .side-item {
+  justify-content: center;
+  gap: 0;
+  padding: 9px 0;
+}
+
+.shell.is-collapsed .side-user {
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 8px;
+}
+
+/* ── Topbar (white in BOTH themes → dark ink; see --topbar-* in tokens.css) ── */
+.topbar {
+  /* The search is centred on the BAR, not between its neighbours: equal outer
+     fractions put the middle column on the viewport's centre line whatever the
+     trail says. Both flanks carry min-width:0 so a long breadcrumb ellipsises
+     instead of stealing the centre. */
+  display: grid;
+  grid-template-columns: 1fr minmax(240px, 520px) 1fr;
   align-items: center;
   gap: 16px;
-  height: 52px;
+  /* Tall enough for the wordmark to span most of the sidebar's width (see
+     .topbar-brand): 190px of artwork at its 3.65:1 ratio is ~52px tall. */
+  height: 66px;
   flex: none;
   padding: 0 18px;
   background: var(--topbar-bg);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  /* White on a light canvas in day, black on a near-black one in night — the
+     edge has to be drawn in both, so no theme opts out of the border. */
+  border-bottom: 1px solid var(--topbar-line);
 }
 
-/* day removes the topbar bottom border */
-:root[data-theme="day"] .topbar {
-  border-bottom: 0;
+.topbar-left {
+  display: flex;
+  align-items: center;
+  /* 18px bar padding + 214px brand slot + this gap = 256px, which is where the
+     canvas content starts (232px sidebar + 24px canvas padding). The page
+     title therefore begins exactly where the page does. */
+  gap: 24px;
+  min-width: 0;
+  overflow: hidden;
+  /* Owns the bar's left padding (pulled in, then given back), so the brand slot
+     can extend into it when the sidebar is collapsed without being clipped by
+     this overflow: the stack centres on the 64px rail, which starts at 0. */
+  margin-left: -18px;
+  padding-left: 18px;
 }
 
+/* Fixed to the rail width so the trail beside it lines up with the nav below,
+   and so the wordmark can be scaled to span exactly that width. */
+.topbar-brand {
+  /* The slot is a set of WINDOWS onto the wordmark PNG. One full-artwork
+     window (the <img>) plus one window per word ("The", "One") drawn as
+     backgrounds. Sidebar open: the word windows sit exactly over their own
+     pixels in the full image, so only the wordmark is seen. Sidebar collapsed
+     (--c: 1): the full image fades and the two word windows TRAVEL — "The"
+     down onto the "O", "One" left under it — into a stack that fits the rail.
+     Every position below is written as open-value·(1 − c) + collapsed-value·c,
+     so one variable drives the whole move and CSS transitions animate it.
+
+     All boxes are in image pixels; re-measure if the asset changes.
+       canvas  2096×756
+       artwork x 42–2046, y 70–637 (the PNG carries transparent padding)
+       "The"   246×103 at (141, 70)   → window padded 20px: 286×143 at (121, 50)
+       "One"   680×340 at (1367, 234)  → window padded 6px left (the curve's
+               tail runs right up to the ring there), 20px elsewhere:
+               706×380 at (1361, 214)
+     The padding keeps sub-pixel rounding of the background position from
+     ever trimming the first pixel of a glyph. */
+  --logo-canvas-w: 2096;
+  --crop-x: 42;   --crop-y: 70;   --crop-w: 2005;  --crop-h: 568;
+  --the-x: 121;   --the-y: 50;    --the-w: 286;    --the-h: 143;
+  --one-x: 1361;  --one-y: 214;   --one-w: 706;    --one-h: 380;
+
+  /* Open: the artwork renders --brand-w wide, flush left, in a slot that spans
+     the sidebar column (232px minus the bar's 18px padding) so the title beside
+     it lines up with the canvas. */
+  --brand-w: 190px;
+  --brand-slot: 214px;
+  --logo-scale: calc(var(--brand-w) / var(--crop-w));
+
+  /* Collapsed: how wide each word renders in the stack, and the gap between. */
+  --the-cw: 25px;  --the-s: calc(var(--the-cw) / var(--the-w));
+  --one-cw: 37px;  --one-s: calc(var(--one-cw) / var(--one-w));
+  --stack-gap: 3px;
+  --stack-h: calc(var(--the-h) * var(--the-s) + var(--stack-gap) + var(--one-h) * var(--one-s));
+
+  /* 0 = open, 1 = collapsed. */
+  --c: 0;
+
+  position: relative;
+  flex: none;
+  width: var(--brand-slot);
+  height: calc(var(--crop-h) * var(--logo-scale) * (1 - var(--c)) + var(--stack-h) * var(--c));
+  /* Collapsed, the slot is the rail itself (64px), so the stack centres on the
+     icon column beneath it; the bar's 18px padding is pulled back to do that. */
+  margin-left: calc(-18px * var(--c));
+  min-width: 0;
+  overflow: hidden;
+  transition: width 0.22s ease, height 0.22s ease, margin-left 0.22s ease;
+}
+
+/* The full artwork. Fades as the words leave it. */
+.topbar-brand img {
+  position: absolute;
+  width: calc(var(--logo-canvas-w) * var(--logo-scale));
+  height: auto;
+  max-width: none;
+  left: calc(-1 * var(--crop-x) * var(--logo-scale));
+  top: calc(-1 * var(--crop-y) * var(--logo-scale));
+  opacity: calc(1 - var(--c));
+  transition: opacity 0.18s ease;
+}
+
+/* The word windows. --brand-url is set on the element from lib/brand.ts so the
+   asset path lives in one place. */
+.topbar-brand::before,
+.topbar-brand::after {
+  content: "";
+  position: absolute;
+  background: var(--brand-url) no-repeat;
+  pointer-events: none;
+  transition:
+    left 0.22s ease, top 0.22s ease, width 0.22s ease, height 0.22s ease,
+    background-size 0.22s ease, background-position 0.22s ease;
+}
+
+/* "The": from its place in the wordmark to the top of the stack, centred. */
+.topbar-brand::before {
+  --s: calc(var(--logo-scale) * (1 - var(--c)) + var(--the-s) * var(--c));
+  --l-open: calc((var(--the-x) - var(--crop-x)) * var(--logo-scale));
+  --l-closed: calc((var(--brand-slot) - var(--the-w) * var(--the-s)) / 2);
+  --t-open: calc((var(--the-y) - var(--crop-y)) * var(--logo-scale));
+  --t-closed: 0px;
+  left: calc(var(--l-open) * (1 - var(--c)) + var(--l-closed) * var(--c));
+  top: calc(var(--t-open) * (1 - var(--c)) + var(--t-closed) * var(--c));
+  width: calc(var(--the-w) * var(--s));
+  height: calc(var(--the-h) * var(--s));
+  background-size: calc(var(--logo-canvas-w) * var(--s)) auto;
+  background-position: calc(-1 * var(--the-x) * var(--s)) calc(-1 * var(--the-y) * var(--s));
+}
+
+/* "One": from the right of the wordmark to the bottom of the stack, centred. */
+.topbar-brand::after {
+  --s: calc(var(--logo-scale) * (1 - var(--c)) + var(--one-s) * var(--c));
+  --l-open: calc((var(--one-x) - var(--crop-x)) * var(--logo-scale));
+  --l-closed: calc((var(--brand-slot) - var(--one-w) * var(--one-s)) / 2);
+  --t-open: calc((var(--one-y) - var(--crop-y)) * var(--logo-scale));
+  --t-closed: calc(var(--the-h) * var(--the-s) + var(--stack-gap));
+  left: calc(var(--l-open) * (1 - var(--c)) + var(--l-closed) * var(--c));
+  top: calc(var(--t-open) * (1 - var(--c)) + var(--t-closed) * var(--c));
+  width: calc(var(--one-w) * var(--s));
+  height: calc(var(--one-h) * var(--s));
+  background-size: calc(var(--logo-canvas-w) * var(--s)) auto;
+  background-position: calc(-1 * var(--one-x) * var(--s)) calc(-1 * var(--one-y) * var(--s));
+}
+
+/* Collapsed: flip the switch and make the slot the rail's full 64px so the
+   stack sits centred over the nav icons. Same clock as the sidebar. */
+.shell.is-collapsed .topbar-brand {
+  --c: 1;
+  --brand-slot: 64px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar-brand,
+  .topbar-brand img,
+  .topbar-brand::before,
+  .topbar-brand::after {
+    transition: none;
+  }
+}
+
+/* One wordmark asset, navy on transparent. On night's black bar the navy would
+   vanish, so invert it — and rotate the hue back so the blue and teal stay
+   blue and teal rather than turning orange and pink. */
+:root[data-theme="night"] .topbar-brand img,
+:root[data-theme="night"] .topbar-brand::before,
+:root[data-theme="night"] .topbar-brand::after {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* ── Global search (the topbar's centre column) ───────────────────────────── */
 .topbar-search {
+  position: relative;
+  min-width: 0;
+  z-index: 30;
+}
+
+.topbar-search-field {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  max-width: 460px;
   height: 32px;
-  padding: 0 12px;
+  padding: 0 10px 0 12px;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--topbar-field);
+  border: 1px solid var(--topbar-line);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.topbar-search-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .topbar-search-icon {
-  color: #b8c0ca;
+  color: var(--topbar-ink-2);
   display: grid;
   place-items: center;
+  flex: none;
 }
 
 .topbar-search input {
   flex: 1;
+  min-width: 0;
   border: 0;
   outline: 0;
   background: transparent;
-  color: #eef2f6;
+  color: var(--topbar-ink);
   font-size: 12.5px;
 }
 
 .topbar-search input::placeholder {
-  color: #b8c0ca;
+  color: var(--topbar-ink-2);
+}
+
+/* Hides the browser's own clear affordance — the field draws its own. */
+.topbar-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.topbar-search-kbd {
+  flex: none;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--topbar-ink-2);
+  background: var(--topbar-bg);
+  border: 1px solid var(--topbar-line);
+  border-radius: 3px;
+  padding: 3px 5px;
+}
+
+.topbar-search-clear {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--topbar-ink-2);
+}
+
+.topbar-search-clear:hover {
+  background: var(--topbar-hover);
+  color: var(--topbar-ink);
+}
+
+/* The results hang over the canvas, so they wear the CANVAS palette — in night
+   a white sheet floating on black would read as a second window. */
+.gs-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.gs-group + .gs-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--row-border);
+}
+
+.gs-group-head {
+  margin: 0;
+  padding: 6px 8px 4px;
+  font-family: var(--th-font), system-ui, sans-serif;
+  font-size: var(--th-size);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.gs-hit {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.gs-hit.is-active {
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+}
+
+.gs-hit-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+}
+
+.gs-hit.is-active .gs-hit-icon {
+  color: inherit;
+}
+
+.gs-hit-label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gs-hit-meta {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.gs-empty,
+.gs-foot {
+  margin: 0;
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.gs-foot {
+  padding: 6px 10px 4px;
+}
+
+/* Narrow bars cannot spare a wide middle third; the centre column keeps the
+   axis but gives its slack back to the flanks, and the panel widens past the
+   field so results stay readable. */
+@media (max-width: 1180px) {
+  .topbar {
+    grid-template-columns: 1fr minmax(180px, 360px) 1fr;
+  }
+
+  .gs-panel {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(440px, calc(100vw - 36px));
+  }
+}
+
+/* ── In-page filter field (list toolbars) ─────────────────────────────────── */
+.filter-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  min-width: 0;
+  flex: 0 1 280px;
+  margin-left: auto;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.filter-field:focus-within {
+  border-color: var(--accent);
+}
+
+.filter-field-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--ink-3);
+}
+
+.filter-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.filter-field input::placeholder {
+  color: var(--ink-3);
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
-  margin-left: auto;
+  min-width: 0;
 }
 
 /* ── Topbar breadcrumb (detail routes) ────────────────────────────────────── */
@@ -245,8 +855,16 @@ input {
   display: flex;
   align-items: center;
   gap: 7px;
-  flex: none;
   min-width: 0;
+  overflow: hidden;
+}
+
+/* The trail lives in a bounded column now, so its last (longest) crumb is the
+   one allowed to give — it ellipsises rather than pushing the centre. */
+.crumbs .crumb-cur {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .crumb-back {
@@ -255,67 +873,50 @@ input {
   display: grid;
   place-items: center;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: #cfd6de;
+  border: 1px solid var(--topbar-line);
+  background: var(--topbar-field);
+  color: var(--topbar-ink-2);
   margin-right: 2px;
 }
 
 .crumb-back:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--topbar-hover);
+  color: var(--topbar-ink);
 }
 
 .crumb {
-  color: #b8c0ca;
-  font-size: 12.5px;
+  color: var(--topbar-ink-2);
+  font-size: 15px;
   text-decoration: none;
   white-space: nowrap;
 }
 
 .crumb:hover {
-  color: #fff;
+  color: var(--topbar-ink);
 }
 
 .crumb-sep {
-  color: #8b949e;
+  color: var(--topbar-ink-2);
 }
 
 .crumb-cur {
-  color: #eef2f6;
-  font-size: 12.5px;
+  color: var(--topbar-ink);
+  font-size: 16px;
   font-weight: 600;
   white-space: nowrap;
   font-family: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
 }
 
-/* Uses the button-scoped accent pair (tokens.css) so the white label clears
-   AA on the always-black topbar in BOTH themes. */
-.btn-newwo {
-  height: 32px;
-  padding: 0 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: var(--btn-accent);
-  color: var(--on-btn-accent);
-  font-weight: 600;
-  font-size: 12.5px;
-  white-space: nowrap;
+/* Detail routes put a WO number here and keep the mono treatment; a nav label
+   is prose, so it takes the UI face at the same size. */
+.crumb-cur.is-nav {
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
-.btn-newwo:disabled {
-  opacity: 0.85;
-}
-
-/* night: soft glow on the New WO button */
-:root[data-theme="night"] .btn-newwo {
-  box-shadow: 0 0 0 1px rgba(53, 184, 243, 0.4), 0 0 18px rgba(53, 184, 243, 0.35);
-}
-
-/* ── "Viewing as" switcher (topbar is black in BOTH themes → light ink) ────── */
+/* ── "Viewing as" switcher (wears the bar's own --topbar-* palette) ───────── */
 .topbar-actor {
   display: inline-flex;
   align-items: center;
@@ -324,7 +925,7 @@ input {
 }
 
 .topbar-actor-label {
-  color: #b8c0ca;
+  color: var(--topbar-ink-2);
   font-size: 11px;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -335,9 +936,9 @@ input {
   max-width: 210px;
   padding: 0 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: #eef2f6;
+  border: 1px solid var(--topbar-line);
+  background: var(--topbar-field);
+  color: var(--topbar-ink);
   font-family: inherit;
   font-size: 12.5px;
   text-overflow: ellipsis;
@@ -345,17 +946,17 @@ input {
 }
 
 .topbar-actor-select:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--topbar-hover);
 }
 
 .topbar-actor-select:disabled {
-  color: #b8c0ca;
+  color: var(--topbar-ink-2);
 }
 
-/* The dropdown list is drawn by the OS on the page's ground, not the topbar's. */
+/* The OS draws this list against the select's own ground, which is the bar's. */
 .topbar-actor-select option {
-  background: var(--surface);
-  color: var(--ink);
+  background: var(--topbar-bg);
+  color: var(--topbar-ink);
 }
 
 .topbar-bell,
@@ -365,24 +966,307 @@ input {
   display: grid;
   place-items: center;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: #cfd6de;
+  border: 1px solid var(--topbar-line);
+  background: var(--topbar-field);
+  color: var(--topbar-ink-2);
   transition: background 0.12s, color 0.12s;
 }
 
 .topbar-bell:hover,
 .theme-toggle:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--topbar-hover);
+  color: var(--topbar-ink);
 }
 
 /* ── Canvas / page ────────────────────────────────────────────────────────── */
-.canvas {
-  flex: 1;
+/* The wrap is the shell-body grid cell; the canvas fills it and scrolls with
+   its native bar hidden, because the O-knob rail (below) replaces it. */
+.canvas-wrap {
+  position: relative;
+  min-width: 0;
   min-height: 0;
+}
+
+.canvas {
+  /* Positioned so it paints over the absolutely-positioned backdrop below —
+     tree order settles it, no z-index (which would open a stacking context
+     under the flyouts). */
+  position: relative;
+  height: 100%;
+  min-width: 0;
   overflow-y: auto;
   padding: 22px 24px 40px;
+}
+
+/* ── Canvas backdrop ─ the brand's route, ghosted (CanvasBackdrop.tsx) ─────
+   The sign-in page's waves-with-stops, dialled down to a watermark and pinned
+   behind the canvas on every tab. It does not scroll with the page — the
+   content slides over it like weather over a map. The stop bubbles fill with
+   --bg at full opacity ON PURPOSE: that blanks the wave under the bubble (the
+   gap the sign-in route cuts with its --bg circle stroke) while the ring and
+   glyph stay translucent. */
+.canvas-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  color: var(--accent);
+}
+.canvas-backdrop-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  opacity: 0.07;
+}
+.canvas-backdrop-stop circle {
+  fill: var(--bg);
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-opacity: 0.16;
+}
+.canvas-backdrop-icon {
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.2;
+}
+/* Night's near-black ground swallows low alphas; nudge them the way the
+   sign-in route does (.2 → .26). */
+:root[data-theme='night'] .canvas-backdrop-line { opacity: 0.09; }
+:root[data-theme='night'] .canvas-backdrop-stop circle { stroke-opacity: 0.2; }
+:root[data-theme='night'] .canvas-backdrop-icon { opacity: 0.24; }
+
+/* ── The "O knob" scrollbar ────────────────────────────────────────────────
+   Design option 1c, app-wide: the thumb is the logo's "O" — a surface-filled
+   ring in the accent — travelling a hairline node line. EVERY native bar is
+   hidden; the replacement rails come from two places:
+     · the canvas — a sibling overlay (components/OKnobScrollbar.tsx), pinned
+       by the .canvas-wrap rules below, z above the sticky table heads (1–5)
+       and below every popover/menu (40+);
+     · everything else — lib/oknob.ts mounts a rail INSIDE each scrollable
+       (filter popovers, menus, modal bodies, global search, sidebar…) with
+       inline geometry, re-pinned on scroll.
+   Textareas can't host a child rail, so they alone keep a native bar, thinned
+   and tinted to the accent. */
+*:not(textarea) {
+  scrollbar-width: none;
+}
+
+*:not(textarea)::-webkit-scrollbar {
+  display: none;
+}
+
+textarea {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+
+.oknob {
+  position: absolute;
+  z-index: 10;
+  cursor: pointer;
+  /* Knob diameter and ring weight; is-sm is the compact cut for short
+     containers (dropdown lists, tab strips). */
+  --okn: 18px;
+  --okr: 5px;
+}
+
+.oknob.is-sm {
+  --okn: 14px;
+  --okr: 4px;
+}
+
+/* Manager-mounted rails sit inside their own surface and should beat any
+   sticky chrome that surface contains. */
+.oknob-in {
+  z-index: 50;
+}
+
+/* The canvas rail is positioned by CSS (its geometry never changes); manager
+   rails carry inline geometry instead. */
+.canvas-wrap > .oknob {
+  top: 8px;
+  bottom: 8px;
+  right: 3px;
+  width: 18px;
+}
+
+.oknob.is-dragging {
+  cursor: grabbing;
+}
+
+.oknob-track {
+  position: absolute;
+  inset: 0;
+}
+
+.oknob-line {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.oknob.is-y .oknob-line {
+  left: calc(50% - 1px);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+.oknob.is-x .oknob-line {
+  top: calc(50% - 1px);
+  left: 0;
+  right: 0;
+  height: 2px;
+}
+
+.oknob-node {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.oknob.is-y .oknob-node { left: calc(50% - 3px); }
+.oknob.is-y .oknob-node.is-top { top: -2px; }
+.oknob.is-y .oknob-node.is-end { bottom: -2px; }
+.oknob.is-x .oknob-node { top: calc(50% - 3px); }
+.oknob.is-x .oknob-node.is-top { left: -2px; }
+.oknob.is-x .oknob-node.is-end { right: -2px; }
+
+.oknob-thumb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--okn);
+  height: var(--okn);
+  border-radius: 50%;
+  background: var(--surface);
+  border: var(--okr) solid var(--accent);
+  box-shadow: var(--shadow);
+  cursor: grab;
+  touch-action: none;
+}
+
+/* A knob wearing a glyph instead of the O (OKnobScrollbar's `icon` — the WO
+   detail page passes its trade's). The thick ring thins to a hairline so the
+   glyph, not the border, is the mark; --accent-text keeps the glyph AA on the
+   surface in day. */
+.oknob-thumb.has-icon {
+  display: grid;
+  place-items: center;
+  border-width: 1.5px;
+  color: var(--accent-text);
+}
+
+/* Hover/drag: the ring swells a touch and takes the pressed accent — in night
+   --accent-text equals --accent, so only the swell reads there, which is the
+   quieter thing on black anyway. */
+.oknob:hover .oknob-thumb,
+.oknob.is-dragging .oknob-thumb {
+  transform: scale(1.12);
+  border-color: var(--accent-text);
+}
+
+.oknob.is-dragging .oknob-thumb {
+  cursor: grabbing;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .oknob-thumb {
+    transition: transform 0.12s ease, border-color 0.12s ease;
+  }
+}
+
+/* ── List pagination (ListPagination.tsx) ─ the footer under every list ──── */
+.list-pgn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 7px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* Summary and picker flank the pager on equal fractions, so the page numbers
+   sit on the bar's own centre line (the topbar-search trick). */
+.pgn-sum {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pgn-pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pgn-btn {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s, color 0.12s;
+}
+
+.pgn-btn:hover:not(:disabled) {
+  background: var(--chip);
+  color: var(--ink);
+}
+
+.pgn-btn:disabled {
+  opacity: 0.45;
+}
+
+.pgn-btn.is-on {
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+}
+
+.pgn-gap {
+  padding: 0 2px;
+  color: var(--ink-3);
+}
+
+.pgn-size {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.pgn-size select {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
 }
 
 .page-head {
@@ -464,6 +1348,164 @@ input {
   box-shadow: 0 0 0 1px var(--danger-border), 0 0 20px rgba(255, 107, 106, 0.22);
 }
 
+/* ── Dashboard pages (Needs Attention / Main Dashboard) ───────────────────── */
+.dash-tabs { margin-bottom: 16px; }
+
+/* Needs Attention cards size to their content (unlike the KPI grid): each is
+   a LINK into the list pre-filtered to the rows it counted, so it gets link
+   affordances. min-width keeps a low count from shrinking to a chip. */
+.attn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+a.kpi.attn {
+  display: block;
+  flex: none;
+  min-width: 200px;
+  max-width: 340px; /* a long meta line wraps instead of widening the card */
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.kpi.attn:hover,
+a.kpi.attn:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a.kpi.attn { transition: border-color 0.15s ease, transform 0.15s ease; }
+  a.kpi.attn:hover { transform: translateY(-1px); }
+}
+
+/* ── Main Dashboard · build-your-own cards (dash/DashCards.tsx) ───────────── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+.dash-cell { position: relative; display: flex; }
+.dash-cell > .dash-card { flex: 1; min-width: 0; }
+/* Inside the grid a count card fills its cell; the attn link's flow sizing
+   (min/max width, centered text) is for the Needs Attention row only. */
+.dash-cell a.kpi.attn.dash-card { max-width: none; min-width: 0; text-align: left; }
+
+.dash-tools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+}
+.dash-cell:hover .dash-tools,
+.dash-cell:focus-within .dash-tools { opacity: 1; }
+.dash-tools button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.dash-tools button:hover { color: var(--ink); border-color: var(--border-strong); }
+@media (prefers-reduced-motion: no-preference) {
+  .dash-tools { transition: opacity 0.12s ease; }
+}
+
+.dash-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 92px;
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dash-add:hover,
+.dash-add:focus-visible { color: var(--accent-text); border-color: var(--accent); outline: none; }
+.dash-add-hint { font-size: 11px; font-weight: 400; color: var(--ink-3); max-width: 220px; text-align: center; }
+
+/* Breakdown card: label · bar · count rows. Length carries the magnitude and
+   the printed count carries the value, so the bar is a single accent hue —
+   color encodes nothing and needs no legend. Each row links to the list
+   pre-filtered to exactly the rows its bucket counted. */
+.bd-rows { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
+.bd-row {
+  display: grid;
+  grid-template-columns: minmax(60px, 42%) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+.bd-name { font-size: 11.5px; color: var(--ink-2); }
+a.bd-row:hover .bd-name,
+a.bd-row:focus-visible .bd-name { color: var(--accent-text); }
+a.bd-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+.bd-bar { height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
+.bd-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); min-width: 2px; }
+.bd-n { font-size: 11.5px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bd-row.is-other .bd-name,
+.bd-row.is-other .bd-n { color: var(--ink-3); font-weight: 400; }
+
+.dash-card .kl svg { vertical-align: -1px; margin-right: 2px; }
+
+/* The card editor dialog */
+.dash-editor .seg { margin-bottom: 8px; }
+.dash-ed-hint { margin: 0 0 12px; font-size: 11.5px; color: var(--ink-3); }
+.dash-ed-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.dash-ed-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dash-ed-leg {
+  width: 36px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.dash-ed-word { font-size: 11.5px; color: var(--ink-3); }
+.dash-ed-op,
+.dash-ed-value,
+.dash-ed-label input {
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+.dash-ed-value { flex: 1; min-width: 130px; }
+.dash-ed-op,
+.dash-ed-value,
+.dash-ed-label input { outline: none; }
+.dash-ed-op:focus-visible,
+.dash-ed-value:focus-visible,
+.dash-ed-label input:focus-visible { border-color: var(--accent); }
+.dash-ed-note { margin: 0; font-size: 11px; color: var(--ink-3); }
+.dash-ed-label { display: flex; flex-direction: column; gap: 4px; }
+.dash-ed-label > span { font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+
 /* ── Toolbar (segmented status-group filter) ──────────────────────────────── */
 .toolbar {
   display: flex;
@@ -502,6 +1544,20 @@ input {
 .seg-btn.is-on {
   background: var(--tab-on-bg);
   color: var(--tab-on-ink);
+}
+
+/* A group the saved view is defined by: on, and not a toggle. */
+.seg-btn.is-locked {
+  cursor: default;
+}
+
+.seg-btn.is-locked svg {
+  opacity: 0.6;
+}
+
+.seg-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* ── Table ────────────────────────────────────────────────────────────────── */
@@ -556,15 +1612,6 @@ input {
   cursor: pointer;
 }
 
-.wo-num-link {
-  color: var(--accent-text);
-  text-decoration: none;
-}
-
-.wo-num-link:hover {
-  text-decoration: underline;
-}
-
 .ct .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -575,6 +1622,29 @@ input {
   font-size: 12px;
   color: var(--ink-2);
   white-space: nowrap;
+}
+
+/* After .wo-num so the accent wins the cascade on cells that carry both classes. */
+.wo-num-link {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.wo-num-link:hover {
+  text-decoration: underline;
+}
+
+/* Trade cell — a small muted glyph keyed to the trade name (WorkOrdersTable). */
+.trade-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.trade-cell .ic {
+  flex: none;
+  color: var(--accent-text);
 }
 
 .site {
@@ -616,14 +1686,27 @@ input {
   font-weight: 600;
   line-height: 1.3;
   border-radius: var(--pill-radius);
-  background: color-mix(in srgb, var(--pill) 14%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--pill) 32%, transparent);
+  /* A pastel of the status's own hex (--pill, from the DB — the same color the
+     status-menu circles draw), strong enough that yellow reads yellow. */
+  background: color-mix(in srgb, var(--pill) 26%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--pill) 46%, transparent);
 }
 
 .pill-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Status names are stored lowercase (ClickUp heritage); presentation leads
+   with a capital. All four spans are flex items, so ::first-letter applies.
+   .group-name covers every group header, statuses included — harmless for the
+   rest. Names opening with punctuation («…») are left as they are. */
+.pill-label::first-letter,
+.status-menu-name::first-letter,
+.wf-name::first-letter,
+.group-name::first-letter {
+  text-transform: uppercase;
 }
 
 .pill-caret {
@@ -646,7 +1729,9 @@ input {
 }
 
 :root[data-theme="day"] .pill {
-  color: var(--pill-ink-day, color-mix(in srgb, var(--pill) 72%, #000000));
+  /* 66% (not 72%) since the 26% pastel background landed — keeps every seeded
+     color ≥4.5:1 (packages/db/scripts/check-contrast.ts is the proof). */
+  color: var(--pill-ink-day, color-mix(in srgb, var(--pill) 66%, #000000));
 }
 
 /* ── Status change menu ───────────────────────────────────────────────────── */
@@ -660,14 +1745,53 @@ input {
   top: calc(100% + 6px);
   left: 0;
   z-index: 100;
-  min-width: 230px;
-  max-height: 360px;
-  overflow-y: auto;
-  padding: 6px;
+  min-width: 250px;
+  /* Fallback only — the component measures the trigger and sets an inline
+     max-height that reaches ~5cm above the viewport's bottom edge. */
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px;
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+}
+
+/* The search stays put; only the list below it scrolls — and since the panel
+   reaches almost to the bottom of the viewport it rarely needs to, so no
+   scrollbar is drawn when it does. */
+.status-menu-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.status-menu-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.status-menu-search {
+  flex: none;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--chip);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.status-menu-search::placeholder {
+  color: var(--ink-3);
+}
+
+.status-menu-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .status-menu-pop.is-right {
@@ -686,13 +1810,13 @@ input {
 }
 
 .status-menu-group + .status-menu-group {
-  margin-top: 4px;
-  padding-top: 4px;
+  margin-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid var(--row-border);
 }
 
 .status-menu-group-label {
-  padding: 5px 10px 3px;
+  padding: 4px 4px 5px;
   font-family: 'Barlow Condensed', sans-serif;
   font-size: 10.5px;
   font-weight: 700;
@@ -701,26 +1825,35 @@ input {
   color: var(--ink-3);
 }
 
+/* One rounded card per status: circle icon + name, no prose. */
 .status-menu-item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
   color: var(--ink);
   font-size: 12.5px;
+  font-weight: 600;
   text-align: left;
+}
+
+.status-menu-item + .status-menu-item {
+  margin-top: 5px;
 }
 
 .status-menu-item:not(:disabled):hover {
   background: var(--chip);
+  border-color: var(--border-strong);
+  cursor: pointer;
 }
 
 .status-menu-item.is-current {
   background: var(--tab-on-bg);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .status-menu-item:disabled {
@@ -728,13 +1861,9 @@ input {
   cursor: default;
 }
 
-.status-menu-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
+.status-circle {
   flex: none;
-  background: var(--pill);
-  border: 1px solid color-mix(in srgb, var(--pill) 60%, transparent);
+  display: block;
 }
 
 .status-menu-name {
@@ -751,14 +1880,45 @@ input {
 }
 
 @media (max-width: 900px) {
-  .shell {
+  /* Too narrow for the full sidebar — pin it to the rail and hide the toggle
+     rather than offering a choice the layout can't honour. */
+  .shell-body,
+  .shell.is-collapsed .shell-body {
     grid-template-columns: 64px 1fr;
   }
   .side-label,
   .side-user-meta,
   .side-badge,
+  .side-caret,
+  .side-sub,
+  .side-collapse,
   .topbar-actor-label {
     display: none;
+  }
+  /* The rail is pinned to 64px here, so the bar shows the collapsed stack. */
+  .topbar-brand {
+    --c: 1;
+    --brand-slot: 64px;
+  }
+  .side-group.is-open {
+    background: transparent;
+    padding-bottom: 0;
+  }
+  .side-head {
+    padding: 0;
+  }
+  .side-nav {
+    padding: 8px;
+  }
+  .side-item {
+    justify-content: center;
+    gap: 0;
+    padding: 9px 0;
+  }
+  .side-user {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 8px;
   }
   .topbar-actor-select {
     max-width: 150px;
@@ -766,4 +1926,109 @@ input {
   .kpi-row {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* ── Sidebar icon motion ───────────────────────────────────────────────────
+   Each primary-nav icon (components/NavIcon.tsx) has a short hover animation
+   that says what the item does. Hover sits on the .side-leaf wrapper, not the
+   button, so the inert items (whose buttons are disabled and swallow pointer
+   events) play too. Runs once per hover, a second or two, and not at all
+   for anyone who asked the OS for less motion. */
+.ni {
+  overflow: visible;
+}
+.ni-tile,
+.ni-clip,
+.ni-truck,
+.ni-wheel,
+.ni-coin,
+.ni-knob {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Quotes / Work Orders — the text lines write themselves in. */
+  .side-leaf:hover .ni-line,
+  .side-item:focus-visible .ni-line {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: ni-write 1.2s ease-out forwards;
+  }
+  .side-leaf:hover .ni-line:nth-of-type(2),
+  .side-item:focus-visible .ni-line:nth-of-type(2) {
+    animation-delay: 0.6s;
+  }
+
+  /* Work Orders — the clip snaps down onto the board first. */
+  .side-leaf:hover .ni-clip,
+  .side-item:focus-visible .ni-clip {
+    animation: ni-clip 1s ease-out;
+  }
+
+  /* Dashboard — tiles pop in one after another. */
+  .side-leaf:hover .ni-tile,
+  .side-item:focus-visible .ni-tile {
+    animation: ni-pop 1s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  }
+  .side-leaf:hover .ni-tile:nth-of-type(2),
+  .side-item:focus-visible .ni-tile:nth-of-type(2) { animation-delay: 0.18s; }
+  .side-leaf:hover .ni-tile:nth-of-type(3),
+  .side-item:focus-visible .ni-tile:nth-of-type(3) { animation-delay: 0.36s; }
+  .side-leaf:hover .ni-tile:nth-of-type(4),
+  .side-item:focus-visible .ni-tile:nth-of-type(4) { animation-delay: 0.54s; }
+
+  /* Vendors — the truck drives off to the right and reverses back. Flat
+     road: sideways only, nothing vertical. */
+  .side-leaf:hover .ni-truck,
+  .side-item:focus-visible .ni-truck {
+    animation: ni-drive 1.5s ease-in-out;
+  }
+
+  /* Invoicing — the coin flips. */
+  .side-leaf:hover .ni-coin,
+  .side-item:focus-visible .ni-coin {
+    animation: ni-flip 1.3s ease-in-out;
+  }
+
+  /* Admin — the knobs slide along their tracks and settle back. */
+  .side-item-group:hover .ni-knob,
+  .side-item-group:focus-visible .ni-knob {
+    animation: ni-slide-up 1.5s ease-in-out;
+  }
+  .side-item-group:hover .ni-knob:nth-of-type(8),
+  .side-item-group:focus-visible .ni-knob:nth-of-type(8) {
+    animation-name: ni-slide-down;
+  }
+}
+
+@keyframes ni-write {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes ni-clip {
+  0%   { transform: translateY(0); }
+  40%  { transform: translateY(1.4px); }
+  100% { transform: translateY(0); }
+}
+@keyframes ni-pop {
+  from { transform: scale(0.4); opacity: 0.2; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+@keyframes ni-drive {
+  0%   { transform: translateX(0); }
+  50%  { transform: translateX(3px); }
+  100% { transform: translateX(0); }
+}
+@keyframes ni-flip {
+  0%   { transform: scaleX(1); }
+  50%  { transform: scaleX(-1); }
+  100% { transform: scaleX(1); }
+}
+@keyframes ni-slide-up {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+@keyframes ni-slide-down {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(3px); }
 }

@@ -1,0 +1,14 @@
+{
+  "name": "theone-root",
+  "private": true,
+  "description": "Convenience shim: the real workspace lives in app/. These scripts just forward there so `npm run dev` works from the repo root too.",
+  "scripts": {
+    "dev": "npm --prefix app run dev",
+    "dev:api": "npm --prefix app run dev:api",
+    "dev:web": "npm --prefix app run dev:web",
+    "setup": "npm --prefix app run setup",
+    "db:migrate": "npm --prefix app run db:migrate",
+    "db:seed": "npm --prefix app run db:seed",
+    "build": "npm --prefix app -w @theone/web run build"
+  }
+}

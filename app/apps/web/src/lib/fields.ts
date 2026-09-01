@@ -21,6 +21,10 @@ export const FIELD = {
   fm: '22. FM',
   comp: '21. Comp',
   am: 'AM',
+  /** Stored under its ClickUp short key; the catalogue labels it 'Team Lead'. */
+  teamLead: 'TL',
+  /** The dispatcher / operations manager handling the WO (see seed.ts). */
+  assignee: 'Assignee',
   salesOwner: 'Sales Owner',
   completionAssignee: 'Completion Assignee',
   assigneeName: 'Assignee Name TXT',
@@ -117,6 +121,21 @@ export function shortDate(iso: string | null | undefined): string | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/** 'Jul 21, 2:30 PM' — datetime field values. A date-only value (no time part,
+    or exactly midnight from a normalized bare date) shows just the day, so the
+    seeded date-only history does not read as "everything at 12:00 AM". */
+export function shortDateTime(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = String(raw);
+  const hasTime = /T\d{2}:\d{2}/.test(s) && !/T00:00(:00)?$/.test(s);
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  const day = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  if (!hasTime) return day;
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${day}, ${time}`;
 }
 
 /** '07-14' — the compact numeric form the comp uses in notes + date rows. */

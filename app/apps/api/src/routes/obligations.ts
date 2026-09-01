@@ -19,7 +19,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse } from '../errors.js';
-import { resolveActingPrincipal } from '../services/activity.js';
+import { actingPrincipalFromRequest } from '../services/activity.js';
 import {
   evaluateDebounced,
   evaluateNow,
@@ -59,17 +59,13 @@ const snoozeSchema = z
   })
   .strict();
 
-function actorHeader(raw: string | string[] | undefined): string | undefined {
-  return Array.isArray(raw) ? raw[0] : raw;
-}
-
 export default async function obligationRoutes(app: FastifyInstance): Promise<void> {
   /**
    * GET /api/pulse — needs_me_now / due_soon / watching for the acting
    * principal. `needs_me` is the same array under the brief's name for it.
    */
   app.get('/pulse', async (req) => {
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     await evaluateDebounced();
     const board = await getPulse(actor);
     return {
@@ -86,7 +82,7 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
   /** GET /api/obligations — the clock chips' source, worst-first. */
   app.get('/obligations', async (req) => {
     const q = parse(obligationQuerySchema, req.query);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     await evaluateDebounced();
     const items = await listObligations(q, actor);
     return { items, total: items.length };
@@ -95,7 +91,7 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
   /** GET /api/notifications — mine only, newest first. */
   app.get('/notifications', async (req) => {
     const { limit } = parse(notificationsQuerySchema, req.query);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     await evaluateDebounced();
     const { items, unread } = await listNotifications(actor.id, limit);
     // `unread` and `unread_count` carry the same number: apps/web's reader
@@ -105,13 +101,13 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
 
   app.post('/notifications/:id/read', async (req) => {
     const { id } = parse(idParamsSchema, req.params);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     await markNotificationRead(id, actor.id);
     return { ok: true };
   });
 
   app.post('/notifications/read-all', async (req) => {
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     const marked = await markAllNotificationsRead(actor.id);
     return { ok: true, marked };
   });
@@ -124,7 +120,7 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
   app.post('/obligations/:id/snooze', async (req) => {
     const { id } = parse(idParamsSchema, req.params);
     const { hours, reason } = parse(snoozeSchema, req.body);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     const obligation = await snoozeObligation(id, hours, reason, actor);
     // The snooze changed the world the evaluator reads; re-run so the very next
     // read (the web invalidates immediately) already agrees with it.
