@@ -3,7 +3,7 @@
    read-only it says so and says why, rather than showing controls that would
    not take effect. */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AdminShell, AdminEmpty } from './AdminShell';
@@ -970,6 +970,9 @@ const FIELD_TYPE_WORD: Record<WoFieldType, string> = {
     keyboard can reach it. */
 const ANY_KEY = '';
 
+/** Keep in step with .fpick-pop's max-height in styles/auth.css. */
+const FPICK_MAX_H = 340;
+
 /** A searchable field picker. The native <select> it replaces opened a list as
     tall as the screen with no way to filter; this one filters as you type,
     moves with ↑/↓ and closes on Escape. */
@@ -983,6 +986,8 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [active, setActive] = useState(0);
+  // Rows below the fold open upwards — a <select> flips on its own, this does not.
+  const [up, setUp] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -1017,6 +1022,13 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const r = rootRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setUp(window.innerHeight - r.bottom < FPICK_MAX_H && r.top > window.innerHeight - r.bottom);
   }, [open]);
 
   // Keep the highlighted row in view while the arrows walk past the fold.
@@ -1068,7 +1080,7 @@ function FieldSelect({ fields, value, anyLabel, ariaLabel, onChange }: {
       </button>
 
       {open && (
-        <div className="fpick-pop" role="dialog" aria-label={ariaLabel}>
+        <div className={`fpick-pop${up ? ' is-up' : ''}`} role="dialog" aria-label={ariaLabel}>
           <div className="fpick-search">
             <Icon name="search" size={14} />
             <input
