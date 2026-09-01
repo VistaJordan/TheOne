@@ -25,6 +25,9 @@ const filterRuleSchema = z.object({
   value: z
     .union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()]))])
     .nullish(),
+  // How this rule joins the one before it (automation conditions mix AND/OR).
+  // Optional: a set whose rules carry none falls back to `match`.
+  join: z.enum(['and', 'or']).optional(),
 });
 
 export const filterSetSchema = z.object({

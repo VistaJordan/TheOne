@@ -150,3 +150,33 @@ export const FIELD_SECTIONS: FieldSection[] = [
     keys: ['fields.Ecotrak ID'],
   },
 ];
+
+/** Catalogue key → where the All-fields tab puts it. Built once from
+    FIELD_SECTIONS above so the two can never drift. */
+const SECTION_INDEX = new Map<string, { si: number; ki: number }>();
+FIELD_SECTIONS.forEach((sec, si) => sec.keys.forEach((k, ki) => SECTION_INDEX.set(k, { si, ki })));
+
+/**
+ * Regroup a field catalogue so custom fields carry the All-fields tab's section
+ * headings — Client, Site, Finances, … — instead of one flat "Custom field"
+ * bucket, and sit in the tab's order within them. A field is then found under
+ * the same heading wherever it is picked.
+ *
+ * Built-in fields keep their own groups (Work order, Site, Money, Dates …) and
+ * stay in front: those are columns, not entries in the fields tab. A custom key
+ * no section names falls to MORE_SECTION_TITLE, exactly as the tab does.
+ */
+export function withFieldSections<T extends { key: string; group: string; custom?: boolean }>(
+  fields: T[],
+): T[] {
+  const END = FIELD_SECTIONS.length;
+  const customs = fields
+    .filter((f) => f.custom)
+    .map((f) => ({ f, at: SECTION_INDEX.get(f.key) }))
+    .sort((a, b) => (a.at?.si ?? END) - (b.at?.si ?? END) || (a.at?.ki ?? 0) - (b.at?.ki ?? 0))
+    .map(({ f, at }) => ({
+      ...f,
+      group: at ? FIELD_SECTIONS[at.si].title : MORE_SECTION_TITLE,
+    }));
+  return [...fields.filter((f) => !f.custom), ...customs];
+}

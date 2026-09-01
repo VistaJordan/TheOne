@@ -372,6 +372,8 @@ export interface FilterRule {
   field: string;
   op: FilterOp;
   value?: unknown;
+  /** 'and' | 'or' against the PREVIOUS rule. See compileFilters. */
+  join?: 'and' | 'or';
 }
 
 export interface FilterSet {
@@ -570,6 +572,17 @@ function compileRule(f: ResolvedField, rule: FilterRule, p: Params): string {
 }
 
 /** Compile a whole filter set. Returns null when nothing constrains the query. */
+/**
+ * Compile a filter set to one SQL boolean expression.
+ *
+ * Two modes, decided by the rules themselves. When no rule carries a `join`,
+ * `match` joins them all the same way — the saved-view filters, and every
+ * automation written before mixed conditions existed. When any rule does, the
+ * joins win and the set can mix: AND binds tighter than OR, exactly as in SQL,
+ * so consecutive ANDs form a group and OR separates the groups. `A AND B OR C`
+ * is `(A AND B) OR C`, never `A AND (B OR C)` — and the builder brackets the
+ * rows the same way, so what is on screen is what runs.
+ */
 export async function compileFilters(set: FilterSet, p: Params): Promise<string | null> {
   const rules = set.rules ?? [];
   if (rules.length === 0) return null;
@@ -578,7 +591,18 @@ export async function compileFilters(set: FilterSet, p: Params): Promise<string 
     const f = await resolveField(rule.field);
     parts.push(`(${compileRule(f, rule, p)})`);
   }
-  return `(${parts.join(set.match === 'any' ? ' OR ' : ' AND ')})`;
+
+  if (!rules.some((r) => r.join)) {
+    return `(${parts.join(set.match === 'any' ? ' OR ' : ' AND ')})`;
+  }
+
+  // Rule 0 has nothing before it, so it always opens the first group.
+  const groups: string[][] = [[parts[0]]];
+  for (let i = 1; i < parts.length; i++) {
+    if (rules[i].join === 'or') groups.push([parts[i]]);
+    else groups[groups.length - 1].push(parts[i]);
+  }
+  return `(${groups.map((g) => `(${g.join(' AND ')})`).join(' OR ')})`;
 }
 
 // ── Sorting & grouping ───────────────────────────────────────────────────────
