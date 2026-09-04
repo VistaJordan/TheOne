@@ -14,7 +14,7 @@
 import type { FastifyRequest } from 'fastify';
 import { query } from '../db.js';
 import { unauthorized, type Capabilities } from './auth.js';
-import type { ActivityEntry, FeedActor } from '@theone/shared';
+import type { ActivityEntry, FeedActor, PermissionSet } from '@theone/shared';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -54,6 +54,9 @@ export interface ActingPrincipal {
   kind: 'human' | 'service';
   role: string | null;
   roleLabel: string | null;
+  isSuperAdmin: boolean;
+  /** The permission tree (0015) — what every gate resolves against. */
+  perms: PermissionSet;
   /** Resolved from the `role` table, not from a hardcoded list (0005). */
   can: Capabilities;
 }
@@ -67,6 +70,8 @@ export function actingPrincipalFromRequest(req: FastifyRequest): ActingPrincipal
     kind: p.kind,
     role: p.role,
     roleLabel: p.roleLabel,
+    isSuperAdmin: p.isSuperAdmin,
+    perms: p.perms,
     can: p.can,
   };
 }

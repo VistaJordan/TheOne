@@ -24,7 +24,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
-import type { ActivityEntry, WoFieldDescriptor } from '@theone/shared';
+import { fieldPermKey, type ActivityEntry, type WoFieldDescriptor } from '@theone/shared';
 import {
   ApiRequestError,
   getFieldHistory,
@@ -70,9 +70,9 @@ interface AllFieldsPanelProps {
 // card can reuse them — this panel keeps the ordering, search and history.
 
 export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
-  const { actingAs } = useAuth();
-  const canEdit = Boolean(actingAs?.can?.edit_wo_fields);
-  const canHistory = Boolean(actingAs?.can?.view_field_history);
+  const { can } = useAuth();
+  const canEdit = can('work_orders', 'edit');
+  const canHistory = can('work_orders/history', 'view');
 
   const qc = useQueryClient();
   const [q, setQ] = useState('');
@@ -235,7 +235,8 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     // don't collide.
     const isLongText =
       f.subtype === 'long_text' && raw !== null && raw !== undefined && String(raw) !== '';
-    const canEditField = canEdit && !readOnly && f.type !== 'boolean';
+    const canEditField =
+      canEdit && can(fieldPermKey(f.key), 'edit') && !readOnly && f.type !== 'boolean';
     const editable = canEditField && !isLongText;
     return (
       <div key={f.key}>

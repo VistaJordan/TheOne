@@ -10,6 +10,7 @@ import {
   listRoutingLists,
 } from '../../../api/client';
 import { Icon } from '../../Icon';
+import { useAuth } from '../../../auth/AuthProvider';
 import { ConfirmDialog } from '../../ConfirmDialog';
 import { StatusCircle } from '../../StatusCircle';
 import { bucketStatuses, useStatusGroups } from '../../../lib/statusGroups';
@@ -45,6 +46,7 @@ export function BulkBar({
   selectingAll,
 }: BulkBarProps) {
   const qc = useQueryClient();
+  const { can } = useAuth();
   const [result, setResult] = useState<BulkUpdateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -102,17 +104,19 @@ export function BulkBar({
         }}
       />
 
-      <button
-        type="button"
-        className="bulk-btn is-danger"
-        disabled={busy}
-        // Soft delete, and Admin → Trash restores it — but it still removes
-        // rows from everyone's list, so it asks first.
-        onClick={() => setConfirmDelete(true)}
-      >
-        <Icon name="trash" size={14} />
-        Delete
-      </button>
+      {can('work_orders', 'delete') && (
+        <button
+          type="button"
+          className="bulk-btn is-danger"
+          disabled={busy}
+          // Soft delete, and Admin → Trash restores it — but it still removes
+          // rows from everyone's list, so it asks first.
+          onClick={() => setConfirmDelete(true)}
+        >
+          <Icon name="trash" size={14} />
+          Delete
+        </button>
+      )}
 
       {confirmDelete && (
         <ConfirmDialog

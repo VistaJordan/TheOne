@@ -1,6 +1,7 @@
 // Typed fetch wrappers over same-origin /api/* (Vite proxies to :5174).
 // TYPE-ONLY imports from @theone/shared — no runtime value ever crosses this
 // boundary (SPRINT1-SPEC §8 Card C). Web never imports @theone/db.
+import type { PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
 import type {
   Kpis,
   Status,
@@ -908,6 +909,9 @@ export interface SessionUser {
   status: UserStatus;
   /** Optional so the dev-candidates list (which has no session) still types. */
   can?: SessionCapabilities;
+  /** The permission tree (0015): the role's grants + this person's overrides.
+      Resolved in the browser with the same `permAllows` the server uses. */
+  perms?: PermissionSet;
 }
 
 export interface MeResponse {
@@ -958,6 +962,8 @@ export interface AdminUserItem extends SessionUser {
   initials: string | null;
   last_login_at: string | null;
   has_signed_in: boolean;
+  /** A super admin has adjusted this person beyond their role (0015). */
+  has_overrides: boolean;
 }
 
 export interface RoleRecord {
@@ -971,6 +977,8 @@ export interface RoleRecord {
   can_manage_users: boolean;
   can_edit_wo_fields: boolean;
   can_view_field_history: boolean;
+  /** The tree (0015) — what the role actually grants. */
+  permissions: PermMap;
   position: number;
   user_count: number;
 }
@@ -1026,11 +1034,31 @@ export interface RoleInput {
   code?: string;
   label: string;
   description?: string | null;
-  can_edit_quote?: boolean;
-  can_approve_quote?: boolean;
-  can_manage_users?: boolean;
-  can_edit_wo_fields?: boolean;
-  can_view_field_history?: boolean;
+  /** The whole tree, replaced as a unit. */
+  permissions?: PermMap;
+}
+
+/** Every field the permission editor can list — unfiltered, unlike /wo-fields. */
+export function listPermissionFields(): Promise<{ items: PermFieldInfo[] }> {
+  return request('/admin/permission-fields');
+}
+
+export interface UserPermissions {
+  user: AdminUserItem;
+  role_permissions: PermMap;
+  overrides: PermMap;
+}
+
+/** Super admins only: one person's overrides on top of their role. */
+export function getUserPermissions(id: string): Promise<UserPermissions> {
+  return request(`/admin/users/${id}/permissions`);
+}
+
+export function setUserPermissions(id: string, overrides: PermMap): Promise<UserPermissions> {
+  return request(`/admin/users/${id}/permissions`, {
+    method: 'PUT',
+    body: JSON.stringify({ overrides }),
+  });
 }
 
 export function createRole(input: RoleInput): Promise<{ role: RoleRecord }> {

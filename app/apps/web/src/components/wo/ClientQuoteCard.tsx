@@ -3,6 +3,7 @@ import type { WorkOrderDetailV2, QuoteStatus } from '../../api/client';
 import { FIELD, field, str } from '../../lib/fields';
 import { QUOTE_STATUS } from '../quote/QuoteStatusPill';
 import { Icon } from '../Icon';
+import { useAuth } from '../../auth/AuthProvider';
 import { InlineField } from './fieldEdit';
 
 interface ClientQuoteCardProps {
@@ -18,6 +19,13 @@ interface ClientQuoteCardProps {
     entry point lives in this card's footer because both are about the quote. */
 export function ClientQuoteCard({ wo, quoteStatus }: ClientQuoteCardProps) {
   const clientQuote = str(field(wo.fields ?? {}, FIELD.clientQuote));
+  // 0015 · the entry point follows the quote permissions: no view, no button;
+  // no create, no "Create quote" at a WO that has none yet.
+  const { can } = useAuth();
+  const showEntry =
+    quoteStatus !== undefined &&
+    can('quotes', 'view') &&
+    (quoteStatus !== null || can('quotes', 'create'));
 
   return (
     <section className="card quote-card">
@@ -32,7 +40,7 @@ export function ClientQuoteCard({ wo, quoteStatus }: ClientQuoteCardProps) {
         </InlineField>
       </div>
 
-      {quoteStatus !== undefined && (
+      {showEntry && (
         <div className="card-foot">
           <Link
             className="btn btn-sm"

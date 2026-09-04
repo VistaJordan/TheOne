@@ -1,11 +1,17 @@
 /* Admin Studio — the panel the route selects.
 
-   The section list (Users · Settings · Workflows · Custom fields · Themes ·
-   Trash) is the one Elise specified. It now lives in the primary sidebar as an
-   expandable "Admin" group, so this screen no longer repeats it in a second
-   in-page rail — one nav for one set of destinations. */
+   The section list (Users · Roles · Settings · Automations · Custom fields ·
+   Themes · Audit log · Trash) lives in the primary sidebar as an expandable
+   "Admin" group, so this screen does not repeat it in a second in-page rail —
+   one nav for one set of destinations.
+
+   Access (0015): each section is its own permission (`admin/<section>` view),
+   read from the REAL signed-in user, never from who they are viewing as. Super
+   admins hold every one. */
 
 import type { ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
+import { adminPermKey } from '@theone/shared';
 import { AppShell } from '../../components/AppShell';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/Icon';
@@ -24,19 +30,27 @@ interface AdminShellProps {
   children: ReactNode;
 }
 
-export function AdminShell({ title, subtitle, actions, children }: AdminShellProps) {
-  const { user } = useAuth();
+/** '/admin/fields' → 'fields' — the permission path segment. */
+export function adminSectionOf(pathname: string): string {
+  const m = /^\/admin\/([a-z-]+)/.exec(pathname);
+  return m ? m[1] : 'users';
+}
 
-  // One gate for the whole console. Locked-with-a-reason rather than a 404:
-  // a dispatcher who lands here from a shared link should learn what this is
-  // and who to ask, not meet a dead end (quotes-payments.md §3.5).
-  if (!user?.is_super_admin) {
+export function AdminShell({ title, subtitle, actions, children }: AdminShellProps) {
+  const { user, adminCan } = useAuth();
+  const { pathname } = useLocation();
+  const section = adminSectionOf(pathname);
+
+  // Locked-with-a-reason rather than a 404: a dispatcher who lands here from a
+  // shared link should learn what this is and who to ask, not meet a dead end
+  // (quotes-payments.md §3.5).
+  if (!user || !adminCan(adminPermKey(section), 'view')) {
     return (
       <AppShell active="Admin">
         <div className="wo-state">
           <Icon name="lock" size={22} />
-          <b>The admin console is restricted to super admins</b>
-          <span>Ask Elise, Jordan, Jeff or Jack if you need access.</span>
+          <b>This part of the admin console is not available to you</b>
+          <span>Ask a super admin — Elise, Jordan, Jeff or Jack — if you need access.</span>
         </div>
       </AppShell>
     );

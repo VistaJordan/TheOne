@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { StatusGroup } from '@theone/shared';
 import type { SavedView } from '../api/client';
 import { AppShell } from '../components/AppShell';
+import { useAuth } from '../auth/AuthProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { WorkOrdersTable } from '../components/WorkOrdersTable';
 import { OKnobScrollbar } from '../components/OKnobScrollbar';
@@ -104,6 +105,8 @@ export function WorkOrdersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allMatchingSelected, setAllMatchingSelected] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  // 0015 · Import needs work_orders:create, Export its own view grant.
+  const { can } = useAuth();
   // The view whose deletion is awaiting confirmation, if any.
   const [pendingDelete, setPendingDelete] = useState<SavedView | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
@@ -369,20 +372,24 @@ export function WorkOrdersPage() {
                 <Icon name="plus" size={14} />
                 Add work order
               </button>
-              <ToolButton onClick={() => setShowImport(true)} title="Import work orders from a CSV">
-                <Icon name="upload" size={14} />
-                Import
-              </ToolButton>
+              {can('work_orders', 'create') && (
+                <ToolButton onClick={() => setShowImport(true)} title="Import work orders from a CSV">
+                  <Icon name="upload" size={14} />
+                  Import
+                </ToolButton>
+              )}
               {/* A real link, so the browser handles the download and the file
                   gets its name from Content-Disposition. */}
-              <a
-                className="tool-btn"
-                href={workOrdersExportUrl(criteria)}
-                title="Export the filtered rows, in the columns shown"
-              >
-                <Icon name="download" size={14} />
-                Export
-              </a>
+              {can('work_orders/export', 'view') && (
+                <a
+                  className="tool-btn"
+                  href={workOrdersExportUrl(criteria)}
+                  title="Export the filtered rows, in the columns shown"
+                >
+                  <Icon name="download" size={14} />
+                  Export
+                </a>
+              )}
             </>
           }
         />

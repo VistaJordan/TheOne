@@ -1075,3 +1075,6 @@ export interface ApiError {
     details: unknown;
   };
 }
+
+// ── Permissions (0015) ───────────────────────────────────────────────────────
+export * from './permissions';

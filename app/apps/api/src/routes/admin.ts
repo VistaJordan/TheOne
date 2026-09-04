@@ -1,23 +1,36 @@
-// Routes: Admin Studio. Everything here requires the manage-users capability
-// (which every super admin has, and any role can be granted — see 0005).
+// Routes: Admin Studio. Every route here is gated on the permission tree
+// (0015): `admin/<section>` view for reads, edit for writes. Super admins hold
+// every permission; any role can be granted a section from the Roles screen.
 //
-//   Users     GET/POST  /admin/users · PATCH /admin/users/:id
-//   Roles     GET/POST  /admin/roles · PATCH/DELETE /admin/roles/:id
-//   Fields    GET       /admin/fields
-//   Workflow  GET       /admin/workflow · POST/PATCH/DELETE /admin/workflow/statuses[/:id]
-//                       POST/PATCH/DELETE /admin/workflow/groups[/:code]
-//   Trash     GET       /admin/trash · POST /admin/trash/:id/restore
-//   Settings  GET       /admin/settings
+//   Users        GET/POST  /admin/users · PATCH /admin/users/:id
+//                GET/PUT   /admin/users/:id/permissions   (super admins only)
+//   Roles        GET/POST  /admin/roles · PATCH/DELETE /admin/roles/:id
+//   Permissions  GET       /admin/permission-fields  (the whole catalogue, for the editor)
+//   Fields       GET       /admin/fields
+//   Workflow     GET       /admin/workflow · POST/PATCH/DELETE /admin/workflow/statuses[/:id]
+//                          POST/PATCH/DELETE /admin/workflow/groups[/:code]
+//   Trash        GET       /admin/trash · POST /admin/trash/:id/restore
+//   Settings     GET       /admin/settings
 //
 // The gate is applied per-route rather than at registration so each 403 can say
-// which privilege was missing.
+// which permission was missing.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { adminPermKey, permAllows, type PermAction } from '@theone/shared';
 import { ApiError, parse } from '../errors.js';
 import { unauthorized } from '../services/auth.js';
-import { disableUser, inviteUser, listUsers, updateUser } from '../services/users.js';
+import {
+  disableUser,
+  getUserPermissions,
+  inviteUser,
+  listUsers,
+  setUserPermissions,
+  updateUser,
+} from '../services/users.js';
 import { createRole, deleteRole, listRoles, updateRole } from '../services/roles.js';
+import { requirePerm } from '../services/permissions.js';
+import { getFieldCatalogue } from '../services/woFields.js';
 import { listFieldDefs, listWorkflow, listTrash, restoreTask, getSettings } from '../services/adminMeta.js';
 import { createFieldDef, updateFieldDef, reorderFieldDefs, FIELD_DEF_TYPES } from '../services/fieldDefs.js';
 import {
@@ -39,13 +52,38 @@ import {
 } from '../services/automations.js';
 import { filterSetSchema } from './views.js';
 
-function requireAdmin(req: FastifyRequest): string {
+type AdminSection =
+  | 'users'
+  | 'roles'
+  | 'settings'
+  | 'automations'
+  | 'fields'
+  | 'themes'
+  | 'audit'
+  | 'trash';
+
+function requireAdmin(req: FastifyRequest, section: AdminSection, action: PermAction = 'view'): string {
   if (!req.auth) throw unauthorized();
   // The REAL user, never `actingAs`: impersonating an admin must not hand the
   // impersonator the ability to edit users and roles as them.
-  if (!req.auth.user.can.manageUsers) {
-    throw new ApiError('FORBIDDEN', 'The admin console is restricted to super admins', {
-      required_capability: 'can_manage_users',
+  requirePerm(
+    req.auth.user,
+    adminPermKey(section),
+    action,
+    action === 'view'
+      ? `Admin › ${section} is not available to you`
+      : `You cannot make changes in Admin › ${section}`,
+  );
+  return req.auth.user.id;
+}
+
+/** The per-user override editor is the one thing a plain admin-console grant
+    does not unlock — it is super admins only, as asked. */
+function requireSuperAdmin(req: FastifyRequest): string {
+  if (!req.auth) throw unauthorized();
+  if (!req.auth.user.isSuperAdmin) {
+    throw new ApiError('FORBIDDEN', 'Only a super admin can adjust one person’s permissions', {
+      required: 'is_super_admin',
     });
   }
   return req.auth.user.id;
@@ -73,6 +111,23 @@ const updateUserSchema = z
   })
   .strict();
 
+// path → {view?, create?, edit?, delete?, approve?}. Shaped here; the service
+// normalises (drops empties, ignores non-booleans) before it stores anything.
+const permMapSchema = z.record(
+  z.string().min(1).max(400),
+  z
+    .object({
+      view: z.boolean().optional(),
+      create: z.boolean().optional(),
+      edit: z.boolean().optional(),
+      delete: z.boolean().optional(),
+      approve: z.boolean().optional(),
+    })
+    .strict(),
+);
+
+const userPermissionsSchema = z.object({ overrides: permMapSchema }).strict();
+
 // ── Roles ────────────────────────────────────────────────────────────────────
 
 const createRoleSchema = z
@@ -80,6 +135,8 @@ const createRoleSchema = z
     code: z.string().trim().max(40).optional(),
     label: z.string().trim().min(2).max(60),
     description: z.string().trim().max(500).nullable().optional(),
+    permissions: permMapSchema.optional(),
+    // Legacy spellings, still accepted and folded into the tree.
     can_edit_quote: z.boolean().optional(),
     can_approve_quote: z.boolean().optional(),
     can_manage_users: z.boolean().optional(),
@@ -93,51 +150,82 @@ const updateRoleSchema = createRoleSchema.partial().strict();
 export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   // ── Users ──────────────────────────────────────────────────────────────────
   app.get('/admin/users', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'users');
     return { items: await listUsers() };
   });
 
   app.post('/admin/users', async (req, reply) => {
-    requireAdmin(req);
+    requireAdmin(req, 'users', 'edit');
     const user = await inviteUser(parse(inviteSchema, req.body));
     return reply.status(201).send({ user });
   });
 
   app.patch('/admin/users/:id', async (req) => {
-    const actorId = requireAdmin(req);
+    const actorId = requireAdmin(req, 'users', 'edit');
     const { id } = parse(idParams, req.params);
     return { user: await updateUser(id, parse(updateUserSchema, req.body), actorId) };
   });
 
   app.post('/admin/users/:id/disable', async (req) => {
-    const actorId = requireAdmin(req);
+    const actorId = requireAdmin(req, 'users', 'edit');
     const { id } = parse(idParams, req.params);
     return { user: await disableUser(id, actorId) };
   });
 
+  // Per-user overrides (0015) — super admins only, both ways.
+  app.get('/admin/users/:id/permissions', async (req) => {
+    requireSuperAdmin(req);
+    const { id } = parse(idParams, req.params);
+    return getUserPermissions(id);
+  });
+
+  app.put('/admin/users/:id/permissions', async (req) => {
+    requireSuperAdmin(req);
+    const { id } = parse(idParams, req.params);
+    const { overrides } = parse(userPermissionsSchema, req.body);
+    return setUserPermissions(id, overrides);
+  });
+
   // ── Roles ──────────────────────────────────────────────────────────────────
   app.get('/admin/roles', async (req) => {
-    requireAdmin(req);
+    // Users needs the role list for its <select>s, so either grant will do.
+    if (!req.auth) throw unauthorized();
+    const u = req.auth.user;
+    const ok =
+      permAllows(u.perms, adminPermKey('roles'), 'view', u.isSuperAdmin) ||
+      permAllows(u.perms, adminPermKey('users'), 'view', u.isSuperAdmin);
+    if (!ok) throw new ApiError('FORBIDDEN', 'Admin › roles is not available to you');
     return { items: await listRoles() };
   });
 
   app.post('/admin/roles', async (req, reply) => {
-    requireAdmin(req);
+    requireAdmin(req, 'roles', 'edit');
     const role = await createRole(parse(createRoleSchema, req.body));
     return reply.status(201).send({ role });
   });
 
   app.patch('/admin/roles/:id', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'roles', 'edit');
     const { id } = parse(idParams, req.params);
     return { role: await updateRole(id, parse(updateRoleSchema, req.body)) };
   });
 
   app.delete('/admin/roles/:id', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'roles', 'edit');
     const { id } = parse(idParams, req.params);
     await deleteRole(id);
     return { ok: true };
+  });
+
+  // The permission editor needs EVERY field, including the ones the caller's
+  // own role hides from /wo-fields — you cannot grant what you cannot list.
+  app.get('/admin/permission-fields', async (req) => {
+    if (!req.auth) throw unauthorized();
+    if (!req.auth.user.isSuperAdmin) requireAdmin(req, 'roles');
+    const cat = await getFieldCatalogue();
+    return {
+      items: cat.fields.map((f) => ({ key: f.key, label: f.label, custom: Boolean(f.custom) })),
+    };
   });
 
   // ── Custom fields (S7: read + the field engine's writes) ───────────────────
@@ -153,24 +241,24 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   const reorderFieldsSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(500) });
 
   app.get('/admin/fields', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields');
     return { items: await listFieldDefs() };
   });
 
   app.post('/admin/fields', async (req, reply) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields', 'edit');
     const body = parse(createFieldSchema, req.body);
     return reply.status(201).send({ field: await createFieldDef(body) });
   });
 
   app.patch('/admin/fields/:id', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields', 'edit');
     const { id } = parse(idParams, req.params);
     return { field: await updateFieldDef(id, parse(updateFieldSchema, req.body)) };
   });
 
   app.put('/admin/fields/order', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields', 'edit');
     const { ids } = parse(reorderFieldsSchema, req.body);
     return { items: await reorderFieldDefs(ids) };
   });
@@ -191,44 +279,44 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   const groupParams = z.object({ code: z.string().trim().min(1).max(60) });
 
   app.get('/admin/workflow', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields');
     return { items: await listWorkflow(), groups: await listStatusGroups() };
   });
 
   app.post('/admin/workflow/statuses', async (req, reply) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields', 'edit');
     const item = await createStatus(parse(createStatusSchema, req.body));
     return reply.status(201).send({ item });
   });
 
   app.patch('/admin/workflow/statuses/:id', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields', 'edit');
     const { id } = parse(idParams, req.params);
     return { item: await updateStatus(id, parse(updateStatusSchema, req.body)) };
   });
 
   app.delete('/admin/workflow/statuses/:id', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields', 'edit');
     const { id } = parse(idParams, req.params);
     await deleteStatus(id);
     return { ok: true };
   });
 
   app.post('/admin/workflow/groups', async (req, reply) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields', 'edit');
     const { label } = parse(groupLabelSchema, req.body);
     return reply.status(201).send({ item: await createStatusGroup(label) });
   });
 
   app.patch('/admin/workflow/groups/:code', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields', 'edit');
     const { code } = parse(groupParams, req.params);
     const { label } = parse(groupLabelSchema, req.body);
     return { item: await renameStatusGroup(code, label) };
   });
 
   app.delete('/admin/workflow/groups/:code', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'fields', 'edit');
     const { code } = parse(groupParams, req.params);
     await deleteStatusGroup(code);
     return { ok: true };
@@ -281,31 +369,31 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/admin/automations', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'automations');
     return { items: await listAutomations() };
   });
 
   app.post('/admin/automations', async (req, reply) => {
-    const actorId = requireAdmin(req);
+    const actorId = requireAdmin(req, 'automations', 'edit');
     const body = parse(createAutomationSchema, req.body);
     return reply.status(201).send({ item: await createAutomation(body, actorId) });
   });
 
   app.patch('/admin/automations/:id', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'automations', 'edit');
     const { id } = parse(idParams, req.params);
     return { item: await updateAutomation(id, parse(updateAutomationSchema, req.body)) };
   });
 
   app.delete('/admin/automations/:id', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'automations', 'edit');
     const { id } = parse(idParams, req.params);
     await deleteAutomation(id);
     return { ok: true };
   });
 
   app.get('/admin/automations/:id/runs', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'automations');
     const { id } = parse(idParams, req.params);
     const { limit } = parse(runsQuerySchema, req.query);
     return { items: await listRuns(id, limit) };
@@ -313,17 +401,16 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   // ── Trash ──────────────────────────────────────────────────────────────────
   app.get('/admin/trash', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'trash');
     return { items: await listTrash() };
   });
 
   app.post('/admin/trash/:id/restore', async (req) => {
-    const actorId = requireAdmin(req);
+    const actorId = requireAdmin(req, 'trash', 'edit');
     const { id } = parse(idParams, req.params);
     return { item: await restoreTask(id, actorId) };
   });
 
-  // ── Settings ───────────────────────────────────────────────────────────────
   // ── Audit log ──────────────────────────────────────────────────────────────
   // GET /admin/audit          the whole activity_log, filtered and paged
   // GET /admin/audit/export   the same rows as CSV
@@ -340,12 +427,12 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/admin/audit', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'audit');
     return listAuditLog(parse(auditQuerySchema, req.query));
   });
 
   app.get('/admin/audit/export', async (req, reply) => {
-    requireAdmin(req);
+    requireAdmin(req, 'audit');
     const { limit: _l, offset: _o, ...filters } = parse(auditQuerySchema, req.query);
     const csv = await exportAuditCsv(filters);
     const stamp = new Date().toISOString().slice(0, 10);
@@ -355,8 +442,9 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       .send(csv);
   });
 
+  // ── Settings ───────────────────────────────────────────────────────────────
   app.get('/admin/settings', async (req) => {
-    requireAdmin(req);
+    requireAdmin(req, 'settings');
     return getSettings();
   });
 }
