@@ -180,14 +180,12 @@ export function SignInPage() {
 
         {!loading && authMode === 'bypass' && (
           <>
-            <div className="signin-dev">
-              <Icon name="alert" size={12} />
-              <span>
-                <b>Development mode.</b> Microsoft is not configured, so the button above signs
-                you in as <b>{devDefault?.email ?? '…'}</b> with no password. Never run this on a
-                server.
-                {candidates.isError && ' Could not reach the API — is it running on :5174?'}
-                {devUsers.length > 1 && (
+            {/* Local bypass only: the account picker toggle. Nothing is said
+                about the mode itself — a footnote that reads "development
+                mode" is wrong the moment the API is merely slow to answer. */}
+            {devUsers.length > 1 && (
+              <div className="signin-dev">
+                <span>
                   <button
                     type="button"
                     className="linkbtn"
@@ -195,9 +193,9 @@ export function SignInPage() {
                   >
                     {showPicker ? 'Hide other accounts' : 'Sign in as someone else'}
                   </button>
-                )}
-              </span>
-            </div>
+                </span>
+              </div>
+            )}
 
             {showPicker && (
               <ul className="signin-users">
