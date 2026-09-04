@@ -1,16 +1,18 @@
 // Routes: technician payment requests (S4).
-//   GET  /work-orders/:id/payment-requests   (list + totals)
-//   POST /work-orders/:id/payment-requests   (201 requested — ANY role)
+//   GET  /work-orders/:id/payment-requests   (list + totals — payments:view)
+//   POST /work-orders/:id/payment-requests   (201 requested — payments:create)
 //
-// No role gate: the AP queue is the control point, and the approval routing is
-// explicitly undecided (product/quotes-payments.md §4.3). The amount goes through
-// the same hardened money validation as the quote's line items.
+// The AP queue is the control point and the approval routing is explicitly
+// undecided (product/quotes-payments.md §4.3), so the only gates are the two
+// permission-tree entries (0015). The amount goes through the same hardened
+// money validation as the quote's line items.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { parse, notFound } from '../errors.js';
-import { resolveTaskId, resolveActingPrincipal } from '../services/activity.js';
+import { resolveTaskId, actingPrincipalFromRequest } from '../services/activity.js';
 import { listPaymentRequests, createPaymentRequest } from '../services/payments.js';
+import { requirePerm } from '../services/permissions.js';
 import { assertRawMoney, zMoney } from '../validation.js';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
@@ -30,9 +32,6 @@ const createSchema = z
   })
   .strict();
 
-function actorHeader(raw: string | string[] | undefined): string | undefined {
-  return Array.isArray(raw) ? raw[0] : raw;
-}
 
 async function taskIdOf(req: FastifyRequest): Promise<string> {
   const { id } = parse(idParamsSchema, req.params);
@@ -43,15 +42,17 @@ async function taskIdOf(req: FastifyRequest): Promise<string> {
 
 export default async function paymentRoutes(app: FastifyInstance): Promise<void> {
   app.get('/work-orders/:id/payment-requests', async (req) => {
+    requirePerm(actingPrincipalFromRequest(req), 'payments', 'view', 'You cannot view payment requests');
     const taskId = await taskIdOf(req);
     return listPaymentRequests(taskId);
   });
 
   app.post('/work-orders/:id/payment-requests', async (req, reply) => {
+    const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'payments', 'create', 'You cannot request payments');
     const taskId = await taskIdOf(req);
     assertRawMoney(req.rawBody);
     const input = parse(createSchema, req.body);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
     const item = await createPaymentRequest(taskId, input, actor);
     return reply.status(201).send({ item });
   });

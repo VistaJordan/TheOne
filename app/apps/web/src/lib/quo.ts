@@ -88,8 +88,9 @@ export function optimisticMessage(body: string, conversationId: string): ThreadM
   };
 }
 
-/** Status names carry an operational '!!' prefix ('!! waiting for approval');
-    the thread foot reads as prose, so strip it. */
+/** Legacy status names carried operational '!!' / '<< >>' wrappers; the seeded
+    vocabulary no longer does, but admins can rename statuses, so keep stripping
+    them for the prose thread foot. */
 export function plainStatus(name: string | null | undefined): string | null {
   if (!name) return null;
   const t = name.replace(/^!+\s*/, '').replace(/^<<\s*/, '').replace(/\s*>>$/, '').trim();

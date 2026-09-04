@@ -18,7 +18,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { parse, notFound } from '../errors.js';
-import { resolveTaskId, resolveActingPrincipal } from '../services/activity.js';
+import { resolveTaskId, actingPrincipalFromRequest } from '../services/activity.js';
 import {
   getQuote,
   listQuotes,
@@ -28,7 +28,9 @@ import {
   approveQuote,
   sendQuote,
   rejectQuote,
+  assertCanCreate,
 } from '../services/quotes.js';
+import { requirePerm } from '../services/permissions.js';
 import { assertRawMoney, zMoney } from '../validation.js';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
@@ -66,9 +68,6 @@ const updateSchema = z
 
 const rejectSchema = z.object({ note: z.string().trim().min(1).max(2000) });
 
-function actorHeader(raw: string | string[] | undefined): string | undefined {
-  return Array.isArray(raw) ? raw[0] : raw;
-}
 
 /** :id (uuid or WO number) → task uuid, 404 when the work order does not exist. */
 async function taskIdOf(req: FastifyRequest): Promise<string> {
@@ -79,12 +78,16 @@ async function taskIdOf(req: FastifyRequest): Promise<string> {
 }
 
 export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
-  /** GET /quotes — the sidebar list page. Read-only, no role gate (S5 auth). */
-  app.get('/quotes', async () => listQuotes());
+  /** GET /quotes — the sidebar list page. Needs quotes:view (0015). */
+  app.get('/quotes', async (req) => {
+    requirePerm(actingPrincipalFromRequest(req), 'quotes', 'view', 'You cannot view quotes');
+    return listQuotes();
+  });
 
   app.get('/work-orders/:id/quote', async (req) => {
     const taskId = await taskIdOf(req);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'quotes', 'view', 'You cannot view quotes');
     const quote = await getQuote(taskId, actor);
     if (!quote) throw notFound('No quote on this work order');
     return { quote };
@@ -92,7 +95,10 @@ export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/work-orders/:id/quote', async (req, reply) => {
     const taskId = await taskIdOf(req);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
+    // Creating is its own grant: an OM may be allowed to revise a draft
+    // somebody else opened without being allowed to open one.
+    assertCanCreate(actor);
     const quote = await createQuote(taskId, actor);
     return reply.status(201).send({ quote });
   });
@@ -101,32 +107,32 @@ export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
     const taskId = await taskIdOf(req);
     assertRawMoney(req.rawBody);
     const input = parse(updateSchema, req.body);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     return { quote: await updateQuote(taskId, input, actor) };
   });
 
   app.post('/work-orders/:id/quote/submit', async (req) => {
     const taskId = await taskIdOf(req);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     return { quote: await submitQuote(taskId, actor) };
   });
 
   app.post('/work-orders/:id/quote/approve', async (req) => {
     const taskId = await taskIdOf(req);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     return { quote: await approveQuote(taskId, actor) };
   });
 
   app.post('/work-orders/:id/quote/send', async (req) => {
     const taskId = await taskIdOf(req);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     return { quote: await sendQuote(taskId, actor) };
   });
 
   app.post('/work-orders/:id/quote/reject', async (req) => {
     const taskId = await taskIdOf(req);
     const { note } = parse(rejectSchema, req.body);
-    const actor = await resolveActingPrincipal(actorHeader(req.headers['x-actor-id']));
+    const actor = actingPrincipalFromRequest(req);
     return { quote: await rejectQuote(taskId, note, actor) };
   });
 }

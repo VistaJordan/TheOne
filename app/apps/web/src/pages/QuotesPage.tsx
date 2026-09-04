@@ -2,11 +2,13 @@
    grand total, last touched, and a way into the builder. It reuses the S1 work-
    orders table (.ct) rather than inventing a second table treatment. */
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { ApiRequestError, listQuotes } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
+import { ListPagination, PAGE_SIZES } from '../components/ListPagination';
 import { QUOTE_STATUS } from '../components/quote/QuoteStatusPill';
 import { usd } from '../lib/quoteTotals';
 import { numericDate } from '../lib/fields';
@@ -17,6 +19,12 @@ export function QuotesPage() {
 
   const items = quotesQuery.data?.items ?? [];
   const total = quotesQuery.data?.total ?? items.length;
+
+  // The quotes endpoint returns the whole set, so the footer pages a client
+  // slice — same bar as the work-orders list, which pages on the server.
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
+  const [offset, setOffset] = useState(0);
+  const pageItems = items.slice(offset, offset + pageSize);
   // A 404 means the list route is not served yet — that is an empty shelf, not a
   // broken page, and it should read that way.
   const notServed =
@@ -25,7 +33,6 @@ export function QuotesPage() {
   return (
     <AppShell active="Quotes">
       <div className="page-head">
-        <h1 className="page-title">Quotes</h1>
         <p className="page-sub">
           {quotesQuery.isLoading
             ? 'Loading…'
@@ -66,7 +73,7 @@ export function QuotesPage() {
                   <td colSpan={5}>No quotes have been built yet.</td>
                 </tr>
               )}
-              {items.map((q) => {
+              {pageItems.map((q) => {
                 const href = `/work-orders/${encodeURIComponent(q.wo_number)}/quote`;
                 return (
                   <tr key={q.id} className="is-clickable" onClick={() => navigate(href)}>
@@ -96,6 +103,20 @@ export function QuotesPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {!quotesQuery.isError && (
+        <ListPagination
+          total={quotesQuery.isLoading ? undefined : total}
+          offset={offset}
+          limit={pageSize}
+          noun="quotes"
+          onOffsetChange={setOffset}
+          onLimitChange={(n) => {
+            setPageSize(n);
+            setOffset(0);
+          }}
+        />
       )}
     </AppShell>
   );

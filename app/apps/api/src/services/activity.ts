@@ -1,90 +1,92 @@
 // Activity + actor resolution service.
-// - resolveActorId: X-Actor-Id header (if it names a real principal) else the
-//   seeded Jordan Brown admin principal (§5). Cached after first lookup.
-// - getActivity: a WO's activity_log newest-first, joined to its actor.
+//
+// S5 CHANGED THE TRUST MODEL HERE. Until auth landed, the acting principal came
+// from an X-Actor-Id request header with a fallback to the seeded Jordan Brown
+// admin — i.e. the caller chose their own identity and therefore their own
+// permissions. The actor is now taken from the session the auth guard attached
+// to the request (plugins/authGuard.ts) and the header is ignored entirely.
+//
+// Impersonation note: when a super admin is viewing as somebody else, writes are
+// attributed to `actingAs` so the app behaves as that role — but the session
+// still records the real human, and impersonation start/stop are their own
+// activity_log events. Nothing is anonymous.
 
+import type { FastifyRequest } from 'fastify';
 import { query } from '../db.js';
-import type { ActivityEntry, FeedActor } from '@theone/shared';
+import { unauthorized, type Capabilities } from './auth.js';
+import type { ActivityEntry, FeedActor, PermissionSet } from '@theone/shared';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ISO-8601 UTC render so the JSON is deterministic regardless of PGlite's date parsing.
 const CREATED_AT_SQL = `to_char((a.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
-let defaultActorId: string | null = null;
-
-/** The seeded Jordan Brown human principal — default write actor (§5, open-question #5). */
-async function getDefaultActorId(): Promise<string> {
-  if (defaultActorId) return defaultActorId;
-  const res = await query<{ id: string }>(
-    `SELECT id FROM principal WHERE display_name = 'Jordan Brown' AND kind = 'human' LIMIT 1`,
-  );
-  if (res.rows.length === 0) {
-    throw new Error('Default actor "Jordan Brown" not found — is the DB seeded?');
-  }
-  defaultActorId = res.rows[0].id;
-  return defaultActorId;
-}
-
 /**
- * Resolve the acting principal id. Uses X-Actor-Id when it is a uuid naming a
- * real principal; otherwise falls back to the default admin. Guarantees a valid
- * FK for activity_log.actor_principal_id.
+ * The principal a write is attributed to. Sourced from `req.auth`, which only
+ * exists once the auth guard has validated a session cookie.
+ *
+ * Throwing on a missing session is deliberate: a write that cannot name its
+ * author must not reach the database. The old header fallback silently
+ * attributed orphaned writes to an admin, which is exactly the behaviour that
+ * made the activity log untrustworthy.
  */
-export async function resolveActorId(headerVal: string | undefined): Promise<string> {
-  if (headerVal && UUID_RE.test(headerVal)) {
-    const res = await query<{ id: string }>(`SELECT id FROM principal WHERE id = $1`, [headerVal]);
-    if (res.rows.length > 0) return res.rows[0].id;
-  }
-  return getDefaultActorId();
+export function actorFromRequest(req: FastifyRequest): FeedActor {
+  if (!req.auth) throw unauthorized();
+  const p = req.auth.actingAs;
+  return { id: p.id, name: p.name, kind: p.kind };
+}
+
+export function actorIdFromRequest(req: FastifyRequest): string {
+  if (!req.auth) throw unauthorized();
+  return req.auth.actingAs.id;
 }
 
 /**
- * Same resolution as resolveActorId, but returns the whole principal so a write
- * can echo the actor back without a second round-trip (S2 POST /comments needs
- * the name + kind for the FeedItem it returns).
- */
-export async function resolveActor(headerVal: string | undefined): Promise<FeedActor> {
-  const id = await resolveActorId(headerVal);
-  const res = await query<{ id: string; display_name: string; kind: 'human' | 'service' }>(
-    `SELECT id, display_name, kind FROM principal WHERE id = $1 LIMIT 1`,
-    [id],
-  );
-  if (res.rows.length === 0) throw new Error(`Principal ${id} vanished`);
-  const p = res.rows[0];
-  return { id: p.id, name: p.display_name, kind: p.kind };
-}
-
-/**
- * S4 · the acting principal WITH its role — the whole permission system until
- * auth lands (S5). `role` is `principal.role` verbatim; the quote gates compare
- * it against QUOTE_EDIT_ROLES / QUOTE_APPROVE_ROLES.
+ * S4 · the acting principal WITH its role — what the quote gates compare
+ * against QUOTE_EDIT_ROLES / QUOTE_APPROVE_ROLES.
+ *
+ * Still resolved BEFORE any db.transaction() opens: PGlite is single-connection,
+ * so a lookup inside a transaction deadlocks.
  */
 export interface ActingPrincipal {
   id: string;
   name: string;
   kind: 'human' | 'service';
   role: string | null;
+  roleLabel: string | null;
+  isSuperAdmin: boolean;
+  /** The permission tree (0015) — what every gate resolves against. */
+  perms: PermissionSet;
+  /** Resolved from the `role` table, not from a hardcoded list (0005). */
+  can: Capabilities;
 }
 
-/**
- * Same resolution as resolveActor (X-Actor-Id → real principal, else the seeded
- * Jordan Brown admin), plus the role. Every role-gated route resolves through
- * this — and ALWAYS before a db.transaction() opens (PGlite is single-connection).
- */
-export async function resolveActingPrincipal(
-  headerVal: string | undefined,
-): Promise<ActingPrincipal> {
-  const id = await resolveActorId(headerVal);
-  const res = await query<{
-    id: string;
-    display_name: string;
-    kind: 'human' | 'service';
-    role: string | null;
-  }>(`SELECT id, display_name, kind, role FROM principal WHERE id = $1 LIMIT 1`, [id]);
-  if (res.rows.length === 0) throw new Error(`Principal ${id} vanished`);
-  const p = res.rows[0];
-  return { id: p.id, name: p.display_name, kind: p.kind, role: p.role };
+export function actingPrincipalFromRequest(req: FastifyRequest): ActingPrincipal {
+  if (!req.auth) throw unauthorized();
+  const p = req.auth.actingAs;
+  return {
+    id: p.id,
+    name: p.name,
+    kind: p.kind,
+    role: p.role,
+    roleLabel: p.roleLabel,
+    isSuperAdmin: p.isSuperAdmin,
+    perms: p.perms,
+    can: p.can,
+  };
+}
+
+/** Sign-in, sign-out and impersonation, written to the same log as everything else. */
+export async function recordAuthEvent(
+  principalId: string,
+  action: 'signed_in' | 'signed_out' | 'impersonation_started' | 'impersonation_ended',
+  after: Record<string, unknown> | null,
+): Promise<void> {
+  await query(
+    `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, after)
+     VALUES ($1, 'principal', $1, $2, $3)`,
+    [principalId, action, after ? JSON.stringify(after) : null],
+  );
 }
 
 interface ActivityRow {

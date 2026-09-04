@@ -14,9 +14,20 @@ import type {
 } from '@theone/shared';
 import { PHASE_BY_STATUS_NAME } from '@theone/shared';
 import { ApiError } from '../errors.js';
-import { UUID_RE, CREATED_AT_SQL, resolveActorId, getActivityForTask } from './activity.js';
+import { logTaskChanges, type TaskChange } from './woAudit.js';
+import { dispatchAutomations, type AutoCtx } from './automations.js';
+import { UUID_RE, CREATED_AT_SQL, getActivityForTask } from './activity.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
+import {
+  Params,
+  compileFilters,
+  compileGroupExpr,
+  compileSort,
+  resolveField,
+  type FilterSet,
+  type SortSpec,
+} from './woFields.js';
 
 /**
  * Status name → lifecycle phase (S2 contract item 3). The map is a code-level
@@ -31,6 +42,13 @@ export interface ListFilters {
   status_group?: string;
   status_id?: string;
   search?: string;
+  /** The saved-view filter set — any field, any operator (services/woFields.ts). */
+  filters?: FilterSet;
+  sort?: SortSpec | null;
+  /** Bucket the whole filtered set by this field and return per-bucket counts. */
+  group_by?: string | null;
+  /** Column keys the caller will render. Custom ones are projected onto `custom`. */
+  columns?: string[];
   limit: number;
   offset: number;
 }
@@ -54,9 +72,19 @@ interface WoRow {
   status_group: StatusRef['group'];
   status_color: string;
   age_days: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+  /** Aliased custom-field columns (c0, c1, …), present only when requested. */
+  [alias: string]: unknown;
 }
 
-function mapListItem(r: WoRow): WorkOrderListItem {
+/** `customByAlias` maps the c0/c1/… aliases back to their field keys. */
+function mapListItem(r: WoRow, customByAlias: Map<string, string>): WorkOrderListItem {
+  const custom: Record<string, string | null> = {};
+  for (const [alias, key] of customByAlias) {
+    const v = r[alias];
+    custom[key] = v === undefined || v === null ? null : String(v);
+  }
   return {
     id: r.id,
     wo_number: r.wo_number,
@@ -73,6 +101,9 @@ function mapListItem(r: WoRow): WorkOrderListItem {
     home_list: r.home_list,
     status: { id: r.status_id, name: r.status_name, group: r.status_group, color: r.status_color },
     age_days: r.age_days === null ? null : Number(r.age_days),
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    custom: customByAlias.size > 0 ? custom : undefined,
   };
 }
 
@@ -83,7 +114,9 @@ const WO_SELECT = `
   t.date_received::text AS date_received,
   hl.name AS home_list,
   s.id AS status_id, s.name AS status_name, s.status_group AS status_group, s.color AS status_color,
-  (now()::date - t.date_received) AS age_days
+  (now()::date - t.date_received) AS age_days,
+  to_char((t.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+  to_char((t.updated_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
 `;
 
 const WO_FROM = `
@@ -92,44 +125,137 @@ const WO_FROM = `
   LEFT JOIN container hl ON hl.id = t.home_list_id
 `;
 
-export async function listWorkOrders(f: ListFilters): Promise<WorkOrderListResponse> {
+/**
+ * The WHERE clause every list-shaped read shares — the list itself, the export,
+ * the group counts, and "select every row that matches, not just the page I can
+ * see". Built once so those four can never drift apart and show the user a
+ * different set than the one they are acting on.
+ *
+ * Returns the clause plus the parameter accumulator it was built into; the
+ * caller keeps appending to that same accumulator for ORDER BY / LIMIT.
+ */
+async function buildListWhere(
+  f: Omit<ListFilters, 'limit' | 'offset'>,
+): Promise<{ sql: string; p: Params }> {
+  const p = new Params();
   const where: string[] = ['t.deleted_at IS NULL'];
-  const params: unknown[] = [];
 
-  if (f.status_group) {
-    params.push(f.status_group);
-    where.push(`t.status_group = $${params.length}`);
-  }
-  if (f.status_id) {
-    params.push(f.status_id);
-    where.push(`t.status_id = $${params.length}`);
-  }
+  // The three legacy scalar params still work: the segmented status-group tabs
+  // and the topbar search predate the filter builder and are cheaper to express
+  // as their own arguments than as a synthesised rule.
+  if (f.status_group) where.push(`t.status_group = ${p.add(f.status_group)}`);
+  if (f.status_id) where.push(`t.status_id = ${p.add(f.status_id)}`);
   if (f.search) {
-    params.push(`%${f.search}%`);
-    const p = `$${params.length}`;
+    const hole = p.add(`%${f.search}%`);
+    // The topbar search is now global, so this is what "find a work order by
+    // anything you can see on the row" has to cover — title and trade included.
     where.push(
-      `(t.wo_number ILIKE ${p} OR t.ext_name ILIKE ${p} OR t.client ILIKE ${p} OR t.city ILIKE ${p})`,
+      `(t.wo_number ILIKE ${hole} OR t.ext_name ILIKE ${hole} OR t.title ILIKE ${hole}
+        OR t.client ILIKE ${hole} OR t.city ILIKE ${hole} OR t.state ILIKE ${hole}
+        OR t.trade ILIKE ${hole})`,
     );
   }
 
-  const whereSql = `WHERE ${where.join(' AND ')}`;
+  const compiled = await compileFilters(f.filters ?? { match: 'all', rules: [] }, p);
+  if (compiled) where.push(compiled);
+
+  return { sql: `WHERE ${where.join(' AND ')}`, p };
+}
+
+/** A `group_by` bucket over the WHOLE filtered set, not just the current page —
+    a collapsed group has to be able to say how many rows it is hiding. */
+async function groupCounts(
+  f: Omit<ListFilters, 'limit' | 'offset'>,
+  whereSql: string,
+  whereParams: unknown[],
+): Promise<{ key: string | null; count: number }[]> {
+  const p = new Params();
+  for (const v of whereParams) p.add(v);
+  const expr = await compileGroupExpr(f.group_by as string, p);
+
+  const res = await query<{ gkey: string | null; n: number | string }>(
+    `SELECT ${expr} AS gkey, COUNT(*)::int AS n
+       ${WO_FROM} ${whereSql}
+      GROUP BY 1
+      ORDER BY 1 ASC NULLS LAST`,
+    p.values,
+  );
+  return res.rows.map((r) => ({
+    // '' and NULL are the same thing to a reader — one "(empty)" bucket.
+    key: r.gkey == null || r.gkey === '' ? null : r.gkey,
+    count: Number(r.n),
+  }));
+}
+
+export async function listWorkOrders(f: ListFilters): Promise<WorkOrderListResponse> {
+  const { sql: whereSql, p } = await buildListWhere(f);
+  // Snapshot before ORDER BY / LIMIT append to the same accumulator: the count
+  // and the group query need the WHERE parameters and nothing after them.
+  const whereParams = [...p.values];
 
   const totalRes = await query<{ total: number | string }>(
-    `SELECT COUNT(*)::int AS total FROM task t ${whereSql}`,
-    params,
+    `SELECT COUNT(*)::int AS total ${WO_FROM} ${whereSql}`,
+    whereParams,
   );
   const total = Number(totalRes.rows[0].total);
 
-  const limitParam = `$${params.length + 1}`;
-  const offsetParam = `$${params.length + 2}`;
+  // Custom-field columns are projected on demand. Sending the whole `fields`
+  // bag would put ~100 keys on every row to render the two the user picked.
+  const { selectSql, customByAlias } = await customProjection(f.columns ?? [], p);
+
+  // A grouped list has to sort by its group key first, or the buckets interleave.
+  const groupOrder = f.group_by ? `${await compileGroupExpr(f.group_by, p)} ASC NULLS LAST, ` : '';
+  const orderSql = groupOrder + (await compileSort(f.sort ?? null, p));
+
   const rows = await query<WoRow>(
-    `SELECT ${WO_SELECT} ${WO_FROM} ${whereSql}
-     ORDER BY t.created_at DESC, t.wo_number ASC
-     LIMIT ${limitParam} OFFSET ${offsetParam}`,
-    [...params, f.limit, f.offset],
+    `SELECT ${WO_SELECT}${selectSql} ${WO_FROM} ${whereSql}
+      ORDER BY ${orderSql}
+      LIMIT ${p.add(f.limit)} OFFSET ${p.add(f.offset)}`,
+    p.values,
   );
 
-  return { items: rows.rows.map(mapListItem), total, limit: f.limit, offset: f.offset };
+  return {
+    items: rows.rows.map((r) => mapListItem(r, customByAlias)),
+    total,
+    limit: f.limit,
+    offset: f.offset,
+    groups: f.group_by ? await groupCounts(f, whereSql, whereParams) : undefined,
+  };
+}
+
+/** SELECT fragment + alias→key map for the custom fields among `columns`. */
+async function customProjection(
+  columns: string[],
+  p: Params,
+): Promise<{ selectSql: string; customByAlias: Map<string, string> }> {
+  const customByAlias = new Map<string, string>();
+  const parts: string[] = [];
+  for (const key of columns) {
+    if (!key.startsWith('fields.')) continue;
+    const f = await resolveField(key);
+    const alias = `c${customByAlias.size}`;
+    customByAlias.set(alias, key);
+    parts.push(`(t.fields->>${p.add(f.jsonKey)}) AS ${alias}`);
+  }
+  return { selectSql: parts.length ? `, ${parts.join(', ')}` : '', customByAlias };
+}
+
+/**
+ * Every id matching the current filters — what "select all 1,240" and the CSV
+ * export both need. Capped: a bulk edit is a deliberate act on a set the user
+ * can describe, not a way to rewrite the entire database in one request.
+ */
+export const BULK_SELECTION_CAP = 5000;
+
+export async function listMatchingIds(
+  f: Omit<ListFilters, 'limit' | 'offset'>,
+): Promise<string[]> {
+  const { sql: whereSql, p } = await buildListWhere(f);
+  const res = await query<{ id: string }>(
+    `SELECT t.id ${WO_FROM} ${whereSql} ORDER BY t.created_at DESC LIMIT ${p.add(BULK_SELECTION_CAP)}`,
+    p.values,
+  );
+  return res.rows.map((r) => r.id);
 }
 
 interface DetailBaseRow extends WoRow {
@@ -168,6 +294,13 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
   const quoteTotal = await getBindableQuoteTotal(r.id);
   if (quoteTotal !== null) money.quote = quoteTotal;
 
+  // The bag the page sees carries the FORMULA's Profit (invoiced − cost), not
+  // whatever snapshot an old export stored — so the All-fields tab and the
+  // Finances card can never disagree.
+  const fieldsOut: Record<string, unknown> = { ...(r.fields ?? {}) };
+  if (money.profit === null) delete fieldsOut['Profit'];
+  else fieldsOut['Profit'] = money.profit;
+
   return {
     id: r.id,
     wo_number: r.wo_number,
@@ -188,7 +321,7 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
       group: r.status_group,
       color: r.status_color,
     },
-    fields: r.fields ?? {},
+    fields: fieldsOut,
     money,
     memberships: memRes.rows.map((m) => ({
       list_id: m.list_id,
@@ -231,7 +364,8 @@ export async function listStatuses(): Promise<Status[]> {
 export async function changeStatus(
   idOrWo: string,
   statusId: string,
-  actorHeader: string | undefined,
+  actorId: string,
+  auto?: AutoCtx,
 ): Promise<WorkOrderDetail> {
   const col = UUID_RE.test(idOrWo) ? 'id' : 'wo_number';
   const db = getDb();
@@ -239,7 +373,9 @@ export async function changeStatus(
   // Resolve the actor BEFORE opening the transaction. PGlite is single-connection:
   // calling the non-transactional query() from inside db.transaction() would queue
   // behind the open transaction and self-deadlock.
-  const actorId = await resolveActorId(actorHeader);
+
+  // Captured for the automations engine, which runs AFTER the commit.
+  let fired: { taskId: string; change: TaskChange } | null = null;
 
   await db.transaction(async (tx) => {
     // Current task + status.
@@ -273,18 +409,21 @@ export async function changeStatus(
       [statusId, newGroup, task_id],
     );
 
-    await tx.query(
-      `INSERT INTO activity_log
-         (actor_principal_id, entity_type, entity_id, action, field, before, after)
-       VALUES ($1, 'task', $2, 'status_changed', 'status_id', $3::jsonb, $4::jsonb)`,
-      [
-        actorId,
-        task_id,
-        JSON.stringify({ status_id: currentStatusId, status_name: currentStatusName }),
-        JSON.stringify({ status_id: statusId, status_name: newStatusName }),
-      ],
-    );
+    const change: TaskChange = {
+      field: 'status_id',
+      before: { status_id: currentStatusId, status_name: currentStatusName },
+      after: { status_id: statusId, status_name: newStatusName },
+    };
+    await logTaskChanges(tx, actorId, task_id, [change], auto?.by);
+    fired = { taskId: task_id, change };
   });
+
+  // Automations react after the commit and before the detail is re-read, so the
+  // caller sees the rule's effect (e.g. an auto-assign) in the response.
+  if (fired !== null) {
+    const f: { taskId: string; change: TaskChange } = fired;
+    await dispatchAutomations({ taskId: f.taskId, kind: 'changed', changes: [f.change] }, auto);
+  }
 
   // Return the fresh detail object (same shape as GET /:id).
   const detail = await getWorkOrderDetail(idOrWo);

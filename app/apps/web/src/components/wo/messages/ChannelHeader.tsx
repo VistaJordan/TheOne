@@ -2,6 +2,7 @@ import type { QuoConversation } from '../../../api/client';
 import { Icon } from '../../Icon';
 import { initials, shortDate } from '../../../lib/fields';
 import { dialHref } from '../../../lib/quo';
+import { tradeIcon } from '../../../lib/tradeIcon';
 
 /** The title on both Quo actions. They are plain links (`tel:`/`sms:`) that
     hand off to the OS/Quo handler — the in-app dialer is a later sprint. */
@@ -29,7 +30,7 @@ export function ChannelHeader({ conversation }: ChannelHeaderProps) {
         <div className="chan-id">
           <div className="chan-tags">
             <span className="chip chip-outline"><Icon name="truck" size={12} />External vendor</span>
-            {trade && <span className="chip chip-sm"><Icon name="snow" size={12} />{trade}</span>}
+            {trade && <span className="chip chip-sm"><Icon name={tradeIcon(trade)} size={12} />{trade}</span>}
           </div>
 
           <div className="chan-name">{vendor.name}</div>
