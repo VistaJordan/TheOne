@@ -84,14 +84,6 @@ export function AdminUsersPage() {
     >
       {strip}
 
-      <div className="callout" style={{ marginBottom: 16 }}>
-        <Icon name="info" size={14} />
-        <span>
-          Sign-in is <b>invitation only</b>. Adding somebody here <i>is</i> the invitation —
-          there is no email to send. They sign in with the Microsoft account matching the
-          address below, and nobody who is not on this list can get in.
-        </span>
-      </div>
 
       <div className="toolbar">
         <button type="button" className="btn btn-primary" onClick={() => setInviteOpen((v) => !v)}>
