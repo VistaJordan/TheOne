@@ -3,6 +3,10 @@
 // Replaces lib/actor.ts, which pinned an arbitrary principal id in localStorage
 // and sent it as a header. Identity now lives in an httpOnly cookie the browser
 // cannot read, so the only way to learn it is to ask the server.
+//
+// Permissions (0015) ride on the session too: `can` answers for the ACTING
+// principal (viewing as a read-only role behaves as one), `adminCan` for the
+// real human — the admin console never opens because of who you are viewing as.
 
 import {
   createContext,
@@ -13,6 +17,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { permAllows, type PermAction } from '@theone/shared';
 import {
   getMe,
   setUnauthorizedHandler,
@@ -24,6 +29,8 @@ import {
   type SessionUser,
 } from '../api/client';
 
+export type Can = (key: string, action: PermAction) => boolean;
+
 interface AuthState {
   loading: boolean;
   authenticated: boolean;
@@ -33,6 +40,10 @@ interface AuthState {
   /** Who the app behaves as — differs from `user` only while impersonating. */
   actingAs: SessionUser | null;
   isImpersonating: boolean;
+  /** May the ACTING principal do this? The same resolver the API runs. */
+  can: Can;
+  /** May the REAL user do this? For the admin console. */
+  adminCan: Can;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
   impersonate: (principalId: string) => Promise<void>;
@@ -47,6 +58,13 @@ const EMPTY: MeResponse = {
   user: null,
   acting_as: null,
 };
+
+function canFor(u: SessionUser | null): Can {
+  if (!u) return () => false;
+  const perms = u.perms ?? { role: {}, overrides: {} };
+  const superAdmin = u.is_super_admin;
+  return (key, action) => permAllows(perms, key, action, superAdmin);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<MeResponse>(EMPTY);
@@ -75,14 +93,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setUnauthorizedHandler(null);
   }, []);
 
-  const value = useMemo<AuthState>(
-    () => ({
+  const value = useMemo<AuthState>(() => {
+    const actingAs = me.acting_as ?? me.user;
+    return {
       loading,
       authenticated: me.authenticated,
       authMode: me.auth_mode,
       user: me.user,
-      actingAs: me.acting_as ?? me.user,
+      actingAs,
       isImpersonating: Boolean(me.is_impersonating),
+      can: canFor(actingAs),
+      adminCan: canFor(me.user),
       refresh,
       signOut: async () => {
         const res = await apiSignOut().catch(() => null);
@@ -103,9 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await apiStopImpersonating();
         await refresh();
       },
-    }),
-    [loading, me, refresh],
-  );
+    };
+  }, [loading, me, refresh]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -119,4 +139,9 @@ export function useAuth(): AuthState {
 /** Convenience for the many places that only care about the effective role. */
 export function useActingRole(): string | null {
   return useAuth().actingAs?.role ?? null;
+}
+
+/** The permission check for the ACTING principal, on its own. */
+export function useCan(): Can {
+  return useAuth().can;
 }

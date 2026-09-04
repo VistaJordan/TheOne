@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { adminPermKey } from '@theone/shared';
 import { LOGO } from '../lib/brand';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { Icon, IconSprite } from './Icon';
@@ -54,6 +55,15 @@ const NAV: NavItem[] = [
   },
 ];
 
+/** Nav label → the permission path its section is gated on (0015). */
+const NAV_PERM: Record<string, string> = {
+  Dashboard: 'dashboard',
+  'Work Orders': 'work_orders',
+  Vendors: 'vendors',
+  Quotes: 'quotes',
+  Invoicing: 'invoicing',
+};
+
 interface AppShellProps {
   children: ReactNode;
   total?: number;
@@ -100,7 +110,23 @@ export function AppShell({
   // S5 — identity comes from the session, not from a client-side pin. `actingAs`
   // is who the app behaves as; `user` is the human who actually signed in, and
   // super-admin rights are always read from the latter.
-  const { user, actingAs, isImpersonating, signOut } = useAuth();
+  const { user, actingAs, isImpersonating, signOut, can, adminCan } = useAuth();
+
+  // 0015 · a section the acting principal may not view leaves the nav; an
+  // Admin group with no visible section leaves with it. Admin reads the REAL
+  // user — viewing as somebody never opens or closes the console.
+  const visibleNav = NAV.map((item) =>
+    item.children
+      ? {
+          ...item,
+          children: item.children.filter((c) =>
+            adminCan(adminPermKey(c.to.replace(/^\/admin\//, '')), 'view'),
+          ),
+        }
+      : item,
+  ).filter((item) =>
+    item.children ? item.children.length > 0 : can(NAV_PERM[item.label] ?? item.label, 'view'),
+  );
 
   // ── Hover flyout ──────────────────────────────────────────────────────────
   // Hovering a nav item shows what is inside it without committing to opening
@@ -161,7 +187,7 @@ export function AppShell({
     navigate(to);
   };
 
-  const flyoutItem = flyout ? NAV.find((i) => i.label === flyout.label) : undefined;
+  const flyoutItem = flyout ? visibleNav.find((i) => i.label === flyout.label) : undefined;
 
   return (
     <div className={`shell${collapsed ? ' is-collapsed' : ''}`}>
@@ -208,7 +234,7 @@ export function AppShell({
             </button>
           </div>
           <nav className="side-nav" id="primary-nav" aria-label="Primary">
-            {NAV.map((item) => {
+            {visibleNav.map((item) => {
               const isActive = item.label === active;
               const count = item.badge === 'total' ? total : undefined;
 

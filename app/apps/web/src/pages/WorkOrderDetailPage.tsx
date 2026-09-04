@@ -38,6 +38,8 @@ import { plainStatus } from '../lib/quo';
 import { phaseForStatus } from '../lib/phases';
 import { deriveHeaderMeta } from '../lib/woDerive';
 import { tradeIcon } from '../lib/tradeIcon';
+import { useAuth } from '../auth/AuthProvider';
+import { tabPermKey } from '@theone/shared';
 
 const TAB_IDS = [
   'fields', 'money', 'payables', 'people', 'site', 'dates', 'cico', 'parts',
@@ -56,8 +58,14 @@ export function WorkOrderDetailPage() {
   // "All fields" is the landing tab (the record itself before the commentary)
   // and keeps a bare URL. `replace` keeps tab hops out of the back button.
   const [searchParams, setSearchParams] = useSearchParams();
+  // 0015 · each tab is its own permission; a tab the acting principal may not
+  // view is not drawn, and a link to it lands on the first one they may.
+  const { can } = useAuth();
+  const visibleTabs = TAB_IDS.filter((t) => can(tabPermKey(t), 'view'));
+  const show = (t: Tab) => visibleTabs.includes(t);
   const rawTab = searchParams.get('tab');
-  const tab: Tab = isTab(rawTab) ? rawTab : 'fields';
+  const wanted: Tab = isTab(rawTab) ? rawTab : 'fields';
+  const tab: Tab = show(wanted) ? wanted : (visibleTabs[0] ?? 'fields');
   const setTab = (t: Tab) =>
     setSearchParams(t === 'fields' ? {} : { tab: t }, { replace: true });
 
@@ -72,7 +80,7 @@ export function WorkOrderDetailPage() {
   const feedQuery = useQuery({
     queryKey: ['wo-feed', wo?.id ?? woNumber],
     queryFn: () => getWorkOrderFeed(wo?.id ?? woNumber),
-    enabled: Boolean(wo),
+    enabled: Boolean(wo) && show('overview'),
   });
 
   // Fetched as soon as the WO resolves (not gated on the tab) because the tab
@@ -81,7 +89,7 @@ export function WorkOrderDetailPage() {
   const messagesQuery = useQuery({
     queryKey: messagesKey,
     queryFn: () => getWorkOrderMessages(wo?.id ?? woNumber),
-    enabled: Boolean(wo),
+    enabled: Boolean(wo) && show('messages'),
   });
 
   const activityQuery = useQuery({
@@ -101,14 +109,14 @@ export function WorkOrderDetailPage() {
   const quoteQuery = useQuery({
     queryKey: ['wo-quote', woNumber],
     queryFn: () => getWorkOrderQuote(woNumber),
-    enabled: Boolean(wo),
+    enabled: Boolean(wo) && can('quotes', 'view'),
     retry: 0,
   });
 
   const paymentsQuery = useQuery({
     queryKey: ['wo-payments', woNumber],
     queryFn: () => getPaymentRequests(woNumber),
-    enabled: Boolean(wo),
+    enabled: Boolean(wo) && can('payments', 'view'),
     retry: 0,
   });
 
@@ -221,22 +229,24 @@ export function WorkOrderDetailPage() {
         <WoHeader wo={wo} phase={phase} inStatusDays={inStatusDays} />
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
-          <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>
-          <TabButton id="money" tab={tab} onSelect={setTab}>Finances</TabButton>
-          <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>
-          <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>
-          <TabButton id="people" tab={tab} onSelect={setTab}>People</TabButton>
-          <TabButton id="payables" tab={tab} onSelect={setTab}>Payables</TabButton>
-          <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>
-          <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>
-          <TabButton id="flags" tab={tab} onSelect={setTab}>Flags</TabButton>
-          <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>
-          <TabButton id="messages" tab={tab} onSelect={setTab}>
-            <Icon name="msg" size={12} />
-            Messages
-            {threadCount !== null && <span className="seg-count">{threadCount}</span>}
-          </TabButton>
-          <TabButton id="audit" tab={tab} onSelect={setTab}>Audit trail</TabButton>
+          {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
+          {show('money') && <TabButton id="money" tab={tab} onSelect={setTab}>Finances</TabButton>}
+          {show('dates') && <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>}
+          {show('cico') && <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>}
+          {show('people') && <TabButton id="people" tab={tab} onSelect={setTab}>People</TabButton>}
+          {show('payables') && <TabButton id="payables" tab={tab} onSelect={setTab}>Payables</TabButton>}
+          {show('site') && <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>}
+          {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
+          {show('flags') && <TabButton id="flags" tab={tab} onSelect={setTab}>Flags</TabButton>}
+          {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
+          {show('messages') && (
+            <TabButton id="messages" tab={tab} onSelect={setTab}>
+              <Icon name="msg" size={12} />
+              Messages
+              {threadCount !== null && <span className="seg-count">{threadCount}</span>}
+            </TabButton>
+          )}
+          {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Audit trail</TabButton>}
         </div>
       </div>
 

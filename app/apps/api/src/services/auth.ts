@@ -10,6 +10,12 @@ import { query } from '../db.js';
 import { config } from '../config.js';
 import { ApiError } from '../errors.js';
 import type { EntraIdentity } from '../auth/entra.js';
+import {
+  normalizePermMap,
+  permAllows,
+  type PermAction,
+  type PermissionSet,
+} from '@theone/shared';
 
 export const SESSION_COOKIE = 'theone.sid';
 
@@ -35,7 +41,10 @@ export interface SessionPrincipal {
   kind: 'human' | 'service';
   isSuperAdmin: boolean;
   status: 'invited' | 'active' | 'disabled';
-  /** Read from the database, never from a hardcoded list (migration 0005). */
+  /** The permission tree (0015): the role's grants + this person's overrides.
+      Every gate resolves against this; `can` below is derived from it. */
+  perms: PermissionSet;
+  /** The five legacy booleans, now DERIVED from `perms` for the older gates. */
   can: Capabilities;
 }
 
@@ -54,11 +63,8 @@ export interface AuthContext {
 const PRINCIPAL_COLUMNS = `
   p.id, p.display_name, p.email, p.role, p.kind, p.is_super_admin, p.status,
   r.label AS role_label,
-  COALESCE(r.can_edit_quote,         false) AS can_edit_quote,
-  COALESCE(r.can_approve_quote,      false) AS can_approve_quote,
-  COALESCE(r.can_manage_users,       false) AS can_manage_users,
-  COALESCE(r.can_edit_wo_fields,     false) AS can_edit_wo_fields,
-  COALESCE(r.can_view_field_history, false) AS can_view_field_history`;
+  COALESCE(r.permissions, '{}'::jsonb)          AS role_permissions,
+  COALESCE(p.permission_overrides, '{}'::jsonb) AS permission_overrides`;
 
 const PRINCIPAL_FROM = `FROM principal p LEFT JOIN role r ON r.code = p.role`;
 
@@ -71,14 +77,21 @@ interface PrincipalRow {
   kind: 'human' | 'service';
   is_super_admin: boolean;
   status: 'invited' | 'active' | 'disabled';
-  can_edit_quote: boolean;
-  can_approve_quote: boolean;
-  can_manage_users: boolean;
-  can_edit_wo_fields: boolean;
-  can_view_field_history: boolean;
+  role_permissions: unknown;
+  permission_overrides: unknown;
 }
 
 function toPrincipal(r: PrincipalRow): SessionPrincipal {
+  // Normalised on the way in so a hand-edited or half-written JSON value can
+  // never make a gate throw — a malformed grant is simply not a grant.
+  const perms: PermissionSet = {
+    role: normalizePermMap(r.role_permissions),
+    overrides: normalizePermMap(r.permission_overrides),
+  };
+  // A super admin holds every permission regardless of role — the two grants
+  // are orthogonal (see 0005) — which `permAllows` bakes in via the last arg.
+  const allow = (key: string, action: PermAction) =>
+    permAllows(perms, key, action, r.is_super_admin);
   return {
     id: r.id,
     name: r.display_name,
@@ -88,16 +101,13 @@ function toPrincipal(r: PrincipalRow): SessionPrincipal {
     roleLabel: r.role_label,
     isSuperAdmin: r.is_super_admin,
     status: r.status,
+    perms,
     can: {
-      quoteEdit: r.can_edit_quote,
-      quoteApprove: r.can_approve_quote,
-      // A super admin can always reach the admin console regardless of which
-      // operating role they hold — the two grants are orthogonal (see 0005).
-      // The same reasoning covers the 0007 field gates: an account trusted to
-      // manage every user is trusted to edit a field and read its history.
-      manageUsers: r.can_manage_users || r.is_super_admin,
-      editWoFields: r.can_edit_wo_fields || r.is_super_admin,
-      viewFieldHistory: r.can_view_field_history || r.is_super_admin,
+      quoteEdit: allow('quotes', 'edit'),
+      quoteApprove: allow('quotes', 'approve'),
+      manageUsers: allow('admin', 'view'),
+      editWoFields: allow('work_orders', 'edit'),
+      viewFieldHistory: allow('work_orders/history', 'view'),
     },
   };
 }

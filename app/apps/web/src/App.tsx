@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import type { ReactNode } from 'react';
 import { ThemeProvider } from './theme/ThemeProvider';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
+import { AppShell, type NavKey } from './components/AppShell';
+import { Icon } from './components/Icon';
 import { SignInPage } from './pages/SignInPage';
 import { AdminUsersPage, AdminRolesPage } from './pages/admin/AdminUsersPage';
 import { AdminAuditPage } from './pages/admin/AdminAuditPage';
@@ -55,6 +57,35 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * 0015 · a page behind a section permission. Locked-with-a-reason rather than
+ * a redirect, so a shared link explains itself. The API refuses the data
+ * regardless; this only spares the person an empty, erroring screen.
+ */
+function RequireCan({
+  perm,
+  nav,
+  children,
+}: {
+  perm: string;
+  nav: NavKey;
+  children: ReactNode;
+}) {
+  const { can } = useAuth();
+  if (!can(perm, 'view')) {
+    return (
+      <AppShell active={nav}>
+        <div className="wo-state">
+          <Icon name="lock" size={22} />
+          <b>This section is not available to you</b>
+          <span>Your role does not include it. Ask a super admin if you need access.</span>
+        </div>
+      </AppShell>
+    );
+  }
+  return <>{children}</>;
+}
+
 export function App() {
   return (
     <ThemeProvider>
@@ -65,25 +96,34 @@ export function App() {
               {/* The only route outside the guard. */}
               <Route path="/sign-in" element={<SignInPage />} />
 
-              <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-              <Route path="/" element={<RequireAuth><WorkOrdersPage /></RequireAuth>} />
+              <Route
+                path="/dashboard"
+                element={<RequireAuth><RequireCan perm="dashboard" nav="Dashboard"><DashboardPage /></RequireCan></RequireAuth>}
+              />
+              <Route
+                path="/"
+                element={<RequireAuth><RequireCan perm="work_orders" nav="Work Orders"><WorkOrdersPage /></RequireCan></RequireAuth>}
+              />
               {/* S2 — WO detail. Addressed by wo_number; the API resolves either
                   a uuid or a WO number on /api/work-orders/:id. */}
               <Route
                 path="/work-orders/:woNumber"
-                element={<RequireAuth><WorkOrderDetailPage /></RequireAuth>}
+                element={<RequireAuth><RequireCan perm="work_orders" nav="Work Orders"><WorkOrderDetailPage /></RequireCan></RequireAuth>}
               />
               {/* S4 — both screens hang off the WO, which is also how the API
                   addresses them (task_id is the key, never a quote id). */}
               <Route
                 path="/work-orders/:woNumber/quote"
-                element={<RequireAuth><QuoteBuilderPage /></RequireAuth>}
+                element={<RequireAuth><RequireCan perm="quotes" nav="Work Orders"><QuoteBuilderPage /></RequireCan></RequireAuth>}
               />
               <Route
                 path="/work-orders/:woNumber/request-payment"
-                element={<RequireAuth><RequestPaymentPage /></RequireAuth>}
+                element={<RequireAuth><RequireCan perm="payments" nav="Work Orders"><RequestPaymentPage /></RequireCan></RequireAuth>}
               />
-              <Route path="/quotes" element={<RequireAuth><QuotesPage /></RequireAuth>} />
+              <Route
+                path="/quotes"
+                element={<RequireAuth><RequireCan perm="quotes" nav="Quotes"><QuotesPage /></RequireCan></RequireAuth>}
+              />
               {/* S5 — Admin Studio. Each section is its own route so the rail
                   can deep-link and the browser's back button works; AdminShell
                   gates every one of them on super admin. */}

@@ -52,9 +52,17 @@ Two mutually exclusive modes, chosen by env (`app/.env`, template in `.env.examp
 - **Super admins** (`principal.is_super_admin`) gate the whole admin console.
   The four are Elise, Jordan Brown, Jeff S, Jack — created by migration 0004
   *and* by `seed.ts` (see "keep in step" below).
-- Roles live in the `role` table with capability flags
-  (`can_edit_quote`, `can_approve_quote`, `can_manage_users`); the server
-  enforces those and nothing else. `principal.role` holds the role *code*.
+- Roles live in the `role` table. Since migration 0015 what a role grants is a
+  **permission tree** in `role.permissions` (jsonb, path → `{view, create,
+  edit, delete, approve}`; e.g. `work_orders/fields/finances/fields.34. Cost`).
+  An unset action inherits from the parent path. `principal.permission_overrides`
+  holds one person's exceptions on top of their role (super admins only can set
+  them, from the Adjust button in Admin › Users). The resolver is
+  `packages/shared/src/permissions.ts` (`permAllows`) and runs identically on
+  the API and in the browser; `apps/api/src/services/permissions.ts` adds the
+  403s and the field redaction of work-order payloads. The five legacy
+  `can_*` columns are kept in step by `services/roles.ts` but no longer gate
+  anything. `principal.role` holds the role *code*.
 
 ## Data: migrations and seed must stay in step
 

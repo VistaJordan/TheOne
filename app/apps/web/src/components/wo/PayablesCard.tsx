@@ -19,6 +19,7 @@ import { shortDate } from '../../lib/fields';
 import { usd } from '../../lib/quoteTotals';
 import { FIELD_SECTIONS } from '../../lib/woFieldSections';
 import { Icon } from '../Icon';
+import { useAuth } from '../../auth/AuthProvider';
 import { InlineField, useWoCatalogue } from './fieldEdit';
 
 const PAYMENTS_SECTION_TITLE = 'Payments';
@@ -69,6 +70,8 @@ interface PaymentHistoryCardProps {
 }
 
 export function PaymentHistoryCard({ woNumber, items, totalPaid, loading }: PaymentHistoryCardProps) {
+  // 0015 · the entry point needs payments:create; the ledger needs only view.
+  const canRequest = useAuth().can('payments', 'create');
   return (
     <section className="card">
       <div className="card-head">
@@ -109,15 +112,17 @@ export function PaymentHistoryCard({ woNumber, items, totalPaid, loading }: Paym
         </ul>
       )}
 
-      <div className="card-foot">
-        <Link
-          className="btn btn-sm"
-          to={`/work-orders/${encodeURIComponent(woNumber)}/request-payment`}
-        >
-          <Icon name="dollar" size={12} />
-          Request payment
-        </Link>
-      </div>
+      {canRequest && (
+        <div className="card-foot">
+          <Link
+            className="btn btn-sm"
+            to={`/work-orders/${encodeURIComponent(woNumber)}/request-payment`}
+          >
+            <Icon name="dollar" size={12} />
+            Request payment
+          </Link>
+        </div>
+      )}
     </section>
   );
 }

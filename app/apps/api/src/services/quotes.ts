@@ -29,6 +29,7 @@ import type {
 } from '@theone/shared';
 import { ApiError, badRequest, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
+import { permAllows } from '@theone/shared';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -311,31 +312,49 @@ export function buildAutoSummary(
 // a role that could approve a quote required editing TypeScript. Renaming a
 // role or changing what it may do is now an admin-console action.
 
+// Since 0015 the answer comes from the permission tree — the role's grants
+// plus the person's own overrides — so "this OM specifically may not build
+// quotes" is expressible without inventing a role for one person.
+
 export function canEditQuote(actor: ActingPrincipal): boolean {
-  return actor.can.quoteEdit;
+  return permAllows(actor.perms, 'quotes', 'edit', actor.isSuperAdmin);
+}
+
+export function canCreateQuote(actor: ActingPrincipal): boolean {
+  return permAllows(actor.perms, 'quotes', 'create', actor.isSuperAdmin);
 }
 
 export function canApproveQuote(actor: ActingPrincipal): boolean {
-  return actor.can.quoteApprove;
+  return permAllows(actor.perms, 'quotes', 'approve', actor.isSuperAdmin);
 }
 
 /** 403 FORBIDDEN — the actor exists, the route exists, the role is below the bar. */
 export function assertCanEdit(actor: ActingPrincipal): void {
   if (!canEditQuote(actor)) {
-    throw forbidden('Your role cannot build or edit quotes', {
+    throw forbidden('You cannot build or edit quotes', {
       actor: actor.name,
       role: actor.roleLabel ?? actor.role,
-      required_capability: 'can_edit_quote',
+      required_permission: 'quotes:edit',
+    });
+  }
+}
+
+export function assertCanCreate(actor: ActingPrincipal): void {
+  if (!canCreateQuote(actor)) {
+    throw forbidden('You cannot create quotes', {
+      actor: actor.name,
+      role: actor.roleLabel ?? actor.role,
+      required_permission: 'quotes:create',
     });
   }
 }
 
 export function assertCanApprove(actor: ActingPrincipal): void {
   if (!canApproveQuote(actor)) {
-    throw forbidden('Your role cannot approve or send quotes', {
+    throw forbidden('You cannot approve or send quotes', {
       actor: actor.name,
       role: actor.roleLabel ?? actor.role,
-      required_capability: 'can_approve_quote',
+      required_permission: 'quotes:approve',
     });
   }
 }

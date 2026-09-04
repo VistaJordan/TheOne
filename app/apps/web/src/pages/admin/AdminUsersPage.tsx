@@ -1,22 +1,30 @@
 /* Admin › Users and Admin › Roles — two sections, one module.
-     Users  · who exists, what role they hold, whether they can sign in
-     Roles  · what roles exist, what each may do, and creating new ones
+     Users  · who exists, what role they hold, whether they can sign in — and,
+              for super admins, an "Adjust" per person that layers exceptions
+              on top of their role (0015)
+     Roles  · what roles exist and exactly what each may see and do, as one
+              tree: sections, tabs, field sections, fields
 
    They used to share one page behind a Users/Roles toggle. Each is now its own
    route so the Admin rail lists them side by side (Users first) and each one
-   is seen alone. The tables and forms below are shared as before. */
+   is seen alone. */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { buildPermissionTree, type PermMap, type PermNode } from '@theone/shared';
 import { AdminShell } from './AdminShell';
 import { Icon } from '../../components/Icon';
+import { PermissionMatrix } from '../../components/admin/PermissionMatrix';
 import { useAuth } from '../../auth/AuthProvider';
 import {
   createRole,
   deleteRole,
+  getUserPermissions,
   inviteUser,
   listAdminUsers,
+  listPermissionFields,
   listRoles,
+  setUserPermissions,
   updateRole,
   updateUser,
   type AdminUserItem,
@@ -49,17 +57,37 @@ function useAdminFeedback() {
   return { fail, done, strip };
 }
 
+/** The whole permission tree, built from the unfiltered field catalogue. */
+function usePermissionTree(enabled: boolean): PermNode[] {
+  const q = useQuery({
+    queryKey: ['permission-fields'],
+    queryFn: listPermissionFields,
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    retry: 0,
+  });
+  return useMemo(() => buildPermissionTree(q.data?.items ?? []), [q.data]);
+}
+
+const same = (a: PermMap, b: PermMap) => JSON.stringify(a) === JSON.stringify(b);
+
 // ── Admin › Users ────────────────────────────────────────────────────────────
 
 export function AdminUsersPage() {
-  const { user } = useAuth();
+  const { user, adminCan } = useAuth();
   const { fail, done, strip } = useAdminFeedback();
   const [inviteOpen, setInviteOpen] = useState(false);
+  // The user whose adjustments are open, if any (super admins only).
+  const [adjusting, setAdjusting] = useState<string | null>(null);
 
-  const isAdmin = Boolean(user?.is_super_admin);
-  const usersQuery = useQuery({ queryKey: ['admin-users'], queryFn: listAdminUsers, enabled: isAdmin, retry: 0 });
+  const allowed = adminCan('admin/users', 'view');
+  const canEdit = adminCan('admin/users', 'edit');
+  const isSuperAdmin = Boolean(user?.is_super_admin);
+
+  const usersQuery = useQuery({ queryKey: ['admin-users'], queryFn: listAdminUsers, enabled: allowed, retry: 0 });
   // Roles feed the role <select> on every row and in the invite form.
-  const rolesQuery = useQuery({ queryKey: ['admin-roles'], queryFn: listRoles, enabled: isAdmin, retry: 0 });
+  const rolesQuery = useQuery({ queryKey: ['admin-roles'], queryFn: listRoles, enabled: allowed, retry: 0 });
+  const tree = usePermissionTree(isSuperAdmin);
 
   const users = usersQuery.data?.items ?? [];
   const roles = rolesQuery.data?.items ?? [];
@@ -84,13 +112,14 @@ export function AdminUsersPage() {
     >
       {strip}
 
-
-      <div className="toolbar">
-        <button type="button" className="btn btn-primary" onClick={() => setInviteOpen((v) => !v)}>
-          <Icon name="user-plus" size={14} />
-          Invite a user
-        </button>
-      </div>
+      {canEdit && (
+        <div className="toolbar">
+          <button type="button" className="btn btn-primary" onClick={() => setInviteOpen((v) => !v)}>
+            <Icon name="user-plus" size={14} />
+            Invite a user
+          </button>
+        </div>
+      )}
 
       {inviteOpen && (
         <InviteForm
@@ -107,7 +136,11 @@ export function AdminUsersPage() {
         selfId={user?.id}
         loading={usersQuery.isLoading}
         error={usersQuery.isError}
-        busy={patchUser.isPending}
+        busy={patchUser.isPending || !canEdit}
+        canAdjust={isSuperAdmin}
+        adjusting={adjusting}
+        onAdjust={(id) => setAdjusting((cur) => (cur === id ? null : id))}
+        tree={tree}
         onChange={(id, input) => patchUser.mutate({ id, input })}
       />
     </AdminShell>
@@ -117,13 +150,15 @@ export function AdminUsersPage() {
 // ── Admin › Roles ────────────────────────────────────────────────────────────
 
 export function AdminRolesPage() {
-  const { user } = useAuth();
+  const { adminCan } = useAuth();
   const { fail, done, strip } = useAdminFeedback();
   const [newRoleOpen, setNewRoleOpen] = useState(false);
 
-  const isAdmin = Boolean(user?.is_super_admin);
-  const rolesQuery = useQuery({ queryKey: ['admin-roles'], queryFn: listRoles, enabled: isAdmin, retry: 0 });
+  const allowed = adminCan('admin/roles', 'view');
+  const canEdit = adminCan('admin/roles', 'edit');
+  const rolesQuery = useQuery({ queryKey: ['admin-roles'], queryFn: listRoles, enabled: allowed, retry: 0 });
   const roles = rolesQuery.data?.items ?? [];
+  const tree = usePermissionTree(allowed);
 
   const addRole = useMutation({
     mutationFn: createRole,
@@ -144,33 +179,45 @@ export function AdminRolesPage() {
   return (
     <AdminShell
       title="Roles"
-      subtitle={`${roles.length} role${roles.length === 1 ? '' : 's'} · capabilities here are the ones the server actually enforces`}
+      subtitle={`${roles.length} role${roles.length === 1 ? '' : 's'} · open a role to set what it may see and do — a whole section at once, or field by field`}
     >
       {strip}
 
-      <div className="toolbar">
-        <button type="button" className="btn btn-primary" onClick={() => setNewRoleOpen((v) => !v)}>
-          <Icon name="plus" size={14} />
-          New role
-        </button>
-      </div>
+      {canEdit && (
+        <div className="toolbar">
+          <button type="button" className="btn btn-primary" onClick={() => setNewRoleOpen((v) => !v)}>
+            <Icon name="plus" size={14} />
+            New role
+          </button>
+        </div>
+      )}
 
       {newRoleOpen && (
         <RoleForm
+          roles={roles}
+          tree={tree}
           busy={addRole.isPending}
           onCancel={() => setNewRoleOpen(false)}
           onSubmit={(v) => addRole.mutate(v)}
         />
       )}
 
-      <RolesTable
-        items={roles}
-        loading={rolesQuery.isLoading}
-        error={rolesQuery.isError}
-        busy={patchRole.isPending || removeRole.isPending}
-        onChange={(id, input) => patchRole.mutate({ id, input })}
-        onDelete={(id) => removeRole.mutate(id)}
-      />
+      {rolesQuery.isLoading && <div className="adm-empty"><b>Loading roles…</b></div>}
+      {rolesQuery.isError && <div className="adm-empty"><b>Could not load roles.</b></div>}
+
+      <div className="role-list">
+        {roles.map((r) => (
+          <RoleCard
+            key={r.id}
+            role={r}
+            tree={tree}
+            busy={patchRole.isPending || removeRole.isPending}
+            readOnly={!canEdit}
+            onSave={(permissions) => patchRole.mutate({ id: r.id, input: { permissions } })}
+            onDelete={() => removeRole.mutate(r.id)}
+          />
+        ))}
+      </div>
     </AdminShell>
   );
 }
@@ -178,7 +225,7 @@ export function AdminRolesPage() {
 // ── Users table ──────────────────────────────────────────────────────────────
 
 function UsersTable({
-  items, roles, selfId, loading, error, busy, onChange,
+  items, roles, selfId, loading, error, busy, canAdjust, adjusting, onAdjust, tree, onChange,
 }: {
   items: AdminUserItem[];
   roles: RoleRecord[];
@@ -186,67 +233,110 @@ function UsersTable({
   loading: boolean;
   error: boolean;
   busy: boolean;
+  canAdjust: boolean;
+  adjusting: string | null;
+  onAdjust: (id: string) => void;
+  tree: PermNode[];
   onChange: (id: string, input: { role?: string; is_super_admin?: boolean; status?: UserStatus }) => void;
 }) {
+  const cols = canAdjust ? 7 : 6;
   return (
     <div className="table-wrap">
       <table className="ct">
         <thead>
           <tr>
             <th>User</th><th>Role</th><th>Status</th><th>Super admin</th>
-            <th>Last sign-in</th><th />
+            <th>Last sign-in</th>
+            {canAdjust && <th>Permissions</th>}
+            <th />
           </tr>
         </thead>
         <tbody>
-          {loading && <tr className="ct-empty"><td colSpan={6}>Loading users…</td></tr>}
+          {loading && <tr className="ct-empty"><td colSpan={cols}>Loading users…</td></tr>}
           {error && !loading && (
-            <tr className="ct-empty"><td colSpan={6}>Could not load users. Is the API running on :5174?</td></tr>
+            <tr className="ct-empty"><td colSpan={cols}>Could not load users. Is the API running on :5174?</td></tr>
           )}
           {items.map((u) => {
             const isSelf = u.id === selfId;
             const status = STATUS_COPY[u.status];
             const off = u.status === 'disabled';
+            const open = adjusting === u.id;
             return (
-              <tr key={u.id} className={off ? 'is-dim' : undefined}>
-                <td>
-                  <div className="site">
-                    <strong>
-                      <span className="side-avatar sm" aria-hidden="true">{initialsOf(u.name)}</span>
-                      {u.name}
-                      {isSelf && <span className="chip chip-sm">You</span>}
-                    </strong>
-                    <small>{u.email ?? '—'}</small>
-                  </div>
-                </td>
-                <td>
-                  <select className="fld sm" value={u.role ?? ''} disabled={busy || off}
-                    aria-label={`Role for ${u.name}`} onChange={(e) => onChange(u.id, { role: e.target.value })}>
-                    {roles.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
-                  </select>
-                </td>
-                <td><span className={`pill pill-${status.tone}`} title={status.hint}>{status.label}</span></td>
-                <td>
-                  {/* Off for yourself: the server refuses it too, so a live
-                      checkbox here would only produce an error. */}
-                  <label className="sw sm" title={isSelf ? 'You cannot change your own super-admin access' : undefined}>
-                    <input type="checkbox" checked={u.is_super_admin} disabled={busy || isSelf || off}
-                      onChange={(e) => onChange(u.id, { is_super_admin: e.target.checked })} />
-                    <span className="sw-track" aria-hidden="true" />
-                    <span className="sr">Super admin</span>
-                  </label>
-                </td>
-                <td>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never'}</td>
-                <td className="num">
-                  {off ? (
-                    <button type="button" className="linkbtn" disabled={busy}
-                      onClick={() => onChange(u.id, { status: 'invited' })}>Re-enable</button>
-                  ) : (
-                    <button type="button" className="linkbtn is-danger" disabled={busy || isSelf}
-                      title={isSelf ? 'You cannot disable your own account' : 'Blocks sign-in and ends every live session'}
-                      onClick={() => onChange(u.id, { status: 'disabled' })}>Disable</button>
+              <UserRows key={u.id} open={open}>
+                <tr className={off ? 'is-dim' : undefined}>
+                  <td>
+                    <div className="site">
+                      <strong>
+                        <span className="side-avatar sm" aria-hidden="true">{initialsOf(u.name)}</span>
+                        {u.name}
+                        {isSelf && <span className="chip chip-sm">You</span>}
+                      </strong>
+                      <small>{u.email ?? '—'}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <select className="fld sm" value={u.role ?? ''} disabled={busy || off}
+                      aria-label={`Role for ${u.name}`} onChange={(e) => onChange(u.id, { role: e.target.value })}>
+                      {roles.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+                    </select>
+                  </td>
+                  <td><span className={`pill pill-${status.tone}`} title={status.hint}>{status.label}</span></td>
+                  <td>
+                    {/* Off for yourself: the server refuses it too, so a live
+                        checkbox here would only produce an error. */}
+                    <label className="sw sm" title={isSelf ? 'You cannot change your own super-admin access' : undefined}>
+                      <input type="checkbox" checked={u.is_super_admin} disabled={busy || isSelf || off}
+                        onChange={(e) => onChange(u.id, { is_super_admin: e.target.checked })} />
+                      <span className="sw-track" aria-hidden="true" />
+                      <span className="sr">Super admin</span>
+                    </label>
+                  </td>
+                  <td>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never'}</td>
+                  {canAdjust && (
+                    <td>
+                      {u.is_super_admin ? (
+                        <span className="faint" title="A super admin already has every permission">Everything</span>
+                      ) : (
+                        <span className="confirm-row">
+                          <button
+                            type="button"
+                            className="linkbtn"
+                            disabled={off}
+                            aria-expanded={open}
+                            title="Allow or deny things for this person specifically, on top of their role"
+                            onClick={() => onAdjust(u.id)}
+                          >
+                            <Icon name="user-cog" size={12} />
+                            {open ? 'Close' : 'Adjust'}
+                          </button>
+                          {u.has_overrides && (
+                            <span className="pill chip-adjusted" title="Has permissions set beyond the role">
+                              Adjusted
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </td>
                   )}
-                </td>
-              </tr>
+                  <td className="num">
+                    {off ? (
+                      <button type="button" className="linkbtn" disabled={busy}
+                        onClick={() => onChange(u.id, { status: 'invited' })}>Re-enable</button>
+                    ) : (
+                      <button type="button" className="linkbtn is-danger" disabled={busy || isSelf}
+                        title={isSelf ? 'You cannot disable your own account' : 'Blocks sign-in and ends every live session'}
+                        onClick={() => onChange(u.id, { status: 'disabled' })}>Disable</button>
+                    )}
+                  </td>
+                </tr>
+                {open && (
+                  <tr className="user-adjust-row">
+                    <td colSpan={cols}>
+                      <UserAdjustPanel user={u} tree={tree} onClose={() => onAdjust(u.id)} />
+                    </td>
+                  </tr>
+                )}
+              </UserRows>
             );
           })}
         </tbody>
@@ -255,97 +345,185 @@ function UsersTable({
   );
 }
 
-// ── Roles table ──────────────────────────────────────────────────────────────
+/** A row and its optional adjustment row, as one keyed unit. */
+function UserRows({ children }: { open: boolean; children: React.ReactNode }) {
+  return <>{children}</>;
+}
 
-function RolesTable({
-  items, loading, error, busy, onChange, onDelete,
+/** The per-person override editor (0015). Everything unset comes from the
+    role; a cell set here wins over the role wherever it is set. */
+function UserAdjustPanel({
+  user, tree, onClose,
 }: {
-  items: RoleRecord[];
-  loading: boolean;
-  error: boolean;
-  busy: boolean;
-  onChange: (id: string, input: Parameters<typeof updateRole>[1]) => void;
-  onDelete: (id: string) => void;
+  user: AdminUserItem;
+  tree: PermNode[];
+  onClose: () => void;
 }) {
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ['user-permissions', user.id],
+    queryFn: () => getUserPermissions(user.id),
+    retry: 0,
+  });
+  const [draft, setDraft] = useState<PermMap | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (q.data) setDraft(q.data.overrides);
+  }, [q.data]);
+
+  const save = useMutation({
+    mutationFn: (overrides: PermMap) => setUserPermissions(user.id, overrides),
+    onSuccess: (res) => {
+      setError(null);
+      qc.setQueryData(['user-permissions', user.id], res);
+      void qc.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (e: Error) => setError(e.message || 'Could not save.'),
+  });
+
+  const saved = q.data?.overrides ?? {};
+  const dirty = draft !== null && !same(draft, saved);
 
   return (
-    <div className="table-wrap">
-      <table className="ct">
-        <thead>
-          <tr>
-            <th>Role</th>
-            <th className="num">Users</th>
-            <th className="pcol">Build quotes</th>
-            <th className="pcol">Approve &amp; send</th>
-            <th className="pcol">Manage users</th>
-            <th className="pcol">Edit WO fields</th>
-            <th className="pcol">Field history</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {loading && <tr className="ct-empty"><td colSpan={8}>Loading roles…</td></tr>}
-          {error && !loading && <tr className="ct-empty"><td colSpan={8}>Could not load roles.</td></tr>}
-          {items.map((r) => (
-            <tr key={r.id}>
-              <td>
-                <div className="site">
-                  <strong>
-                    {r.is_system && <Icon name="lock" size={12} />}
-                    {r.label}
-                    <code className="rolecode">{r.code}</code>
-                  </strong>
-                  <small>{r.description ?? '—'}</small>
-                </div>
-              </td>
-              <td className="num">{r.user_count || '—'}</td>
-              <Cap on={r.can_edit_quote} busy={busy} label={`${r.label} can build quotes`}
-                onToggle={(v) => onChange(r.id, { can_edit_quote: v })} />
-              <Cap on={r.can_approve_quote} busy={busy} label={`${r.label} can approve quotes`}
-                onToggle={(v) => onChange(r.id, { can_approve_quote: v })} />
-              <Cap on={r.can_manage_users} busy={busy} label={`${r.label} can manage users`}
-                onToggle={(v) => onChange(r.id, { can_manage_users: v })} />
-              <Cap on={r.can_edit_wo_fields} busy={busy} label={`${r.label} can edit work-order fields`}
-                onToggle={(v) => onChange(r.id, { can_edit_wo_fields: v })} />
-              <Cap on={r.can_view_field_history} busy={busy} label={`${r.label} can view field history`}
-                onToggle={(v) => onChange(r.id, { can_view_field_history: v })} />
-              <td className="num">
-                {r.is_system ? (
-                  <span className="faint" title="Built-in roles are referenced by the seed and by migrations">
-                    Built-in
-                  </span>
-                ) : confirming === r.id ? (
-                  <span className="confirm-row">
-                    <button type="button" className="linkbtn" onClick={() => setConfirming(null)}>Cancel</button>
-                    <button type="button" className="linkbtn is-danger" disabled={busy}
-                      onClick={() => { onDelete(r.id); setConfirming(null); }}>Confirm</button>
-                  </span>
-                ) : (
-                  <button type="button" className="linkbtn is-danger" disabled={busy}
-                    title={r.user_count > 0 ? 'Move its users to another role first' : 'Delete this role'}
-                    onClick={() => setConfirming(r.id)}>Delete</button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="user-adjust">
+      <div className="user-adjust-head">
+        <Icon name="user-cog" size={14} />
+        <span>
+          Adjusting <b>{user.name}</b> · role <b>{user.role_label ?? user.role ?? '—'}</b>. Faded cells
+          are what the role gives; click one to set it for {user.name.split(' ')[0]} alone.
+        </span>
+      </div>
+      {error && (
+        <div className="callout callout-lock" role="alert">
+          <Icon name="alert" size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+      {q.isLoading || draft === null ? (
+        <div className="adm-empty"><b>Loading permissions…</b></div>
+      ) : q.isError ? (
+        <div className="adm-empty"><b>Could not load this person’s permissions.</b></div>
+      ) : (
+        <PermissionMatrix
+          tree={tree}
+          value={draft}
+          onChange={setDraft}
+          base={q.data?.role_permissions ?? {}}
+          baseLabel={`from the ${user.role_label ?? user.role ?? 'role'} role`}
+          disabled={save.isPending}
+        />
+      )}
+      <div className="role-save">
+        <span className="faint">{dirty ? 'Unsaved adjustments' : 'Saved'}</span>
+        <button type="button" className="btn" onClick={onClose}>Close</button>
+        <button type="button" className="btn" disabled={!dirty || save.isPending} onClick={() => setDraft(saved)}>
+          Discard
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!dirty || save.isPending || draft === null}
+          onClick={() => draft && save.mutate(draft)}
+        >
+          <Icon name="check" size={14} />
+          {save.isPending ? 'Saving…' : 'Save adjustments'}
+        </button>
+      </div>
     </div>
   );
 }
 
-function Cap({ on, busy, label, onToggle }: {
-  on: boolean; busy: boolean; label: string; onToggle: (v: boolean) => void;
+// ── Role card ────────────────────────────────────────────────────────────────
+
+function RoleCard({
+  role, tree, busy, readOnly, onSave, onDelete,
+}: {
+  role: RoleRecord;
+  tree: PermNode[];
+  busy: boolean;
+  readOnly: boolean;
+  onSave: (permissions: PermMap) => void;
+  onDelete: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<PermMap>(role.permissions);
+  const [confirming, setConfirming] = useState(false);
+
+  // A save (or somebody else's) refreshes the role; follow it unless the
+  // operator is mid-edit, in which case their draft is the newer truth.
+  useEffect(() => {
+    setDraft((d) => (same(d, role.permissions) || !open ? role.permissions : d));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role.permissions]);
+
+  const dirty = !same(draft, role.permissions);
+  const granted = Object.values(role.permissions).reduce((n, g) => n + Object.keys(g).length, 0);
+
   return (
-    <td className="pcell">
-      <label className="sw sm">
-        <input type="checkbox" checked={on} disabled={busy} aria-label={label}
-          onChange={(e) => onToggle(e.target.checked)} />
-        <span className="sw-track" aria-hidden="true" />
-      </label>
-    </td>
+    <section className={`card role-card${open ? ' is-open' : ''}`}>
+      <div
+        className="card-head"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setOpen((v) => !v);
+          }
+        }}
+      >
+        <div className="role-head-main">
+          <Icon name={open ? 'chev-d' : 'chev-r'} size={14} />
+          {role.is_system && <Icon name="lock" size={12} />}
+          <h3 className="card-title">{role.label}</h3>
+          <code className="rolecode">{role.code}</code>
+          {role.description && <span className="role-sub">{role.description}</span>}
+        </div>
+        <div className="role-actions" onClick={(e) => e.stopPropagation()}>
+          <span className="faint">
+            {role.user_count === 0 ? 'No users' : `${role.user_count} user${role.user_count === 1 ? '' : 's'}`}
+            {' · '}
+            {granted === 0 ? 'nothing granted' : `${granted} setting${granted === 1 ? '' : 's'}`}
+          </span>
+          {!readOnly && (role.is_system ? (
+            <span className="faint" title="Built-in roles are referenced by the seed and by migrations">
+              Built-in
+            </span>
+          ) : confirming ? (
+            <span className="confirm-row">
+              <button type="button" className="linkbtn" onClick={() => setConfirming(false)}>Cancel</button>
+              <button type="button" className="linkbtn is-danger" disabled={busy}
+                onClick={() => { onDelete(); setConfirming(false); }}>Confirm</button>
+            </span>
+          ) : (
+            <button type="button" className="linkbtn is-danger" disabled={busy}
+              title={role.user_count > 0 ? 'Move its users to another role first' : 'Delete this role'}
+              onClick={() => setConfirming(true)}>Delete</button>
+          ))}
+        </div>
+      </div>
+
+      {open && (
+        <div className="role-body">
+          <PermissionMatrix tree={tree} value={draft} onChange={setDraft} disabled={busy || readOnly} />
+          {!readOnly && (
+            <div className="role-save">
+              <span className="faint">{dirty ? 'Unsaved changes' : 'Saved'}</span>
+              <button type="button" className="btn" disabled={!dirty || busy} onClick={() => setDraft(role.permissions)}>
+                Discard
+              </button>
+              <button type="button" className="btn btn-primary" disabled={!dirty || busy} onClick={() => onSave(draft)}>
+                <Icon name="check" size={14} />
+                {busy ? 'Saving…' : 'Save role'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -399,7 +577,7 @@ function InviteForm({ roles, busy, onCancel, onSubmit }: {
             <label className="sw">
               <input type="checkbox" checked={superAdmin} onChange={(e) => setSuperAdmin(e.target.checked)} />
               <span className="sw-track" aria-hidden="true" />
-              <span>Can manage users and view as anyone</span>
+              <span>Every permission, the admin console, and view as anyone</span>
             </label>
           </div>
         </div>
@@ -416,22 +594,17 @@ function InviteForm({ roles, busy, onCancel, onSubmit }: {
   );
 }
 
-function RoleForm({ busy, onCancel, onSubmit }: {
+function RoleForm({ roles, tree, busy, onCancel, onSubmit }: {
+  roles: RoleRecord[];
+  tree: PermNode[];
   busy: boolean;
   onCancel: () => void;
-  onSubmit: (v: {
-    label: string; description: string | null;
-    can_edit_quote: boolean; can_approve_quote: boolean; can_manage_users: boolean;
-    can_edit_wo_fields: boolean; can_view_field_history: boolean;
-  }) => void;
+  onSubmit: (v: { label: string; description: string | null; permissions: PermMap }) => void;
 }) {
   const [label, setLabel] = useState('');
   const [description, setDescription] = useState('');
-  const [edit, setEdit] = useState(false);
-  const [approve, setApprove] = useState(false);
-  const [manage, setManage] = useState(false);
-  const [editFields, setEditFields] = useState(false);
-  const [viewHistory, setViewHistory] = useState(false);
+  const [permissions, setPermissions] = useState<PermMap>({});
+  const [copyFrom, setCopyFrom] = useState('');
 
   const valid = label.trim().length >= 2;
   // Mirrors the server's normalizeCode so the operator sees the identifier they
@@ -461,55 +634,40 @@ function RoleForm({ busy, onCancel, onSubmit }: {
           </div>
         </div>
 
-        <div className="field">
-          <span className="lbl">Capabilities</span>
-          <span className="hint" style={{ marginBottom: 8 }}>
-            Only the gates the server enforces today. More appear here as modules land — a
-            checkbox for a permission nothing checks would be worse than none.
-          </span>
-          <div className="cap-list">
-            <CapRow on={edit} set={setEdit} title="Build and edit quotes"
-              note="Create a draft, add line items, submit for approval." />
-            <CapRow on={approve} set={setApprove} title="Approve and send quotes"
-              note="Approve, reject with a note, push the summary to the client CMMS." />
-            <CapRow on={manage} set={setManage} title="Manage users"
-              note="Full access to this admin console." />
-            <CapRow on={editFields} set={setEditFields} title="Edit work-order fields"
-              note="Change field values inline on the detail page, and in bulk from the list." />
-            <CapRow on={viewHistory} set={setViewHistory} title="View field history"
-              note="Open any field's change trail on the detail page." />
+        <div className="frow">
+          <div className="field">
+            <label className="lbl" htmlFor="role-copy">Start from</label>
+            <select
+              className="fld"
+              id="role-copy"
+              value={copyFrom}
+              onChange={(e) => {
+                setCopyFrom(e.target.value);
+                const src = roles.find((r) => r.code === e.target.value);
+                setPermissions(src ? { ...src.permissions } : {});
+              }}
+            >
+              <option value="">Nothing — grant from scratch</option>
+              {roles.map((r) => <option key={r.code} value={r.code}>Copy of {r.label}</option>)}
+            </select>
+            <span className="hint">Copies that role’s settings as a starting point; the two stay independent afterwards.</span>
           </div>
+        </div>
+
+        <div className="field">
+          <span className="lbl">Permissions</span>
+          <PermissionMatrix tree={tree} value={permissions} onChange={setPermissions} disabled={busy} />
         </div>
 
         <div className="sheet-f">
           <button type="button" className="btn" onClick={onCancel}>Cancel</button>
           <button type="button" className="btn btn-primary" disabled={!valid || busy}
-            onClick={() => onSubmit({
-              label: label.trim(),
-              description: description.trim() || null,
-              can_edit_quote: edit, can_approve_quote: approve, can_manage_users: manage,
-              can_edit_wo_fields: editFields, can_view_field_history: viewHistory,
-            })}>
+            onClick={() => onSubmit({ label: label.trim(), description: description.trim() || null, permissions })}>
             <Icon name="plus" size={14} />
             {busy ? 'Creating…' : 'Create role'}
           </button>
         </div>
       </div>
     </section>
-  );
-}
-
-function CapRow({ on, set, title, note }: {
-  on: boolean; set: (v: boolean) => void; title: string; note: string;
-}) {
-  return (
-    <label className="cap-row">
-      <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} />
-      <span className="sw-track" aria-hidden="true" />
-      <span className="cap-text">
-        <b>{title}</b>
-        <small>{note}</small>
-      </span>
-    </label>
   );
 }

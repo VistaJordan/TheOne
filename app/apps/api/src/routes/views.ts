@@ -12,7 +12,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse } from '../errors.js';
-import { actorIdFromRequest } from '../services/activity.js';
+import { actorIdFromRequest, actingPrincipalFromRequest } from '../services/activity.js';
+import { allowFor, visibleFields } from '../services/permissions.js';
 import { getFieldCatalogue, FILTER_OPS, OPS_BY_TYPE } from '../services/woFields.js';
 import { createView, deleteView, listViews, updateView } from '../services/views.js';
 
@@ -54,9 +55,20 @@ const idParams = z.object({ id: z.string().uuid() });
 export default async function viewRoutes(app: FastifyInstance): Promise<void> {
   // The catalogue also ships the operator table, so the filter builder never
   // has to keep its own copy of which tests apply to which field type.
-  app.get('/wo-fields', async () => {
+  // Trimmed to the fields the ACTING principal may see (0015): a hidden field
+  // is then absent from the column picker, the filter builder, the All-fields
+  // tab and every card that reads the catalogue — one cut, everywhere.
+  app.get('/wo-fields', async (req) => {
+    const allow = allowFor(actingPrincipalFromRequest(req));
     const cat = await getFieldCatalogue();
-    return { ...cat, ops_by_type: OPS_BY_TYPE };
+    const fields = visibleFields(allow, cat.fields);
+    const visible = new Set(fields.map((f) => f.key));
+    return {
+      ...cat,
+      fields,
+      default_columns: cat.default_columns.filter((k) => visible.has(k)),
+      ops_by_type: OPS_BY_TYPE,
+    };
   });
 
   app.get('/views', async (req) => {

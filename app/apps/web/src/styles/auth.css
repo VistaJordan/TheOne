@@ -689,3 +689,66 @@ td.pcell .sw { justify-content: center; }
 @media (prefers-reduced-motion: no-preference) {
   .fedit { transition: opacity 120ms ease; }
 }
+
+/* ── Permission matrix (0015) ───────────────────────────────────────────── */
+.pm { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.pm-tools { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.pm-tools .fld { max-width: 260px; }
+.pm-legend { display: flex; gap: 14px; margin-left: auto; font-size: 11.5px; color: var(--ink-3); align-items: center; flex-wrap: wrap; }
+.pm-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.pm-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--border); background: var(--field-bg); }
+.pm-swatch.is-on { background: var(--accent); border-color: transparent; }
+.pm-swatch.is-inherited { opacity: .5; }
+.pm-swatch.is-explicit.is-off { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+
+.pm-head, .pm-row { display: grid; grid-template-columns: minmax(0, 1fr) repeat(5, 68px) 64px; align-items: center; }
+.pm-head { padding: 6px 12px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); border-bottom: 1px solid var(--border); background: var(--chip); }
+.pm-head span { text-align: center; }
+.pm-head .pm-name-h { text-align: left; }
+.pm-row { padding-right: 12px; min-height: 36px; border-bottom: 1px solid var(--row-border); }
+.pm-row:last-of-type { border-bottom: none; }
+.pm-row.depth-0 { background: var(--field-bg); }
+.pm-row.depth-0 .pm-label { font-weight: 600; font-size: 13.5px; }
+.pm-row.depth-1 .pm-label { font-weight: 600; }
+.pm-name { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 6px 0; font-size: 13px; color: var(--ink); }
+.pm-name small { font-weight: 400; color: var(--ink-3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-tog { flex: none; width: 20px; height: 20px; display: grid; place-items: center; background: none; border: 0; color: var(--ink-3); cursor: pointer; border-radius: 4px; padding: 0; }
+.pm-tog:hover { color: var(--ink); background: var(--chip); }
+.pm-tog:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pm-tog.is-leaf { visibility: hidden; }
+.pm-cellwrap { display: flex; justify-content: center; align-items: center; gap: 3px; }
+.pm-cell { width: 26px; height: 22px; border-radius: 6px; border: 1px solid var(--border); background: var(--field-bg); display: grid; place-items: center; cursor: pointer; color: var(--ink-3); padding: 0; }
+.pm-cell.is-on { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+.pm-cell.is-inherited { opacity: .5; }
+.pm-cell.is-explicit { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--accent); }
+.pm-cell.is-explicit.is-off { border-color: var(--danger); color: var(--danger); box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--danger); opacity: 1; }
+.pm-cell:hover:not(:disabled) { opacity: 1; border-color: var(--border-strong); }
+.pm-cell:disabled { cursor: not-allowed; }
+.pm-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pm-reset { width: 14px; height: 14px; border: 0; background: none; color: var(--ink-3); cursor: pointer; padding: 0; display: grid; place-items: center; }
+.pm-reset:hover { color: var(--danger); }
+.pm-count { justify-self: end; font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+.pm-clear { font-size: 11px; }
+.pm-empty { padding: 24px; text-align: center; color: var(--ink-3); font-size: 13px; }
+.pm-foot { display: flex; gap: 12px; align-items: center; padding: 9px 12px; border-top: 1px solid var(--border); background: var(--chip); flex-wrap: wrap; }
+.pm-foot .pm-dirty { font-size: 12px; color: var(--ink-3); margin-right: auto; }
+
+/* Roles as cards, each opening onto its matrix */
+.role-list { display: flex; flex-direction: column; gap: 10px; }
+.role-card .card-head { cursor: pointer; gap: 10px; }
+.role-card .card-head:hover .card-title { color: var(--accent-text, var(--accent)); }
+.role-head-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.role-head-main .card-title { margin: 0; }
+.role-sub { font-size: 12px; color: var(--ink-3); flex-basis: 100%; }
+.role-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; flex: none; }
+.role-body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.role-save { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+.role-save .faint { margin-right: auto; }
+
+/* Per-user adjustments, opened under the user's row */
+.user-adjust-row > td { padding: 0 !important; }
+.user-adjust { padding: 12px 16px 16px; background: var(--field-bg); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.user-adjust-head { display: flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; color: var(--ink-2); }
+.user-adjust-head b { color: var(--ink); }
+.chip-adjusted { --pill: var(--warn-solid); }

@@ -6,9 +6,12 @@
 // trust boundary in one place (services/auth.ts) instead of splitting it across
 // an invite-token scheme we would then have to secure separately.
 
+import type { PermMap } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { destroySessionsFor } from './auth.js';
+import { parsePermMap } from './permissions.js';
+import { getRolePermissionsByCode } from './roles.js';
 
 export interface AdminUser {
   id: string;
@@ -21,6 +24,8 @@ export interface AdminUser {
   is_super_admin: boolean;
   last_login_at: string | null;
   has_signed_in: boolean;
+  /** True when a super admin has adjusted this person beyond their role (0015). */
+  has_overrides: boolean;
 }
 
 const SELECT_USER = `
@@ -33,7 +38,8 @@ const SELECT_USER = `
          p.status,
          p.is_super_admin,
          p.last_login_at,
-         (p.entra_oid IS NOT NULL) AS has_signed_in
+         (p.entra_oid IS NOT NULL) AS has_signed_in,
+         (p.permission_overrides <> '{}'::jsonb) AS has_overrides
     FROM principal p
     LEFT JOIN role r ON r.code = p.role`;
 
@@ -193,4 +199,39 @@ export async function updateUser(
  */
 export async function disableUser(id: string, actorId: string): Promise<AdminUser> {
   return updateUser(id, { status: 'disabled' }, actorId);
+}
+
+// ── Per-user overrides (0015) ────────────────────────────────────────────────
+// "Adam is an OM, but Adam specifically may not build quotes." The override
+// map has the same shape as a role's tree and wins over it wherever it says
+// something; everything it leaves unsaid falls through to the role.
+
+export interface UserPermissions {
+  user: AdminUser;
+  /** What the person's role grants — the baseline the overrides sit on. */
+  role_permissions: PermMap;
+  overrides: PermMap;
+}
+
+export async function getUserPermissions(id: string): Promise<UserPermissions> {
+  const user = await getUser(id);
+  const res = await query<{ permission_overrides: PermMap }>(
+    `SELECT permission_overrides FROM principal WHERE id = $1`,
+    [id],
+  );
+  return {
+    user,
+    role_permissions: await getRolePermissionsByCode(user.role),
+    overrides: res.rows[0]?.permission_overrides ?? {},
+  };
+}
+
+export async function setUserPermissions(id: string, raw: unknown): Promise<UserPermissions> {
+  await getUser(id);
+  const overrides = parsePermMap(raw);
+  await query(`UPDATE principal SET permission_overrides = $2::jsonb WHERE id = $1`, [
+    id,
+    JSON.stringify(overrides),
+  ]);
+  return getUserPermissions(id);
 }

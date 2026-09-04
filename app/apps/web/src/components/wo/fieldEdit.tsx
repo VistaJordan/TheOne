@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { WoFieldDescriptor } from '@theone/shared';
+import { fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
 import {
   ApiRequestError,
   getWoFields,
@@ -76,10 +76,18 @@ export function useWoCatalogue(): Map<string, WoFieldDescriptor> {
   );
 }
 
-/** True when the ACTING principal may edit fields (same rule as the server). */
+/** True when the ACTING principal may edit fields at all (same rule as the server). */
 export function useCanEditFields(): boolean {
-  const { actingAs } = useAuth();
-  return Boolean(actingAs?.can?.edit_wo_fields);
+  const { can } = useAuth();
+  return can('work_orders', 'edit');
+}
+
+/** True when the ACTING principal may edit THIS field (0015: the section
+    grant, then the field's own entry in the tree). */
+export function useCanEditField(fieldKey: string): boolean {
+  const { can } = useAuth();
+  const key = fieldPermKey(fieldKey);
+  return can('work_orders', 'edit') && can(key, 'view') && can(key, 'edit');
 }
 
 /** One field-save mutation. Invalidates broadly (['work-orders'] covers the
@@ -125,7 +133,7 @@ interface InlineFieldProps {
  * when it is computed (formula/attachment). Booleans render as a live checkbox.
  */
 export function InlineField({ wo, fieldKey, children, label, className }: InlineFieldProps) {
-  const canEdit = useCanEditFields();
+  const canEdit = useCanEditField(fieldKey);
   const byKey = useWoCatalogue();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');

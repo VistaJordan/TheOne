@@ -74,6 +74,9 @@ function publicPrincipal(p: SessionPrincipal) {
       edit_wo_fields: p.can.editWoFields,
       view_field_history: p.can.viewFieldHistory,
     },
+    // The full tree (0015). The web runs the same resolver (@theone/shared
+    // permAllows) over it, so what it hides is exactly what the API refuses.
+    perms: p.perms,
   };
 }
 

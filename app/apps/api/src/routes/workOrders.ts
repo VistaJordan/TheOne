@@ -8,11 +8,16 @@
 //   POST /work-orders/bulk/delete   soft-delete many
 //   POST /work-orders/import        create/update from parsed CSV rows
 //
+// Permissions (0015) are checked on the ACTING principal — viewing as a
+// read-only role behaves as one. Reads are trimmed (redactWorkOrder) to the
+// fields the caller may see; writes 403 on the first field they may not edit.
+//
 // (Registered under the /api prefix in index.ts.)
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { parse, notFound, badRequest } from '../errors.js';
+import { fieldPermKey, tabPermKey } from '@theone/shared';
+import { ApiError, parse, notFound, badRequest } from '../errors.js';
 import {
   listWorkOrders,
   listMatchingIds,
@@ -28,10 +33,16 @@ import {
 } from '../services/activity.js';
 import { updateWorkOrderFields, getFieldHistory } from '../services/woFieldValues.js';
 import { getFieldTimes } from '../services/woMetrics.js';
-import { ApiError } from '../errors.js';
 import { getFeed, addComment } from '../services/feed.js';
 import { getMessages, resolveConversationId, sendMessage } from '../services/messages.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
+import {
+  allowFor,
+  assertFieldWrites,
+  redactWorkOrder,
+  requirePerm,
+  visibleColumns,
+} from '../services/permissions.js';
 import { filterSetSchema, sortSchema } from './views.js';
 
 /** A query-string parameter carrying JSON — `filters` and `sort`. Decoding here
@@ -141,16 +152,35 @@ const fieldHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
-/** 403 helpers for the 0007 field gates — checked on the ACTING principal, the
-    same choice the quote gates make: viewing as a read-only role behaves as one. */
-function requireFieldEdit(req: Parameters<typeof actingPrincipalFromRequest>[0]): string {
+/** Every gate below reads the ACTING principal — the same choice the quote
+    gates make: viewing as a read-only role behaves as one. */
+function acting(req: FastifyRequest) {
   const p = actingPrincipalFromRequest(req);
-  if (!p.can.editWoFields) {
-    throw new ApiError('FORBIDDEN', 'Your role cannot edit work-order fields', {
-      required_capability: 'can_edit_wo_fields',
-    });
-  }
+  return { p, allow: allowFor(p) };
+}
+
+function requireView(req: FastifyRequest) {
+  const a = acting(req);
+  requirePerm(a.p, 'work_orders', 'view', 'You cannot view work orders');
+  return a;
+}
+
+/** 403 helper for field writes: the section-level grant, then every key. */
+function requireFieldEdit(req: FastifyRequest, catalogueKeys: string[]): string {
+  const { p, allow } = acting(req);
+  requirePerm(p, 'work_orders', 'edit', 'You cannot edit work orders');
+  assertFieldWrites(allow, catalogueKeys);
   return p.id;
+}
+
+// The bulk patch names promoted columns directly (client, nte, …) and custom
+// keys under `fields`; both become catalogue keys for the per-field gate.
+function patchKeys(patch: z.output<typeof bulkPatchSchema>): string[] {
+  const { status_id: _s, home_list_id: _h, fields, ...cols } = patch;
+  return [
+    ...Object.keys(cols),
+    ...Object.keys(fields ?? {}).map((k) => `fields.${k}`),
+  ];
 }
 
 // S2: an update is 1..4000 chars of real text (whitespace-only is empty).
@@ -168,8 +198,16 @@ const messageBodySchema = z.object({
 
 export default async function workOrdersRoutes(app: FastifyInstance): Promise<void> {
   app.get('/work-orders', async (req) => {
+    const { allow } = requireView(req);
     const q = parse(listQuerySchema, req.query);
-    return listWorkOrders({ ...criteriaOf(q), limit: q.limit, offset: q.offset });
+    const page = await listWorkOrders({
+      ...criteriaOf(q),
+      columns: visibleColumns(allow, q.columns),
+      limit: q.limit,
+      offset: q.offset,
+    });
+    for (const item of page.items) redactWorkOrder(allow, item);
+    return page;
   });
 
   // ── S6 · list-wide operations ──────────────────────────────────────────────
@@ -180,6 +218,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // Every id the current filters match, so "select all 1,240" acts on the whole
   // result set and not just the page the browser happens to be holding.
   app.get('/work-orders/ids', async (req) => {
+    requireView(req);
     const q = parse(listCriteriaSchema, req.query);
     const ids = await listMatchingIds(criteriaOf(q));
     return { ids, total: ids.length };
@@ -189,8 +228,10 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // The browser reaches it as a same-origin link and the session cookie rides
   // along — no token in the URL to leak into a history entry.
   app.get('/work-orders/export', async (req, reply) => {
+    const { p, allow } = requireView(req);
+    requirePerm(p, 'work_orders/export', 'view', 'You cannot export work orders');
     const q = parse(listCriteriaSchema, req.query);
-    const csv = await exportCsv(criteriaOf(q), q.columns ?? []);
+    const csv = await exportCsv(criteriaOf(q), visibleColumns(allow, q.columns) ?? []);
     const stamp = new Date().toISOString().slice(0, 10);
     return reply
       .header('Content-Type', 'text/csv; charset=utf-8')
@@ -200,18 +241,20 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
 
   app.post('/work-orders/bulk', async (req) => {
     const { ids, patch } = parse(bulkBodySchema, req.body);
-    // Status moves and routing stay open to every signed-in operator (they
-    // always were); writing field VALUES now needs the 0007 capability, the
-    // same gate the detail page's inline editor enforces.
-    const { status_id: _s, home_list_id: _h, ...fieldWrites } = patch;
-    const touchesFields =
-      Object.keys(fieldWrites).some((k) => k !== 'fields') ||
-      Object.keys(patch.fields ?? {}).length > 0;
-    if (touchesFields) requireFieldEdit(req);
+    const { p } = acting(req);
+    // A status move is its own grant; routing (home list) rides with it.
+    // Writing field VALUES takes the edit grant, then every key named.
+    if (patch.status_id !== undefined || patch.home_list_id !== undefined) {
+      requirePerm(p, 'work_orders/status', 'edit', 'You cannot change work-order status');
+    }
+    const keys = patchKeys(patch);
+    if (keys.length > 0) requireFieldEdit(req, keys);
     return bulkUpdate(ids, patch, actorIdFromRequest(req));
   });
 
   app.post('/work-orders/bulk/delete', async (req) => {
+    const { p } = acting(req);
+    requirePerm(p, 'work_orders', 'delete', 'You cannot delete work orders');
     const { ids } = parse(bulkDeleteSchema, req.body);
     return bulkDelete(ids, actorIdFromRequest(req));
   });
@@ -220,18 +263,28 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // KEY — the header→field mapping is a decision the person importing makes,
   // and it belongs next to the preview where they can see its effect.
   app.post('/work-orders/import', async (req) => {
+    const { p, allow } = acting(req);
+    requirePerm(p, 'work_orders', 'create', 'You cannot import work orders');
     const { rows, mode, dry_run } = parse(importBodySchema, req.body);
+    // Upserting rewrites fields on existing rows: gate every column the file
+    // carries, exactly as the bulk editor would.
+    const keys = new Set<string>();
+    for (const row of rows) for (const k of Object.keys(row)) keys.add(k);
+    assertFieldWrites(allow, [...keys].filter((k) => k !== 'wo_number' && k !== 'title' && k !== 'status'));
     return importWorkOrders(rows, { mode, dry_run }, actorIdFromRequest(req));
   });
 
   app.get('/work-orders/:id', async (req) => {
+    const { allow } = requireView(req);
     const { id } = parse(idParamsSchema, req.params);
     const detail = await getWorkOrderDetail(id);
     if (!detail) throw notFound('Work order not found');
-    return detail;
+    return redactWorkOrder(allow, detail);
   });
 
   app.patch('/work-orders/:id/status', async (req) => {
+    const { p } = acting(req);
+    requirePerm(p, 'work_orders/status', 'edit', 'You cannot change work-order status');
     const { id } = parse(idParamsSchema, req.params);
     const { status_id } = parse(statusBodySchema, req.body);
     return changeStatus(id, status_id, actorIdFromRequest(req));
@@ -242,38 +295,43 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   app.patch('/work-orders/:id/fields', async (req) => {
     const { id } = parse(idParamsSchema, req.params);
     const { values } = parse(fieldValuesSchema, req.body);
-    const actorId = requireFieldEdit(req);
-    return updateWorkOrderFields(id, values, actorId);
+    const actorId = requireFieldEdit(req, Object.keys(values));
+    const { allow } = acting(req);
+    const res = await updateWorkOrderFields(id, values, actorId);
+    if (res.detail) redactWorkOrder(allow, res.detail);
+    return res;
   });
 
-  // S7 · one field's change history, capability-gated.
+  // S7 · one field's change history, permission-gated twice: the history
+  // grant, and the field itself must be one the caller may see.
   app.get('/work-orders/:id/field-history', async (req) => {
     const { id } = parse(idParamsSchema, req.params);
     const { field, limit } = parse(fieldHistoryQuerySchema, req.query);
-    const p = actingPrincipalFromRequest(req);
-    if (!p.can.viewFieldHistory) {
-      throw new ApiError('FORBIDDEN', 'Your role cannot view field history', {
-        required_capability: 'can_view_field_history',
-      });
-    }
+    const { p, allow } = requireView(req);
+    requirePerm(p, 'work_orders/history', 'view', 'You cannot view field history');
+    assertFieldVisible(allow, field);
     const taskId = await resolveTaskId(id);
     if (!taskId) throw notFound('Work order not found');
     return { items: await getFieldHistory(taskId, field, limit) };
   });
 
   // Per-field change timestamps — the audit trail as data. Unlike
-  // /field-history this carries no before/after trail (and no capability
-  // gate): just when each field first/last changed and what it became, for
-  // any page that needs the timestamps without displaying the history.
+  // /field-history this carries no before/after trail: just when each field
+  // first/last changed and what it became, for any page that needs the
+  // timestamps without displaying the history. Hidden fields are left out.
   app.get('/work-orders/:id/field-times', async (req) => {
+    const { allow } = requireView(req);
     const { id } = parse(idParamsSchema, req.params);
     const taskId = await resolveTaskId(id);
     if (!taskId) throw notFound('Work order not found');
-    return { items: await getFieldTimes(taskId) };
+    const items = await getFieldTimes(taskId);
+    return { items: items.filter((t) => allow(fieldPermKey(t.field), 'view')) };
   });
 
   // S2 · the merged updates+activity stream, newest-first.
   app.get('/work-orders/:id/feed', async (req) => {
+    const { p } = requireView(req);
+    requirePerm(p, tabPermKey('overview'), 'view', 'You cannot view the Overview tab');
     const { id } = parse(idParamsSchema, req.params);
     const taskId = await resolveTaskId(id);
     if (!taskId) throw notFound('Work order not found');
@@ -282,6 +340,8 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
 
   // S2 · the second write path: post an internal or client-visible update.
   app.post('/work-orders/:id/comments', async (req, reply) => {
+    const { p } = acting(req);
+    requirePerm(p, 'work_orders/comments', 'create', 'You cannot post updates');
     const { id } = parse(idParamsSchema, req.params);
     const { body, client_visible } = parse(commentBodySchema, req.body);
     const taskId = await resolveTaskId(id);
@@ -297,6 +357,8 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // A WO with no linked Quo line is NOT an error: it returns conversation:null
   // and the web renders the empty state.
   app.get('/work-orders/:id/messages', async (req) => {
+    const { p } = requireView(req);
+    requirePerm(p, tabPermKey('messages'), 'view', 'You cannot view messages');
     const { id } = parse(idParamsSchema, req.params);
     const taskId = await resolveTaskId(id);
     if (!taskId) throw notFound('Work order not found');
@@ -306,6 +368,8 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // S3 · the third write path: send a text to the technician. Local-only until
   // the real Quo pipe lands, hence pending_sync=true on the stored row.
   app.post('/work-orders/:id/messages', async (req, reply) => {
+    const { p } = acting(req);
+    requirePerm(p, tabPermKey('messages'), 'view', 'You cannot send messages');
     const { id } = parse(idParamsSchema, req.params);
     const { body } = parse(messageBodySchema, req.body);
     const taskId = await resolveTaskId(id);
@@ -319,4 +383,14 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const item = await sendMessage(taskId, conversationId, body, actor);
     return reply.status(201).send({ item });
   });
+}
+
+// History and field-times address fields by CATALOGUE key ('fields.<key>' or a
+// promoted column) — the same address the permission path is built from.
+function assertFieldVisible(allow: ReturnType<typeof allowFor>, key: string): void {
+  if (!allow(fieldPermKey(key), 'view')) {
+    throw new ApiError('FORBIDDEN', `You cannot view "${key.replace(/^fields\./, '')}"`, {
+      required_permission: `${fieldPermKey(key)}:view`,
+    });
+  }
 }
