@@ -2058,6 +2058,16 @@ textarea {
 }
 .audit-via-link:hover { text-decoration: underline; }
 
+/* An automation's row names the rule where a person's row names the person, so
+   the link takes the weight `.audit-text b` gives that slot and adds only the
+   accent colour — the sentence keeps its shape whoever wrote the change. */
+.audit-actor-link {
+  color: var(--accent-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.audit-actor-link:hover { text-decoration: underline; }
+
 .audit-time {
   padding-top: 4px;
   font-size: 11.5px;

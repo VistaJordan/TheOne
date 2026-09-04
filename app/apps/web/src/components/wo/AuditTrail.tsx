@@ -60,13 +60,35 @@ export function AuditTrail({ entries, loading, error }: AuditTrailProps) {
     <ol className="audit">
       {entries.map((e) => {
         const who = e.actor?.display_name ?? 'System';
+        // An automation signs its writes as the "Automations" service
+        // principal, but the useful subject is the rule's own name — that is
+        // what a reader wants to open. The avatar still carries the actor, so
+        // the row is legibly machine-made either way.
+        const auto = automationRef(e.after);
+        const subject = auto?.name ?? who;
         return (
           <li className="audit-row" key={e.id}>
-            <span className={`audit-av${e.actor?.kind === 'service' ? ' is-service' : ''}`} aria-hidden="true">
+            <span
+              className={`audit-av${e.actor?.kind === 'service' ? ' is-service' : ''}`}
+              title={who}
+              aria-hidden="true"
+            >
               {initials(who)}
             </span>
             <p className="audit-text">
-              <b>{who}</b> {describe(e, byKey, isAdmin)}
+              {auto?.name && isAdmin && auto.id
+                ? (
+                  <Link
+                    className="audit-actor-link"
+                    to={`/admin/automations?rule=${encodeURIComponent(auto.id)}`}
+                    title={`${who} — open this rule`}
+                  >
+                    {subject}
+                  </Link>
+                )
+                : <b>{subject}</b>}
+              {' '}
+              {describe(e, byKey)}
             </p>
             <time className="audit-time" dateTime={e.created_at}>{feedTime(e.created_at)}</time>
           </li>
@@ -78,8 +100,8 @@ export function AuditTrail({ entries, loading, error }: AuditTrailProps) {
 
 // ── Sentences ────────────────────────────────────────────────────────────────
 
-function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>, isAdmin: boolean): ReactNode {
-  const via = viaOf(e.after, isAdmin);
+function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): ReactNode {
+  const via = viaOf(e.after);
 
   switch (e.action) {
     case 'status_changed':
@@ -170,28 +192,14 @@ function Val({ children }: { children: ReactNode }) {
 }
 
 /**
- * "via import" / "via bulk", and for the automations engine the rule's own
- * name, linked to it in Admin › Automations so a reader can see the trigger
- * and conditions that produced the change. Only super admins get the link —
- * everyone else meets the console's lock screen — but everyone sees the name.
+ * "via import" / "via bulk". Automations say nothing here — the rule is the
+ * sentence's subject instead (it reads "Change the status to … changed Status
+ * from … to …"), so repeating it at the end would only be noise. A row written
+ * before the rule was recorded has no name to promote, and keeps the actor's
+ * own "Automations" as its subject.
  */
-function viaOf(after: ActivityEntry['after'], isAdmin: boolean): ReactNode {
-  const auto = automationRef(after);
-  if (auto) {
-    if (!auto.name) return <span className="audit-via">via an automation</span>;
-    return (
-      <span className="audit-via">
-        via{' '}
-        {isAdmin && auto.id
-          ? (
-            <Link className="audit-via-link" to={`/admin/automations?rule=${encodeURIComponent(auto.id)}`}>
-              {auto.name}
-            </Link>
-          )
-          : auto.name}
-      </span>
-    );
-  }
+function viaOf(after: ActivityEntry['after']): ReactNode {
+  if (automationRef(after)) return null;
   const via = viaLabel(after);
   return via ? <span className="audit-via">via {via}</span> : null;
 }
