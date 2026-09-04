@@ -124,9 +124,13 @@ export function AppShell({
           ),
         }
       : item,
-  ).filter((item) =>
-    item.children ? item.children.length > 0 : can(NAV_PERM[item.label] ?? item.label, 'view'),
-  );
+  ).filter((item) => {
+    if (item.children) return item.children.length > 0;
+    // An item with no permission of its own (a module the tree does not know
+    // yet) stays: hiding it would be a silent regression, not protection.
+    const perm = NAV_PERM[item.label];
+    return perm ? can(perm, 'view') : true;
+  });
 
   // ── Hover flyout ──────────────────────────────────────────────────────────
   // Hovering a nav item shows what is inside it without committing to opening
