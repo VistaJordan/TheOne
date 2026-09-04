@@ -89,12 +89,20 @@
 .signin-card {
   position: relative; z-index: 1;
   width: 100%; max-width: 420px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  /* The card carries the brand colour: a wash of the route's sky blue that
+     fades into the surface, an accent edge along the top like a stop on the
+     line, and a soft accent halo. All from tokens, so night gets the teal
+     tint on black and day the pale blue on white. */
+  background: linear-gradient(180deg, var(--tab-on-bg) 0%, var(--surface) 46%);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-top: 4px solid var(--accent);
   border-radius: var(--radius);
   /* Lifted a little further than a canvas card — it is the only thing on the
-     page and sits over the route. Night keeps its flat, edged look. */
-  box-shadow: 0 14px 44px rgba(20, 25, 35, .08), var(--shadow);
+     page and sits over the route. */
+  box-shadow:
+    0 14px 44px rgba(20, 25, 35, .08),
+    0 0 0 6px color-mix(in srgb, var(--accent) 12%, transparent),
+    var(--shadow);
   padding: 36px 30px 30px;
   display: flex; flex-direction: column; gap: 14px;
 }
@@ -123,7 +131,7 @@
 }
 /* Navy on the night card would vanish; same inversion the topbar uses. */
 :root[data-theme="night"] .signin-logo img { filter: invert(1) hue-rotate(180deg); }
-:root[data-theme="night"] .signin-card { box-shadow: none; }
+:root[data-theme="night"] .signin-card { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent), 0 0 60px color-mix(in srgb, var(--accent) 18%, transparent); }
 
 /* Dev-bypass footnote under the Microsoft button: quiet, but it must still be
    read — it names the account the button will use and says never to ship it. */
@@ -147,7 +155,7 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.signin-ms:hover { border-color: var(--accent); }
+.signin-ms:hover { border-color: var(--accent); background: var(--tab-on-bg); }
 .signin-ms:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .signin-note {

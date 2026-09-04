@@ -175,11 +175,6 @@ export function SignInPage() {
               <MicrosoftMark />
               {busy && busy === devDefault?.id ? 'Signing in…' : 'Sign in with Microsoft'}
             </button>
-            <p className="signin-note">
-              <Icon name="lock" size={12} />
-              Access is by invitation. If your account has not been added yet, ask a super admin to
-              invite your work address.
-            </p>
           </>
         )}
 
