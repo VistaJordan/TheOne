@@ -24,12 +24,14 @@ export const CICO_STATUS_KEY = '18. Check-in/out Status';
 export const CHECKED_IN_AT_KEY = 'Checked-in At';
 export const CHECKED_OUT_AT_KEY = 'Checked-out At';
 
-/** Which stamp a status value earns, if any. */
+/** Which stamp a status value earns, if any. The production dropdown numbers
+    its options ('1. Checked-in', '2. Checked-out') and the seed does not, so
+    a leading "N." is ignored and the hyphen is optional. */
 export function cicoStampKeyFor(status: unknown): string | null {
   if (typeof status !== 'string') return null;
-  const s = status.trim().toLowerCase();
-  if (s === 'checked-in' || s === 'checked in') return CHECKED_IN_AT_KEY;
-  if (s.startsWith('checked-out') || s.startsWith('checked out')) return CHECKED_OUT_AT_KEY;
+  const s = status.trim().toLowerCase().replace(/^\d+[.)]?\s*/, '');
+  if (/^checked[\s-]?in\b/.test(s)) return CHECKED_IN_AT_KEY;
+  if (/^checked[\s-]?out\b/.test(s)) return CHECKED_OUT_AT_KEY;
   return null;
 }
 
