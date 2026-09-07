@@ -44,11 +44,13 @@ import {
   VISIT_TYPE_FIELD_KEY,
 } from '../../lib/woFieldSections';
 import type { IconName } from '../Icon';
-import { DASH, bool, feedTime, fieldValueToString, initials } from '../../lib/fields';
+import { DASH, FIELD, bool, feedTime, fieldValueToString, initials, isCostOverNte } from '../../lib/fields';
 import { formatValue, unwrap } from '../../lib/auditFormat';
+import { resolveMoney } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 
 import { FieldEditor, displayValue as display, draftOf } from './fieldEdit';
+import { FieldHistory } from './FieldHistory';
 
 const ORDER_PREF_KEY = 'wo.fields.order';
 
@@ -238,6 +240,9 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     const canEditField =
       canEdit && can(fieldPermKey(f.key), 'edit') && !readOnly && f.type !== 'boolean';
     const editable = canEditField && !isLongText;
+    // The Cost row goes red when it is above the client NTE (same rule as the
+    // Finances card and the list column).
+    const overNte = f.key === `fields.${FIELD.cost}` && isCostOverNte(raw, resolveMoney(wo).nte);
     return (
       <div key={f.key}>
         <div
@@ -260,7 +265,10 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
               <span className="afp-fx" title="Computed field — the formula is not wired up yet">ƒ</span>
             )}
           </dt>
-          <dd>
+          <dd
+            className={overNte ? 'is-over-nte' : undefined}
+            title={overNte ? 'Cost is above the client NTE' : undefined}
+          >
             {f.type === 'boolean' && !readOnly ? (
               <label className="afp-check">
                 <input
@@ -520,66 +528,6 @@ function LongTextValue({ text }: { text: string }) {
   );
 }
 
-// ── Per-field history drawer ─────────────────────────────────────────────────
-
-function FieldHistory({ woId, field }: { woId: string; field: WoFieldDescriptor }) {
-  const historyQuery = useQuery({
-    queryKey: ['wo-field-history', woId, field.key],
-    queryFn: () => getFieldHistory(woId, field.key),
-    retry: 0,
-  });
-
-  if (historyQuery.isLoading) {
-    return <div className="afp-history"><span className="afp-none">Loading history…</span></div>;
-  }
-  if (historyQuery.isError) {
-    const err = historyQuery.error;
-    const forbidden = err instanceof ApiRequestError && err.status === 403;
-    return (
-      <div className="afp-history">
-        <span className="afp-none">
-          {forbidden ? 'Your role cannot view field history.' : 'History unavailable.'}
-        </span>
-      </div>
-    );
-  }
-
-  const items = historyQuery.data?.items ?? [];
-  if (items.length === 0) {
-    return (
-      <div className="afp-history">
-        <span className="afp-none">No recorded changes — this value has held since import.</span>
-      </div>
-    );
-  }
-
-  return (
-    <ol className="afp-history">
-      {items.map((e: ActivityEntry) => {
-        const who = e.actor?.display_name ?? 'System';
-        const before = formatValue(unwrap(e.before), field);
-        const after = formatValue(unwrap(e.after), field);
-        return (
-          <li key={e.id} className="afp-hrow">
-            <span className={`audit-av${e.actor?.kind === 'service' ? ' is-service' : ''}`} aria-hidden="true">
-              {initials(who)}
-            </span>
-            <p className="afp-htext">
-              <b>{who}</b>{' '}
-              {before === DASH && after !== DASH ? (
-                <>set it to <span className="audit-val">{after}</span></>
-              ) : after === DASH && before !== DASH ? (
-                <>cleared it (was <span className="audit-val">{before}</span>)</>
-              ) : (
-                <>changed it from <span className="audit-val">{before}</span> to{' '}
-                  <span className="audit-val">{after}</span></>
-              )}
-            </p>
-            <time className="audit-time" dateTime={e.created_at}>{feedTime(e.created_at)}</time>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
+// The per-field history drawer moved to ./FieldHistory so the tab cards can
+// offer it on their rows too.
 
