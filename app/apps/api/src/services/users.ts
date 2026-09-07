@@ -12,6 +12,18 @@ import { ApiError } from '../errors.js';
 import { destroySessionsFor } from './auth.js';
 import { parsePermMap } from './permissions.js';
 import { getRolePermissionsByCode } from './roles.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
+
+/** What the audit log keeps of an account row. */
+function snapshot(u: AdminUser): Snapshot {
+  return {
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    status: u.status,
+    is_super_admin: u.is_super_admin,
+  };
+}
 
 export interface AdminUser {
   id: string;
@@ -104,7 +116,7 @@ export interface InviteInput {
   is_super_admin?: boolean;
 }
 
-export async function inviteUser(input: InviteInput): Promise<AdminUser> {
+export async function inviteUser(input: InviteInput, actorId: string): Promise<AdminUser> {
   await assertRole(input.role);
   const email = input.email.trim().toLowerCase();
 
@@ -125,7 +137,15 @@ export async function inviteUser(input: InviteInput): Promise<AdminUser> {
      RETURNING id`,
     [input.name.trim(), email, input.role, initialsOf(input.name), input.is_super_admin ?? false],
   );
-  return getUser(res.rows[0].id);
+  const created = await getUser(res.rows[0].id);
+  await logAdminEvent({
+    actorId,
+    entity: 'principal',
+    entityId: created.id,
+    action: 'user_invited',
+    after: snapshot(created),
+  });
+  return created;
 }
 
 export interface UpdateUserInput {
@@ -190,7 +210,21 @@ export async function updateUser(
   // Disabling has to bite immediately, not whenever their cookie expires.
   if (input.status === 'disabled') await destroySessionsFor(id);
 
-  return getUser(id);
+  const updated = await getUser(id);
+  const before = snapshot(current);
+  const after = snapshot(updated);
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId,
+      entity: 'principal',
+      entityId: id,
+      action:
+        input.status === 'disabled' && current.status !== 'disabled' ? 'user_disabled' : 'user_updated',
+      before,
+      after,
+    });
+  }
+  return updated;
 }
 
 /**
@@ -226,12 +260,28 @@ export async function getUserPermissions(id: string): Promise<UserPermissions> {
   };
 }
 
-export async function setUserPermissions(id: string, raw: unknown): Promise<UserPermissions> {
-  await getUser(id);
+export async function setUserPermissions(
+  id: string,
+  raw: unknown,
+  actorId: string,
+): Promise<UserPermissions> {
+  const current = await getUserPermissions(id);
   const overrides = parsePermMap(raw);
   await query(`UPDATE principal SET permission_overrides = $2::jsonb WHERE id = $1`, [
     id,
     JSON.stringify(overrides),
   ]);
+  const before: Snapshot = { name: current.user.name, overrides: current.overrides };
+  const after: Snapshot = { name: current.user.name, overrides };
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId,
+      entity: 'principal',
+      entityId: id,
+      action: 'user_permissions_set',
+      before,
+      after,
+    });
+  }
   return getUserPermissions(id);
 }

@@ -96,7 +96,7 @@ const FEED_SQL = `
       FROM activity_log a
       JOIN principal p ON p.id = a.actor_principal_id
      WHERE a.entity_type = 'task'
-       AND a.entity_id = $1
+       AND a.entity_id = $1::text
        AND a.action IN ('status_changed', 'created')
   ) f
   ORDER BY f.created_ts DESC, f.sort_key DESC

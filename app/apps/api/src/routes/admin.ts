@@ -155,8 +155,8 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/admin/users', async (req, reply) => {
-    requireAdmin(req, 'users', 'edit');
-    const user = await inviteUser(parse(inviteSchema, req.body));
+    const actorId = requireAdmin(req, 'users', 'edit');
+    const user = await inviteUser(parse(inviteSchema, req.body), actorId);
     return reply.status(201).send({ user });
   });
 
@@ -180,10 +180,10 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.put('/admin/users/:id/permissions', async (req) => {
-    requireSuperAdmin(req);
+    const actorId = requireSuperAdmin(req);
     const { id } = parse(idParams, req.params);
     const { overrides } = parse(userPermissionsSchema, req.body);
-    return setUserPermissions(id, overrides);
+    return setUserPermissions(id, overrides, actorId);
   });
 
   // ── Roles ──────────────────────────────────────────────────────────────────
@@ -199,21 +199,21 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/admin/roles', async (req, reply) => {
-    requireAdmin(req, 'roles', 'edit');
-    const role = await createRole(parse(createRoleSchema, req.body));
+    const actorId = requireAdmin(req, 'roles', 'edit');
+    const role = await createRole(parse(createRoleSchema, req.body), actorId);
     return reply.status(201).send({ role });
   });
 
   app.patch('/admin/roles/:id', async (req) => {
-    requireAdmin(req, 'roles', 'edit');
+    const actorId = requireAdmin(req, 'roles', 'edit');
     const { id } = parse(idParams, req.params);
-    return { role: await updateRole(id, parse(updateRoleSchema, req.body)) };
+    return { role: await updateRole(id, parse(updateRoleSchema, req.body), actorId) };
   });
 
   app.delete('/admin/roles/:id', async (req) => {
-    requireAdmin(req, 'roles', 'edit');
+    const actorId = requireAdmin(req, 'roles', 'edit');
     const { id } = parse(idParams, req.params);
-    await deleteRole(id);
+    await deleteRole(id, actorId);
     return { ok: true };
   });
 
@@ -246,21 +246,21 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/admin/fields', async (req, reply) => {
-    requireAdmin(req, 'fields', 'edit');
+    const actorId = requireAdmin(req, 'fields', 'edit');
     const body = parse(createFieldSchema, req.body);
-    return reply.status(201).send({ field: await createFieldDef(body) });
+    return reply.status(201).send({ field: await createFieldDef(body, actorId) });
   });
 
   app.patch('/admin/fields/:id', async (req) => {
-    requireAdmin(req, 'fields', 'edit');
+    const actorId = requireAdmin(req, 'fields', 'edit');
     const { id } = parse(idParams, req.params);
-    return { field: await updateFieldDef(id, parse(updateFieldSchema, req.body)) };
+    return { field: await updateFieldDef(id, parse(updateFieldSchema, req.body), actorId) };
   });
 
   app.put('/admin/fields/order', async (req) => {
-    requireAdmin(req, 'fields', 'edit');
+    const actorId = requireAdmin(req, 'fields', 'edit');
     const { ids } = parse(reorderFieldsSchema, req.body);
-    return { items: await reorderFieldDefs(ids) };
+    return { items: await reorderFieldDefs(ids, actorId) };
   });
 
   // ── Statuses & workflow (the status engine's writes) ───────────────────────
@@ -284,41 +284,41 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/admin/workflow/statuses', async (req, reply) => {
-    requireAdmin(req, 'fields', 'edit');
-    const item = await createStatus(parse(createStatusSchema, req.body));
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const item = await createStatus(parse(createStatusSchema, req.body), actorId);
     return reply.status(201).send({ item });
   });
 
   app.patch('/admin/workflow/statuses/:id', async (req) => {
-    requireAdmin(req, 'fields', 'edit');
+    const actorId = requireAdmin(req, 'fields', 'edit');
     const { id } = parse(idParams, req.params);
-    return { item: await updateStatus(id, parse(updateStatusSchema, req.body)) };
+    return { item: await updateStatus(id, parse(updateStatusSchema, req.body), actorId) };
   });
 
   app.delete('/admin/workflow/statuses/:id', async (req) => {
-    requireAdmin(req, 'fields', 'edit');
+    const actorId = requireAdmin(req, 'fields', 'edit');
     const { id } = parse(idParams, req.params);
-    await deleteStatus(id);
+    await deleteStatus(id, actorId);
     return { ok: true };
   });
 
   app.post('/admin/workflow/groups', async (req, reply) => {
-    requireAdmin(req, 'fields', 'edit');
+    const actorId = requireAdmin(req, 'fields', 'edit');
     const { label } = parse(groupLabelSchema, req.body);
-    return reply.status(201).send({ item: await createStatusGroup(label) });
+    return reply.status(201).send({ item: await createStatusGroup(label, actorId) });
   });
 
   app.patch('/admin/workflow/groups/:code', async (req) => {
-    requireAdmin(req, 'fields', 'edit');
+    const actorId = requireAdmin(req, 'fields', 'edit');
     const { code } = parse(groupParams, req.params);
     const { label } = parse(groupLabelSchema, req.body);
-    return { item: await renameStatusGroup(code, label) };
+    return { item: await renameStatusGroup(code, label, actorId) };
   });
 
   app.delete('/admin/workflow/groups/:code', async (req) => {
-    requireAdmin(req, 'fields', 'edit');
+    const actorId = requireAdmin(req, 'fields', 'edit');
     const { code } = parse(groupParams, req.params);
-    await deleteStatusGroup(code);
+    await deleteStatusGroup(code, actorId);
     return { ok: true };
   });
 
@@ -380,15 +380,15 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch('/admin/automations/:id', async (req) => {
-    requireAdmin(req, 'automations', 'edit');
+    const actorId = requireAdmin(req, 'automations', 'edit');
     const { id } = parse(idParams, req.params);
-    return { item: await updateAutomation(id, parse(updateAutomationSchema, req.body)) };
+    return { item: await updateAutomation(id, parse(updateAutomationSchema, req.body), actorId) };
   });
 
   app.delete('/admin/automations/:id', async (req) => {
-    requireAdmin(req, 'automations', 'edit');
+    const actorId = requireAdmin(req, 'automations', 'edit');
     const { id } = parse(idParams, req.params);
-    await deleteAutomation(id);
+    await deleteAutomation(id, actorId);
     return { ok: true };
   });
 
@@ -412,7 +412,9 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ── Audit log ──────────────────────────────────────────────────────────────
-  // GET /admin/audit          the whole activity_log, filtered and paged
+  // GET /admin/audit          the whole activity_log, filtered and paged —
+  //                           work-order edits, sign-ins AND the admin changes
+  //                           (fields, statuses, roles, users, automations)
   // GET /admin/audit/export   the same rows as CSV
 
   const auditQuerySchema = z.object({

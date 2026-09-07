@@ -14,6 +14,18 @@ import { permAllows, type PermMap } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { parsePermMap } from './permissions.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
+
+/** What the audit log keeps of a role. The whole permission tree rides along
+    so a grant that was later withdrawn can still be read back. */
+function snapshot(r: RoleRecord): Snapshot {
+  return {
+    name: r.label,
+    code: r.code,
+    description: r.description,
+    permissions: r.permissions,
+  };
+}
 
 export interface RoleRecord {
   id: string;
@@ -119,7 +131,7 @@ export interface RoleInput {
   can_view_field_history?: boolean;
 }
 
-export async function createRole(input: RoleInput): Promise<RoleRecord> {
+export async function createRole(input: RoleInput, actorId: string): Promise<RoleRecord> {
   // Derive the code from the label when none is supplied — "Regional Manager"
   // becomes `regional_manager`, which is what an operator expects and saves
   // them inventing an identifier they will never see again.
@@ -152,10 +164,22 @@ export async function createRole(input: RoleInput): Promise<RoleRecord> {
       JSON.stringify(permissions),
     ],
   );
-  return getRole(res.rows[0].id);
+  const created = await getRole(res.rows[0].id);
+  await logAdminEvent({
+    actorId,
+    entity: 'role',
+    entityId: created.id,
+    action: 'role_created',
+    after: snapshot(created),
+  });
+  return created;
 }
 
-export async function updateRole(id: string, input: Partial<RoleInput>): Promise<RoleRecord> {
+export async function updateRole(
+  id: string,
+  input: Partial<RoleInput>,
+  actorId: string,
+): Promise<RoleRecord> {
   const current = await getRole(id);
 
   // A system role's CODE is referenced by the seed and by migration 0005, so it
@@ -226,10 +250,16 @@ export async function updateRole(id: string, input: Partial<RoleInput>): Promise
   );
   // principal.role carries ON UPDATE CASCADE, so a code change follows through
   // to everyone holding it rather than orphaning them.
-  return getRole(id);
+  const updated = await getRole(id);
+  const before = snapshot(current);
+  const after = snapshot(updated);
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({ actorId, entity: 'role', entityId: id, action: 'role_updated', before, after });
+  }
+  return updated;
 }
 
-export async function deleteRole(id: string): Promise<void> {
+export async function deleteRole(id: string, actorId: string): Promise<void> {
   const role = await getRole(id);
 
   if (role.is_system) {
@@ -245,4 +275,11 @@ export async function deleteRole(id: string): Promise<void> {
   }
 
   await query(`DELETE FROM role WHERE id = $1`, [id]);
+  await logAdminEvent({
+    actorId,
+    entity: 'role',
+    entityId: id,
+    action: 'role_deleted',
+    before: snapshot(role),
+  });
 }
