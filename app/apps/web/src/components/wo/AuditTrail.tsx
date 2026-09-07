@@ -190,6 +190,41 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       return <>sent a technician payment to Yoda</>;
     case 'payment_paid':
       return <>marked a technician payment paid</>;
+    // Approval tasks (0026): the title says what was asked, the note why it
+    // was decided that way.
+    case 'approval_task_created':
+      return (
+        <>
+          raised an approval task
+          {e.after?.title ? <>: <Val>{String(e.after.title)}</Val></> : null}
+          {e.after?.rule ? <> (rule <Val>{String(e.after.rule)}</Val>)</> : null}
+        </>
+      );
+    case 'approval_task_claimed':
+      return <>claimed an approval task{e.after?.title ? <>: <Val>{String(e.after.title)}</Val></> : null}</>;
+    case 'approval_task_approved':
+      return (
+        <>
+          approved an approval task
+          {e.after?.title ? <>: <Val>{String(e.after.title)}</Val></> : null}
+          {e.after?.note ? <> — {String(e.after.note)}</> : null}
+        </>
+      );
+    case 'approval_task_rejected':
+      return (
+        <>
+          rejected an approval task
+          {e.after?.title ? <>: <Val>{String(e.after.title)}</Val></> : null}
+          {e.after?.note ? <> — {String(e.after.note)}</> : null}
+        </>
+      );
+    case 'approval_task_cancelled':
+      return (
+        <>
+          cancelled an approval task
+          {e.after?.note ? <> — {String(e.after.note)}</> : null}
+        </>
+      );
     default:
       return <>{e.action.replace(/_/g, ' ')}</>;
   }

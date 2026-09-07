@@ -313,6 +313,10 @@ export interface AutomationTrigger {
   /** How the new value is tested against `to`. 'eq'/absent = exact match; the
       comparisons are for money/number fields ("changed to more than 500"). */
   to_op?: 'eq' | 'gt' | 'gte' | 'lt' | 'lte' | null;
+  /** Compare the new value against ANOTHER field's current value instead of
+      the constant in `to` ("Cost changed to more than NTE" — rule 1.5.2).
+      Both fields must be money/number; `to` is ignored when this is set. */
+  to_field?: string | null;
   /** Wait this long after the trigger before acting (0/absent = immediately).
       Conditions are evaluated AFTER the wait — "if the quote is still not
       ready" — and another matching change restarts the clock. Timers are DB
@@ -320,11 +324,27 @@ export interface AutomationTrigger {
   delay_minutes?: number | null;
 }
 
-/** One write the rule performs: set a field to a value (null clears it). */
+/** What one action does. Absent = 'set_field' (every rule saved before
+    approval tasks existed). */
+export type AutomationActionKind = 'set_field' | 'approval_task';
+
+/**
+ * One thing the rule does. 'set_field': set `field` to `value` (null clears
+ * it). 'approval_task': raise an approval task on the work order — `field` is
+ * the literal 'approval_task', `value` the task type (ApprovalTaskType) and
+ * `assign_role` the role code whose inbox it lands in (null = any approver).
+ * `field`/`value` stay filled in both shapes so run logs and summaries read
+ * one way.
+ */
 export interface AutomationAction {
+  kind?: AutomationActionKind;
   field: string;
   value: string | null;
+  assign_role?: string | null;
 }
+
+/** The sentinel `field` of an 'approval_task' action. */
+export const APPROVAL_TASK_ACTION_FIELD = 'approval_task';
 
 export interface AutomationItem {
   id: string;
@@ -1004,6 +1024,90 @@ export interface SnoozeInput {
 
 export interface SnoozeResponse {
   obligation: Obligation;
+}
+
+// ── Approval tasks (0026) — the manager's inbox ──────────────────────────────
+/**
+ * Something on a work order that needs a person with authority to say yes or
+ * no. Rule 1.5.2 (cost over NTE) is the first thing that raises one; the
+ * rules engine can raise any type. open → approved | rejected, or cancelled
+ * when the reason went away on its own.
+ */
+export type ApprovalTaskType = 'nte_override' | 'manager_review';
+
+export type ApprovalTaskStatus = 'open' | 'approved' | 'rejected' | 'cancelled';
+
+/** Permission path: `view` = the Approvals page; `approve` covers reject and claim. */
+export const APPROVALS_PERM_KEY = 'approvals';
+
+/** The task types the automation builder offers, with how each reads. */
+export const APPROVAL_TASK_TYPES: { code: ApprovalTaskType; label: string; hint: string }[] = [
+  {
+    code: 'nte_override',
+    label: 'NTE override approval',
+    hint: 'The cost is above the client NTE — a manager decides whether to proceed anyway (rule 1.5.2)',
+  },
+  {
+    code: 'manager_review',
+    label: 'Manager review',
+    hint: 'A manager looks at the work order and signs off — the rule name is the reason',
+  },
+];
+
+export interface ApprovalTaskSource {
+  automation_id: string | null;
+  name: string | null;
+}
+
+export interface ApprovalTask {
+  id: string;
+  type: ApprovalTaskType;
+  task_id: string;
+  /** One line saying what is asked, e.g. "Cost $1,200.00 is over the NTE $1,000.00". */
+  title: string;
+  /** The numbers behind the title at the time it was raised (or last refreshed). */
+  detail: Record<string, unknown>;
+  /** Role code whose inbox this lands in; null = anyone who may approve. */
+  assigned_role: string | null;
+  assigned_role_label: string | null;
+  /** Whoever claimed it (or was handed it). */
+  assigned_to: ActivityActor | null;
+  status: ApprovalTaskStatus;
+  source: ApprovalTaskSource | null;
+  created_by: ActivityActor | null;
+  created_at: string;
+  updated_at: string;
+  decided_by: ActivityActor | null;
+  decided_at: string | null;
+  decision_note: string | null;
+}
+
+/** One row of GET /api/approvals — the task plus the work order it sits on,
+    with the columns the inbox filters by. */
+export interface ApprovalListItem extends ApprovalTask {
+  wo_number: string;
+  wo_title: string | null;
+  client: string | null;
+  billing_entity: string | null;
+  trade: string | null;
+}
+
+/** GET /api/approvals — every task across live work orders, open first. */
+export interface ApprovalListResponse {
+  items: ApprovalListItem[];
+  total: number;
+  counts: Record<ApprovalTaskStatus, number>;
+}
+
+/** GET /api/work-orders/:id/approval-tasks — newest first. */
+export interface ApprovalTasksResponse {
+  items: ApprovalTask[];
+  total: number;
+}
+
+/** POST /api/approval-tasks/:id/{approve,reject,claim}. */
+export interface ApprovalTaskResponse {
+  item: ApprovalTask;
 }
 
 // ── Activity log ─────────────────────────────────────────────────────────────

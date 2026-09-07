@@ -337,6 +337,9 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       // How the new value is tested against `to` — the comparisons are for
       // money/number fields ("changed to more than 500"); eq/absent = exact.
       to_op: z.enum(['eq', 'gt', 'gte', 'lt', 'lte']).nullish(),
+      // Compare against another field's current value instead of `to`
+      // ("Cost changed to more than NTE").
+      to_field: z.string().trim().min(1).max(200).nullish(),
       // Wait N minutes after the trigger; conditions run when the wait ends.
       delay_minutes: z.number().int().min(0).max(43200).nullish(),
     })
@@ -344,8 +347,11 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   const actionSchema = z
     .object({
+      // Absent = set a field; 'approval_task' raises a task in the inbox (0026).
+      kind: z.enum(['set_field', 'approval_task']).optional(),
       field: z.string().trim().min(1).max(200),
       value: z.string().max(4000).nullable(),
+      assign_role: z.string().trim().max(60).nullish(),
     })
     .strict();
 

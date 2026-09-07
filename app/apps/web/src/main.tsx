@@ -11,6 +11,7 @@ import './styles/quote.css';
 import './styles/payment.css';
 import './styles/pulse.css';
 import './styles/receivables.css';
+import './styles/approvals.css';
 import './styles/auth.css';
 import './styles/wo-list.css';
 import { App } from './App';

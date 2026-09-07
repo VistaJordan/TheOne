@@ -35,7 +35,14 @@ import type {
   AutomationItem,
   AutomationRunItem,
   AutomationTrigger,
+  ApprovalTaskType,
 } from '@theone/shared';
+import { APPROVAL_TASK_ACTION_FIELD } from '@theone/shared';
+import {
+  createApprovalTask,
+  isApprovalTaskType,
+  reconcileApprovalTasks,
+} from './approvals.js';
 
 const MAX_DEPTH = 5;
 const MAX_ACTIONS = 10;
@@ -123,13 +130,55 @@ function toValueMatches(trigger: AutomationTrigger, after: string): boolean {
   const a = numOf(after);
   const b = numOf(String(trigger.to));
   if (a === null || b === null) return false;
+  return compareNumbers(op, a, b);
+}
+
+function compareNumbers(op: string, a: number, b: number): boolean {
   switch (op) {
+    case 'eq': return a === b;
     case 'gt': return a > b;
     case 'gte': return a >= b;
     case 'lt': return a < b;
     case 'lte': return a <= b;
     default: return false;
   }
+}
+
+/** A field's current value on one work order, as a number (null when unset
+    or not numeric). Core keys read their column, custom keys the bag. */
+async function currentNumberOf(taskId: string, key: string): Promise<number | null> {
+  const f = await resolveField(key);
+  const res = f.custom
+    ? await query<{ v: string | null }>(
+        `SELECT t.fields->>$2 AS v FROM task t WHERE t.id = $1 LIMIT 1`,
+        [taskId, f.jsonKey],
+      )
+    : await query<{ v: string | null }>(
+        `SELECT (${f.sql})::text AS v FROM task t WHERE t.id = $1 LIMIT 1`,
+        [taskId],
+      );
+  const v = res.rows[0]?.v;
+  return v == null ? null : numOf(String(v));
+}
+
+/** The field-to-field form of the `to` test: "Cost changed to more than NTE".
+    Either side missing or non-numeric never matches — an NTE that is not set
+    is not an NTE that was exceeded. */
+async function toFieldMatches(
+  trigger: AutomationTrigger,
+  taskId: string,
+  after: string,
+): Promise<boolean> {
+  const a = numOf(after);
+  if (a === null) return false;
+  let b: number | null = null;
+  try {
+    b = await currentNumberOf(taskId, trigger.to_field as string);
+  } catch {
+    return false; // the compared field was deleted from the catalogue
+  }
+  if (b === null) return false;
+  return compareNumbers(trigger.to_op ?? 'eq', a, b);
 }
 
 // ── The service principal automations act as ─────────────────────────────────
@@ -185,14 +234,15 @@ async function validateTrigger(trigger: AutomationTrigger): Promise<void> {
     await resolveField(trigger.field); // throws on an unknown key
   }
   const op = trigger.to_op;
+  const toField = trigger.to_field?.trim() || null;
   if (op != null && op !== 'eq') {
     if (!['gt', 'gte', 'lt', 'lte'].includes(op)) {
       throw new ApiError('BAD_REQUEST', `Unknown "to" comparison "${op}"`);
     }
-    if (trigger.kind !== 'changed' || !trigger.field || trigger.to == null) {
+    if (trigger.kind !== 'changed' || !trigger.field || (trigger.to == null && !toField)) {
       throw new ApiError(
         'BAD_REQUEST',
-        'A more-than/less-than trigger needs a specific field and a value to compare against',
+        'A more-than/less-than trigger needs a specific field and a value (or another field) to compare against',
       );
     }
     const f = await resolveField(trigger.field);
@@ -202,8 +252,30 @@ async function validateTrigger(trigger: AutomationTrigger): Promise<void> {
         `"${f.label}" is not a number — more-than/less-than triggers apply to money and number fields`,
       );
     }
-    if (numOf(String(trigger.to)) === null) {
+    if (!toField && numOf(String(trigger.to)) === null) {
       throw new ApiError('BAD_REQUEST', `"${trigger.to}" is not a number to compare against`);
+    }
+  }
+  if (toField) {
+    // Field against field ("Cost changed to more than NTE"): both sides numeric.
+    if (trigger.kind !== 'changed' || !trigger.field) {
+      throw new ApiError(
+        'BAD_REQUEST',
+        'Comparing against another field needs a specific field that changes',
+      );
+    }
+    const f = await resolveField(trigger.field);
+    const g = await resolveField(toField);
+    for (const x of [f, g]) {
+      if (x.type !== 'money' && x.type !== 'number') {
+        throw new ApiError(
+          'BAD_REQUEST',
+          `"${x.label}" is not a number — a field-to-field comparison needs money or number fields on both sides`,
+        );
+      }
+    }
+    if (f.key === g.key) {
+      throw new ApiError('BAD_REQUEST', `"${f.label}" cannot be compared against itself`);
     }
   }
   const d = trigger.delay_minutes;
@@ -223,15 +295,31 @@ async function validateConditions(conditions: FilterSet): Promise<void> {
 
 /** An action target, resolved to how the engine will apply it. */
 interface ResolvedAction {
-  kind: 'status' | 'priority' | 'custom';
+  kind: 'status' | 'priority' | 'custom' | 'approval_task';
   /** For 'custom': the catalogue key (`fields.<json key>`). */
   catalogueKey?: string;
   value: string | null;
+  /** For 'approval_task': the type and the role whose inbox it lands in. */
+  approvalType?: ApprovalTaskType;
+  assignRole?: string | null;
 }
 
 async function resolveAction(a: AutomationAction): Promise<ResolvedAction> {
   const field = a.field.trim();
   const value = a.value === undefined ? null : a.value;
+
+  // Raise a task in the Approvals inbox (0026) rather than write a field.
+  if (a.kind === 'approval_task' || field === APPROVAL_TASK_ACTION_FIELD) {
+    if (!isApprovalTaskType(value)) {
+      throw new ApiError('BAD_REQUEST', 'An approval task action needs a task type');
+    }
+    const role = a.assign_role?.trim() || null;
+    if (role) {
+      const hit = await query<{ code: string }>(`SELECT code FROM role WHERE code = $1 LIMIT 1`, [role]);
+      if (!hit.rows[0]) throw new ApiError('BAD_REQUEST', `No role is coded "${role}"`);
+    }
+    return { kind: 'approval_task', value, approvalType: value, assignRole: role };
+  }
 
   if (field === 'status' || field === 'status_id') {
     if (!value) throw new ApiError('BAD_REQUEST', 'A status action needs a status to move to');
@@ -459,17 +547,38 @@ export async function listRuns(automationId: string, limit: number): Promise<Aut
 
 // ── The engine ───────────────────────────────────────────────────────────────
 
-function triggerMatches(trigger: AutomationTrigger, event: AutomationEvent): TaskChange | true | null {
+async function triggerMatches(
+  trigger: AutomationTrigger,
+  event: AutomationEvent,
+): Promise<TaskChange | true | null> {
   // Manual rules never fire from events — only from an explicit enrollment.
   if (trigger.kind === 'manual') return null;
   if (trigger.kind === 'created') return event.kind === 'created' ? true : null;
   if (event.kind !== 'changed') return null;
   for (const change of event.changes ?? []) {
     if (trigger.field && !matchKeysOf(change).includes(trigger.field)) continue;
-    if (trigger.to != null && !toValueMatches(trigger, afterValueOf(change))) continue;
+    if (trigger.to_field) {
+      // Against another field's value as it stands after the commit.
+      if (!(await toFieldMatches(trigger, event.taskId, afterValueOf(change)))) continue;
+    } else if (trigger.to != null && !toValueMatches(trigger, afterValueOf(change))) {
+      continue;
+    }
     return change;
   }
   return null;
+}
+
+/** What the rule saw change, handed to a manager-review task for its title. */
+async function causeOf(match: TaskChange | true | null): Promise<{ field_label: string; value: string } | null> {
+  if (!match || match === true) return null;
+  const key = matchKeysOf(match)[0];
+  let label = key;
+  try {
+    label = (await resolveField(key)).label;
+  } catch {
+    /* a change on a key the catalogue no longer knows reads as the key */
+  }
+  return { field_label: label, value: afterValueOf(match) };
 }
 
 /** True when the work order still exists and passes the rule's conditions. */
@@ -494,6 +603,7 @@ async function applyActions(
   actions: AutomationAction[],
   actorId: string,
   ctx: AutoCtx,
+  cause: { field_label: string; value: string } | null = null,
 ): Promise<{ field: string; value: string | null }[]> {
   // Imported at call time: workOrders/woFieldValues call back into this module
   // after their writes, and a static import each way would be a cycle.
@@ -503,7 +613,20 @@ async function applyActions(
   const applied: { field: string; value: string | null }[] = [];
   for (const a of actions) {
     const r = await resolveAction(a);
-    if (r.kind === 'status') {
+    if (r.kind === 'approval_task') {
+      const { item, created } = await createApprovalTask({
+        taskId,
+        type: r.approvalType as ApprovalTaskType,
+        assignRole: r.assignRole ?? null,
+        actorId,
+        source: ctx.by ? { automationId: ctx.by.id, name: ctx.by.name } : null,
+        cause,
+      });
+      applied.push({
+        field: APPROVAL_TASK_ACTION_FIELD,
+        value: `${item.type}${created ? '' : ' (refreshed the open task)'}`,
+      });
+    } else if (r.kind === 'status') {
       const hit = await query<{ id: string; name: string }>(
         `SELECT id, name FROM status WHERE id::text = $1 OR lower(name) = $2 LIMIT 1`,
         [r.value, norm(r.value as string)],
@@ -562,6 +685,13 @@ export async function dispatchAutomations(event: AutomationEvent, ctx?: AutoCtx)
   if (event.kind === 'changed' && (event.changes?.length ?? 0) === 0) return;
 
   try {
+    // Housekeeping first, on every change: an open approval task whose reason
+    // is gone (cost back under NTE) is cancelled before any rule can look at
+    // the work order. Lives here so no write path can forget it.
+    if (event.kind === 'changed') {
+      await reconcileApprovalTasks(event.taskId, await automationActorId());
+    }
+
     const rules = await query<AutomationRow>(
       `SELECT ${AUTOMATION_COLS} FROM automation
         WHERE enabled AND entity = 'work_order'
@@ -578,7 +708,8 @@ export async function dispatchAutomations(event: AutomationEvent, ctx?: AutoCtx)
 
     for (const rule of rules.rows) {
       if (c.fired.has(rule.id)) continue;
-      if (!triggerMatches(rule.trigger, event)) continue;
+      const match = await triggerMatches(rule.trigger, event);
+      if (!match) continue;
 
       // A delayed rule does not act now — it arms (or re-arms) a DB timer and
       // the scheduler evaluates its conditions when the wait ends. "When CICO
@@ -612,7 +743,9 @@ export async function dispatchAutomations(event: AutomationEvent, ctx?: AutoCtx)
         by: { kind: 'automation', id: rule.id, name: rule.name },
       };
       try {
-        const applied = await applyActions(event.taskId, rule.actions, actorId, child);
+        const applied = await applyActions(
+          event.taskId, rule.actions, actorId, child, await causeOf(match),
+        );
         await recordRun(rule.id, event.taskId, woNumber, 'applied', { applied });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

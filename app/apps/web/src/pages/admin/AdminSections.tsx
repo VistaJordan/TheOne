@@ -30,6 +30,7 @@ import {
   listAdminWorkflow,
   listAutomationRuns,
   listAutomations,
+  listRoles,
   listTrash,
   reorderAdminFields,
   restoreFromTrash,
@@ -50,6 +51,7 @@ import {
   type WoFilterRule,
   type WoFieldType,
 } from '../../api/client';
+import { APPROVAL_TASK_ACTION_FIELD, APPROVAL_TASK_TYPES } from '@theone/shared';
 
 // ══ SETTINGS ═════════════════════════════════════════════════════════════════
 
@@ -324,12 +326,20 @@ const TO_OP_PHRASE: Record<string, string> = {
   lte: 'to at most',
 };
 
+/** How an approval-task action reads in a sentence. */
+function approvalPhrase(type: string | null, role: string | null | undefined): string {
+  const label = APPROVAL_TASK_TYPES.find((x) => x.code === type)?.label ?? 'approval';
+  return `raise an ${label} task${role ? ` for ${role}` : ''}`;
+}
+
 /** The card's one-line reading of a rule: when — if — then. */
 function summarize(a: AutomationItem, fields: WoFieldDescriptor[]): string {
   const t = a.trigger;
-  const toPhrase = t.to
-    ? ` ${TO_OP_PHRASE[t.to_op ?? ''] ?? 'to'} “${t.to}”`
-    : '';
+  const toPhrase = t.to_field
+    ? ` ${TO_OP_PHRASE[t.to_op ?? ''] ?? 'to the same as'} ${fieldLabel(t.to_field, fields)}`
+    : t.to
+      ? ` ${TO_OP_PHRASE[t.to_op ?? ''] ?? 'to'} “${t.to}”`
+      : '';
   const base =
     t.kind === 'manual'
       ? 'When work orders are enrolled from the list'
@@ -343,9 +353,11 @@ function summarize(a: AutomationItem, fields: WoFieldDescriptor[]): string {
   const iff = n > 0 ? ` — if ${n === 1 ? '1 condition matches' : `${n} conditions match`}` : '';
   const then = a.actions
     .map((x) =>
-      x.value === null || x.value === ''
-        ? `clear ${fieldLabel(x.field, fields)}`
-        : `set ${fieldLabel(x.field, fields)} to “${x.value}”`,
+      x.kind === 'approval_task' || x.field === APPROVAL_TASK_ACTION_FIELD
+        ? approvalPhrase(x.value, x.assign_role)
+        : x.value === null || x.value === ''
+          ? `clear ${fieldLabel(x.field, fields)}`
+          : `set ${fieldLabel(x.field, fields)} to “${x.value}”`,
     )
     .join(', ');
   return then ? `${when}${iff} — ${then}` : `${when}${iff}`;
@@ -576,9 +588,11 @@ function RunLog({ id, fields }: { id: string; fields: WoFieldDescriptor[] }) {
     if (r.outcome === 'skipped') return d.message ?? 'Skipped — conditions no longer matched';
     return (d.applied ?? [])
       .map((x) =>
-        x.value === null
-          ? `cleared ${fieldLabel(x.field, fields)}`
-          : `${fieldLabel(x.field, fields)} → ${x.value}`,
+        x.field === APPROVAL_TASK_ACTION_FIELD
+          ? `raised ${approvalPhrase(x.value, null).replace(/^raise /, '')}${x.value?.includes('refreshed') ? ' (refreshed the open task)' : ''}`
+          : x.value === null
+            ? `cleared ${fieldLabel(x.field, fields)}`
+            : `${fieldLabel(x.field, fields)} → ${x.value}`,
       )
       .join(' · ') || 'Applied';
   };
@@ -677,7 +691,16 @@ function JoinToggle({ value, onChange }: {
     </span>
   );
 }
-interface ActionDraft { field: string; value: string }
+/** 'set_field': field + value. 'approval_task': value = the task type, and
+    assign_role = the role code whose inbox it lands in ('' = any approver). */
+interface ActionDraft {
+  kind: 'set_field' | 'approval_task';
+  field: string;
+  value: string;
+  assign_role: string;
+}
+
+const NEW_ACTION: ActionDraft = { kind: 'set_field', field: '', value: '', assign_role: '' };
 
 const BUILDER_STEPS = ['Trigger', 'Applies to', 'Conditions', 'Actions'] as const;
 
@@ -696,6 +719,14 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
   const [trigField, setTrigField] = useState(initial?.trigger.field ?? '');
   const [trigTo, setTrigTo] = useState(initial?.trigger.to ?? '');
   const [trigToOp, setTrigToOp] = useState<string>(initial?.trigger.to_op ?? 'eq');
+  // The numeric comparison is against a typed value or against another
+  // field's current value ("Cost changed to more than NTE").
+  const [trigCmp, setTrigCmp] = useState<'value' | 'field'>(initial?.trigger.to_field ? 'field' : 'value');
+  const [trigToField, setTrigToField] = useState(initial?.trigger.to_field ?? '');
+  // Roles, for the approval-task action's lane picker. The automations editor
+  // may not have Admin › Roles; a 403 falls back to typing the code.
+  const rolesQ = useQuery({ queryKey: ['admin-roles'], queryFn: listRoles, retry: 0 });
+  const roles = rolesQ.data?.items ?? [];
   const [rules, setRules] = useState<RuleDraft[]>(
     (initial?.conditions?.rules ?? []).map((r) => ({
       field: r.field,
@@ -708,8 +739,13 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
   );
   const [actions, setActions] = useState<ActionDraft[]>(
     initial
-      ? initial.actions.map((x) => ({ field: x.field, value: x.value ?? '' }))
-      : [{ field: 'status', value: '' }],
+      ? initial.actions.map((x) => ({
+          kind: x.kind === 'approval_task' || x.field === APPROVAL_TASK_ACTION_FIELD ? 'approval_task' : 'set_field',
+          field: x.field,
+          value: x.value ?? '',
+          assign_role: x.assign_role ?? '',
+        }))
+      : [{ ...NEW_ACTION, field: 'status' }],
   );
 
   const triggerFields = fields.filter((f) => !UNTRIGGERABLE.has(f.key));
@@ -738,9 +774,15 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
   // The numeric "to" comparison only means something on a money/number field.
   const trigFieldType = fields.find((f) => f.key === trigField)?.type;
   const trigIsNumeric = trigFieldType === 'money' || trigFieldType === 'number';
+  // The other side of a field-to-field comparison: any OTHER numeric field.
+  const numericFields = triggerFields.filter(
+    (f) => (f.type === 'money' || f.type === 'number') && f.key !== trigField,
+  );
 
   const build = (): AutomationInput => {
-    const hasTo = kind === 'changed' && trigField && trigTo.trim() !== '';
+    const hasToField =
+      kind === 'changed' && !!trigField && trigIsNumeric && trigCmp === 'field' && trigToField !== '';
+    const hasTo = kind === 'changed' && !!trigField && !hasToField && trigTo.trim() !== '';
     return {
       name: name.trim(),
       entity,
@@ -748,22 +790,32 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
         kind,
         field: kind === 'changed' && trigField ? trigField : null,
         to: hasTo ? trigTo.trim() : null,
-        to_op: hasTo && trigIsNumeric && trigToOp !== 'eq'
+        to_op: (hasTo || hasToField) && trigIsNumeric && trigToOp !== 'eq'
           ? (trigToOp as 'gt' | 'gte' | 'lt' | 'lte')
           : null,
+        to_field: hasToField ? trigToField : null,
         delay_minutes: null,
       },
     conditions: condsOf(rules),
       actions: actions
-        .filter((a) => a.field)
-        .map((a) => ({ field: a.field, value: a.value.trim() === '' ? null : a.value })),
+        .filter((a) => (a.kind === 'approval_task' ? a.value : a.field))
+        .map((a) =>
+          a.kind === 'approval_task'
+            ? {
+                kind: 'approval_task' as const,
+                field: APPROVAL_TASK_ACTION_FIELD,
+                value: a.value,
+                assign_role: a.assign_role.trim() || null,
+              }
+            : { field: a.field, value: a.value.trim() === '' ? null : a.value },
+        ),
     };
   };
 
   const actionsValid =
-    actions.some((a) => a.field) &&
+    actions.some((a) => (a.kind === 'approval_task' ? a.value : a.field)) &&
     // A status action with no target status is half-written, not a "clear".
-    actions.every((a) => a.field !== 'status' || a.value.trim() !== '');
+    actions.every((a) => a.kind === 'approval_task' || a.field !== 'status' || a.value.trim() !== '');
   const valid = name.trim().length > 0 && actionsValid;
 
   const last = step === BUILDER_STEPS.length - 1;
@@ -822,7 +874,10 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
                   value={trigField}
                   anyLabel="Any field"
                   ariaLabel="Which field"
-                  onChange={(v) => { setTrigField(v); setTrigTo(''); setTrigToOp('eq'); }}
+                  onChange={(v) => {
+                    setTrigField(v); setTrigTo(''); setTrigToOp('eq');
+                    setTrigCmp('value'); setTrigToField('');
+                  }}
                 />
                 {trigField && trigIsNumeric && (
                   <select
@@ -837,7 +892,32 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
                     <option value="lte">to at most</option>
                   </select>
                 )}
-                {trigField && (
+                {/* A number can be tested against a typed amount or against
+                    another field on the same work order — "Cost changed to
+                    more than NTE" is rule 1.5.2. */}
+                {trigField && trigIsNumeric && (
+                  <select
+                    className="fld fld-sm" value={trigCmp}
+                    aria-label="Compare against a value or another field"
+                    onChange={(e) => {
+                      setTrigCmp(e.target.value as 'value' | 'field');
+                      setTrigTo(''); setTrigToField('');
+                    }}
+                  >
+                    <option value="value">an amount</option>
+                    <option value="field">another field</option>
+                  </select>
+                )}
+                {trigField && trigIsNumeric && trigCmp === 'field' && (
+                  <FieldSelect
+                    fields={numericFields}
+                    value={trigToField}
+                    anyLabel="Pick the field to compare with…"
+                    ariaLabel="Field to compare against"
+                    onChange={setTrigToField}
+                  />
+                )}
+                {trigField && !(trigIsNumeric && trigCmp === 'field') && (
                   <ValueControl
                     desc={byKey(trigField)}
                     value={trigTo}
@@ -963,6 +1043,55 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
             const f = byKey(a.field);
             return (
               <div className="auto-row auto-row-then" key={i}>
+                {/* What the action does: write a field, or put a task in the
+                    Approvals inbox for a manager to decide (0026). */}
+                <select
+                  className="fld fld-sm" value={a.kind}
+                  aria-label={`Action ${i + 1} kind`}
+                  onChange={(e) =>
+                    setAction(i, {
+                      kind: e.target.value as ActionDraft['kind'],
+                      field: '', value: '', assign_role: '',
+                    })
+                  }
+                >
+                  <option value="set_field">Set a field</option>
+                  <option value="approval_task">Raise an approval task</option>
+                </select>
+                {a.kind === 'approval_task' ? (
+                  <>
+                    <select
+                      className="fld fld-sm" value={a.value}
+                      aria-label={`Action ${i + 1} task type`}
+                      onChange={(e) => setAction(i, { value: e.target.value })}
+                    >
+                      <option value="">pick a task type…</option>
+                      {APPROVAL_TASK_TYPES.map((t) => (
+                        <option key={t.code} value={t.code} title={t.hint}>{t.label}</option>
+                      ))}
+                    </select>
+                    {roles.length > 0 ? (
+                      <select
+                        className="fld fld-sm" value={a.assign_role}
+                        aria-label={`Action ${i + 1} — whose inbox`}
+                        onChange={(e) => setAction(i, { assign_role: e.target.value })}
+                      >
+                        <option value="">for any approver</option>
+                        {roles.filter((r) => r.code !== 'service').map((r) => (
+                          <option key={r.code} value={r.code}>for {r.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="fld fld-sm" type="text" value={a.assign_role}
+                        placeholder="role code (empty = any approver)"
+                        aria-label={`Action ${i + 1} — role code`}
+                        onChange={(e) => setAction(i, { assign_role: e.target.value })}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <>
                 <FieldSelect
                   fields={actionFields}
                   value={a.field}
@@ -980,6 +1109,8 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
                     onChange={(v) => setAction(i, { value: v })}
                   />
                 )}
+                  </>
+                )}
                 <button
                   type="button" className="wf-x" title="Remove this action"
                   disabled={actions.length === 1}
@@ -992,7 +1123,7 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
           })}
           <button
             type="button" className="linkbtn auto-add"
-            onClick={() => setActions([...actions, { field: '', value: '' }])}
+            onClick={() => setActions([...actions, { ...NEW_ACTION }])}
           >
             + Add an action
           </button>

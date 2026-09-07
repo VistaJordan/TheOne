@@ -412,6 +412,12 @@ export function buildPermissionTree(fields: PermFieldInfo[]): PermNode[] {
         },
       ],
     },
+    {
+      key: 'approvals',
+      label: 'Approvals',
+      actions: ['view', 'approve'],
+      note: 'View = the Approvals inbox and the tasks on a work order; approve also covers reject and claim.',
+    },
     { key: 'vendors', label: 'Vendors', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
     { key: 'invoicing', label: 'Invoicing', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
     {

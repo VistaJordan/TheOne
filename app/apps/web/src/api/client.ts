@@ -3,6 +3,11 @@
 // boundary (SPRINT1-SPEC §8 Card C). Web never imports @theone/db.
 import type { PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
 import type {
+  ApprovalListResponse,
+  ApprovalTaskResponse,
+  ApprovalTasksResponse,
+} from '@theone/shared';
+import type {
   Kpis,
   Status,
   WorkOrderDetail,
@@ -923,6 +928,53 @@ export function sendPaymentToYoda(id: string, yodaRef: string | null): Promise<P
 /** POST …/mark-paid — approved | sent_to_yoda → paid (payments/process:edit). */
 export function markPaymentPaid(id: string): Promise<PaymentRequestResponse> {
   return decidePayment(id, 'mark-paid');
+}
+
+// ── Approvals — the manager's inbox (0026) ───────────────────────────────────
+
+export type {
+  ApprovalListItem,
+  ApprovalListResponse,
+  ApprovalTask,
+  ApprovalTaskResponse,
+  ApprovalTasksResponse,
+  ApprovalTaskStatus,
+  ApprovalTaskType,
+} from '@theone/shared';
+
+/** GET /api/approvals — every task across work orders, open ones first. */
+export function listApprovals(): Promise<ApprovalListResponse> {
+  return request<ApprovalListResponse>('/approvals');
+}
+
+/** GET /api/work-orders/:id/approval-tasks — the tasks on one work order. */
+export function listWorkOrderApprovals(idOrNumber: string): Promise<ApprovalTasksResponse> {
+  return request<ApprovalTasksResponse>(
+    `/work-orders/${encodeURIComponent(idOrNumber)}/approval-tasks`,
+  );
+}
+
+function decideApproval(id: string, verb: string, body: Record<string, unknown> = {}) {
+  return request<ApprovalTaskResponse>(`/approval-tasks/${encodeURIComponent(id)}/${verb}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** POST …/approve — open → approved, optional note (approvals:approve). */
+export function approveApprovalTask(id: string, note: string | null): Promise<ApprovalTaskResponse> {
+  return decideApproval(id, 'approve', { note });
+}
+
+/** POST …/reject — open → rejected; the note is posted as an internal update
+    on the work order (approvals:approve). */
+export function rejectApprovalTask(id: string, note: string): Promise<ApprovalTaskResponse> {
+  return decideApproval(id, 'reject', { note });
+}
+
+/** POST …/claim — take an open task into your own lane (approvals:approve). */
+export function claimApprovalTask(id: string): Promise<ApprovalTaskResponse> {
+  return decideApproval(id, 'claim');
 }
 
 // ── S5 · authentication ──────────────────────────────────────────────────────

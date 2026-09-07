@@ -26,6 +26,7 @@ export type NavKey =
   | 'Quotes'
   | 'Payments'
   | 'Receivables'
+  | 'Approvals'
   | 'Admin';
 
 interface NavChild {
@@ -59,6 +60,9 @@ const NAV: NavItem[] = [
   // Payables: the queue where technician payment requests are approved and
   // handed to Yoda. Receivables (AR) sits beside it.
   { label: 'Payments', icon: 'card', to: '/payments' },
+  // The manager's inbox (0026): approval tasks the rules engine raises —
+  // the NTE override of rule 1.5.2 first.
+  { label: 'Approvals', icon: 'inbox', to: '/approvals' },
   // AR — completion audit + invoicing, ported from the Support Automation
   // shadow-audit assistant. Subtabs live inside the page.
   { label: 'Receivables', icon: 'dollar', to: '/receivables' },
@@ -78,6 +82,7 @@ const NAV_PERM: Record<string, string> = {
   Vendors: 'vendors',
   Quotes: 'quotes',
   Payments: 'payments',
+  Approvals: 'approvals',
   Invoicing: 'invoicing',
 };
 

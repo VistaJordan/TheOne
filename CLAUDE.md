@@ -74,6 +74,18 @@ automation rules (`services/adminAudit.ts`, whole before/after snapshots with a
 join it as `t.id::text = a.entity_id`, and never feed one `$n` parameter to both
 a uuid column and `entity_id` in the same statement — PGlite refuses to type it.
 
+**Approval tasks** (migration 0026, `services/approvals.ts`, `/approvals` in
+the sidebar) are the generic "a manager has to say yes or no" queue. The rules
+engine raises them (automation action kind `approval_task`) and business rule
+1.5.2 ships as a seeded automation: when `34. Cost` changes to more than the
+`nte` core field, an `nte_override` task lands in the inbox. Two engine
+additions carry it: a trigger may compare against another field
+(`trigger.to_field`) and an action may be `{kind:'approval_task', field:
+'approval_task', value:<type>, assign_role}`. One open task per (work order,
+type); `reconcileApprovalTasks` (called from `dispatchAutomations`) cancels an
+NTE task once the cost is back under the NTE. Decisions post an internal
+comment on the work order. Permission path `approvals` (view / approve).
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

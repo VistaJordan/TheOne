@@ -5,7 +5,8 @@ import type { WoFilterSet } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { KpiRow } from '../components/KpiRow';
 import { DashCards } from '../components/dash/DashCards';
-import { getKpis, listWorkOrders } from '../api/client';
+import { getKpis, listApprovals, listWorkOrders } from '../api/client';
+import { useAuth } from '../auth/AuthProvider';
 import { filterUrl } from '../lib/woView';
 import { VISIT_TYPE_FIELD_KEY } from '../lib/woFieldSections';
 
@@ -43,6 +44,18 @@ export function DashboardPage() {
   });
   const visitTypeCount = visitTypeQuery.data?.total;
 
+  // The inbox's open count (0026) — only asked for when this person may see
+  // the inbox, so the card never shows a 403 as a mystery.
+  const { can } = useAuth();
+  const canSeeApprovals = can('approvals', 'view');
+  const approvalsQuery = useQuery({
+    queryKey: ['approvals'],
+    queryFn: listApprovals,
+    enabled: canSeeApprovals,
+    retry: 0,
+  });
+  const openApprovals = approvalsQuery.data?.counts.open;
+
   return (
     <AppShell active="Dashboard" total={countQuery.data?.total}>
       <div className="seg dash-tabs" role="group" aria-label="Dashboard pages">
@@ -73,6 +86,16 @@ export function DashboardPage() {
             to={filterUrl(VISIT_TYPE_UNSET)}
             allClearNote="Every work order has a visit type"
           />
+          {canSeeApprovals && (
+            <AttentionCard
+              label="Awaiting approval"
+              count={approvalsQuery.isError ? null : openApprovals}
+              loading={approvalsQuery.isLoading}
+              to="/approvals"
+              allClearNote="Nothing is waiting for a decision"
+              errorNote="Could not count the open approval tasks"
+            />
+          )}
         </div>
       ) : (
         <>
@@ -95,12 +118,15 @@ function AttentionCard({
   loading,
   to,
   allClearNote,
+  errorNote = 'Could not count these — is the Visit Type field in the catalogue?',
 }: {
   label: string;
   count: number | null | undefined;
   loading: boolean;
   to: string;
   allClearNote: string;
+  /** What to say when the count failed; defaults to the Visit Type card's reason. */
+  errorNote?: string;
 }) {
   const hot = typeof count === 'number' && count > 0;
   return (
@@ -111,9 +137,7 @@ function AttentionCard({
           the link. Only the edge states need a caption. */}
       {!loading && (count === null || !hot) && (
         <div className="km">
-          {count === null
-            ? 'Could not count these — is the Visit Type field in the catalogue?'
-            : allClearNote}
+          {count === null ? errorNote : allClearNote}
         </div>
       )}
     </Link>

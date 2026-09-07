@@ -33,6 +33,7 @@ import integrationRoutes from './routes/integrations.js';
 import viewRoutes from './routes/views.js';
 import prefsRoutes from './routes/prefs.js';
 import automationsRoutes from './routes/automations.js';
+import approvalRoutes from './routes/approvals.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
@@ -87,6 +88,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(viewRoutes, { prefix: '/api' });
   await app.register(prefsRoutes, { prefix: '/api' });
   await app.register(automationsRoutes, { prefix: '/api' });
+  await app.register(approvalRoutes, { prefix: '/api' });
 
   return app;
 }
