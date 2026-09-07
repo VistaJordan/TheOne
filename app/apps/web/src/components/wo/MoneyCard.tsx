@@ -38,7 +38,7 @@ export function MoneyCard({ wo }: MoneyCardProps) {
         {comp && <span className="card-meta">{comp}</span>}
       </div>
 
-      <div className={`nte-row${isCostOverNte(m.cost, m.nte) ? ' is-over-nte' : ''}`}>
+      <div className="nte-row">
         <span className="nte-k">Client NTE</span>
         <InlineField wo={wo} fieldKey={`fields.${FIELD.nte}`} label="Client NTE" className="nte-v">
           {money(m.nte)}

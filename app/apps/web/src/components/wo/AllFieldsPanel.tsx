@@ -243,14 +243,10 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     // The Cost row goes red when it is above the client NTE (same rule as the
     // Finances card and the list column).
     const overNte = f.key === `fields.${FIELD.cost}` && isCostOverNte(raw, resolveMoney(wo).nte);
-    // The two rows the rule is about — Client NTE and Cost — share a red wash
-    // so the pair reads as one problem, not one red number.
-    const inOverNtePair =
-      overNte || (f.key === `fields.${FIELD.nte}` && isCostOverNte(resolveMoney(wo).cost, raw));
     return (
       <div key={f.key}>
         <div
-          className={`fieldrow afp-row${dragEnabled ? ' has-grip' : ''}${reorder.dragging === i && dragEnabled ? ' is-dragging' : ''}${inOverNtePair ? ' is-over-nte' : ''}`}
+          className={`fieldrow afp-row${dragEnabled ? ' has-grip' : ''}${reorder.dragging === i && dragEnabled ? ' is-dragging' : ''}${overNte ? ' is-over-nte' : ''}`}
           {...rowProps}
         >
           {dragEnabled && (
