@@ -342,6 +342,10 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: '34. Cost',                 label: 'Cost',                 type: 'currency' },
   { key: 'Admin Comment',            label: 'Admin Comment',        type: 'long_text' },
   { key: '18. Check-in/out Status',  label: 'Check-in/out Status',  type: 'dropdown', options: ['Checked-in', 'Checked-out', 'Checked-out - RTN'] },
+  // Stamped by the API the moment the status above moves (services/cicoStamps.ts);
+  // migration 0018 carries the SAME two rows for an already-seeded pgdata.
+  { key: 'Checked-in At',            label: 'Checked-in At',        type: 'datetime' },
+  { key: 'Checked-out At',           label: 'Checked-out At',       type: 'datetime' },
   { key: 'Client Quote',             label: 'Client Quote',         type: 'long_text' },
   { key: '28. Sharepoint Link',      label: 'Sharepoint Link',      type: 'url' },
   { key: 'Days since Done',          label: 'Days Since Done',      type: 'formula' },

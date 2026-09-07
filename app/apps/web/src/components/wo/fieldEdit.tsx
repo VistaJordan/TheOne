@@ -52,8 +52,17 @@ export function draftOf(f: WoFieldDescriptor, raw: unknown): string {
   if (raw === null || raw === undefined) return '';
   if (f.type === 'date') return String(raw).slice(0, 10);
   if (f.type === 'datetime') {
-    // datetime-local refuses a bare date, so a day-only value gets midnight.
     const s = String(raw).replace(' ', 'T');
+    // A zoned stamp (the API's check-in/out stamps are UTC, '…Z') is shown to
+    // the editor in the viewer's local time, the way the read-only view prints it.
+    if (/(Z|[+-]\d{2}:?\d{2})$/.test(s) && s.length > 16) {
+      const d = new Date(s);
+      if (!Number.isNaN(d.getTime())) {
+        const two = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}`;
+      }
+    }
+    // datetime-local refuses a bare date, so a day-only value gets midnight.
     return s.length >= 16 ? s.slice(0, 16) : s.length === 10 ? `${s}T00:00` : s;
   }
   if (f.type === 'money' || f.type === 'number') {
