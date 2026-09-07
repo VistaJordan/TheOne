@@ -711,7 +711,12 @@ export interface MeResponse {
 // ── Admin › Audit log ────────────────────────────────────────────────────────
 
 export interface AuditLogEntry extends ActivityEntry {
+  /** 'task' for work-order rows; 'field_def' | 'status' | 'status_group' |
+      'role' | 'principal' | 'automation' for admin changes and sign-ins. */
   entity_type: string;
+  entity_id: string;
+  /** Non-work-order rows: what was touched, as named at the time. */
+  entity_name: string | null;
   wo_number: string | null;
   ext_name: string | null;
 }

@@ -82,10 +82,12 @@ export async function recordAuthEvent(
   action: 'signed_in' | 'signed_out' | 'impersonation_started' | 'impersonation_ended',
   after: Record<string, unknown> | null,
 ): Promise<void> {
+  // The id is passed twice on purpose: one $1 feeding a uuid column AND a text
+  // column (entity_id is text since 0017) makes Postgres refuse to type it.
   await query(
     `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, after)
-     VALUES ($1, 'principal', $1, $2, $3)`,
-    [principalId, action, after ? JSON.stringify(after) : null],
+     VALUES ($1, 'principal', $2, $3, $4)`,
+    [principalId, principalId, action, after ? JSON.stringify(after) : null],
   );
 }
 
@@ -131,7 +133,7 @@ export async function getActivityForTask(taskId: string, limit: number): Promise
             ${CREATED_AT_SQL} AS created_at
        FROM activity_log a
        JOIN principal p ON p.id = a.actor_principal_id
-      WHERE a.entity_type = 'task' AND a.entity_id = $1
+      WHERE a.entity_type = 'task' AND a.entity_id = $1::text
       ORDER BY a.created_at DESC, a.id DESC
       LIMIT $2`,
     [taskId, limit],

@@ -13,11 +13,23 @@
 //   phase group    add freely; rename the label (the CODE is the stable id
 //                  saved views filter on and never changes); delete only a
 //                  non-built-in group with no statuses left in it.
+//
+// Every write logs an activity_log row (adminAudit.ts): entity 'status' keyed
+// by the status id, entity 'status_group' keyed by the group's text code.
 
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { invalidateFieldCache } from './woFields.js';
 import type { WorkflowItem } from './adminMeta.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
+
+function statusSnapshot(s: WorkflowItem): Snapshot {
+  return { name: s.name, group: s.status_group, color: s.color };
+}
+
+function groupSnapshot(g: StatusGroupRow): Snapshot {
+  return { name: g.label, code: g.code };
+}
 
 export interface StatusGroupRow {
   code: string;
@@ -65,7 +77,7 @@ export interface CreateStatusInput {
   color?: string;
 }
 
-export async function createStatus(input: CreateStatusInput): Promise<WorkflowItem> {
+export async function createStatus(input: CreateStatusInput, actorId: string): Promise<WorkflowItem> {
   const name = input.name.trim();
   if (name.length === 0) throw new ApiError('BAD_REQUEST', 'A status needs a name');
   const color = input.color ?? '#656f7d';
@@ -101,7 +113,15 @@ export async function createStatus(input: CreateStatusInput): Promise<WorkflowIt
   );
 
   invalidateFieldCache();
-  return getStatusRow(res.rows[0].id);
+  const created = await getStatusRow(res.rows[0].id);
+  await logAdminEvent({
+    actorId,
+    entity: 'status',
+    entityId: created.id,
+    action: 'status_created',
+    after: statusSnapshot(created),
+  });
+  return created;
 }
 
 export interface StatusPatch {
@@ -109,7 +129,7 @@ export interface StatusPatch {
   color?: string;
 }
 
-export async function updateStatus(id: string, patch: StatusPatch): Promise<WorkflowItem> {
+export async function updateStatus(id: string, patch: StatusPatch, actorId: string): Promise<WorkflowItem> {
   const current = await getStatusRow(id);
 
   const name = patch.name?.trim();
@@ -136,11 +156,24 @@ export async function updateStatus(id: string, patch: StatusPatch): Promise<Work
   );
 
   invalidateFieldCache();
-  return getStatusRow(id);
+  const updated = await getStatusRow(id);
+  const before = statusSnapshot(current);
+  const after = statusSnapshot(updated);
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId,
+      entity: 'status',
+      entityId: id,
+      action: 'status_updated',
+      before,
+      after,
+    });
+  }
+  return updated;
 }
 
-export async function deleteStatus(id: string): Promise<void> {
-  await getStatusRow(id); // 404 before any counting
+export async function deleteStatus(id: string, actorId: string): Promise<void> {
+  const current = await getStatusRow(id); // 404 before any counting
 
   // Trashed work orders still reference the status (hard FK), so they block
   // the delete too — restoring one must not resurrect a dangling status_id.
@@ -162,6 +195,13 @@ export async function deleteStatus(id: string): Promise<void> {
 
   await query(`DELETE FROM status WHERE id = $1`, [id]);
   invalidateFieldCache();
+  await logAdminEvent({
+    actorId,
+    entity: 'status',
+    entityId: id,
+    action: 'status_deleted',
+    before: statusSnapshot(current),
+  });
 }
 
 // ── Phase groups ─────────────────────────────────────────────────────────────
@@ -174,7 +214,7 @@ function slugify(label: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
-export async function createStatusGroup(label: string): Promise<StatusGroupRow> {
+export async function createStatusGroup(label: string, actorId: string): Promise<StatusGroupRow> {
   const clean = label.trim();
   if (clean.length === 0) throw new ApiError('BAD_REQUEST', 'A phase needs a name');
 
@@ -197,12 +237,27 @@ export async function createStatusGroup(label: string): Promise<StatusGroupRow> 
 
   invalidateFieldCache();
   const rows = await listStatusGroups();
-  return rows.find((g) => g.code === code)!;
+  const created = rows.find((g) => g.code === code)!;
+  await logAdminEvent({
+    actorId,
+    entity: 'status_group',
+    entityId: code,
+    action: 'status_group_created',
+    after: groupSnapshot(created),
+  });
+  return created;
 }
 
-export async function renameStatusGroup(code: string, label: string): Promise<StatusGroupRow> {
+export async function renameStatusGroup(
+  code: string,
+  label: string,
+  actorId: string,
+): Promise<StatusGroupRow> {
   const clean = label.trim();
   if (clean.length === 0) throw new ApiError('BAD_REQUEST', 'A phase needs a name');
+
+  const current = (await listStatusGroups()).find((g) => g.code === code);
+  if (!current) throw new ApiError('NOT_FOUND', 'No such phase group');
 
   const res = await query<{ code: string }>(
     `UPDATE status_group_def SET label = $2 WHERE code = $1 RETURNING code`,
@@ -212,12 +267,23 @@ export async function renameStatusGroup(code: string, label: string): Promise<St
 
   invalidateFieldCache();
   const rows = await listStatusGroups();
-  return rows.find((g) => g.code === code)!;
+  const updated = rows.find((g) => g.code === code)!;
+  if (updated.label !== current.label) {
+    await logAdminEvent({
+      actorId,
+      entity: 'status_group',
+      entityId: code,
+      action: 'status_group_renamed',
+      before: groupSnapshot(current),
+      after: groupSnapshot(updated),
+    });
+  }
+  return updated;
 }
 
-export async function deleteStatusGroup(code: string): Promise<void> {
-  const res = await query<{ is_builtin: boolean; status_count: number }>(
-    `SELECT g.is_builtin,
+export async function deleteStatusGroup(code: string, actorId: string): Promise<void> {
+  const res = await query<{ label: string; is_builtin: boolean; status_count: number }>(
+    `SELECT g.label, g.is_builtin,
             (SELECT COUNT(*)::int FROM status s WHERE s.status_group = g.code) AS status_count
        FROM status_group_def g WHERE g.code = $1 LIMIT 1`,
     [code],
@@ -232,4 +298,11 @@ export async function deleteStatusGroup(code: string): Promise<void> {
 
   await query(`DELETE FROM status_group_def WHERE code = $1`, [code]);
   invalidateFieldCache();
+  await logAdminEvent({
+    actorId,
+    entity: 'status_group',
+    entityId: code,
+    action: 'status_group_deleted',
+    before: { name: res.rows[0].label, code },
+  });
 }

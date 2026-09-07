@@ -1,7 +1,12 @@
 /* Admin › Audit log — the whole activity_log, across every work order and
    every kind of write, filterable and exportable. The per-WO Audit trail tab
    shows the same rows scoped to one work order; the WO # column here links
-   straight to it. */
+   straight to it.
+
+   Admin changes sit in the same list: a custom field created or renamed, a
+   status or phase edited, a role, a user or an automation rule. Those rows
+   carry whole before/after snapshots, and the last column lists only the keys
+   that changed. */
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -21,11 +26,15 @@ import { DASH, feedTime, initials } from '../../lib/fields';
 import {
   actionLabel,
   automationRef,
+  entityLabel,
   formatValue,
   labelOf,
   nameOf,
+  snapshotChanges,
+  snapshotSummary,
   unwrap,
   viaLabel,
+  type SnapshotChange,
 } from '../../lib/auditFormat';
 
 const PAGE = 100;
@@ -119,7 +128,7 @@ export function AdminAuditPage() {
           <span>Search</span>
           <input
             type="search"
-            placeholder="WO #, ext ref, field, or value…"
+            placeholder="WO #, ext ref, field, name, or value…"
             value={q}
             onChange={(e) => setFilter(() => setQ(e.target.value))}
           />
@@ -160,7 +169,7 @@ export function AdminAuditPage() {
                   <th>Time</th>
                   <th>User</th>
                   <th>Change</th>
-                  <th>Work order</th>
+                  <th>Item</th>
                   <th>Field</th>
                   <th>From → to</th>
                 </tr>
@@ -235,18 +244,77 @@ function AuditRow({ e, byKey }: { e: AuditLogEntry; byKey: Map<string, WoFieldDe
         )}
       </td>
       <td>
-        {e.wo_number ? (
-          <Link className="audit-wo" to={`/work-orders/${e.wo_number}`}>
-            <b>{e.wo_number}</b>
-            {e.ext_name && <span className="audit-ext">{e.ext_name}</span>}
-          </Link>
-        ) : (
-          <span className="audit-ext">{e.entity_type === 'principal' ? 'Account' : DASH}</span>
-        )}
+        <ItemCell e={e} />
       </td>
       <td>{change.field}</td>
       <td className="audit-change">{change.value}</td>
     </tr>
+  );
+}
+
+/** Where to look at the thing a non-work-order row touched. A deleted item
+    still links to its admin page — that is where its absence shows. */
+function adminHref(e: AuditLogEntry): string | null {
+  switch (e.entity_type) {
+    case 'field_def':
+    case 'status':
+    case 'status_group':
+      return '/admin/fields';
+    case 'role':
+      return '/admin/roles';
+    case 'principal':
+      return '/admin/users';
+    case 'automation':
+      return `/admin/automations?rule=${encodeURIComponent(e.entity_id)}`;
+    default:
+      return null;
+  }
+}
+
+function ItemCell({ e }: { e: AuditLogEntry }) {
+  if (e.entity_type === 'task') {
+    if (!e.wo_number) return <span className="audit-ext">{DASH}</span>;
+    return (
+      <Link className="audit-wo" to={`/work-orders/${e.wo_number}`}>
+        <b>{e.wo_number}</b>
+        {e.ext_name && <span className="audit-ext">{e.ext_name}</span>}
+      </Link>
+    );
+  }
+  const kind = entityLabel(e.entity_type);
+  const href = adminHref(e);
+  const body = (
+    <>
+      <b>{e.entity_name ?? kind}</b>
+      <span className="audit-ext">{kind}</span>
+    </>
+  );
+  return href ? (
+    <Link className="audit-wo" to={href}>{body}</Link>
+  ) : (
+    <span className="audit-wo">{body}</span>
+  );
+}
+
+/** Admin rows: the snapshot keys that changed, one per line. */
+function ChangeList({ items, created }: { items: SnapshotChange[]; created?: boolean }) {
+  if (items.length === 0) return <>{DASH}</>;
+  return (
+    <ul className="audit-diff">
+      {items.map((c) => (
+        <li key={c.key}>
+          <span className="audit-diff-k">{c.label}</span>{' '}
+          {created ? (
+            <span className="audit-val">{c.to}</span>
+          ) : (
+            <>
+              <span className="audit-val">{c.from}</span> →{' '}
+              <span className="audit-val">{c.to}</span>
+            </>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -296,6 +364,25 @@ function changeOf(
     case 'comment_added':
       return { field: DASH, value: e.after?.client_visible ? 'client-visible' : 'internal' };
     default:
-      return { field: DASH, value: DASH };
+      break;
   }
+
+  // Admin rows (entity_type other than task): before/after are snapshots.
+  if (e.entity_type !== 'task' && (e.before || e.after)) {
+    const field = e.field ? labelOf(e.field, byKey) : DASH;
+    if (e.action.endsWith('_created') || e.action === 'user_invited') {
+      return { field, value: <ChangeList items={snapshotSummary(e.after)} created /> };
+    }
+    if (e.action.endsWith('_deleted')) {
+      return { field, value: <ChangeList items={snapshotSummary(e.before)} created /> };
+    }
+    if (e.action === 'field_defs_reordered') {
+      const n = snapshotChanges(e.before, e.after).length;
+      return { field: DASH, value: n ? 'admin default order changed' : DASH };
+    }
+    if (e.before && e.after) {
+      return { field, value: <ChangeList items={snapshotChanges(e.before, e.after)} /> };
+    }
+  }
+  return { field: DASH, value: DASH };
 }

@@ -66,6 +66,14 @@ Two mutually exclusive modes, chosen by env (`app/.env`, template in `.env.examp
 
 ## Data: migrations and seed must stay in step
 
+The audit log is one table, `activity_log`, and every write goes there: work-order
+edits (`services/woAudit.ts`), sign-ins, and since migration 0017 the admin
+changes too — custom-field definitions, statuses and phase groups, roles, users,
+automation rules (`services/adminAudit.ts`, whole before/after snapshots with a
+`name`). `entity_id` is **text** since 0017 (phase groups are keyed by code):
+join it as `t.id::text = a.entity_id`, and never feed one `$n` parameter to both
+a uuid column and `entity_id` in the same statement — PGlite refuses to type it.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

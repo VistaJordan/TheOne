@@ -29,6 +29,7 @@ import {
   type FilterSet,
 } from './woFields.js';
 import type { TaskChange } from './woAudit.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 import type {
   AutomationAction,
   AutomationItem,
@@ -320,6 +321,27 @@ export interface AutomationInput {
   actions: AutomationAction[];
 }
 
+/** What the audit log keeps of a rule — the whole definition, so an edit to a
+    condition or an action reads back even after the rule is deleted. */
+function ruleSnapshot(r: AutomationItem): Snapshot {
+  return {
+    name: r.name,
+    enabled: r.enabled,
+    entity: r.entity,
+    trigger: r.trigger,
+    conditions: r.conditions,
+    actions: r.actions,
+  };
+}
+
+async function getAutomation(id: string): Promise<AutomationItem> {
+  const res = await query<AutomationRow>(`SELECT ${AUTOMATION_COLS} FROM automation WHERE id = $1`, [
+    id,
+  ]);
+  if (!res.rows[0]) throw new ApiError('NOT_FOUND', 'Automation not found');
+  return res.rows[0];
+}
+
 export async function createAutomation(
   input: AutomationInput,
   actorId: string,
@@ -345,13 +367,22 @@ export async function createAutomation(
       actorId,
     ],
   );
+  await logAdminEvent({
+    actorId,
+    entity: 'automation',
+    entityId: res.rows[0].id,
+    action: 'automation_created',
+    after: ruleSnapshot(res.rows[0]),
+  });
   return res.rows[0];
 }
 
 export async function updateAutomation(
   id: string,
   input: Partial<AutomationInput>,
+  actorId: string,
 ): Promise<AutomationItem> {
+  const current = await getAutomation(id);
   const sets: string[] = [];
   const params: unknown[] = [];
   const push = (frag: string, v: unknown) => {
@@ -386,12 +417,32 @@ export async function updateAutomation(
     params,
   );
   if (!res.rows[0]) throw new ApiError('NOT_FOUND', 'Automation not found');
+  const before = ruleSnapshot(current);
+  const after = ruleSnapshot(res.rows[0]);
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId,
+      entity: 'automation',
+      entityId: id,
+      action: 'automation_updated',
+      before,
+      after,
+    });
+  }
   return res.rows[0];
 }
 
-export async function deleteAutomation(id: string): Promise<void> {
+export async function deleteAutomation(id: string, actorId: string): Promise<void> {
+  const current = await getAutomation(id);
   const res = await query<{ id: string }>(`DELETE FROM automation WHERE id = $1 RETURNING id`, [id]);
   if (!res.rows[0]) throw new ApiError('NOT_FOUND', 'Automation not found');
+  await logAdminEvent({
+    actorId,
+    entity: 'automation',
+    entityId: id,
+    action: 'automation_deleted',
+    before: ruleSnapshot(current),
+  });
 }
 
 export async function listRuns(automationId: string, limit: number): Promise<AutomationRunItem[]> {

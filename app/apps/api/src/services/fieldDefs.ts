@@ -17,12 +17,23 @@
 // import headers guessable. Deleting is deliberately absent for now — a field
 // with values behind it should be hidden/retired, not destroyed, and that
 // lifecycle is future work.
+//
+// Every write logs an activity_log row (adminAudit.ts) under field = 'fields.
+// <key>', the same key the work-order value edits use — so filtering the audit
+// log by one field shows its definition changes beside its value changes.
 
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { invalidateFieldCache } from './woFields.js';
 import type { FieldDefItem } from './adminMeta.js';
 import { listFieldDefs } from './adminMeta.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
+
+/** What the audit log keeps of a definition: enough to read a rename, a type
+    change or an options edit back without the row. */
+function snapshot(f: FieldDefItem): Snapshot {
+  return { name: f.label, key: f.key, type: f.type, options: f.options };
+}
 
 /** Everything the field_type enum accepts (0001 + phone from 0007 + datetime
     from 0009). */
@@ -83,7 +94,7 @@ export interface FieldDefInput {
   options?: string[];
 }
 
-export async function createFieldDef(input: FieldDefInput): Promise<FieldDefItem> {
+export async function createFieldDef(input: FieldDefInput, actorId: string): Promise<FieldDefItem> {
   const label = input.label.trim();
   if (label.length === 0) throw new ApiError('BAD_REQUEST', 'A field needs a name');
   assertType(input.type);
@@ -116,7 +127,16 @@ export async function createFieldDef(input: FieldDefInput): Promise<FieldDefItem
   );
 
   invalidateFieldCache();
-  return getDef(res.rows[0].id);
+  const created = await getDef(res.rows[0].id);
+  await logAdminEvent({
+    actorId,
+    entity: 'field_def',
+    entityId: created.id,
+    action: 'field_def_created',
+    field: `fields.${created.key}`,
+    after: snapshot(created),
+  });
+  return created;
 }
 
 export interface FieldDefPatch {
@@ -125,7 +145,11 @@ export interface FieldDefPatch {
   options?: string[];
 }
 
-export async function updateFieldDef(id: string, patch: FieldDefPatch): Promise<FieldDefItem> {
+export async function updateFieldDef(
+  id: string,
+  patch: FieldDefPatch,
+  actorId: string,
+): Promise<FieldDefItem> {
   const current = await getDef(id);
 
   const label = patch.label?.trim();
@@ -147,16 +171,31 @@ export async function updateFieldDef(id: string, patch: FieldDefPatch): Promise<
   );
 
   invalidateFieldCache();
-  return getDef(id);
+  const updated = await getDef(id);
+  const before = snapshot(current);
+  const after = snapshot(updated);
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId,
+      entity: 'field_def',
+      entityId: id,
+      action: 'field_def_updated',
+      field: `fields.${updated.key}`,
+      before,
+      after,
+    });
+  }
+  return updated;
 }
 
 /** The admin default order: position = index in `ids`. Ids not listed keep
     their position but sink below the listed ones (they get max+offset). */
-export async function reorderFieldDefs(ids: string[]): Promise<FieldDefItem[]> {
+export async function reorderFieldDefs(ids: string[], actorId: string): Promise<FieldDefItem[]> {
   if (ids.length === 0) throw new ApiError('BAD_REQUEST', 'Nothing to reorder');
 
   const existing = await query<{ id: string }>(`SELECT id FROM field_def`);
   const known = new Set(existing.rows.map((r) => r.id));
+  const orderBefore = (await listFieldDefs()).map((f) => f.label);
   for (const id of ids) {
     if (!known.has(id)) throw new ApiError('BAD_REQUEST', 'Unknown field in the new order');
   }
@@ -166,5 +205,22 @@ export async function reorderFieldDefs(ids: string[]): Promise<FieldDefItem[]> {
   }
 
   invalidateFieldCache();
-  return listFieldDefs();
+  const items = await listFieldDefs();
+  const orderAfter = items.map((f) => f.label);
+  if (JSON.stringify(orderBefore) !== JSON.stringify(orderAfter)) {
+    // One row for the whole reorder, keyed to the first field that moved:
+    // there is no single row to point at, and a row per field would flood the log.
+    const moved = orderAfter.find((label, i) => orderBefore[i] !== label) ?? orderAfter[0];
+    const movedDef = items.find((f) => f.label === moved);
+    await logAdminEvent({
+      actorId,
+      entity: 'field_def',
+      entityId: movedDef?.id ?? ids[0],
+      action: 'field_defs_reordered',
+      field: movedDef ? `fields.${movedDef.key}` : null,
+      before: { name: 'All fields', order: orderBefore },
+      after: { name: 'All fields', order: orderAfter },
+    });
+  }
+  return items;
 }

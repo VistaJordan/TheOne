@@ -205,7 +205,7 @@ export async function getFieldHistory(
             ${CREATED_AT_SQL} AS created_at
        FROM activity_log a
        JOIN principal p ON p.id = a.actor_principal_id
-      WHERE a.entity_type = 'task' AND a.entity_id = $1 AND a.field IN (${holes})
+      WHERE a.entity_type = 'task' AND a.entity_id = $1::text AND a.field IN (${holes})
       ORDER BY a.created_at DESC, a.id DESC
       LIMIT $${fieldKeys.length + 2}`,
     [taskId, ...fieldKeys, limit],

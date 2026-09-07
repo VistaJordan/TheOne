@@ -108,8 +108,123 @@ export const ACTION_LABELS: Record<string, string> = {
   signed_out: 'Signed out',
   impersonation_started: 'Viewing as started',
   impersonation_ended: 'Viewing as ended',
+  // Admin changes (api/services/adminAudit.ts).
+  field_def_created: 'Custom field created',
+  field_def_updated: 'Custom field changed',
+  field_defs_reordered: 'Custom fields reordered',
+  status_created: 'Status created',
+  status_updated: 'Status changed',
+  status_deleted: 'Status deleted',
+  status_group_created: 'Phase created',
+  status_group_renamed: 'Phase renamed',
+  status_group_deleted: 'Phase deleted',
+  role_created: 'Role created',
+  role_updated: 'Role changed',
+  role_deleted: 'Role deleted',
+  user_invited: 'User invited',
+  user_updated: 'User changed',
+  user_disabled: 'User disabled',
+  user_permissions_set: 'User permissions adjusted',
+  automation_created: 'Automation created',
+  automation_updated: 'Automation changed',
+  automation_deleted: 'Automation deleted',
 };
 
 export function actionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action.replace(/_/g, ' ');
+}
+
+/** What kind of thing a non-work-order row points at. */
+export const ENTITY_LABELS: Record<string, string> = {
+  task: 'Work order',
+  principal: 'User',
+  field_def: 'Custom field',
+  status: 'Status',
+  status_group: 'Phase',
+  role: 'Role',
+  automation: 'Automation',
+};
+
+export function entityLabel(entityType: string): string {
+  return ENTITY_LABELS[entityType] ?? entityType.replace(/_/g, ' ');
+}
+
+/** Human labels for the keys inside an admin snapshot. */
+const SNAPSHOT_KEYS: Record<string, string> = {
+  name: 'Name',
+  key: 'Key',
+  type: 'Type',
+  options: 'Options',
+  order: 'Order',
+  group: 'Phase',
+  color: 'Color',
+  code: 'Code',
+  description: 'Description',
+  permissions: 'Permissions',
+  overrides: 'Overrides',
+  email: 'Email',
+  role: 'Role',
+  status: 'Status',
+  is_super_admin: 'Super admin',
+  enabled: 'Enabled',
+  entity: 'Applies to',
+  trigger: 'Trigger',
+  conditions: 'Conditions',
+  actions: 'Actions',
+};
+
+export interface SnapshotChange {
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+}
+
+/** One compact string for a snapshot value: scalars as-is, lists as a count
+    (or the items when short), trees as "N entries". */
+export function snapshotValue(v: unknown): string {
+  if (v === null || v === undefined || v === '') return DASH;
+  if (typeof v === 'boolean') return v ? 'yes' : 'no';
+  if (Array.isArray(v)) {
+    if (v.length === 0) return 'none';
+    if (v.every((x) => typeof x === 'string') && v.length <= 6) return (v as string[]).join(', ');
+    return `${v.length} item${v.length === 1 ? '' : 's'}`;
+  }
+  if (typeof v === 'object') {
+    const n = Object.keys(v as object).length;
+    return `${n} entr${n === 1 ? 'y' : 'ies'}`;
+  }
+  return String(v);
+}
+
+/** The keys that differ between two admin snapshots, in snapshot order. */
+export function snapshotChanges(before: unknown, after: unknown): SnapshotChange[] {
+  const b = (before && typeof before === 'object' ? before : {}) as Record<string, unknown>;
+  const a = (after && typeof after === 'object' ? after : {}) as Record<string, unknown>;
+  const keys = [...new Set([...Object.keys(b), ...Object.keys(a)])];
+  const out: SnapshotChange[] = [];
+  for (const key of keys) {
+    if (JSON.stringify(b[key]) === JSON.stringify(a[key])) continue;
+    out.push({
+      key,
+      label: SNAPSHOT_KEYS[key] ?? key.replace(/_/g, ' '),
+      from: snapshotValue(b[key]),
+      to: snapshotValue(a[key]),
+    });
+  }
+  return out;
+}
+
+/** A created row has no `before`: list what it was created with, minus the
+    name (that is the row's title already). */
+export function snapshotSummary(snap: unknown): SnapshotChange[] {
+  const s = (snap && typeof snap === 'object' ? snap : {}) as Record<string, unknown>;
+  return Object.keys(s)
+    .filter((k) => k !== 'name' && s[k] !== null && s[k] !== undefined && s[k] !== '')
+    .map((key) => ({
+      key,
+      label: SNAPSHOT_KEYS[key] ?? key.replace(/_/g, ' '),
+      from: '',
+      to: snapshotValue(s[key]),
+    }));
 }

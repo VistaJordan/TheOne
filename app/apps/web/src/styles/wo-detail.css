@@ -2209,6 +2209,25 @@ textarea {
   color: var(--ink-3);
 }
 
+/* Admin rows: one changed snapshot key per line. */
+.audit-diff {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audit-diff-k {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.audit-diff-k::after {
+  content: ':';
+}
+
 .audit-pager {
   display: flex;
   align-items: center;

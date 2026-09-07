@@ -160,7 +160,7 @@ export async function metricDuration(
             ${ISO('pair.to_at')} AS to_at,
             EXTRACT(EPOCH FROM (pair.to_at - pair.from_at))::float8 AS seconds
        FROM pair
-       JOIN task t ON t.id = pair.entity_id
+       JOIN task t ON t.id::text = pair.entity_id
        JOIN status s ON s.id = t.status_id
        LEFT JOIN container hl ON hl.id = t.home_list_id
       WHERE ${where.join(' AND ')}
@@ -220,14 +220,14 @@ export async function getFieldTimes(taskId: string): Promise<WoFieldTime[]> {
     query<{ field: string; action: string; after: Record<string, unknown> | null; last_at: string }>(
       `SELECT DISTINCT ON (a.field) a.field, a.action, a.after, ${ISO('a.created_at')} AS last_at
          FROM activity_log a
-        WHERE a.entity_type = 'task' AND a.entity_id = $1 AND a.field IS NOT NULL
+        WHERE a.entity_type = 'task' AND a.entity_id = $1::text AND a.field IS NOT NULL
         ORDER BY a.field, a.id DESC`,
       [taskId],
     ),
     query<{ field: string; changes: number | string; first_at: string }>(
       `SELECT a.field, COUNT(*)::int AS changes, ${ISO('MIN(a.created_at)')} AS first_at
          FROM activity_log a
-        WHERE a.entity_type = 'task' AND a.entity_id = $1 AND a.field IS NOT NULL
+        WHERE a.entity_type = 'task' AND a.entity_id = $1::text AND a.field IS NOT NULL
         GROUP BY a.field`,
       [taskId],
     ),
