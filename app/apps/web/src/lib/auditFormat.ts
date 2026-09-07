@@ -76,6 +76,17 @@ export function formatValue(v: unknown, f: WoFieldDescriptor | undefined): strin
         ? String(v)
         : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
+    case 'datetime': {
+      // 'Sep 7, 2026, 8:02:43 AM' — the check-in/out stamps are to the second,
+      // and a history row is exactly where the second matters.
+      const s = String(v).replace(' ', 'T');
+      const d = new Date(s);
+      if (Number.isNaN(d.getTime())) return String(v);
+      const day = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      if (!/T\d{2}:\d{2}/.test(s)) return day;
+      const secs = /T\d{2}:\d{2}:\d{2}/.test(s);
+      return `${day}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', ...(secs ? { second: '2-digit' } : {}) })}`;
+    }
     case 'boolean':
       return v === true || v === 'true' ? 'checked' : 'unchecked';
     default:

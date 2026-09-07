@@ -70,6 +70,15 @@ export function str(v: unknown): string | null {
 
 /** Finite number, tolerating the numeric-string values the bag carries
     (e.g. Profit arrives as "-412"). Returns null for anything else. */
+/** The one money rule every surface applies: a Cost above the client NTE is
+    shown in red (Finances card, All-fields row, list column). No NTE, or an
+    NTE of zero, means "not set" and never fires it. */
+export function isCostOverNte(cost: unknown, nte: unknown): boolean {
+  const c = num(cost);
+  const n = num(nte);
+  return c != null && n != null && n > 0 && c > n;
+}
+
 export function num(v: unknown): number | null {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
   if (typeof v === 'string') {

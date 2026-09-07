@@ -1,5 +1,5 @@
 import type { WorkOrderDetailV2 } from '../../api/client';
-import { DASH, FIELD, field, money, num, str } from '../../lib/fields';
+import { DASH, FIELD, field, isCostOverNte, money, num, str } from '../../lib/fields';
 import { NTE_WARN_PCT, nteBasis, resolveMoney } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 import { InlineField } from './fieldEdit';
@@ -81,7 +81,13 @@ export function MoneyCard({ wo }: MoneyCardProps) {
             <InlineField wo={wo} fieldKey="fields.1. Not Fully Paid" label="Not fully paid" />
           </dd>
         </div>
-        <MoneyRow wo={wo} label="Cost" fieldKey={`fields.${FIELD.cost}`} value={m.cost} />
+        <MoneyRow
+          wo={wo}
+          label="Cost"
+          fieldKey={`fields.${FIELD.cost}`}
+          value={m.cost}
+          overNte={isCostOverNte(m.cost, m.nte)}
+        />
         <MoneyRow wo={wo} label="Total invoiced" fieldKey={`fields.${FIELD.invoiced}`} value={m.invoiced} />
         <MoneyRow wo={wo} label="Discount" fieldKey="fields.Discount" value={discount} />
         <div className="kvrow is-total">
@@ -109,16 +115,24 @@ function MoneyRow({
   label,
   fieldKey,
   value,
+  overNte,
 }: {
   wo: WorkOrderDetailV2;
   label: string;
   fieldKey: string;
   value: number | null;
+  /** Cost above the client NTE — the row reads in red everywhere it appears. */
+  overNte?: boolean;
 }) {
   return (
     <div className="kvrow">
       <dt>{label}</dt>
-      <dd className={value == null ? 'is-none' : undefined}>
+      <dd
+        className={[value == null ? 'is-none' : '', overNte ? 'is-over-nte' : '']
+          .filter(Boolean)
+          .join(' ') || undefined}
+        title={overNte ? 'Cost is above the client NTE' : undefined}
+      >
         <InlineField wo={wo} fieldKey={fieldKey} label={label}>
           {value == null ? DASH : money(value)}
         </InlineField>

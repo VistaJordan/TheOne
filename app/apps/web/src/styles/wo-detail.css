@@ -1045,6 +1045,16 @@ textarea {
 
 .kvrow dd.is-none { color: var(--ink-3); font-weight: 400; }
 
+/* Cost above the client NTE — one rule, three surfaces (Finances card,
+   All-fields row, list column). The colour rides on the container so the
+   inline editor's value inherits it; the pencil keeps its own colour. */
+.kvrow dd.is-over-nte,
+.fieldrow dd.is-over-nte .afp-val,
+.ct td.is-over-nte .cell-text {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .kvrow.is-total {
   margin-top: 2px;
   padding-top: 9px;
@@ -1606,6 +1616,23 @@ textarea {
 
 .fieldrow dd a { color: var(--accent-text); }
 .fieldrow dd.is-bool { font-weight: 600; color: var(--accent-text); }
+
+/* Tab-card rows with the per-field history clock (CICO, Payables): the value
+   keeps the width, the button sits at the row's end and shows on hover, on
+   focus, or while its drawer is open — the All-fields behaviour. */
+.fieldrow.has-hist dd { display: flex; align-items: flex-start; gap: 6px; }
+.fieldrow.has-hist dd > :first-child { flex: 1; min-width: 0; }
+.fieldrow.has-hist .afp-act { flex: none; margin-top: -2px; }
+/* Always faintly there on the cards (the All-fields page hides it until
+   hover, and people looked for it and could not find it); full on hover. */
+.fieldrow.has-hist .afp-act,
+.cico-state .afp-act { opacity: 0.55; }
+.fieldrow.has-hist:hover .afp-act,
+.cico-state:hover .afp-act,
+.fieldrow.has-hist .afp-act.is-on,
+.cico-state .afp-act.is-on { opacity: 1; }
+.cico-state .afp-act { flex: none; margin-left: 6px; }
+.cico-history { padding: 0 16px 8px; }
 
 /* ── S7 · All-fields panel: search + order bar, inline edit, history ───────── */
 /* The bar pins itself directly under the .wo-pin block (whose live height the

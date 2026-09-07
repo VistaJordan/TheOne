@@ -11,8 +11,10 @@
    The old rail-era mini card capped the ledger at three rows; the tab has the
    room to show all of it. */
 
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { PaymentRequest, WorkOrderDetailV2 } from '../../api/client';
+import { FieldHistory, HistoryToggle } from './FieldHistory';
 import { payeeLabel, PAYMENT_STATUS_LABEL } from '../payments/PaymentsTable';
 import type { PaymentRequestStatus } from '@theone/shared';
 import { shortDate } from '../../lib/fields';
@@ -35,6 +37,7 @@ const STATUS_CHIP: Record<PaymentRequestStatus, string> = {
 
 export function PayablesFieldsCard({ wo }: { wo: WorkOrderDetailV2 }) {
   const byKey = useWoCatalogue();
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
   const keys = FIELD_SECTIONS.find((s) => s.title === PAYMENTS_SECTION_TITLE)?.keys ?? [];
   const fields = keys
     .map((k) => byKey.get(k))
@@ -50,11 +53,19 @@ export function PayablesFieldsCard({ wo }: { wo: WorkOrderDetailV2 }) {
       ) : (
         <dl className="fieldlist">
           {fields.map((f) => (
-            <div className="fieldrow" key={f.key}>
-              <dt>{f.label}</dt>
-              <dd>
-                <InlineField wo={wo} fieldKey={f.key} label={f.label} />
-              </dd>
+            <div key={f.key}>
+              <div className="fieldrow has-hist">
+                <dt>{f.label}</dt>
+                <dd>
+                  <InlineField wo={wo} fieldKey={f.key} label={f.label} />
+                  <HistoryToggle
+                    field={f}
+                    open={historyFor === f.key}
+                    onToggle={() => setHistoryFor(historyFor === f.key ? null : f.key)}
+                  />
+                </dd>
+              </div>
+              {historyFor === f.key && <FieldHistory woId={wo.id} field={f} />}
             </div>
           ))}
         </dl>
