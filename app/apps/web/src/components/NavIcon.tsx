@@ -2,11 +2,12 @@
 
    <Icon> references a <symbol> with <use>, and nothing in the document can
    reach the parts of a <use> clone — so ".side-item:hover .line" never
-   matches. The six primary-nav icons are drawn here as real elements instead,
+   matches. The primary-nav icons are drawn here as real elements instead,
    with a class on each moving part, so app.css can give every item a small
    hover animation that says what the item does:
 
      grid       tiles pop in one after another
+     zap        the heartbeat traces itself in, left to right
      clipboard  the clip snaps down and the two lines tick in
      truck      the truck rolls forward with a bump
      file       the text lines write themselves in
@@ -44,6 +45,11 @@ const DRAWINGS: Partial<Record<IconName, JSX.Element>> = {
       <rect className="ni-tile" x="3" y="14" width="7" height="7" rx="1" />
       <rect className="ni-tile" x="14" y="14" width="7" height="7" rx="1" />
     </>
+  ),
+  zap: (
+    /* The sprite draws this right-to-left; reversed here so the trace runs
+       the way a monitor sweeps. Same points, same picture at rest. */
+    <polyline className="ni-beat" points="2 12 6 12 9 3 15 21 18 12 22 12" pathLength={1} />
   ),
   clipboard: (
     <>
