@@ -1055,6 +1055,31 @@ textarea {
   font-weight: 600;
 }
 
+/* …and the ROW carries a red wash, so the pair (Client NTE + Cost) is seen
+   before the number is read. The Finances rows have no side padding of their
+   own — the wash pushes out into the card's gutter and rounds off. The
+   All-fields rows and the list cell already pad, so the wash just fills. */
+.kvrow.is-over-nte {
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 6px;
+  background: var(--danger-bg);
+  border-bottom-color: var(--danger-border);
+}
+.nte-row.is-over-nte {
+  margin: 0 8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 6px;
+  background: var(--danger-bg);
+}
+.fieldlist.afp > div > .fieldrow.is-over-nte,
+.fieldlist.afp > div:nth-child(even) > .fieldrow.is-over-nte {
+  background: var(--danger-bg);
+}
+.ct td.is-over-nte { background: var(--danger-bg); }
+
 .kvrow.is-total {
   margin-top: 2px;
   padding-top: 9px;

@@ -38,7 +38,7 @@ export function MoneyCard({ wo }: MoneyCardProps) {
         {comp && <span className="card-meta">{comp}</span>}
       </div>
 
-      <div className="nte-row">
+      <div className={`nte-row${isCostOverNte(m.cost, m.nte) ? ' is-over-nte' : ''}`}>
         <span className="nte-k">Client NTE</span>
         <InlineField wo={wo} fieldKey={`fields.${FIELD.nte}`} label="Client NTE" className="nte-v">
           {money(m.nte)}
@@ -169,7 +169,7 @@ function MoneyRow({
   overNte?: boolean;
 }) {
   return (
-    <div className="kvrow">
+    <div className={`kvrow${overNte ? ' is-over-nte' : ''}`}>
       <dt>{label}</dt>
       <dd
         className={[value == null ? 'is-none' : '', overNte ? 'is-over-nte' : '']
