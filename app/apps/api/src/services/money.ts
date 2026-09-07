@@ -15,8 +15,8 @@
 
 import type { Money } from '@theone/shared';
 
-const K_NTE = '16. Client NTE \u{1F534}'; // '16. Client NTE 🔴'
-const K_COST = '34. Cost';
+export const K_NTE = '16. Client NTE \u{1F534}'; // '16. Client NTE 🔴'
+export const K_COST = '34. Cost';
 const K_INVOICED = 'Total Invoiced';
 const K_PROFIT = 'Profit';
 const K_QUOTE = 'Quote'; // absent today; read anyway so a future field flows through

@@ -18,7 +18,7 @@ import { initialsOf, roleLabel } from '../lib/actor';
 
 /** The two nav items that lead somewhere. Everything else still renders (the
     shape of the product is part of the design) but stays inert. */
-export type NavKey = 'Dashboard' | 'Work Orders' | 'Quotes' | 'Payments' | 'Admin';
+export type NavKey = 'Dashboard' | 'Work Orders' | 'Quotes' | 'Payments' | 'Approvals' | 'Admin';
 
 interface NavChild {
   label: string;
@@ -48,6 +48,9 @@ const NAV: NavItem[] = [
   // Payables: the queue where technician payment requests are approved and
   // handed to Yoda. Invoicing (receivables) stays the placeholder beside it.
   { label: 'Payments', icon: 'card', to: '/payments' },
+  // The manager's inbox (0020): approval tasks the rules engine raises —
+  // the NTE override of rule 1.5.2 first.
+  { label: 'Approvals', icon: 'inbox', to: '/approvals' },
   { label: 'Invoicing', icon: 'dollar' },
   // S5 — Admin is six sections deep, so it renders as a group rather than a
   // single item that hides five destinations behind an in-page rail.
@@ -65,6 +68,7 @@ const NAV_PERM: Record<string, string> = {
   Vendors: 'vendors',
   Quotes: 'quotes',
   Payments: 'payments',
+  Approvals: 'approvals',
   Invoicing: 'invoicing',
 };
 

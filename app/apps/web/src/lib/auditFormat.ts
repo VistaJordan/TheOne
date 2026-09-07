@@ -115,6 +115,12 @@ export const ACTION_LABELS: Record<string, string> = {
   payment_rejected: 'Payment rejected',
   payment_sent_to_yoda: 'Payment sent to Yoda',
   payment_paid: 'Payment paid',
+  // Approval tasks (0020) — the manager's inbox.
+  approval_task_created: 'Approval task raised',
+  approval_task_claimed: 'Approval task claimed',
+  approval_task_approved: 'Approval task approved',
+  approval_task_rejected: 'Approval task rejected',
+  approval_task_cancelled: 'Approval task cancelled',
   signed_in: 'Signed in',
   signed_out: 'Signed out',
   impersonation_started: 'Viewing as started',

@@ -13,6 +13,7 @@
      file       the text lines write themselves in
      dollar     the coin flips
      card       the signature strip writes itself in
+     inbox      the tray's lip writes itself in
      sliders    the knobs slide
 
    Paths are copied verbatim from the sprite, so the icons look identical at
@@ -87,6 +88,12 @@ const DRAWINGS: Partial<Record<IconName, JSX.Element>> = {
       <rect x="2.5" y="5" width="19" height="14" rx="2" />
       <line x1="2.5" y1="10" x2="21.5" y2="10" />
       <line className="ni-swipe" x1="6.5" y1="15" x2="10" y2="15" pathLength={1} />
+    </>
+  ),
+  inbox: (
+    <>
+      <path d="M5.5 5.1 3.3 11.3A2 2 0 0 0 3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-.3-.7L18.5 5.1A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.9 1.1Z" />
+      <polyline className="ni-line" points="3 12 8 12 9.5 15 14.5 15 16 12 21 12" pathLength={1} />
     </>
   ),
   sliders: (

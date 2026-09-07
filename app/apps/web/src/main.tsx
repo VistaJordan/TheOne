@@ -9,6 +9,7 @@ import './styles/s4-forms.css';
 import './styles/forms.css';
 import './styles/quote.css';
 import './styles/payment.css';
+import './styles/approvals.css';
 import './styles/auth.css';
 import './styles/wo-list.css';
 import { App } from './App';

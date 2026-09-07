@@ -1,5 +1,9 @@
-import type { WorkOrderDetailV2 } from '../../api/client';
-import { DASH, FIELD, field, isCostOverNte, money, num, str } from '../../lib/fields';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import type { ApprovalTask, WorkOrderDetailV2 } from '../../api/client';
+import { listWorkOrderApprovals } from '../../api/client';
+import { useAuth } from '../../auth/AuthProvider';
+import { DASH, FIELD, field, isCostOverNte, money, num, numericDate, str } from '../../lib/fields';
 import { NTE_WARN_PCT, nteBasis, resolveMoney } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 import { InlineField } from './fieldEdit';
@@ -74,6 +78,8 @@ export function MoneyCard({ wo }: MoneyCardProps) {
         </div>
       )}
 
+      <NteOverrideLine wo={wo} />
+
       <dl className="kvlist">
         <div className="kvrow">
           <dt>Not fully paid</dt>
@@ -107,6 +113,44 @@ export function MoneyCard({ wo }: MoneyCardProps) {
         </div>
       </dl>
     </section>
+  );
+}
+
+/** Where the NTE override stands (rule 1.5.2, 0020): the latest override task
+    on this work order — waiting on a manager, approved, rejected — or nothing
+    when the cost never went over. Reads the inbox's own rows, so the card and
+    the Approvals page can never disagree. */
+function NteOverrideLine({ wo }: { wo: WorkOrderDetailV2 }) {
+  const { can } = useAuth();
+  const allowed = can('approvals', 'view');
+  const q = useQuery({
+    queryKey: ['wo-approvals', wo.wo_number],
+    queryFn: () => listWorkOrderApprovals(wo.wo_number),
+    enabled: allowed,
+    retry: 0,
+  });
+  const latest: ApprovalTask | undefined = q.data?.items.find((t) => t.type === 'nte_override');
+  if (!allowed || !latest || latest.status === 'cancelled') return null;
+
+  const by = latest.decided_by?.display_name;
+  const when = numericDate(latest.decided_at);
+  const text =
+    latest.status === 'open'
+      ? 'NTE override awaiting a manager'
+      : latest.status === 'approved'
+        ? 'NTE override approved'
+        : 'NTE override rejected';
+  const trail =
+    latest.status === 'open'
+      ? (latest.source?.name ?? null)
+      : [by ? `by ${by}` : null, when].filter(Boolean).join(' · ') || null;
+
+  return (
+    <div className={`nte-override is-${latest.status}`} title={latest.decision_note ?? latest.title}>
+      <Icon name={latest.status === 'approved' ? 'check-circle' : latest.status === 'rejected' ? 'x' : 'inbox'} size={12} />
+      <Link to="/approvals">{text}</Link>
+      {trail && <small>{trail}</small>}
+    </div>
   );
 }
 

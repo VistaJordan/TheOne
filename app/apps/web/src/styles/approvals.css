@@ -1,0 +1,53 @@
+/* ── Approvals — the manager's inbox (/approvals, 0020) ──────────────────────
+   The table, lanes, decision cluster and dialogs reuse the Payments tab's
+   vocabulary (payment.css `.payq-*`): both pages are a queue of things
+   waiting on a person with authority, and they should read as one family.
+   What is only here: the filter row, the type chip in the task cell, and the
+   NTE-override line on the Finances card. Every colour is a token. */
+
+.apq-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin: 0 0 12px;
+}
+
+.apq-filter {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.apq-filter .fld-sm { min-width: 140px; }
+
+.apq-filters .linkbtn { align-self: center; margin-top: 14px; }
+
+.ct .apq-type { margin-right: 6px; vertical-align: 1px; }
+
+.payq-status .apq-note {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── The NTE override line on the Finances card ─────────────────────────────
+   Rides the meter's caption style; the colour says where the override stands. */
+.nte-override {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 16px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.nte-override.is-open { color: var(--warn); }
+.nte-override.is-approved { color: var(--accent); }
+.nte-override.is-rejected { color: var(--danger); }
+.nte-override small { font-weight: 400; color: var(--ink-3); }
+.nte-override a { color: inherit; }
