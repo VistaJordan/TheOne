@@ -750,7 +750,16 @@ export interface QuoteResponse {
 }
 
 // ── Payment requests (S4) ────────────────────────────────────────────────────
-export type PaymentRequestStatus = 'requested' | 'approved' | 'paid' | 'rejected';
+/**
+ * requested → approved → sent_to_yoda → paid, or rejected from either of the
+ * first two (0016). Yoda is the payment tool the money leaves from; "sent to
+ * Yoda" is the hand-off and "paid" the confirmation that it went out.
+ */
+export type PaymentRequestStatus = 'requested' | 'approved' | 'sent_to_yoda' | 'paid' | 'rejected';
+
+/** Permission path for the processing half (send to Yoda, mark paid). Its
+    `edit` action inherits from `payments` when unset. */
+export const PAYMENT_PROCESS_PERM_KEY = 'payments/process';
 
 /**
  * The methods the request screen offers. `payment_request.method` is free TEXT,
@@ -787,6 +796,39 @@ export interface PaymentRequest {
   status: PaymentRequestStatus;
   requested_by: ActivityActor | null;
   created_at: string;
+  /** Last decision on the row (0016). */
+  updated_at: string;
+  approved_by: ActivityActor | null;
+  approved_at: string | null;
+  rejected_by: ActivityActor | null;
+  rejected_at: string | null;
+  rejection_note: string | null;
+  sent_to_yoda_by: ActivityActor | null;
+  sent_to_yoda_at: string | null;
+  /** Whatever reference Yoda handed back, if the processor recorded one. */
+  yoda_ref: string | null;
+  paid_by: ActivityActor | null;
+  paid_at: string | null;
+}
+
+/** One row of GET /api/payments — the request plus the work order it sits on. */
+export interface PaymentListItem extends PaymentRequest {
+  wo_number: string;
+  title: string | null;
+  client: string | null;
+}
+
+/** GET /api/payments — every request across work orders, newest first. */
+export interface PaymentListResponse {
+  items: PaymentListItem[];
+  total: number;
+  /** Row counts per status, for the tab's filter chips. */
+  counts: Record<PaymentRequestStatus, number>;
+}
+
+/** POST /api/payment-requests/:id/{approve,reject,send-to-yoda,mark-paid}. */
+export interface PaymentRequestResponse {
+  item: PaymentRequest;
 }
 
 /** GET /api/work-orders/:id/payment-requests — newest first. */

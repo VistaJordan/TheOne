@@ -182,6 +182,14 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       return <>rejected the quote</>;
     case 'payment_requested':
       return <>requested a technician payment</>;
+    case 'payment_approved':
+      return <>approved a technician payment</>;
+    case 'payment_rejected':
+      return <>rejected a technician payment</>;
+    case 'payment_sent_to_yoda':
+      return <>sent a technician payment to Yoda</>;
+    case 'payment_paid':
+      return <>marked a technician payment paid</>;
     default:
       return <>{e.action.replace(/_/g, ' ')}</>;
   }

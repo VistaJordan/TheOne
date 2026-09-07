@@ -12,6 +12,7 @@
      truck      the truck rolls forward with a bump
      file       the text lines write themselves in
      dollar     the coin flips
+     card       the signature strip writes itself in
      sliders    the knobs slide
 
    Paths are copied verbatim from the sprite, so the icons look identical at
@@ -80,6 +81,13 @@ const DRAWINGS: Partial<Record<IconName, JSX.Element>> = {
       <line x1="12" y1="2" x2="12" y2="22" />
       <path d="M17 5.5H9.8a3.3 3.3 0 0 0 0 6.6h4.4a3.3 3.3 0 0 1 0 6.6H6" />
     </g>
+  ),
+  card: (
+    <>
+      <rect x="2.5" y="5" width="19" height="14" rx="2" />
+      <line x1="2.5" y1="10" x2="21.5" y2="10" />
+      <line className="ni-swipe" x1="6.5" y1="15" x2="10" y2="15" pathLength={1} />
+    </>
   ),
   sliders: (
     <>

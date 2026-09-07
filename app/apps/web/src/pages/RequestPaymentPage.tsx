@@ -7,9 +7,10 @@
      "-500" as $500, "5e3" as $53 and "12.34.56" as $12.34. parseMoney() strips
      only currency chrome and then demands a full-string plain decimal — this is
      a money-releasing form, so anything else is an error, not a coercion.
-   · THE AP-APPROVAL CONTROL SAYS WHAT IS ACTUALLY TRUE. Routing for AP approval
-     is undecided, so the caption reads "AP approval — routing TBD" rather than
-     naming a role we have not agreed on (errata §1).
+   · THE APPROVAL CONTROL SAYS WHAT IS ACTUALLY TRUE. Decisions are made from
+     the Payments tab (approve / reject by the approvers, send to Yoda / mark
+     paid by AP — 0016), so this screen points there instead of pretending to
+     hold an approve button of its own.
 */
 
 import { useMemo, useState } from 'react';
@@ -551,28 +552,17 @@ export function RequestPaymentPage() {
                 )}
               </span>
               <div className="submit-right">
-                {/* §3.5 — visible and locked, never hidden. The caption states
-                    the truth: AP approval routing is genuinely undecided. */}
+                {/* §3.5 — the decision lives elsewhere and says so: the
+                    Payments tab is where this request gets approved and
+                    handed to Yoda (0016). */}
                 <span className="locked">
-                  <span className="tipwrap">
-                    <button
-                      type="button"
-                      className="btn btn-locked"
-                      tabIndex={0}
-                      aria-disabled="true"
-                      aria-describedby="lockTipPay"
-                    >
-                      <Icon name="lock" size={14} />
-                      Approve payment
-                    </button>
-                    <span className="tip" id="lockTipPay" role="tooltip">
-                      <Icon name="lock" size={12} />
-                      AP approval — routing TBD
-                    </span>
-                  </span>
+                  <Link className="btn" to="/payments">
+                    <Icon name="card" size={14} />
+                    Open Payments
+                  </Link>
                   <span className="locked-cap">
-                    <Icon name="lock" size={12} />
-                    AP approval — routing TBD
+                    <Icon name="info" size={12} />
+                    Approved and sent to Yoda from the Payments tab
                   </span>
                 </span>
 
@@ -632,11 +622,11 @@ export function RequestPaymentPage() {
                 <span className="pill-label">{submitted ? 'Requested' : 'Draft'}</span>
               </span>
             </div>
-            {/* Requested → Approved → Paid (requirements §2). Nothing on the
-                timeline is reached until submit succeeds, so a pre-submit draft
-                shows all three greyed. */}
+            {/* Requested → Approved → Sent to Yoda → Paid (0016). Nothing on
+                the timeline is reached until submit succeeds, so a pre-submit
+                draft shows all four greyed. */}
             <ol className="lifebar" aria-label="Payment request lifecycle">
-              {(['requested', 'approved', 'paid'] as const).map((step) => {
+              {(['requested', 'approved', 'sent_to_yoda', 'paid'] as const).map((step) => {
                 const reached = status !== null && lifeIndex(status) >= lifeIndex(step);
                 const current = status === step;
                 return (
@@ -658,8 +648,8 @@ export function RequestPaymentPage() {
             </ol>
             <p className="life-when">
               {submitted
-                ? 'Requested just now. A rejected request comes back here as a draft with AP’s reason attached.'
-                : 'Not yet submitted. Submitting adds it to the AP queue. A rejected request comes back here as a draft with AP’s reason attached.'}
+                ? 'Requested just now. It now sits in the Payments tab for approval; a rejection posts the reviewer’s reason as an internal update on this work order.'
+                : 'Not yet submitted. Submitting adds it to the Payments tab, where it is approved and sent to Yoda; a rejection posts the reviewer’s reason as an internal update on this work order.'}
             </p>
           </section>
 
@@ -714,8 +704,13 @@ export function RequestPaymentPage() {
   );
 }
 
-const LIFE_LABEL = { requested: 'Requested', approved: 'Approved', paid: 'Paid' } as const;
+const LIFE_LABEL = {
+  requested: 'Requested',
+  approved: 'Approved',
+  sent_to_yoda: 'Sent to Yoda',
+  paid: 'Paid',
+} as const;
 
 function lifeIndex(status: string): number {
-  return ['requested', 'approved', 'paid'].indexOf(status);
+  return ['requested', 'approved', 'sent_to_yoda', 'paid'].indexOf(status);
 }

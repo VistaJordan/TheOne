@@ -19,6 +19,8 @@ import type {
   QuoteStatus as SharedQuoteStatus,
   PaymentRequest as SharedPaymentRequest,
   PaymentRequestsResponse as SharedPaymentRequestsResponse,
+  PaymentListResponse,
+  PaymentRequestResponse,
   // S4.1 — the "Viewing as" list.
   PrincipalsResponse as SharedPrincipalsResponse,
   // S6 — the list's field catalogue, filter vocabulary and saved views.
@@ -629,6 +631,44 @@ export function postPaymentRequest(
     `/work-orders/${encodeURIComponent(idOrNumber)}/payment-requests`,
     { method: 'POST', body: JSON.stringify(input) },
   );
+}
+
+// ── Payments tab — decisions (0016) ──────────────────────────────────────────
+
+export type { PaymentListItem, PaymentListResponse, PaymentRequestResponse } from '@theone/shared';
+
+/** GET /api/payments — every request across work orders, waiting ones first. */
+export function listPayments(): Promise<PaymentListResponse> {
+  return request<PaymentListResponse>('/payments');
+}
+
+function decidePayment(id: string, verb: string, body: Record<string, unknown> = {}) {
+  return request<PaymentRequestResponse>(`/payment-requests/${encodeURIComponent(id)}/${verb}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** POST …/approve — requested → approved (payments:approve). */
+export function approvePayment(id: string): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'approve');
+}
+
+/** POST …/reject — requested | approved → rejected; the note is posted as an
+    internal update on the work order (payments:approve). */
+export function rejectPayment(id: string, note: string): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'reject', { note });
+}
+
+/** POST …/send-to-yoda — approved → sent_to_yoda, with Yoda's reference if
+    there is one (payments/process:edit). */
+export function sendPaymentToYoda(id: string, yodaRef: string | null): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'send-to-yoda', { yoda_ref: yodaRef });
+}
+
+/** POST …/mark-paid — approved | sent_to_yoda → paid (payments/process:edit). */
+export function markPaymentPaid(id: string): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'mark-paid');
 }
 
 // ── S5 · authentication ──────────────────────────────────────────────────────

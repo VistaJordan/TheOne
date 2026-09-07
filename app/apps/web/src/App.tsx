@@ -21,6 +21,7 @@ import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage';
 import { QuoteBuilderPage } from './pages/QuoteBuilderPage';
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
+import { PaymentsPage } from './pages/PaymentsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -123,6 +124,11 @@ export function App() {
               <Route
                 path="/quotes"
                 element={<RequireAuth><RequireCan perm="quotes" nav="Quotes"><QuotesPage /></RequireCan></RequireAuth>}
+              />
+              {/* Payables queue — approve, reject, hand to Yoda, mark paid. */}
+              <Route
+                path="/payments"
+                element={<RequireAuth><RequireCan perm="payments" nav="Payments"><PaymentsPage /></RequireCan></RequireAuth>}
               />
               {/* S5 — Admin Studio. Each section is its own route so the rail
                   can deep-link and the browser's back button works; AdminShell

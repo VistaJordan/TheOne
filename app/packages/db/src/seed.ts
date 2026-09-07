@@ -461,8 +461,9 @@ const QUOTE_OPTION_A_LINES: SeedLine[] = [
 ];
 
 // ── S4 · the comp's "Previous payments on this work order" table ─────────────
-// Both are PAID, so the screen's "Total paid on this WO" and "Payables total"
-// both read $475.00 — exactly what the comp shows.
+// The two PAID rows make "Total paid on this WO" read $475.00 — exactly what
+// the comp shows. The other two give the Payments tab (0016) something to
+// decide on: one waiting for approval, one approved and waiting for Yoda.
 const SEED_PAYMENTS: {
   purpose: string;
   amount: number;
@@ -472,6 +473,8 @@ const SEED_PAYMENTS: {
 }[] = [
   { purpose: 'Assessment trip charge', amount: 75, method: 'Zelle', status: 'paid', created_at: '2026-07-15T14:20:00Z' },
   { purpose: 'Parts advance', amount: 400, method: 'ACH', status: 'paid', created_at: '2026-07-22T16:05:00Z' },
+  { purpose: 'Return trip charge', amount: 120, method: 'ACH', status: 'approved', created_at: '2026-09-03T15:40:00Z' },
+  { purpose: 'Fulfilment visit labor', amount: 350, method: 'Zelle', status: 'requested', created_at: '2026-09-05T18:10:00Z' },
 ];
 
 async function main() {
