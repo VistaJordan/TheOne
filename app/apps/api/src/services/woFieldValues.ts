@@ -14,6 +14,7 @@ import { resolveField, type ResolvedField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations, type AutoCtx } from './automations.js';
 import { applyProfitFormula } from './money.js';
+import { applyCicoStamps } from './cicoStamps.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import type { ActivityEntry } from '@theone/shared';
@@ -127,6 +128,9 @@ export async function updateWorkOrderFields(
     const mirror = MIRROR_BY_JSON_KEY[p.jsonKey];
     if (mirror) mirrorSets.push({ ...mirror, value: mirrorValue(mirror.cast, p.value) });
   }
+
+  // A check-in / check-out stamps its time on the work order (cicoStamps.ts).
+  log.push(...applyCicoStamps(merged, log, patch.map((p) => p.jsonKey)));
 
   if (log.length > 0) {
     // Profit = Total Invoiced − Cost, recomputed on every write. Derived, so

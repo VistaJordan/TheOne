@@ -166,6 +166,8 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
     slug: 'cico',
     keys: [
       'fields.18. Check-in/out Status',
+      'fields.Checked-in At',
+      'fields.Checked-out At',
       'fields.25. IVR Link',
       'fields.30. IVR Pin',
       'fields.CICO Method',
