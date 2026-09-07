@@ -30,7 +30,8 @@ A quote belongs to a work order and produces the client-facing proposal that get
 
 - **Context header** (from WO): WO #, location, requestor (OM), Comp, FM.
 - **Fields:** technician — should link to the **vendor record** (name + phone fallback for unregistered techs) · purpose · amount · payment method (list TBD) · attachment (receipt/invoice image) · note · optional **alternate recipient** ("send payment to someone other than the technician").
-- **Flow:** submit → payment request lands in the AP queue → (approval chain TBD) → paid. Status on the request: Requested → Approved → Paid (or Rejected).
+- **Flow:** submit → payment request lands in the **Payments tab** → approved → sent to **Yoda** (the payment tool) → paid. Status on the request: Requested → Approved → Sent to Yoda → Paid (or Rejected, with the reviewer's note posted as an internal update on the WO).
+- **Who decides (built 2026-09-07, migration 0016):** approve / reject = `payments:approve` (baseline: ATL, TL, AM, admin — the quote approvers); send to Yoda / mark paid = `payments/process:edit` (baseline: AP, admin). Both retunable per role in Admin › Roles. The amount-tiered "either of two managers" rule (6.2.3) is **not** modelled yet — every approver can approve any amount.
 - **Previous payments for this WO** table: date, recipient, method, purpose, amount — visible right on the request screen.
 - Persists to the `payable` table (schema extension needed: method, purpose, requestor, alternate recipient, attachment ref, status timeline).
 

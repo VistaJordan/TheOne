@@ -397,7 +397,19 @@ export function buildPermissionTree(fields: PermFieldInfo[]): PermNode[] {
       actions: ['view', 'create', 'edit', 'approve'],
       note: 'Approve also covers reject and send to the client CMMS.',
     },
-    { key: 'payments', label: 'Payment requests', actions: ['view', 'create'] },
+    {
+      key: 'payments',
+      label: 'Payments',
+      actions: ['view', 'create', 'approve'],
+      note: 'View = the Payments tab and the ledger on a work order; create = raise a request; approve also covers reject.',
+      children: [
+        {
+          key: 'payments/process',
+          label: 'Process (send to Yoda, mark paid)',
+          actions: ['edit'],
+        },
+      ],
+    },
     { key: 'vendors', label: 'Vendors', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
     { key: 'invoicing', label: 'Invoicing', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
     {

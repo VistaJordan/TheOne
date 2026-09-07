@@ -2000,6 +2000,14 @@ a.bd-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; 
     animation: ni-flip 1.3s ease-in-out;
   }
 
+  /* Payments — the card's signature strip writes itself in. */
+  .side-leaf:hover .ni-swipe,
+  .side-item:focus-visible .ni-swipe {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: ni-write 0.9s ease-out forwards;
+  }
+
   /* Admin — the knobs slide along their tracks and settle back. */
   .side-item-group:hover .ni-knob,
   .side-item-group:focus-visible .ni-knob {

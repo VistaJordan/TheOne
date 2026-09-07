@@ -23,6 +23,7 @@ import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { PulsePage } from './pages/PulsePage';
 import { ReceivablesPage } from './pages/ReceivablesPage';
+import { PaymentsPage } from './pages/PaymentsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -132,6 +133,11 @@ export function App() {
                   invoicing pipeline it feeds. :tab is 'invoicing'; bare =/audit. */}
               <Route path="/receivables" element={<RequireAuth><ReceivablesPage /></RequireAuth>} />
               <Route path="/receivables/:tab" element={<RequireAuth><ReceivablesPage /></RequireAuth>} />
+              {/* Payables queue — approve, reject, hand to Yoda, mark paid. */}
+              <Route
+                path="/payments"
+                element={<RequireAuth><RequireCan perm="payments" nav="Payments"><PaymentsPage /></RequireCan></RequireAuth>}
+              />
               {/* S5 — Admin Studio. Each section is its own route so the rail
                   can deep-link and the browser's back button works; AdminShell
                   gates every one of them on super admin. */}

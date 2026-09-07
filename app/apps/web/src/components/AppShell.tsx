@@ -24,6 +24,7 @@ export type NavKey =
   | 'Pulse'
   | 'Work Orders'
   | 'Quotes'
+  | 'Payments'
   | 'Receivables'
   | 'Admin';
 
@@ -55,6 +56,9 @@ const NAV: NavItem[] = [
   { label: 'Work Orders', icon: 'clipboard', to: '/', badge: 'total' },
   { label: 'Vendors', icon: 'truck' },
   { label: 'Quotes', icon: 'file', to: '/quotes' },
+  // Payables: the queue where technician payment requests are approved and
+  // handed to Yoda. Receivables (AR) sits beside it.
+  { label: 'Payments', icon: 'card', to: '/payments' },
   // AR — completion audit + invoicing, ported from the Support Automation
   // shadow-audit assistant. Subtabs live inside the page.
   { label: 'Receivables', icon: 'dollar', to: '/receivables' },
@@ -73,6 +77,7 @@ const NAV_PERM: Record<string, string> = {
   'Work Orders': 'work_orders',
   Vendors: 'vendors',
   Quotes: 'quotes',
+  Payments: 'payments',
   Invoicing: 'invoicing',
 };
 

@@ -28,6 +28,7 @@ const PAYMENTS_SECTION_TITLE = 'Payments';
 const STATUS_CHIP: Record<PaymentRequestStatus, string> = {
   requested: 'chip-outline',
   approved: '',
+  sent_to_yoda: '',
   paid: 'chip-accent',
   rejected: 'chip-danger',
 };
