@@ -31,7 +31,7 @@ import type {
   ApprovalTasksResponse,
 } from '@theone/shared';
 import { APPROVALS_PERM_KEY, APPROVAL_TASK_TYPES } from '@theone/shared';
-import { ApiError, badRequest } from '../errors.js';
+import { ApiError, badRequest, conflict } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
@@ -439,6 +439,38 @@ export async function claimApprovalTask(id: string, actor: ActingPrincipal): Pro
     );
   });
   return getApprovalTask(id);
+}
+
+// ── The block (rule 1.5.2, second half) ──────────────────────────────────────
+
+/** The open NTE-override task on a work order, if there is one. */
+export async function openNteOverride(
+  taskId: string,
+): Promise<{ id: string; title: string } | null> {
+  const res = await query<{ id: string; title: string }>(
+    `SELECT id::text AS id, title FROM approval_task
+      WHERE task_id = $1 AND type = 'nte_override' AND status = 'open' LIMIT 1`,
+    [taskId],
+  );
+  return res.rows[0] ?? null;
+}
+
+/**
+ * "WO financial progression is blocked until Manager clears this." Approving
+ * or sending the quote and approving or sending a technician payment call
+ * this first; while an NTE override waits on a manager the move is refused
+ * with a 409 that names the task, so the screen can point at the inbox.
+ * Rejecting stays allowed — saying no never needs the override.
+ *
+ * Runs BEFORE the caller's transaction opens (PGlite single-connection rule).
+ */
+export async function assertNoOpenNteOverride(taskId: string, move: string): Promise<void> {
+  const open = await openNteOverride(taskId);
+  if (!open) return;
+  throw conflict(
+    `${move} is on hold: the cost is over the client NTE and a manager has not decided the NTE override yet (rule 1.5.2). Decide it under Approvals first.`,
+    { rule: '1.5.2', approval_task_id: open.id, approval_task_title: open.title },
+  );
 }
 
 // ── Housekeeping ─────────────────────────────────────────────────────────────

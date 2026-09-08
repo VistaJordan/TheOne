@@ -31,6 +31,7 @@ import { ApiError, badRequest, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { evaluateForTask } from './obligations.js';
 import { permAllows } from '@theone/shared';
+import { assertNoOpenNteOverride, openNteOverride } from './approvals.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -544,6 +545,7 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
   const q = res.rows[0];
 
   const sections = await loadSections(q.id);
+  const nteOverride = await openNteOverride(taskId);
   const totals = computeQuoteTotals({
     sections,
     sales_tax: Number(q.sales_tax ?? 0),
@@ -587,6 +589,7 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     totals,
     summary,
     permissions: permissionsFor(actor),
+    nte_override_open: nteOverride !== null,
   };
 }
 
@@ -923,9 +926,11 @@ export async function submitQuote(taskId: string, actor: ActingPrincipal): Promi
   return transition(taskId, ['draft'], 'pending_approval', 'quote_submitted', actor);
 }
 
-/** pending_approval → approved (atl+). Fills money.quote on the WO. */
+/** pending_approval → approved (atl+). Fills money.quote on the WO. Refused
+    (409) while an NTE override waits on a manager — rule 1.5.2. */
 export async function approveQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
+  await assertNoOpenNteOverride(taskId, 'Approving the quote');
   return transition(
     taskId,
     ['pending_approval'],
@@ -945,6 +950,7 @@ export async function approveQuote(taskId: string, actor: ActingPrincipal): Prom
  */
 export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
+  await assertNoOpenNteOverride(taskId, 'Sending the quote');
 
   // Read the numbers BEFORE the transaction opens (single-connection rule).
   const pre = await getQuote(taskId, actor);

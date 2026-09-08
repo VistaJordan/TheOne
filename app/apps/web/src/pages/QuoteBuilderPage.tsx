@@ -108,6 +108,10 @@ export function QuoteBuilderPage() {
   const status = quote?.status ?? 'draft';
   const canEdit = permissions?.can_edit ?? false;
   const canApprove = permissions?.can_approve ?? false;
+  /** Rule 1.5.2: an NTE override waits on a manager, so approve / send are on
+      hold (the API refuses them with a 409) until it is decided. */
+  const nteHold = quote?.nte_override_open ?? false;
+  const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
   /** Edits stop once a quote is approved (§1) — approved/sent render read-only. */
   const editable = canEdit && (status === 'draft' || status === 'pending_approval');
 
@@ -430,7 +434,9 @@ export function QuoteBuilderPage() {
                       <Icon name="x" size={14} />
                       Reject with note
                     </button>
-                    {primary('Approve & Send to CMMS', 'check', () => approveMutation.mutate())}
+                    {nteHold
+                      ? lockedButton('Approve & Send to CMMS', NTE_HOLD_TIP, 'lockTipApprove')
+                      : primary('Approve & Send to CMMS', 'check', () => approveMutation.mutate())}
                   </>
                 ) : (
                   lockedButton('Approve & Send to CMMS', 'Requires ATL or above', 'lockTipApprove')
@@ -440,7 +446,9 @@ export function QuoteBuilderPage() {
 
             {status === 'approved' &&
               (canApprove
-                ? primary('Send to CMMS', 'send', () => sendMutation.mutate())
+                ? nteHold
+                  ? lockedButton('Send to CMMS', NTE_HOLD_TIP, 'lockTipSend')
+                  : primary('Send to CMMS', 'send', () => sendMutation.mutate())
                 : lockedButton('Send to CMMS', 'Requires ATL or above', 'lockTipSend'))}
 
             {status === 'sent' && (

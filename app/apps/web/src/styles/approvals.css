@@ -27,6 +27,15 @@
 
 .ct .apq-type { margin-right: 6px; vertical-align: 1px; }
 
+/* The section switcher (All · NTE increases · Quotes · Payments) sits left of
+   the lane switcher in the same head row; below ~760px the two stack. */
+.apq-sections { flex-wrap: wrap; }
+
+/* Rule 1.5.2's hold: an open quote / payment row whose work order has an NTE
+   override waiting. The row dims a touch so the eye goes to what can move. */
+.ct tr.apq-held > td:not(.payq-actions) { opacity: 0.72; }
+.ct tr.apq-held small a { color: var(--ink-2); }
+
 .payq-status .apq-note {
   max-width: 220px;
   overflow: hidden;

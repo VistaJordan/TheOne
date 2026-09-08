@@ -47,8 +47,12 @@ Two mutually exclusive modes, chosen by env (`app/.env`, template in `.env.examp
 - Sessions are **server-side rows** (`session` table) sent as an httpOnly
   cookie — not JWTs — so sign-out and "disable user" revoke immediately.
 - `plugins/authGuard.ts` 401s every `/api/*` route except the allowlist at its top.
-- Sign-in is **invite-only**: the callback looks the principal up by verified
-  email; creating the row in Admin › Users *is* the invitation.
+- Sign-in policy (rule 5.1.1): the callback looks the principal up by verified
+  email. Nobody on file and the address is on `AUTH_ALLOWED_DOMAINS` (default
+  `byblosvista.com`) → the row is created on the spot as `AUTH_AUTO_ENROL_ROLE`
+  (default `om_probation`, OM Under Probation), logged `user_auto_enrolled`, and
+  a super admin promotes them from Admin › Users. Any other address is
+  **invite-only**: creating the row in Admin › Users *is* the invitation.
 - **Super admins** (`principal.is_super_admin`) gate the whole admin console.
   The four are Elise, Jordan Brown, Jeff S, Jack — created by migration 0004
   *and* by `seed.ts` (see "keep in step" below).
@@ -70,7 +74,10 @@ The audit log is one table, `activity_log`, and every write goes there: work-ord
 edits (`services/woAudit.ts`), sign-ins, and since migration 0023 the admin
 changes too — custom-field definitions, statuses and phase groups, roles, users,
 automation rules (`services/adminAudit.ts`, whole before/after snapshots with a
-`name`). `entity_id` is **text** since 0023 (phase groups are keyed by code):
+`name`). Since migration 0029 the table is **append-only at the database**:
+a `BEFORE UPDATE OR DELETE` trigger raises (rule 1.2.2), so a correction is a
+new row, never an edit; TRUNCATE still works for the local seed. `entity_id`
+is **text** since 0023 (phase groups are keyed by code):
 join it as `t.id::text = a.entity_id`, and never feed one `$n` parameter to both
 a uuid column and `entity_id` in the same statement — PGlite refuses to type it.
 
@@ -85,6 +92,16 @@ additions carry it: a trigger may compare against another field
 type); `reconcileApprovalTasks` (called from `dispatchAutomations`) cancels an
 NTE task once the cost is back under the NTE. Decisions post an internal
 comment on the work order. Permission path `approvals` (view / approve).
+The second half of 1.5.2 ("financial progression is blocked") is
+`assertNoOpenNteOverride` in the same service: quote approve / send and
+payment approve / send-to-Yoda call it first and get a **409 `CONFLICT`**
+while an `nte_override` task is open; rejecting is never blocked. The
+`Quote` payload and each `/api/payments` row carry `nte_override_open` so the
+builder and the Payments tab draw the verb locked before the click. The
+`/approvals` page is a sectioned inbox — All · NTE increases · (Manager
+reviews) · Quotes (`pending_approval`) · Payments (`requested`) — built
+client-side from `/approvals`, `/quotes` and `/payments`; open rows sort
+oldest first (rule 7.2.2) and every decision is per row (7.2.3).
 
 **Visits** (migration 0021, `services/visits.ts`, `components/wo/CicoCard.tsx`)
 replaced the three check-in/out fields with a log: one `wo_visit` row per
