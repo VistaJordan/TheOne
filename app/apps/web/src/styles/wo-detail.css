@@ -1091,7 +1091,9 @@ textarea {
 .card-fin .card-head { padding: 9px 14px; }
 .card-fin .nte-row { padding: 10px 14px 8px; }
 .card-fin .kvlist { padding: 2px 14px 10px; }
-.card-fin .kvrow { padding: 5px 0; }
+/* Vertical only: the over-NTE wash owns the side padding (it pads back what
+   its negative margin took), and this rule sits later at equal specificity. */
+.card-fin .kvrow { padding-top: 5px; padding-bottom: 5px; }
 /* The meter is a row of this card like any other — it carried the rail's 16px
    inset, which the dot in front of "Client NTE" used to hide. */
 .card-fin .ntemeter { padding: 2px 14px 12px; }
