@@ -1296,7 +1296,16 @@ textarea {
 .card-cico.afp-sect { max-width: none; }
 /* The state chip and the fold sit at the head's right, on the tab's card-head
    and inside the All-fields section title alike. */
-.cv-headright { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.cv-headright {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  /* The section title is uppercase condensed; the chip inside it is not. */
+  font-family: 'Barlow', sans-serif;
+  text-transform: none;
+  letter-spacing: normal;
+}
 .cv-fold { flex: none; opacity: 0.7; }
 .cv-fold:hover,
 .cv-fold:focus-visible { opacity: 1; }
