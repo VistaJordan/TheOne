@@ -310,6 +310,10 @@ export interface QuoteListItem {
   status: SharedQuoteStatus;
   grand_total: number | null;
   updated_at: string | null;
+  /** The work order's own numbers as they stand now (Approvals inbox columns). */
+  wo_due: string | null;
+  wo_nte: number | null;
+  wo_cost: number | null;
 }
 
 export interface QuoteListResponse {

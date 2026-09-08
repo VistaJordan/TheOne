@@ -74,6 +74,9 @@ interface Row {
   client: string | null;
   billing_entity: string | null;
   trade: string | null;
+  wo_due: string | null;
+  wo_nte: number | string | null;
+  wo_cost: string | null;
 }
 
 const SELECT_SQL = `
@@ -91,7 +94,10 @@ const SELECT_SQL = `
          db.id::text AS decided_by_id, db.display_name AS decided_by_name, db.kind::text AS decided_by_kind,
          ${ISO('a.decided_at')} AS decided_at,
          a.decision_note,
-         t.wo_number, t.title AS wo_title, t.client, t.billing_entity, t.trade
+         t.wo_number, t.title AS wo_title, t.client, t.billing_entity, t.trade,
+         t.fields->>'Due Date'   AS wo_due,
+         t.nte::float8           AS wo_nte,
+         t.fields->>'34. Cost'   AS wo_cost
     FROM approval_task a
     JOIN task t            ON t.id = a.task_id
     LEFT JOIN role r       ON r.code = a.assigned_role
@@ -140,6 +146,9 @@ function mapListItem(r: Row): ApprovalListItem {
     client: r.client,
     billing_entity: r.billing_entity,
     trade: r.trade,
+    wo_due: r.wo_due,
+    wo_nte: num(r.wo_nte),
+    wo_cost: num(r.wo_cost),
   };
 }
 

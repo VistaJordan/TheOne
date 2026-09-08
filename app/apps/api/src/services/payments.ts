@@ -77,6 +77,9 @@ interface PaymentRow {
   title: string | null;
   client: string | null;
   nte_override_open: boolean;
+  wo_due: string | null;
+  wo_nte: number | string | null;
+  wo_cost: string | null;
 }
 
 const SELECT_SQL = `
@@ -104,6 +107,9 @@ const SELECT_SQL = `
          pb.id::text AS paid_by_id, pb.display_name AS paid_by_name, pb.kind::text AS paid_by_kind,
          ${ISO('pr.paid_at')} AS paid_at,
          t.wo_number, t.title, t.client,
+         t.fields->>'Due Date'   AS wo_due,
+         t.nte::float8           AS wo_nte,
+         t.fields->>'34. Cost'   AS wo_cost,
          EXISTS (SELECT 1 FROM approval_task a
                   WHERE a.task_id = pr.task_id AND a.type = 'nte_override' AND a.status = 'open')
                             AS nte_override_open
@@ -168,7 +174,20 @@ function mapListItem(r: PaymentRow): PaymentListItem {
     title: r.title,
     client: r.client,
     nte_override_open: Boolean(r.nte_override_open),
+    wo_due: r.wo_due,
+    wo_nte: moneyNum(r.wo_nte),
+    wo_cost: moneyNum(r.wo_cost),
   };
+}
+
+/** A bag/column value as a finite number ("$1,610" → 1610), else null. */
+function moneyNum(v: unknown): number | null {
+  if (v === null || v === undefined || typeof v === 'boolean') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const digits = String(v).replace(/[^0-9.-]/g, '');
+  if (!/^-?\d*\.?\d+$/.test(digits)) return null;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : null;
 }
 
 function round2(n: number): number {

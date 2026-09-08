@@ -1,13 +1,24 @@
 import { useMemo, useState } from 'react';
-import type { WoFieldDescriptor } from '../../../api/client';
 import { Icon } from '../../Icon';
 import { Popover, ToolButton } from './Popover';
 import { DEFAULT_VIEW } from '../../../lib/woView';
 
+/** What the menu needs to know about a column: the work-orders list passes
+    its WoFieldDescriptors; any other table passes this much. */
+export interface ColumnChoice {
+  key: string;
+  label: string;
+  /** Section heading in the picker (the work-orders list groups by field
+      group; a fixed table can leave it out). */
+  group?: string;
+}
+
 interface ColumnsMenuProps {
-  fields: WoFieldDescriptor[];
+  fields: ColumnChoice[];
   columns: string[];
   onChange: (next: string[]) => void;
+  /** What Reset restores. Defaults to the work-orders list's default view. */
+  defaults?: string[];
 }
 
 /**
@@ -18,7 +29,7 @@ interface ColumnsMenuProps {
  * Showing them in one list would mean either an arbitrary position for every
  * unchecked field or a list that reshuffles itself as you tick boxes.
  */
-export function ColumnsMenu({ fields, columns, onChange }: ColumnsMenuProps) {
+export function ColumnsMenu({ fields, columns, onChange, defaults }: ColumnsMenuProps) {
   const [q, setQ] = useState('');
   const byKey = useMemo(() => new Map(fields.map((f) => [f.key, f])), [fields]);
 
@@ -60,7 +71,7 @@ export function ColumnsMenu({ fields, columns, onChange }: ColumnsMenuProps) {
             <button
               type="button"
               className="link-btn"
-              onClick={() => onChange([...DEFAULT_VIEW.columns])}
+              onClick={() => onChange([...(defaults ?? DEFAULT_VIEW.columns)])}
             >
               Reset
             </button>
@@ -128,7 +139,7 @@ export function ColumnsMenu({ fields, columns, onChange }: ColumnsMenuProps) {
                 onClick={() => onChange([...columns, f.key])}
               >
                 <span className="ellipsis">{f.label}</span>
-                <span className="field-type">{f.group}</span>
+                {f.group && <span className="field-type">{f.group}</span>}
                 <Icon name="plus" size={12} />
               </button>
             ))}

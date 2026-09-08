@@ -624,6 +624,20 @@ export interface QuoteListItem {
   status: QuoteStatus;
   grand_total: number | null;
   updated_at: string | null;
+  /** The work order's own numbers as they stand NOW (the Approvals inbox columns). */
+  wo_due: string | null;
+  wo_nte: number | null;
+  wo_cost: number | null;
+}
+
+/** A bag/column value as a finite number ("$1,610" → 1610), else null. */
+function moneyNum(v: unknown): number | null {
+  if (v === null || v === undefined || typeof v === 'boolean') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const digits = String(v).replace(/[^0-9.-]/g, '');
+  if (!/^-?\d*\.?\d+$/.test(digits)) return null;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -641,11 +655,17 @@ export async function listQuotes(limit = 200): Promise<{ items: QuoteListItem[];
     status: QuoteStatus;
     sales_tax: number | null;
     updated_at: string | null;
+    wo_due: string | null;
+    wo_nte: number | string | null;
+    wo_cost: string | null;
   }>(
     `SELECT q.id::text AS id, q.task_id::text AS task_id, q.status,
             q.sales_tax::float8 AS sales_tax,
             ${ISO('q.updated_at')} AS updated_at,
-            t.wo_number, t.title, t.client
+            t.wo_number, t.title, t.client,
+            t.fields->>'Due Date'   AS wo_due,
+            t.nte::float8           AS wo_nte,
+            t.fields->>'34. Cost'   AS wo_cost
        FROM quote q
        JOIN task t ON t.id = q.task_id
       ORDER BY q.updated_at DESC
@@ -671,6 +691,9 @@ export async function listQuotes(limit = 200): Promise<{ items: QuoteListItem[];
       status: r.status,
       grand_total: totals.grand_total,
       updated_at: r.updated_at,
+      wo_due: r.wo_due,
+      wo_nte: moneyNum(r.wo_nte),
+      wo_cost: moneyNum(r.wo_cost),
     });
   }
   return { items, total: items.length };

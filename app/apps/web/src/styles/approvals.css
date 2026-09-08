@@ -25,7 +25,16 @@
 
 .apq-filters .linkbtn { align-self: center; margin-top: 14px; }
 
+/* The Columns menu (shared with the work-orders list) closes the filter row
+   on the right; its panel opens right-aligned so it never leaves the page. */
+.apq-columns { margin-left: auto; align-self: flex-end; }
+
 .ct .apq-type { margin-right: 6px; vertical-align: 1px; }
+
+/* NTE increase: how far over, in the danger colour (rule 1.5.1); the Cost
+   column cell reads red the same way once it passes the NTE. */
+.ct .apq-over { color: var(--danger); }
+.ct td.is-over-nte { color: var(--danger); font-weight: 600; }
 
 /* The section switcher (All · NTE increases · Quotes · Payments) sits left of
    the lane switcher in the same head row; below ~760px the two stack. */
