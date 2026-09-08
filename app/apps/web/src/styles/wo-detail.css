@@ -133,6 +133,74 @@ textarea {
 
 .chip-sm { padding: 2px 7px; font-size: 11px; }
 
+/* ── Worth block: Client NTE beside Cost, each under its own label ────────
+   Sits with the meta chips (and beside the status when the header is
+   folded). Cost above the NTE turns the whole block red and draws the bar
+   under it — the same rule the Finances card and the list column apply. */
+.worth {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 16px;
+  padding: 3px 10px 4px;
+  border-radius: 8px;
+  background: var(--chip);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.worth-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.worth-k {
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  line-height: 1.2;
+}
+
+.worth-v {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.worth-v.is-none { color: var(--ink-3); font-weight: 400; }
+
+.worth-cur {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.worth.is-over {
+  padding-bottom: 9px;
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+.worth.is-over .worth-k { color: var(--danger); opacity: 0.8; }
+.worth.is-over .worth-cell:last-child .worth-v,
+.worth.is-over .worth-cell:last-child .worth-cur { color: var(--danger); }
+.worth.is-over::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 3px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--danger);
+}
+
 /* ── Status pill size variants (base .pill lives in app.css) ──────────────── */
 .pill-lg { padding: 5px 12px; font-size: 13px; gap: 7px; }
 .pill-sm { padding: 1px 7px; font-size: 11px; }

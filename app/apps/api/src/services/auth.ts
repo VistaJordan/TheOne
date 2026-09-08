@@ -1,15 +1,19 @@
 // Sessions and sign-in policy.
 //
-// The rule this file exists to enforce: SIGN-IN IS INVITE-ONLY. A verified
-// Microsoft identity is necessary but not sufficient — the address must already
-// match a `principal` row that is not disabled. Creating that row IS the
-// invitation; there is no self-registration path anywhere in the API.
+// The rule this file exists to enforce (5.1.1): a verified Microsoft identity
+// is necessary but not sufficient. Either the address already matches a
+// `principal` row that is not disabled (an invitation, made from Admin › Users),
+// or it belongs to one of `config.signIn.allowedDomains` — in which case the
+// first sign-in enrols the person as `config.signIn.autoEnrolRole` (OM Under
+// Probation by default) and a super admin promotes them from Admin › Users.
+// Anyone else is refused. There is no other registration path.
 
 import { randomBytes } from 'node:crypto';
 import { query } from '../db.js';
 import { config } from '../config.js';
 import { ApiError } from '../errors.js';
 import type { EntraIdentity } from '../auth/entra.js';
+import { logAdminEvent } from './adminAudit.js';
 import {
   normalizePermMap,
   permAllows,
@@ -122,8 +126,11 @@ function toPrincipal(r: PrincipalRow): SessionPrincipal {
  * `oid` is bound to the row, and from then on it is preferred — so changing
  * somebody's display name or even their primary address in Entra does not
  * detach them from their history.
+ *
+ * Nobody on file: an address on an allowed domain is enrolled on the spot
+ * (`enrolNewPrincipal`); anything else is refused with `reason: 'not_invited'`.
  */
-export async function resolveInvitedPrincipal(identity: EntraIdentity): Promise<SessionPrincipal> {
+export async function resolvePrincipalForSignIn(identity: EntraIdentity): Promise<SessionPrincipal> {
   const byOid = await query<PrincipalRow>(
     `SELECT ${PRINCIPAL_COLUMNS} ${PRINCIPAL_FROM} WHERE p.entra_oid = $1 LIMIT 1`,
     [identity.oid],
@@ -140,10 +147,21 @@ export async function resolveInvitedPrincipal(identity: EntraIdentity): Promise<
     ).rows[0];
 
   if (!found) {
+    if (isAllowedDomain(identity.email)) return enrolNewPrincipal(identity);
+    const { allowedDomains } = config.signIn;
     throw new ApiError(
       'FORBIDDEN',
-      `${identity.email} has not been invited to The One`,
-      { email: identity.email, reason: 'not_invited' },
+      allowedDomains.length > 0
+        ? `${identity.email} is not a @${allowedDomains.join(' / @')} account and has not been invited`
+        : `${identity.email} has not been invited to The One`,
+      {
+        email: identity.email,
+        reason: 'not_invited',
+        hint:
+          allowedDomains.length > 0
+            ? `Sign in with your @${allowedDomains[0]} account, or ask a super admin to invite this address.`
+            : 'Ask a super admin to invite this address.',
+      },
     );
   }
 
@@ -173,6 +191,73 @@ export async function resolveInvitedPrincipal(identity: EntraIdentity): Promise<
     [found.id],
   );
   return toPrincipal(updated.rows[0]);
+}
+
+function isAllowedDomain(email: string): boolean {
+  const at = email.lastIndexOf('@');
+  if (at < 0) return false;
+  const domain = email.slice(at + 1).toLowerCase();
+  return config.signIn.allowedDomains.includes(domain);
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (parts[0][0] + last).toUpperCase();
+}
+
+/**
+ * First sign-in from an allowed domain: create the principal as
+ * `config.signIn.autoEnrolRole`, already `active` with the oid bound.
+ *
+ * The role must exist — a typo in AUTH_AUTO_ENROL_ROLE must fail loudly at the
+ * door, not create a row with a dangling role code and no permissions.
+ * The insert is ON CONFLICT DO NOTHING on the case-insensitive email index so
+ * two first sign-ins racing each other converge on one row. The event is
+ * logged as `user_auto_enrolled`, attributed to the person themselves: no
+ * admin acted, and the audit page reads it like an invitation.
+ */
+async function enrolNewPrincipal(identity: EntraIdentity): Promise<SessionPrincipal> {
+  const roleCode = config.signIn.autoEnrolRole;
+  const role = await query<{ code: string }>(`SELECT code FROM role WHERE code = $1`, [roleCode]);
+  if (!role.rows[0]) {
+    throw new ApiError('INTERNAL', 'Sign-in is misconfigured on the server', {
+      email: identity.email,
+      reason: 'auto_enrol_role_missing',
+      hint: `AUTH_AUTO_ENROL_ROLE="${roleCode}" is not a role code. Ask an administrator.`,
+    });
+  }
+
+  const name = identity.name?.trim() || identity.email.slice(0, identity.email.indexOf('@'));
+  const inserted = await query<{ id: string }>(
+    `INSERT INTO principal
+       (kind, display_name, email, role, initials, status, is_super_admin, entra_oid, last_login_at)
+     VALUES ('human', $1, $2, $3, $4, 'active', false, $5, now())
+     ON CONFLICT (lower(email)) WHERE email IS NOT NULL DO NOTHING
+     RETURNING id`,
+    [name, identity.email, roleCode, initialsOf(name), identity.oid],
+  );
+
+  if (!inserted.rows[0]) {
+    // Lost the race — the other request created the row; take the normal path.
+    return resolvePrincipalForSignIn(identity);
+  }
+
+  const id = inserted.rows[0].id;
+  const row = await query<PrincipalRow>(
+    `SELECT ${PRINCIPAL_COLUMNS} ${PRINCIPAL_FROM} WHERE p.id = $1 LIMIT 1`,
+    [id],
+  );
+  const principal = toPrincipal(row.rows[0]);
+  await logAdminEvent({
+    actorId: id,
+    entity: 'principal',
+    entityId: id,
+    action: 'user_auto_enrolled',
+    after: { name, email: identity.email, role: roleCode, status: 'active', is_super_admin: false },
+  });
+  return principal;
 }
 
 // ── 2 · Sessions ─────────────────────────────────────────────────────────────

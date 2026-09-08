@@ -54,6 +54,32 @@ export interface Config {
   sessionTtlHours: number;
   /** Cookies go Secure only over HTTPS; localhost is plain http in dev. */
   cookieSecure: boolean;
+  /** Who may sign in without an invitation, and what they become (rule 5.1.1). */
+  signIn: SignInPolicy;
+}
+
+export interface SignInPolicy {
+  /** Lower-cased email domains that enrol themselves on first Microsoft sign-in.
+      Empty = nobody; sign-in is then strictly invite-only. */
+  allowedDomains: string[];
+  /** Role code a self-enrolled account starts with. Changed later from
+      Admin › Users like any other role. */
+  autoEnrolRole: string;
+}
+
+function buildSignIn(): SignInPolicy {
+  const raw = str('AUTH_ALLOWED_DOMAINS') ?? 'byblosvista.com';
+  const allowedDomains =
+    raw.toLowerCase() === 'none'
+      ? []
+      : raw
+          .split(',')
+          .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
+          .filter(Boolean);
+  return {
+    allowedDomains,
+    autoEnrolRole: str('AUTH_AUTO_ENROL_ROLE') ?? 'om_probation',
+  };
 }
 
 function buildEntra(): EntraConfig | null {
@@ -107,6 +133,7 @@ function build(): Config {
     entra,
     sessionTtlHours: Number(str('SESSION_TTL_HOURS') ?? 12),
     cookieSecure: webOrigin.startsWith('https://'),
+    signIn: buildSignIn(),
   };
 }
 
@@ -115,7 +142,12 @@ export const config: Config = build();
 /** Logged once at boot so the mode in force is never a guess. */
 export function describeAuth(): string {
   if (config.authMode === 'entra') {
-    return `auth: Microsoft Entra ID (tenant ${config.entra!.tenantId}), invite-only`;
+    const { allowedDomains, autoEnrolRole } = config.signIn;
+    const policy =
+      allowedDomains.length === 0
+        ? 'invite-only'
+        : `@${allowedDomains.join(', @')} self-enrol as ${autoEnrolRole}; others invite-only`;
+    return `auth: Microsoft Entra ID (tenant ${config.entra!.tenantId}), ${policy}`;
   }
   return 'auth: DEV BYPASS — no password required, local development only';
 }
