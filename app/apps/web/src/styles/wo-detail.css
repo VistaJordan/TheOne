@@ -1292,7 +1292,7 @@ textarea {
    node = not checked in, amber = on site, green = done; "New visit" and the
    site-access rows close the card. The same card renders in the CICO tab and
    inside the All-fields sections (.afp-sect), full width there. */
-.card-cico { max-width: 720px; }
+.card-cico { max-width: 960px; }
 .card-cico.afp-sect { max-width: none; }
 /* The state chip and the fold sit at the head's right, on the tab's card-head
    and inside the All-fields section title alike. */
