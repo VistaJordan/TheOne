@@ -36,6 +36,7 @@ const visitBodySchema = z.object({
   tech_name: z.string().max(200).nullable().optional(),
   tech_phone: z.string().max(60).nullable().optional(),
   method: z.string().max(60).nullable().optional(),
+  method_detail: z.string().max(300).nullable().optional(),
   checked_in_at: z.string().max(40).nullable().optional(),
   checked_out_at: z.string().max(40).nullable().optional(),
 });

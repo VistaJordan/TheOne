@@ -762,3 +762,5 @@ td.pcell .sw { justify-content: center; }
 .adm-cico-ct td { vertical-align: middle; }
 .adm-cico-sel { width: auto; min-width: 120px; padding: 4px 24px 4px 8px; font-size: 12px; }
 .adm-cico-when { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.adm-cico-add .adm-cico-detailfield { flex: 2 1 280px; max-width: 520px; }
+.adm-cico-detail { width: 100%; min-width: 220px; padding: 4px 8px; font-size: 12px; }

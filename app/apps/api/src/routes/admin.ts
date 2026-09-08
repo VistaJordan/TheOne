@@ -464,16 +464,22 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.put('/admin/cico-methods/:fm', async (req) => {
     const actorId = requireAdmin(req, 'fields', 'edit');
     const { fm } = parse(z.object({ fm: z.string().trim().min(1).max(120) }), req.params);
-    const { method } = parse(z.object({ method: z.string().trim().min(1).max(60) }), req.body);
+    const { method, detail } = parse(
+      z.object({
+        method: z.string().trim().min(1).max(60),
+        detail: z.string().trim().max(300).nullable().optional(),
+      }),
+      req.body,
+    );
     const before = (await listCicoMethods()).find((m) => m.fm === fm) ?? null;
-    const item = await setCicoMethod(fm, method, actorId);
+    const item = await setCicoMethod(fm, method, detail ?? null, actorId);
     await logAdminEvent({
       actorId,
       entity: 'fm_cico_method',
       entityId: item.fm,
       action: before ? 'cico_method_changed' : 'cico_method_created',
-      before: before ? { name: before.fm, method: before.method } : null,
-      after: { name: item.fm, method: item.method },
+      before: before ? { name: before.fm, method: before.method, detail: before.detail } : null,
+      after: { name: item.fm, method: item.method, detail: item.detail },
     });
     return { item };
   });
@@ -488,7 +494,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       entity: 'fm_cico_method',
       entityId: gone.fm,
       action: 'cico_method_deleted',
-      before: { name: gone.fm, method: gone.method },
+      before: { name: gone.fm, method: gone.method, detail: gone.detail },
       after: null,
     });
     return { ok: true };

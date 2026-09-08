@@ -1240,8 +1240,16 @@ export const VISIT_STATUSES: { code: VisitStatus; label: string }[] = [
 ];
 
 /** How a tech checks in with the client's system. The FM table
-    (fm_cico_method) holds one of these per FM company. */
-export const VISIT_METHODS = ['IVR', 'App', 'Phone', 'Portal', 'Email', 'Manual'] as const;
+    (fm_cico_method) holds one of these per FM company, plus the instruction
+    that goes with it (the IVR number, "Submit request on Teams" …). */
+export const VISIT_METHODS = ['IVR', 'Portal', 'Email', 'Operator', 'App', 'Manual'] as const;
+
+/** The legacy 'CICO Method' value for a method + detail pair — the shape the
+    operation wrote by hand before the log ("IVR - (866) 254-8780"). */
+export function cicoMethodText(method: string | null, detail: string | null): string | null {
+  if (!method) return null;
+  return detail ? `${method} - ${detail}` : method;
+}
 
 /** Fallback vocabulary when the 'Visit Type' dropdown is not in the catalogue. */
 export const DEFAULT_VISIT_TYPES = ['Assessment', 'Job', 'Return trip'];
@@ -1285,6 +1293,10 @@ export interface WoVisit {
   tech_name: string | null;
   tech_phone: string | null;
   method: string | null;
+  /** The instruction for this method — the IVR number, "Service Channel",
+      "Submit request on Teams (must add photos)". Copied from the FM table
+      when the visit is logged; editable on the visit. */
+  method_detail: string | null;
   /** UTC ISO to the second, or null until the status moves. */
   checked_in_at: string | null;
   checked_out_at: string | null;
@@ -1305,17 +1317,19 @@ export interface VisitInput {
   tech_name?: string | null;
   tech_phone?: string | null;
   method?: string | null;
+  method_detail?: string | null;
   checked_in_at?: string | null;
   checked_out_at?: string | null;
 }
 
-/** GET /api/work-orders/:id/visits — oldest first. `default_method` is what
-    the FM table says for this work order's FM (null when there is no entry),
-    so a new visit can be pre-filled. */
+/** GET /api/work-orders/:id/visits — oldest first. `default_method` and its
+    detail are what the FM table says for this work order's FM (null when
+    there is no entry), so a new visit can be pre-filled. */
 export interface WoVisitsResponse {
   items: WoVisit[];
   fm: string | null;
   default_method: string | null;
+  default_method_detail: string | null;
 }
 
 /** POST / PATCH replies: the visit touched plus the fresh list. */
@@ -1328,5 +1342,7 @@ export interface WoVisitResponse {
 export interface FmCicoMethod {
   fm: string;
   method: string;
+  /** The instruction: phone number, portal, "Submit request on Teams" … */
+  detail: string | null;
   updated_at: string;
 }
