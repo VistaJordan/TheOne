@@ -50,8 +50,11 @@ import {
   type WoFilterOp,
   type WoFilterRule,
   type WoFieldType,
+  deleteCicoMethod,
+  listCicoMethods,
+  setCicoMethod,
 } from '../../api/client';
-import { APPROVAL_TASK_ACTION_FIELD, APPROVAL_TASK_TYPES } from '@theone/shared';
+import { APPROVAL_TASK_ACTION_FIELD, APPROVAL_TASK_TYPES, VISIT_METHODS } from '@theone/shared';
 
 // ══ SETTINGS ═════════════════════════════════════════════════════════════════
 
@@ -2056,10 +2059,166 @@ export function AdminFieldsPage() {
         </div>
       )}
 
+      {/* Which check-in method each FM company uses (0021): a new visit on a
+          work order takes its method from here by the WO's FM. Vocabulary,
+          like the fields above, so it lives on the same grant. */}
+      <CicoMethodsCard />
+
       {/* The status engine — moved here from the old Workflows tab when that
           slot became Automations: statuses are vocabulary, like fields. */}
       <StatusEditor />
     </AdminShell>
+  );
+}
+
+// ── Check-in method by FM (0021) ─────────────────────────────────────────────
+// The "database of the method for each client": FM company → IVR / App /
+// Phone / Portal / Email / Manual. The FM names come from the '22. FM'
+// dropdown so a row can only be spelled the way the work orders spell it.
+
+const FM_FIELD_KEY = 'fields.22. FM';
+
+function CicoMethodsCard() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['admin-cico-methods'], queryFn: listCicoMethods, retry: 0 });
+  const catalogue = useQuery({ queryKey: ['wo-fields'], queryFn: getWoFields, staleTime: 5 * 60 * 1000 });
+  const fmOptions = useMemo(
+    () =>
+      (catalogue.data?.fields ?? [])
+        .find((f) => f.key === FM_FIELD_KEY)
+        ?.options?.map((o) => o.value.trim())
+        .filter(Boolean) ?? [],
+    [catalogue.data],
+  );
+  const items = q.data?.items ?? [];
+  const onFile = new Set(items.map((i) => i.fm));
+
+  const [fm, setFm] = useState('');
+  const [method, setMethod] = useState<string>(VISIT_METHODS[0]);
+  const [error, setError] = useState<string | null>(null);
+
+  const done = () => {
+    setError(null);
+    void qc.invalidateQueries({ queryKey: ['admin-cico-methods'] });
+  };
+  const fail = (err: unknown) =>
+    setError(err instanceof ApiRequestError ? err.message : 'The change did not save');
+  const set = useMutation({
+    mutationFn: (v: { fm: string; method: string }) => setCicoMethod(v.fm, v.method),
+    onSuccess: () => { done(); setFm(''); },
+    onError: fail,
+  });
+  const del = useMutation({ mutationFn: (name: string) => deleteCicoMethod(name), onSuccess: done, onError: fail });
+  const busy = set.isPending || del.isPending;
+  const methods = VISIT_METHODS as readonly string[];
+
+  return (
+    <section className="card adm-cico">
+      <div className="card-head">
+        <Icon name="check-circle" size={14} />
+        <h3 className="card-title">Check-in method by FM</h3>
+        <span className="card-meta">{items.length} on file</span>
+      </div>
+      <p className="adm-cico-note">
+        A new visit on a work order takes its check-in method from the work order's FM company.
+        An FM with nothing on file shows a note on the visit log; the method can still be changed
+        on any visit.
+      </p>
+
+      {error && (
+        <div className="callout adm-cico-err" role="alert">
+          <Icon name="alert" size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <form
+        className="adm-cico-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (fm.trim()) set.mutate({ fm: fm.trim(), method });
+        }}
+      >
+        <label className="field">
+          <span className="lbl">FM company</span>
+          <input
+            className="fld"
+            list="adm-cico-fm-options"
+            value={fm}
+            onChange={(e) => setFm(e.target.value)}
+            placeholder="Type or pick an FM"
+            disabled={busy}
+          />
+          <datalist id="adm-cico-fm-options">
+            {fmOptions.filter((o) => !onFile.has(o)).map((o) => <option key={o} value={o} />)}
+          </datalist>
+        </label>
+        <label className="field">
+          <span className="lbl">Method</span>
+          <select className="fld" value={method} onChange={(e) => setMethod(e.target.value)} disabled={busy}>
+            {methods.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </label>
+        <button type="submit" className="btn btn-primary" disabled={busy || !fm.trim()}>
+          <Icon name="plus" size={14} />
+          {onFile.has(fm.trim()) ? 'Update' : 'Add'}
+        </button>
+      </form>
+
+      {q.isLoading && <div className="empty-flat">Loading…</div>}
+      {q.isError && <div className="empty-flat">Could not load the table — GET /api/admin/cico-methods did not respond.</div>}
+      {!q.isLoading && !q.isError && items.length === 0 && (
+        <div className="empty-flat">Nothing on file yet — add the FM companies and how their techs check in.</div>
+      )}
+      {items.length > 0 && (
+        <div className="table-wrap">
+          <table className="ct adm-cico-ct">
+            <thead>
+              <tr>
+                <th>FM company</th>
+                <th>Method</th>
+                <th>Updated</th>
+                <th aria-label="Remove" />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((i) => (
+                <tr key={i.fm}>
+                  <td><b>{i.fm}</b></td>
+                  <td>
+                    <select
+                      className="fld adm-cico-sel"
+                      value={i.method}
+                      disabled={busy}
+                      aria-label={`Check-in method for ${i.fm}`}
+                      onChange={(e) => set.mutate({ fm: i.fm, method: e.target.value })}
+                    >
+                      {!methods.includes(i.method) && <option value={i.method}>{i.method}</option>}
+                      {methods.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </td>
+                  <td className="adm-cico-when">
+                    {new Date(i.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </td>
+                  <td className="num">
+                    <button
+                      type="button"
+                      className="afp-act"
+                      title={`Remove ${i.fm}`}
+                      aria-label={`Remove ${i.fm}`}
+                      disabled={busy}
+                      onClick={() => del.mutate(i.fm)}
+                    >
+                      <Icon name="trash" size={12} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

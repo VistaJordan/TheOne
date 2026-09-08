@@ -86,6 +86,20 @@ type); `reconcileApprovalTasks` (called from `dispatchAutomations`) cancels an
 NTE task once the cost is back under the NTE. Decisions post an internal
 comment on the work order. Permission path `approvals` (view / approve).
 
+**Visits** (migration 0021, `services/visits.ts`, `components/wo/CicoCard.tsx`)
+replaced the three check-in/out fields with a log: one `wo_visit` row per
+visit (type, tech name + phone, method, own check-in / check-out stamps to
+the second; moving `status` stamps the time). The seven legacy bag keys —
+`Visit Type`, `18. Check-in/out Status`, `Checked-in At`, `Checked-out At`,
+`Tech Name`, `Tech Phone Number`, `CICO Method` (`VISIT_OWNED_KEYS` in shared)
+— **mirror the latest visit** and are refused by the field editor and bulk
+edit, so columns / filters / automations on them keep working. Mirror writes
+are logged `via: 'visit'`; visit writes are logged as `visit_created|updated|
+deleted` with snapshots under field `visit:<id>`. `fm_cico_method` (FM → IVR /
+App / Phone / …, Admin › Custom fields) pre-fills a new visit's method from the
+WO's `22. FM`. The same `CicoCard` renders in the CICO tab and as the CICO
+section of All-fields. Gate: `work_orders/fields/cico` view / edit.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

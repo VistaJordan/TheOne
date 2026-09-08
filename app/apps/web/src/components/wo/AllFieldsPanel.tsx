@@ -24,7 +24,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
-import { fieldPermKey, type ActivityEntry, type WoFieldDescriptor } from '@theone/shared';
+import {
+  CICO_SECTION_SLUG,
+  VISIT_HIDDEN_KEYS,
+  VISIT_OWNED_KEYS,
+  fieldPermKey,
+  type ActivityEntry,
+  type WoFieldDescriptor,
+} from '@theone/shared';
 import {
   ApiRequestError,
   getFieldHistory,
@@ -41,7 +48,6 @@ import {
   FIELD_SECTIONS,
   MORE_SECTION_ICON,
   MORE_SECTION_TITLE,
-  VISIT_TYPE_FIELD_KEY,
 } from '../../lib/woFieldSections';
 import type { IconName } from '../Icon';
 import { DASH, FIELD, bool, feedTime, fieldValueToString, initials, isCostOverNte } from '../../lib/fields';
@@ -49,10 +55,17 @@ import { formatValue, unwrap } from '../../lib/auditFormat';
 import { resolveMoney } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 
+import { CicoCard } from './CicoCard';
 import { FieldEditor, displayValue as display, draftOf } from './fieldEdit';
 import { FieldHistory } from './FieldHistory';
 
 const ORDER_PREF_KEY = 'wo.fields.order';
+
+/** The check-in/out fields the VISIT LOG renders (0021): not list rows. */
+const VISIT_HIDDEN = new Set(VISIT_HIDDEN_KEYS.map((k) => `fields.${k}`));
+/** Every field the visit log writes — read-only wherever it still shows
+    (tech name / phone stay in Technician, mirroring the latest visit). */
+const VISIT_OWNED = new Set(VISIT_OWNED_KEYS.map((k) => `fields.${k}`));
 
 type OrderMode = 'default' | 'alpha' | 'manual';
 
@@ -90,21 +103,18 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   });
 
   // Every custom (bag-backed) field, in ADMIN order — the catalogue is already
-  // sorted by field_def.position. Comp and Visit Type are pulled out of the
-  // list: they render as toolbar controls beside the search box instead.
+  // sorted by field_def.position. Comp is pulled out of the list (it renders
+  // as a toolbar control beside the search box), and so are the five fields
+  // the visit log owns — the CICO card below shows those as the log itself.
   const fields = useMemo(
     () =>
       (catalogue.data?.fields ?? []).filter(
-        (f) => f.custom && f.key !== COMP_FIELD_KEY && f.key !== VISIT_TYPE_FIELD_KEY,
+        (f) => f.custom && f.key !== COMP_FIELD_KEY && !VISIT_HIDDEN.has(f.key),
       ),
     [catalogue.data],
   );
   const compField = useMemo(
     () => (catalogue.data?.fields ?? []).find((f) => f.key === COMP_FIELD_KEY) ?? null,
-    [catalogue.data],
-  );
-  const visitTypeField = useMemo(
-    () => (catalogue.data?.fields ?? []).find((f) => f.key === VISIT_TYPE_FIELD_KEY) ?? null,
     [catalogue.data],
   );
 
@@ -153,16 +163,16 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   const sections = useMemo(() => {
     const byKey = new Map(fields.map((f) => [f.key, f]));
     const used = new Set<string>();
-    const out: { title: string; icon: IconName; wide?: boolean; fields: WoFieldDescriptor[] }[] = [];
+    const out: { title: string; slug: string; icon: IconName; wide?: boolean; fields: WoFieldDescriptor[] }[] = [];
     for (const s of FIELD_SECTIONS) {
       const members = s.keys
         .map((k) => byKey.get(k))
         .filter((f): f is WoFieldDescriptor => Boolean(f));
       for (const f of members) used.add(f.key);
-      if (members.length > 0) out.push({ title: s.title, icon: s.icon, wide: s.wide, fields: members });
+      if (members.length > 0) out.push({ title: s.title, slug: s.slug, icon: s.icon, wide: s.wide, fields: members });
     }
     const rest = fields.filter((f) => !used.has(f.key));
-    if (rest.length > 0) out.push({ title: MORE_SECTION_TITLE, icon: MORE_SECTION_ICON, fields: rest });
+    if (rest.length > 0) out.push({ title: MORE_SECTION_TITLE, slug: 'more', icon: MORE_SECTION_ICON, fields: rest });
     return out;
   }, [fields]);
   const shownSections = sections
@@ -227,7 +237,9 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   // `i` only matters when dragging is possible — the sectioned path passes -1.
   const renderRow = (f: WoFieldDescriptor, i: number) => {
     const raw = valueOf(f);
-    const readOnly = f.subtype === 'formula' || f.subtype === 'attachment';
+    // Tech name / phone mirror the latest visit (0021): shown, never typed.
+    const mirrored = VISIT_OWNED.has(f.key);
+    const readOnly = f.subtype === 'formula' || f.subtype === 'attachment' || mirrored;
     const isEditing = editing === f.key;
     const rowProps = dragEnabled ? reorder.rowProps(i) : {};
     // Click-to-edit: the value itself opens the editor (links inside a value
@@ -263,6 +275,11 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
             {f.label}
             {f.subtype === 'formula' && (
               <span className="afp-fx" title="Computed field — the formula is not wired up yet">ƒ</span>
+            )}
+            {mirrored && (
+              <span className="afp-fx" title="Comes from the latest visit in the check-in / check-out log (CICO)">
+                visit
+              </span>
             )}
           </dt>
           <dd
@@ -355,23 +372,15 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     );
   };
 
-  // One toolbar select, shared by Comp and Visit Type — a dropdown rendered as
-  // a control beside the search box rather than as a list row. `flagEmpty`
-  // paints the control in the danger ramp while no value is set.
-  const renderBarSelect = (
-    f: WoFieldDescriptor,
-    label: string,
-    opts?: { flagEmpty?: boolean },
-  ) => {
+  // The Comp toolbar select — a dropdown rendered as a control beside the
+  // search box rather than as a list row. (Visit Type sat here too until the
+  // visit log took it over: a visit's type is picked when the visit is logged.)
+  const renderBarSelect = (f: WoFieldDescriptor, label: string) => {
     const v = valueOf(f);
     const cur = v == null ? '' : String(v);
-    const missing = Boolean(opts?.flagEmpty) && cur === '';
     const options = f.options ?? [];
     return (
-      <label
-        className={`afp-comp${missing ? ' is-missing' : ''}`}
-        title={missing ? `${label} has not been set for this work order` : undefined}
-      >
+      <label className="afp-comp">
         <span>{label}</span>
         <select
           value={cur}
@@ -421,10 +430,6 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
           />
         </label>
         {compField && renderBarSelect(compField, 'Comp')}
-        {/* Visit Type must be filled on every WO — empty renders in the danger
-            ramp until someone sets it (the dashboard's Needs Attention page
-            counts these). */}
-        {visitTypeField && renderBarSelect(visitTypeField, 'Visit Type', { flagEmpty: true })}
         <div className="seg afp-order" role="group" aria-label="Field order">
           <OrderButton mode="default" current={pref.mode} onSelect={setMode}>Default</OrderButton>
           <OrderButton mode="alpha" current={pref.mode} onSelect={setMode}>A–Z</OrderButton>
@@ -443,6 +448,12 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
       {pref.mode === 'default' ? (
         <div className="afp-sections">
           {shownSections.map((s) => (
+            // The CICO section IS the visit log — the same card as the CICO
+            // tab, so the two can never drift. A search narrows it back to
+            // the matching rows (IVR link, pin…) like any other section.
+            s.slug === CICO_SECTION_SLUG && needle === '' ? (
+              <CicoCard key={s.title} wo={wo} embedded />
+            ) : (
             <section className={`card afp-sect${s.wide ? ' is-wide' : ''}`} key={s.title}>
               <h3 className="afp-sect-title">
                 <Icon name={s.icon} size={14} />
@@ -450,6 +461,7 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
               </h3>
               <dl className="fieldlist afp">{s.fields.map((f) => renderRow(f, -1))}</dl>
             </section>
+            )
           ))}
           {shownSections.length === 0 && (
             <p className="afp-none">No field matches “{q}”.</p>

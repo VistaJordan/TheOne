@@ -4,7 +4,15 @@ import { Link } from 'react-router-dom';
 import type { ActivityEntry, WoFieldDescriptor } from '@theone/shared';
 import { getWoFields } from '../../api/client';
 import { DASH, feedTime, initials } from '../../lib/fields';
-import { automationRef, formatValue, labelOf, nameOf, unwrap, viaLabel } from '../../lib/auditFormat';
+import {
+  automationRef,
+  describeVisitChange,
+  formatValue,
+  labelOf,
+  nameOf,
+  unwrap,
+  viaLabel,
+} from '../../lib/auditFormat';
 import { Icon } from '../Icon';
 import { useAuth } from '../../auth/AuthProvider';
 
@@ -225,6 +233,11 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
           {e.after?.note ? <> — {String(e.after.note)}</> : null}
         </>
       );
+    // Visits (0021): the snapshots say which visit and what moved.
+    case 'visit_created':
+    case 'visit_updated':
+    case 'visit_deleted':
+      return <>{describeVisitChange(e.before, e.after)}</>;
     default:
       return <>{e.action.replace(/_/g, ' ')}</>;
   }

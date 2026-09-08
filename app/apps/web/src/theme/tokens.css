@@ -55,6 +55,13 @@
 :root[data-theme="night"]{ --warn:#f8ae00; --warn-solid:#f8ae00; --warn-bg:rgba(248,174,0,.13); --warn-border:rgba(248,174,0,.34); }
 :root[data-theme="day"]  { --warn:#7c5700; --warn-solid:#d98c00; --warn-bg:#fdf3e0;            --warn-border:#f0d49a; }
 
+/* ══ 0021 — ok ramp (the visit log: a finished visit, a "Completed" chip) ═══
+   The product's own status green: #6bed5e (the ClickUp "Done" pill) for night,
+   and its certified day ink #36772f (SPRINT1-SPEC §6, 5.11:1) for day.
+     night  #6bed5e on #0c0d0e = 12.4:1      day  #36772f on #ffffff = 5.11:1  */
+:root[data-theme="night"]{ --ok:#6bed5e; --ok-solid:#6bed5e; --ok-bg:rgba(107,237,94,.12); --ok-border:rgba(107,237,94,.32); }
+:root[data-theme="day"]  { --ok:#36772f; --ok-solid:#4caf50; --ok-bg:#e8f5e6;            --ok-border:#bfe3ba; }
+
 /* ══ S2 — day-theme contrast exception #2 (flagged by the comp) ═════════════
    The topbar "New Work Order" button is a solid --accent fill sitting on the
    ALWAYS-BLACK topbar. In day that pair is #ffffff on #1a9fd4 = 3.02:1, which

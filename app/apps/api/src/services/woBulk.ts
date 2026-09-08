@@ -18,7 +18,7 @@ import { listCustomFields, resolveField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
 import { applyProfitFormula } from './money.js';
-import { applyCicoStamps } from './cicoStamps.js';
+import { assertNotVisitOwned } from './visits.js';
 import type { WorkOrderListItem } from '@theone/shared';
 
 /** `$1, $2, …` for a list of values. PGlite's parameter serialisation for
@@ -116,6 +116,8 @@ export async function bulkUpdate(
     if (!f.custom) throw new ApiError('BAD_REQUEST', `"${f.label}" is not a custom field`);
     customPatch.push({ key: f.jsonKey as string, value });
   }
+  // The check-in/out fields mirror the visit log (0021): not bulk-editable.
+  assertNotVisitOwned(customPatch.map((c) => c.key));
 
   const rows = await query<{
     id: string;
@@ -210,8 +212,6 @@ export async function bulkUpdate(
             else merged[c.key] = c.value;
             log.push({ field: `fields.${c.key}`, before: row.fields?.[c.key] ?? null, after: c.value });
           }
-          // A check-in / check-out stamps its time (cicoStamps.ts).
-          log.push(...applyCicoStamps(merged, log, customPatch.map((c) => c.key)));
           // Profit = Total Invoiced − Cost, kept in step on every bag write.
           applyProfitFormula(merged);
           params.push(JSON.stringify(merged));

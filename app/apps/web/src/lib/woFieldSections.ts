@@ -26,9 +26,9 @@ export interface FieldSection extends FieldSectionDef {
 /** Comp renders as a control in the tab's toolbar, not as a row. */
 export const COMP_FIELD_KEY = 'fields.21. Comp';
 
-/** Visit Type sits beside Comp in the same toolbar. It must be set on every
-    work order, so an empty value renders in the danger ramp — and the
-    dashboard's Needs Attention page counts the work orders still missing it. */
+/** Visit Type mirrors the LATEST VISIT in the check-in / check-out log (0021)
+    — it is no longer a toolbar control. Empty means no visit has been logged,
+    which is what the dashboard's Needs Attention page counts. */
 export const VISIT_TYPE_FIELD_KEY = 'fields.Visit Type';
 
 /** Catch-all heading for fields no section names. */

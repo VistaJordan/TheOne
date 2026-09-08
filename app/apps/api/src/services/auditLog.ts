@@ -190,6 +190,7 @@ const ENTITY_LABELS: Record<string, string> = {
   status_group: 'Phase',
   role: 'Role',
   automation: 'Automation',
+  fm_cico_method: 'Check-in method',
 };
 
 /** Admin rows hold whole snapshots; the CSV lists only the keys that changed,

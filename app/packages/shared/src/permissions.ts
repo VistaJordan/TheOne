@@ -164,7 +164,12 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
   {
     title: 'CICO',
     slug: 'cico',
+    // Since 0021 the first five keys are OWNED BY THE VISIT LOG (wo_visit):
+    // they mirror the latest visit and the All-fields tab renders the log in
+    // their place. They stay here so their permission rides with the section.
+    wide: true,
     keys: [
+      'fields.Visit Type',
       'fields.18. Check-in/out Status',
       'fields.Checked-in At',
       'fields.Checked-out At',

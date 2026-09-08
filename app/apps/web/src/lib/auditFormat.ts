@@ -26,7 +26,77 @@ export function nameOf(blob: unknown, key: string): string {
 export function viaLabel(after: unknown): string | null {
   const via =
     after && typeof after === 'object' ? (after as Record<string, unknown>).via : undefined;
-  return typeof via === 'string' ? via : null;
+  if (typeof via !== 'string') return null;
+  // The mirror rows the visit log writes (0021) say where they came from.
+  return via === 'visit' ? 'the visit log' : via;
+}
+
+// ── Visits (0021) ────────────────────────────────────────────────────────────
+// visit_created / visit_updated / visit_deleted rows carry whole snapshots
+// (see api/services/visits.ts) — this turns a pair into one sentence, used by
+// the per-WO audit trail, the visit's own history drawer and Admin › Audit log.
+
+type VisitSnap = Record<string, unknown> & { name?: string };
+
+function snapOf(blob: unknown): VisitSnap | null {
+  return blob && typeof blob === 'object' && !Array.isArray(blob) ? (blob as VisitSnap) : null;
+}
+
+/** '07:04:12 on Jul 15' — a stamp inside a sentence, in the viewer's local time. */
+export function visitStampText(v: unknown): string {
+  if (typeof v !== 'string' || !v) return DASH;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const day = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${time} on ${day}`;
+}
+
+const VISIT_KEY_LABELS: Record<string, string> = {
+  visit_type: 'type',
+  tech_name: 'tech',
+  tech_phone: 'tech phone',
+  method: 'method',
+  checked_in_at: 'check-in time',
+  checked_out_at: 'check-out time',
+  return_trip_needed: 'return trip needed',
+};
+
+function visitValueText(key: string, v: unknown): string {
+  if (key === 'checked_in_at' || key === 'checked_out_at') return visitStampText(v);
+  if (key === 'return_trip_needed') return v ? 'yes' : 'no';
+  return v === null || v === undefined || v === '' ? DASH : String(v);
+}
+
+/** The sentence after the actor's name: "logged Visit 2 · Job for R. Delgado",
+    "checked in Visit 2 · Job at 07:04:12 on Sep 3", "updated Visit 1 ·
+    Assessment: tech — → K. Okafor". */
+export function describeVisitChange(before: unknown, after: unknown): string {
+  const b = snapOf(before);
+  const a = snapOf(after);
+  const name = a?.name ?? b?.name ?? 'a visit';
+  if (!b && a) {
+    const who = typeof a.tech_name === 'string' && a.tech_name ? ` for ${a.tech_name}` : '';
+    const state =
+      a.status === 'checked_in' ? ` — checked in at ${visitStampText(a.checked_in_at)}`
+      : a.status === 'checked_out' ? ` — checked out at ${visitStampText(a.checked_out_at)}`
+      : '';
+    return `logged ${name}${who}${state}`;
+  }
+  if (b && !a) return `deleted ${name}`;
+  if (!b || !a) return `changed ${name}`;
+
+  if (b.status !== a.status) {
+    if (a.status === 'checked_in') return `checked in ${name} at ${visitStampText(a.checked_in_at)}`;
+    if (a.status === 'checked_out') {
+      return `checked out ${name} at ${visitStampText(a.checked_out_at)}${a.return_trip_needed ? ' — return trip needed' : ''}`;
+    }
+    return `reset ${name} to not checked in`;
+  }
+  const diffs = Object.keys(VISIT_KEY_LABELS)
+    .filter((k) => String(b[k] ?? '') !== String(a[k] ?? ''))
+    .map((k) => `${VISIT_KEY_LABELS[k]} ${visitValueText(k, b[k])} → ${visitValueText(k, a[k])}`);
+  return diffs.length ? `updated ${name}: ${diffs.join(', ')}` : `touched ${name}`;
 }
 
 /** The automation that made the change, for rows written by the engine. The id
@@ -121,6 +191,13 @@ export const ACTION_LABELS: Record<string, string> = {
   approval_task_approved: 'Approval task approved',
   approval_task_rejected: 'Approval task rejected',
   approval_task_cancelled: 'Approval task cancelled',
+  // Visits (0021) — the check-in / check-out log.
+  visit_created: 'Visit logged',
+  visit_updated: 'Visit updated',
+  visit_deleted: 'Visit deleted',
+  cico_method_created: 'Check-in method added',
+  cico_method_changed: 'Check-in method changed',
+  cico_method_deleted: 'Check-in method removed',
   signed_in: 'Signed in',
   signed_out: 'Signed out',
   impersonation_started: 'Viewing as started',
@@ -160,6 +237,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   status_group: 'Phase',
   role: 'Role',
   automation: 'Automation',
+  fm_cico_method: 'Check-in method',
 };
 
 export function entityLabel(entityType: string): string {

@@ -1285,27 +1285,202 @@ textarea {
 
 .margin-chip.is-neg { background: var(--warn-bg); color: var(--warn); }
 
-/* ── CICO ─────────────────────────────────────────────────────────────────
-   Check-in/out is the state the rest of the section explains, so it leads the
-   card as a chip rather than as the first of five identical rows. */
-.card-cico { max-width: 620px; }
+/* ── CICO · the visit log (0021) ──────────────────────────────────────────
+   One work order, many visits. The card head carries the live state (on site,
+   checked out, return trip needed) and the chevron that folds earlier visits
+   away; a summary strip leads; then one row per visit on a rail — hollow
+   node = not checked in, amber = on site, green = done; "New visit" and the
+   site-access rows close the card. The same card renders in the CICO tab and
+   inside the All-fields sections (.afp-sect), full width there. */
+.card-cico { max-width: 720px; }
+.card-cico.afp-sect { max-width: none; }
+.card-cico .cv-head .afp-sect-title { flex: 1; min-width: 0; padding: 0; }
+.cv-fold { flex: none; opacity: 0.7; }
+.cv-fold:hover,
+.cv-fold:focus-visible { opacity: 1; }
 
-.cico-state {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
+.chip-ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-border); }
+
+/* Summary strip */
+.cv-sum {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   border-bottom: 1px solid var(--row-border);
 }
-
-.cico-state-k {
+.cv-sum > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 16px;
+  border-right: 1px solid var(--row-border);
+}
+.cv-sum > div:last-child { border-right: 0; }
+.cv-sum-k {
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cv-sum-v {
+  font-family: var(--kpi-font), 'Barlow', sans-serif;
+  font-weight: var(--kpi-weight);
+  font-size: 20px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.cv-sum-v small {
+  font-family: 'Barlow', sans-serif;
+  font-weight: 500;
   font-size: 12px;
-  font-weight: 600;
   color: var(--ink-2);
+  margin-left: 5px;
 }
 
-.card-cico .fieldlist { padding-top: 8px; }
+/* The rows */
+.cv-list { list-style: none; margin: 0; padding: 4px 0 0; }
+.cv-visit {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 0 12px;
+  padding: 12px 16px 12px 14px;
+  border-bottom: 1px solid var(--row-border);
+}
+.cv-visit:last-child { border-bottom: 0; }
+.cv-visit.is-open { background: var(--warn-bg); }
+.cv-visit.is-open::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--warn-solid);
+}
+.cv-rail { display: flex; flex-direction: column; align-items: center; padding-top: 5px; }
+.cv-node {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--ink-3);
+  background: var(--surface);
+}
+.cv-visit.is-open .cv-node { border-color: var(--warn-solid); background: var(--warn-solid); }
+.cv-visit.is-done .cv-node { border-color: var(--ok-solid); background: var(--ok-solid); }
+.cv-line { flex: 1; width: 1px; margin-top: 4px; background: var(--border-strong); }
+.cv-visit:last-child .cv-line { display: none; }
+.cv-more { padding: 8px 16px 4px 46px; }
+.cv-more .linkbtn { display: inline-flex; align-items: center; gap: 4px; }
+
+.cv-body { min-width: 0; }
+.cv-vhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cv-n {
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cv-type { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.cv-tech { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+.cv-tech b { color: var(--ink); font-weight: 600; }
+.cv-phone { color: var(--accent-text); text-decoration: none; font-variant-numeric: tabular-nums; }
+.cv-phone:hover { text-decoration: underline; }
+
+.cv-stamps {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 3px 20px;
+  align-items: baseline;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.cv-k {
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cv-v { font-size: 13px; font-weight: 600; color: var(--ink); }
+.cv-v .cv-day { margin-right: 6px; font-weight: 500; color: var(--ink-2); }
+.cv-v .cv-sec { font-weight: 500; color: var(--ink-3); }
+.cv-v.is-live { color: var(--warn); }
+.cv-sub { font-size: 11.5px; color: var(--ink-3); }
+.cv-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.cv-meta .chip { font-weight: 500; }
+
+/* Actions: the status select, then the clock / pencil / trash */
+.cv-act { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.cv-status { width: auto; min-width: 150px; padding: 5px 24px 5px 9px; font-size: 12px; }
+.cv-icons { display: inline-flex; gap: 2px; }
+.cv-act .afp-act { opacity: 0.55; }
+.cv-visit:hover .cv-act .afp-act,
+.cv-act .afp-act.is-on,
+.cv-act .afp-act:focus-visible { opacity: 1; }
+.cv-del:hover { color: var(--danger); }
+.cv-hist-wrap { grid-column: 2 / -1; margin-top: 8px; }
+.cv-history { margin: 0; }
+
+@media (max-width: 640px) {
+  .cv-sum { grid-template-columns: repeat(2, 1fr); }
+  .cv-sum > div:nth-child(2) { border-right: 0; }
+  .cv-stamps { grid-template-columns: 1fr; gap: 2px; }
+  .cv-visit { grid-template-columns: 22px 1fr; }
+  .cv-act { grid-column: 2; flex-direction: row; align-items: center; justify-content: flex-start; margin-top: 8px; }
+  .cv-hist-wrap { grid-column: 2; }
+}
+
+/* Empty, errors, hints */
+.cv-empty { display: flex; flex-direction: column; gap: 4px; }
+.cv-empty b { color: var(--ink-2); }
+.cv-legacy { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
+.cv-error { margin: 0; padding: 0 16px 8px; }
+.cv-hint { font-size: 11.5px; color: var(--ink-3); }
+.cv-hint b { color: var(--ink-2); font-weight: 600; }
+.cv-hint a { color: var(--accent-text); }
+
+/* "New visit" and the two forms */
+.cv-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--row-border);
+}
+.cv-composer,
+.cv-form { margin: 0; }
+.cv-composer { padding: 12px 16px 14px; border-top: 1px solid var(--row-border); background: var(--thead-bg); }
+.cv-form { margin-top: 8px; }
+.cv-form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.cv-form-row + .cv-form-row { margin-top: 10px; }
+.cv-form-row .field { flex: 1 1 150px; max-width: 230px; }
+/* The type picker keeps its three options on one line; the inputs share the rest. */
+.cv-form-row .cv-typefield { flex: 0 0 auto; max-width: none; }
+.cv-types { flex-wrap: wrap; }
+.lbl.is-missing { color: var(--danger); }
+.cv-form-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.cv-form-foot .cv-hint { margin-left: auto; }
+
+/* Site access rows under the log */
+.cv-subhead { margin-top: 2px; padding: 10px 16px 0; border-top: 1px solid var(--row-border); }
+.card-cico .fieldlist { padding-top: 6px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .cv-visit.is-open .cv-node { animation: cv-pulse 1.8s ease-in-out infinite; }
+  @keyframes cv-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 var(--warn-border); }
+    50% { box-shadow: 0 0 0 5px transparent; }
+  }
+}
 
 /* ── People ───────────────────────────────────────────────────────────────── */
 /* The six named seats. Label left, who is in it right — the same row grammar
@@ -1646,14 +1821,9 @@ textarea {
 .fieldrow.has-hist .afp-act { flex: none; margin-top: -2px; }
 /* Always faintly there on the cards (the All-fields page hides it until
    hover, and people looked for it and could not find it); full on hover. */
-.fieldrow.has-hist .afp-act,
-.cico-state .afp-act { opacity: 0.55; }
+.fieldrow.has-hist .afp-act { opacity: 0.55; }
 .fieldrow.has-hist:hover .afp-act,
-.cico-state:hover .afp-act,
-.fieldrow.has-hist .afp-act.is-on,
-.cico-state .afp-act.is-on { opacity: 1; }
-.cico-state .afp-act { flex: none; margin-left: 6px; }
-.cico-history { padding: 0 16px 8px; }
+.fieldrow.has-hist .afp-act.is-on { opacity: 1; }
 
 /* ── S7 · All-fields panel: search + order bar, inline edit, history ───────── */
 /* The bar pins itself directly under the .wo-pin block (whose live height the
@@ -1726,16 +1896,6 @@ textarea {
 }
 
 .afp-comp select:focus-visible { outline: none; border-color: var(--accent); }
-
-/* Visit Type unset — the control wears the danger ramp until a value lands
-   (AllFieldsPanel flags it via .is-missing; the Needs Attention dashboard
-   counts the WOs in this state). */
-.afp-comp.is-missing span { color: var(--danger); }
-.afp-comp.is-missing select {
-  color: var(--danger);
-  background: var(--danger-bg);
-  border-color: var(--danger-border);
-}
 
 /* ── All fields · sections (default mode — lib/woFieldSections.ts) ────────── */
 /* Each section is a card of its own (like the tab panels around it); two share

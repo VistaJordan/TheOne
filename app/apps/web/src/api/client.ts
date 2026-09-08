@@ -6,6 +6,11 @@ import type {
   ApprovalListResponse,
   ApprovalTaskResponse,
   ApprovalTasksResponse,
+  FmCicoMethod,
+  VisitInput,
+  WoVisit,
+  WoVisitResponse,
+  WoVisitsResponse,
 } from '@theone/shared';
 import type {
   Kpis,
@@ -1488,6 +1493,56 @@ export function patchWorkOrderFields(
     method: 'PATCH',
     body: JSON.stringify({ values }),
   });
+}
+
+// ── Visits (0021) — check-in / check-out as a log ────────────────────────────
+
+export type { FmCicoMethod, VisitInput, WoVisit, WoVisitResponse, WoVisitsResponse };
+
+/** GET /api/work-orders/:id/visits — the log, oldest first, plus the FM's
+    default check-in method for a new visit. */
+export function listVisits(idOrNumber: string): Promise<WoVisitsResponse> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/visits`);
+}
+
+/** POST /api/work-orders/:id/visits — 201 { item, items }. `visit_type` is
+    required; `method` defaults to the FM's when omitted. */
+export function createVisit(idOrNumber: string, input: VisitInput): Promise<WoVisitResponse> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/visits`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** PATCH /api/visits/:id — a status move stamps its time; a stamp sent
+    alongside is a correction and wins. */
+export function updateVisit(id: string, input: VisitInput): Promise<WoVisitResponse> {
+  return request(`/visits/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteVisit(id: string): Promise<{ items: WoVisit[] }> {
+  return request(`/visits/${id}`, { method: 'DELETE' });
+}
+
+/** GET /api/visits/:id/history — every recorded change of one visit. */
+export function getVisitHistory(id: string): Promise<{ items: ActivityEntry[] }> {
+  return request(`/visits/${id}/history`);
+}
+
+/** Admin › Custom fields: the FM → check-in method table. */
+export function listCicoMethods(): Promise<{ items: FmCicoMethod[] }> {
+  return request('/admin/cico-methods');
+}
+
+export function setCicoMethod(fm: string, method: string): Promise<{ item: FmCicoMethod }> {
+  return request(`/admin/cico-methods/${encodeURIComponent(fm)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ method }),
+  });
+}
+
+export function deleteCicoMethod(fm: string): Promise<{ ok: true }> {
+  return request(`/admin/cico-methods/${encodeURIComponent(fm)}`, { method: 'DELETE' });
 }
 
 /** GET /api/work-orders/:id/field-history?field= — one field's trail, newest

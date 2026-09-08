@@ -366,9 +366,11 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: '17. Address',              label: 'Address',              type: 'location' },
   { key: '20. Last Update',          label: 'Last Update',          type: 'short_text' },
   { key: '21. Comp',                 label: 'Comp',                 type: 'dropdown', options: ['AF', 'SFM', 'BKR', 'TPM', 'EDS', 'RF'] },
-  // Beside Comp in the All-fields toolbar (never a list row); empty renders in
-  // the danger ramp and feeds the dashboard's "Visit Type not set" card.
-  { key: 'Visit Type',               label: 'Visit Type',           type: 'dropdown', options: ['Assessment', 'Job'] },
+  // The visit log's vocabulary (0021): a visit's type is picked when the visit
+  // is logged, and this field MIRRORS the latest visit — empty means no visit
+  // yet, which feeds the dashboard's "No visit logged" card. Migration 0021
+  // adds 'Return trip' to an already-seeded database — keep the two in step.
+  { key: 'Visit Type',               label: 'Visit Type',           type: 'dropdown', options: ['Assessment', 'Job', 'Return trip'] },
   { key: '22. FM',                   label: 'FM',                   type: 'dropdown', options: FM_OPTIONS },
   { key: '24. Sign-Off Link',        label: 'Sign-Off Link',        type: 'short_text' },
   { key: '25. IVR Link',             label: 'IVR Link',             type: 'short_text' },
@@ -456,6 +458,35 @@ const CURATED_FIELDS: CuratedField[] = [
 // the seed carries the four priced lines and the comp's $2,890 total.
 const QUOTE_INCURRED_NARRATIVE =
   'the customer-facing standing freezer at the front of the store was reading +18°F and would not pull down. On arrival the evaporator was iced over and the condenser fan motor was seized — windings read open and the blade would not turn by hand. The compressor cycles on the start capacitor but drops out on overload after roughly 40 seconds, and condenser ambient measured 118°F with the fan down. Product on the top two racks has softened; the store moved the ice cream to the walk-in overnight. Case is safe to leave off until parts land.';
+
+// ── Check-in method by FM (0021) ─────────────────────────────────────────────
+// DEMO values for the FMs the samples use. The real "database of the method for
+// each client" is entered in Admin › Custom fields › Check-in method by FM;
+// re-seeding replaces whatever is there with this list.
+const FM_CICO_METHODS: Record<string, string> = {
+  'Advanced': 'IVR',
+  '7-Eleven': 'App',
+  'EMCOR': 'IVR',
+  'SHEER': 'Phone',
+  'Rural King': 'Portal',
+  'Vixxo': 'IVR',
+  'Flynn': 'App',
+  'WKS': 'Phone',
+  'KINDERCARE': 'IVR',
+  'AMC': 'App',
+  'SunHoldings': 'Portal',
+  'Vuori': 'Email',
+  'Safety': 'Phone',
+  'FrontStreet': 'IVR',
+  'PRS': 'IVR',
+  'CHEESECAKE FACTORY': 'App',
+  'Mobettahs': 'Phone',
+};
+
+/** UTC ISO to the second — the shape the API stamps visits with. */
+function isoSeconds(d: Date): string {
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
 
 const QUOTE_SCOPE_LINES = [
   'Replace the seized condenser fan motor with the OEM assembly and a new blade.',
@@ -655,6 +686,7 @@ async function main() {
   // ── 0. Idempotent reset ────────────────────────────────────────────────────
   await exec(`
     TRUNCATE TABLE
+      wo_visit, fm_cico_method,
       quote_line, quote_section, quote, payment_request,
       quo_message, quo_call, quo_job_segment, quo_conversation,
       attachment, payable, vendor, comment, activity_log,
@@ -823,9 +855,15 @@ async function main() {
 
   // ── 5. Tasks (§4.4) + memberships (§4.5) + created activity (§4.9) ──────────
   let taskCount = 0;
+  let visitCount = 0;
   let membershipCount = 0;
   let activityCount = 0;
   const taskIdByWo = new Map<string, string>();
+
+  // 0021 · the FM → check-in method table, before the visits that read it.
+  for (const [fm, method] of Object.entries(FM_CICO_METHODS)) {
+    await query(`INSERT INTO fm_cico_method (fm, method) VALUES ($1, $2)`, [fm, method]);
+  }
   const taskMeta = new Map<string, { statusName: string; fields: Record<string, unknown> }>();
 
   for (const t of data.taskSamples) {
@@ -842,6 +880,26 @@ async function main() {
     const statusGroup = statusGroupById.get(statusId)!;
     const homeListId = listIdByName.get(t.list) ?? null;
     const createdAt = toDate(t.created);
+
+    // 0021 · a sample the export left "Checked-out" becomes one closed visit
+    // in the log, and the seven mirrored fields read that visit — the same
+    // state the API would leave after logging and checking out the visit.
+    const legacyCico = str(f['18. Check-in/out Status']);
+    let visit: { type: string; method: string | null; inAt: string; outAt: string } | null = null;
+    if (legacyCico && /checked.?out/i.test(legacyCico)) {
+      const base = createdAt ? new Date(`${createdAt}T14:00:00Z`) : new Date('2026-08-01T14:00:00Z');
+      const inAt = new Date(base.getTime() + 2 * 86_400_000 + (taskCount % 5) * 37 * 60_000);
+      const outAt = new Date(inAt.getTime() + (95 + (taskCount % 7) * 41) * 60_000);
+      const type = str(f['Visit Type']) ?? (/assess/i.test(canonicalStatus) ? 'Assessment' : 'Job');
+      const method = FM_CICO_METHODS[(str(f['22. FM']) ?? '').trim()] ?? null;
+      visit = { type, method, inAt: isoSeconds(inAt), outAt: isoSeconds(outAt) };
+      f['Visit Type'] = type;
+      f['18. Check-in/out Status'] = 'Checked-out';
+      f['Checked-in At'] = visit.inAt;
+      f['Checked-out At'] = visit.outAt;
+      if (method) f['CICO Method'] = method;
+      else delete f['CICO Method'];
+    }
 
     const taskId = await insertId(
       `INSERT INTO task (
@@ -876,6 +934,16 @@ async function main() {
     taskIdByWo.set(t.id, taskId);
     taskMeta.set(t.id, { statusName: canonicalStatus, fields: f });
     taskCount++;
+
+    if (visit) {
+      await query(
+        `INSERT INTO wo_visit
+           (task_id, seq, visit_type, status, method, checked_in_at, checked_out_at, created_by)
+         VALUES ($1, 1, $2, 'checked_out', $3, $4::timestamptz, $5::timestamptz, $6)`,
+        [taskId, visit.type, visit.method, visit.inAt, visit.outAt, seedBotId],
+      );
+      visitCount++;
+    }
 
     if (homeListId) {
       await query(
@@ -1302,6 +1370,8 @@ async function main() {
   console.log(`  statuses          : ${data.statuses.length + 1} (17 pipeline + 1 archive)`);
   console.log(`  field_defs        : ${fieldCount} (curated catalogue, S7)`);
   console.log(`  tasks             : ${taskCount}`);
+  console.log(`  visits            : ${visitCount} (one closed visit per sample the export left checked out)`);
+  console.log(`  fm cico methods   : ${Object.keys(FM_CICO_METHODS).length} (demo values — Admin › Custom fields)`);
   console.log(`  memberships       : ${membershipCount}`);
   console.log(`  vendors           : ${VENDORS.length}`);
   console.log(`  payables          : ${payableCount}`);
