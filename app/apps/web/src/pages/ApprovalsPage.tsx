@@ -573,7 +573,7 @@ export function ApprovalsPage() {
             <thead>
               <tr>
                 <th className="col-wo">WO #</th>
-                <th className="col-client">Client / Title</th>
+                <th className="col-client">Client</th>
                 <th>Waiting for</th>
                 <th>For</th>
                 <th className="col-list">Raised</th>
@@ -852,10 +852,9 @@ function InboxRow(props: RowProps) {
         </Link>
       </td>
       <td className="col-client">
-        <div className="site">
-          <strong>{row.client ?? '—'}</strong>
-          <small>{row.wo_title ?? '—'}</small>
-        </div>
+        {/* The work-order title is one click away on the WO number; here it only
+            pushed the money off to the right. It stays as the hover text. */}
+        <strong title={row.wo_title ?? undefined}>{row.client ?? '—'}</strong>
       </td>
       <td>
         <Ask row={row} />
