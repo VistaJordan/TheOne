@@ -1294,7 +1294,9 @@ textarea {
    inside the All-fields sections (.afp-sect), full width there. */
 .card-cico { max-width: 720px; }
 .card-cico.afp-sect { max-width: none; }
-.card-cico .cv-head .afp-sect-title { flex: 1; min-width: 0; padding: 0; }
+/* The state chip and the fold sit at the head's right, on the tab's card-head
+   and inside the All-fields section title alike. */
+.cv-headright { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
 .cv-fold { flex: none; opacity: 0.7; }
 .cv-fold:hover,
 .cv-fold:focus-visible { opacity: 1; }
@@ -1443,9 +1445,7 @@ textarea {
 }
 
 /* Empty, errors, hints */
-.cv-empty { display: flex; flex-direction: column; gap: 4px; }
-.cv-empty b { color: var(--ink-2); }
-.cv-legacy { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
+.cv-empty { color: var(--ink-2); font-weight: 600; }
 .cv-error { margin: 0; padding: 0 16px 8px; }
 .cv-hint { font-size: 11.5px; color: var(--ink-3); }
 .cv-hint b { color: var(--ink-2); font-weight: 600; }
@@ -1474,9 +1474,9 @@ textarea {
 .cv-form-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .cv-form-foot .cv-hint { margin-left: auto; }
 
-/* Site access rows under the log */
-.cv-subhead { margin-top: 2px; padding: 10px 16px 0; border-top: 1px solid var(--row-border); }
-.card-cico .fieldlist { padding-top: 6px; }
+/* The site-access rows (IVR link, pin, sign-off) under the log: a hairline
+   parts them from whatever sits above — the New visit foot or the list. */
+.card-cico .cv-access { padding-top: 6px; border-top: 1px solid var(--row-border); }
 
 @media (prefers-reduced-motion: no-preference) {
   .cv-visit.is-open .cv-node { animation: cv-pulse 1.8s ease-in-out infinite; }

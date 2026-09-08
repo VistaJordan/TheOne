@@ -42,8 +42,8 @@ import {
   type WorkOrderDetailV2,
 } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
-import { DASH, feedTime, initials, str } from '../../lib/fields';
-import { describeVisitChange, visitStampText } from '../../lib/auditFormat';
+import { DASH, feedTime, initials } from '../../lib/fields';
+import { describeVisitChange } from '../../lib/auditFormat';
 import { FIELD_SECTIONS } from '../../lib/woFieldSections';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Icon } from '../Icon';
@@ -185,29 +185,20 @@ export function CicoCard({ wo, embedded }: CicoCardProps) {
 
   return (
     <section className={`card card-cico${embedded ? ' afp-sect is-wide' : ''}`}>
-      <div className="card-head cv-head">
-        {embedded ? (
-          <h3 className="afp-sect-title">
-            <Icon name="check-circle" size={14} />
-            CICO
-          </h3>
-        ) : (
+      {/* Embedded, the head is the same section title every All-fields card
+          wears (no card-head band); on the tab it is the ordinary card head. */}
+      {embedded ? (
+        <h3 className="afp-sect-title">
+          <Icon name="check-circle" size={14} />
+          CICO
+          {canSeeLog && <HeadRight visits={visits} collapsed={collapsed} onFold={toggleFold} />}
+        </h3>
+      ) : (
+        <div className="card-head">
           <h2 className="card-title">Check-in / check-out</h2>
-        )}
-        {canSeeLog && <StateChip visits={visits} />}
-        {canSeeLog && visits.length > 1 && (
-          <button
-            type="button"
-            className="afp-act cv-fold"
-            title={collapsed ? `Show all ${visits.length} visits` : 'Hide the earlier visits'}
-            aria-label={collapsed ? `Show all ${visits.length} visits` : 'Hide the earlier visits'}
-            aria-expanded={!collapsed}
-            onClick={toggleFold}
-          >
-            <Icon name={collapsed ? 'chev-d' : 'chev-u'} size={14} />
-          </button>
-        )}
-      </div>
+          {canSeeLog && <HeadRight visits={visits} collapsed={collapsed} onFold={toggleFold} />}
+        </div>
+      )}
 
       {canSeeLog && (
         <VisitLog
@@ -227,10 +218,7 @@ export function CicoCard({ wo, embedded }: CicoCardProps) {
 
       {accessFields.length > 0 && (
         <>
-          <div className="cv-subhead">
-            <span className="overline">Site access · the same for every visit</span>
-          </div>
-          <dl className="fieldlist">
+          <dl className="fieldlist cv-access">
             {accessFields.map((f) => (
               <div key={f.key}>
                 <div className="fieldrow has-hist">
@@ -258,7 +246,27 @@ export function CicoCard({ wo, embedded }: CicoCardProps) {
   );
 }
 
-// ── Head chip: the live state of the work order ──────────────────────────────
+// ── Head: the live state chip and the fold ───────────────────────────────────
+
+function HeadRight({ visits, collapsed, onFold }: { visits: WoVisit[]; collapsed: boolean; onFold: () => void }) {
+  return (
+    <span className="cv-headright">
+      <StateChip visits={visits} />
+      {visits.length > 1 && (
+        <button
+          type="button"
+          className="afp-act cv-fold"
+          title={collapsed ? `Show all ${visits.length} visits` : 'Hide the earlier visits'}
+          aria-label={collapsed ? `Show all ${visits.length} visits` : 'Hide the earlier visits'}
+          aria-expanded={!collapsed}
+          onClick={onFold}
+        >
+          <Icon name={collapsed ? 'chev-d' : 'chev-u'} size={14} />
+        </button>
+      )}
+    </span>
+  );
+}
 
 function StateChip({ visits }: { visits: WoVisit[] }) {
   const open = [...visits].reverse().find((v) => v.status === 'checked_in');
@@ -360,7 +368,6 @@ function VisitLog({
 
   const shown = collapsed && visits.length > 1 ? visits.slice(-1) : visits;
   const hidden = visits.length - shown.length;
-  const legacy = visits.length === 0 ? legacyNote(wo) : null;
 
   return (
     <>
@@ -383,15 +390,7 @@ function VisitLog({
       ) : failed ? (
         <div className="empty-flat">Could not load the visits — GET /api/work-orders/:id/visits did not respond.</div>
       ) : visits.length === 0 ? (
-        <div className="empty-flat cv-empty">
-          <b>No visit logged yet.</b>
-          <span>
-            {canEdit
-              ? 'Log a visit when a tech is dispatched, then move it to Checked in and Checked out as they go — the times stamp themselves.'
-              : 'Visits are logged by the dispatch team as a tech is sent out.'}
-          </span>
-          {legacy && <span className="cv-legacy">Recorded before the visit log: {legacy}</span>}
-        </div>
+        <div className="empty-flat cv-empty">No visit logged yet.</div>
       ) : (
         <ol className="cv-list">
           {hidden > 0 && (
@@ -447,21 +446,6 @@ function VisitLog({
       )}
     </>
   );
-}
-
-/** What the old fields say on a work order that predates the log. */
-function legacyNote(wo: WorkOrderDetailV2): string | null {
-  const bag = wo.fields ?? {};
-  const status = str(bag[VISIT_MIRROR_KEYS.status]);
-  if (!status) return null;
-  const parts = [status.replace(/^\d+[.)]?\s*/, '')];
-  const inAt = str(bag[VISIT_MIRROR_KEYS.checkedInAt]);
-  const outAt = str(bag[VISIT_MIRROR_KEYS.checkedOutAt]);
-  if (inAt) parts.push(`in at ${visitStampText(inAt)}`);
-  if (outAt) parts.push(`out at ${visitStampText(outAt)}`);
-  const tech = str(bag[VISIT_MIRROR_KEYS.techName]);
-  if (tech) parts.push(`tech ${tech}`);
-  return parts.join(' · ');
 }
 
 // ── One visit ────────────────────────────────────────────────────────────────
@@ -740,7 +724,6 @@ function VisitComposer({ visitTypes, fm, defaultMethod, defaultDetail, busy, onC
   const [method, setMethod] = useState(defaultMethod ?? '');
   const [detail, setDetail] = useState(defaultDetail ?? '');
   const [touched, setTouched] = useState(false);
-  const fromFm = Boolean(defaultMethod) && method === defaultMethod;
 
   // Picking a different method than the FM's drops the FM's instruction (an
   // IVR number is no help on a portal visit); picking it back restores it.
@@ -817,13 +800,7 @@ function VisitComposer({ visitTypes, fm, defaultMethod, defaultDetail, busy, onC
           Log visit
         </button>
         <button type="button" className="btn btn-sm" onClick={onCancel} disabled={busy}>Cancel</button>
-        <span className="cv-hint">
-          {touched && !type
-            ? 'Pick the visit type first.'
-            : fromFm && fm
-              ? <>Method from <b>{fm.trim()}</b>’s check-in method. Move the status to Checked in when the tech arrives.</>
-              : 'Move the status to Checked in when the tech arrives — the time stamps itself, to the second.'}
-        </span>
+        {touched && !type && <span className="cv-hint">Pick the visit type first.</span>}
       </div>
     </form>
   );
