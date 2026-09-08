@@ -2071,7 +2071,33 @@ export function AdminFieldsPage() {
   );
 }
 
-// ── Check-in method by FM (0021) ─────────────────────────────────────────────
+/** One FM's instruction, edited in place: saves on blur or Enter, Escape
+    puts the saved value back. */
+function DetailCell({ value, busy, label, onCommit }: {
+  value: string;
+  busy: boolean;
+  label: string;
+  onCommit: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  return (
+    <input
+      className="fld adm-cico-detail"
+      value={draft}
+      disabled={busy}
+      aria-label={label}
+      placeholder="—"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => onCommit(draft.trim())}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
+        if (e.key === 'Escape') setDraft(value);
+      }}
+    />
+  );
+}
+
+// ── Check-in method by FM (0021 / 0022) ──────────────────────────────────────
 // The "database of the method for each client": FM company → IVR / App /
 // Phone / Portal / Email / Manual. The FM names come from the '22. FM'
 // dropdown so a row can only be spelled the way the work orders spell it.
@@ -2095,6 +2121,7 @@ function CicoMethodsCard() {
 
   const [fm, setFm] = useState('');
   const [method, setMethod] = useState<string>(VISIT_METHODS[0]);
+  const [detail, setDetail] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const done = () => {
@@ -2104,8 +2131,9 @@ function CicoMethodsCard() {
   const fail = (err: unknown) =>
     setError(err instanceof ApiRequestError ? err.message : 'The change did not save');
   const set = useMutation({
-    mutationFn: (v: { fm: string; method: string }) => setCicoMethod(v.fm, v.method),
-    onSuccess: () => { done(); setFm(''); },
+    mutationFn: (v: { fm: string; method: string; detail: string | null }) =>
+      setCicoMethod(v.fm, v.method, v.detail),
+    onSuccess: () => { done(); setFm(''); setDetail(''); },
     onError: fail,
   });
   const del = useMutation({ mutationFn: (name: string) => deleteCicoMethod(name), onSuccess: done, onError: fail });
@@ -2136,7 +2164,7 @@ function CicoMethodsCard() {
         className="adm-cico-add"
         onSubmit={(e) => {
           e.preventDefault();
-          if (fm.trim()) set.mutate({ fm: fm.trim(), method });
+          if (fm.trim()) set.mutate({ fm: fm.trim(), method, detail: detail.trim() || null });
         }}
       >
         <label className="field">
@@ -2159,6 +2187,16 @@ function CicoMethodsCard() {
             {methods.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
+        <label className="field adm-cico-detailfield">
+          <span className="lbl">Detail</span>
+          <input
+            className="fld"
+            value={detail}
+            onChange={(e) => setDetail(e.target.value)}
+            placeholder="IVR number, “Service Channel”, “Submit request on Teams”…"
+            disabled={busy}
+          />
+        </label>
         <button type="submit" className="btn btn-primary" disabled={busy || !fm.trim()}>
           <Icon name="plus" size={14} />
           {onFile.has(fm.trim()) ? 'Update' : 'Add'}
@@ -2177,6 +2215,7 @@ function CicoMethodsCard() {
               <tr>
                 <th>FM company</th>
                 <th>Method</th>
+                <th>Detail</th>
                 <th>Updated</th>
                 <th aria-label="Remove" />
               </tr>
@@ -2191,11 +2230,22 @@ function CicoMethodsCard() {
                       value={i.method}
                       disabled={busy}
                       aria-label={`Check-in method for ${i.fm}`}
-                      onChange={(e) => set.mutate({ fm: i.fm, method: e.target.value })}
+                      onChange={(e) => set.mutate({ fm: i.fm, method: e.target.value, detail: i.detail })}
                     >
                       {!methods.includes(i.method) && <option value={i.method}>{i.method}</option>}
                       {methods.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
+                  </td>
+                  <td>
+                    <DetailCell
+                      key={`${i.fm}:${i.detail ?? ''}`}
+                      value={i.detail ?? ''}
+                      busy={busy}
+                      label={`Detail for ${i.fm}`}
+                      onCommit={(v) => {
+                        if (v !== (i.detail ?? '')) set.mutate({ fm: i.fm, method: i.method, detail: v || null });
+                      }}
+                    />
                   </td>
                   <td className="adm-cico-when">
                     {new Date(i.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}

@@ -217,6 +217,7 @@ export function CicoCard({ wo, embedded }: CicoCardProps) {
           failed={visitsQuery.isError}
           fm={visitsQuery.data?.fm ?? null}
           defaultMethod={visitsQuery.data?.default_method ?? null}
+          defaultDetail={visitsQuery.data?.default_method_detail ?? null}
           collapsed={collapsed}
           onExpand={() => { setCollapsed(false); writeFold(false); }}
           canEdit={canEditLog}
@@ -288,6 +289,7 @@ interface VisitLogProps {
   failed: boolean;
   fm: string | null;
   defaultMethod: string | null;
+  defaultDetail: string | null;
   collapsed: boolean;
   onExpand: () => void;
   canEdit: boolean;
@@ -295,7 +297,7 @@ interface VisitLogProps {
 }
 
 function VisitLog({
-  wo, visits, loading, failed, fm, defaultMethod, collapsed, onExpand, canEdit, visitTypes,
+  wo, visits, loading, failed, fm, defaultMethod, defaultDetail, collapsed, onExpand, canEdit, visitTypes,
 }: VisitLogProps) {
   const qc = useQueryClient();
   const { can } = useAuth();
@@ -423,6 +425,7 @@ function VisitLog({
             visitTypes={visitTypes}
             fm={fm}
             defaultMethod={defaultMethod}
+            defaultDetail={defaultDetail}
             busy={create.isPending}
             onCancel={() => { setComposing(false); setError(null); }}
             onSubmit={(input) => create.mutate(input)}
@@ -535,6 +538,7 @@ function VisitRow({ v, now, canEdit, busy, visitTypes, onPatch, onDelete }: Visi
             </div>
             <div className="cv-meta">
               {v.method && <span className="chip" title="Check-in method">{v.method}</span>}
+              {v.method_detail && <span className="cv-detail">{v.method_detail}</span>}
               {done && (v.return_trip_needed
                 ? <span className="chip chip-danger">Return trip needed</span>
                 : <span className="chip chip-ok">Completed</span>)}
@@ -640,6 +644,7 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
   const [tech, setTech] = useState(v.tech_name ?? '');
   const [phone, setPhone] = useState(v.tech_phone ?? '');
   const [method, setMethod] = useState(v.method ?? '');
+  const [detail, setDetail] = useState(v.method_detail ?? '');
   const [inAt, setInAt] = useState(toLocalInput(v.checked_in_at));
   const [outAt, setOutAt] = useState(toLocalInput(v.checked_out_at));
 
@@ -656,6 +661,7 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
     if (tech.trim() !== (v.tech_name ?? '')) input.tech_name = tech.trim() || null;
     if (phone.trim() !== (v.tech_phone ?? '')) input.tech_phone = phone.trim() || null;
     if (method !== (v.method ?? '')) input.method = method || null;
+    if (detail.trim() !== (v.method_detail ?? '')) input.method_detail = detail.trim() || null;
     if (inAt !== toLocalInput(v.checked_in_at)) input.checked_in_at = fromLocalInput(inAt);
     if (outAt !== toLocalInput(v.checked_out_at)) input.checked_out_at = fromLocalInput(outAt);
     if (Object.keys(input).length === 0) { onCancel(); return; }
@@ -690,6 +696,10 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
             {methods.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
+        <label className="field cv-detailfield">
+          <span className="lbl">Method detail</span>
+          <input className="fld" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="IVR number, portal, where to submit…" disabled={busy} />
+        </label>
       </div>
       <div className="cv-form-row">
         <label className="field">
@@ -715,10 +725,11 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
 
 // ── Logging a new visit ──────────────────────────────────────────────────────
 
-function VisitComposer({ visitTypes, fm, defaultMethod, busy, onCancel, onSubmit }: {
+function VisitComposer({ visitTypes, fm, defaultMethod, defaultDetail, busy, onCancel, onSubmit }: {
   visitTypes: string[];
   fm: string | null;
   defaultMethod: string | null;
+  defaultDetail: string | null;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (input: VisitInput) => void;
@@ -727,8 +738,16 @@ function VisitComposer({ visitTypes, fm, defaultMethod, busy, onCancel, onSubmit
   const [tech, setTech] = useState('');
   const [phone, setPhone] = useState('');
   const [method, setMethod] = useState(defaultMethod ?? '');
+  const [detail, setDetail] = useState(defaultDetail ?? '');
   const [touched, setTouched] = useState(false);
   const fromFm = Boolean(defaultMethod) && method === defaultMethod;
+
+  // Picking a different method than the FM's drops the FM's instruction (an
+  // IVR number is no help on a portal visit); picking it back restores it.
+  const pickMethod = (m: string) => {
+    setMethod(m);
+    setDetail(m === defaultMethod ? (defaultDetail ?? '') : '');
+  };
 
   const submit = () => {
     setTouched(true);
@@ -738,6 +757,7 @@ function VisitComposer({ visitTypes, fm, defaultMethod, busy, onCancel, onSubmit
       tech_name: tech.trim() || null,
       tech_phone: phone.trim() || null,
       method: method || null,
+      method_detail: detail.trim() || null,
     });
   };
 
@@ -775,10 +795,20 @@ function VisitComposer({ visitTypes, fm, defaultMethod, busy, onCancel, onSubmit
         </label>
         <label className="field">
           <span className="lbl">Method</span>
-          <select className="fld" value={method} onChange={(e) => setMethod(e.target.value)} disabled={busy}>
+          <select className="fld" value={method} onChange={(e) => pickMethod(e.target.value)} disabled={busy}>
             <option value="">—</option>
             {VISIT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
+        </label>
+        <label className="field cv-detailfield">
+          <span className="lbl">Method detail</span>
+          <input
+            className="fld"
+            value={detail}
+            onChange={(e) => setDetail(e.target.value)}
+            placeholder="IVR number, portal, where to submit…"
+            disabled={busy}
+          />
         </label>
       </div>
       <div className="cv-form-foot">

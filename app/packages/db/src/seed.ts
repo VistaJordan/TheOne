@@ -423,29 +423,54 @@ const CURATED_FIELDS: CuratedField[] = [
 const QUOTE_INCURRED_NARRATIVE =
   'the customer-facing standing freezer at the front of the store was reading +18°F and would not pull down. On arrival the evaporator was iced over and the condenser fan motor was seized — windings read open and the blade would not turn by hand. The compressor cycles on the start capacitor but drops out on overload after roughly 40 seconds, and condenser ambient measured 118°F with the fan down. Product on the top two racks has softened; the store moved the ice cream to the walk-in overnight. Case is safe to leave off until parts land.';
 
-// ── Check-in method by FM (0021) ─────────────────────────────────────────────
-// DEMO values for the FMs the samples use. The real "database of the method for
-// each client" is entered in Admin › Custom fields › Check-in method by FM;
-// re-seeding replaces whatever is there with this list.
-const FM_CICO_METHODS: Record<string, string> = {
-  'Advanced': 'IVR',
-  '7-Eleven': 'App',
-  'EMCOR': 'IVR',
-  'SHEER': 'Phone',
-  'Rural King': 'Portal',
-  'Vixxo': 'IVR',
-  'Flynn': 'App',
-  'WKS': 'Phone',
-  'KINDERCARE': 'IVR',
-  'AMC': 'App',
-  'SunHoldings': 'Portal',
-  'Vuori': 'Email',
-  'Safety': 'Phone',
-  'FrontStreet': 'IVR',
-  'PRS': 'IVR',
-  'CHEESECAKE FACTORY': 'App',
-  'Mobettahs': 'Phone',
-};
+// ── Check-in method by FM (0021 / 0022) ──────────────────────────────────────
+// The operation's real table (Elise, 2026-09-08): which kind of check-in each
+// FM company uses and the instruction that goes with it. Migration 0022
+// carries the SAME rows for an already-migrated database — keep in step.
+const FM_CICO_METHODS: [fm: string, method: string, detail: string][] = [
+  ["FrontStreet", "IVR", "(866) 254-8780"],
+  ["Lessen", "Portal", "Submit request on Teams"],
+  ["Powerhouse", "Portal", "Submit request on Teams (must add photos)"],
+  ["Ferrandino & Son", "Email", "Submit request on Teams"],
+  ["Freshco", "Email", "Submit request on Teams"],
+  ["Impact", "Email", "Submit request on Teams"],
+  ["Advanced", "IVR", "(866) 254-8347"],
+  ["Nest", "IVR", "(877) 374-2054"],
+  ["OReilly", "IVR", "Service Channel"],
+  ["Outback Steakhouse", "IVR", "Service Channel"],
+  ["SHEER", "Operator", "Submit request on Teams"],
+  ["RESQ", "Portal", "Submit request on Teams (must add photos and the manager's name)"],
+  ["HERO", "Email", "Submit request on Teams"],
+  ["Davaco", "IVR", "(833) 948-2261"],
+  ["KFM24", "IVR", "(301) 854-6776"],
+  ["PRS", "IVR", "Service Channel"],
+  ["TrueSource", "Operator", "Submit request on Teams"],
+  ["Vixxo", "IVR", "(888) 928-3276 (if you're new and a live operator answers, hang up)"],
+  ["Canteen", "Email", "Submit request on Teams"],
+  ["Extra Space", "Email", "Submit request on Teams"],
+  ["ONO-BBQ", "Email", "Submit request on Teams"],
+  ["CHEESECAKE FACTORY", "IVR", "Service Channel"],
+  ["DinTai", "IVR", "Service Channel"],
+  ["FedEx", "IVR", "Service Channel"],
+  ["First Watch", "IVR", "Service Channel"],
+  ["JRSK", "IVR", "Service Channel"],
+  ["Habit Burger", "IVR", "Service Channel"],
+  ["KINDERCARE", "IVR", "Service Channel"],
+  ["Mobettahs", "IVR", "Service Channel"],
+  ["Rural King", "IVR", "Service Channel"],
+  ["AMC", "Portal", "Submit request on Teams"],
+  ["Bashas", "Portal", "Submit request on Teams"],
+  ["Learning", "Portal", "Submit request on Teams"],
+  ["MACYS", "Portal", "Submit request on Teams"],
+  ["Portland Leather", "Portal", "Submit request on Teams"],
+  ["SizzlingPlatter", "Portal", "Submit request on Teams"],
+  ["Swig Stores", "Portal", "Submit request on Teams"],
+  ["Uncommon Brands", "Portal", "Submit request on Teams"],
+  ["Vuori", "Portal", "Submit request on Teams"],
+  ["Wendy's", "Portal", "Submit request on Teams"],
+  ["BOSS", "IVR", "(877) 841-0301"],
+];
+const FM_METHOD_BY_NAME = new Map(FM_CICO_METHODS.map((r) => [r[0].trim().toLowerCase(), r]));
 
 /** UTC ISO to the second — the shape the API stamps visits with. */
 function isoSeconds(d: Date): string {
@@ -687,8 +712,8 @@ async function main() {
   const taskIdByWo = new Map<string, string>();
 
   // 0021 · the FM → check-in method table, before the visits that read it.
-  for (const [fm, method] of Object.entries(FM_CICO_METHODS)) {
-    await query(`INSERT INTO fm_cico_method (fm, method) VALUES ($1, $2)`, [fm, method]);
+  for (const [fm, method, detail] of FM_CICO_METHODS) {
+    await query(`INSERT INTO fm_cico_method (fm, method, detail) VALUES ($1, $2, $3)`, [fm, method, detail]);
   }
   const taskMeta = new Map<string, { statusName: string; fields: Record<string, unknown> }>();
 
@@ -711,19 +736,22 @@ async function main() {
     // in the log, and the seven mirrored fields read that visit — the same
     // state the API would leave after logging and checking out the visit.
     const legacyCico = str(f['18. Check-in/out Status']);
-    let visit: { type: string; method: string | null; inAt: string; outAt: string } | null = null;
+    let visit: { type: string; method: string | null; detail: string | null; inAt: string; outAt: string } | null = null;
     if (legacyCico && /checked.?out/i.test(legacyCico)) {
       const base = createdAt ? new Date(`${createdAt}T14:00:00Z`) : new Date('2026-08-01T14:00:00Z');
       const inAt = new Date(base.getTime() + 2 * 86_400_000 + (taskCount % 5) * 37 * 60_000);
       const outAt = new Date(inAt.getTime() + (95 + (taskCount % 7) * 41) * 60_000);
       const type = str(f['Visit Type']) ?? (/assess/i.test(canonicalStatus) ? 'Assessment' : 'Job');
-      const method = FM_CICO_METHODS[(str(f['22. FM']) ?? '').trim()] ?? null;
-      visit = { type, method, inAt: isoSeconds(inAt), outAt: isoSeconds(outAt) };
+      const entry = FM_METHOD_BY_NAME.get((str(f['22. FM']) ?? '').trim().toLowerCase());
+      const method = entry?.[1] ?? null;
+      const detail = entry?.[2] ?? null;
+      visit = { type, method, detail, inAt: isoSeconds(inAt), outAt: isoSeconds(outAt) };
       f['Visit Type'] = type;
       f['18. Check-in/out Status'] = 'Checked-out';
       f['Checked-in At'] = visit.inAt;
       f['Checked-out At'] = visit.outAt;
-      if (method) f['CICO Method'] = method;
+      // "IVR - (866) 254-8780" — the shape the operation wrote by hand.
+      if (method) f['CICO Method'] = detail ? `${method} - ${detail}` : method;
       else delete f['CICO Method'];
     }
 
@@ -764,9 +792,9 @@ async function main() {
     if (visit) {
       await query(
         `INSERT INTO wo_visit
-           (task_id, seq, visit_type, status, method, checked_in_at, checked_out_at, created_by)
-         VALUES ($1, 1, $2, 'checked_out', $3, $4::timestamptz, $5::timestamptz, $6)`,
-        [taskId, visit.type, visit.method, visit.inAt, visit.outAt, seedBotId],
+           (task_id, seq, visit_type, status, method, method_detail, checked_in_at, checked_out_at, created_by)
+         VALUES ($1, 1, $2, 'checked_out', $3, $4, $5::timestamptz, $6::timestamptz, $7)`,
+        [taskId, visit.type, visit.method, visit.detail, visit.inAt, visit.outAt, seedBotId],
       );
       visitCount++;
     }
@@ -941,7 +969,7 @@ async function main() {
   console.log(`  field_defs        : ${fieldCount} (curated catalogue, S7)`);
   console.log(`  tasks             : ${taskCount}`);
   console.log(`  visits            : ${visitCount} (one closed visit per sample the export left checked out)`);
-  console.log(`  fm cico methods   : ${Object.keys(FM_CICO_METHODS).length} (demo values — Admin › Custom fields)`);
+  console.log(`  fm cico methods   : ${FM_CICO_METHODS.length} (the operation's table; also in migration 0022)`);
   console.log(`  memberships       : ${membershipCount}`);
   console.log(`  vendors           : ${VENDORS.length}`);
   console.log(`  payables          : ${payableCount}`);

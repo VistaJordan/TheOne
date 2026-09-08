@@ -31,6 +31,7 @@
 import { getDb, query } from '../db.js';
 import { ApiError } from '../errors.js';
 import {
+  cicoMethodText,
   fieldSectionPermKey,
   CICO_SECTION_SLUG,
   VISIT_METHODS,
@@ -99,6 +100,7 @@ interface Row {
   tech_name: string | null;
   tech_phone: string | null;
   method: string | null;
+  method_detail: string | null;
   checked_in_at: string | null;
   checked_out_at: string | null;
   ci_id: string | null; ci_name: string | null; ci_kind: 'human' | 'service' | null;
@@ -110,7 +112,7 @@ interface Row {
 
 const SELECT_SQL = `
   SELECT v.id::text AS id, v.task_id::text AS task_id, v.seq, v.visit_type, v.status,
-         v.return_trip_needed, v.tech_name, v.tech_phone, v.method,
+         v.return_trip_needed, v.tech_name, v.tech_phone, v.method, v.method_detail,
          ${ISO('v.checked_in_at')}  AS checked_in_at,
          ${ISO('v.checked_out_at')} AS checked_out_at,
          ci.id::text AS ci_id, ci.display_name AS ci_name, ci.kind::text AS ci_kind,
@@ -138,6 +140,7 @@ function mapRow(r: Row): WoVisit {
     tech_name: r.tech_name,
     tech_phone: r.tech_phone,
     method: r.method,
+    method_detail: r.method_detail,
     checked_in_at: r.checked_in_at,
     checked_out_at: r.checked_out_at,
     checked_in_by: actorOf(r.ci_id, r.ci_name, r.ci_kind),
@@ -173,44 +176,53 @@ export async function taskIdOfVisit(visitId: string): Promise<string | null> {
 
 const METHODS = new Set<string>(VISIT_METHODS);
 
+const METHOD_SELECT = `SELECT fm, method, detail, ${ISO('updated_at')} AS updated_at FROM fm_cico_method`;
+
 export async function listCicoMethods(): Promise<FmCicoMethod[]> {
-  const res = await query<FmCicoMethod>(
-    `SELECT fm, method, ${ISO('updated_at')} AS updated_at FROM fm_cico_method ORDER BY lower(fm)`,
-  );
+  const res = await query<FmCicoMethod>(`${METHOD_SELECT} ORDER BY lower(fm)`);
   return res.rows;
 }
 
-export async function methodForFm(fm: string | null): Promise<string | null> {
+/** The FM's entry — matched trimmed and case-insensitively, because the FM
+    dropdown and the table are typed by different people. */
+export async function methodForFm(
+  fm: string | null,
+): Promise<{ method: string; detail: string | null } | null> {
   if (!fm || !fm.trim()) return null;
-  const res = await query<{ method: string }>(
-    `SELECT method FROM fm_cico_method WHERE lower(btrim(fm)) = lower(btrim($1)) LIMIT 1`,
+  const res = await query<{ method: string; detail: string | null }>(
+    `SELECT method, detail FROM fm_cico_method WHERE lower(btrim(fm)) = lower(btrim($1)) LIMIT 1`,
     [fm],
   );
-  return res.rows[0]?.method ?? null;
+  return res.rows[0] ?? null;
 }
 
-export async function setCicoMethod(fm: string, method: string, actorId: string): Promise<FmCicoMethod> {
+export async function setCicoMethod(
+  fm: string,
+  method: string,
+  detail: string | null,
+  actorId: string,
+): Promise<FmCicoMethod> {
   const name = fm.trim();
   if (!name) throw new ApiError('BAD_REQUEST', 'Which FM company?');
   if (!METHODS.has(method)) {
     throw new ApiError('BAD_REQUEST', `Method must be one of ${[...METHODS].join(', ')}`);
   }
+  const note = detail?.trim() ? detail.trim() : null;
   await query(
-    `INSERT INTO fm_cico_method (fm, method, updated_by, updated_at)
-     VALUES ($1, $2, $3, now())
-     ON CONFLICT (fm) DO UPDATE SET method = EXCLUDED.method, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-    [name, method, actorId],
+    `INSERT INTO fm_cico_method (fm, method, detail, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, now())
+     ON CONFLICT (fm) DO UPDATE
+       SET method = EXCLUDED.method, detail = EXCLUDED.detail,
+           updated_by = EXCLUDED.updated_by, updated_at = now()`,
+    [name, method, note, actorId],
   );
-  const res = await query<FmCicoMethod>(
-    `SELECT fm, method, ${ISO('updated_at')} AS updated_at FROM fm_cico_method WHERE fm = $1`,
-    [name],
-  );
+  const res = await query<FmCicoMethod>(`${METHOD_SELECT} WHERE fm = $1`, [name]);
   return res.rows[0];
 }
 
 export async function deleteCicoMethod(fm: string): Promise<FmCicoMethod | null> {
   const res = await query<FmCicoMethod>(
-    `DELETE FROM fm_cico_method WHERE fm = $1 RETURNING fm, method, ${ISO('updated_at')} AS updated_at`,
+    `DELETE FROM fm_cico_method WHERE fm = $1 RETURNING fm, method, detail, ${ISO('updated_at')} AS updated_at`,
     [fm],
   );
   return res.rows[0] ?? null;
@@ -224,10 +236,12 @@ export async function listVisits(taskId: string): Promise<WoVisitsResponse> {
     [taskId, K_FM],
   );
   const fm = t.rows[0]?.fm ?? null;
+  const entry = await methodForFm(fm);
   return {
     items: await rowsForTask({ query }, taskId),
     fm,
-    default_method: await methodForFm(fm),
+    default_method: entry?.method ?? null,
+    default_method_detail: entry?.detail ?? null,
   };
 }
 
@@ -261,6 +275,7 @@ interface Clean {
   tech_name?: string | null;
   tech_phone?: string | null;
   method?: string | null;
+  method_detail?: string | null;
   checked_in_at?: string | null;
   checked_out_at?: string | null;
 }
@@ -284,6 +299,7 @@ function clean(input: VisitInput, forCreate: boolean): Clean {
   if ('tech_name' in input) out.tech_name = text(input.tech_name, 'Tech name', 200);
   if ('tech_phone' in input) out.tech_phone = text(input.tech_phone, 'Tech phone', 60);
   if ('method' in input) out.method = text(input.method, 'Method', 60);
+  if ('method_detail' in input) out.method_detail = text(input.method_detail, 'Method detail', 300);
   if ('checked_in_at' in input) out.checked_in_at = stamp(input.checked_in_at, 'Checked-in time');
   if ('checked_out_at' in input) out.checked_out_at = stamp(input.checked_out_at, 'Checked-out time');
   return out;
@@ -322,7 +338,8 @@ async function syncMirrors(q: Q, taskId: string): Promise<TaskChange[]> {
     [VISIT_MIRROR_KEYS.checkedOutAt]: v?.checked_out_at ?? null,
     [VISIT_MIRROR_KEYS.techName]: v?.tech_name ?? null,
     [VISIT_MIRROR_KEYS.techPhone]: v?.tech_phone ?? null,
-    [VISIT_MIRROR_KEYS.method]: v?.method ?? null,
+    // "IVR - (866) 254-8780": the shape the operation wrote by hand before.
+    [VISIT_MIRROR_KEYS.method]: v ? cicoMethodText(v.method, v.method_detail) : null,
   };
 
   const merged: Record<string, unknown> = { ...fields };
@@ -356,6 +373,7 @@ function snapshot(v: WoVisit): Record<string, unknown> & { name: string } {
     tech_name: v.tech_name,
     tech_phone: v.tech_phone,
     method: v.method,
+    method_detail: v.method_detail,
     checked_in_at: v.checked_in_at,
     checked_out_at: v.checked_out_at,
   };
@@ -396,11 +414,16 @@ export async function createVisit(
   const c = clean(input, true);
 
   // Everything that reads OUTSIDE the transaction goes first (PGlite is one
-  // connection): the FM's method, when the caller did not choose one.
+  // connection): the FM's entry, for whatever the caller did not choose —
+  // the method when none was sent, and the instruction when the method is
+  // the FM's own and no instruction was sent.
   let method = c.method;
-  if (method === undefined) {
+  let detail = c.method_detail;
+  if (method === undefined || detail === undefined) {
     const t = await query<{ fm: string | null }>(`SELECT t.fields->>$2 AS fm FROM task t WHERE t.id = $1`, [taskId, K_FM]);
-    method = await methodForFm(t.rows[0]?.fm ?? null);
+    const entry = await methodForFm(t.rows[0]?.fm ?? null);
+    if (method === undefined) method = entry?.method ?? null;
+    if (detail === undefined) detail = entry && entry.method === method ? entry.detail : null;
   }
 
   const status: VisitStatus = c.status ?? 'planned';
@@ -421,9 +444,9 @@ export async function createVisit(
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO wo_visit
          (task_id, seq, visit_type, status, return_trip_needed, tech_name, tech_phone, method,
-          checked_in_at, checked_out_at, checked_in_by, checked_out_by, created_by)
+          method_detail, checked_in_at, checked_out_at, checked_in_by, checked_out_by, created_by)
        VALUES ($1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM wo_visit WHERE task_id = $1),
-               $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz, $10, $11, $12)
+               $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::timestamptz, $11, $12, $13)
        RETURNING id::text AS id`,
       [
         taskId,
@@ -433,6 +456,7 @@ export async function createVisit(
         c.tech_name ?? null,
         c.tech_phone ?? null,
         method ?? null,
+        detail ?? null,
         checkedIn,
         checkedOut,
         checkedIn ? actor.id : null,
@@ -471,6 +495,7 @@ export async function updateVisit(
   if (c.tech_name !== undefined) next.tech_name = c.tech_name;
   if (c.tech_phone !== undefined) next.tech_phone = c.tech_phone;
   if (c.method !== undefined) next.method = c.method;
+  if (c.method_detail !== undefined) next.method_detail = c.method_detail;
 
   const now = nowStamp();
   let inBy = cur.checked_in_by?.id ?? null;
@@ -508,7 +533,7 @@ export async function updateVisit(
     await tx.query(
       `UPDATE wo_visit
           SET visit_type = $2, status = $3, return_trip_needed = $4,
-              tech_name = $5, tech_phone = $6, method = $7,
+              tech_name = $5, tech_phone = $6, method = $7, method_detail = $12,
               checked_in_at = $8::timestamptz, checked_out_at = $9::timestamptz,
               checked_in_by = $10, checked_out_by = $11
         WHERE id = $1`,
@@ -524,6 +549,7 @@ export async function updateVisit(
         next.checked_out_at,
         inBy,
         outBy,
+        next.method_detail,
       ],
     );
     updated = await rowById(tx, visitId);

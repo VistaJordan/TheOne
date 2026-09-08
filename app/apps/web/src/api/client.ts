@@ -1280,10 +1280,14 @@ export function listCicoMethods(): Promise<{ items: FmCicoMethod[] }> {
   return request('/admin/cico-methods');
 }
 
-export function setCicoMethod(fm: string, method: string): Promise<{ item: FmCicoMethod }> {
+export function setCicoMethod(
+  fm: string,
+  method: string,
+  detail: string | null,
+): Promise<{ item: FmCicoMethod }> {
   return request(`/admin/cico-methods/${encodeURIComponent(fm)}`, {
     method: 'PUT',
-    body: JSON.stringify({ method }),
+    body: JSON.stringify({ method, detail }),
   });
 }
 
