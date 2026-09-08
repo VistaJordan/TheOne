@@ -397,7 +397,7 @@ function VisitLog({
             <li className="cv-more">
               <button type="button" className="linkbtn" onClick={onExpand}>
                 <Icon name="chev-d" size={12} />
-                Show all {visits.length} visits ({hidden} earlier)
+                {hidden} earlier visit{hidden === 1 ? '' : 's'} hidden · show all {visits.length}
               </button>
             </li>
           )}
