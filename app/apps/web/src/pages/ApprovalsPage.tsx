@@ -888,9 +888,6 @@ function Ask({ row }: { row: Row }) {
               d.item.title
             )}
           </strong>
-          {(row.billing_entity || row.trade) && (
-            <small>{[row.billing_entity, row.trade].filter(Boolean).join(' · ')}</small>
-          )}
         </div>
       );
     }
