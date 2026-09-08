@@ -61,7 +61,7 @@ export function QuotesPage() {
                 <th className="col-client">Client / Title</th>
                 <th className="col-status">Quote status</th>
                 <th className="col-nte num">Grand total</th>
-                <th className="col-list">Updated</th>
+                <th className="col-date">Updated</th>
               </tr>
             </thead>
             <tbody>
@@ -96,7 +96,7 @@ export function QuotesPage() {
                       <span className="chip chip-sm">{QUOTE_STATUS[q.status]?.label ?? q.status}</span>
                     </td>
                     <td className="col-nte num">{q.grand_total == null ? '—' : usd(q.grand_total)}</td>
-                    <td className="col-list">{numericDate(q.updated_at) ?? '—'}</td>
+                    <td className="col-date">{numericDate(q.updated_at) ?? '—'}</td>
                   </tr>
                 );
               })}

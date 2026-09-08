@@ -151,8 +151,8 @@ const COLUMN_CLASS: Partial<Record<ColumnKey, string>> = {
   client: 'col-client',
   nte: 'num',
   cost: 'num',
-  due: 'col-list',
-  raised: 'col-list',
+  due: 'col-date',
+  raised: 'col-date',
   status: 'col-status',
 };
 
@@ -970,7 +970,7 @@ function InboxRow(props: RowProps) {
           </td>
         );
       case 'due':
-        return <td key={k} className="col-list">{numericDate(row.due) ?? '—'}</td>;
+        return <td key={k} className="col-date">{numericDate(row.due) ?? '—'}</td>;
       case 'owner':
         return (
           <td key={k}>
@@ -982,7 +982,7 @@ function InboxRow(props: RowProps) {
         );
       case 'raised':
         return (
-          <td key={k} className="col-list">
+          <td key={k} className="col-date">
             <span className="payq-status">
               <span>{when}</span>
               {raisedBy && <small>{raisedBy}</small>}
