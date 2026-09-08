@@ -28,7 +28,8 @@ export type AdminEntity =
   | 'status_group'
   | 'role'
   | 'principal'
-  | 'automation';
+  | 'automation'
+  | 'fm_cico_method';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

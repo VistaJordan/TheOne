@@ -26,6 +26,7 @@ import { DASH, feedTime, initials } from '../../lib/fields';
 import {
   actionLabel,
   automationRef,
+  describeVisitChange,
   entityLabel,
   formatValue,
   labelOf,
@@ -266,6 +267,8 @@ function adminHref(e: AuditLogEntry): string | null {
       return '/admin/users';
     case 'automation':
       return `/admin/automations?rule=${encodeURIComponent(e.entity_id)}`;
+    case 'fm_cico_method':
+      return '/admin/fields';
     default:
       return null;
   }
@@ -363,6 +366,16 @@ function changeOf(
       return { field: DASH, value: e.after?.source === 'import' ? 'via import' : DASH };
     case 'comment_added':
       return { field: DASH, value: e.after?.client_visible ? 'client-visible' : 'internal' };
+    // Visits (0021): whole-visit snapshots on a work-order row.
+    case 'visit_created':
+    case 'visit_updated':
+    case 'visit_deleted': {
+      const snap = (e.after ?? e.before) as Record<string, unknown> | null;
+      return {
+        field: typeof snap?.name === 'string' ? snap.name : 'Visit',
+        value: describeVisitChange(e.before, e.after),
+      };
+    }
     default:
       break;
   }

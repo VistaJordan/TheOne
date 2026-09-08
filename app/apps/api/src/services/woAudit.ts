@@ -25,7 +25,8 @@ export interface TaskChange {
   after: unknown;
 }
 
-export type ChangeSource = 'import' | 'bulk' | AutomationSource;
+// 'visit': a mirror of the latest visit, written by the visit log (0021).
+export type ChangeSource = 'import' | 'bulk' | 'visit' | AutomationSource;
 
 /** The rule that made this change, when an automation did. */
 export interface AutomationSource {

@@ -1064,3 +1064,109 @@ export interface ApiError {
 
 // ── Permissions (0015) ───────────────────────────────────────────────────────
 export * from './permissions';
+
+// ── Visits (0021) — check-in / check-out as a log ────────────────────────────
+// One work order, many visits. Each visit has a type, a tech, a method and its
+// own check-in / check-out stamps. The seven legacy bag fields below mirror
+// the LATEST visit so columns, filters, exports and automations keep working;
+// they are no longer written by hand.
+
+export type VisitStatus = 'planned' | 'checked_in' | 'checked_out';
+
+export const VISIT_STATUSES: { code: VisitStatus; label: string }[] = [
+  { code: 'planned', label: 'Not checked in' },
+  { code: 'checked_in', label: 'Checked in' },
+  { code: 'checked_out', label: 'Checked out' },
+];
+
+/** How a tech checks in with the client's system. The FM table
+    (fm_cico_method) holds one of these per FM company. */
+export const VISIT_METHODS = ['IVR', 'App', 'Phone', 'Portal', 'Email', 'Manual'] as const;
+
+/** Fallback vocabulary when the 'Visit Type' dropdown is not in the catalogue. */
+export const DEFAULT_VISIT_TYPES = ['Assessment', 'Job', 'Return trip'];
+
+/** Bag keys (task.fields) the visit log writes — the mirror of the latest visit. */
+export const VISIT_MIRROR_KEYS = {
+  visitType: 'Visit Type',
+  status: '18. Check-in/out Status',
+  checkedInAt: 'Checked-in At',
+  checkedOutAt: 'Checked-out At',
+  techName: 'Tech Name',
+  techPhone: 'Tech Phone Number',
+  method: 'CICO Method',
+} as const;
+
+/** Every mirrored bag key: the API refuses a direct write to any of these. */
+export const VISIT_OWNED_KEYS: string[] = Object.values(VISIT_MIRROR_KEYS);
+
+/** The mirrored keys the All-fields tab HIDES (the visit log shows them); the
+    other two (tech name / phone) stay visible, read-only, in Technician. */
+export const VISIT_HIDDEN_KEYS: string[] = [
+  VISIT_MIRROR_KEYS.visitType,
+  VISIT_MIRROR_KEYS.status,
+  VISIT_MIRROR_KEYS.checkedInAt,
+  VISIT_MIRROR_KEYS.checkedOutAt,
+  VISIT_MIRROR_KEYS.method,
+];
+
+/** The field section whose view / edit grant gates the visit log. */
+export const CICO_SECTION_SLUG = 'cico';
+
+export interface WoVisit {
+  id: string;
+  task_id: string;
+  /** Visit 1, 2, 3… on this work order. Stable once assigned. */
+  seq: number;
+  visit_type: string;
+  status: VisitStatus;
+  /** The old 'Checked-out - RTN': this visit ended, another is needed. */
+  return_trip_needed: boolean;
+  tech_name: string | null;
+  tech_phone: string | null;
+  method: string | null;
+  /** UTC ISO to the second, or null until the status moves. */
+  checked_in_at: string | null;
+  checked_out_at: string | null;
+  checked_in_by: ActivityActor | null;
+  checked_out_by: ActivityActor | null;
+  created_by: ActivityActor | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** POST /api/work-orders/:id/visits and PATCH /api/visits/:id. Every key is
+    optional on PATCH; POST needs `visit_type`. Stamps are ISO datetimes and
+    override the automatic "now" when sent alongside a status change. */
+export interface VisitInput {
+  visit_type?: string;
+  status?: VisitStatus;
+  return_trip_needed?: boolean;
+  tech_name?: string | null;
+  tech_phone?: string | null;
+  method?: string | null;
+  checked_in_at?: string | null;
+  checked_out_at?: string | null;
+}
+
+/** GET /api/work-orders/:id/visits — oldest first. `default_method` is what
+    the FM table says for this work order's FM (null when there is no entry),
+    so a new visit can be pre-filled. */
+export interface WoVisitsResponse {
+  items: WoVisit[];
+  fm: string | null;
+  default_method: string | null;
+}
+
+/** POST / PATCH replies: the visit touched plus the fresh list. */
+export interface WoVisitResponse {
+  item: WoVisit;
+  items: WoVisit[];
+}
+
+/** One row of the FM → check-in method table (Admin › Custom fields). */
+export interface FmCicoMethod {
+  fm: string;
+  method: string;
+  updated_at: string;
+}

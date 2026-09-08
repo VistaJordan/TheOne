@@ -29,6 +29,7 @@ import viewRoutes from './routes/views.js';
 import prefsRoutes from './routes/prefs.js';
 import automationsRoutes from './routes/automations.js';
 import approvalRoutes from './routes/approvals.js';
+import visitRoutes from './routes/visits.js';
 import { startAutomationScheduler } from './services/automations.js';
 
 async function main(): Promise<void> {
@@ -78,6 +79,7 @@ async function main(): Promise<void> {
   await app.register(prefsRoutes, { prefix: '/api' });
   await app.register(automationsRoutes, { prefix: '/api' });
   await app.register(approvalRoutes, { prefix: '/api' });
+  await app.register(visitRoutes, { prefix: '/api' });
 
   await app.listen({ port: config.port, host: config.host });
 

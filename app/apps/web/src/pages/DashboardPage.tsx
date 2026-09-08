@@ -19,8 +19,10 @@ import { VISIT_TYPE_FIELD_KEY } from '../lib/woFieldSections';
 
 type DashTab = 'attention' | 'main';
 
-/** The rows behind the "Visit Type not set" card — also the filter its click
-    hands to the list, so the card and the landing page can never disagree. */
+/** The rows behind the "No visit logged" card — also the filter its click
+    hands to the list, so the card and the landing page can never disagree.
+    'Visit Type' mirrors the latest visit (0021), so "not set" means no visit
+    has been logged on the work order yet. */
 const VISIT_TYPE_UNSET: WoFilterSet = {
   match: 'all',
   rules: [{ field: VISIT_TYPE_FIELD_KEY, op: 'is_not_set' }],
@@ -80,11 +82,11 @@ export function DashboardPage() {
       {tab === 'attention' ? (
         <div className="attn-row">
           <AttentionCard
-            label="Visit Type not set"
+            label="No visit logged"
             count={visitTypeQuery.isError ? null : visitTypeCount}
             loading={visitTypeQuery.isLoading}
             to={filterUrl(VISIT_TYPE_UNSET)}
-            allClearNote="Every work order has a visit type"
+            allClearNote="Every work order has a visit logged"
           />
           {canSeeApprovals && (
             <AttentionCard

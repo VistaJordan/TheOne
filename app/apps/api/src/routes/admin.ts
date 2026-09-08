@@ -43,6 +43,8 @@ import {
   updateStatus,
 } from '../services/statusAdmin.js';
 import { listAuditLog, exportAuditCsv } from '../services/auditLog.js';
+import { deleteCicoMethod, listCicoMethods, setCicoMethod } from '../services/visits.js';
+import { logAdminEvent } from '../services/adminAudit.js';
 import {
   createAutomation,
   deleteAutomation,
@@ -448,6 +450,48 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       .header('Content-Type', 'text/csv; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="audit-log-${stamp}.csv"`)
       .send(csv);
+  });
+
+  // ── Check-in method by FM (0021) ───────────────────────────────────────────
+  // The "database of the method for each client": a new visit takes its
+  // method from here by the work order's FM. Vocabulary, like the fields, so
+  // it rides on the Custom fields grant.
+  app.get('/admin/cico-methods', async (req) => {
+    requireAdmin(req, 'fields');
+    return { items: await listCicoMethods() };
+  });
+
+  app.put('/admin/cico-methods/:fm', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { fm } = parse(z.object({ fm: z.string().trim().min(1).max(120) }), req.params);
+    const { method } = parse(z.object({ method: z.string().trim().min(1).max(60) }), req.body);
+    const before = (await listCicoMethods()).find((m) => m.fm === fm) ?? null;
+    const item = await setCicoMethod(fm, method, actorId);
+    await logAdminEvent({
+      actorId,
+      entity: 'fm_cico_method',
+      entityId: item.fm,
+      action: before ? 'cico_method_changed' : 'cico_method_created',
+      before: before ? { name: before.fm, method: before.method } : null,
+      after: { name: item.fm, method: item.method },
+    });
+    return { item };
+  });
+
+  app.delete('/admin/cico-methods/:fm', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { fm } = parse(z.object({ fm: z.string().trim().min(1).max(120) }), req.params);
+    const gone = await deleteCicoMethod(fm);
+    if (!gone) throw new ApiError('NOT_FOUND', 'No method is on file for that FM');
+    await logAdminEvent({
+      actorId,
+      entity: 'fm_cico_method',
+      entityId: gone.fm,
+      action: 'cico_method_deleted',
+      before: { name: gone.fm, method: gone.method },
+      after: null,
+    });
+    return { ok: true };
   });
 
   // ── Settings ───────────────────────────────────────────────────────────────

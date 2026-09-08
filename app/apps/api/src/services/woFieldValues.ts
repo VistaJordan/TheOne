@@ -14,7 +14,7 @@ import { resolveField, type ResolvedField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations, type AutoCtx } from './automations.js';
 import { applyProfitFormula } from './money.js';
-import { applyCicoStamps } from './cicoStamps.js';
+import { assertNotVisitOwned } from './visits.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import type { ActivityEntry } from '@theone/shared';
@@ -105,6 +105,12 @@ export async function updateWorkOrderFields(
     }
     patch.push({ jsonKey: f.jsonKey as string, value: coerceValue(f, raw), resolved: f });
   }
+  // The seven check-in/out fields mirror the visit log (0021) and are not
+  // edited by hand any more — the message points at the CICO tab.
+  assertNotVisitOwned(
+    patch.map((p) => p.jsonKey),
+    (k) => patch.find((p) => p.jsonKey === k)?.resolved.label ?? k,
+  );
 
   const row = await query<{ id: string; fields: Record<string, unknown> }>(
     `SELECT t.id, t.fields FROM task t
@@ -128,9 +134,6 @@ export async function updateWorkOrderFields(
     const mirror = MIRROR_BY_JSON_KEY[p.jsonKey];
     if (mirror) mirrorSets.push({ ...mirror, value: mirrorValue(mirror.cast, p.value) });
   }
-
-  // A check-in / check-out stamps its time on the work order (cicoStamps.ts).
-  log.push(...applyCicoStamps(merged, log, patch.map((p) => p.jsonKey)));
 
   if (log.length > 0) {
     // Profit = Total Invoiced − Cost, recomputed on every write. Derived, so
