@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ObligationSummary, Phase, WorkOrderDetailV2 } from '../../api/client';
-import { DASH, FIELD, dateVal, daysSince, field, money, numericDate, str } from '../../lib/fields';
-import { deriveHeaderMeta } from '../../lib/woDerive';
+import { DASH, FIELD, dateVal, daysSince, field, isCostOverNte, money, numericDate, str } from '../../lib/fields';
+import { deriveHeaderMeta, resolveMoney } from '../../lib/woDerive';
 import { tradeIcon } from '../../lib/tradeIcon';
 import { CopyButton } from '../CopyButton';
 import { Icon } from '../Icon';
@@ -9,6 +9,22 @@ import { ClockChipCluster } from '../obligations/ClockChip';
 import { StatusChangeMenu } from '../StatusChangeMenu';
 import { StatusPill } from '../StatusPill';
 import { PhaseBar } from './PhaseBar';
+
+/** One labelled amount in the worth block. The currency sign is drawn
+    separately, smaller and lighter, so label + amount read the way the comp
+    has them; an unset amount shows the dash alone. */
+function WorthCell({ label, value }: { label: string; value: number | null | undefined }) {
+  const set = value != null && Number.isFinite(value);
+  return (
+    <span className="worth-cell">
+      <span className="worth-k">{label}</span>
+      <span className={`worth-v${set ? '' : ' is-none'}`}>
+        {set && <span className="worth-cur">$</span>}
+        {set ? money(value).replace(/^\$/, '') : DASH}
+      </span>
+    </span>
+  );
+}
 
 /** Age past which the aging cluster flips to the warn ramp. */
 const AGE_WARN_DAYS = 10;
@@ -55,6 +71,10 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick }:
   // 'Assignee' is the field the list filters on; the older free-text
   // 'Assignee Name TXT' backstops work orders imported before it existed.
   const assignee = str(field(f, FIELD.assignee)) ?? str(field(f, FIELD.assigneeName));
+  // Same money rule as the Finances card and the list column: the cost turns
+  // the whole block red once it passes the NTE.
+  const m = resolveMoney(wo);
+  const overNte = isCostOverNte(m.cost, m.nte);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   const toggleCollapsed = () => {
     setCollapsed((v) => {
@@ -75,10 +95,16 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick }:
         <Icon name="user" size={12} />
         {assignee ?? 'Unassigned'}
       </span>
-      <span className="chip" title="Client NTE — not to exceed">
-        <Icon name="dollar" size={12} />
-        {/* The dollar icon is this chip's label, so the amount drops money()'s own "$". */}
-        {money(wo.nte).replace(/^\$/, '')}
+      <span
+        className={`worth${overNte ? ' is-over' : ''}`}
+        title={
+          overNte
+            ? `Cost ${money(m.cost)} is over the client NTE of ${money(m.nte)}`
+            : 'Client NTE (not to exceed) and the cost so far'
+        }
+      >
+        <WorthCell label="Client NTE" value={m.nte} />
+        <WorthCell label="Cost" value={m.cost} />
       </span>
     </>
   );

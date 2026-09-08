@@ -30,7 +30,7 @@ import {
   createSession,
   destroySession,
   devBypassSignIn,
-  resolveInvitedPrincipal,
+  resolvePrincipalForSignIn,
   setImpersonation,
   storeAuthTransaction,
   unauthorized,
@@ -122,7 +122,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     try {
       const idToken = await exchangeCode(q.code, tx.codeVerifier);
       const identity = await verifyIdToken(idToken, tx.nonce);
-      const principal = await resolveInvitedPrincipal(identity);
+      const principal = await resolvePrincipalForSignIn(identity);
 
       const { id, expiresAt } = await createSession(principal.id, {
         userAgent: req.headers['user-agent'],
@@ -135,9 +135,11 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     } catch (err) {
       if (err instanceof EntraError) return fail(err.message, err.detail);
       if (err instanceof ApiError) {
-        // The invite-only refusal lands here. Say plainly what happened —
-        // "not invited" is actionable; "authentication failed" is not.
-        return fail(err.message, 'Ask a super admin to invite this address.');
+        // The "not invited / wrong domain" refusal lands here. Say plainly
+        // what happened — the service attaches a `hint` that names the
+        // allowed domain; "authentication failed" would not be actionable.
+        const hint = (err.details as { hint?: string } | null)?.hint;
+        return fail(err.message, hint ?? 'Ask a super admin to invite this address.');
       }
       req.log.error(err);
       return fail('Could not complete the sign-in');

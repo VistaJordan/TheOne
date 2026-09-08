@@ -1929,7 +1929,6 @@ export function AdminFieldsPage() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-fields'], queryFn: listAdminFields, retry: 0 });
   const items = q.data?.items ?? [];
-  const unused = items.filter((f) => f.used_by === 0).length;
 
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -1982,7 +1981,6 @@ export function AdminFieldsPage() {
   return (
     <AdminShell
       title="Custom fields"
-      subtitle={`The work-order vocabulary: ${items.length} fields, in the default order every user starts from${unused ? ` · ${unused} unused` : ''} — plus the status pipeline below`}
       actions={
         <button type="button" className="btn btn-primary" onClick={() => setAdding((v) => !v)}>
           <Icon name="plus" size={14} />
@@ -1990,16 +1988,6 @@ export function AdminFieldsPage() {
         </button>
       }
     >
-      <div className="callout" style={{ marginBottom: 16 }}>
-        <Icon name="info" size={14} />
-        <span>
-          Renaming changes the <b>label</b> everywhere (lists, filters, the audit trail — old
-          entries included); the mono <b>key</b> underneath is the storage address and never
-          changes. Drag rows to set the default field order — each user can still arrange their
-          own order on the work-order page.
-        </span>
-      </div>
-
       {error && (
         <div className="callout" style={{ marginBottom: 16 }} role="alert">
           <Icon name="alert" size={14} />

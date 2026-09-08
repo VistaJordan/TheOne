@@ -558,7 +558,7 @@ function InviteForm({ roles, busy, onCancel, onSubmit }: {
             <label className="lbl" htmlFor="inv-email">Work email <span className="req">*</span></label>
             <input className="fld" id="inv-email" type="email" placeholder="name@byblosvista.com"
               value={email} onChange={(e) => setEmail(e.target.value)} />
-            <span className="hint">Must match their Microsoft account exactly — this is what sign-in checks.</span>
+            <span className="hint">Must match their Microsoft account exactly — this is what sign-in checks. A byblosvista.com account needs no invitation: it enrols itself as OM Under Probation on first sign-in, and you change the role here.</span>
           </div>
           <div className="field">
             <label className="lbl" htmlFor="inv-name">Full name <span className="req">*</span></label>

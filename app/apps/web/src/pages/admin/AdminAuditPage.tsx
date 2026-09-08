@@ -383,7 +383,7 @@ function changeOf(
   // Admin rows (entity_type other than task): before/after are snapshots.
   if (e.entity_type !== 'task' && (e.before || e.after)) {
     const field = e.field ? labelOf(e.field, byKey) : DASH;
-    if (e.action.endsWith('_created') || e.action === 'user_invited') {
+    if (e.action.endsWith('_created') || e.action === 'user_invited' || e.action === 'user_auto_enrolled') {
       return { field, value: <ChangeList items={snapshotSummary(e.after)} created /> };
     }
     if (e.action.endsWith('_deleted')) {

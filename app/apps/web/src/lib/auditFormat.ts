@@ -217,6 +217,7 @@ export const ACTION_LABELS: Record<string, string> = {
   role_updated: 'Role changed',
   role_deleted: 'Role deleted',
   user_invited: 'User invited',
+  user_auto_enrolled: 'User enrolled on first sign-in',
   user_updated: 'User changed',
   user_disabled: 'User disabled',
   user_permissions_set: 'User permissions adjusted',
