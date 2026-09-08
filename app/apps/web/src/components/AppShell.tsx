@@ -116,19 +116,19 @@ export function AppShell({
     setOpenGroups((g) => (g.includes(label) ? g.filter((l) => l !== label) : [...g, label]));
   };
   // S5 — identity comes from the session, not from a client-side pin. `actingAs`
-  // is who the app behaves as; `user` is the human who actually signed in, and
-  // super-admin rights are always read from the latter.
-  const { user, actingAs, isImpersonating, signOut, can, adminCan } = useAuth();
+  // is who the app behaves as; `user` is the human who actually signed in.
+  const { user, actingAs, isImpersonating, signOut, can } = useAuth();
 
   // 0015 · a section the acting principal may not view leaves the nav; an
-  // Admin group with no visible section leaves with it. Admin reads the REAL
-  // user — viewing as somebody never opens or closes the console.
+  // Admin group with no visible section leaves with it. The Admin group follows
+  // the acting principal like everything else, so viewing as a dispatcher hides
+  // the console exactly as it is hidden for them.
   const visibleNav = NAV.map((item) =>
     item.children
       ? {
           ...item,
           children: item.children.filter((c) =>
-            adminCan(adminPermKey(c.to.replace(/^\/admin\//, '')), 'view'),
+            can(adminPermKey(c.to.replace(/^\/admin\//, '')), 'view'),
           ),
         }
       : item,

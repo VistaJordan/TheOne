@@ -22,8 +22,8 @@ interface AuditTrailProps {
  * is the same data across every work order.
  */
 export function AuditTrail({ entries, loading, error }: AuditTrailProps) {
-  const { user } = useAuth();
-  const isAdmin = Boolean(user?.is_super_admin);
+  const { actingAs } = useAuth();
+  const isAdmin = Boolean(actingAs?.is_super_admin);
   const catalogue = useQuery({
     queryKey: ['wo-fields'],
     queryFn: getWoFields,

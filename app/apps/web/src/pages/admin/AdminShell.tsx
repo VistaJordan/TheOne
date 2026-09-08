@@ -37,14 +37,14 @@ export function adminSectionOf(pathname: string): string {
 }
 
 export function AdminShell({ title, subtitle, actions, children }: AdminShellProps) {
-  const { user, adminCan } = useAuth();
+  const { actingAs, can } = useAuth();
   const { pathname } = useLocation();
   const section = adminSectionOf(pathname);
 
   // Locked-with-a-reason rather than a 404: a dispatcher who lands here from a
   // shared link should learn what this is and who to ask, not meet a dead end
   // (quotes-payments.md §3.5).
-  if (!user || !adminCan(adminPermKey(section), 'view')) {
+  if (!actingAs || !can(adminPermKey(section), 'view')) {
     return (
       <AppShell active="Admin">
         <div className="wo-state">

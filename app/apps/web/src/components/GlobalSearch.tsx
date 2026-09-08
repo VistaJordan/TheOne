@@ -75,8 +75,9 @@ function matches(q: string, ...fields: (string | null | undefined)[]): boolean {
 
 export function GlobalSearch() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const isAdmin = !!user?.is_super_admin;
+  // The acting principal: viewing as a dispatcher hides the admin pages here too.
+  const { actingAs } = useAuth();
+  const isAdmin = !!actingAs?.is_super_admin;
 
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
