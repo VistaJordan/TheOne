@@ -114,7 +114,7 @@ const COLUMN_CHOICES: (ColumnChoice & { key: ColumnKey })[] = [
   { key: 'ask', label: 'Waiting for' },
   { key: 'nte', label: 'NTE' },
   { key: 'cost', label: 'Cost' },
-  { key: 'due', label: 'Due' },
+  { key: 'due', label: 'WO Due Date' },
   { key: 'owner', label: 'For' },
   { key: 'raised', label: 'Raised' },
   { key: 'status', label: 'Status' },
