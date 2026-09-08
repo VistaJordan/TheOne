@@ -205,7 +205,7 @@ export function PaymentsPage() {
                 <th>Payee / Purpose</th>
                 <th className="num">Amount</th>
                 <th className="col-status">Status</th>
-                <th className="col-list">Requested</th>
+                <th className="col-date">Requested</th>
                 <th className="payq-actions">Decision</th>
               </tr>
             </thead>
@@ -391,7 +391,7 @@ function PaymentRow({ item, canApprove, canProcess, busy, onDecide }: RowProps) 
           {trail && <small title={trail}>{trail}</small>}
         </span>
       </td>
-      <td className="col-list">
+      <td className="col-date">
         <span className="payq-status">
           <span>{when}</span>
           {by && <small>{by}</small>}

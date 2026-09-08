@@ -31,6 +31,11 @@
 
 .ct .apq-type { margin-right: 6px; vertical-align: 1px; }
 
+/* Date cells on the Approvals, Payments and Quotes queues. NOT `.col-list`:
+   that name belongs to the Columns menu's flex list (wo-list.css) and turned
+   these <td>s into flex boxes, which painted white gaps on row hover. */
+.ct .col-date { white-space: nowrap; }
+
 /* NTE increase: how far over, in the danger colour (rule 1.5.1); the Cost
    column cell reads red the same way once it passes the NTE. */
 .ct .apq-over { color: var(--danger); }
