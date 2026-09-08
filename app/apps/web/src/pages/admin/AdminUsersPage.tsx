@@ -74,15 +74,17 @@ const same = (a: PermMap, b: PermMap) => JSON.stringify(a) === JSON.stringify(b)
 // ── Admin › Users ────────────────────────────────────────────────────────────
 
 export function AdminUsersPage() {
-  const { user, adminCan } = useAuth();
+  // The ACTING principal throughout: viewing as someone shows the page as they
+  // would see it ("You" on their row, Adjust only if they are a super admin).
+  const { actingAs, can } = useAuth();
   const { fail, done, strip } = useAdminFeedback();
   const [inviteOpen, setInviteOpen] = useState(false);
   // The user whose adjustments are open, if any (super admins only).
   const [adjusting, setAdjusting] = useState<string | null>(null);
 
-  const allowed = adminCan('admin/users', 'view');
-  const canEdit = adminCan('admin/users', 'edit');
-  const isSuperAdmin = Boolean(user?.is_super_admin);
+  const allowed = can('admin/users', 'view');
+  const canEdit = can('admin/users', 'edit');
+  const isSuperAdmin = Boolean(actingAs?.is_super_admin);
 
   const usersQuery = useQuery({ queryKey: ['admin-users'], queryFn: listAdminUsers, enabled: allowed, retry: 0 });
   // Roles feed the role <select> on every row and in the invite form.
@@ -133,7 +135,7 @@ export function AdminUsersPage() {
       <UsersTable
         items={users}
         roles={roles}
-        selfId={user?.id}
+        selfId={actingAs?.id}
         loading={usersQuery.isLoading}
         error={usersQuery.isError}
         busy={patchUser.isPending || !canEdit}
@@ -150,12 +152,12 @@ export function AdminUsersPage() {
 // ── Admin › Roles ────────────────────────────────────────────────────────────
 
 export function AdminRolesPage() {
-  const { adminCan } = useAuth();
+  const { can } = useAuth();
   const { fail, done, strip } = useAdminFeedback();
   const [newRoleOpen, setNewRoleOpen] = useState(false);
 
-  const allowed = adminCan('admin/roles', 'view');
-  const canEdit = adminCan('admin/roles', 'edit');
+  const allowed = can('admin/roles', 'view');
+  const canEdit = can('admin/roles', 'edit');
   const rolesQuery = useQuery({ queryKey: ['admin-roles'], queryFn: listRoles, enabled: allowed, retry: 0 });
   const roles = rolesQuery.data?.items ?? [];
   const tree = usePermissionTree(allowed);

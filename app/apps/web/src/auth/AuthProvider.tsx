@@ -5,8 +5,11 @@
 // cannot read, so the only way to learn it is to ask the server.
 //
 // Permissions (0015) ride on the session too: `can` answers for the ACTING
-// principal (viewing as a read-only role behaves as one), `adminCan` for the
-// real human — the admin console never opens because of who you are viewing as.
+// principal, admin console included, so "Viewing as" shows exactly what that
+// person sees. Only super admins can impersonate, so following the acting
+// principal only ever narrows what is on screen; the API still checks the real
+// user on every admin write, and the top-bar switcher (the way back) reads the
+// real user too.
 
 import {
   createContext,
@@ -35,15 +38,13 @@ interface AuthState {
   loading: boolean;
   authenticated: boolean;
   authMode: AuthMode;
-  /** The human who signed in. Admin rights are always read from this. */
+  /** The human who signed in. Only the "Viewing as" switcher keys off this. */
   user: SessionUser | null;
   /** Who the app behaves as — differs from `user` only while impersonating. */
   actingAs: SessionUser | null;
   isImpersonating: boolean;
   /** May the ACTING principal do this? The same resolver the API runs. */
   can: Can;
-  /** May the REAL user do this? For the admin console. */
-  adminCan: Can;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
   impersonate: (principalId: string) => Promise<void>;
@@ -103,7 +104,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       actingAs,
       isImpersonating: Boolean(me.is_impersonating),
       can: canFor(actingAs),
-      adminCan: canFor(me.user),
       refresh,
       signOut: async () => {
         const res = await apiSignOut().catch(() => null);
