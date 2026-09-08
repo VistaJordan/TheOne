@@ -51,11 +51,12 @@ import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { ListPagination, PAGE_SIZES } from '../components/ListPagination';
+import { ColumnsMenu, type ColumnChoice } from '../components/wo/list/ColumnsMenu';
 import { PAYMENT_STATUS_LABEL, payeeLabel } from '../components/payments/PaymentsTable';
 import { QUOTE_STATUS } from '../components/quote/QuoteStatusPill';
 import { useAuth } from '../auth/AuthProvider';
 import { usd } from '../lib/quoteTotals';
-import { numericDate } from '../lib/fields';
+import { isCostOverNte, numericDate } from '../lib/fields';
 
 // ── Vocabulary ───────────────────────────────────────────────────────────────
 
@@ -101,6 +102,60 @@ export const TYPE_LABEL: Record<ApprovalTaskType, string> = Object.fromEntries(
 /** Rule 1.5.2's hold, as the locked verb explains it. */
 const NTE_HOLD = 'On hold — the NTE override on this work order has to be decided first (rule 1.5.2)';
 
+// ── Columns ──────────────────────────────────────────────────────────────────
+// WO # opens the row and Decision acts on it, so those two are always there,
+// first and last. Everything between is chosen from the Columns menu, in the
+// order chosen, and remembered per browser like the header fold.
+
+type ColumnKey = 'client' | 'ask' | 'nte' | 'cost' | 'due' | 'owner' | 'raised' | 'status';
+
+const COLUMN_CHOICES: (ColumnChoice & { key: ColumnKey })[] = [
+  { key: 'client', label: 'Client' },
+  { key: 'ask', label: 'Waiting for' },
+  { key: 'nte', label: 'NTE' },
+  { key: 'cost', label: 'Cost' },
+  { key: 'due', label: 'Due' },
+  { key: 'owner', label: 'For' },
+  { key: 'raised', label: 'Raised' },
+  { key: 'status', label: 'Status' },
+];
+
+const DEFAULT_COLUMNS: ColumnKey[] = ['client', 'ask', 'nte', 'cost', 'due', 'owner', 'raised', 'status'];
+
+const COLUMNS_KEY = 'theone.approvals.columns';
+
+function loadColumns(): ColumnKey[] {
+  try {
+    const raw = localStorage.getItem(COLUMNS_KEY);
+    if (!raw) return DEFAULT_COLUMNS;
+    const known = new Set<string>(COLUMN_CHOICES.map((c) => c.key));
+    const parsed = (JSON.parse(raw) as unknown[]).filter(
+      (k): k is ColumnKey => typeof k === 'string' && known.has(k),
+    );
+    return parsed.length > 0 ? parsed : DEFAULT_COLUMNS;
+  } catch {
+    return DEFAULT_COLUMNS;
+  }
+}
+
+function saveColumns(cols: ColumnKey[]): void {
+  try {
+    localStorage.setItem(COLUMNS_KEY, JSON.stringify(cols));
+  } catch {
+    /* storage disabled — the choice simply does not survive the reload */
+  }
+}
+
+/** Header cell class per column: money right-aligned, dates narrow. */
+const COLUMN_CLASS: Partial<Record<ColumnKey, string>> = {
+  client: 'col-client',
+  nte: 'num',
+  cost: 'num',
+  due: 'col-list',
+  raised: 'col-list',
+  status: 'col-status',
+};
+
 // ── One row shape for three kinds of thing ───────────────────────────────────
 
 type RowData =
@@ -117,6 +172,10 @@ interface Row {
   client: string | null;
   billing_entity: string | null;
   trade: string | null;
+  /** The work order's own numbers, as they stand now. */
+  due: string | null;
+  nte: number | null;
+  cost: number | null;
   /** When it started waiting — ISO, for the sort and the Raised column. */
   raised_at: string;
   /** Still waiting for a decision. */
@@ -176,6 +235,9 @@ function taskRow(
     client: item.client,
     billing_entity: item.billing_entity,
     trade: item.trade,
+    due: item.wo_due,
+    nte: item.wo_nte,
+    cost: item.wo_cost,
     raised_at: item.created_at,
     open,
     mine,
@@ -205,6 +267,9 @@ function quoteRow(item: QuoteListItem, canDecide: boolean, held: Set<string>): R
     client: item.client,
     billing_entity: null,
     trade: null,
+    due: item.wo_due,
+    nte: item.wo_nte,
+    cost: item.wo_cost,
     raised_at: item.updated_at ?? '',
     open,
     mine: open && canDecide,
@@ -259,6 +324,9 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
     client: item.client,
     billing_entity: null,
     trade: null,
+    due: item.wo_due,
+    nte: item.wo_nte,
+    cost: item.wo_cost,
     raised_at: item.created_at,
     open,
     mine: open && canDecide,
@@ -310,6 +378,13 @@ export function ApprovalsPage() {
   const myRole = actingAs?.role ?? null;
 
   const [section, setSection] = useState<Section>('all');
+  const [columns, setColumns] = useState<ColumnKey[]>(loadColumns);
+  const changeColumns = (next: string[]) => {
+    const known = new Set<string>(COLUMN_CHOICES.map((c) => c.key));
+    const cols = next.filter((k): k is ColumnKey => known.has(k));
+    setColumns(cols);
+    saveColumns(cols);
+  };
   const [lane, setLane] = useState<Lane>(canDecideAnything ? 'mine' : 'open');
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -545,6 +620,14 @@ export function ApprovalsPage() {
               Clear filters
             </button>
           )}
+          <div className="apq-columns">
+            <ColumnsMenu
+              fields={COLUMN_CHOICES}
+              columns={columns}
+              defaults={DEFAULT_COLUMNS}
+              onChange={changeColumns}
+            />
+          </div>
         </div>
       )}
 
@@ -573,25 +656,26 @@ export function ApprovalsPage() {
             <thead>
               <tr>
                 <th className="col-wo">WO #</th>
-                <th className="col-client">Client</th>
-                <th>Waiting for</th>
-                <th>For</th>
-                <th className="col-list">Raised</th>
-                <th className="col-status">Status</th>
+                {columns.map((k) => (
+                  <th key={k} className={COLUMN_CLASS[k]}>
+                    {COLUMN_CHOICES.find((c) => c.key === k)?.label}
+                  </th>
+                ))}
                 <th className="payq-actions">Decision</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr className="ct-empty"><td colSpan={7}>Loading the inbox…</td></tr>
+                <tr className="ct-empty"><td colSpan={columns.length + 2}>Loading the inbox…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr className="ct-empty"><td colSpan={7}>{emptyText}</td></tr>
+                <tr className="ct-empty"><td colSpan={columns.length + 2}>{emptyText}</td></tr>
               )}
               {pageRows.map((r) => (
                 <InboxRow
                   key={r.key}
                   row={r}
+                  columns={columns}
                   myId={myId}
                   canApproveTasks={canApproveTasks}
                   canApproveQuotes={canApproveQuotes}
@@ -771,6 +855,7 @@ function FilterSelect({
 
 interface RowProps {
   row: Row;
+  columns: ColumnKey[];
   myId: string | null;
   canApproveTasks: boolean;
   canApproveQuotes: boolean;
@@ -785,14 +870,27 @@ function Ask({ row }: { row: Row }) {
   const d = row.data;
   switch (d.kind) {
     case 'task': {
-      const numbers = nteNumbers(d.item);
+      // NTE increase: the NTE and Cost columns carry the numbers; the cell
+      // says only how far over. Other task kinds keep their title.
+      const over =
+        d.item.type === 'nte_override' && row.cost != null && row.nte != null
+          ? row.cost - row.nte
+          : null;
       return (
         <div className="site payq-who">
           <strong>
             {chip}
-            {d.item.title}
+            {over != null ? (
+              <span className="apq-over">{usd(over)} over</span>
+            ) : d.item.type === 'nte_override' ? (
+              'Cost is over the client NTE'
+            ) : (
+              d.item.title
+            )}
           </strong>
-          <small>{[numbers, row.billing_entity, row.trade].filter(Boolean).join(' · ')}</small>
+          {(row.billing_entity || row.trade) && (
+            <small>{[row.billing_entity, row.trade].filter(Boolean).join(' · ')}</small>
+          )}
         </div>
       );
     }
@@ -802,9 +900,7 @@ function Ask({ row }: { row: Row }) {
         <div className="site payq-who">
           <strong>
             {chip}
-            {d.item.status === 'pending_approval'
-              ? `Quote for ${usd(d.item.grand_total)} waiting for approval`
-              : `Quote for ${usd(d.item.grand_total)}`}
+            {`Quote ${usd(d.item.grand_total)}`}
           </strong>
           <small>
             <Link to={href}>Open the quote</Link>
@@ -833,16 +929,85 @@ function InboxRow(props: RowProps) {
   const { row } = props;
   const woHref = `/work-orders/${encodeURIComponent(row.wo_number)}`;
   const when = numericDate(row.raised_at) ?? '—';
+  // Who raised it — a person's name only. A rule-raised task says nothing
+  // here: the kind chip already says what it is.
   const raisedBy =
     row.data.kind === 'task'
-      ? (row.data.item.source?.name ?? row.data.item.created_by?.display_name ?? null)
+      ? (row.data.item.source ? null : (row.data.item.created_by?.display_name ?? null))
       : row.data.kind === 'payment'
         ? (row.data.item.requested_by?.display_name ?? null)
         : null;
+  const overNte = isCostOverNte(row.cost, row.nte);
   const lane =
     row.data.kind === 'task' && row.data.item.assigned_to && row.data.item.assigned_role_label
       ? `${row.data.item.assigned_role_label} lane`
       : null;
+
+  /** One cell per chosen column, in the chosen order. */
+  const cell = (k: ColumnKey) => {
+    switch (k) {
+      case 'client':
+        return (
+          <td key={k} className="col-client">
+            {/* The work-order title is one click away on the WO number; here it
+                only pushed the money off to the right. It stays as hover text. */}
+            <strong title={row.wo_title ?? undefined}>{row.client ?? '—'}</strong>
+          </td>
+        );
+      case 'ask':
+        return (
+          <td key={k}>
+            <Ask row={row} />
+          </td>
+        );
+      case 'nte':
+        return <td key={k} className="num">{row.nte == null ? '—' : usd(row.nte)}</td>;
+      case 'cost':
+        return (
+          <td
+            key={k}
+            className={`num${overNte ? ' is-over-nte' : ''}`}
+            title={overNte ? 'Cost is above the client NTE' : undefined}
+          >
+            {row.cost == null ? '—' : usd(row.cost)}
+          </td>
+        );
+      case 'due':
+        return <td key={k} className="col-list">{numericDate(row.due) ?? '—'}</td>;
+      case 'owner':
+        return (
+          <td key={k}>
+            <span className="payq-status">
+              <span>{row.owner}</span>
+              {lane && <small>{lane}</small>}
+            </span>
+          </td>
+        );
+      case 'raised':
+        return (
+          <td key={k} className="col-list">
+            <span className="payq-status">
+              <span>{when}</span>
+              {raisedBy && <small>{raisedBy}</small>}
+            </span>
+          </td>
+        );
+      case 'status':
+        return (
+          <td key={k} className="col-status">
+            <span className="payq-status">
+              <span className={`chip chip-sm ${row.status.chip}`.trim()}>{row.status.label}</span>
+              {row.status.trail && (
+                <small title={row.status.note ?? row.status.trail}>{row.status.trail}</small>
+              )}
+              {row.status.note && (
+                <small className="apq-note" title={row.status.note}>{row.status.note}</small>
+              )}
+            </span>
+          </td>
+        );
+    }
+  };
 
   return (
     <tr className={row.held && row.open ? 'apq-held' : undefined}>
@@ -851,37 +1016,7 @@ function InboxRow(props: RowProps) {
           {row.wo_number}
         </Link>
       </td>
-      <td className="col-client">
-        {/* The work-order title is one click away on the WO number; here it only
-            pushed the money off to the right. It stays as the hover text. */}
-        <strong title={row.wo_title ?? undefined}>{row.client ?? '—'}</strong>
-      </td>
-      <td>
-        <Ask row={row} />
-      </td>
-      <td>
-        <span className="payq-status">
-          <span>{row.owner}</span>
-          {lane && <small>{lane}</small>}
-        </span>
-      </td>
-      <td className="col-list">
-        <span className="payq-status">
-          <span>{when}</span>
-          {raisedBy && <small>{raisedBy}</small>}
-        </span>
-      </td>
-      <td className="col-status">
-        <span className="payq-status">
-          <span className={`chip chip-sm ${row.status.chip}`.trim()}>{row.status.label}</span>
-          {row.status.trail && (
-            <small title={row.status.note ?? row.status.trail}>{row.status.trail}</small>
-          )}
-          {row.status.note && (
-            <small className="apq-note" title={row.status.note}>{row.status.note}</small>
-          )}
-        </span>
-      </td>
+      {props.columns.map(cell)}
       <td className="payq-actions">
         <Decisions {...props} />
       </td>

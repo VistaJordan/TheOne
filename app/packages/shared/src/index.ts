@@ -842,6 +842,10 @@ export interface PaymentListItem extends PaymentRequest {
   /** Rule 1.5.2: an NTE override is waiting on a manager for this work
       order, so approve / send to Yoda are refused (409) until it is decided. */
   nte_override_open: boolean;
+  /** The work order's own numbers as they stand NOW (the inbox columns). */
+  wo_due: string | null;
+  wo_nte: number | null;
+  wo_cost: number | null;
 }
 
 /** GET /api/payments — every request across work orders, newest first. */
@@ -936,6 +940,10 @@ export interface ApprovalListItem extends ApprovalTask {
   client: string | null;
   billing_entity: string | null;
   trade: string | null;
+  /** The work order's own numbers as they stand NOW (the inbox columns). */
+  wo_due: string | null;
+  wo_nte: number | null;
+  wo_cost: number | null;
 }
 
 /** GET /api/approvals — every task across live work orders, open first. */
