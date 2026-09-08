@@ -446,19 +446,38 @@ function Decisions({ item, canApprove, canProcess, busy, onDecide }: RowProps) {
       </span>
     );
 
+  // Rule 1.5.2: while an NTE override waits on a manager, the moves that let
+  // money out are on hold — the API refuses them with a 409, this says so first.
+  const hold = item.nte_override_open;
+  const HOLD = 'On hold — the NTE override on this work order has to be decided first (rule 1.5.2)';
+
   switch (item.status) {
     case 'requested':
       return (
         <>
           {verb('Reject', 'x', 'reject', canApprove, 'Requires payment approval rights', 'danger')}
-          {verb('Approve', 'check', 'approve', canApprove, 'Requires payment approval rights', 'primary')}
+          {verb(
+            'Approve',
+            'check',
+            'approve',
+            canApprove && !hold,
+            canApprove ? HOLD : 'Requires payment approval rights',
+            'primary',
+          )}
         </>
       );
     case 'approved':
       return (
         <>
           {verb('Reject', 'x', 'reject', canApprove, 'Requires payment approval rights', 'danger')}
-          {verb('Send to Yoda', 'send', 'send', canProcess, 'AP processes payments', 'primary')}
+          {verb(
+            'Send to Yoda',
+            'send',
+            'send',
+            canProcess && !hold,
+            canProcess ? HOLD : 'AP processes payments',
+            'primary',
+          )}
         </>
       );
     case 'sent_to_yoda':

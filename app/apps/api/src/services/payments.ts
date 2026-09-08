@@ -31,6 +31,7 @@ import { PAYMENT_PROCESS_PERM_KEY } from '@theone/shared';
 import { ApiError, badRequest } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { requirePerm } from './permissions.js';
+import { assertNoOpenNteOverride } from './approvals.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -74,6 +75,7 @@ interface PaymentRow {
   wo_number: string;
   title: string | null;
   client: string | null;
+  nte_override_open: boolean;
 }
 
 const SELECT_SQL = `
@@ -100,7 +102,10 @@ const SELECT_SQL = `
          pr.yoda_ref,
          pb.id::text AS paid_by_id, pb.display_name AS paid_by_name, pb.kind::text AS paid_by_kind,
          ${ISO('pr.paid_at')} AS paid_at,
-         t.wo_number, t.title, t.client
+         t.wo_number, t.title, t.client,
+         EXISTS (SELECT 1 FROM approval_task a
+                  WHERE a.task_id = pr.task_id AND a.type = 'nte_override' AND a.status = 'open')
+                            AS nte_override_open
     FROM payment_request pr
     JOIN task t            ON t.id = pr.task_id
     LEFT JOIN vendor v     ON v.id = pr.vendor_id
@@ -156,7 +161,13 @@ function mapPayment(r: PaymentRow): PaymentRequest {
 }
 
 function mapListItem(r: PaymentRow): PaymentListItem {
-  return { ...mapPayment(r), wo_number: r.wo_number, title: r.title, client: r.client };
+  return {
+    ...mapPayment(r),
+    wo_number: r.wo_number,
+    title: r.title,
+    client: r.client,
+    nte_override_open: Boolean(r.nte_override_open),
+  };
 }
 
 function round2(n: number): number {
@@ -371,6 +382,9 @@ async function decide(
   kind: DecisionKind,
   actor: ActingPrincipal,
   text: string | null,
+  /** Rule 1.5.2: the moves that let money out are refused while an NTE
+      override waits on a manager. Checked before the transaction opens. */
+  progression: string | null = null,
 ): Promise<PaymentRequest> {
   const d: Decision = DECISIONS[kind];
   const cur = await getPaymentRequest(id);
@@ -380,6 +394,7 @@ async function decide(
       allowed_from: d.from,
     });
   }
+  if (progression) await assertNoOpenNteOverride(cur.task_id, progression);
 
   const params: unknown[] = [d.to, id, actor.id];
   if (d.set.includes('$4')) params.push(text);
@@ -438,10 +453,11 @@ async function decide(
   return getPaymentRequest(id);
 }
 
-/** requested → approved (payments:approve). */
+/** requested → approved (payments:approve). Refused (409) while an NTE
+    override waits on a manager — rule 1.5.2. */
 export async function approvePaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
   requirePerm(actor, 'payments', 'approve', 'You cannot approve payment requests');
-  return decide(id, 'approve', actor, null);
+  return decide(id, 'approve', actor, null, 'Approving this payment');
 }
 
 /** requested | approved → rejected, with the reason (payments:approve). */
@@ -461,7 +477,7 @@ export async function sendPaymentRequestToYoda(
   actor: ActingPrincipal,
 ): Promise<PaymentRequest> {
   requirePerm(actor, PAYMENT_PROCESS_PERM_KEY, 'edit', 'You cannot send payments to Yoda');
-  return decide(id, 'send_to_yoda', actor, yodaRef);
+  return decide(id, 'send_to_yoda', actor, yodaRef, 'Sending this payment to Yoda');
 }
 
 /** approved | sent_to_yoda → paid (payments/process:edit). */

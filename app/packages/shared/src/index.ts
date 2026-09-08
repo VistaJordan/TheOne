@@ -762,6 +762,9 @@ export interface Quote {
   totals: QuoteTotals;
   summary: QuoteSummary;
   permissions: QuotePermissions;
+  /** Rule 1.5.2: an NTE override is waiting on a manager for this work
+      order, so approving / sending is refused (409) until it is decided. */
+  nte_override_open: boolean;
 }
 
 /** GET/POST/PUT /api/work-orders/:id/quote and every lifecycle POST. */
@@ -836,6 +839,9 @@ export interface PaymentListItem extends PaymentRequest {
   wo_number: string;
   title: string | null;
   client: string | null;
+  /** Rule 1.5.2: an NTE override is waiting on a manager for this work
+      order, so approve / send to Yoda are refused (409) until it is decided. */
+  nte_override_open: boolean;
 }
 
 /** GET /api/payments — every request across work orders, newest first. */
@@ -1051,6 +1057,7 @@ export type ApiErrorCode =
   | 'BAD_REQUEST'
   | 'UNAUTHORIZED'   // 401 — no valid session (S5 auth)
   | 'FORBIDDEN'
+  | 'CONFLICT'       // 409 — the state refuses the move (an NTE override is pending, rule 1.5.2)
   | 'NOT_FOUND'
   | 'INTERNAL';
 
