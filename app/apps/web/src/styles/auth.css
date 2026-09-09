@@ -450,7 +450,10 @@ td.pcell .sw { justify-content: center; }
   grid-template-columns: minmax(150px, 1.1fr) minmax(120px, .9fr) minmax(150px, 1.1fr) 26px;
 }
 .auto-row-when { grid-template-columns: minmax(170px, .9fr) minmax(150px, 1fr) minmax(150px, 1.1fr); }
-.auto-row-then { grid-template-columns: minmax(150px, 1fr) minmax(150px, 1.2fr) 26px; }
+/* kind · field · value · remove. The value control only mounts once a field
+   is picked, so the remove button is pinned to the last track either way. */
+.auto-row-then { grid-template-columns: minmax(150px, .9fr) minmax(150px, 1fr) minmax(150px, 1.1fr) 26px; }
+.auto-row-then .wf-x { grid-column: -2; }
 .auto-add { align-self: flex-start; }
 /* The wizard chrome: numbered stepper, live preview sentence, choice tiles. */
 .auto-stepper {
@@ -500,6 +503,7 @@ td.pcell .sw { justify-content: center; }
 .auto-builder .auto-row-when { margin-top: 12px; }
 @media (max-width: 700px) {
   .auto-row, .auto-row-when, .auto-row-then { grid-template-columns: 1fr; }
+  .auto-row-then .wf-x { grid-column: auto; }
 }
 
 /* ── Field picker (searchable replacement for the grouped <select>) ────── */
