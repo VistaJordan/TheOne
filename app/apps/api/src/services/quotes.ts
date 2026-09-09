@@ -923,7 +923,7 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
         ORDER BY CASE kind WHEN 'incurred' THEN 0 ELSE 1 END, position ASC, id ASC`,
       [quoteId],
     )
-  ).rows as SectionRow[];
+  ).rows as unknown as SectionRow[];
   const lineRows = (
     await tx.query(
       `SELECT l.id::text AS id, l.section_id::text AS section_id, l.line_type, l.description,
@@ -934,7 +934,7 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
         ORDER BY l.position ASC, l.id ASC`,
       [quoteId],
     )
-  ).rows as LineRow[];
+  ).rows as unknown as LineRow[];
 
   const money = (n: number) => `$${n.toFixed(2)}`;
   let optionIndex = 0;
