@@ -817,5 +817,21 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
     if (r.status === 'open' && decideTypes.includes(r.type)) to_decide += n;
     if ((r.status === 'approved' || r.status === 'rejected') && r.mine && !r.acked) to_acknowledge += n;
   }
+  // The inbox's "For me" lane also holds the quotes and technician payments
+  // waiting on this person; the badge counts what that lane shows.
+  if (allow('quotes', 'approve') && allow(approvalSectionPermKey('quotes'), 'view')) {
+    const q = await query<{ n: number | string }>(
+      `SELECT count(*)::int AS n FROM quote q JOIN task t ON t.id = q.task_id
+        WHERE q.status = 'pending_approval' AND t.deleted_at IS NULL`,
+    );
+    to_decide += Number(q.rows[0]?.n ?? 0);
+  }
+  if (allow('payments', 'approve') && allow(approvalSectionPermKey('payments'), 'view')) {
+    const p = await query<{ n: number | string }>(
+      `SELECT count(*)::int AS n FROM payment_request p JOIN task t ON t.id = p.task_id
+        WHERE p.status = 'requested' AND t.deleted_at IS NULL`,
+    );
+    to_decide += Number(p.rows[0]?.n ?? 0);
+  }
   return { to_decide, to_acknowledge };
 }
