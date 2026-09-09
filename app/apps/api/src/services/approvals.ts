@@ -41,6 +41,8 @@ import {
 } from '@theone/shared';
 import { ApiError, badRequest, conflict } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
+import { Params } from './woFields.js';
+import { woScopeSql } from './woScope.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
 
@@ -195,13 +197,19 @@ function num(v: unknown): number | null {
  * with no section grant still gets "My requests".
  */
 export async function listApprovalTasks(viewer: ActingPrincipal, limit = 500): Promise<ApprovalListResponse> {
+  // 0026: a scoped viewer sees the tasks on THEIR work orders — plus the
+  // requests they raised themselves, which stay theirs even if the work order
+  // was reassigned afterwards.
+  const p = new Params();
+  const scope = woScopeSql(viewer, p);
+  const scopeSql = scope ? `AND (${scope} OR a.created_by = ${p.add(viewer.id)})` : '';
   const res = await query<Row>(
     `${SELECT_SQL}
-      WHERE t.deleted_at IS NULL
+      WHERE t.deleted_at IS NULL ${scopeSql}
       ORDER BY CASE a.status WHEN 'open' THEN 0 ELSE 1 END,
                a.created_at DESC, a.id DESC
-      LIMIT $1`,
-    [limit],
+      LIMIT ${p.add(limit)}`,
+    p.values,
   );
   const allow = allowFor(viewer);
   const items = res.rows
@@ -802,13 +810,18 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
   const decideTypes = (['nte_override', 'status_change', 'manager_review'] as ApprovalTaskType[]).filter(
     (t) => allow(approvalSectionPermKey(approvalSectionOf(t)), 'approve'),
   );
+  const p = new Params();
+  const me = p.add(viewer.id);
+  const scope = woScopeSql(viewer, p);
+  const scopeSql = scope ? `AND (${scope} OR a.created_by = ${me})` : '';
   const res = await query<{ type: ApprovalTaskType; status: ApprovalTaskStatus; mine: boolean; acked: boolean; n: number | string }>(
-    `SELECT a.type, a.status, (a.created_by = $1) AS mine, (a.acknowledged_at IS NOT NULL) AS acked, count(*)::int AS n
+    `SELECT a.type, a.status, (a.created_by = ${me}) AS mine, (a.acknowledged_at IS NOT NULL) AS acked, count(*)::int AS n
        FROM approval_task a JOIN task t ON t.id = a.task_id
       WHERE t.deleted_at IS NULL
-        AND (a.status = 'open' OR (a.created_by = $1 AND a.acknowledged_at IS NULL))
+        AND (a.status = 'open' OR (a.created_by = ${me} AND a.acknowledged_at IS NULL))
+        ${scopeSql}
       GROUP BY 1, 2, 3, 4`,
-    [viewer.id],
+    p.values,
   );
   let to_decide = 0;
   let to_acknowledge = 0;
@@ -819,19 +832,22 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
   }
   // The inbox's "For me" lane also holds the quotes and technician payments
   // waiting on this person; the badge counts what that lane shows.
+  const only = scope ? `AND ${scope}` : '';
   if (allow('quotes', 'approve') && allow(approvalSectionPermKey('quotes'), 'view')) {
     const q = await query<{ n: number | string }>(
       `SELECT count(*)::int AS n FROM quote q JOIN task t ON t.id = q.task_id
-        WHERE q.status = 'pending_approval' AND t.deleted_at IS NULL`,
+        WHERE q.status = 'pending_approval' AND t.deleted_at IS NULL ${only}`,
+      p.values,
     );
     to_decide += Number(q.rows[0]?.n ?? 0);
   }
   if (allow('payments', 'approve') && allow(approvalSectionPermKey('payments'), 'view')) {
-    const p = await query<{ n: number | string }>(
-      `SELECT count(*)::int AS n FROM payment_request p JOIN task t ON t.id = p.task_id
-        WHERE p.status = 'requested' AND t.deleted_at IS NULL`,
+    const pr = await query<{ n: number | string }>(
+      `SELECT count(*)::int AS n FROM payment_request pr JOIN task t ON t.id = pr.task_id
+        WHERE pr.status = 'requested' AND t.deleted_at IS NULL ${only}`,
+      p.values,
     );
-    to_decide += Number(p.rows[0]?.n ?? 0);
+    to_decide += Number(pr.rows[0]?.n ?? 0);
   }
   return { to_decide, to_acknowledge };
 }

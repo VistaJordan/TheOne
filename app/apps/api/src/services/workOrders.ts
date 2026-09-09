@@ -17,7 +17,8 @@ import { PHASE_BY_STATUS_NAME } from '@theone/shared';
 import { ApiError } from '../errors.js';
 import { logTaskChanges, type ChangeSource, type TaskChange } from './woAudit.js';
 import { dispatchAutomations, type AutoCtx } from './automations.js';
-import { UUID_RE, CREATED_AT_SQL, getActivityForTask } from './activity.js';
+import { UUID_RE, CREATED_AT_SQL, getActivityForTask, type ActingPrincipal } from './activity.js';
+import { woScopeSql } from './woScope.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
 import {
@@ -137,9 +138,15 @@ const WO_FROM = `
  */
 async function buildListWhere(
   f: Omit<ListFilters, 'limit' | 'offset'>,
+  actor?: ActingPrincipal,
 ): Promise<{ sql: string; p: Params }> {
   const p = new Params();
   const where: string[] = ['t.deleted_at IS NULL'];
+
+  // 0026: the row scope comes first — a dispatcher's list, export, counts and
+  // "select all" are all "their" work orders before any filter is applied.
+  const scope = actor ? woScopeSql(actor, p) : null;
+  if (scope) where.push(scope);
 
   // The three legacy scalar params still work: the segmented status-group tabs
   // and the topbar search predate the filter builder and are cheaper to express
@@ -188,8 +195,11 @@ async function groupCounts(
   }));
 }
 
-export async function listWorkOrders(f: ListFilters): Promise<WorkOrderListResponse> {
-  const { sql: whereSql, p } = await buildListWhere(f);
+export async function listWorkOrders(
+  f: ListFilters,
+  actor?: ActingPrincipal,
+): Promise<WorkOrderListResponse> {
+  const { sql: whereSql, p } = await buildListWhere(f, actor);
   // Snapshot before ORDER BY / LIMIT append to the same accumulator: the count
   // and the group query need the WHERE parameters and nothing after them.
   const whereParams = [...p.values];
@@ -250,8 +260,9 @@ export const BULK_SELECTION_CAP = 5000;
 
 export async function listMatchingIds(
   f: Omit<ListFilters, 'limit' | 'offset'>,
+  actor?: ActingPrincipal,
 ): Promise<string[]> {
-  const { sql: whereSql, p } = await buildListWhere(f);
+  const { sql: whereSql, p } = await buildListWhere(f, actor);
   const res = await query<{ id: string }>(
     `SELECT t.id ${WO_FROM} ${whereSql} ORDER BY t.created_at DESC LIMIT ${p.add(BULK_SELECTION_CAP)}`,
     p.values,

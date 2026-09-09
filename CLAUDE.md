@@ -135,6 +135,30 @@ needs no code: nothing pauses a timer and the quote clock keys off visits.
 The status button reads "Request status change" for request-mode users and
 the bulk bar hides its status move for them.
 
+**Which work orders a person sees** (migration 0026, rule 8.5, the
+roadmap's "my book / my entity") is two more paths in the same permission
+tree, so Roles and per-user Adjust draw it with no UI of its own:
+`work_orders/scope` view = everything (unset inherits `work_orders` view) or
+**false = only work orders assigned to them**, plus every billing entity
+granted as `work_orders/scope/entity/<Comp>`. The Roles screen shows it as
+the "Which work orders" row (Everything / Only theirs, `WO_SCOPE_CHOICES`)
+with one tickable child per Comp value (`/admin/permission-fields` returns
+`entities`). 0026 puts OM / OM Under Probation / Senior OM on "Only theirs".
+The resolver is `resolveWoScope` in `packages/shared/src/permissions.ts`;
+`apps/api/src/services/woScope.ts` turns it into one SQL predicate
+(`woScopeSql`: bag `Assignee`, a comma-joined list of display names, matched
+against the acting principal's name, `Assignee Name TXT` as the backstop, OR
+`t.billing_entity IN (...)`). It is appended by `buildListWhere` (list, ids,
+export, group counts), the approvals inbox and badge (own requests always
+stay), the quotes and payments queues, KPIs and metrics; `resolveTaskId(id,
+actor)` in `services/activity.ts` is what every per-work-order route resolves
+through and throws a **403** for a row outside the scope, and bulk edit /
+delete refuse a selection that is not wholly inside it. The list header shows
+a "Yours only" / "Yours + SFM" chip for a scoped person. Super admins are
+never scoped. Not scoped on purpose: the admin console counts and Trash
+(admin only), the automations engine (system), and the distinct-value
+dropdowns (they list vocabulary, not rows).
+
 **Visits** (migration 0021, `services/visits.ts`, `components/wo/CicoCard.tsx`)
 replaced the three check-in/out fields with a log: one `wo_visit` row per
 visit (type, tech name + phone, method, own check-in / check-out stamps to

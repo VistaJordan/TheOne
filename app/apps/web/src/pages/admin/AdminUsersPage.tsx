@@ -66,7 +66,10 @@ function usePermissionTree(enabled: boolean): PermNode[] {
     staleTime: 5 * 60 * 1000,
     retry: 0,
   });
-  return useMemo(() => buildPermissionTree(q.data?.items ?? []), [q.data]);
+  return useMemo(
+    () => buildPermissionTree(q.data?.items ?? [], { entities: q.data?.entities ?? [] }),
+    [q.data],
+  );
 }
 
 const same = (a: PermMap, b: PermMap) => JSON.stringify(a) === JSON.stringify(b);

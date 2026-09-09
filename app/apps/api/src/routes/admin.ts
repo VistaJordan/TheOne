@@ -226,8 +226,18 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!req.auth) throw unauthorized();
     if (!req.auth.user.isSuperAdmin) requireAdmin(req, 'roles');
     const cat = await getFieldCatalogue();
+    // 0026: the billing entities (Comp) the "Which work orders" row can grant —
+    // the dropdown's defined options plus whatever the data already holds.
+    const entities = new Set<string>();
+    for (const key of ['billing_entity', 'fields.21. Comp']) {
+      for (const o of cat.fields.find((f) => f.key === key)?.options ?? []) {
+        const v = String(o.value ?? '').trim();
+        if (v) entities.add(v);
+      }
+    }
     return {
       items: cat.fields.map((f) => ({ key: f.key, label: f.label, custom: Boolean(f.custom) })),
+      entities: [...entities].sort((a, b) => a.localeCompare(b)),
     };
   });
 

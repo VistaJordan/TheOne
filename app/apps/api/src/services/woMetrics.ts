@@ -34,6 +34,8 @@ import {
   type FilterSet,
   type ResolvedField,
 } from './woFields.js';
+import type { ActingPrincipal } from './activity.js';
+import { woScopeSql } from './woScope.js';
 
 // The same FROM the list query uses, so compiled filters (which reference the
 // t / s / hl aliases) drop in unchanged.
@@ -51,11 +53,14 @@ export async function metricBreakdown(
   fieldKey: string,
   filters: FilterSet | undefined,
   limit: number,
+  viewer?: ActingPrincipal,
 ): Promise<MetricBreakdown> {
   const f = await resolveField(fieldKey); // validates the key (throws on unknown)
   const p = new Params();
   const expr = await compileGroupExpr(fieldKey, p);
   const where = ['t.deleted_at IS NULL'];
+  const scope = viewer ? woScopeSql(viewer, p) : null; // 0026
+  if (scope) where.push(scope);
   if (filters) {
     const w = await compileFilters(filters, p);
     if (w) where.push(w);
@@ -120,6 +125,7 @@ export async function metricDuration(
   from: MetricEvent,
   to: MetricEvent,
   filters: FilterSet | undefined,
+  viewer?: ActingPrincipal,
 ): Promise<MetricDuration> {
   const fromField = await resolveField(from.field);
   const toField = await resolveField(to.field);
@@ -127,6 +133,8 @@ export async function metricDuration(
   const fromSql = eventMatch('a', fromField, from.value, p);
   const toSql = eventMatch('b', toField, to.value, p);
   const where = ['t.deleted_at IS NULL'];
+  const scope = viewer ? woScopeSql(viewer, p) : null; // 0026
+  if (scope) where.push(scope);
   if (filters) {
     const w = await compileFilters(filters, p);
     if (w) where.push(w);

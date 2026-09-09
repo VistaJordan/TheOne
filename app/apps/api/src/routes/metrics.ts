@@ -13,6 +13,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse } from '../errors.js';
 import { metricBreakdown, metricDuration } from '../services/woMetrics.js';
+import { actingPrincipalFromRequest } from '../services/activity.js';
 import { filterSetSchema } from './views.js';
 import { jsonParam } from './workOrders.js';
 
@@ -36,11 +37,11 @@ const durationQuerySchema = z.object({
 export default async function metricsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/metrics/breakdown', async (req) => {
     const q = parse(breakdownQuerySchema, req.query);
-    return metricBreakdown(q.field, q.filters, q.limit);
+    return metricBreakdown(q.field, q.filters, q.limit, actingPrincipalFromRequest(req));
   });
 
   app.get('/metrics/duration', async (req) => {
     const q = parse(durationQuerySchema, req.query);
-    return metricDuration(q.from, q.to, q.filters);
+    return metricDuration(q.from, q.to, q.filters, actingPrincipalFromRequest(req));
   });
 }

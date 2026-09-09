@@ -335,10 +335,65 @@ export const STATUS_MODE_CHOICES: NonNullable<PermNode['choices']> = [
   { code: 'none', label: 'Not allowed', hint: 'No status button at all', grant: { edit: false, create: false } },
 ];
 
+// ── Which work orders a person can see (0026 · rule 8.5, the roadmap's
+// "my book / my entity") ─────────────────────────────────────────────────────
+// Row-level scope on top of the field-level grants above. `work_orders/scope`
+// :view answers "everything?". Unset, it inherits `work_orders`:view, so a
+// role that can open the list sees all of it until narrowed; set to false it
+// means "only the work orders assigned to them" — plus every billing entity
+// (the Comp field) granted underneath as `work_orders/scope/entity/<Comp>`.
+// Per person from Adjust, as usual: an override at any of these paths beats
+// the role, so "let this OM see everything later" is one click.
+export const WO_SCOPE_PERM_KEY = 'work_orders/scope';
+export const WO_SCOPE_ENTITY_ROOT = `${WO_SCOPE_PERM_KEY}/entity`;
+
+/** Path segments cannot hold '/', so the entity code is URI-encoded. */
+export function woScopeEntityPermKey(entity: string): string {
+  return `${WO_SCOPE_ENTITY_ROOT}/${encodeURIComponent(entity)}`;
+}
+
+export const WO_SCOPE_CHOICES: NonNullable<PermNode['choices']> = [
+  { code: 'all', label: 'Everything', hint: 'Every work order', grant: { view: true } },
+  {
+    code: 'assigned',
+    label: 'Only theirs',
+    hint: 'Work orders assigned to them, plus every billing entity ticked underneath',
+    grant: { view: false },
+  },
+];
+
+export interface WoScope {
+  /** true = no row restriction at all. */
+  all: boolean;
+  /** Billing entities (Comp) whose work orders they see in full, when not `all`. */
+  entities: string[];
+}
+
+/** The row scope a permission set resolves to — the API filters by it and
+    the web says so on the list. Super admins see everything. */
+export function resolveWoScope(set: PermissionSet | null | undefined, superAdmin = false): WoScope {
+  if (superAdmin || permAllows(set, WO_SCOPE_PERM_KEY, 'view')) return { all: true, entities: [] };
+  const prefix = `${WO_SCOPE_ENTITY_ROOT}/`;
+  const keys = new Set<string>();
+  for (const map of [set?.role ?? {}, set?.overrides ?? {}]) {
+    for (const k of Object.keys(map)) if (k.startsWith(prefix)) keys.add(k);
+  }
+  const entities: string[] = [];
+  for (const k of keys) {
+    if (permAllows(set, k, 'view')) entities.push(decodeURIComponent(k.slice(prefix.length)));
+  }
+  return { all: false, entities: entities.sort() };
+}
+
 export interface PermFieldInfo {
   key: string;
   label: string;
   custom?: boolean;
+}
+
+export interface PermissionTreeOptions {
+  /** Billing-entity codes (Comp) to offer under "Which work orders". */
+  entities?: string[];
 }
 
 /**
@@ -347,7 +402,10 @@ export interface PermFieldInfo {
  * under Admin. Built from the live field catalogue so an admin-added field
  * shows up (under "More fields") without a deploy.
  */
-export function buildPermissionTree(fields: PermFieldInfo[]): PermNode[] {
+export function buildPermissionTree(
+  fields: PermFieldInfo[],
+  opts: PermissionTreeOptions = {},
+): PermNode[] {
   const bySection = new Map<string, PermFieldInfo[]>();
   for (const f of fields) {
     const slug = fieldSectionSlug(f.key);
@@ -396,6 +454,18 @@ export function buildPermissionTree(fields: PermFieldInfo[]): PermNode[] {
       actions: ['view', 'create', 'edit', 'delete'],
       note: 'Create = import; edit = field values and status; delete = bulk delete to Trash.',
       children: [
+        {
+          key: WO_SCOPE_PERM_KEY,
+          label: 'Which work orders',
+          actions: ['view'],
+          note: 'Everything, or only the ones assigned to them (rule 8.5). Tick a billing entity below to let them see all of its work orders too.',
+          choices: WO_SCOPE_CHOICES,
+          children: (opts.entities ?? []).map((e) => ({
+            key: woScopeEntityPermKey(e),
+            label: `Entity · ${e}`,
+            actions: ['view'],
+          })),
+        },
         {
           key: 'work_orders/status',
           label: 'Status changes',

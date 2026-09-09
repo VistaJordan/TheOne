@@ -43,7 +43,7 @@ const visitBodySchema = z.object({
 
 async function taskIdOf(req: FastifyRequest): Promise<string> {
   const { id } = parse(idParamsSchema, req.params);
-  const taskId = await resolveTaskId(id);
+  const taskId = await resolveTaskId(id, actingPrincipalFromRequest(req));
   if (!taskId) throw notFound('Work order not found');
   return taskId;
 }

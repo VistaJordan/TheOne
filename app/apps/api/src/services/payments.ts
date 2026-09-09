@@ -30,6 +30,8 @@ import type {
 import { PAYMENT_PROCESS_PERM_KEY } from '@theone/shared';
 import { ApiError, badRequest } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
+import { Params } from './woFields.js';
+import { woScopeSql } from './woScope.js';
 import { requirePerm } from './permissions.js';
 import { assertNoOpenNteOverride } from './approvals.js';
 
@@ -229,10 +231,16 @@ const STATUSES: PaymentRequestStatus[] = ['requested', 'approved', 'sent_to_yoda
  * their rows but leave the queue — nobody should be paying against a WO that
  * is in Trash.
  */
-export async function listAllPaymentRequests(limit = 500): Promise<PaymentListResponse> {
+export async function listAllPaymentRequests(
+  limit = 500,
+  viewer?: ActingPrincipal,
+): Promise<PaymentListResponse> {
+  // 0026: a scoped viewer's queue holds the payables on their work orders only.
+  const p = new Params();
+  const scope = viewer ? woScopeSql(viewer, p) : null;
   const res = await query<PaymentRow>(
     `${SELECT_SQL}
-      WHERE t.deleted_at IS NULL
+      WHERE t.deleted_at IS NULL ${scope ? `AND ${scope}` : ''}
       ORDER BY CASE pr.status
                  WHEN 'requested' THEN 0
                  WHEN 'approved' THEN 1
@@ -240,8 +248,8 @@ export async function listAllPaymentRequests(limit = 500): Promise<PaymentListRe
                  ELSE 3
                END,
                pr.created_at DESC, pr.id DESC
-      LIMIT $1`,
-    [limit],
+      LIMIT ${p.add(limit)}`,
+    p.values,
   );
   const items = res.rows.map(mapListItem);
   const counts = Object.fromEntries(STATUSES.map((s) => [s, 0])) as Record<PaymentRequestStatus, number>;

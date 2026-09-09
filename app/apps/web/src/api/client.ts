@@ -925,7 +925,7 @@ export interface RoleInput {
 }
 
 /** Every field the permission editor can list — unfiltered, unlike /wo-fields. */
-export function listPermissionFields(): Promise<{ items: PermFieldInfo[] }> {
+export function listPermissionFields(): Promise<{ items: PermFieldInfo[]; entities: string[] }> {
   return request('/admin/permission-fields');
 }
 
