@@ -1154,20 +1154,17 @@ function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayme
   // rejection. Either clears it from My requests.
   if (!row.open) {
     if (d.kind === 'task' && row.requester && d.item.type === 'status_change') {
+      // The Status column already says approved / rejected; the cell holds
+      // only the verb, so the two never crowd each other.
       const approved = d.item.status === 'approved';
-      return (
-        <>
-          <span className="payq-done">{row.status.label}</span>
-          {verb(
-            approved ? 'Continue' : 'Understood',
-            approved ? 'check-check' : 'check',
-            true,
-            '',
-            () => onDecide('acknowledge'),
-            'primary',
-            'ack',
-          )}
-        </>
+      return verb(
+        approved ? 'Continue' : 'Understood',
+        approved ? 'check-check' : 'check',
+        true,
+        '',
+        () => onDecide('acknowledge'),
+        'primary',
+        'ack',
       );
     }
     return <span className="payq-done">{row.status.label}</span>;
