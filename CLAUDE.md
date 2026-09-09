@@ -124,6 +124,33 @@ App / Phone / …, Admin › Custom fields) pre-fills a new visit's method from 
 WO's `22. FM`. The same `CicoCard` renders in the CICO tab and as the CICO
 section of All-fields. Gate: `work_orders/fields/cico` view / edit.
 
+**Quote clock and the Due Today view** (migration 0030, rules 2.3.1–2.3.3 and
+4.1). `Quote Due Date` is a **computed** bag field: the latest *Assessment*
+visit's check-out + 48 wall-clock hours, skipping Saturdays, Sundays and the
+`holiday` table as whole days, in America/Chicago (`apps/api/src/lib/
+businessDays.ts`, pure, self-checks via `tsx`). `syncMirrors` in
+`services/visits.ts` re-derives it on every visit write (a Job or Return-trip
+check-out never sets it; deleting the assessment visit clears it), logged
+`via: 'visit'` like the mirrored keys; the field editor and bulk edit refuse
+it (`COMPUTED_KEYS` in shared, same guard as `VISIT_OWNED_KEYS`). `Scheduled
+Date` and `Parts Arrival Date` are ordinary hand-typed datetimes; all three
+live in the Dates section. The Work Orders page has a **built-in "Due Today"
+tab** (`lib/dueToday.ts`, id `builtin:due-today`, never saved or pinned):
+under it the status-group segment becomes All · Due date · Scheduled · Quote ·
+Parts arriving, each a filter on "today" (`businessDay()`); Quote is *today or
+earlier* AND status still before Quote Ready (`isQuoteOwed`, phases Intake /
+Assessment / Quote), so a missed quote does not vanish the next day. The
+sections are OR groups in the filter compiler's join mode and the quick-filter
+chips are ANDed into every group; the Filter menu is hidden there. The list
+cell, the Dates card and the CICO summary turn the date red only while the
+quote is still owed (`lib/quoteDue.ts`). Holidays: Admin › Settings card,
+`/api/admin/holidays` (grant `admin/settings` edit), seeded with US federal
+observed dates for 2026–27 by the migration; the table is **not** truncated
+by the seed (configuration, no FKs — the 0012 reasoning). Deferred: record-level
+scoping of the view per user (rule 8.5) and whether the other three sections
+include overdue rows; on phase-0-ground the Pulse's `quote_owed` clock still
+starts at Waiting for Quote and should be rewired to this field after merge.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

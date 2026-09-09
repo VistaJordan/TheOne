@@ -1,5 +1,6 @@
 import type { WorkOrderDetailV2 } from '../../api/client';
 import { DASH, str } from '../../lib/fields';
+import { QUOTE_DUE_FIELD_KEY, QUOTE_DUE_HINT, quoteOwedIn } from '../../lib/quoteDue';
 import { FIELD_SECTIONS } from '../../lib/woFieldSections';
 import { Icon } from '../Icon';
 import { InlineField, useWoCatalogue } from './fieldEdit';
@@ -23,9 +24,11 @@ function fullDateTime(raw: unknown): string | null {
 }
 
 /** The Dates tab: exactly the All-fields DATES section (Today, SLA Requested,
-    SLA Updated, Date-Time Received, Date Created, Due Date), driven by the
-    same section config so the two views cannot drift. Every row edits in
-    place; an SLA/due date in the past wears the warn ramp. */
+    SLA Updated, Date-Time Received, Date Created, Due Date, Scheduled Date,
+    Parts Arrival Date, Quote Due Date), driven by the same section config so
+    the two views cannot drift. Every row edits in place except Quote Due
+    Date, which the API computes (0024); an SLA/due date in the past wears the
+    warn ramp — Quote Due Date only while the quote is still owed. */
 export function DatesCard({ wo }: DatesCardProps) {
   const byKey = useWoCatalogue();
   const keys = FIELD_SECTIONS.find((s) => s.title === 'Dates')?.keys ?? [];
@@ -46,19 +49,23 @@ export function DatesCard({ wo }: DatesCardProps) {
             // A value the Date parser rejects (e.g. a formula's output) still
             // shows as its raw text rather than vanishing.
             const text = fullDateTime(raw) ?? str(raw);
+            const isQuoteDue = f.key === QUOTE_DUE_FIELD_KEY;
             const deadline = /SLA|Due/i.test(f.label);
-            const overdue =
-              deadline && text != null && !Number.isNaN(Date.parse(String(str(raw)).replace(' ', 'T')))
+            const past =
+              text != null && !Number.isNaN(Date.parse(String(str(raw)).replace(' ', 'T')))
                 ? Date.parse(String(str(raw)).replace(' ', 'T')) < Date.now()
                 : false;
+            // A quote that went out on time is not late just because its
+            // clock has run out (rule 2.3.3: status before Quote Ready).
+            const overdue = isQuoteDue ? past && quoteOwedIn(wo.status?.name) : deadline && past;
             return (
-              <div className="date-row" key={f.key}>
+              <div className="date-row" key={f.key} title={isQuoteDue ? QUOTE_DUE_HINT : undefined}>
                 <span className="date-k">{f.label}</span>
                 <span className={`date-v${text == null ? ' is-none' : overdue ? ' is-warn' : ''}`}>
                   <InlineField wo={wo} fieldKey={f.key} label={f.label}>
                     {overdue && <Icon name="alert" size={12} />}
                     {text ?? DASH}
-                    {overdue ? ' · overdue' : ''}
+                    {overdue ? (isQuoteDue ? ' · quote overdue' : ' · overdue') : ''}
                   </InlineField>
                 </span>
               </div>

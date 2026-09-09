@@ -1367,3 +1367,10 @@
     display: none;
   }
 }
+
+/* ── Quote Due Date (0024) ── red once the clock has run out while the quote is
+   still owed (rule 2.3.3). Same weight as the over-NTE cost. */
+.ct td.is-overdue .cell-text { color: var(--danger); font-weight: 600; }
+
+/* The built-in Due Today tab wears its clock. */
+.view-tab.is-builtin svg { opacity: 0.8; }

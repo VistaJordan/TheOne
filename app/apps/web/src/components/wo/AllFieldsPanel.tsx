@@ -26,6 +26,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
 import {
   CICO_SECTION_SLUG,
+  COMPUTED_KEYS,
   VISIT_HIDDEN_KEYS,
   VISIT_OWNED_KEYS,
   fieldPermKey,
@@ -65,7 +66,7 @@ const ORDER_PREF_KEY = 'wo.fields.order';
 const VISIT_HIDDEN = new Set(VISIT_HIDDEN_KEYS.map((k) => `fields.${k}`));
 /** Every field the visit log writes — read-only wherever it still shows
     (tech name / phone stay in Technician, mirroring the latest visit). */
-const VISIT_OWNED = new Set(VISIT_OWNED_KEYS.map((k) => `fields.${k}`));
+const VISIT_OWNED = new Set([...VISIT_OWNED_KEYS, ...COMPUTED_KEYS].map((k) => `fields.${k}`));
 
 type OrderMode = 'default' | 'alpha' | 'manual';
 
@@ -237,7 +238,8 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   // `i` only matters when dragging is possible — the sectioned path passes -1.
   const renderRow = (f: WoFieldDescriptor, i: number) => {
     const raw = valueOf(f);
-    // Tech name / phone mirror the latest visit (0021): shown, never typed.
+    // Tech name / phone mirror the latest visit (0021) and Quote Due Date is
+    // computed from the assessment check-out (0024): shown, never typed.
     const mirrored = VISIT_OWNED.has(f.key);
     const readOnly = f.subtype === 'formula' || f.subtype === 'attachment' || mirrored;
     const isEditing = editing === f.key;

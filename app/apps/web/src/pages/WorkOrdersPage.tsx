@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { StatusGroup } from '@theone/shared';
+import { businessDay, isQuoteOwed, type StatusGroup } from '@theone/shared';
 import type { SavedView } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { useAuth } from '../auth/AuthProvider';
@@ -12,6 +12,7 @@ import { Icon } from '../components/Icon';
 import {
   createSavedView,
   deleteSavedView,
+  getStatuses,
   getUserPref,
   getWoFields,
   listMatchingWorkOrderIds,
@@ -31,6 +32,13 @@ import { ImportDialog } from '../components/wo/list/ImportDialog';
 import { ListPagination, PAGE_SIZES } from '../components/ListPagination';
 import { ToolButton } from '../components/wo/list/Popover';
 import { useStatusGroups } from '../lib/statusGroups';
+import {
+  DUE_SECTIONS,
+  DUE_TODAY_VIEW,
+  DUE_TODAY_VIEW_ID,
+  dueTodayFilters,
+  type DueSection,
+} from '../lib/dueToday';
 import {
   DEFAULT_VIEW,
   loadStoredView,
@@ -102,6 +110,31 @@ export function WorkOrdersPage() {
   // a reload lands back in "just looking".
   const [editing, setEditing] = useState(false);
 
+  // ── The built-in Due Today view (0024, rules 2.3.3 / 4.1) ──────────────────
+  // Its filters are not in `view.filters`: they are rebuilt from the calendar
+  // and the live status list on every render (lib/dueToday.ts), and the
+  // quick-filter chips' rules ride along inside them.
+  const isDueToday = activeViewId === DUE_TODAY_VIEW_ID;
+  const [dueSection, setDueSection] = useState<DueSection>('all');
+  // "Today" in the business time zone, re-read every minute so the list
+  // rolls over at midnight without a reload.
+  const [today, setToday] = useState(() => businessDay());
+  useEffect(() => {
+    const t = setInterval(() => setToday(businessDay()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  // The Quote section needs the statuses a quote is still owed in.
+  const statusesQuery = useQuery({
+    queryKey: ['statuses'],
+    queryFn: getStatuses,
+    enabled: isDueToday,
+    staleTime: 5 * 60 * 1000,
+  });
+  const owedStatuses = useMemo(
+    () => (statusesQuery.data ?? []).filter((s) => isQuoteOwed(s.name, s.phase)).map((s) => s.name),
+    [statusesQuery.data],
+  );
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allMatchingSelected, setAllMatchingSelected] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -141,10 +174,14 @@ export function WorkOrdersPage() {
   // A saved view that has been deleted elsewhere should not leave the tab strip
   // pointing at nothing.
   useEffect(() => {
-    if (activeViewId && viewsQuery.isSuccess && !activeView) setActiveViewId(null);
+    if (activeViewId && activeViewId !== DUE_TODAY_VIEW_ID && viewsQuery.isSuccess && !activeView) {
+      setActiveViewId(null);
+    }
   }, [activeViewId, activeView, viewsQuery.isSuccess]);
 
-  const dirty = activeView ? !sameView(view, viewOf(activeView)) : !sameView(view, DEFAULT_VIEW);
+  const dirty = activeView
+    ? !sameView(view, viewOf(activeView))
+    : !sameView(view, isDueToday ? DUE_TODAY_VIEW : DEFAULT_VIEW);
 
   // ── The query ──────────────────────────────────────────────────────────────
   // `criteria` is what the list, the id sweep and the CSV export all send, so
@@ -154,13 +191,15 @@ export function WorkOrdersPage() {
   // view. (Text search is the topbar's job — it searches the whole product.)
   const criteria = useMemo(
     () => ({
-      filters: sendableFilters(view.filters),
+      filters: sendableFilters(
+        isDueToday ? dueTodayFilters(dueSection, today, owedStatuses, view.filters.rules) : view.filters,
+      ),
       sort: view.sort ?? undefined,
       group_by: view.group_by ?? undefined,
       columns: view.columns,
       breach: byBreach || undefined,
     }),
-    [view, byBreach],
+    [view, byBreach, isDueToday, dueSection, today, owedStatuses],
   );
 
   // ── The status tabs ────────────────────────────────────────────────────────
@@ -201,6 +240,9 @@ export function WorkOrdersPage() {
   const woQuery = useQuery({
     queryKey: ['work-orders', criteria, pageSize, offset],
     queryFn: () => listWorkOrders({ ...criteria, limit: pageSize, offset }),
+    // Due Today's Quote section is written from the status list — wait for
+    // it rather than show one wrong page first.
+    enabled: !isDueToday || statusesQuery.isSuccess,
     // A page flip redraws in place instead of flashing the loading row.
     placeholderData: (prev) => prev,
   });
@@ -235,6 +277,13 @@ export function WorkOrdersPage() {
     setViewError(null);
     setActiveViewId(v?.id ?? null);
     setView(v ? viewOf(v) : DEFAULT_VIEW);
+    setEditing(false);
+  }, []);
+  const onSelectDueToday = useCallback(() => {
+    setViewError(null);
+    setActiveViewId(DUE_TODAY_VIEW_ID);
+    setView(DUE_TODAY_VIEW);
+    setDueSection('all');
     setEditing(false);
   }, []);
 
@@ -353,7 +402,11 @@ export function WorkOrdersPage() {
           onSaveNew={(name, shared) => saveNew.mutate({ name, shared })}
           onSaveExisting={() => saveExisting.mutate()}
           onDelete={setPendingDelete}
-          onResetToSaved={() => setView(activeView ? viewOf(activeView) : DEFAULT_VIEW)}
+          onResetToSaved={() =>
+            setView(activeView ? viewOf(activeView) : isDueToday ? DUE_TODAY_VIEW : DEFAULT_VIEW)
+          }
+          builtinActive={isDueToday}
+          onSelectBuiltin={onSelectDueToday}
           busy={viewBusy}
           error={viewError}
           pinnedId={pinnedId}
@@ -395,6 +448,24 @@ export function WorkOrdersPage() {
         />
 
         <div className="toolbar">
+          {isDueToday ? (
+            // Due Today cuts by DATE, not status: the four lists of rule 4.1,
+            // one at a time, or all of them.
+            <div className="seg" role="group" aria-label="Due today lists">
+              {DUE_SECTIONS.map((s) => (
+                <button
+                  type="button"
+                  key={s.key}
+                  aria-pressed={dueSection === s.key}
+                  title={s.hint}
+                  className={`seg-btn${dueSection === s.key ? ' is-on' : ''}`}
+                  onClick={() => setDueSection(s.key)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          ) : (
           <div className="seg" role="group" aria-label="Status groups">
             {filters.map((f) => {
               const on = f.key === 'all' ? groups?.size === 0 : (groups?.has(f.key) ?? false);
@@ -423,6 +494,7 @@ export function WorkOrdersPage() {
               );
             })}
           </div>
+          )}
 
           <div className="quick-filters" role="group" aria-label="Quick filters">
             {QUICK_FILTERS.map((qf) => (
@@ -453,12 +525,16 @@ export function WorkOrdersPage() {
             />
           ) : (
             <>
-              <FilterMenu
-                fields={fields}
-                opsByType={opsByType}
-                value={view.filters}
-                onChange={(filters) => setView({ ...view, filters })}
-              />
+              {/* Due Today's own filters are the calendar's; the chips are
+                  the way to narrow it, so the free-form menu steps aside. */}
+              {!isDueToday && (
+                <FilterMenu
+                  fields={fields}
+                  opsByType={opsByType}
+                  value={view.filters}
+                  onChange={(filters) => setView({ ...view, filters })}
+                />
+              )}
               <GroupMenu
                 fields={fields}
                 value={view.group_by}

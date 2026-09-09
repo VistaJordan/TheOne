@@ -44,6 +44,7 @@ import {
 } from '../services/statusAdmin.js';
 import { listAuditLog, exportAuditCsv } from '../services/auditLog.js';
 import { deleteCicoMethod, listCicoMethods, setCicoMethod } from '../services/visits.js';
+import { deleteHoliday, listHolidays, setHoliday } from '../services/holidays.js';
 import { logAdminEvent, logExport } from '../services/adminAudit.js';
 import {
   createAutomation,
@@ -510,5 +511,46 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get('/admin/settings', async (req) => {
     requireAdmin(req, 'settings');
     return getSettings();
+  });
+
+  // ── Holidays (0024) ────────────────────────────────────────────────────────
+  // The System_Holiday_Table of rule 2.3.2: days the quote clock skips. The
+  // only editable thing under Settings, hence its own edit grant.
+  app.get('/admin/holidays', async (req) => {
+    requireAdmin(req, 'settings');
+    return { items: await listHolidays() };
+  });
+
+  app.put('/admin/holidays/:day', async (req) => {
+    const actorId = requireAdmin(req, 'settings', 'edit');
+    const { day } = parse(z.object({ day: z.string().trim().min(8).max(10) }), req.params);
+    const { name } = parse(z.object({ name: z.string().trim().min(1).max(120) }), req.body);
+    const before = (await listHolidays()).find((h) => h.day === day) ?? null;
+    const item = await setHoliday(day, name);
+    await logAdminEvent({
+      actorId,
+      entity: 'holiday',
+      entityId: item.day,
+      action: before ? 'holiday_changed' : 'holiday_created',
+      before: before ? { name: before.name, day: before.day } : null,
+      after: { name: item.name, day: item.day },
+    });
+    return { item };
+  });
+
+  app.delete('/admin/holidays/:day', async (req) => {
+    const actorId = requireAdmin(req, 'settings', 'edit');
+    const { day } = parse(z.object({ day: z.string().trim().min(8).max(10) }), req.params);
+    const gone = await deleteHoliday(day);
+    if (!gone) throw new ApiError('NOT_FOUND', 'No holiday is on file for that day');
+    await logAdminEvent({
+      actorId,
+      entity: 'holiday',
+      entityId: gone.day,
+      action: 'holiday_deleted',
+      before: { name: gone.name, day: gone.day },
+      after: null,
+    });
+    return { ok: true };
   });
 }

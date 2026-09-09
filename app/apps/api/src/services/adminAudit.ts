@@ -30,6 +30,8 @@ export type AdminEntity =
   | 'principal'
   | 'automation'
   | 'fm_cico_method'
+  // The holiday table (0024) — the days the quote clock skips.
+  | 'holiday'
   // Saved views of the work-order list (views.ts) — user-owned, not admin, but
   // a "system button" all the same (rule 1.2.1).
   | 'saved_view'

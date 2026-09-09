@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
+import { COMPUTED_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
 import {
   ApiRequestError,
   getWoFields,
@@ -18,6 +18,9 @@ import { DASH, bool, fieldValueToString, money, num, shortDate, shortDateTime } 
 import { Icon } from '../Icon';
 
 const isUrlValue = (s: string) => /^https?:\/\//i.test(s);
+
+/** Catalogue keys the API derives (visit mirrors, Quote Due Date). */
+const API_OWNED = new Set([...VISIT_OWNED_KEYS, ...COMPUTED_KEYS].map((k) => `fields.${k}`));
 
 /** Read-only rendering of one value, typed by its descriptor. */
 export function displayValue(f: WoFieldDescriptor, raw: unknown): ReactNode {
@@ -152,7 +155,10 @@ export function InlineField({ wo, fieldKey, children, label, className }: Inline
   const jsonKey = fieldKey.startsWith('fields.') ? fieldKey.slice('fields.'.length) : fieldKey;
   const raw = (wo.fields ?? {})[jsonKey];
 
-  const readOnly = !f || f.subtype === 'formula' || f.subtype === 'attachment';
+  // The visit log's mirrored keys (0021) and the computed Quote Due Date
+  // (0024) are shown wherever they sit, never typed — the API refuses them.
+  const readOnly =
+    !f || f.subtype === 'formula' || f.subtype === 'attachment' || API_OWNED.has(fieldKey);
   if (!canEdit || readOnly) {
     return <span className={className}>{children ?? (f ? displayValue(f, raw) : DASH)}</span>;
   }
