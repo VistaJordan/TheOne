@@ -10,6 +10,7 @@ import {
   formatValue,
   labelOf,
   nameOf,
+  quoteChanges,
   unwrap,
   viaLabel,
 } from '../../lib/auditFormat';
@@ -178,8 +179,20 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       return <>sent a message to the technician</>;
     case 'quote_created':
       return <>created the quote</>;
-    case 'quote_updated':
-      return <>revised the quote</>;
+    case 'quote_updated': {
+      // The snapshot says which parts moved; a money change also says where to.
+      const changes = quoteChanges(e.before, e.after);
+      const money = changes.find((c) => c.key === 'grand_total');
+      return (
+        <>
+          revised the quote
+          {changes.length > 0 && <>: {changes.map((c) => c.label.toLowerCase()).join(', ')}</>}
+          {money && (
+            <> (total from <Val>{money.from}</Val> to <Val>{money.to}</Val>)</>
+          )}
+        </>
+      );
+    }
     case 'quote_submitted':
       return <>submitted the quote for approval</>;
     case 'quote_sent':

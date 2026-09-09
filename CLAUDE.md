@@ -74,7 +74,14 @@ The audit log is one table, `activity_log`, and every write goes there: work-ord
 edits (`services/woAudit.ts`), sign-ins, and since migration 0023 the admin
 changes too — custom-field definitions, statuses and phase groups, roles, users,
 automation rules (`services/adminAudit.ts`, whole before/after snapshots with a
-`name`). Since migration 0029 the table is **append-only at the database**:
+`name`). Rule 1.2.1 ("every button") also covers saved views (`view_created|
+updated|deleted`, entity `saved_view`), CSV downloads (`work_orders_exported`,
+`audit_log_exported`, entity `export`, entity_id = the actor) and quote
+revisions (`quote_updated` carries whole-quote snapshots from `snapshotQuote`
+in `services/quotes.ts`; an autosave that changed nothing logs nothing).
+Deliberately not logged: per-user prefs (column widths, collapsed cards) and
+pure UI clicks (tabs, folds, filters) — they change no record. Since migration
+0029 the table is **append-only at the database**:
 a `BEFORE UPDATE OR DELETE` trigger raises (rule 1.2.2), so a correction is a
 new row, never an edit; TRUNCATE still works for the local seed. `entity_id`
 is **text** since 0023 (phase groups are keyed by code):

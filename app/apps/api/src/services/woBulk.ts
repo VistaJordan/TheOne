@@ -315,10 +315,11 @@ function cellFor(item: WorkOrderListItem, key: string): unknown {
   }
 }
 
+/** The file plus what went into it, so the route can log the download (1.2.1). */
 export async function exportCsv(
   filters: Omit<ListFilters, 'limit' | 'offset'>,
   columns: string[],
-): Promise<string> {
+): Promise<{ csv: string; rows: number; columns: string[] }> {
   const cols = columns.length > 0 ? columns : ['wo_number', 'title', 'client', 'status', 'nte'];
   const labels: string[] = [];
   for (const key of cols) labels.push((await resolveField(key)).label);
@@ -332,10 +333,11 @@ export async function exportCsv(
     offset: 0,
   });
 
-  return toCsv(
+  const csv = toCsv(
     labels,
     page.items.map((item) => cols.map((key) => cellFor(item, key))),
   );
+  return { csv, rows: page.items.length, columns: cols };
 }
 
 // ── Import ───────────────────────────────────────────────────────────────────

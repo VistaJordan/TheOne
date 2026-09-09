@@ -44,7 +44,7 @@ import {
 } from '../services/statusAdmin.js';
 import { listAuditLog, exportAuditCsv } from '../services/auditLog.js';
 import { deleteCicoMethod, listCicoMethods, setCicoMethod } from '../services/visits.js';
-import { logAdminEvent } from '../services/adminAudit.js';
+import { logAdminEvent, logExport } from '../services/adminAudit.js';
 import {
   createAutomation,
   deleteAutomation,
@@ -442,10 +442,16 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/admin/audit/export', async (req, reply) => {
-    requireAdmin(req, 'audit');
+    const actorId = requireAdmin(req, 'audit');
     const { limit: _l, offset: _o, ...filters } = parse(auditQuerySchema, req.query);
-    const csv = await exportAuditCsv(filters);
+    const { csv, rows } = await exportAuditCsv(filters);
     const stamp = new Date().toISOString().slice(0, 10);
+    // Rule 1.2.1: the audit log records its own export, like any other button.
+    await logExport(actorId, 'audit_log_exported', {
+      name: `audit-log-${stamp}.csv`,
+      rows,
+      filters: filters as Record<string, unknown>,
+    });
     return reply
       .header('Content-Type', 'text/csv; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="audit-log-${stamp}.csv"`)

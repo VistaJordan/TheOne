@@ -13,6 +13,21 @@
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { resolveField, OPS_BY_TYPE, type FilterSet, type SortSpec } from './woFields.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
+
+/** The view as an activity_log snapshot (rule 1.2.1): what it is called, what
+    it shows and whether it is published — never the owner or the timestamps. */
+function snapshotOf(r: ViewRow): Snapshot {
+  return {
+    name: r.name,
+    entity: r.entity,
+    columns: Array.isArray(r.columns) ? r.columns : [],
+    filters: normalizeFilters(r.filters),
+    group_by: r.group_by,
+    sort: r.sort ?? null,
+    is_shared: r.is_shared === true,
+  };
+}
 
 export interface SavedViewRecord {
   id: string;
@@ -155,7 +170,15 @@ export async function createView(ownerId: string, input: ViewInput): Promise<Sav
       input.is_shared ?? false,
     ],
   );
-  return mapView(await getViewRow(res.rows[0].id), ownerId);
+  const row = await getViewRow(res.rows[0].id);
+  await logAdminEvent({
+    actorId: ownerId,
+    entity: 'saved_view',
+    entityId: row.id,
+    action: 'view_created',
+    after: snapshotOf(row),
+  });
+  return mapView(row, ownerId);
 }
 
 export async function updateView(
@@ -195,7 +218,21 @@ export async function updateView(
       input.is_shared ?? null,
     ],
   );
-  return mapView(await getViewRow(id), viewerId);
+  const row = await getViewRow(id);
+  // Re-saving the same layout is a no-op PATCH; it logs nothing.
+  const before = snapshotOf(existing);
+  const after = snapshotOf(row);
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId: viewerId,
+      entity: 'saved_view',
+      entityId: id,
+      action: 'view_updated',
+      before,
+      after,
+    });
+  }
+  return mapView(row, viewerId);
 }
 
 export async function deleteView(id: string, viewerId: string): Promise<void> {
@@ -204,4 +241,11 @@ export async function deleteView(id: string, viewerId: string): Promise<void> {
     throw new ApiError('FORBIDDEN', 'Only the person who created a view can delete it');
   }
   await query(`DELETE FROM saved_view WHERE id = $1`, [id]);
+  await logAdminEvent({
+    actorId: viewerId,
+    entity: 'saved_view',
+    entityId: id,
+    action: 'view_deleted',
+    before: snapshotOf(existing),
+  });
 }

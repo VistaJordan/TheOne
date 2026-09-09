@@ -31,6 +31,7 @@ import {
   formatValue,
   labelOf,
   nameOf,
+  quoteChanges,
   snapshotChanges,
   snapshotSummary,
   unwrap,
@@ -269,6 +270,8 @@ function adminHref(e: AuditLogEntry): string | null {
       return `/admin/automations?rule=${encodeURIComponent(e.entity_id)}`;
     case 'fm_cico_method':
       return '/admin/fields';
+    case 'saved_view':
+      return '/work-orders';
     default:
       return null;
   }
@@ -376,6 +379,11 @@ function changeOf(
         value: describeVisitChange(e.before, e.after),
       };
     }
+    // Quote revisions: whole-quote snapshots on a work-order row.
+    case 'quote_updated': {
+      const items = quoteChanges(e.before, e.after);
+      return { field: 'Quote', value: items.length ? <ChangeList items={items} /> : DASH };
+    }
     default:
       break;
   }
@@ -383,7 +391,12 @@ function changeOf(
   // Admin rows (entity_type other than task): before/after are snapshots.
   if (e.entity_type !== 'task' && (e.before || e.after)) {
     const field = e.field ? labelOf(e.field, byKey) : DASH;
-    if (e.action.endsWith('_created') || e.action === 'user_invited' || e.action === 'user_auto_enrolled') {
+    if (
+      e.action.endsWith('_created') ||
+      e.action.endsWith('_exported') ||
+      e.action === 'user_invited' ||
+      e.action === 'user_auto_enrolled'
+    ) {
       return { field, value: <ChangeList items={snapshotSummary(e.after)} created /> };
     }
     if (e.action.endsWith('_deleted')) {

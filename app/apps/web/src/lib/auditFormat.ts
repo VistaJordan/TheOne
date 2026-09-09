@@ -224,6 +224,12 @@ export const ACTION_LABELS: Record<string, string> = {
   automation_created: 'Automation created',
   automation_updated: 'Automation changed',
   automation_deleted: 'Automation deleted',
+  // Saved views and downloads (rule 1.2.1: every system button logs).
+  view_created: 'View saved',
+  view_updated: 'View changed',
+  view_deleted: 'View deleted',
+  work_orders_exported: 'Work orders exported',
+  audit_log_exported: 'Audit log exported',
 };
 
 export function actionLabel(action: string): string {
@@ -240,6 +246,8 @@ export const ENTITY_LABELS: Record<string, string> = {
   role: 'Role',
   automation: 'Automation',
   fm_cico_method: 'Check-in method',
+  saved_view: 'Saved view',
+  export: 'Export',
 };
 
 export function entityLabel(entityType: string): string {
@@ -270,7 +278,43 @@ const SNAPSHOT_KEYS: Record<string, string> = {
   trigger: 'Trigger',
   conditions: 'Conditions',
   actions: 'Actions',
+  // Saved views.
+  columns: 'Columns',
+  filters: 'Filters',
+  group_by: 'Group by',
+  sort: 'Sort',
+  is_shared: 'Shared',
+  // Exports.
+  rows: 'Rows',
+  criteria: 'Criteria',
+  // Quote snapshots (quotes.ts snapshotQuote).
+  sales_tax: 'Sales tax',
+  total_cost: 'Our cost',
+  specs: 'Specs',
+  note_to_customer: 'Note to customer',
+  summary_pinned: 'Pinned summary',
+  grand_total: 'Grand total',
+  lines: 'Lines',
 };
+
+/**
+ * What a quote revision changed. The snapshot's `sections` is the structured
+ * record and `lines` its one-string-per-line reading, so listing both would
+ * say the same thing twice — the tree is dropped here. Rows written before
+ * the snapshots (after = { quote_id, fields }) list the posted keys instead.
+ */
+export function quoteChanges(before: unknown, after: unknown): SnapshotChange[] {
+  const a = (after && typeof after === 'object' ? after : {}) as Record<string, unknown>;
+  if (!before && Array.isArray(a.fields)) {
+    return (a.fields as string[]).map((key) => ({
+      key,
+      label: SNAPSHOT_KEYS[key] ?? key.replace(/_/g, ' '),
+      from: '',
+      to: '',
+    }));
+  }
+  return snapshotChanges(before, after).filter((c) => c.key !== 'sections' && c.key !== 'quote_id');
+}
 
 export interface SnapshotChange {
   key: string;

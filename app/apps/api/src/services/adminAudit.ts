@@ -29,9 +29,27 @@ export type AdminEntity =
   | 'role'
   | 'principal'
   | 'automation'
-  | 'fm_cico_method';
+  | 'fm_cico_method'
+  // Saved views of the work-order list (views.ts) — user-owned, not admin, but
+  // a "system button" all the same (rule 1.2.1).
+  | 'saved_view'
+  // A CSV download: one row per file, keyed to the person who pulled it.
+  | 'export';
 
 export type Snapshot = Record<string, unknown> & { name: string };
+
+/**
+ * Rule 1.2.1 counts a download as a button. The row names the file, how many
+ * rows it held and the criteria it was pulled with — the file itself is not
+ * kept. entity_id is the actor: an export belongs to nobody else.
+ */
+export async function logExport(
+  actorId: string,
+  action: 'work_orders_exported' | 'audit_log_exported',
+  after: Snapshot,
+): Promise<void> {
+  await logAdminEvent({ actorId, entity: 'export', entityId: actorId, action, after });
+}
 
 export interface AdminEvent {
   actorId: string;

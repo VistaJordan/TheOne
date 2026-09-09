@@ -191,6 +191,8 @@ const ENTITY_LABELS: Record<string, string> = {
   role: 'Role',
   automation: 'Automation',
   fm_cico_method: 'Check-in method',
+  saved_view: 'Saved view',
+  export: 'Export',
 };
 
 /** Admin rows hold whole snapshots; the CSV lists only the keys that changed,
@@ -213,9 +215,9 @@ function snapshotDiff(before: unknown, after: unknown): { from: string; to: stri
 
 export async function exportAuditCsv(
   f: Omit<AuditLogFilters, 'limit' | 'offset'>,
-): Promise<string> {
+): Promise<{ csv: string; rows: number }> {
   const page = await listAuditLog({ ...f, limit: AUDIT_EXPORT_CAP, offset: 0 });
-  return toCsv(
+  const csv = toCsv(
     ['Time (UTC)', 'User', 'Action', 'Entity', 'Name', 'WO #', 'Ext ref', 'Field', 'From', 'To'],
     page.items.map((e) => {
       const admin = e.entity_type !== 'task';
@@ -234,4 +236,5 @@ export async function exportAuditCsv(
       ];
     }),
   );
+  return { csv, rows: page.items.length };
 }
