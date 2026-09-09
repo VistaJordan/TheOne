@@ -26,7 +26,9 @@ export interface TaskChange {
 }
 
 // 'visit': a mirror of the latest visit, written by the visit log (0021).
-export type ChangeSource = 'import' | 'bulk' | 'visit' | AutomationSource;
+// An approval task (0025): the status moved because a manager approved a
+// status-change request — the actor is the manager, the stamp names the task.
+export type ChangeSource = 'import' | 'bulk' | 'visit' | AutomationSource | ApprovalSource;
 
 /** The rule that made this change, when an automation did. */
 export interface AutomationSource {
@@ -35,10 +37,17 @@ export interface AutomationSource {
   name: string;
 }
 
+/** The approved request behind this change (rule 2.4.3). */
+export interface ApprovalSource {
+  kind: 'approval_task';
+  id: string;
+}
+
 /** The `via` stamp merged into `after`. Automations carry the rule with them. */
 function viaStamp(source: ChangeSource | undefined): Record<string, unknown> {
   if (!source) return {};
   if (typeof source === 'string') return { via: source };
+  if (source.kind === 'approval_task') return { via: 'approval_task', approval_task_id: source.id };
   return { via: 'automation', automation_id: source.id, automation_name: source.name };
 }
 

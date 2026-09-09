@@ -409,6 +409,9 @@ export interface WorkOrderDetail {
   recent_activity: ActivityEntry[];
   /** S2: the money block powering the NTE meter + financial rows. */
   money: Money;
+  /** 0025: a status change requested under rule 2.4.1 — pending, or decided
+      and not yet acknowledged by whoever asked. Null when there is none. */
+  status_change: StatusChangeState | null;
 }
 
 // ── Money (S2) ───────────────────────────────────────────────────────────────
@@ -1043,15 +1046,99 @@ export interface SnoozeResponse {
  * rules engine can raise any type. open → approved | rejected, or cancelled
  * when the reason went away on its own.
  */
-export type ApprovalTaskType = 'nte_override' | 'manager_review';
+export type ApprovalTaskType = 'nte_override' | 'manager_review' | 'status_change';
 
 export type ApprovalTaskStatus = 'open' | 'approved' | 'rejected' | 'cancelled';
 
 /** Permission path: `view` = the Approvals page; `approve` covers reject and claim. */
 export const APPROVALS_PERM_KEY = 'approvals';
 
-/** The task types the automation builder offers, with how each reads. */
-export const APPROVAL_TASK_TYPES: { code: ApprovalTaskType; label: string; hint: string }[] = [
+/**
+ * The inbox's sections, each its own permission path under `approvals`
+ * (0025): `view` shows the section, `approve` lets the person decide in it.
+ * An unset action inherits from `approvals`. Quotes and Payments only take
+ * `view` here — deciding those stays with `quotes:approve` and the payments
+ * grant, so the money rules keep one gate.
+ */
+export type ApprovalSectionKey = 'nte' | 'status' | 'reviews' | 'quotes' | 'payments';
+
+export const APPROVAL_SECTIONS: { key: ApprovalSectionKey; label: string; decides: boolean }[] = [
+  { key: 'nte', label: 'NTE increases', decides: true },
+  { key: 'status', label: 'Status changes', decides: true },
+  { key: 'reviews', label: 'Manager reviews', decides: true },
+  { key: 'quotes', label: 'Quotes', decides: false },
+  { key: 'payments', label: 'Payments', decides: false },
+];
+
+export function approvalSectionPermKey(section: ApprovalSectionKey): string {
+  return `${APPROVALS_PERM_KEY}/${section}`;
+}
+
+/** Which section an approval task of this type lives in. */
+export function approvalSectionOf(type: ApprovalTaskType): ApprovalSectionKey {
+  return type === 'nte_override' ? 'nte' : type === 'status_change' ? 'status' : 'reviews';
+}
+
+/**
+ * Permission path for moving a work order's status (0025):
+ *   edit    change it directly
+ *   create  REQUEST a change — a manager decides (rule 2.4.1)
+ * A person with `create` but not `edit` is a Dispatcher for rule 2.4.1. The
+ * Roles screen and the per-user Adjust show the pair as one three-way choice
+ * (STATUS_CHANGE_MODES) rather than two boxes.
+ */
+export const STATUS_PERM_KEY = 'work_orders/status';
+
+export type StatusChangeMode = 'direct' | 'request' | 'none';
+
+export const STATUS_CHANGE_MODES: { code: StatusChangeMode; label: string; hint: string }[] = [
+  { code: 'direct', label: 'Change directly', hint: 'Moves the status straight away' },
+  { code: 'request', label: 'Must request', hint: 'Asks a manager; the status moves when they approve (rule 2.4.1)' },
+  { code: 'none', label: 'Not allowed', hint: 'No status button at all' },
+];
+
+/** How every task type reads, on the inbox and in the audit trail. */
+export const APPROVAL_TASK_LABEL: Record<ApprovalTaskType, string> = {
+  nte_override: 'NTE override',
+  manager_review: 'Manager review',
+  status_change: 'Status change',
+};
+
+/** The `detail` of a status_change task: what was asked (rule 2.4.1). */
+export interface StatusChangeDetail {
+  from_status_id: string;
+  from_status_name: string;
+  to_status_id: string;
+  to_status_name: string;
+}
+
+/**
+ * The status change waiting on (or just decided for) a work order, carried on
+ * the detail payload so the header can draw it before any click: open =
+ * pending a manager; approved / rejected = decided and not yet acknowledged
+ * by the requester (2.4.3 — the dispatcher is told, and says they saw it).
+ */
+export interface StatusChangeState {
+  approval_task_id: string;
+  status: Extract<ApprovalTaskStatus, 'open' | 'approved' | 'rejected'>;
+  to_status: StatusRef;
+  requested_by: ActivityActor | null;
+  decided_by: ActivityActor | null;
+  decided_at: string | null;
+  decision_note: string | null;
+}
+
+/** GET /api/approvals/counts — the sidebar badge, for the acting principal. */
+export interface ApprovalCounts {
+  /** Open items this person may decide (approvers). */
+  to_decide: number;
+  /** This person's own decided requests not yet acknowledged (requesters). */
+  to_acknowledge: number;
+}
+
+/** The task types the automation builder offers, with how each reads.
+    (A status change is asked for by a person, never raised by a rule.) */
+export const APPROVAL_TASK_TYPES: { code: Exclude<ApprovalTaskType, 'status_change'>; label: string; hint: string }[] = [
   {
     code: 'nte_override',
     label: 'NTE override approval',
@@ -1090,6 +1177,10 @@ export interface ApprovalTask {
   decided_by: ActivityActor | null;
   decided_at: string | null;
   decision_note: string | null;
+  /** 0025: the requester (or an approver) said they saw the decision. A
+      decided status_change stays in the requester's "My requests" until then. */
+  acknowledged_by: ActivityActor | null;
+  acknowledged_at: string | null;
 }
 
 /** One row of GET /api/approvals — the task plus the work order it sits on,

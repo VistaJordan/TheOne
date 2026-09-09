@@ -732,6 +732,14 @@ td.pcell .sw { justify-content: center; }
 .pm-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pm-reset { width: 14px; height: 14px; border: 0; background: none; color: var(--ink-3); cursor: pointer; padding: 0; display: grid; place-items: center; }
 .pm-reset:hover { color: var(--danger); }
+/* 0025: one choice across the action columns (the status-change mode). */
+.pm-choicewrap { grid-column: 2 / span 5; display: flex; align-items: center; gap: 4px; justify-content: center; flex-wrap: wrap; }
+.pm-choice { height: 22px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--field-bg); color: var(--ink-3); font: inherit; font-size: 11.5px; cursor: pointer; }
+.pm-choice.is-on { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+.pm-choice.is-on.is-inherited { opacity: .5; }
+.pm-choice:hover:not(:disabled) { opacity: 1; border-color: var(--border-strong); }
+.pm-choice:disabled { cursor: not-allowed; }
+.pm-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pm-count { justify-self: end; font-size: 11px; color: var(--ink-3); white-space: nowrap; }
 .pm-clear { font-size: 11px; }
 .pm-empty { padding: 24px; text-align: center; color: var(--ink-3); font-size: 13px; }

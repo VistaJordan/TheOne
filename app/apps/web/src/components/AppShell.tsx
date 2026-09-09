@@ -1,7 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { adminPermKey } from '@theone/shared';
+import { getApprovalCounts } from '../api/client';
 import { LOGO } from '../lib/brand';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { Icon, IconSprite } from './Icon';
@@ -39,8 +41,9 @@ interface NavItem {
   icon: IconName;
   /** Route this item navigates to; absent = inert, later-sprint item. */
   to?: string;
-  /** Marks the item whose badge carries the live work-order count. */
-  badge?: 'total';
+  /** Marks the item whose badge carries the live work-order count — or, for
+      Approvals (0025), what waits on the viewer: to decide, or to acknowledge. */
+  badge?: 'total' | 'approvals';
   /** A section with enough destinations to deserve its own disclosure. The
       header stops navigating and becomes the toggle; the children are the
       routes (Signals in the reference nav works the same way). */
@@ -62,7 +65,7 @@ const NAV: NavItem[] = [
   { label: 'Payments', icon: 'card', to: '/payments' },
   // The manager's inbox (0026): approval tasks the rules engine raises —
   // the NTE override of rule 1.5.2 first.
-  { label: 'Approvals', icon: 'inbox', to: '/approvals' },
+  { label: 'Approvals', icon: 'inbox', to: '/approvals', badge: 'approvals' },
   // AR — completion audit + invoicing, ported from the Support Automation
   // shadow-audit assistant. Subtabs live inside the page.
   { label: 'Receivables', icon: 'dollar', to: '/receivables' },
@@ -132,6 +135,21 @@ export function AppShell({
   // S5 — identity comes from the session, not from a client-side pin. `actingAs`
   // is who the app behaves as; `user` is the human who actually signed in.
   const { user, actingAs, isImpersonating, signOut, can } = useAuth();
+
+  // 0025 · the Approvals badge: what waits on this person (open tasks they
+  // may decide + their own decided requests not yet acknowledged). Polled
+  // gently; every decision and request also invalidates it.
+  const countsQuery = useQuery({
+    queryKey: ['approval-counts', actingAs?.id ?? null],
+    queryFn: getApprovalCounts,
+    enabled: !!actingAs && can('approvals', 'view'),
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    retry: 0,
+  });
+  const approvalsWaiting = countsQuery.data
+    ? countsQuery.data.to_decide + countsQuery.data.to_acknowledge
+    : undefined;
 
   // 0015 · a section the acting principal may not view leaves the nav; an
   // Admin group with no visible section leaves with it. The Admin group follows
@@ -261,7 +279,12 @@ export function AppShell({
           <nav className="side-nav" id="primary-nav" aria-label="Primary">
             {visibleNav.map((item) => {
               const isActive = item.label === active;
-              const count = item.badge === 'total' ? total : undefined;
+              const count =
+                item.badge === 'total'
+                  ? total
+                  : item.badge === 'approvals' && approvalsWaiting
+                    ? approvalsWaiting
+                    : undefined;
 
               // ── Group: header discloses the children, it does not navigate ──
               if (item.children) {

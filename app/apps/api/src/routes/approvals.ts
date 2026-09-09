@@ -1,14 +1,19 @@
 // Routes: approval tasks (0026) — the manager's inbox.
-//   GET  /approvals                            (the inbox — approvals:view)
+//   GET  /approvals                            (the inbox — approvals:view, trimmed to the
+//                                               sections the viewer may see + their own requests)
+//   GET  /approvals/counts                     (the sidebar badge — what waits on the viewer)
 //   GET  /work-orders/:id/approval-tasks       (tasks on one WO — approvals:view)
-//   POST /approval-tasks/:id/approve           (open → approved — approvals:approve)
-//   POST /approval-tasks/:id/reject            (open → rejected + internal note — approvals:approve)
-//   POST /approval-tasks/:id/claim             (take it into your lane — approvals:approve)
+//   POST /approval-tasks/:id/approve           (open → approved — approvals/<section>:approve)
+//   POST /approval-tasks/:id/reject            (open → rejected + internal note — same)
+//   POST /approval-tasks/:id/claim             (take it into your lane — same)
+//   POST /approval-tasks/:id/acknowledge       (0025: the requester saw the decision)
+//   POST /approval-tasks/:id/withdraw          (0025: the requester takes an open request back)
 //
-// Tasks are RAISED by the rules engine (an 'approval_task' action), never by
-// hand from here. The acting principal is resolved once, up front, and the
-// permission checks for the decisions live in the service so no route can
-// forget one.
+// Tasks are RAISED by the rules engine (an 'approval_task' action) — and,
+// since 0025, by a person asking for a status change (POST /work-orders/:id/
+// status-request, in workOrders.ts). The acting principal is resolved once,
+// up front, and the permission checks for the decisions live in the service
+// so no route can forget one.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -16,11 +21,14 @@ import { APPROVALS_PERM_KEY } from '@theone/shared';
 import { parse, notFound } from '../errors.js';
 import { resolveTaskId, actingPrincipalFromRequest } from '../services/activity.js';
 import {
+  acknowledgeApprovalTask,
+  approvalCounts,
   approveApprovalTask,
   claimApprovalTask,
   listApprovalTasks,
   listApprovalTasksForWorkOrder,
   rejectApprovalTask,
+  withdrawApprovalTask,
 } from '../services/approvals.js';
 import { requirePerm } from '../services/permissions.js';
 
@@ -38,9 +46,14 @@ async function taskIdOf(req: FastifyRequest): Promise<string> {
 
 export default async function approvalRoutes(app: FastifyInstance): Promise<void> {
   app.get('/approvals', async (req) => {
-    requirePerm(actingPrincipalFromRequest(req), APPROVALS_PERM_KEY, 'view', 'You cannot view approvals');
-    return listApprovalTasks();
+    const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, APPROVALS_PERM_KEY, 'view', 'You cannot view approvals');
+    return listApprovalTasks(actor);
   });
+
+  // No permission gate: a zero is the honest answer for someone who may do
+  // nothing here, and the sidebar asks for every signed-in person.
+  app.get('/approvals/counts', async (req) => approvalCounts(actingPrincipalFromRequest(req)));
 
   app.get('/work-orders/:id/approval-tasks', async (req) => {
     requirePerm(actingPrincipalFromRequest(req), APPROVALS_PERM_KEY, 'view', 'You cannot view approvals');
@@ -66,5 +79,17 @@ export default async function approvalRoutes(app: FastifyInstance): Promise<void
     const { id } = parse(uuidParamsSchema, req.params);
     const actor = actingPrincipalFromRequest(req);
     return { item: await claimApprovalTask(id, actor) };
+  });
+
+  app.post('/approval-tasks/:id/acknowledge', async (req) => {
+    const { id } = parse(uuidParamsSchema, req.params);
+    const actor = actingPrincipalFromRequest(req);
+    return { item: await acknowledgeApprovalTask(id, actor) };
+  });
+
+  app.post('/approval-tasks/:id/withdraw', async (req) => {
+    const { id } = parse(uuidParamsSchema, req.params);
+    const actor = actingPrincipalFromRequest(req);
+    return { item: await withdrawApprovalTask(id, actor) };
   });
 }

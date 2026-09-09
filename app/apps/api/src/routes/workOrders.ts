@@ -304,6 +304,21 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     return changeStatus(id, status_id, actorIdFromRequest(req));
   });
 
+  // Rule 2.4.1 (0025): a Dispatcher — work_orders/status:create without
+  // :edit — asks for the move instead; a manager decides it under Approvals.
+  // 201 when a request was raised, 200 when an open one was re-targeted.
+  app.post('/work-orders/:id/status-request', async (req, reply) => {
+    const { p } = acting(req);
+    const { id } = parse(idParamsSchema, req.params);
+    const { status_id } = parse(statusBodySchema, req.body);
+    const taskId = await resolveTaskId(id);
+    if (!taskId) throw notFound('Work order not found');
+    const { requestStatusChange } = await import('../services/approvals.js');
+    const { item, created } = await requestStatusChange(taskId, status_id, p);
+    reply.code(created ? 201 : 200);
+    return { item, created };
+  });
+
   // S7 · the inline editor on the All-fields tab. One or many values, typed
   // coercion + mirror sync in the service, fresh detail back.
   app.patch('/work-orders/:id/fields', async (req) => {
