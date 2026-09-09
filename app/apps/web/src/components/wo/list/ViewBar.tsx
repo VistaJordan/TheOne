@@ -39,6 +39,10 @@ interface ViewBarProps {
       page opens on it. Null = nothing pinned. */
   pinnedId?: string | null;
   onTogglePin?: (view: SavedView) => void;
+  /** The built-in "Due Today" view (0024): a fixed tab after "All work
+      orders". While it is up nothing can be saved, pinned or deleted. */
+  builtinActive?: boolean;
+  onSelectBuiltin?: () => void;
 }
 
 function CountBadge({ count }: { count: number }) {
@@ -75,9 +79,12 @@ export function ViewBar({
   actions,
   pinnedId = null,
   onTogglePin,
+  builtinActive = false,
+  onSelectBuiltin,
 }: ViewBarProps) {
   const active = views.find((v) => v.id === activeId) ?? null;
   const badge = count != null ? <CountBadge count={count} /> : null;
+  const plainActive = activeId === null && !builtinActive;
 
   const viewTab = (v: SavedView) => (
     <button
@@ -112,13 +119,28 @@ export function ViewBar({
         <button
           type="button"
           role="tab"
-          aria-selected={activeId === null}
-          className={`view-tab${activeId === null ? ' is-on' : ''}`}
+          aria-selected={plainActive}
+          className={`view-tab${plainActive ? ' is-on' : ''}`}
           onClick={() => onSelect(null)}
         >
           All work orders
-          {activeId === null && badge}
+          {plainActive && badge}
         </button>
+
+        {onSelectBuiltin && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={builtinActive}
+            className={`view-tab is-builtin${builtinActive ? ' is-on' : ''}`}
+            onClick={onSelectBuiltin}
+            title="Built in: due today, scheduled today, quotes due, parts arriving"
+          >
+            <Icon name="clock" size={12} />
+            Due Today
+            {builtinActive && badge}
+          </button>
+        )}
 
         {rest.map(viewTab)}
       </div>
@@ -162,12 +184,16 @@ export function ViewBar({
 
         {actions}
 
-        <SaveAsMenu
-          suggestion={active ? `${active.name} copy` : ''}
-          state={state}
-          onSave={onSaveNew}
-          busy={busy}
-        />
+        {/* Due Today rebuilds its filters from the calendar every day; a copy
+            saved now would freeze today's date, so it is not offered. */}
+        {!builtinActive && (
+          <SaveAsMenu
+            suggestion={active ? `${active.name} copy` : ''}
+            state={state}
+            onSave={onSaveNew}
+            busy={busy}
+          />
+        )}
 
         {/* Pinning is personal (user_pref), so a shared colleague's view can
             be pinned too — it changes where YOUR page opens, not their view. */}

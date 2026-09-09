@@ -383,6 +383,13 @@ const CURATED_FIELDS: CuratedField[] = [
   // import path in apps/api woBulk.ts does the same for live creates).
   { key: 'Date Created',             label: 'Date Created',         type: 'datetime' },
   { key: 'Due Date',                 label: 'Due Date',             type: 'datetime' },
+  // 0024 — the Due Today view's dates (migration 0024 carries the SAME three
+  // rows for an already-seeded pgdata; keep in step). Scheduled and Parts
+  // Arrival are typed by the dispatcher; Quote Due Date is COMPUTED from the
+  // latest Assessment check-out (services/visits.ts) and refused by hand.
+  { key: 'Scheduled Date',           label: 'Scheduled Date',       type: 'datetime' },
+  { key: 'Parts Arrival Date',       label: 'Parts Arrival Date',   type: 'datetime' },
+  { key: 'Quote Due Date',           label: 'Quote Due Date',       type: 'datetime' },
   { key: 'Days since Invoiced',      label: 'Days Since Invoiced',  type: 'formula' },
   { key: 'Days Since QC',            label: 'Days Since QC',        type: 'formula' },
   { key: 'Discount',                 label: 'Discount',             type: 'currency' },

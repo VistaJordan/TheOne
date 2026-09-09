@@ -159,6 +159,11 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       'fields.Date-Time Received',
       'fields.Date Created',
       'fields.Due Date',
+      // 0024 — the Due Today view's other three dates. Quote Due Date is
+      // computed from the assessment check-out (rule 2.3.2), never typed.
+      'fields.Scheduled Date',
+      'fields.Parts Arrival Date',
+      'fields.Quote Due Date',
     ],
   },
   {
@@ -295,7 +300,8 @@ export function tabPermKey(tabId: string): string {
 export const ADMIN_PERM_SECTIONS: { slug: string; label: string; actions: PermAction[] }[] = [
   { slug: 'users', label: 'Users', actions: ['view', 'edit'] },
   { slug: 'roles', label: 'Roles', actions: ['view', 'edit'] },
-  { slug: 'settings', label: 'Settings', actions: ['view'] },
+  // 'edit' = the holiday table (0024); the rest of Settings is read-only.
+  { slug: 'settings', label: 'Settings', actions: ['view', 'edit'] },
   { slug: 'automations', label: 'Automations', actions: ['view', 'edit'] },
   { slug: 'fields', label: 'Custom fields', actions: ['view', 'edit'] },
   { slug: 'themes', label: 'Themes', actions: ['view'] },

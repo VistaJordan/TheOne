@@ -34,6 +34,10 @@ import {
   cicoMethodText,
   fieldSectionPermKey,
   CICO_SECTION_SLUG,
+  COMPUTED_KEYS,
+  QUOTE_CLOCK_VISIT_TYPE,
+  QUOTE_DUE_HOURS,
+  QUOTE_DUE_KEY,
   VISIT_METHODS,
   VISIT_MIRROR_KEYS,
   VISIT_OWNED_KEYS,
@@ -50,6 +54,8 @@ import { CREATED_AT_SQL } from './activity.js';
 import { requirePerm } from './permissions.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
+import { addWorkingHours } from '../lib/businessDays.js';
+import { holidayDays } from './holidays.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 const K_FM = '22. FM';
@@ -73,13 +79,23 @@ export function requireVisitEdit(p: ActingPrincipal): void {
 // ── The write guard for the legacy fields ────────────────────────────────────
 
 const OWNED = new Set(VISIT_OWNED_KEYS);
+/** Derived from the visits too, but with its own story (0024). */
+const COMPUTED = new Set(COMPUTED_KEYS);
 
-/** 400 when a bag patch names a key the visit log owns. `labelOf` turns a
-    json key into what the caller called it. */
+/** 400 when a bag patch names a key the visit log owns — or one the API
+    computes from it (Quote Due Date). `labelOf` turns a json key into what
+    the caller called it. */
 export function assertNotVisitOwned(jsonKeys: string[], labelOf?: (k: string) => string): void {
   for (const k of jsonKeys) {
-    if (!OWNED.has(k)) continue;
     const label = labelOf ? labelOf(k) : k;
+    if (COMPUTED.has(k)) {
+      throw new ApiError(
+        'BAD_REQUEST',
+        `"${label}" is computed from the assessment visit's check-out (+${QUOTE_DUE_HOURS} working hours) — correct the visit's check-out time instead`,
+        { visit_owned_field: k },
+      );
+    }
+    if (!OWNED.has(k)) continue;
     throw new ApiError(
       'BAD_REQUEST',
       `"${label}" is recorded per visit now — open the CICO tab and edit the visit instead`,
@@ -315,9 +331,36 @@ export function legacyStatusOf(v: Pick<WoVisit, 'status' | 'return_trip_needed'>
 }
 
 /**
+ * The quote clock (rules 2.3.1–2.3.2, 0024): the LATEST Assessment visit
+ * that has checked out, plus QUOTE_DUE_HOURS working hours (weekends and
+ * holidays skipped whole). Null when no assessment has checked out — a job or
+ * a return trip owes no quote. Re-derived on every visit write, so correcting
+ * a check-out time, or deleting the visit, moves or clears the due date.
+ */
+async function quoteDueFor(q: Q, taskId: string): Promise<string | null> {
+  const res = await q.query<{ out: string | null }>(
+    `SELECT ${ISO('v.checked_out_at')} AS out
+       FROM wo_visit v
+      WHERE v.task_id = $1
+        AND v.status = 'checked_out'
+        AND v.checked_out_at IS NOT NULL
+        AND lower(btrim(v.visit_type)) = lower($2)
+      ORDER BY v.seq DESC
+      LIMIT 1`,
+    [taskId, QUOTE_CLOCK_VISIT_TYPE],
+  );
+  const out = res.rows[0]?.out ?? null;
+  if (!out) return null;
+  const due = addWorkingHours(new Date(out), QUOTE_DUE_HOURS, await holidayDays(q));
+  // Same shape as the check-out stamps: ISO to the second, UTC.
+  return due.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+/**
  * Rewrite the seven mirrored bag keys from the LATEST visit (highest seq), or
- * clear them when the work order has no visit left. Returns the changes so the
- * caller can log them and hand them to the automations engine.
+ * clear them when the work order has no visit left — and the Quote Due Date
+ * the visits imply (0024). Returns the changes so the caller can log them and
+ * hand them to the automations engine.
  */
 async function syncMirrors(q: Q, taskId: string): Promise<TaskChange[]> {
   const latest = await q.query<Row>(
@@ -332,6 +375,7 @@ async function syncMirrors(q: Q, taskId: string): Promise<TaskChange[]> {
   const fields = t.rows[0]?.fields ?? {};
 
   const desired: Record<string, unknown> = {
+    [QUOTE_DUE_KEY]: await quoteDueFor(q, taskId),
     [VISIT_MIRROR_KEYS.visitType]: v?.visit_type ?? null,
     [VISIT_MIRROR_KEYS.status]: v ? legacyStatusOf(v) : null,
     [VISIT_MIRROR_KEYS.checkedInAt]: v?.checked_in_at ?? null,

@@ -1136,6 +1136,57 @@ export const VISIT_HIDDEN_KEYS: string[] = [
 /** The field section whose view / edit grant gates the visit log. */
 export const CICO_SECTION_SLUG = 'cico';
 
+// ── The quote clock (rules 2.3.1–2.3.3) and the Due Today view (4.1) ────────
+
+/** COMPUTED bag key: latest Assessment check-out + QUOTE_DUE_HOURS, skipping
+    weekends and holidays as whole days (0024). Re-derived on every visit
+    write by services/visits.ts; the field editor and bulk edit refuse it. */
+export const QUOTE_DUE_KEY = 'Quote Due Date';
+export const QUOTE_DUE_HOURS = 48;
+/** The visit type whose check-out starts the quote clock (rule 2.3.1 — an
+    assessment owes a quote; a job or a return trip does not). */
+export const QUOTE_CLOCK_VISIT_TYPE = 'Assessment';
+
+/** Hand-kept datetime fields the Due Today view reads (0024). */
+export const SCHEDULED_DATE_KEY = 'Scheduled Date';
+export const PARTS_ARRIVAL_KEY = 'Parts Arrival Date';
+export const DUE_DATE_KEY = 'Due Date';
+
+/** Bag keys the API derives and refuses to take from a hand edit. */
+export const COMPUTED_KEYS: string[] = [QUOTE_DUE_KEY];
+
+/** True while a quote is still owed on a work order in this status — before
+    "Quote Ready" or anything after it in the pipeline (rule 2.3.3's "Quote
+    Ready or equivalent submitted status"). Cancelled (phase null) owes
+    nothing. An unknown status (phase unknown) owes nothing either, so the
+    Due Today view never shouts about a status it cannot place. */
+export function isQuoteOwed(statusName: string | null | undefined, phase: Phase | null | undefined): boolean {
+  if (!statusName || !phase) return false;
+  if (statusName === 'Quote Ready') return false;
+  return phase === 'Intake' || phase === 'Assessment' || phase === 'Quote';
+}
+
+/** Business time zone for "today" and the quote clock (rule 2.3.2). */
+export const BUSINESS_TIME_ZONE = 'America/Chicago';
+
+/** 'YYYY-MM-DD' of `now` in the business time zone. */
+export function businessDay(now: Date = new Date()): string {
+  // en-CA prints ISO order; Intl handles DST for the zone.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+/** One row of the System_Holiday_Table (rule 2.3.2), Admin › Settings. */
+export interface Holiday {
+  /** 'YYYY-MM-DD' */
+  day: string;
+  name: string;
+}
+
 export interface WoVisit {
   id: string;
   task_id: string;

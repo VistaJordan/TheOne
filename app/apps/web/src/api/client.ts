@@ -7,6 +7,7 @@ import type {
   ApprovalTaskResponse,
   ApprovalTasksResponse,
   FmCicoMethod,
+  Holiday,
   VisitInput,
   WoVisit,
   WoVisitResponse,
@@ -964,6 +965,22 @@ export interface AdminSettings {
 
 export function getAdminSettings(): Promise<AdminSettings> {
   return request('/admin/settings');
+}
+
+// The holiday table (0024) — the days the quote clock skips (rule 2.3.2).
+export function listHolidays(): Promise<{ items: Holiday[] }> {
+  return request('/admin/holidays');
+}
+
+export function setHoliday(day: string, name: string): Promise<{ item: Holiday }> {
+  return request(`/admin/holidays/${encodeURIComponent(day)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteHoliday(day: string): Promise<{ ok: true }> {
+  return request(`/admin/holidays/${encodeURIComponent(day)}`, { method: 'DELETE' });
 }
 
 export interface AdminWorkflowItem {

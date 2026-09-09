@@ -53,8 +53,17 @@ import {
   deleteCicoMethod,
   listCicoMethods,
   setCicoMethod,
+  deleteHoliday,
+  listHolidays,
+  setHoliday,
 } from '../../api/client';
-import { APPROVAL_TASK_ACTION_FIELD, APPROVAL_TASK_TYPES, VISIT_METHODS } from '@theone/shared';
+import {
+  APPROVAL_TASK_ACTION_FIELD,
+  APPROVAL_TASK_TYPES,
+  QUOTE_DUE_HOURS,
+  VISIT_METHODS,
+  businessDay,
+} from '@theone/shared';
 
 // ══ SETTINGS ═════════════════════════════════════════════════════════════════
 
@@ -65,7 +74,7 @@ export function AdminSettingsPage() {
   return (
     <AdminShell
       title="Settings"
-      subtitle="How this instance is configured. Set by environment and migration — read-only here."
+      subtitle="How this instance is configured. Set by environment and migration — read-only here, except the holiday table."
     >
       {q.isLoading && <AdminEmpty icon="sliders" title="Loading settings…" />}
       {q.isError && <AdminEmpty icon="alert" title="Could not load settings" />}
@@ -118,7 +127,158 @@ export function AdminSettingsPage() {
           </SetCard>
         </div>
       )}
+
+      <HolidaysCard />
     </AdminShell>
+  );
+}
+
+/** The System_Holiday_Table (rule 2.3.2, 0024): the days, besides weekends,
+    the quote clock skips. Reuses the check-in-method card's chrome. */
+function HolidaysCard() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['admin-holidays'], queryFn: listHolidays, retry: 0 });
+  const items = q.data?.items ?? [];
+  const today = businessDay();
+  const upcoming = items.filter((h) => h.day >= today);
+  const past = items.filter((h) => h.day < today);
+  const [showPast, setShowPast] = useState(false);
+
+  const [day, setDay] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const done = () => {
+    setError(null);
+    void qc.invalidateQueries({ queryKey: ['admin-holidays'] });
+  };
+  const fail = (err: unknown) =>
+    setError(err instanceof ApiRequestError ? err.message : 'The change did not save');
+  const set = useMutation({
+    mutationFn: (v: { day: string; name: string }) => setHoliday(v.day, v.name),
+    onSuccess: () => { done(); setDay(''); setName(''); },
+    onError: fail,
+  });
+  const del = useMutation({ mutationFn: (d: string) => deleteHoliday(d), onSuccess: done, onError: fail });
+  const busy = set.isPending || del.isPending;
+  const onFile = new Set(items.map((h) => h.day));
+
+  const dayText = (d: string) =>
+    new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+    });
+
+  const rows = (list: typeof items) =>
+    list.map((h) => (
+      <tr key={h.day} className={h.day < today ? 'is-muted' : undefined}>
+        <td><b>{dayText(h.day)}</b></td>
+        <td>
+          <DetailCell
+            key={`${h.day}:${h.name}`}
+            value={h.name}
+            busy={busy}
+            label={`Name of the holiday on ${h.day}`}
+            onCommit={(v) => {
+              if (v.trim() && v !== h.name) set.mutate({ day: h.day, name: v.trim() });
+            }}
+          />
+        </td>
+        <td className="num">
+          <button
+            type="button"
+            className="afp-act"
+            title={`Remove ${h.name}`}
+            aria-label={`Remove ${h.name}`}
+            disabled={busy}
+            onClick={() => del.mutate(h.day)}
+          >
+            <Icon name="trash" size={12} />
+          </button>
+        </td>
+      </tr>
+    ));
+
+  return (
+    <section className="card adm-cico">
+      <div className="card-head">
+        <Icon name="clock" size={14} />
+        <h3 className="card-title">Holidays</h3>
+        <span className="card-meta">{upcoming.length} upcoming</span>
+      </div>
+      <p className="adm-cico-note">
+        The quote clock — {QUOTE_DUE_HOURS} hours from an assessment check-out — skips Saturdays,
+        Sundays and every day listed here as a whole day. Add the observed weekday when a holiday
+        falls on a weekend. Changing a day does not move quote due dates already stamped; they
+        re-derive the next time the visit is edited.
+      </p>
+
+      {error && (
+        <div className="callout adm-cico-err" role="alert">
+          <Icon name="alert" size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <form
+        className="adm-cico-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (day && name.trim()) set.mutate({ day, name: name.trim() });
+        }}
+      >
+        <label className="field">
+          <span className="lbl">Day</span>
+          <input className="fld" type="date" value={day} onChange={(e) => setDay(e.target.value)} disabled={busy} />
+        </label>
+        <label className="field adm-cico-detailfield">
+          <span className="lbl">Name</span>
+          <input
+            className="fld"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Thanksgiving Day, Company holiday…"
+            disabled={busy}
+          />
+        </label>
+        <button type="submit" className="btn btn-primary" disabled={busy || !day || !name.trim()}>
+          <Icon name="plus" size={14} />
+          {onFile.has(day) ? 'Rename' : 'Add'}
+        </button>
+      </form>
+
+      {q.isLoading && <div className="empty-flat">Loading…</div>}
+      {q.isError && <div className="empty-flat">Could not load the table — GET /api/admin/holidays did not respond.</div>}
+      {!q.isLoading && !q.isError && items.length === 0 && (
+        <div className="empty-flat">No holidays on file — the clock skips weekends only.</div>
+      )}
+      {items.length > 0 && (
+        <div className="table-wrap">
+          <table className="ct adm-cico-ct">
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Holiday</th>
+                <th aria-label="Remove" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows(upcoming)}
+              {past.length > 0 && (
+                <tr>
+                  <td colSpan={3}>
+                    <button type="button" className="linkbtn" onClick={() => setShowPast((v) => !v)}>
+                      <Icon name={showPast ? 'chev-u' : 'chev-d'} size={12} />
+                      {showPast ? 'Hide' : 'Show'} {past.length} past holiday{past.length === 1 ? '' : 's'}
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {showPast && rows(past)}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -23,6 +23,7 @@ import { Link } from 'react-router-dom';
 import {
   CICO_SECTION_SLUG,
   DEFAULT_VISIT_TYPES,
+  QUOTE_DUE_KEY,
   VISIT_HIDDEN_KEYS,
   VISIT_METHODS,
   VISIT_MIRROR_KEYS,
@@ -42,8 +43,9 @@ import {
   type WorkOrderDetailV2,
 } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
-import { DASH, feedTime, initials } from '../../lib/fields';
+import { DASH, feedTime, initials, str } from '../../lib/fields';
 import { describeVisitChange } from '../../lib/auditFormat';
+import { QUOTE_DUE_HINT, quoteDueBreached } from '../../lib/quoteDue';
 import { FIELD_SECTIONS } from '../../lib/woFieldSections';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Icon } from '../Icon';
@@ -365,6 +367,12 @@ function VisitLog({
       .pop() ?? null;
     return { count: visits.length, techs: techs.size, ms, lastOut: stampParts(lastOut) };
   }, [visits, now]);
+  // The quote clock (0024): the API stamps Quote Due Date from the latest
+  // Assessment check-out; the strip shows it, red once it has run out while
+  // the quote is still owed.
+  const quoteDueRaw = str((wo.fields ?? {})[QUOTE_DUE_KEY]);
+  const quoteDue = stampParts(quoteDueRaw);
+  const quoteLate = quoteDueBreached(quoteDueRaw, wo.status?.name, now);
 
   const shown = collapsed && visits.length > 1 ? visits.slice(-1) : visits;
   const hidden = visits.length - shown.length;
@@ -380,6 +388,13 @@ function VisitLog({
             <span className="cv-sum-k">Last check-out</span>
             <span className="cv-sum-v">
               {summary.lastOut ? <>{summary.lastOut.day}<small>{summary.lastOut.hm}</small></> : DASH}
+            </span>
+          </div>
+          <div title={QUOTE_DUE_HINT}>
+            <span className="cv-sum-k">Quote due</span>
+            <span className={`cv-sum-v${quoteLate ? ' is-warn' : ''}`}>
+              {quoteLate && <Icon name="alert" size={12} />}
+              {quoteDue ? <>{quoteDue.day}<small>{quoteDue.hm}</small></> : DASH}
             </span>
           </div>
         </div>

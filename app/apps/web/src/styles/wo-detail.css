@@ -2536,3 +2536,7 @@ textarea {
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
+
+/* CICO summary: the quote clock, red while overdue and still owed (0024). */
+.cv-sum-v.is-warn { color: var(--danger); }
+.cv-sum-v.is-warn svg { margin-right: 4px; vertical-align: -1px; }
