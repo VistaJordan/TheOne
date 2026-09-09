@@ -242,7 +242,7 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
   {
     title: 'Integrations',
     slug: 'integrations',
-    keys: ['fields.Ecotrak ID'],
+    keys: ['fields.Client Portal Type', 'fields.Ecotrak ID'],
   },
 ];
 
