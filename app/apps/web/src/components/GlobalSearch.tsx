@@ -65,9 +65,8 @@ const DESTINATIONS: Destination[] = [
 const MAX_PER_GROUP = 5;
 const GROUP_ORDER: Group[] = ['Pages', 'Work orders', 'Quotes', 'People'];
 
-/** The hint has to name the key the reader actually has under their hand. */
-const SHORTCUT_HINT =
-  typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.userAgent) ? '⌘K' : 'Ctrl K';
+// Cmd/Ctrl+K still opens the search (listener below); the on-screen hint was
+// removed from the bar at Elise's request (2026-09-09).
 
 function matches(q: string, ...fields: (string | null | undefined)[]): boolean {
   return fields.some((f) => !!f && f.toLowerCase().includes(q));
@@ -260,9 +259,7 @@ export function GlobalSearch() {
           >
             <Icon name="x" size={12} />
           </button>
-        ) : (
-          <kbd className="topbar-search-kbd" aria-hidden="true">{SHORTCUT_HINT}</kbd>
-        )}
+        ) : null}
       </div>
 
       {showPanel && (

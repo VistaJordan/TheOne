@@ -661,19 +661,6 @@ input {
   display: none;
 }
 
-.topbar-search-kbd {
-  flex: none;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  color: var(--topbar-ink-2);
-  background: var(--topbar-bg);
-  border: 1px solid var(--topbar-line);
-  border-radius: 3px;
-  padding: 3px 5px;
-}
-
 .topbar-search-clear {
   flex: none;
   width: 20px;
