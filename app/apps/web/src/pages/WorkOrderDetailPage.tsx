@@ -208,14 +208,24 @@ export function WorkOrderDetailPage() {
 
   if (woQuery.isError || !wo) {
     const notFound = woQuery.error instanceof ApiRequestError && woQuery.error.status === 404;
+    // 0026: the row scope — the work order exists, it just is not theirs.
+    const outOfScope = woQuery.error instanceof ApiRequestError && woQuery.error.status === 403;
     return shell(
       <div className="wo-state">
         <Icon name="alert" size={22} />
-        <b>{notFound ? `${woNumber} not found` : 'Could not load this work order'}</b>
+        <b>
+          {notFound
+            ? `${woNumber} not found`
+            : outOfScope
+              ? `${woNumber} is not assigned to you`
+              : 'Could not load this work order'}
+        </b>
         <span>
           {notFound
             ? 'It may have been deleted, or the number is wrong.'
-            : 'Is the API running on :5174?'}
+            : outOfScope
+              ? 'You see the work orders assigned to you. Ask a manager if you need this one.'
+              : 'Is the API running on :5174?'}
         </span>
         <Link className="btn" to="/">Back to Work Orders</Link>
       </div>,

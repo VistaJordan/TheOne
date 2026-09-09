@@ -14,6 +14,7 @@
 import { withTransaction, query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { listWorkOrders, type ListFilters } from './workOrders.js';
+import type { ActingPrincipal } from './activity.js';
 import { listCustomFields, resolveField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
@@ -319,19 +320,23 @@ function cellFor(item: WorkOrderListItem, key: string): unknown {
 export async function exportCsv(
   filters: Omit<ListFilters, 'limit' | 'offset'>,
   columns: string[],
+  actor?: ActingPrincipal,
 ): Promise<{ csv: string; rows: number; columns: string[] }> {
   const cols = columns.length > 0 ? columns : ['wo_number', 'title', 'client', 'status', 'nte'];
   const labels: string[] = [];
   for (const key of cols) labels.push((await resolveField(key)).label);
 
-  const page = await listWorkOrders({
-    ...filters,
-    columns: cols,
-    // Grouping only affects presentation; ordering by the group key still makes
-    // the file easier to read, so it is left in.
-    limit: EXPORT_CAP,
-    offset: 0,
-  });
+  const page = await listWorkOrders(
+    {
+      ...filters,
+      columns: cols,
+      // Grouping only affects presentation; ordering by the group key still
+      // makes the file easier to read, so it is left in.
+      limit: EXPORT_CAP,
+      offset: 0,
+    },
+    actor,
+  );
 
   const csv = toCsv(
     labels,

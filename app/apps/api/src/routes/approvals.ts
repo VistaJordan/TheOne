@@ -39,7 +39,7 @@ const rejectSchema = z.object({ note: z.string().trim().min(1).max(2000) });
 
 async function taskIdOf(req: FastifyRequest): Promise<string> {
   const { id } = parse(idParamsSchema, req.params);
-  const taskId = await resolveTaskId(id);
+  const taskId = await resolveTaskId(id, actingPrincipalFromRequest(req));
   if (!taskId) throw notFound('Work order not found');
   return taskId;
 }

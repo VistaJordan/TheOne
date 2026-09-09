@@ -72,7 +72,7 @@ const rejectSchema = z.object({ note: z.string().trim().min(1).max(2000) });
 /** :id (uuid or WO number) → task uuid, 404 when the work order does not exist. */
 async function taskIdOf(req: FastifyRequest): Promise<string> {
   const { id } = parse(idParamsSchema, req.params);
-  const taskId = await resolveTaskId(id);
+  const taskId = await resolveTaskId(id, actingPrincipalFromRequest(req));
   if (!taskId) throw notFound('Work order not found');
   return taskId;
 }
@@ -80,8 +80,9 @@ async function taskIdOf(req: FastifyRequest): Promise<string> {
 export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
   /** GET /quotes — the sidebar list page. Needs quotes:view (0015). */
   app.get('/quotes', async (req) => {
-    requirePerm(actingPrincipalFromRequest(req), 'quotes', 'view', 'You cannot view quotes');
-    return listQuotes();
+    const viewer = actingPrincipalFromRequest(req);
+    requirePerm(viewer, 'quotes', 'view', 'You cannot view quotes');
+    return listQuotes(undefined, viewer);
   });
 
   app.get('/work-orders/:id/quote', async (req) => {

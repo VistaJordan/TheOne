@@ -50,7 +50,7 @@ const sendSchema = z.object({ yoda_ref: z.string().trim().max(200).nullable().op
 
 async function taskIdOf(req: FastifyRequest): Promise<string> {
   const { id } = parse(idParamsSchema, req.params);
-  const taskId = await resolveTaskId(id);
+  const taskId = await resolveTaskId(id, actingPrincipalFromRequest(req));
   if (!taskId) throw notFound('Work order not found');
   return taskId;
 }
@@ -74,8 +74,9 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
 
   /** GET /payments — the sidebar tab. Needs payments:view (0015). */
   app.get('/payments', async (req) => {
-    requirePerm(actingPrincipalFromRequest(req), 'payments', 'view', 'You cannot view payment requests');
-    return listAllPaymentRequests();
+    const viewer = actingPrincipalFromRequest(req);
+    requirePerm(viewer, 'payments', 'view', 'You cannot view payment requests');
+    return listAllPaymentRequests(undefined, viewer);
   });
 
   app.post('/payment-requests/:id/approve', async (req) => {

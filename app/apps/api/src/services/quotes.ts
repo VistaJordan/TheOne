@@ -30,6 +30,8 @@ import type {
 import { ApiError, badRequest, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { evaluateForTask } from './obligations.js';
+import { Params } from './woFields.js';
+import { woScopeSql } from './woScope.js';
 import { permAllows } from '@theone/shared';
 import { assertNoOpenNteOverride, openNteOverride } from './approvals.js';
 
@@ -645,7 +647,13 @@ function moneyNum(v: unknown): number | null {
  * grand_total goes through computeQuoteTotals() like every other number on the
  * screen — RULE B included — so the list can never disagree with the builder.
  */
-export async function listQuotes(limit = 200): Promise<{ items: QuoteListItem[]; total: number }> {
+export async function listQuotes(
+  limit = 200,
+  viewer?: ActingPrincipal,
+): Promise<{ items: QuoteListItem[]; total: number }> {
+  // 0026: a scoped viewer's queue holds the quotes on their work orders only.
+  const p = new Params();
+  const scope = viewer ? woScopeSql(viewer, p) : null;
   const res = await query<{
     id: string;
     task_id: string;
@@ -668,9 +676,10 @@ export async function listQuotes(limit = 200): Promise<{ items: QuoteListItem[];
             t.fields->>'34. Cost'   AS wo_cost
        FROM quote q
        JOIN task t ON t.id = q.task_id
+      WHERE t.deleted_at IS NULL ${scope ? `AND ${scope}` : ''}
       ORDER BY q.updated_at DESC
-      LIMIT $1`,
-    [limit],
+      LIMIT ${p.add(limit)}`,
+    p.values,
   );
 
   const items: QuoteListItem[] = [];

@@ -10,29 +10,41 @@
 
 import { query } from '../db.js';
 import type { Kpis } from '@theone/shared';
+import type { ActingPrincipal } from './activity.js';
+import { Params } from './woFields.js';
+import { woScopeSql } from './woScope.js';
 
 // §5/§10: fallback margin from aggregates.invoicedSample (27092/60653 = 44.7%, avgProfit 271).
 const MARGIN_FALLBACK = { pct: 44.7, avgProfit: 271 };
 
-export async function getKpis(): Promise<Kpis> {
+export async function getKpis(viewer?: ActingPrincipal): Promise<Kpis> {
+  // 0026: a scoped viewer's dashboard counts their work orders only. One
+  // predicate shared by all four aggregates, so the tiles agree with the list.
+  const p = new Params();
+  const scope = viewer ? woScopeSql(viewer, p) : null;
+  const only = scope ? `AND ${scope}` : '';
+
   const activeRes = await query<{ count: number | string }>(
     `SELECT COUNT(*)::int AS count
-       FROM task
-      WHERE deleted_at IS NULL AND status_group IN ('open','active','pending')`,
+       FROM task t
+      WHERE t.deleted_at IS NULL AND t.status_group IN ('open','active','pending') ${only}`,
+    p.values,
   );
 
   const waitRes = await query<{ count: number | string; oldest: number | string | null }>(
     `SELECT COUNT(*)::int AS count,
             MAX(now()::date - t.date_received) AS oldest
        FROM task t JOIN status s ON s.id = t.status_id
-      WHERE t.deleted_at IS NULL AND s.name = 'Waiting for Approval'`,
+      WHERE t.deleted_at IS NULL AND s.name = 'Waiting for Approval' ${only}`,
+    p.values,
   );
 
   const readyRes = await query<{ count: number | string; queued: number | string | null }>(
     `SELECT COUNT(*)::int AS count,
             COALESCE(SUM(t.nte), 0)::float8 AS queued
        FROM task t JOIN status s ON s.id = t.status_id
-      WHERE t.deleted_at IS NULL AND s.name = 'Ready to Invoice'`,
+      WHERE t.deleted_at IS NULL AND s.name = 'Ready to Invoice' ${only}`,
+    p.values,
   );
 
   // Margin from invoiced WOs: sum(total_invoiced - cost) / sum(total_invoiced).
@@ -48,7 +60,8 @@ export async function getKpis(): Promise<Kpis> {
        FROM task t
       WHERE t.deleted_at IS NULL
         AND (t.fields->>'Total Invoiced') ~ '^[0-9.]+$'
-        AND (t.fields->>'Total Invoiced')::numeric > 0`,
+        AND (t.fields->>'Total Invoiced')::numeric > 0 ${only}`,
+    p.values,
   );
 
   const mr = marginRes.rows[0];

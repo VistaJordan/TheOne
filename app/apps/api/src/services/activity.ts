@@ -14,6 +14,8 @@
 import type { FastifyRequest } from 'fastify';
 import { query } from '../db.js';
 import { unauthorized, type Capabilities } from './auth.js';
+import { Params } from './woFields.js';
+import { outOfScope, woScopeSql } from './woScope.js';
 import type { ActivityEntry, FeedActor, PermissionSet } from '@theone/shared';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -115,14 +117,25 @@ function mapActivity(r: ActivityRow): ActivityEntry {
   };
 }
 
-/** Resolve a task uuid from a uuid-or-wo_number identifier; null if not found. */
-export async function resolveTaskId(idOrWo: string): Promise<string | null> {
-  const col = UUID_RE.test(idOrWo) ? 'id' : 'wo_number';
-  const res = await query<{ id: string }>(
-    `SELECT id FROM task WHERE ${col} = $1 AND deleted_at IS NULL LIMIT 1`,
-    [idOrWo],
+/**
+ * Resolve a task uuid from a uuid-or-wo_number identifier; null if not found.
+ * With an actor, the row scope (0026) is checked too: a work order that exists
+ * but is outside what they may see throws the scope 403 — every per-work-order
+ * route resolves through here, so none of them can leak a row the list hides.
+ */
+export async function resolveTaskId(idOrWo: string, actor?: ActingPrincipal): Promise<string | null> {
+  const col = UUID_RE.test(idOrWo) ? 't.id' : 't.wo_number';
+  const p = new Params();
+  const hole = p.add(idOrWo);
+  const scope = actor ? woScopeSql(actor, p) : null;
+  const res = await query<{ id: string; in_scope: boolean }>(
+    `SELECT t.id, ${scope ?? 'TRUE'} AS in_scope
+       FROM task t WHERE ${col} = ${hole} AND t.deleted_at IS NULL LIMIT 1`,
+    p.values,
   );
-  return res.rows.length > 0 ? res.rows[0].id : null;
+  if (res.rows.length === 0) return null;
+  if (!res.rows[0].in_scope) throw outOfScope();
+  return res.rows[0].id;
 }
 
 /** A task's activity newest-first (§5 GET /api/activity). */

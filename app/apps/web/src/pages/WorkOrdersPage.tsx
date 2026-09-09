@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { businessDay, isQuoteOwed, type StatusGroup } from '@theone/shared';
+import { businessDay, isQuoteOwed, resolveWoScope, type StatusGroup } from '@theone/shared';
 import type { SavedView } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { useAuth } from '../auth/AuthProvider';
@@ -139,7 +139,13 @@ export function WorkOrdersPage() {
   const [allMatchingSelected, setAllMatchingSelected] = useState(false);
   const [showImport, setShowImport] = useState(false);
   // 0015 · Import needs work_orders:create, Export its own view grant.
-  const { can } = useAuth();
+  const { can, actingAs } = useAuth();
+  // 0026: a scoped person's list is "theirs" before any filter; say so, so an
+  // empty list or a missing number is not read as a bug.
+  const scope = useMemo(
+    () => resolveWoScope(actingAs?.perms, actingAs?.is_super_admin),
+    [actingAs],
+  );
   // The view whose deletion is awaiting confirmation, if any.
   const [pendingDelete, setPendingDelete] = useState<SavedView | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
@@ -413,6 +419,19 @@ export function WorkOrdersPage() {
           onTogglePin={togglePin}
           actions={
             <>
+              {!scope.all && (
+                <span
+                  className="chip chip-outline"
+                  title={
+                    scope.entities.length > 0
+                      ? `You see the work orders assigned to you and every ${scope.entities.join(', ')} work order`
+                      : 'You see the work orders assigned to you'
+                  }
+                >
+                  <Icon name="user" size={12} />
+                  {scope.entities.length > 0 ? `Yours + ${scope.entities.join(', ')}` : 'Yours only'}
+                </span>
+              )}
               {/* The comp's accent CTA leads the cluster. There is no create
                   API or form yet, so like Vendors in the nav it renders inert
                   until that sprint lands. */}

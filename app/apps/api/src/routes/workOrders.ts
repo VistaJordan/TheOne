@@ -37,6 +37,7 @@ import { getFeed, addComment } from '../services/feed.js';
 import { getMessages, resolveConversationId, sendMessage } from '../services/messages.js';
 import { evaluateForTask } from '../services/obligations.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
+import { assertIdsInScope } from '../services/woScope.js';
 import { logExport } from '../services/adminAudit.js';
 import {
   allowFor,
@@ -202,15 +203,18 @@ const messageBodySchema = z.object({
 
 export default async function workOrdersRoutes(app: FastifyInstance): Promise<void> {
   app.get('/work-orders', async (req) => {
-    const { allow } = requireView(req);
+    const { p, allow } = requireView(req);
     const q = parse(listQuerySchema, req.query);
-    const page = await listWorkOrders({
-      ...criteriaOf(q),
-      breach: q.breach,
-      columns: visibleColumns(allow, q.columns),
-      limit: q.limit,
-      offset: q.offset,
-    });
+    const page = await listWorkOrders(
+      {
+        ...criteriaOf(q),
+        breach: q.breach,
+        columns: visibleColumns(allow, q.columns),
+        limit: q.limit,
+        offset: q.offset,
+      },
+      p,
+    );
     for (const item of page.items) redactWorkOrder(allow, item);
     return page;
   });
@@ -223,9 +227,9 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // Every id the current filters match, so "select all 1,240" acts on the whole
   // result set and not just the page the browser happens to be holding.
   app.get('/work-orders/ids', async (req) => {
-    requireView(req);
+    const { p } = requireView(req);
     const q = parse(listCriteriaSchema, req.query);
-    const ids = await listMatchingIds(criteriaOf(q));
+    const ids = await listMatchingIds(criteriaOf(q), p);
     return { ids, total: ids.length };
   });
 
@@ -237,7 +241,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     requirePerm(p, 'work_orders/export', 'view', 'You cannot export work orders');
     const q = parse(listCriteriaSchema, req.query);
     const criteria = criteriaOf(q);
-    const { csv, rows, columns } = await exportCsv(criteria, visibleColumns(allow, q.columns) ?? []);
+    const { csv, rows, columns } = await exportCsv(criteria, visibleColumns(allow, q.columns) ?? [], p);
     const stamp = new Date().toISOString().slice(0, 10);
     // Rule 1.2.1: a download is a button. Logged before the bytes leave so a
     // failed log cannot follow a file that already went out.
@@ -263,6 +267,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     }
     const keys = patchKeys(patch);
     if (keys.length > 0) requireFieldEdit(req, keys);
+    await assertIdsInScope(p, ids);
     return bulkUpdate(ids, patch, actorIdFromRequest(req));
   });
 
@@ -270,6 +275,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { p } = acting(req);
     requirePerm(p, 'work_orders', 'delete', 'You cannot delete work orders');
     const { ids } = parse(bulkDeleteSchema, req.body);
+    await assertIdsInScope(p, ids);
     return bulkDelete(ids, actorIdFromRequest(req));
   });
 
@@ -289,8 +295,11 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   });
 
   app.get('/work-orders/:id', async (req) => {
-    const { allow } = requireView(req);
+    const { p, allow } = requireView(req);
     const { id } = parse(idParamsSchema, req.params);
+    // 0026: the row scope answers before the detail loads — a 403 for a work
+    // order that is not theirs, never a redacted peek at it.
+    if (!(await resolveTaskId(id, p))) throw notFound('Work order not found');
     const detail = await getWorkOrderDetail(id);
     if (!detail) throw notFound('Work order not found');
     return redactWorkOrder(allow, detail);
@@ -301,6 +310,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     requirePerm(p, 'work_orders/status', 'edit', 'You cannot change work-order status');
     const { id } = parse(idParamsSchema, req.params);
     const { status_id } = parse(statusBodySchema, req.body);
+    if (!(await resolveTaskId(id, p))) throw notFound('Work order not found');
     return changeStatus(id, status_id, actorIdFromRequest(req));
   });
 
@@ -311,7 +321,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { p } = acting(req);
     const { id } = parse(idParamsSchema, req.params);
     const { status_id } = parse(statusBodySchema, req.body);
-    const taskId = await resolveTaskId(id);
+    const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
     const { requestStatusChange } = await import('../services/approvals.js');
     const { item, created } = await requestStatusChange(taskId, status_id, p);
@@ -325,7 +335,8 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { id } = parse(idParamsSchema, req.params);
     const { values } = parse(fieldValuesSchema, req.body);
     const actorId = requireFieldEdit(req, Object.keys(values));
-    const { allow } = acting(req);
+    const { p, allow } = acting(req);
+    if (!(await resolveTaskId(id, p))) throw notFound('Work order not found');
     const res = await updateWorkOrderFields(id, values, actorId);
     if (res.detail) redactWorkOrder(allow, res.detail);
     return res;
@@ -339,7 +350,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { p, allow } = requireView(req);
     requirePerm(p, 'work_orders/history', 'view', 'You cannot view field history');
     assertFieldVisible(allow, field);
-    const taskId = await resolveTaskId(id);
+    const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
     return { items: await getFieldHistory(taskId, field, limit) };
   });
@@ -349,9 +360,9 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // first/last changed and what it became, for any page that needs the
   // timestamps without displaying the history. Hidden fields are left out.
   app.get('/work-orders/:id/field-times', async (req) => {
-    const { allow } = requireView(req);
+    const { p, allow } = requireView(req);
     const { id } = parse(idParamsSchema, req.params);
-    const taskId = await resolveTaskId(id);
+    const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
     const items = await getFieldTimes(taskId);
     return { items: items.filter((t) => allow(fieldPermKey(t.field), 'view')) };
@@ -362,7 +373,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { p } = requireView(req);
     requirePerm(p, tabPermKey('overview'), 'view', 'You cannot view the Overview tab');
     const { id } = parse(idParamsSchema, req.params);
-    const taskId = await resolveTaskId(id);
+    const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
     return getFeed(taskId);
   });
@@ -373,7 +384,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     requirePerm(p, 'work_orders/comments', 'create', 'You cannot post updates');
     const { id } = parse(idParamsSchema, req.params);
     const { body, client_visible } = parse(commentBodySchema, req.body);
-    const taskId = await resolveTaskId(id);
+    const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
 
     // Resolved outside the transaction — PGlite is single-connection (see feed.ts).
@@ -393,7 +404,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { p } = requireView(req);
     requirePerm(p, tabPermKey('messages'), 'view', 'You cannot view messages');
     const { id } = parse(idParamsSchema, req.params);
-    const taskId = await resolveTaskId(id);
+    const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
     return getMessages(taskId);
   });
@@ -405,7 +416,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     requirePerm(p, tabPermKey('messages'), 'view', 'You cannot send messages');
     const { id } = parse(idParamsSchema, req.params);
     const { body } = parse(messageBodySchema, req.body);
-    const taskId = await resolveTaskId(id);
+    const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
 
     const conversationId = await resolveConversationId(taskId);
