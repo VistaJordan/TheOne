@@ -322,7 +322,18 @@ export interface PermNode {
   actions: PermAction[];
   note?: string;
   children?: PermNode[];
+  /** 0025: drawn as ONE choice across the row instead of a box per action —
+      the status-change mode (direct / request / none) is the only one so far.
+      Each choice is the grant it stores; "inherit" is no entry at all. */
+  choices?: { code: string; label: string; hint?: string; grant: PermGrant }[];
 }
+
+/** The three-way status-change choice as the grants it stores (0025). */
+export const STATUS_MODE_CHOICES: NonNullable<PermNode['choices']> = [
+  { code: 'direct', label: 'Change directly', hint: 'Moves the status straight away', grant: { edit: true, create: true } },
+  { code: 'request', label: 'Must request', hint: 'Asks a manager; the status moves when they approve (rule 2.4.1)', grant: { edit: false, create: true } },
+  { code: 'none', label: 'Not allowed', hint: 'No status button at all', grant: { edit: false, create: false } },
+];
 
 export interface PermFieldInfo {
   key: string;
@@ -385,7 +396,13 @@ export function buildPermissionTree(fields: PermFieldInfo[]): PermNode[] {
       actions: ['view', 'create', 'edit', 'delete'],
       note: 'Create = import; edit = field values and status; delete = bulk delete to Trash.',
       children: [
-        { key: 'work_orders/status', label: 'Change status', actions: ['edit'] },
+        {
+          key: 'work_orders/status',
+          label: 'Status changes',
+          actions: ['create', 'edit'],
+          note: 'Change directly, or must ask a manager (rule 2.4.1). Set per role here; per person from Adjust.',
+          choices: STATUS_MODE_CHOICES,
+        },
         { key: 'work_orders/comments', label: 'Post updates', actions: ['create'] },
         { key: 'work_orders/export', label: 'Export to CSV', actions: ['view'] },
         { key: 'work_orders/history', label: 'Field history', actions: ['view'] },
@@ -427,7 +444,14 @@ export function buildPermissionTree(fields: PermFieldInfo[]): PermNode[] {
       key: 'approvals',
       label: 'Approvals',
       actions: ['view', 'approve'],
-      note: 'View = the Approvals inbox and the tasks on a work order; approve also covers reject and claim.',
+      note: 'View = the Approvals inbox and the tasks on a work order; approve also covers reject and claim. Each section below can differ.',
+      children: [
+        { key: 'approvals/nte', label: 'NTE increases', actions: ['view', 'approve'] },
+        { key: 'approvals/status', label: 'Status changes', actions: ['view', 'approve'], note: 'Requests raised under rule 2.4.1. A person always sees their own.' },
+        { key: 'approvals/reviews', label: 'Manager reviews', actions: ['view', 'approve'] },
+        { key: 'approvals/quotes', label: 'Quotes', actions: ['view'], note: 'Deciding stays with Quotes › Approve.' },
+        { key: 'approvals/payments', label: 'Payments', actions: ['view'], note: 'Deciding stays with Payments › Approve.' },
+      ],
     },
     { key: 'vendors', label: 'Vendors', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
     { key: 'invoicing', label: 'Invoicing', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },

@@ -26,16 +26,25 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { APPROVALS_PERM_KEY, APPROVAL_TASK_TYPES } from '@theone/shared';
+import {
+  APPROVALS_PERM_KEY,
+  APPROVAL_TASK_LABEL,
+  STATUS_PERM_KEY,
+  approvalSectionOf,
+  approvalSectionPermKey,
+  type ApprovalSectionKey,
+} from '@theone/shared';
 import type {
   ApprovalListItem,
   ApprovalTaskStatus,
   ApprovalTaskType,
   PaymentListItem,
   QuoteListItem,
+  StatusChangeDetail,
 } from '../api/client';
 import {
   ApiRequestError,
+  acknowledgeApprovalTask,
   approveApprovalTask,
   approvePayment,
   approveQuote,
@@ -46,6 +55,7 @@ import {
   rejectApprovalTask,
   rejectPayment,
   rejectQuote,
+  withdrawApprovalTask,
 } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -60,22 +70,27 @@ import { isCostOverNte, numericDate } from '../lib/fields';
 
 // ── Vocabulary ───────────────────────────────────────────────────────────────
 
-type Lane = 'mine' | 'open' | 'done';
+/** 'requests' (0025): the viewer's OWN status-change requests — open, and
+    decided until they acknowledge. The dispatcher's side of rule 2.4.3. */
+type Lane = 'mine' | 'open' | 'done' | 'requests';
 
 const LANE_LABEL: Record<Lane, string> = {
   mine: 'For me',
   open: 'Open',
   done: 'Done',
+  requests: 'My requests',
 };
 
-/** The sections. 'all' is the unified queue; the rest are one kind each. */
-type Section = 'all' | 'nte' | 'review' | 'quotes' | 'payments';
+/** The sections. 'all' is the unified queue; the rest are one kind each —
+    and, since 0025, each is a permission path under `approvals`. */
+type Section = 'all' | ApprovalSectionKey;
 type Kind = Exclude<Section, 'all'>;
 
 const SECTION_LABEL: Record<Section, string> = {
   all: 'All',
   nte: 'NTE increases',
-  review: 'Manager reviews',
+  status: 'Status changes',
+  reviews: 'Manager reviews',
   quotes: 'Quotes',
   payments: 'Payments',
 };
@@ -83,7 +98,8 @@ const SECTION_LABEL: Record<Section, string> = {
 /** The chip in the task cell — what kind of thing the row is. */
 const KIND_CHIP: Record<Kind, string> = {
   nte: 'NTE increase',
-  review: 'Review',
+  status: 'Status change',
+  reviews: 'Review',
   quotes: 'Quote',
   payments: 'Payment',
 };
@@ -95,9 +111,7 @@ export const APPROVAL_STATUS_LABEL: Record<ApprovalTaskStatus, string> = {
   cancelled: 'Cancelled',
 };
 
-export const TYPE_LABEL: Record<ApprovalTaskType, string> = Object.fromEntries(
-  APPROVAL_TASK_TYPES.map((t) => [t.code, t.label]),
-) as Record<ApprovalTaskType, string>;
+export const TYPE_LABEL: Record<ApprovalTaskType, string> = APPROVAL_TASK_LABEL;
 
 /** Rule 1.5.2's hold, as the locked verb explains it. */
 const NTE_HOLD = 'On hold — the NTE override on this work order has to be decided first (rule 1.5.2)';
@@ -188,6 +202,9 @@ interface Row {
   status: { label: string; chip: string; trail: string | null; note: string | null };
   /** Rule 1.5.2: an open NTE override on this work order holds the money moves. */
   held: boolean;
+  /** 0025: the viewer asked for this — it shows in their My requests lane
+      while open, and after a decision until they acknowledge it. */
+  requester: boolean;
   data: RowData;
 }
 
@@ -211,10 +228,14 @@ function taskRow(
   myId: string | null,
   myRole: string | null,
   held: Set<string>,
+  canDecide: boolean,
 ): Row {
   const open = item.status === 'open';
+  // "For me" = open, mine to decide (0025: the section's approve grant), and
+  // in my lane — claimed by me, or unclaimed and routed to anyone / my role.
   const mine =
     open &&
+    canDecide &&
     (item.assigned_to
       ? item.assigned_to.id === myId
       : item.assigned_role === null || item.assigned_role === myRole);
@@ -228,7 +249,7 @@ function taskRow(
         .join(' · ') || null;
   return {
     key: `task:${item.id}`,
-    section: item.type === 'nte_override' ? 'nte' : 'review',
+    section: approvalSectionOf(item.type),
     task_id: item.task_id,
     wo_number: item.wo_number,
     wo_title: item.wo_title,
@@ -252,6 +273,9 @@ function taskRow(
     },
     // The NTE task IS the hold; it is never held by itself.
     held: item.type !== 'nte_override' && held.has(item.task_id),
+    requester:
+      item.created_by?.id === myId &&
+      (open || ((item.status === 'approved' || item.status === 'rejected') && !item.acknowledged_at)),
     data: { kind: 'task', item },
   };
 }
@@ -281,6 +305,7 @@ function quoteRow(item: QuoteListItem, canDecide: boolean, held: Set<string>): R
       note: null,
     },
     held: held.has(item.task_id),
+    requester: false,
     data: { kind: 'quote', item },
   };
 }
@@ -342,13 +367,16 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
       note: item.status === 'rejected' ? item.rejection_note : null,
     },
     held: item.nte_override_open || held.has(item.task_id),
+    requester: false,
     data: { kind: 'payment', item },
   };
 }
 
 // ── Decisions ────────────────────────────────────────────────────────────────
 
-type DecisionKind = 'approve' | 'reject' | 'claim';
+/** 0025: acknowledge (Continue / Understood) and withdraw are the requester's
+    verbs on their own status-change requests. */
+type DecisionKind = 'approve' | 'reject' | 'claim' | 'acknowledge' | 'withdraw';
 
 interface Pending {
   kind: DecisionKind;
@@ -368,12 +396,20 @@ const NO_FILTERS: Filters = { entity: '', client: '', trade: '', owner: '' };
 export function ApprovalsPage() {
   const queryClient = useQueryClient();
   const { can, actingAs } = useAuth();
-  const canApproveTasks = can(APPROVALS_PERM_KEY, 'approve');
-  const canSeeQuotes = can('quotes', 'view');
+  // 0025: every section is its own path under `approvals` — view shows it,
+  // approve lets the viewer decide in it. Quotes and payments keep their own
+  // approve gate; the section grant only says whether they show here.
+  const canSeeSection = (s: Kind) => can(approvalSectionPermKey(s), 'view');
+  const canDecideTask = (type: ApprovalTaskType) => can(approvalSectionPermKey(approvalSectionOf(type)), 'approve');
+  const canApproveAnyTask =
+    canDecideTask('nte_override') || canDecideTask('status_change') || canDecideTask('manager_review');
+  const canSeeQuotes = can('quotes', 'view') && canSeeSection('quotes');
   const canApproveQuotes = can('quotes', 'approve');
-  const canSeePayments = can('payments', 'view');
+  const canSeePayments = can('payments', 'view') && canSeeSection('payments');
   const canApprovePayments = can('payments', 'approve');
-  const canDecideAnything = canApproveTasks || canApproveQuotes || canApprovePayments;
+  const canDecideAnything = canApproveAnyTask || canApproveQuotes || canApprovePayments;
+  // A person in request mode (rule 2.4.1) lands on their own requests.
+  const requestMode = can(STATUS_PERM_KEY, 'create') && !can(STATUS_PERM_KEY, 'edit');
   const myId = actingAs?.id ?? null;
   const myRole = actingAs?.role ?? null;
 
@@ -385,7 +421,7 @@ export function ApprovalsPage() {
     setColumns(cols);
     saveColumns(cols);
   };
-  const [lane, setLane] = useState<Lane>(canDecideAnything ? 'mine' : 'open');
+  const [lane, setLane] = useState<Lane>(requestMode ? 'requests' : canDecideAnything ? 'mine' : 'open');
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -411,7 +447,7 @@ export function ApprovalsPage() {
     const held = new Set(
       tasks.filter((t) => t.type === 'nte_override' && t.status === 'open').map((t) => t.task_id),
     );
-    const out: Row[] = tasks.map((t) => taskRow(t, myId, myRole, held));
+    const out: Row[] = tasks.map((t) => taskRow(t, myId, myRole, held, canDecideTask(t.type)));
     for (const q of quotesQuery.data?.items ?? []) {
       // A draft is nobody's to approve yet; it enters the inbox on submit.
       if (q.status === 'draft') continue;
@@ -419,9 +455,11 @@ export function ApprovalsPage() {
     }
     for (const p of paymentsQuery.data?.items ?? []) out.push(paymentRow(p, canApprovePayments, held));
     return out;
-  }, [approvalsQuery.data, quotesQuery.data, paymentsQuery.data, myId, myRole, canApproveQuotes, canApprovePayments]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- canDecideTask closes over `can`
+  }, [approvalsQuery.data, quotesQuery.data, paymentsQuery.data, myId, myRole, canApproveQuotes, canApprovePayments, can]);
 
-  const inLane = (r: Row, l: Lane) => (l === 'mine' ? r.mine : l === 'open' ? r.open : !r.open);
+  const inLane = (r: Row, l: Lane) =>
+    l === 'requests' ? r.requester : l === 'mine' ? r.mine : l === 'open' ? r.open : !r.open;
   const inSection = (r: Row, s: Section) => s === 'all' || r.section === s;
 
   const laneRows = useMemo(() => rows.filter((r) => inLane(r, lane)), [rows, lane]);
@@ -466,20 +504,33 @@ export function ApprovalsPage() {
   const sectionCount = (s: Section): number | undefined =>
     loaded ? laneRows.filter((r) => inSection(r, s)).length : undefined;
 
-  // Which sections to offer: the two task kinds always (reviews only once one
-  // exists), quotes and payments when the viewer may see them.
+  // Which sections to offer: the ones the viewer may see (reviews only once
+  // one exists), plus any section their own requests fall in.
   const sections: Section[] = [
     'all',
-    'nte',
-    ...(rows.some((r) => r.section === 'review') ? (['review'] as Section[]) : []),
+    ...(canSeeSection('nte') ? (['nte'] as Section[]) : []),
+    ...(canSeeSection('status') || rows.some((r) => r.section === 'status' && r.requester)
+      ? (['status'] as Section[])
+      : []),
+    ...(canSeeSection('reviews') && rows.some((r) => r.section === 'reviews') ? (['reviews'] as Section[]) : []),
     ...(canSeeQuotes ? (['quotes'] as Section[]) : []),
     ...(canSeePayments ? (['payments'] as Section[]) : []),
+  ];
+  // The lanes: My requests only for someone who has (or can raise) requests.
+  const lanes: Lane[] = [
+    ...(requestMode || rows.some((r) => r.requester) ? (['requests'] as Lane[]) : []),
+    'mine',
+    'open',
+    'done',
   ];
 
   const anyFilter = Object.values(filters).some(Boolean);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['approvals'] });
+    void queryClient.invalidateQueries({ queryKey: ['approval-counts'] });
+    // An approved status change moved the work order.
+    void queryClient.invalidateQueries({ queryKey: ['work-orders'] });
     void queryClient.invalidateQueries({ queryKey: ['quotes'] });
     void queryClient.invalidateQueries({ queryKey: ['payments'] });
     // The work order's cards and audit trail show the same rows.
@@ -493,9 +544,13 @@ export function ApprovalsPage() {
   const decide = useMutation({
     mutationFn: async ({ kind, row, text }: Pending & { text: string | null }) => {
       const d = row.data;
-      if (kind === 'claim') {
-        if (d.kind !== 'task') throw new Error('Only tasks can be claimed');
-        return claimApprovalTask(d.item.id);
+      if (kind === 'claim' || kind === 'acknowledge' || kind === 'withdraw') {
+        if (d.kind !== 'task') throw new Error('Only tasks can be claimed, acknowledged or withdrawn');
+        return kind === 'claim'
+          ? claimApprovalTask(d.item.id)
+          : kind === 'acknowledge'
+            ? acknowledgeApprovalTask(d.item.id)
+            : withdrawApprovalTask(d.item.id);
       }
       switch (d.kind) {
         case 'task':
@@ -548,6 +603,8 @@ export function ApprovalsPage() {
 
   const emptyText = anyFilter
     ? 'Nothing matches these filters.'
+    : lane === 'requests'
+      ? 'No requests of yours are waiting or undecided — you are up to date.'
     : lane === 'mine'
       ? 'Nothing is waiting on you.'
       : lane === 'open'
@@ -589,7 +646,7 @@ export function ApprovalsPage() {
           })}
         </div>
         <div className="seg payq-lanes" role="group" aria-label="Approval lanes">
-          {(['mine', 'open', 'done'] as const).map((l) => {
+          {lanes.map((l) => {
             const n = laneCount(l);
             return (
               <button
@@ -677,14 +734,16 @@ export function ApprovalsPage() {
                   row={r}
                   columns={columns}
                   myId={myId}
-                  canApproveTasks={canApproveTasks}
+                  canDecideTask={canDecideTask}
                   canApproveQuotes={canApproveQuotes}
                   canApprovePayments={canApprovePayments}
                   busy={busy}
                   onDecide={(kind) => {
                     setError(null);
-                    if (kind === 'claim') decide.mutate({ kind, row: r, text: null });
-                    else setPending({ kind, row: r });
+                    // Claim, acknowledge and withdraw need no note: straight through.
+                    if (kind === 'claim' || kind === 'acknowledge' || kind === 'withdraw') {
+                      decide.mutate({ kind, row: r, text: null });
+                    } else setPending({ kind, row: r });
                   }}
                 />
               ))}
@@ -712,7 +771,9 @@ export function ApprovalsPage() {
           title={
             pending.row.data.item.type === 'nte_override'
               ? 'Approve this NTE increase?'
-              : 'Approve this task?'
+              : pending.row.data.item.type === 'status_change'
+                ? 'Approve this status change?'
+                : 'Approve this task?'
           }
           facts={facts(pending.row)}
           idKey={pending.row.key}
@@ -775,7 +836,9 @@ export function ApprovalsPage() {
                 ? 'Reject this payment'
                 : pending.row.data.item.type === 'nte_override'
                   ? 'Reject this NTE increase'
-                  : 'Reject this task'
+                  : pending.row.data.item.type === 'status_change'
+                    ? 'Reject this status change'
+                    : 'Reject this task'
           }
           facts={facts(pending.row)}
           idKey={pending.row.key}
@@ -800,8 +863,17 @@ function facts(row: Row): { k: string; v: string }[] {
   switch (row.data.kind) {
     case 'task': {
       const numbers = nteNumbers(row.data.item);
+      const move =
+        row.data.item.type === 'status_change'
+          ? (row.data.item.detail as Partial<StatusChangeDetail>)
+          : null;
       return [
-        { k: 'Task', v: row.data.item.title },
+        move
+          ? { k: 'Status', v: `${move.from_status_name ?? '?'} → ${move.to_status_name ?? '?'}` }
+          : { k: 'Task', v: row.data.item.title },
+        ...(move && row.data.item.created_by
+          ? [{ k: 'Requested by', v: row.data.item.created_by.display_name }]
+          : []),
         ...(numbers ? [{ k: 'Numbers', v: numbers }] : []),
         { k: 'Work order', v: wo },
       ];
@@ -857,7 +929,8 @@ interface RowProps {
   row: Row;
   columns: ColumnKey[];
   myId: string | null;
-  canApproveTasks: boolean;
+  /** 0025: per section — approvals/<section>:approve for the task's type. */
+  canDecideTask: (type: ApprovalTaskType) => boolean;
   canApproveQuotes: boolean;
   canApprovePayments: boolean;
   busy: boolean;
@@ -876,6 +949,9 @@ function Ask({ row }: { row: Row }) {
         d.item.type === 'nte_override' && row.cost != null && row.nte != null
           ? row.cost - row.nte
           : null;
+      // A status change reads From → To (0025); the decision note (the
+      // rejection reason) rides in the Status column.
+      const move = d.item.type === 'status_change' ? (d.item.detail as Partial<StatusChangeDetail>) : null;
       return (
         <div className="site payq-who">
           <strong>
@@ -884,10 +960,19 @@ function Ask({ row }: { row: Row }) {
               <span className="apq-over">{usd(over)} over</span>
             ) : d.item.type === 'nte_override' ? (
               'Cost is over the client NTE'
+            ) : move ? (
+              <span className="apq-move">
+                <span>{move.from_status_name ?? '?'}</span>
+                <span className="apq-arrow" aria-hidden="true">→</span>
+                <b>{move.to_status_name ?? '?'}</b>
+              </span>
             ) : (
               d.item.title
             )}
           </strong>
+          {move && d.item.created_by && (
+            <small>Requested by {d.item.created_by.display_name}</small>
+          )}
         </div>
       );
     }
@@ -1023,10 +1108,10 @@ function InboxRow(props: RowProps) {
 
 /** The verbs a row offers at its status. A verb the viewer may not use is
     drawn locked with the reason — the rule is "visible, never hidden". */
-function Decisions({ row, myId, canApproveTasks, canApproveQuotes, canApprovePayments, busy, onDecide }: RowProps) {
+function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayments, busy, onDecide }: RowProps) {
   const verb = (
     label: string,
-    icon: 'check' | 'x' | 'user',
+    icon: 'check' | 'x' | 'user' | 'check-check' | 'refresh',
     allowed: boolean,
     reason: string,
     onClick: () => void,
@@ -1062,18 +1147,44 @@ function Decisions({ row, myId, canApproveTasks, canApproveQuotes, canApprovePay
       </span>
     );
 
-  if (!row.open) return <span className="payq-done">{row.status.label}</span>;
-
   const d = row.data;
+
+  // 0025: a decided request of the viewer's own waits for their acknowledgement
+  // — "Continue" after an approval (the way is clear), "Understood" after a
+  // rejection. Either clears it from My requests.
+  if (!row.open) {
+    if (d.kind === 'task' && row.requester && d.item.type === 'status_change') {
+      const approved = d.item.status === 'approved';
+      return (
+        <>
+          <span className="payq-done">{row.status.label}</span>
+          {verb(
+            approved ? 'Continue' : 'Understood',
+            approved ? 'check-check' : 'check',
+            true,
+            '',
+            () => onDecide('acknowledge'),
+            'primary',
+            'ack',
+          )}
+        </>
+      );
+    }
+    return <span className="payq-done">{row.status.label}</span>;
+  }
+
   switch (d.kind) {
     case 'task': {
       const claimedByMe = d.item.assigned_to?.id === myId;
+      const may = canDecideTask(d.item.type);
+      const need = `Requires ${KIND_CHIP[row.section].toLowerCase()} approval rights`;
       return (
         <>
-          {!claimedByMe &&
-            verb('Claim', 'user', canApproveTasks, 'Requires approval rights', () => onDecide('claim'), 'plain')}
-          {verb('Reject', 'x', canApproveTasks, 'Requires approval rights', () => onDecide('reject'), 'danger')}
-          {verb('Approve', 'check', canApproveTasks, 'Requires approval rights', () => onDecide('approve'), 'primary')}
+          {row.requester &&
+            verb('Withdraw', 'refresh', true, '', () => onDecide('withdraw'), 'plain')}
+          {!claimedByMe && verb('Claim', 'user', may, need, () => onDecide('claim'), 'plain')}
+          {verb('Reject', 'x', may, need, () => onDecide('reject'), 'danger')}
+          {verb('Approve', 'check', may, need, () => onDecide('approve'), 'primary')}
         </>
       );
     }

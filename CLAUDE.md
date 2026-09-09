@@ -110,6 +110,31 @@ reviews) · Quotes (`pending_approval`) · Payments (`requested`) — built
 client-side from `/approvals`, `/quotes` and `/payments`; open rows sort
 oldest first (rule 7.2.2) and every decision is per row (7.2.3).
 
+**Status change requests** (migration 0025, rules 2.4.1–2.4.4) ride the same
+table: a request is an `approval_task` of type `status_change` with the
+from/to in `detail` and the rejection reason in `decision_note`; 0025 adds
+`acknowledged_by/_at`. "Dispatcher" is a permission, not a role name:
+`work_orders/status` has `edit` (change directly) and `create` (must
+request); the Roles screen and per-user Adjust draw the pair as ONE
+three-way choice (`choices` on the PermNode, `STATUS_MODE_CHOICES`). 0025
+sets OM / OM Under Probation / Senior OM to request, TL / ATL / AM / Admin
+to direct. The inbox sections are permission paths `approvals/nte|status|
+reviews|quotes|payments` (view / approve; unset inherits from `approvals`);
+the API trims `/approvals` to the viewer's sections **plus their own
+requests**, and every decision requires the task's section `approve`.
+`POST /work-orders/:id/status-request` raises one (201 new / 200 re-targeted);
+approving calls `changeStatus` after the decision commits with source
+`{kind:'approval_task'}`, so the `status_changed` row reads `via:
+'approval_task'`; `reconcileApprovalTasks` cancels an open request once the
+work order sits in the requested status by any other route. The requester
+sees the decision on the work-order header chip and in the **My requests**
+lane of `/approvals` until they acknowledge it (Continue after an approval,
+Understood or Request again after a rejection — `POST …/acknowledge`,
+`…/withdraw`); `GET /approvals/counts` feeds the sidebar badge. Rule 2.4.4
+needs no code: nothing pauses a timer and the quote clock keys off visits.
+The status button reads "Request status change" for request-mode users and
+the bulk bar hides its status move for them.
+
 **Visits** (migration 0021, `services/visits.ts`, `components/wo/CicoCard.tsx`)
 replaced the three check-in/out fields with a log: one `wo_visit` row per
 visit (type, tech name + phone, method, own check-in / check-out stamps to

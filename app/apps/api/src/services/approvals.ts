@@ -23,22 +23,31 @@
 import { query, getDb } from '../db.js';
 import type {
   ActivityActor,
+  ApprovalCounts,
   ApprovalListItem,
   ApprovalListResponse,
   ApprovalTask,
   ApprovalTaskStatus,
   ApprovalTaskType,
   ApprovalTasksResponse,
+  StatusChangeDetail,
 } from '@theone/shared';
-import { APPROVALS_PERM_KEY, APPROVAL_TASK_TYPES } from '@theone/shared';
+import {
+  APPROVAL_TASK_LABEL,
+  APPROVAL_TASK_TYPES,
+  STATUS_PERM_KEY,
+  approvalSectionOf,
+  approvalSectionPermKey,
+} from '@theone/shared';
 import { ApiError, badRequest, conflict } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
-import { requirePerm } from './permissions.js';
+import { allowFor, requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
-const TYPES = new Set<string>(APPROVAL_TASK_TYPES.map((t) => t.code));
+// The rule-raised kinds plus the one a person asks for (0025).
+const TYPES = new Set<string>([...APPROVAL_TASK_TYPES.map((t) => t.code), 'status_change']);
 const STATUSES: ApprovalTaskStatus[] = ['open', 'approved', 'rejected', 'cancelled'];
 
 export function isApprovalTaskType(v: unknown): v is ApprovalTaskType {
@@ -69,6 +78,10 @@ interface Row {
   decided_by_kind: 'human' | 'service' | null;
   decided_at: string | null;
   decision_note: string | null;
+  ab_id: string | null;
+  ab_name: string | null;
+  ab_kind: 'human' | 'service' | null;
+  acknowledged_at: string | null;
   wo_number: string;
   wo_title: string | null;
   client: string | null;
@@ -94,6 +107,8 @@ const SELECT_SQL = `
          db.id::text AS decided_by_id, db.display_name AS decided_by_name, db.kind::text AS decided_by_kind,
          ${ISO('a.decided_at')} AS decided_at,
          a.decision_note,
+         ab.id::text AS ab_id, ab.display_name AS ab_name, ab.kind::text AS ab_kind,
+         ${ISO('a.acknowledged_at')} AS acknowledged_at,
          t.wo_number, t.title AS wo_title, t.client, t.billing_entity, t.trade,
          t.fields->>'Due Date'   AS wo_due,
          t.nte::float8           AS wo_nte,
@@ -104,6 +119,7 @@ const SELECT_SQL = `
     LEFT JOIN principal at ON at.id = a.assigned_to
     LEFT JOIN principal cb ON cb.id = a.created_by
     LEFT JOIN principal db ON db.id = a.decided_by
+    LEFT JOIN principal ab ON ab.id = a.acknowledged_by
 `;
 
 function actorOf(
@@ -135,6 +151,8 @@ function mapTask(r: Row): ApprovalTask {
     decided_by: actorOf(r.decided_by_id, r.decided_by_name, r.decided_by_kind),
     decided_at: r.decided_at,
     decision_note: r.decision_note,
+    acknowledged_by: actorOf(r.ab_id, r.ab_name, r.ab_kind),
+    acknowledged_at: r.acknowledged_at,
   };
 }
 
@@ -171,8 +189,12 @@ function num(v: unknown): number | null {
 /**
  * The inbox: every task across every live work order, open ones first, then
  * newest first. Deleted work orders keep their rows but leave the list.
+ *
+ * 0025: trimmed to the sections the viewer may see (approvals/<section>:view)
+ * — except a person's OWN requests, which they always see, so a dispatcher
+ * with no section grant still gets "My requests".
  */
-export async function listApprovalTasks(limit = 500): Promise<ApprovalListResponse> {
+export async function listApprovalTasks(viewer: ActingPrincipal, limit = 500): Promise<ApprovalListResponse> {
   const res = await query<Row>(
     `${SELECT_SQL}
       WHERE t.deleted_at IS NULL
@@ -181,7 +203,14 @@ export async function listApprovalTasks(limit = 500): Promise<ApprovalListRespon
       LIMIT $1`,
     [limit],
   );
-  const items = res.rows.map(mapListItem);
+  const allow = allowFor(viewer);
+  const items = res.rows
+    .map(mapListItem)
+    .filter(
+      (i) =>
+        i.created_by?.id === viewer.id ||
+        allow(approvalSectionPermKey(approvalSectionOf(i.type)), 'view'),
+    );
   const counts = Object.fromEntries(STATUSES.map((s) => [s, 0])) as Record<ApprovalTaskStatus, number>;
   for (const i of items) counts[i.status] += 1;
   return { items, total: items.length, counts };
@@ -218,6 +247,36 @@ async function costAndNte(taskId: string): Promise<{ cost: number | null; nte: n
   return { cost: num(r.cost), nte: num(r.nte) };
 }
 
+/**
+ * The from → to of a status-change request, checked against the work order
+ * and the status table right now (0025). Refuses an unknown target and a
+ * no-op (asking for the status the work order already has).
+ */
+async function statusChangeDetail(taskId: string, toStatusId: string | null): Promise<StatusChangeDetail> {
+  if (!toStatusId) throw badRequest('Which status is being asked for?', { status_id: toStatusId });
+  const cur = await query<{ status_id: string; status_name: string }>(
+    `SELECT t.status_id::text AS status_id, s.name AS status_name
+       FROM task t JOIN status s ON s.id = t.status_id
+      WHERE t.id = $1 AND t.deleted_at IS NULL LIMIT 1`,
+    [taskId],
+  );
+  if (!cur.rows[0]) throw new ApiError('NOT_FOUND', 'Work order not found');
+  const to = await query<{ id: string; name: string }>(
+    `SELECT id::text AS id, name FROM status WHERE id = $1 LIMIT 1`,
+    [toStatusId],
+  );
+  if (!to.rows[0]) throw badRequest('Unknown status_id', { status_id: toStatusId });
+  if (to.rows[0].id === cur.rows[0].status_id) {
+    throw badRequest(`The work order is already in ${cur.rows[0].status_name}`, { status_id: toStatusId });
+  }
+  return {
+    from_status_id: cur.rows[0].status_id,
+    from_status_name: cur.rows[0].status_name,
+    to_status_id: to.rows[0].id,
+    to_status_name: to.rows[0].name,
+  };
+}
+
 export interface RaiseInput {
   taskId: string;
   type: ApprovalTaskType;
@@ -228,12 +287,18 @@ export interface RaiseInput {
   source?: { automationId: string | null; name: string | null } | null;
   /** For 'manager_review': what the rule saw change, for the title. */
   cause?: { field_label: string; value: string } | null;
+  /** For 'status_change': the status asked for (rule 2.4.1). */
+  toStatusId?: string | null;
 }
 
 /** The title and detail a type carries, from the work order's current numbers. */
 async function describe(
   input: RaiseInput,
 ): Promise<{ title: string; detail: Record<string, unknown> }> {
+  if (input.type === 'status_change') {
+    const d = await statusChangeDetail(input.taskId, input.toStatusId ?? null);
+    return { title: `Status change requested: ${d.from_status_name} → ${d.to_status_name}`, detail: { ...d } };
+  }
   if (input.type === 'nte_override') {
     const m = await costAndNte(input.taskId);
     const cost = m?.cost ?? null;
@@ -280,10 +345,34 @@ export async function createApprovalTask(
     [input.taskId, input.type],
   );
   if (open.rows[0]) {
-    await query(
-      `UPDATE approval_task SET title = $1, detail = $2::jsonb, updated_at = now() WHERE id = $3`,
-      [title, JSON.stringify(detail), open.rows[0].id],
-    );
+    const before = await getApprovalTask(open.rows[0].id);
+    const db = getDb();
+    await db.transaction(async (tx) => {
+      // A person's repeat request replaces the target AND becomes theirs;
+      // a rule's refresh keeps the numbers current and the row as it was.
+      await tx.query(
+        `UPDATE approval_task
+            SET title = $1, detail = $2::jsonb, updated_at = now(),
+                created_by = CASE WHEN $4::boolean THEN $5::uuid ELSE created_by END
+          WHERE id = $3`,
+        [title, JSON.stringify(detail), open.rows[0].id, input.type === 'status_change', input.actorId],
+      );
+      // Rule 1.2.1: the refresh is a change to the record, so it is logged —
+      // the trail shows both asks, not just the last one.
+      if (before.title !== title || JSON.stringify(before.detail) !== JSON.stringify(detail)) {
+        await tx.query(
+          `INSERT INTO activity_log
+             (actor_principal_id, entity_type, entity_id, action, field, before, after)
+           VALUES ($1, 'task', $2, 'approval_task_updated', 'approval_task.detail', $3::jsonb, $4::jsonb)`,
+          [
+            input.actorId,
+            input.taskId,
+            JSON.stringify({ approval_task_id: before.id, type: before.type, title: before.title, detail: before.detail }),
+            JSON.stringify({ approval_task_id: before.id, type: input.type, title, detail }),
+          ],
+        );
+      }
+    });
     return { item: await getApprovalTask(open.rows[0].id), created: false };
   }
 
@@ -331,16 +420,29 @@ export async function createApprovalTask(
 
 // ── Decisions ────────────────────────────────────────────────────────────────
 
-const TYPE_LABEL: Record<ApprovalTaskType, string> = {
-  nte_override: 'NTE override',
-  manager_review: 'Manager review',
-};
+const TYPE_LABEL = APPROVAL_TASK_LABEL;
+
+/** 403 unless the actor may decide in the section this task lives in (0025). */
+function requireDecide(actor: ActingPrincipal, type: ApprovalTaskType, verb: string): void {
+  requirePerm(
+    actor,
+    approvalSectionPermKey(approvalSectionOf(type)),
+    'approve',
+    `You cannot ${verb} ${APPROVAL_TASK_LABEL[type].toLowerCase()} tasks`,
+  );
+}
 
 /**
  * approve / reject. The status, its stamps, the activity row and an internal
  * comment on the work order all land in one transaction — the decision is
  * feedback for whoever is running the job, and the Updates feed is where
  * they look.
+ *
+ * Approving a status_change (rule 2.4.3) then moves the work order through
+ * the ordinary changeStatus — after this transaction commits, since that
+ * service opens its own and dispatches automations — stamped `via:
+ * 'approval_task'` so the trail names the request. If the target status was
+ * deleted in the meantime the task stays open and the caller gets a 409.
  */
 async function decide(
   id: string,
@@ -357,6 +459,23 @@ async function decide(
   const action = to === 'approved' ? 'approval_task_approved' : 'approval_task_rejected';
   const verb = to === 'approved' ? 'approved' : 'rejected';
   const body = `${TYPE_LABEL[cur.type]} ${verb} — ${cur.title}${note ? ` — ${note}` : ''}`;
+
+  // The target must still exist before anything is written, so an approval
+  // never lands without the move it promises.
+  let moveTo: string | null = null;
+  if (to === 'approved' && cur.type === 'status_change') {
+    const d = cur.detail as Partial<StatusChangeDetail>;
+    const hit = d.to_status_id
+      ? await query<{ id: string }>(`SELECT id::text AS id FROM status WHERE id = $1 LIMIT 1`, [d.to_status_id])
+      : { rows: [] as { id: string }[] };
+    if (!hit.rows[0]) {
+      throw conflict(
+        `The status "${d.to_status_name ?? '?'}" no longer exists, so this request cannot be approved. Reject it with a note instead.`,
+        { approval_task_id: id, status_id: d.to_status_id ?? null },
+      );
+    }
+    moveTo = hit.rows[0].id;
+  }
 
   const db = getDb();
   await db.transaction(async (tx) => {
@@ -401,34 +520,43 @@ async function decide(
       ],
     );
   });
+
+  // Rule 2.4.3, "update WO_Status to requested status": the manager's approval
+  // is the act that moves it, so the manager is the actor on the status row.
+  if (moveTo !== null) {
+    const { changeStatus } = await import('./workOrders.js');
+    await changeStatus(cur.task_id, moveTo, actor.id, undefined, { kind: 'approval_task', id });
+  }
   return getApprovalTask(id);
 }
 
-/** open → approved (approvals:approve). */
+/** open → approved (approvals/<section>:approve). */
 export async function approveApprovalTask(
   id: string,
   note: string | null,
   actor: ActingPrincipal,
 ): Promise<ApprovalTask> {
-  requirePerm(actor, APPROVALS_PERM_KEY, 'approve', 'You cannot approve tasks');
+  const cur = await getApprovalTask(id);
+  requireDecide(actor, cur.type, 'approve');
   return decide(id, 'approved', note, actor);
 }
 
-/** open → rejected, with the reason (approvals:approve). */
+/** open → rejected, with the reason (approvals/<section>:approve). */
 export async function rejectApprovalTask(
   id: string,
   note: string,
   actor: ActingPrincipal,
 ): Promise<ApprovalTask> {
-  requirePerm(actor, APPROVALS_PERM_KEY, 'approve', 'You cannot reject tasks');
+  const cur = await getApprovalTask(id);
+  requireDecide(actor, cur.type, 'reject');
   return decide(id, 'rejected', note, actor);
 }
 
-/** Take an open task into your own lane (approvals:approve). Claiming is
-    routing, not a decision — no comment, just the audit row. */
+/** Take an open task into your own lane (approvals/<section>:approve).
+    Claiming is routing, not a decision — no comment, just the audit row. */
 export async function claimApprovalTask(id: string, actor: ActingPrincipal): Promise<ApprovalTask> {
-  requirePerm(actor, APPROVALS_PERM_KEY, 'approve', 'You cannot claim tasks');
   const cur = await getApprovalTask(id);
+  requireDecide(actor, cur.type, 'claim');
   if (cur.status !== 'open') {
     throw badRequest(`This task is already ${cur.status}`, { status: cur.status });
   }
@@ -496,49 +624,181 @@ export async function assertNoOpenNteOverride(taskId: string, move: string): Pro
  */
 export async function reconcileApprovalTasks(taskId: string, actorId: string): Promise<void> {
   try {
-    const open = await query<{ id: string; title: string }>(
-      `SELECT id::text AS id, title FROM approval_task
-        WHERE task_id = $1 AND type = 'nte_override' AND status = 'open' LIMIT 1`,
-      [taskId],
-    );
-    if (!open.rows[0]) return;
-    const m = await costAndNte(taskId);
-    if (!m) return;
-    const stillOver = m.cost !== null && m.nte !== null && m.cost > m.nte;
-    if (stillOver) return;
-
-    const why =
-      m.cost === null || m.nte === null
-        ? 'Cost or NTE was cleared'
-        : `Cost ${money(m.cost)} is back within the NTE ${money(m.nte)}`;
-    const db = getDb();
-    await db.transaction(async (tx) => {
-      await tx.query(
-        `UPDATE approval_task
-            SET status = 'cancelled', decided_by = $1, decided_at = now(), decision_note = $2,
-                updated_at = now()
-          WHERE id = $3`,
-        [actorId, why, open.rows[0].id],
-      );
-      await tx.query(
-        `INSERT INTO activity_log
-           (actor_principal_id, entity_type, entity_id, action, field, before, after)
-         VALUES ($1, 'task', $2, 'approval_task_cancelled', 'approval_task.status', $3::jsonb, $4::jsonb)`,
-        [
-          actorId,
-          taskId,
-          JSON.stringify({ approval_task_id: open.rows[0].id, status: 'open' }),
-          JSON.stringify({
-            approval_task_id: open.rows[0].id,
-            type: 'nte_override',
-            status: 'cancelled',
-            title: open.rows[0].title,
-            note: why,
-          }),
-        ],
-      );
-    });
+    await reconcileNteOverride(taskId, actorId);
+    await reconcileStatusChange(taskId, actorId);
   } catch (err) {
     console.error('[approvals] reconcile failed:', err);
   }
+}
+
+async function reconcileNteOverride(taskId: string, actorId: string): Promise<void> {
+  const open = await query<{ id: string; title: string }>(
+    `SELECT id::text AS id, title FROM approval_task
+      WHERE task_id = $1 AND type = 'nte_override' AND status = 'open' LIMIT 1`,
+    [taskId],
+  );
+  if (!open.rows[0]) return;
+  const m = await costAndNte(taskId);
+  if (!m) return;
+  const stillOver = m.cost !== null && m.nte !== null && m.cost > m.nte;
+  if (stillOver) return;
+
+  const why =
+    m.cost === null || m.nte === null
+      ? 'Cost or NTE was cleared'
+      : `Cost ${money(m.cost)} is back within the NTE ${money(m.nte)}`;
+  await cancelTask(taskId, open.rows[0].id, 'nte_override', open.rows[0].title, why, actorId);
+}
+
+/** 0025: an open status-change request whose target the work order now sits
+    in (a manager moved it by hand) has nothing left to decide. */
+async function reconcileStatusChange(taskId: string, actorId: string): Promise<void> {
+  const open = await query<{ id: string; title: string; to_id: string | null; to_name: string | null }>(
+    `SELECT a.id::text AS id, a.title, a.detail->>'to_status_id' AS to_id, a.detail->>'to_status_name' AS to_name
+       FROM approval_task a
+      WHERE a.task_id = $1 AND a.type = 'status_change' AND a.status = 'open' LIMIT 1`,
+    [taskId],
+  );
+  const r = open.rows[0];
+  if (!r || !r.to_id) return;
+  const cur = await query<{ status_id: string }>(
+    `SELECT status_id::text AS status_id FROM task WHERE id = $1 LIMIT 1`,
+    [taskId],
+  );
+  if (!cur.rows[0] || cur.rows[0].status_id !== r.to_id) return;
+  await cancelTask(
+    taskId,
+    r.id,
+    'status_change',
+    r.title,
+    `The work order was moved to ${r.to_name ?? 'the requested status'} directly`,
+    actorId,
+  );
+}
+
+/** open → cancelled with a reason; one audit row (no comment — nobody decided). */
+async function cancelTask(
+  taskId: string,
+  id: string,
+  type: ApprovalTaskType,
+  title: string,
+  why: string,
+  actorId: string,
+): Promise<void> {
+  const db = getDb();
+  await db.transaction(async (tx) => {
+    await tx.query(
+      `UPDATE approval_task
+          SET status = 'cancelled', decided_by = $1, decided_at = now(), decision_note = $2,
+              updated_at = now()
+        WHERE id = $3`,
+      [actorId, why, id],
+    );
+    await tx.query(
+      `INSERT INTO activity_log
+         (actor_principal_id, entity_type, entity_id, action, field, before, after)
+       VALUES ($1, 'task', $2, 'approval_task_cancelled', 'approval_task.status', $3::jsonb, $4::jsonb)`,
+      [
+        actorId,
+        taskId,
+        JSON.stringify({ approval_task_id: id, status: 'open' }),
+        JSON.stringify({ approval_task_id: id, type, status: 'cancelled', title, note: why }),
+      ],
+    );
+  });
+}
+
+// ── Status change requests (rules 2.4.1 – 2.4.3, 0025) ──────────────────────
+
+/**
+ * Rule 2.4.1: a person who may only REQUEST a status change (work_orders/
+ * status:create without :edit) asks here. One open request per work order —
+ * asking again replaces the target and makes the request theirs. The
+ * automations engine does not react: nothing on the work order changed yet.
+ */
+export async function requestStatusChange(
+  taskId: string,
+  toStatusId: string,
+  actor: ActingPrincipal,
+): Promise<{ item: ApprovalTask; created: boolean }> {
+  requirePerm(actor, STATUS_PERM_KEY, 'create', 'You cannot request status changes');
+  return createApprovalTask({
+    taskId,
+    type: 'status_change',
+    actorId: actor.id,
+    toStatusId,
+  });
+}
+
+/**
+ * The requester says they saw the decision (rule 2.4.3's "notify"): the row
+ * leaves their My requests. An approver may acknowledge on their behalf.
+ */
+export async function acknowledgeApprovalTask(id: string, actor: ActingPrincipal): Promise<ApprovalTask> {
+  const cur = await getApprovalTask(id);
+  if (cur.status !== 'approved' && cur.status !== 'rejected') {
+    throw badRequest(`Only a decided task can be acknowledged; this one is ${cur.status}`, { status: cur.status });
+  }
+  if (cur.acknowledged_at) return cur;
+  const own = cur.created_by?.id === actor.id;
+  if (!own) requireDecide(actor, cur.type, 'acknowledge');
+  const db = getDb();
+  await db.transaction(async (tx) => {
+    await tx.query(
+      `UPDATE approval_task SET acknowledged_by = $1, acknowledged_at = now(), updated_at = now() WHERE id = $2`,
+      [actor.id, id],
+    );
+    await tx.query(
+      `INSERT INTO activity_log
+         (actor_principal_id, entity_type, entity_id, action, field, before, after)
+       VALUES ($1, 'task', $2, 'approval_task_acknowledged', 'approval_task.acknowledged', NULL, $3::jsonb)`,
+      [
+        actor.id,
+        cur.task_id,
+        JSON.stringify({ approval_task_id: id, type: cur.type, status: cur.status, title: cur.title }),
+      ],
+    );
+  });
+  return getApprovalTask(id);
+}
+
+/** The requester (or an approver) takes an open request back. */
+export async function withdrawApprovalTask(id: string, actor: ActingPrincipal): Promise<ApprovalTask> {
+  const cur = await getApprovalTask(id);
+  if (cur.status !== 'open') {
+    throw badRequest(`This task is already ${cur.status}`, { status: cur.status });
+  }
+  const own = cur.created_by?.id === actor.id;
+  if (!own) requireDecide(actor, cur.type, 'withdraw');
+  await cancelTask(cur.task_id, id, cur.type, cur.title, `Withdrawn by ${actor.name}`, actor.id);
+  return getApprovalTask(id);
+}
+
+/**
+ * The sidebar badge: what waits on this person. Approvers count the open
+ * tasks in the sections they may decide; requesters count their own decided
+ * requests not yet acknowledged. (Quotes and payments waiting are not
+ * counted here — they have their own pages and badges are for the inbox.)
+ */
+export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalCounts> {
+  const allow = allowFor(viewer);
+  const decideTypes = (['nte_override', 'status_change', 'manager_review'] as ApprovalTaskType[]).filter(
+    (t) => allow(approvalSectionPermKey(approvalSectionOf(t)), 'approve'),
+  );
+  const res = await query<{ type: ApprovalTaskType; status: ApprovalTaskStatus; mine: boolean; acked: boolean; n: number | string }>(
+    `SELECT a.type, a.status, (a.created_by = $1) AS mine, (a.acknowledged_at IS NOT NULL) AS acked, count(*)::int AS n
+       FROM approval_task a JOIN task t ON t.id = a.task_id
+      WHERE t.deleted_at IS NULL
+        AND (a.status = 'open' OR (a.created_by = $1 AND a.acknowledged_at IS NULL))
+      GROUP BY 1, 2, 3, 4`,
+    [viewer.id],
+  );
+  let to_decide = 0;
+  let to_acknowledge = 0;
+  for (const r of res.rows) {
+    const n = Number(r.n);
+    if (r.status === 'open' && decideTypes.includes(r.type)) to_decide += n;
+    if ((r.status === 'approved' || r.status === 'rejected') && r.mine && !r.acked) to_acknowledge += n;
+  }
+  return { to_decide, to_acknowledge };
 }

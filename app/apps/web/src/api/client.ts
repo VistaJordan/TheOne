@@ -3,7 +3,9 @@
 // boundary (SPRINT1-SPEC §8 Card C). Web never imports @theone/db.
 import type { PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
 import type {
+  ApprovalCounts,
   ApprovalListResponse,
+  ApprovalTask,
   ApprovalTaskResponse,
   ApprovalTasksResponse,
   FmCicoMethod,
@@ -689,6 +691,7 @@ export function markPaymentPaid(id: string): Promise<PaymentRequestResponse> {
 // ── Approvals — the manager's inbox (0020) ───────────────────────────────────
 
 export type {
+  ApprovalCounts,
   ApprovalListItem,
   ApprovalListResponse,
   ApprovalTask,
@@ -696,6 +699,8 @@ export type {
   ApprovalTasksResponse,
   ApprovalTaskStatus,
   ApprovalTaskType,
+  StatusChangeDetail,
+  StatusChangeState,
 } from '@theone/shared';
 
 /** GET /api/approvals — every task across work orders, open ones first. */
@@ -731,6 +736,34 @@ export function rejectApprovalTask(id: string, note: string): Promise<ApprovalTa
 /** POST …/claim — take an open task into your own lane (approvals:approve). */
 export function claimApprovalTask(id: string): Promise<ApprovalTaskResponse> {
   return decideApproval(id, 'claim');
+}
+
+/** POST …/acknowledge — 0025: the requester saw the decision; the row leaves
+    their My requests. */
+export function acknowledgeApprovalTask(id: string): Promise<ApprovalTaskResponse> {
+  return decideApproval(id, 'acknowledge');
+}
+
+/** POST …/withdraw — 0025: the requester takes an open request back. */
+export function withdrawApprovalTask(id: string): Promise<ApprovalTaskResponse> {
+  return decideApproval(id, 'withdraw');
+}
+
+/** GET /api/approvals/counts — the sidebar badge for the acting principal. */
+export function getApprovalCounts(): Promise<ApprovalCounts> {
+  return request<ApprovalCounts>('/approvals/counts');
+}
+
+/** POST /api/work-orders/:id/status-request — rule 2.4.1: ask a manager to
+    move the status (work_orders/status:create). */
+export function requestStatusChange(
+  idOrNumber: string,
+  status_id: string,
+): Promise<{ item: ApprovalTask; created: boolean }> {
+  return request<{ item: ApprovalTask; created: boolean }>(
+    `/work-orders/${encodeURIComponent(idOrNumber)}/status-request`,
+    { method: 'POST', body: JSON.stringify({ status_id }) },
+  );
 }
 
 // ── S5 · authentication ──────────────────────────────────────────────────────

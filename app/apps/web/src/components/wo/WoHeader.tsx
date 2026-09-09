@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Phase, WorkOrderDetailV2 } from '../../api/client';
 import { DASH, FIELD, dateVal, daysSince, field, isCostOverNte, money, numericDate, str } from '../../lib/fields';
 import { deriveHeaderMeta, resolveMoney } from '../../lib/woDerive';
@@ -8,6 +8,7 @@ import { Icon } from '../Icon';
 import { StatusChangeMenu } from '../StatusChangeMenu';
 import { StatusPill } from '../StatusPill';
 import { PhaseBar } from './PhaseBar';
+import { StatusChangeBanner } from './StatusChangeBanner';
 
 /** One labelled amount in the worth block. The currency sign is drawn
     separately, smaller and lighter, so label + amount read the way the comp
@@ -71,6 +72,8 @@ export function WoHeader({ wo, phase, inStatusDays }: WoHeaderProps) {
   const m = resolveMoney(wo);
   const overNte = isCostOverNte(m.cost, m.nte);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
+  // "Request again" on a rejected request re-opens the status menu.
+  const statusTriggerRef = useRef<HTMLButtonElement>(null);
   const toggleCollapsed = () => {
     setCollapsed((v) => {
       saveCollapsed(!v);
@@ -125,20 +128,32 @@ export function WoHeader({ wo, phase, inStatusDays }: WoHeaderProps) {
             className="pill-lg"
             leading={<span className="pill-dot" aria-hidden="true" />}
           />
+          {wo.status_change && (
+            <StatusChangeBanner
+              state={wo.status_change}
+              onRequestAgain={() => statusTriggerRef.current?.click()}
+            />
+          )}
           <StatusChangeMenu
             woId={wo.id}
             current={wo.status}
             align="right"
-            renderTrigger={({ open, toggle }) => (
+            renderTrigger={({ open, toggle, mode }) => (
               <button
                 type="button"
+                ref={statusTriggerRef}
                 className="btn btn-primary"
                 onClick={toggle}
                 aria-haspopup="menu"
                 aria-expanded={open}
+                title={
+                  mode === 'request'
+                    ? 'Asks a manager to move the status — it changes when they approve (rule 2.4.1)'
+                    : undefined
+                }
               >
-                <Icon name="swap" size={14} />
-                Change status
+                <Icon name={mode === 'request' ? 'send' : 'swap'} size={14} />
+                {mode === 'request' ? 'Request status change' : 'Change status'}
               </button>
             )}
           />

@@ -11,10 +11,11 @@ import type {
   Status,
   StatusRef,
   Phase,
+  StatusChangeState,
 } from '@theone/shared';
 import { PHASE_BY_STATUS_NAME } from '@theone/shared';
 import { ApiError } from '../errors.js';
-import { logTaskChanges, type TaskChange } from './woAudit.js';
+import { logTaskChanges, type ChangeSource, type TaskChange } from './woAudit.js';
 import { dispatchAutomations, type AutoCtx } from './automations.js';
 import { UUID_RE, CREATED_AT_SQL, getActivityForTask } from './activity.js';
 import { computeMoney } from './money.js';
@@ -329,6 +330,64 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
       is_home: m.is_home,
     })),
     recent_activity: recent,
+    status_change: await pendingStatusChange(r.id),
+  };
+}
+
+/**
+ * 0025 · the status-change request the header should show: the open one, or
+ * the newest decided one nobody has acknowledged yet (rule 2.4.3 — the
+ * dispatcher is told, and says they saw it). Read straight from approval_task
+ * so this module does not import the approvals service (which imports the
+ * automations dispatcher, which imports this).
+ */
+async function pendingStatusChange(taskId: string): Promise<StatusChangeState | null> {
+  const res = await query<{
+    id: string;
+    status: 'open' | 'approved' | 'rejected';
+    detail: { to_status_id?: string; to_status_name?: string } | null;
+    to_id: string | null;
+    to_name: string | null;
+    to_group: StatusRef['group'] | null;
+    to_color: string | null;
+    rb_id: string | null;
+    rb_name: string | null;
+    db_id: string | null;
+    db_name: string | null;
+    decided_at: string | null;
+    decision_note: string | null;
+  }>(
+    `SELECT a.id::text AS id, a.status, a.detail,
+            s.id::text AS to_id, s.name AS to_name, s.status_group AS to_group, s.color AS to_color,
+            rb.id::text AS rb_id, rb.display_name AS rb_name,
+            db.id::text AS db_id, db.display_name AS db_name,
+            to_char((a.decided_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS decided_at,
+            a.decision_note
+       FROM approval_task a
+       LEFT JOIN status s     ON s.id::text = a.detail->>'to_status_id'
+       LEFT JOIN principal rb ON rb.id = a.created_by
+       LEFT JOIN principal db ON db.id = a.decided_by
+      WHERE a.task_id = $1 AND a.type = 'status_change'
+        AND (a.status = 'open' OR (a.status IN ('approved', 'rejected') AND a.acknowledged_at IS NULL))
+      ORDER BY CASE a.status WHEN 'open' THEN 0 ELSE 1 END, a.updated_at DESC
+      LIMIT 1`,
+    [taskId],
+  );
+  const r = res.rows[0];
+  if (!r) return null;
+  return {
+    approval_task_id: r.id,
+    status: r.status,
+    to_status: {
+      id: r.to_id ?? r.detail?.to_status_id ?? '',
+      name: r.to_name ?? r.detail?.to_status_name ?? '',
+      group: r.to_group ?? 'open',
+      color: r.to_color ?? '',
+    },
+    requested_by: r.rb_id ? { id: r.rb_id, display_name: r.rb_name ?? '' } : null,
+    decided_by: r.db_id ? { id: r.db_id, display_name: r.db_name ?? '' } : null,
+    decided_at: r.decided_at,
+    decision_note: r.decision_note,
   };
 }
 
@@ -366,6 +425,9 @@ export async function changeStatus(
   statusId: string,
   actorId: string,
   auto?: AutoCtx,
+  /** 0025: the approved status-change request behind this move, stamped on
+      the audit row as `via: 'approval_task'` (rule 2.4.3). */
+  source?: ChangeSource,
 ): Promise<WorkOrderDetail> {
   const col = UUID_RE.test(idOrWo) ? 'id' : 'wo_number';
   const db = getDb();
@@ -414,7 +476,7 @@ export async function changeStatus(
       before: { status_id: currentStatusId, status_name: currentStatusName },
       after: { status_id: statusId, status_name: newStatusName },
     };
-    await logTaskChanges(tx, actorId, task_id, [change], auto?.by);
+    await logTaskChanges(tx, actorId, task_id, [change], auto?.by ?? source);
     fired = { taskId: task_id, change };
   });
 

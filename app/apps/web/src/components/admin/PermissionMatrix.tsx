@@ -204,7 +204,26 @@ export function PermissionMatrix({
               {node.note && <small>{node.note}</small>}
             </div>
 
-            {PERM_ACTIONS.map((action) => {
+            {node.choices ? (
+              // 0025: one choice across the action columns (the status-change
+              // mode). The current choice is whichever grant matches the
+              // effective answer; "inherit" shows the inherited choice faded.
+              <ChoiceRow
+                node={node}
+                choices={node.choices}
+                value={value}
+                base={base}
+                baseLabel={baseLabel}
+                disabled={disabled}
+                onPick={(grant) => {
+                  const next: PermMap = { ...value };
+                  if (grant === null) delete next[node.key];
+                  else next[node.key] = { ...grant };
+                  onChange(next);
+                }}
+              />
+            ) : (
+            PERM_ACTIONS.map((action) => {
               if (!node.actions.includes(action)) return <span key={action} className="pm-cellwrap" />;
               const { on, source } = effective(value, base, node.key, action);
               const explicit = source === 'self';
@@ -244,7 +263,8 @@ export function PermissionMatrix({
                   )}
                 </span>
               );
-            })}
+            })
+            )}
 
             <span className="pm-count">
               {hasChildren && under > 0 && !disabled ? (
@@ -279,6 +299,93 @@ export function PermissionMatrix({
         )}
       </div>
     </div>
+  );
+}
+
+type Choice = NonNullable<PermNode['choices']>[number];
+
+/** The effective choice on a node: the first choice whose grant matches every
+    action's effective answer, and where the answer comes from. */
+function effectiveChoice(
+  value: PermMap,
+  base: PermMap | undefined,
+  node: PermNode,
+  choices: Choice[],
+): { choice: Choice | null; source: Source } {
+  const own = value[node.key];
+  if (own && Object.keys(own).length > 0) {
+    const hit = choices.find((c) => node.actions.every((a) => (own[a] ?? false) === (c.grant[a] ?? false)));
+    if (hit) return { choice: hit, source: 'self' };
+  }
+  const answers = node.actions.map((a) => effective(value, base, node.key, a));
+  const source: Source = answers.some((x) => x.source === 'self')
+    ? 'self'
+    : answers.some((x) => x.source === 'inherited')
+      ? 'inherited'
+      : answers.some((x) => x.source === 'base')
+        ? 'base'
+        : 'default';
+  const hit = choices.find((c) => node.actions.every((a, i) => answers[i].on === (c.grant[a] ?? false)));
+  return { choice: hit ?? null, source };
+}
+
+function ChoiceRow({
+  node,
+  choices,
+  value,
+  base,
+  baseLabel,
+  disabled,
+  onPick,
+}: {
+  node: PermNode;
+  choices: Choice[];
+  value: PermMap;
+  base?: PermMap;
+  baseLabel?: string;
+  disabled?: boolean;
+  onPick: (grant: Choice['grant'] | null) => void;
+}) {
+  const { choice, source } = effectiveChoice(value, base, node, choices);
+  const explicit = source === 'self';
+  const where = explicit
+    ? 'Set here'
+    : source === 'base'
+      ? `From ${baseLabel ?? 'the role'}`
+      : source === 'inherited'
+        ? 'Inherited from the row above'
+        : 'Not set anywhere';
+  return (
+    <span className="pm-choicewrap" role="radiogroup" aria-label={`${node.label}: ${where}`}>
+      {choices.map((c) => {
+        const on = choice?.code === c.code;
+        return (
+          <button
+            key={c.code}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            className={`pm-choice${on ? ' is-on' : ''}${on && !explicit ? ' is-inherited' : ''}`}
+            disabled={disabled}
+            title={`${c.hint ?? c.label}${on ? ` — ${where}` : ''}`}
+            onClick={() => onPick(c.grant)}
+          >
+            {c.label}
+          </button>
+        );
+      })}
+      {explicit && !disabled && (
+        <button
+          type="button"
+          className="pm-reset"
+          aria-label={`Reset ${node.label} to inherited`}
+          title="Back to inherited"
+          onClick={() => onPick(null)}
+        >
+          <Icon name="refresh" size={12} />
+        </button>
+      )}
+    </span>
   );
 }
 

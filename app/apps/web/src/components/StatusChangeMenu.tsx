@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { StatusRef } from '@theone/shared';
-import { getStatuses, patchStatus } from '../api/client';
+import { STATUS_PERM_KEY, type StatusRef } from '@theone/shared';
+import { ApiRequestError, getStatuses, patchStatus, requestStatusChange } from '../api/client';
+import { useAuth } from '../auth/AuthProvider';
 import { bucketStatuses, useStatusGroups } from '../lib/statusGroups';
 import { StatusCircle } from './StatusCircle';
 import { StatusPill } from './StatusPill';
@@ -11,19 +12,38 @@ import { StatusPill } from './StatusPill';
 const BOTTOM_GAP_PX = 190;
 const MIN_HEIGHT_PX = 240;
 
+/**
+ * What the viewer may do with the status (0025, rule 2.4.1):
+ *   direct   work_orders/status:edit    — the pick moves it
+ *   request  work_orders/status:create  — the pick asks a manager
+ *   none     neither                    — no menu at all
+ */
+export type StatusMenuMode = 'direct' | 'request' | 'none';
+
+export function useStatusMenuMode(): StatusMenuMode {
+  const { can } = useAuth();
+  if (can(STATUS_PERM_KEY, 'edit')) return 'direct';
+  if (can(STATUS_PERM_KEY, 'create')) return 'request';
+  return 'none';
+}
+
 interface StatusChangeMenuProps {
   woId: string;
   current: StatusRef;
-  /** Replace the default pill trigger (the detail header uses a button). */
-  renderTrigger?: (api: { open: boolean; toggle: () => void }) => ReactNode;
+  /** Replace the default pill trigger (the detail header uses a button). The
+      mode is handed over so the trigger can read "Request status change". */
+  renderTrigger?: (api: { open: boolean; toggle: () => void; mode: StatusMenuMode }) => ReactNode;
   /** Anchor the popover to the right edge — for triggers near the viewport edge. */
   align?: 'left' | 'right';
 }
 
-/** Click the trigger → dropdown of all statuses (grouped) → PATCH → invalidate. */
+/** Click the trigger → dropdown of all statuses (grouped) → PATCH (or, for a
+    dispatcher, POST a request) → invalidate. */
 export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' }: StatusChangeMenuProps) {
+  const mode = useStatusMenuMode();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [sent, setSent] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
@@ -40,15 +60,38 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
   });
   const { groups } = useStatusGroups(open);
 
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['work-orders'] });
+    qc.invalidateQueries({ queryKey: ['kpis'] });
+    // A status change writes an activity row → the detail feed + audit tab
+    // must re-read (S2 contract item 1).
+    qc.invalidateQueries({ queryKey: ['wo-feed'] });
+    qc.invalidateQueries({ queryKey: ['wo-activity'] });
+    qc.invalidateQueries({ queryKey: ['approvals'] });
+    qc.invalidateQueries({ queryKey: ['approval-counts'] });
+    qc.invalidateQueries({ queryKey: ['wo-approvals'] });
+  };
+
   const mutation = useMutation({
-    mutationFn: (status_id: string) => patchStatus(woId, status_id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['work-orders'] });
-      qc.invalidateQueries({ queryKey: ['kpis'] });
-      // A status change writes an activity row → the detail feed + audit tab
-      // must re-read (S2 contract item 1).
-      qc.invalidateQueries({ queryKey: ['wo-feed'] });
-      qc.invalidateQueries({ queryKey: ['wo-activity'] });
+    mutationFn: async (s: { id: string; name: string }) => {
+      if (mode === 'request') {
+        await requestStatusChange(woId, s.id);
+        return s.name;
+      }
+      await patchStatus(woId, s.id);
+      return null;
+    },
+    onSuccess: (askedFor) => {
+      invalidate();
+      if (askedFor) {
+        // Say so before closing — the header chip carries it from here.
+        setSent(askedFor);
+        window.setTimeout(() => {
+          setSent(null);
+          setOpen(false);
+        }, 900);
+        return;
+      }
       setOpen(false);
     },
   });
@@ -84,6 +127,12 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
     return () => window.removeEventListener('resize', fit);
   }, [open]);
 
+  // No grant at all: the pill is read-only. A verb the viewer cannot use is
+  // not drawn here because the pill IS the value — there is nothing to lock.
+  if (mode === 'none') {
+    return renderTrigger ? null : <StatusPill status={current} />;
+  }
+
   // Fractions are computed on the FULL group first, so a filtered list keeps
   // each status's own circle rather than re-spreading the wedges.
   const q = search.trim().toLowerCase();
@@ -91,11 +140,17 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
     .map((b) => ({ ...b, statuses: b.statuses.filter((s) => !q || s.name.toLowerCase().includes(q)) }))
     .filter((b) => b.statuses.length > 0);
   const noMatch = q.length > 0 && buckets.length === 0 && !statusesQuery.isLoading;
+  const failText =
+    mutation.error instanceof ApiRequestError
+      ? mutation.error.message
+      : mode === 'request'
+        ? 'The request could not be sent'
+        : 'Update failed';
 
   return (
     <div className="status-menu" ref={rootRef}>
       {renderTrigger ? (
-        renderTrigger({ open, toggle: () => setOpen((v) => !v) })
+        renderTrigger({ open, toggle: () => setOpen((v) => !v), mode })
       ) : (
         <StatusPill
           status={current}
@@ -112,15 +167,21 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
           <input
             className="status-menu-search"
             type="search"
-            placeholder="Search statuses…"
+            placeholder={mode === 'request' ? 'Request a status…' : 'Search statuses…'}
             aria-label="Search statuses"
             value={search}
             autoFocus
             onChange={(e) => setSearch(e.target.value)}
           />
+          {mode === 'request' && !sent && (
+            <div className="status-menu-note">
+              Picking a status sends a request to a manager — the status moves when they approve.
+            </div>
+          )}
           {statusesQuery.isLoading && <div className="status-menu-note">Loading…</div>}
           {statusesQuery.isError && <div className="status-menu-note">Failed to load statuses</div>}
-          {mutation.isError && <div className="status-menu-note err">Update failed</div>}
+          {mutation.isError && <div className="status-menu-note err">{failText}</div>}
+          {sent && <div className="status-menu-note ok">Request for {sent} sent for approval</div>}
           {noMatch && <div className="status-menu-note">No status matches “{search.trim()}”</div>}
           {/* data-oknob-own: keep the app-wide O-knob manager (lib/oknob.ts)
               from mounting a rail here — this menu scrolls bare, no bar. */}
@@ -136,13 +197,13 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
                       role="menuitem"
                       key={s.id}
                       className={`status-menu-item${active ? ' is-current' : ''}`}
-                      disabled={mutation.isPending}
+                      disabled={mutation.isPending || sent !== null}
                       onClick={() => {
                         if (active) {
                           setOpen(false);
                           return;
                         }
-                        mutation.mutate(s.id);
+                        mutation.mutate({ id: s.id, name: s.name });
                       }}
                     >
                       <StatusCircle group={b.code} color={s.color} fraction={s.fraction} size={16} />

@@ -88,10 +88,14 @@ export function BulkBar({
         {ids.length} selected
       </span>
 
-      <BulkStatusMenu
-        disabled={busy}
-        onPick={(status_id) => apply.mutate({ status_id })}
-      />
+      {/* Rule 2.4.1 (0025): a person who must REQUEST status changes has no
+          bulk status move — one request per work order, from its header. */}
+      {can('work_orders/status', 'edit') && (
+        <BulkStatusMenu
+          disabled={busy}
+          onPick={(status_id) => apply.mutate({ status_id })}
+        />
+      )}
 
       <BulkEditMenu fields={fields} disabled={busy} onApply={(patch) => apply.mutate(patch)} />
 
