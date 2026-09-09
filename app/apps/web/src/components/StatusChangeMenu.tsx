@@ -173,11 +173,6 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
             autoFocus
             onChange={(e) => setSearch(e.target.value)}
           />
-          {mode === 'request' && !sent && (
-            <div className="status-menu-note">
-              Picking a status sends a request to a manager — the status moves when they approve.
-            </div>
-          )}
           {statusesQuery.isLoading && <div className="status-menu-note">Loading…</div>}
           {statusesQuery.isError && <div className="status-menu-note">Failed to load statuses</div>}
           {mutation.isError && <div className="status-menu-note err">{failText}</div>}
