@@ -406,6 +406,7 @@ export async function createApprovalTask(
           type: input.type,
           status: 'open',
           title,
+          detail,
           assigned_role: role,
           ...(input.source?.name ? { rule: input.source.name } : {}),
         }),
@@ -497,6 +498,7 @@ async function decide(
           type: cur.type,
           status: to,
           title: cur.title,
+          detail: cur.detail,
           ...(note ? { note } : {}),
         }),
       ],
@@ -506,6 +508,8 @@ async function decide(
        VALUES ($1, $2, $3, false) RETURNING id::text AS id`,
       [cur.task_id, actor.id, body],
     );
+    // The comment row names the decision it carries, so the audit trail can
+    // say WHAT the internal update was about without reading the comment.
     await tx.query(
       `INSERT INTO activity_log
          (actor_principal_id, entity_type, entity_id, action, field, before, after)
@@ -513,7 +517,12 @@ async function decide(
       [
         actor.id,
         cur.task_id,
-        JSON.stringify({ comment_id: ins.rows[0].id, client_visible: false, approval_task_id: id }),
+        JSON.stringify({
+          comment_id: ins.rows[0].id,
+          client_visible: false,
+          approval_task_id: id,
+          approval: { type: cur.type, title: cur.title, detail: cur.detail, status: to, note },
+        }),
       ],
     );
   });
@@ -570,7 +579,7 @@ export async function claimApprovalTask(id: string, actor: ActingPrincipal): Pro
         actor.id,
         cur.task_id,
         JSON.stringify({ approval_task_id: id, assigned_to: cur.assigned_to?.display_name ?? null }),
-        JSON.stringify({ approval_task_id: id, type: cur.type, title: cur.title, assigned_to: actor.name }),
+        JSON.stringify({ approval_task_id: id, type: cur.type, title: cur.title, detail: cur.detail, assigned_to: actor.name }),
       ],
     );
   });
@@ -649,8 +658,14 @@ async function reconcileNteOverride(taskId: string, actorId: string): Promise<vo
 /** 0025: an open status-change request whose target the work order now sits
     in (a manager moved it by hand) has nothing left to decide. */
 async function reconcileStatusChange(taskId: string, actorId: string): Promise<void> {
-  const open = await query<{ id: string; title: string; to_id: string | null; to_name: string | null }>(
-    `SELECT a.id::text AS id, a.title, a.detail->>'to_status_id' AS to_id, a.detail->>'to_status_name' AS to_name
+  const open = await query<{
+    id: string;
+    title: string;
+    detail: Record<string, unknown> | null;
+    to_id: string | null;
+    to_name: string | null;
+  }>(
+    `SELECT a.id::text AS id, a.title, a.detail, a.detail->>'to_status_id' AS to_id, a.detail->>'to_status_name' AS to_name
        FROM approval_task a
       WHERE a.task_id = $1 AND a.type = 'status_change' AND a.status = 'open' LIMIT 1`,
     [taskId],
@@ -669,6 +684,7 @@ async function reconcileStatusChange(taskId: string, actorId: string): Promise<v
     r.title,
     `The work order was moved to ${r.to_name ?? 'the requested status'} directly`,
     actorId,
+    r.detail,
   );
 }
 
@@ -680,6 +696,7 @@ async function cancelTask(
   title: string,
   why: string,
   actorId: string,
+  detail: Record<string, unknown> | null = null,
 ): Promise<void> {
   await withTransaction(async (tx) => {
     await tx.query(
@@ -697,7 +714,7 @@ async function cancelTask(
         actorId,
         taskId,
         JSON.stringify({ approval_task_id: id, status: 'open' }),
-        JSON.stringify({ approval_task_id: id, type, status: 'cancelled', title, note: why }),
+        JSON.stringify({ approval_task_id: id, type, status: 'cancelled', title, detail, note: why }),
       ],
     );
   });
@@ -749,7 +766,7 @@ export async function acknowledgeApprovalTask(id: string, actor: ActingPrincipal
       [
         actor.id,
         cur.task_id,
-        JSON.stringify({ approval_task_id: id, type: cur.type, status: cur.status, title: cur.title }),
+        JSON.stringify({ approval_task_id: id, type: cur.type, status: cur.status, title: cur.title, detail: cur.detail }),
       ],
     );
   });
@@ -764,7 +781,7 @@ export async function withdrawApprovalTask(id: string, actor: ActingPrincipal): 
   }
   const own = cur.created_by?.id === actor.id;
   if (!own) requireDecide(actor, cur.type, 'withdraw');
-  await cancelTask(cur.task_id, id, cur.type, cur.title, `Withdrawn by ${actor.name}`, actor.id);
+  await cancelTask(cur.task_id, id, cur.type, cur.title, `Withdrawn by ${actor.name}`, actor.id, cur.detail);
   return getApprovalTask(id);
 }
 
