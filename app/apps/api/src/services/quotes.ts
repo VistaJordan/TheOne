@@ -792,6 +792,11 @@ export async function updateQuote(
 
   const db = getDb();
   await db.transaction(async (tx) => {
+    // Rule 1.2.1: the row carries what the quote looked like before and after,
+    // not just which keys the builder posted. Taken inside the transaction so
+    // a concurrent edit cannot slip between the snapshot and the write.
+    const before = await snapshotQuote(tx, cur.id);
+
     const sets: string[] = [];
     const params: unknown[] = [];
     const set = (col: string, value: unknown) => {
@@ -850,10 +855,12 @@ export async function updateQuote(
       }
     }
 
-    await logQuoteActivity(tx, actor.id, taskId, 'quote_updated', null, {
-      quote_id: cur.id,
-      fields: Object.keys(input),
-    });
+    // The builder autosaves the whole form, so most PUTs change nothing; an
+    // identical snapshot logs no row rather than a "revised" that revised nothing.
+    const after = await snapshotQuote(tx, cur.id);
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      await logQuoteActivity(tx, actor.id, taskId, 'quote_updated', before, after);
+    }
   });
 
   const quote = await getQuote(taskId, actor);
@@ -869,6 +876,114 @@ interface Queryable {
     sql: string,
     params?: unknown[],
   ): Promise<{ rows: T[] }>;
+}
+
+/**
+ * The quote as an activity_log snapshot (rule 1.2.1): the header fields, the
+ * section/line tree with ids and positions stripped (so a re-save of the same
+ * form compares equal), and two reader-friendly derivations — `lines` as one
+ * string per line, `grand_total` from computeQuoteTotals — so the audit tab
+ * can say what moved without re-deriving quote arithmetic. `name` is what the
+ * admin audit page prints as the row's title, like every other snapshot.
+ */
+interface QuoteSnapshot extends Record<string, unknown> {
+  name: string;
+  quote_id: string;
+  sales_tax: number;
+  total_cost: number | null;
+  specs: string | null;
+  note_to_customer: string | null;
+  summary_pinned: string | null;
+  grand_total: number;
+  lines: string[];
+  sections: unknown[];
+}
+
+async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnapshot> {
+  const head = (
+    await tx.query(
+      `SELECT sales_tax::float8 AS sales_tax, total_cost::float8 AS total_cost,
+              specs, note_to_customer, summary_pinned
+         FROM quote WHERE id = $1`,
+      [quoteId],
+    )
+  ).rows[0] as {
+    sales_tax: number | null;
+    total_cost: number | null;
+    specs: string | null;
+    note_to_customer: string | null;
+    summary_pinned: string | null;
+  };
+  const secRows = (
+    await tx.query(
+      `SELECT id::text AS id, kind, name, narrative_reported, scope_lines,
+              include_in_summary, position
+         FROM quote_section
+        WHERE quote_id = $1
+        ORDER BY CASE kind WHEN 'incurred' THEN 0 ELSE 1 END, position ASC, id ASC`,
+      [quoteId],
+    )
+  ).rows as SectionRow[];
+  const lineRows = (
+    await tx.query(
+      `SELECT l.id::text AS id, l.section_id::text AS section_id, l.line_type, l.description,
+              l.qty::float8 AS qty, l.rate::float8 AS rate, l.day_value, l.ot, l.position
+         FROM quote_line l
+         JOIN quote_section s ON s.id = l.section_id
+        WHERE s.quote_id = $1
+        ORDER BY l.position ASC, l.id ASC`,
+      [quoteId],
+    )
+  ).rows as LineRow[];
+
+  const money = (n: number) => `$${n.toFixed(2)}`;
+  let optionIndex = 0;
+  const lines: string[] = [];
+  const sections = secRows.map((s) => {
+    const label = s.kind === 'incurred' ? 'Incurred' : `Option ${optionLetter(optionIndex++)}`;
+    const own = lineRows
+      .filter((l) => l.section_id === s.id)
+      .map((l) => {
+        const qty = Number(l.qty ?? 0);
+        const rate = Number(l.rate ?? 0);
+        const ot = l.ot === true;
+        lines.push(
+          `${label} · ${l.description}: ${qty} × ${money(rate)}${ot ? ' OT' : ''} = ${money(computeLineAmount({ qty, rate, ot }))}`,
+        );
+        return { line_type: l.line_type, description: l.description, qty, rate, day_value: l.day_value, ot };
+      });
+    return {
+      kind: s.kind,
+      label,
+      name: s.name,
+      narrative_reported: s.narrative_reported,
+      scope_lines: Array.isArray(s.scope_lines) ? s.scope_lines : [],
+      include_in_summary: s.include_in_summary === true,
+      lines: own,
+    };
+  });
+
+  const sales_tax = Number(head?.sales_tax ?? 0);
+  const total_cost = head?.total_cost == null ? null : Number(head.total_cost);
+  const totals = computeQuoteTotals({
+    sections: sections.map((s, i) => ({ id: String(i), ...s })),
+    sales_tax,
+    total_cost,
+    nte: null,
+  });
+
+  return {
+    name: 'Quote',
+    quote_id: quoteId,
+    sales_tax,
+    total_cost,
+    specs: head?.specs ?? null,
+    note_to_customer: head?.note_to_customer ?? null,
+    summary_pinned: head?.summary_pinned ?? null,
+    grand_total: totals.grand_total,
+    lines,
+    sections,
+  };
 }
 
 async function logQuoteActivity(

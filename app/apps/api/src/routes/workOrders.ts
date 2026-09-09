@@ -36,6 +36,7 @@ import { getFieldTimes } from '../services/woMetrics.js';
 import { getFeed, addComment } from '../services/feed.js';
 import { getMessages, resolveConversationId, sendMessage } from '../services/messages.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
+import { logExport } from '../services/adminAudit.js';
 import {
   allowFor,
   assertFieldWrites,
@@ -231,8 +232,17 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { p, allow } = requireView(req);
     requirePerm(p, 'work_orders/export', 'view', 'You cannot export work orders');
     const q = parse(listCriteriaSchema, req.query);
-    const csv = await exportCsv(criteriaOf(q), visibleColumns(allow, q.columns) ?? []);
+    const criteria = criteriaOf(q);
+    const { csv, rows, columns } = await exportCsv(criteria, visibleColumns(allow, q.columns) ?? []);
     const stamp = new Date().toISOString().slice(0, 10);
+    // Rule 1.2.1: a download is a button. Logged before the bytes leave so a
+    // failed log cannot follow a file that already went out.
+    await logExport(p.id, 'work_orders_exported', {
+      name: `work-orders-${stamp}.csv`,
+      rows,
+      columns,
+      criteria: criteria as unknown as Record<string, unknown>,
+    });
     return reply
       .header('Content-Type', 'text/csv; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="work-orders-${stamp}.csv"`)
