@@ -203,6 +203,8 @@ async function upsertOne(
   );
 
   const fields = {
+    // Rule 2.6.1: the portal the work order came from (0033 field_def).
+    'Client Portal Type': 'Ecotrak',
     'Ecotrak ID': externalId,
     'Ecotrak Status': wo.status,
     'Store': wo.location?.store_number ?? null,
