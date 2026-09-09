@@ -27,8 +27,63 @@ export function viaLabel(after: unknown): string | null {
   const via =
     after && typeof after === 'object' ? (after as Record<string, unknown>).via : undefined;
   if (typeof via !== 'string') return null;
-  // The mirror rows the visit log writes (0021) say where they came from.
-  return via === 'visit' ? 'the visit log' : via;
+  // The mirror rows the visit log writes (0021) say where they came from; a
+  // status moved by a manager's approval (0025) says so in words.
+  return via === 'visit' ? 'the visit log' : via === 'approval_task' ? 'an approved status change request' : via;
+}
+
+// ── Approval tasks (0020 / 0025) ─────────────────────────────────────────────
+// Every approval_task_* row (and the comment a decision posts) carries the
+// task's type, title and detail in `after`; a comment row nests them under
+// `approval`. This turns that into "the status change request from A to B"
+// (or the task's title for the other kinds), for both audit views.
+
+export interface ApprovalRef {
+  type: string | null;
+  title: string | null;
+  from: string | null;
+  to: string | null;
+  note: string | null;
+  status: string | null;
+}
+
+export function approvalRef(after: unknown): ApprovalRef | null {
+  if (!after || typeof after !== 'object') return null;
+  const a = after as Record<string, unknown>;
+  const src = (a.approval && typeof a.approval === 'object' ? (a.approval as Record<string, unknown>) : a);
+  const type = typeof src.type === 'string' ? src.type : null;
+  const title = typeof src.title === 'string' ? src.title : null;
+  if (!type && !title) return null;
+  const d = src.detail && typeof src.detail === 'object' ? (src.detail as Record<string, unknown>) : {};
+  let from = typeof d.from_status_name === 'string' ? d.from_status_name : null;
+  let to = typeof d.to_status_name === 'string' ? d.to_status_name : null;
+  // Rows written before detail was logged: the title reads "… : A → B".
+  if (type === 'status_change' && (!from || !to) && title) {
+    const m = /:\s*(.+?)\s*→\s*(.+)$/.exec(title);
+    if (m) {
+      from = from ?? m[1];
+      to = to ?? m[2];
+    }
+  }
+  return {
+    type,
+    title,
+    from,
+    to,
+    note: typeof src.note === 'string' && src.note.trim() ? src.note : null,
+    status: typeof src.status === 'string' ? src.status : null,
+  };
+}
+
+/** "the status change request from A to B" / "the NTE override — <title>". */
+export function approvalAskText(ref: ApprovalRef): string {
+  if (ref.type === 'status_change') {
+    return ref.from && ref.to
+      ? `the status change request from ${ref.from} to ${ref.to}`
+      : 'the status change request';
+  }
+  if (ref.type === 'nte_override') return ref.title ? `the NTE override (${ref.title})` : 'the NTE override';
+  return ref.title ? `the manager review (${ref.title})` : 'the manager review';
 }
 
 // ── Visits (0021) ────────────────────────────────────────────────────────────
@@ -192,6 +247,9 @@ export const ACTION_LABELS: Record<string, string> = {
   approval_task_approved: 'Approval task approved',
   approval_task_rejected: 'Approval task rejected',
   approval_task_cancelled: 'Approval task cancelled',
+  // Status change requests (0025).
+  approval_task_updated: 'Request re-targeted',
+  approval_task_acknowledged: 'Decision acknowledged',
   // Visits (0021) — the check-in / check-out log.
   visit_created: 'Visit logged',
   visit_updated: 'Visit updated',

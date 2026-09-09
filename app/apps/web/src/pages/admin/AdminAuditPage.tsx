@@ -25,6 +25,8 @@ import { useDebounced } from '../../hooks/useDebounced';
 import { DASH, feedTime, initials } from '../../lib/fields';
 import {
   actionLabel,
+  approvalAskText,
+  approvalRef,
   automationRef,
   describeVisitChange,
   entityLabel,
@@ -367,8 +369,54 @@ function changeOf(
     }
     case 'created':
       return { field: DASH, value: e.after?.source === 'import' ? 'via import' : DASH };
-    case 'comment_added':
-      return { field: DASH, value: e.after?.client_visible ? 'client-visible' : 'internal' };
+    case 'comment_added': {
+      // A decision's comment (0020 / 0025) says what it decided.
+      const ref = approvalRef(e.after);
+      const kind = e.after?.client_visible ? 'client-visible' : 'internal';
+      if (!ref) return { field: DASH, value: kind };
+      return {
+        field: kind,
+        value: (
+          <>
+            {ref.status === 'rejected' ? 'rejected' : 'approved'} {approvalAskText(ref)}
+            {ref.note ? <> — {ref.note}</> : null}
+          </>
+        ),
+      };
+    }
+    // Approval tasks (0020 / 0025): what was asked — a status change reads
+    // From → To like a status row; the other kinds show their title.
+    case 'approval_task_created':
+    case 'approval_task_updated':
+    case 'approval_task_claimed':
+    case 'approval_task_approved':
+    case 'approval_task_rejected':
+    case 'approval_task_cancelled':
+    case 'approval_task_acknowledged': {
+      const ref = approvalRef(e.after) ?? approvalRef(e.before);
+      if (!ref) break;
+      if (ref.type === 'status_change') {
+        return {
+          field: 'Status change request',
+          value: (
+            <>
+              <span className="audit-val">{ref.from ?? DASH}</span> →{' '}
+              <span className="audit-val">{ref.to ?? DASH}</span>
+              {ref.note ? <> — {ref.note}</> : null}
+            </>
+          ),
+        };
+      }
+      return {
+        field: ref.type === 'nte_override' ? 'NTE override' : 'Manager review',
+        value: (
+          <>
+            {ref.title ?? DASH}
+            {ref.note ? <> — {ref.note}</> : null}
+          </>
+        ),
+      };
+    }
     // Visits (0021): whole-visit snapshots on a work-order row.
     case 'visit_created':
     case 'visit_updated':

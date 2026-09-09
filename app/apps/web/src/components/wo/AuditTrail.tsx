@@ -5,6 +5,8 @@ import type { ActivityEntry, WoFieldDescriptor } from '@theone/shared';
 import { getWoFields } from '../../api/client';
 import { DASH, feedTime, initials } from '../../lib/fields';
 import {
+  approvalAskText,
+  approvalRef,
   automationRef,
   describeVisitChange,
   formatValue,
@@ -173,8 +175,23 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       return <>moved this work order to Trash</>;
     case 'restored':
       return <>restored this work order from Trash</>;
-    case 'comment_added':
-      return <>posted {e.after?.client_visible ? 'a client-visible' : 'an internal'} update</>;
+    case 'comment_added': {
+      // A decision's comment (0020 / 0025) says what it decided, so the row
+      // reads "posted an internal update: approved the status change request
+      // from A to B — note" rather than a bare "posted an internal update".
+      const ref = approvalRef(e.after);
+      return (
+        <>
+          posted {e.after?.client_visible ? 'a client-visible' : 'an internal'} update
+          {ref && (
+            <>
+              : {ref.status === 'rejected' ? 'rejected' : 'approved'} {approvalAskText(ref)}
+              {ref.note ? <> — {ref.note}</> : null}
+            </>
+          )}
+        </>
+      );
+    }
     case 'tech_message_sent':
       return <>sent a message to the technician</>;
     case 'quote_created':
@@ -213,7 +230,19 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       return <>marked a technician payment paid</>;
     // Approval tasks (0020): the title says what was asked, the note why it
     // was decided that way.
-    case 'approval_task_created':
+    // A status change request (0025) reads as the ask itself — "requested a
+    // status change from A to B" — so nobody has to open the task to know
+    // what was asked; the other kinds keep their title.
+    case 'approval_task_created': {
+      const ref = approvalRef(e.after);
+      if (ref?.type === 'status_change') {
+        return (
+          <>
+            requested a status change
+            {ref.from && ref.to ? <> from <Val>{ref.from}</Val> to <Val>{ref.to}</Val></> : null}
+          </>
+        );
+      }
       return (
         <>
           raised an approval task
@@ -221,31 +250,53 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
           {e.after?.rule ? <> (rule <Val>{String(e.after.rule)}</Val>)</> : null}
         </>
       );
+    }
+    case 'approval_task_updated': {
+      const was = approvalRef(e.before);
+      const ref = approvalRef(e.after);
+      return (
+        <>
+          changed a status change request
+          {was?.to ? <> from asking for <Val>{was.to}</Val></> : null}
+          {ref?.to ? <> to asking for <Val>{ref.to}</Val></> : null}
+        </>
+      );
+    }
     case 'approval_task_claimed':
-      return <>claimed an approval task{e.after?.title ? <>: <Val>{String(e.after.title)}</Val></> : null}</>;
     case 'approval_task_approved':
-      return (
-        <>
-          approved an approval task
-          {e.after?.title ? <>: <Val>{String(e.after.title)}</Val></> : null}
-          {e.after?.note ? <> — {String(e.after.note)}</> : null}
-        </>
-      );
     case 'approval_task_rejected':
-      return (
-        <>
-          rejected an approval task
-          {e.after?.title ? <>: <Val>{String(e.after.title)}</Val></> : null}
-          {e.after?.note ? <> — {String(e.after.note)}</> : null}
-        </>
-      );
     case 'approval_task_cancelled':
+    case 'approval_task_acknowledged': {
+      const ref = approvalRef(e.after);
+      const verb =
+        e.action === 'approval_task_claimed'
+          ? 'claimed'
+          : e.action === 'approval_task_approved'
+            ? 'approved'
+            : e.action === 'approval_task_rejected'
+              ? 'rejected'
+              : e.action === 'approval_task_cancelled'
+                ? 'cancelled'
+                : 'acknowledged the decision on';
       return (
         <>
-          cancelled an approval task
-          {e.after?.note ? <> — {String(e.after.note)}</> : null}
+          {verb}{' '}
+          {ref ? (
+            ref.type === 'status_change' ? (
+              <>
+                the status change request
+                {ref.from && ref.to ? <> from <Val>{ref.from}</Val> to <Val>{ref.to}</Val></> : null}
+              </>
+            ) : (
+              <>an approval task{ref.title ? <>: <Val>{ref.title}</Val></> : null}</>
+            )
+          ) : (
+            'an approval task'
+          )}
+          {ref?.note ? <> — {ref.note}</> : null}
         </>
       );
+    }
     // Visits (0021): the snapshots say which visit and what moved.
     case 'visit_created':
     case 'visit_updated':
