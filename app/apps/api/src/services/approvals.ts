@@ -92,6 +92,7 @@ interface Row {
   wo_due: string | null;
   wo_nte: number | string | null;
   wo_cost: string | null;
+  wo_emergency: boolean | null;
 }
 
 const SELECT_SQL = `
@@ -114,7 +115,8 @@ const SELECT_SQL = `
          t.wo_number, t.title AS wo_title, t.client, t.billing_entity, t.trade,
          t.fields->>'Due Date'   AS wo_due,
          t.nte::float8           AS wo_nte,
-         t.fields->>'34. Cost'   AS wo_cost
+         t.fields->>'34. Cost'   AS wo_cost,
+         COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS wo_emergency
     FROM approval_task a
     JOIN task t            ON t.id = a.task_id
     LEFT JOIN role r       ON r.code = a.assigned_role
@@ -169,6 +171,7 @@ function mapListItem(r: Row): ApprovalListItem {
     wo_due: r.wo_due,
     wo_nte: num(r.wo_nte),
     wo_cost: num(r.wo_cost),
+    wo_emergency: Boolean(r.wo_emergency),
   };
 }
 

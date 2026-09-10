@@ -317,6 +317,8 @@ export interface QuoteListItem {
   wo_due: string | null;
   wo_nte: number | null;
   wo_cost: number | null;
+  /** Rule 2.5.1: the work order is flagged Emergency. */
+  wo_emergency: boolean;
 }
 
 export interface QuoteListResponse {

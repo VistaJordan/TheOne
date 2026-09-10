@@ -6,7 +6,7 @@ interface FlagsRowProps {
   wo: WorkOrderDetailV2;
 }
 
-/** The four penalty-exposure checkboxes. Unset reads as "All clear" — the
+/** Emergency (rule 2.5.1) and the four penalty-exposure checkboxes. Unset reads as "All clear" — the
     fields are absent on most archived WOs, which is the same as false here.
     For editors each flag is a toggle (the same boolean save the All-fields
     checkboxes use); for everyone else it stays a plain indicator. */
@@ -52,7 +52,7 @@ export function FlagsRow({ wo }: FlagsRowProps) {
         {save.error
           ? save.error
           : on.length === 0
-            ? 'No penalty exposure on this work order.'
+            ? 'Nothing raised on this work order.'
             : `Raised: ${on.map((f) => f.key).join(' · ')}`}
       </div>
     </section>

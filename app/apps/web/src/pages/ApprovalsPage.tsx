@@ -60,6 +60,7 @@ import {
 import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
+import { EmergencyBadge } from '../components/EmergencyBadge';
 import { ListPagination, PAGE_SIZES } from '../components/ListPagination';
 import { ColumnsMenu, type ColumnChoice } from '../components/wo/list/ColumnsMenu';
 import { PAYMENT_STATUS_LABEL, payeeLabel } from '../components/payments/PaymentsTable';
@@ -190,6 +191,8 @@ interface Row {
   due: string | null;
   nte: number | null;
   cost: number | null;
+  /** Rule 2.5.1: the work order is flagged Emergency — red rail + badge. */
+  emergency: boolean;
   /** When it started waiting — ISO, for the sort and the Raised column. */
   raised_at: string;
   /** Still waiting for a decision. */
@@ -259,6 +262,7 @@ function taskRow(
     due: item.wo_due,
     nte: item.wo_nte,
     cost: item.wo_cost,
+    emergency: item.wo_emergency,
     raised_at: item.created_at,
     open,
     mine,
@@ -294,6 +298,7 @@ function quoteRow(item: QuoteListItem, canDecide: boolean, held: Set<string>): R
     due: item.wo_due,
     nte: item.wo_nte,
     cost: item.wo_cost,
+    emergency: item.wo_emergency,
     raised_at: item.updated_at ?? '',
     open,
     mine: open && canDecide,
@@ -352,6 +357,7 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
     due: item.wo_due,
     nte: item.wo_nte,
     cost: item.wo_cost,
+    emergency: item.wo_emergency,
     raised_at: item.created_at,
     open,
     mine: open && canDecide,
@@ -1092,11 +1098,18 @@ function InboxRow(props: RowProps) {
   };
 
   return (
-    <tr className={row.held && row.open ? 'apq-held' : undefined}>
+    <tr
+      className={
+        [row.held && row.open ? 'apq-held' : '', row.emergency ? 'is-emergency' : '']
+          .filter(Boolean)
+          .join(' ') || undefined
+      }
+    >
       <td className="col-wo">
         <Link className="wo-num wo-num-link" to={woHref}>
           {row.wo_number}
         </Link>
+        {row.emergency && <EmergencyBadge compact />}
       </td>
       {props.columns.map(cell)}
       <td className="payq-actions">

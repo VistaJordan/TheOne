@@ -12,6 +12,7 @@ import { ListPagination, PAGE_SIZES } from '../components/ListPagination';
 import { QUOTE_STATUS } from '../components/quote/QuoteStatusPill';
 import { usd } from '../lib/quoteTotals';
 import { numericDate } from '../lib/fields';
+import { EmergencyBadge } from '../components/EmergencyBadge';
 
 export function QuotesPage() {
   const navigate = useNavigate();
@@ -76,7 +77,11 @@ export function QuotesPage() {
               {pageItems.map((q) => {
                 const href = `/work-orders/${encodeURIComponent(q.wo_number)}/quote`;
                 return (
-                  <tr key={q.id} className="is-clickable" onClick={() => navigate(href)}>
+                  <tr
+                    key={q.id}
+                    className={`is-clickable${q.wo_emergency ? ' is-emergency' : ''}`}
+                    onClick={() => navigate(href)}
+                  >
                     <td className="col-wo">
                       <Link
                         className="wo-num wo-num-link"
@@ -85,6 +90,7 @@ export function QuotesPage() {
                       >
                         {q.wo_number}
                       </Link>
+                      {q.wo_emergency && <EmergencyBadge compact />}
                     </td>
                     <td className="col-client">
                       <div className="site">

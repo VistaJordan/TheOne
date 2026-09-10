@@ -200,6 +200,22 @@ scoping of the view per user (rule 8.5) and whether the other three sections
 include overdue rows; on phase-0-ground the Pulse's `quote_owed` clock still
 starts at Waiting for Quote and should be rewired to this field after merge.
 
+**Emergency flag** (migration 0034, rule 2.5.1). One checkbox custom field,
+`Emergency` (`FIELD.emergency`, Overview section, so its permission path is
+`work_orders/fields/overview/fields.Emergency`), ticked by hand for now. Every
+row payload projects it so the red needs no bag fetch: `emergency` on the
+work-order list item, `wo_emergency` on approvals / quotes / payments rows.
+The web draws it in one place, `components/EmergencyBadge.tsx`, plus an
+`is-emergency` class on list / inbox / queue rows and the header card (red
+rail, `.emg` styles in `app.css`); the Flags card lists it first. Later the
+client portals decide it: the Ecotrak ingest already maps priority L1 to core
+`priority = 'urgent'`, and 0034 seeds a **paused** automation "priority
+changed to urgent → Emergency = true" as the hook (the ingest does not
+dispatch automations yet). It fires only when the priority changes, so an
+admin unticking the box sticks until the client changes their priority again.
+The `automation` table is not truncated by the seed, so the rule lives in the
+migration only; the field is in `CURATED_FIELDS` too — keep in step.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

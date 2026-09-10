@@ -46,10 +46,14 @@ export const FIELD = {
   checkInOut: '18. Check-in/out Status',
   wko: '38. WKO#',
   quoteCheckoutDate: 'QuoteReqCheckoutDate',
+  /** Rule 2.5.1: the Emergency checkbox (0034) — red across every view. */
+  emergency: 'Emergency',
 } as const;
 
-/** The four penalty-exposure checkboxes rendered by FlagsRow. */
+/** The checkboxes rendered by FlagsRow: Emergency (rule 2.5.1) first, then
+    the four penalty-exposure flags. */
 export const FLAG_FIELDS = [
+  'Emergency',
   '14. Missed ETA',
   '13. Late quote',
   '15. Recall',
@@ -92,6 +96,12 @@ export function num(v: unknown): number | null {
 
 export function bool(v: unknown): boolean {
   return v === true || v === 'true' || v === 1;
+}
+
+/** Rule 2.5.1: is this work order flagged Emergency? (detail pages read the
+    bag; list rows carry `emergency` from the API instead). */
+export function isEmergency(fields: Fields | null | undefined): boolean {
+  return bool(field(fields ?? {}, FIELD.emergency));
 }
 
 /** A YYYY-MM-DD (or ISO) date string, else null. Rejects placeholders like

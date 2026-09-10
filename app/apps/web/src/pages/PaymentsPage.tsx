@@ -32,6 +32,7 @@ import { PAYMENT_STATUS_LABEL, payeeLabel } from '../components/payments/Payment
 import { useAuth } from '../auth/AuthProvider';
 import { usd } from '../lib/quoteTotals';
 import { numericDate } from '../lib/fields';
+import { EmergencyBadge } from '../components/EmergencyBadge';
 
 type Lane = 'approval' | 'process' | 'all';
 
@@ -360,11 +361,12 @@ function PaymentRow({ item, canApprove, canProcess, busy, onDecide }: RowProps) 
             : null;
 
   return (
-    <tr>
+    <tr className={item.wo_emergency ? 'is-emergency' : undefined}>
       <td className="col-wo">
         <Link className="wo-num wo-num-link" to={woHref}>
           {item.wo_number}
         </Link>
+        {item.wo_emergency && <EmergencyBadge compact />}
       </td>
       <td className="col-client">
         <div className="site">

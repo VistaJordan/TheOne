@@ -118,6 +118,9 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
     slug: 'overview',
     wide: true,
     keys: [
+      // Rule 2.5.1: the Emergency checkbox leads — it is the one thing to know
+      // first, and its permission path is work_orders/fields/overview/….
+      'fields.Emergency',
       'fields.35. WO Description',
       'fields.20. Last Update',
       'fields.29. PDF Link',

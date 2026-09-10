@@ -82,6 +82,7 @@ interface PaymentRow {
   wo_due: string | null;
   wo_nte: number | string | null;
   wo_cost: string | null;
+  wo_emergency: boolean | null;
 }
 
 const SELECT_SQL = `
@@ -112,6 +113,7 @@ const SELECT_SQL = `
          t.fields->>'Due Date'   AS wo_due,
          t.nte::float8           AS wo_nte,
          t.fields->>'34. Cost'   AS wo_cost,
+         COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS wo_emergency,
          EXISTS (SELECT 1 FROM approval_task a
                   WHERE a.task_id = pr.task_id AND a.type = 'nte_override' AND a.status = 'open')
                             AS nte_override_open
@@ -179,6 +181,7 @@ function mapListItem(r: PaymentRow): PaymentListItem {
     wo_due: r.wo_due,
     wo_nte: moneyNum(r.wo_nte),
     wo_cost: moneyNum(r.wo_cost),
+    wo_emergency: Boolean(r.wo_emergency),
   };
 }
 

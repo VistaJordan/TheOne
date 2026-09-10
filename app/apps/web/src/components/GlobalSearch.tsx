@@ -17,6 +17,7 @@ import { useDebounced } from '../hooks/useDebounced';
 import { ADMIN_SECTIONS } from '../lib/adminSections';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
+import { EmergencyBadge } from './EmergencyBadge';
 
 type Group = 'Pages' | 'Work orders' | 'Quotes' | 'People';
 
@@ -27,6 +28,8 @@ interface Hit {
   label: string;
   /** Right-hand context line — client, status, role. */
   meta?: string;
+  /** Rule 2.5.1: the work order behind the hit is flagged Emergency. */
+  emergency?: boolean;
   to: string;
 }
 
@@ -134,6 +137,7 @@ export function GlobalSearch() {
       icon: 'clipboard' as const,
       label: `${w.wo_number} · ${w.ext_name ?? w.title}`,
       meta: [w.client, w.status?.name].filter(Boolean).join(' · ') || undefined,
+      emergency: w.emergency,
       to: `/work-orders/${encodeURIComponent(w.wo_number)}`,
     }));
 
@@ -146,6 +150,7 @@ export function GlobalSearch() {
         icon: 'file' as const,
         label: `Quote · ${qt.wo_number}${qt.title ? ` — ${qt.title}` : ''}`,
         meta: [qt.client, qt.status].filter(Boolean).join(' · ') || undefined,
+        emergency: qt.wo_emergency,
         to: `/work-orders/${encodeURIComponent(qt.wo_number)}/quote`,
       }));
 
@@ -295,6 +300,7 @@ export function GlobalSearch() {
                           <Icon name={hit.icon} size={14} />
                         </span>
                         <span className="gs-hit-label">{hit.label}</span>
+                        {hit.emergency && <EmergencyBadge compact />}
                         {hit.meta && <span className="gs-hit-meta">{hit.meta}</span>}
                       </button>
                     );

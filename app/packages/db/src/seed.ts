@@ -361,6 +361,9 @@ const US_STATES = [
 const CURATED_FIELDS: CuratedField[] = [
   { key: '✅ Client AFM',            label: 'Client AFM',           type: 'short_text' },
   { key: '1. Not Fully Paid',        label: 'Not Fully Paid',       type: 'checkbox' },
+  // Rule 2.5.1 (0034): the Emergency flag — red across every view. KEEP IN
+  // STEP with migration 0034.
+  { key: 'Emergency',                label: 'Emergency',            type: 'checkbox' },
   { key: '12. Bad quote',            label: 'Bad Quote',            type: 'checkbox' },
   { key: '16. Client NTE 🔴',        label: 'Client NTE',           type: 'currency' },
   { key: '17. Address',              label: 'Address',              type: 'location' },

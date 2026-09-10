@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { ObligationSummary, Phase, WorkOrderDetailV2 } from '../../api/client';
-import { DASH, FIELD, dateVal, daysSince, field, isCostOverNte, money, numericDate, str } from '../../lib/fields';
+import { DASH, FIELD, dateVal, daysSince, field, isCostOverNte, isEmergency, money, numericDate, str } from '../../lib/fields';
+import { EmergencyBadge } from '../EmergencyBadge';
 import { deriveHeaderMeta, resolveMoney } from '../../lib/woDerive';
 import { tradeIcon } from '../../lib/tradeIcon';
 import { CopyButton } from '../CopyButton';
@@ -76,6 +77,8 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick }:
   // the whole block red once it passes the NTE.
   const m = resolveMoney(wo);
   const overNte = isCostOverNte(m.cost, m.nte);
+  // Rule 2.5.1: the Emergency flag reads red here as in every other view.
+  const emergency = isEmergency(f);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   // "Request again" on a rejected request re-opens the status menu.
   const statusTriggerRef = useRef<HTMLButtonElement>(null);
@@ -113,11 +116,12 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick }:
   );
 
   return (
-    <section className={`card wohead${collapsed ? ' is-collapsed' : ''}`}>
+    <section className={`card wohead${collapsed ? ' is-collapsed' : ''}${emergency ? ' is-emergency' : ''}`}>
       <div className="wohead-top">
         <div className="wohead-idline">
           <h1 className="wo-title">{wo.wo_number}</h1>
           <CopyButton value={wo.wo_number} label="Copy WO number" />
+          {emergency && <EmergencyBadge />}
           {wo.ext_name && (
             <span className="extref">
               <span className="extref-k">Ext ref</span>
