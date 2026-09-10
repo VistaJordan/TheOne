@@ -216,6 +216,30 @@ admin unticking the box sticks until the client changes their priority again.
 The `automation` table is not truncated by the seed, so the rule lives in the
 migration only; the field is in `CURATED_FIELDS` too — keep in step.
 
+**Ecotrak allowed transitions** (rules 2.6.3 / 2.7, no migration). Ecotrak
+only lets a service provider move a work order to a few statuses from
+wherever it sits on THEIR side, and 2.7 says which Ecotrak status each of
+our statuses would push ("Nexxess to Ecotrack"; On Site is En route *then*
+Arrived). Both tables are pure data in `packages/shared/src/ecotrak.ts`
+(`ECOTRAK_ALLOWED_TRANSITIONS`, `ECOTRAK_PUSH_BY_STATUS_NAME`) and
+`checkEcotrakTransition(currentEcotrakStatus, targetStatusName)` answers
+`not_linked | no_push | unlisted | allowed | blocked | locked`. The current
+Ecotrak status is the `Ecotrak Status` bag key, which Jordan's inbound sync
+on phase-0-ground writes; **nothing here talks to Ecotrak** (the adapter is
+read-only until go-live and this file must not import from or edit it).
+`changeStatus` runs the check: `ECOTRAK_TRANSITION_MODE=warn` (default) lets
+the move through and stamps `after.ecotrak = {outcome, from, to}` on the
+`status_changed` row (the audit trail and Admin › Audit read it); `block`
+refuses with a **409 `CONFLICT`** (`details.code = ECOTRAK_TRANSITION`). The
+status menu takes `ecotrakStatus` and tags a pick Ecotrak would refuse; the
+header shows an "Ecotrak · <status>" chip. Deferred on purpose and answered
+`unlisted`, never refused: targets no allowed list names (PROPOSAL_SUBMITTED
+comes from the proposal push, CANCELLED is not SP-writable, ACCEPTED is a
+one-time act), the "NA" statuses, and SOFT_COMPLETED as a current state.
+The 2.7 "Proposed Internal Status Transitions" (our own status order) is a
+separate rule, not modelled. Self-checks: `npx tsx
+packages/shared/src/ecotrak.selfcheck.ts` from `app/`.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

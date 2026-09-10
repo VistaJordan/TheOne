@@ -1,7 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { STATUS_PERM_KEY, type StatusRef } from '@theone/shared';
+import {
+  STATUS_PERM_KEY,
+  checkEcotrakTransition,
+  describeEcotrakRefusal,
+  ecotrakTransitionRefused,
+  type StatusRef,
+} from '@theone/shared';
 import { ApiRequestError, getStatuses, patchStatus, requestStatusChange } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { useInvalidateObligations } from '../hooks/useObligations';
@@ -36,11 +42,15 @@ interface StatusChangeMenuProps {
   renderTrigger?: (api: { open: boolean; toggle: () => void; mode: StatusMenuMode }) => ReactNode;
   /** Anchor the popover to the right edge — for triggers near the viewport edge. */
   align?: 'left' | 'right';
+  /** The work order's current Ecotrak status (the `Ecotrak Status` bag key),
+      when the caller has it. Rules 2.6.3 / 2.7: a pick Ecotrak would refuse
+      is marked before the click; the API decides whether it goes through. */
+  ecotrakStatus?: unknown;
 }
 
 /** Click the trigger → dropdown of all statuses (grouped) → PATCH (or, for a
     dispatcher, POST a request) → invalidate. */
-export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' }: StatusChangeMenuProps) {
+export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left', ecotrakStatus }: StatusChangeMenuProps) {
   const mode = useStatusMenuMode();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -192,13 +202,16 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
                 <div className="status-menu-group-label">{b.label}</div>
                 {b.statuses.map((s) => {
                   const active = s.id === current.id;
+                  const verdict = active ? null : checkEcotrakTransition(ecotrakStatus, s.name);
+                  const refusal = verdict && ecotrakTransitionRefused(verdict) ? describeEcotrakRefusal(verdict) : null;
                   return (
                     <button
                       type="button"
                       role="menuitem"
                       key={s.id}
-                      className={`status-menu-item${active ? ' is-current' : ''}`}
+                      className={`status-menu-item${active ? ' is-current' : ''}${refusal ? ' is-ecotrak-refused' : ''}`}
                       disabled={mutation.isPending || sent !== null}
+                      title={refusal ?? undefined}
                       onClick={() => {
                         if (active) {
                           setOpen(false);
@@ -209,6 +222,11 @@ export function StatusChangeMenu({ woId, current, renderTrigger, align = 'left' 
                     >
                       <StatusCircle group={b.code} color={s.color} fraction={s.fraction} size={16} />
                       <span className="status-menu-name">{s.name}</span>
+                      {refusal && (
+                        <span className="status-menu-ecotrak" aria-label={refusal}>
+                          Ecotrak
+                        </span>
+                      )}
                       {active && <span className="status-menu-check" aria-hidden="true">✓</span>}
                     </button>
                   );

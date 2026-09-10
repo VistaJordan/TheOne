@@ -1,7 +1,13 @@
 import { useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import type { ActivityEntry, WoFieldDescriptor } from '@theone/shared';
+import {
+  describeEcotrakRefusal,
+  ecotrakTransitionRefused,
+  type ActivityEntry,
+  type EcotrakTransitionVerdict,
+  type WoFieldDescriptor,
+} from '@theone/shared';
 import { getWoFields } from '../../api/client';
 import { DASH, feedTime, initials } from '../../lib/fields';
 import {
@@ -121,6 +127,7 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
           changed <b>Status</b> from <Val>{nameOf(e.before, 'status_name')}</Val> to{' '}
           <Val>{nameOf(e.after, 'status_name')}</Val>
           {via}
+          {ecotrakNote(e.after)}
         </>
       );
 
@@ -309,6 +316,15 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
 
 function Val({ children }: { children: ReactNode }) {
   return <span className="audit-val">{children}</span>;
+}
+
+/** Rules 2.6.3 / 2.7: the status_changed row carries `ecotrak` when Ecotrak
+    would have refused the transition the move implies (warn mode let it
+    through). Reads "· Ecotrak does not allow Accepted → Arrived (rule 2.6.3)". */
+function ecotrakNote(after: ActivityEntry['after']): ReactNode {
+  const v = after?.ecotrak as EcotrakTransitionVerdict | undefined;
+  if (!v || !ecotrakTransitionRefused(v)) return null;
+  return <span className="audit-ecotrak"> · {describeEcotrakRefusal(v)}</span>;
 }
 
 /**

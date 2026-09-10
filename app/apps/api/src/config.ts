@@ -67,6 +67,11 @@ export interface Config {
   demoMode: boolean;
   /** Who may sign in without an invitation, and what they become (rule 5.1.1). */
   signIn: SignInPolicy;
+  /** Rules 2.6.3 / 2.7: what a status change does when Ecotrak would refuse
+      the transition it implies. 'warn' (default) lets the move through and
+      stamps the audit row; 'block' refuses it with a 409. Nothing is pushed
+      to Ecotrak in either mode — the adapter is inbound-only until go-live. */
+  ecotrakTransitionMode: 'warn' | 'block';
 }
 
 export interface SignInPolicy {
@@ -151,6 +156,7 @@ function build(): Config {
     cookieSecure: webOrigin.startsWith('https://'),
     demoMode,
     signIn: buildSignIn(),
+    ecotrakTransitionMode: (str('ECOTRAK_TRANSITION_MODE') ?? 'warn').toLowerCase() === 'block' ? 'block' : 'warn',
   };
 }
 

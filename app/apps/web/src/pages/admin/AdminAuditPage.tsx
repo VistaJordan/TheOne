@@ -11,7 +11,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import type { WoFieldDescriptor } from '@theone/shared';
+import {
+  describeEcotrakRefusal,
+  ecotrakTransitionRefused,
+  type EcotrakTransitionVerdict,
+  type WoFieldDescriptor,
+} from '@theone/shared';
 import { AdminShell, AdminEmpty } from './AdminShell';
 import { Icon } from '../../components/Icon';
 import {
@@ -331,16 +336,21 @@ function changeOf(
   byKey: Map<string, WoFieldDescriptor>,
 ): { field: string; value: ReactNode } {
   switch (e.action) {
-    case 'status_changed':
+    case 'status_changed': {
+      // Rules 2.6.3 / 2.7: a move Ecotrak would have refused says so here.
+      const v = e.after?.ecotrak as EcotrakTransitionVerdict | undefined;
+      const refused = v && ecotrakTransitionRefused(v) ? describeEcotrakRefusal(v) : null;
       return {
         field: 'Status',
         value: (
           <>
             <span className="audit-val">{nameOf(e.before, 'status_name')}</span> →{' '}
             <span className="audit-val">{nameOf(e.after, 'status_name')}</span>
+            {refused && <span className="audit-ecotrak"> · {refused}</span>}
           </>
         ),
       };
+    }
     case 'routed':
       return {
         field: 'Home list',
