@@ -27,6 +27,7 @@ interface PaymentsTableProps {
 export const PAYMENT_STATUS_LABEL: Record<PaymentRequestStatus, string> = {
   requested: 'Requested',
   approved: 'Approved',
+  sent_to_yoda: 'Sent to Yoda',
   paid: 'Paid',
   rejected: 'Rejected',
 };

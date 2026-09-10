@@ -1,0 +1,327 @@
+<title>Work Order Page Layout</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  :root {
+    --bg:#f2f4f6; --surface:#fff; --border:#e3e6ea; --border-strong:#d4d9df; --row-border:#edf0f3;
+    --ink:#191c21; --ink-2:#555c68; --ink-3:#6c727b;
+    --accent:#1a9fd4; --accent-text:#0d6e97; --tab-on-bg:#e5f5fd; --tab-on-ink:#0d6e97; --chip:#eceff2; --thead-bg:#fafbfc;
+    --good-bg:#e4f5ea; --good-ink:#1c6b3a; --warn-bg:#fdf3dc; --warn-ink:#7c5700; --danger:#c92a29; --danger-bg:#fbe9e9;
+    --radius:10px; --radius-sm:7px; --pill:999px; --shadow:0 1px 2px rgba(20,25,35,.05);
+    --wire:#c9d2dc; --wire-fill:#f6f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#050505; --surface:#0c0d0e; --border:rgba(255,255,255,.09); --border-strong:rgba(255,255,255,.14); --row-border:rgba(255,255,255,.055);
+      --ink:#f2f3f5; --ink-2:#9aa0ab; --ink-3:#7f838c;
+      --accent:#35b8f3; --accent-text:#35b8f3; --tab-on-bg:rgba(53,184,243,.14); --tab-on-ink:#7fd5f8; --chip:rgba(255,255,255,.08); --thead-bg:#0c0d0e;
+      --good-bg:rgba(52,199,120,.16); --good-ink:#7fe0a8; --warn-bg:rgba(248,174,0,.12); --warn-ink:#f8ae00; --danger:#ff6b6a; --danger-bg:rgba(255,107,106,.14);
+      --radius:4px; --radius-sm:3px; --pill:3px; --shadow:none;
+      --wire:rgba(255,255,255,.18); --wire-fill:rgba(255,255,255,.04);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#050505; --surface:#0c0d0e; --border:rgba(255,255,255,.09); --border-strong:rgba(255,255,255,.14); --row-border:rgba(255,255,255,.055);
+    --ink:#f2f3f5; --ink-2:#9aa0ab; --ink-3:#7f838c;
+    --accent:#35b8f3; --accent-text:#35b8f3; --tab-on-bg:rgba(53,184,243,.14); --tab-on-ink:#7fd5f8; --chip:rgba(255,255,255,.08); --thead-bg:#0c0d0e;
+    --good-bg:rgba(52,199,120,.16); --good-ink:#7fe0a8; --warn-bg:rgba(248,174,0,.12); --warn-ink:#f8ae00; --danger:#ff6b6a; --danger-bg:rgba(255,107,106,.14);
+    --radius:4px; --radius-sm:3px; --pill:3px; --shadow:none;
+    --wire:rgba(255,255,255,.18); --wire-fill:rgba(255,255,255,.04);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Barlow', system-ui, sans-serif; font-size:14px; line-height:1.5; }
+  .page { max-width:1180px; margin:0 auto; padding:40px 28px 90px; }
+  .eyebrow { font-family:'Barlow Condensed', sans-serif; text-transform:uppercase; letter-spacing:.1em; font-size:12px; font-weight:700; color:var(--accent-text); margin:0 0 6px; }
+  h1 { margin:0 0 10px; font-size:30px; font-weight:800; letter-spacing:-.015em; line-height:1.15; text-wrap:balance; }
+  h2 { margin:0 0 6px; font-size:21px; font-weight:800; letter-spacing:-.01em; }
+  h3 { margin:0 0 6px; font-size:15px; font-weight:700; }
+  p { margin:0 0 10px; }
+  .lede { max-width:66ch; color:var(--ink-2); font-size:15px; }
+  b { font-weight:600; color:var(--ink); }
+  code { font-family:'JetBrains Mono', monospace; font-size:11.5px; background:var(--chip); padding:1px 5px; border-radius:4px; color:var(--ink); }
+  section.block { margin-top:44px; }
+  .muted { color:var(--ink-2); }
+  .small { font-size:12.5px; }
+
+  /* diagnosis grid */
+  .diag { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:16px; }
+  .diag .d { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow); }
+  .diag .n { font-family:'Barlow Condensed', sans-serif; font-size:30px; font-weight:800; line-height:1; color:var(--ink); }
+  .diag .k { margin-top:4px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); }
+  .diag .v { margin-top:8px; font-size:13px; color:var(--ink-2); }
+
+  /* option cards */
+  .opt { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); margin-top:18px; overflow:hidden; }
+  .opt.is-rec { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), var(--shadow); }
+  .opt-head { display:flex; align-items:baseline; gap:12px; padding:16px 20px 12px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .opt-key { font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--ink-3); }
+  .opt-title { margin:0; font-size:17px; font-weight:700; }
+  .tag { margin-left:auto; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:3px 9px; border-radius:var(--pill); }
+  .tag.rec { background:var(--tab-on-bg); color:var(--tab-on-ink); } .tag.ok { background:var(--good-bg); color:var(--good-ink); } .tag.meh { background:var(--warn-bg); color:var(--warn-ink); }
+  .opt-body { display:grid; grid-template-columns:1fr 300px; }
+  .wireframe { padding:18px 20px; background:var(--bg); border-right:1px solid var(--border); overflow-x:auto; }
+  .notes { padding:16px 20px 18px; font-size:13px; color:var(--ink-2); display:flex; flex-direction:column; gap:9px; }
+  .notes .h { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); }
+  .notes .pro::before { content:'+'; font-weight:700; color:var(--good-ink); margin-right:7px; }
+  .notes .con::before { content:'–'; font-weight:700; color:var(--warn-ink); margin-right:7px; }
+  @media (max-width:860px) { .opt-body { grid-template-columns:1fr; } .wireframe { border-right:0; border-bottom:1px solid var(--border); } .diag { grid-template-columns:1fr; } }
+
+  /* wireframe language */
+  .w { min-width:760px; font-size:11.5px; color:var(--ink-2); }
+  .w-head { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; margin-bottom:8px; }
+  .w-id { display:flex; align-items:center; gap:10px; }
+  .w-id .wo { font-family:'JetBrains Mono', monospace; font-size:16px; font-weight:700; color:var(--ink); }
+  .w-id .pill { background:var(--chip); border-radius:var(--pill); padding:2px 9px; font-weight:600; font-size:11px; }
+  .w-id .btn { margin-left:auto; background:var(--accent); color:#fff; border-radius:var(--radius-sm); padding:4px 10px; font-weight:700; font-size:11px; }
+  :root[data-theme="dark"] .w-id .btn { color:#00121c; }
+  .w-meta { display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap; }
+  .w-meta .chip { background:var(--chip); border-radius:var(--pill); padding:2px 8px; font-size:10.5px; font-weight:600; }
+  .w-meta .chip.new { background:var(--tab-on-bg); color:var(--tab-on-ink); outline:1.5px dashed var(--accent); outline-offset:1px; }
+  .w-meta .aging { margin-left:auto; display:flex; gap:6px; }
+  .w-meta .aging span { border:1px solid var(--border); border-radius:var(--radius-sm); padding:3px 8px; font-size:10.5px; }
+  .w-phase { display:flex; gap:3px; margin-top:8px; }
+  .w-phase i { flex:1; height:3px; background:var(--accent); opacity:.45; border-radius:2px; } .w-phase i.on { opacity:1; } .w-phase i.off { background:var(--wire); opacity:1; }
+  .w-tabs { display:flex; gap:2px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:4px; margin-bottom:8px; width:max-content; }
+  .w-tabs span { padding:5px 11px; border-radius:var(--radius-sm); font-weight:600; font-size:11.5px; }
+  .w-tabs span.on { background:var(--tab-on-bg); color:var(--tab-on-ink); }
+  .w-tabs span .n { font-size:10px; color:var(--ink-3); margin-left:4px; }
+  .w-grid { display:grid; grid-template-columns:1fr 280px; gap:8px; align-items:start; }
+  .w-grid.one { grid-template-columns:1fr; }
+  .w-col { display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .w-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:9px 12px; }
+  .w-card .t { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink); margin-bottom:5px; display:flex; gap:8px; align-items:baseline; }
+  .w-card .t small { font-weight:500; text-transform:none; letter-spacing:0; color:var(--ink-3); margin-left:auto; }
+  .w-card.ghost { border-style:dashed; border-color:var(--wire); background:var(--wire-fill); }
+  .ln { height:7px; border-radius:3px; background:var(--wire); margin:5px 0; } .ln.s { width:45%; } .ln.m { width:70%; } .ln.l { width:92%; }
+  .kv { display:grid; grid-template-columns:auto 1fr; column-gap:12px; row-gap:3px; font-size:11px; }
+  .kv b { font-weight:500; color:var(--ink-3); }
+  .kv span { color:var(--ink); }
+  .glance { display:flex; flex-direction:column; gap:6px; }
+  .glance .g { display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:11px; }
+  .glance .g .ic { width:22px; height:22px; border-radius:50%; background:var(--tab-on-bg); color:var(--tab-on-ink); display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; flex:none; }
+  .glance .g .arr { margin-left:auto; color:var(--ink-3); }
+  .meter { height:6px; border-radius:3px; background:var(--chip); position:relative; margin:6px 0; }
+  .meter i { position:absolute; inset:0; width:100%; background:var(--warn-ink); border-radius:3px; opacity:.85; }
+  .sec-strip { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 8px; }
+  .sec-strip span { background:var(--chip); padding:2px 8px; border-radius:var(--pill); font-size:10.5px; font-weight:600; }
+  .sec-strip span.on { background:var(--tab-on-bg); color:var(--tab-on-ink); }
+  .avatars { display:flex; gap:6px; }
+  .av { width:22px; height:22px; border-radius:50%; background:var(--chip); display:inline-flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:800; color:var(--ink-2); }
+  .av.am { background:var(--tab-on-bg); color:var(--tab-on-ink); }
+
+  /* field map */
+  .map { margin-top:16px; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; background:var(--surface); box-shadow:var(--shadow); }
+  .map-row { display:grid; grid-template-columns:200px 1fr 260px; border-top:1px solid var(--row-border); }
+  .map-row:first-child { border-top:0; background:var(--thead-bg); }
+  .map-row > div { padding:11px 14px; font-size:12.5px; }
+  .map-row.h > div { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-2); }
+  .map-row .g { font-weight:700; color:var(--ink); }
+  .map-row .g small { display:block; font-weight:500; color:var(--ink-3); font-size:11.5px; margin-top:2px; }
+  .map-row .where { color:var(--ink-2); }
+  .map-row .where b { color:var(--accent-text); font-weight:600; }
+  .f { display:inline-block; background:var(--chip); border-radius:4px; padding:1px 6px; margin:2px 3px 2px 0; font-size:11.5px; color:var(--ink); white-space:nowrap; }
+  .f.drop { text-decoration:line-through; color:var(--ink-3); }
+  .f.derive { border:1px dashed var(--border-strong); background:transparent; }
+  .legend { display:flex; gap:16px; margin-top:8px; font-size:12px; color:var(--ink-2); flex-wrap:wrap; }
+  @media (max-width:860px) { .map-row { grid-template-columns:1fr; } }
+
+  .verdict { margin-top:44px; max-width:72ch; }
+  .verdict ol { margin:0; padding-left:20px; color:var(--ink-2); } .verdict li { margin-bottom:7px; }
+</style>
+
+<div class="page">
+  <p class="eyebrow">Work order page · proposal</p>
+  <h1>Giving every fact on the work order one home</h1>
+  <p class="lede">The page isn't messy because it has too much on it — it's messy because it has <b>two competing organisations at once</b>: tabs on the left, a tower of cards on the right, and the same facts living in both plus a raw field dump. Below: what's actually there today, three ways to reorganise it, and a map that gives all 61 fields a place.</p>
+
+  <div class="diag">
+    <div class="d"><div class="n">4 + 8</div><div class="k">tabs and rail cards</div><div class="v">Overview · Messages · Audit · All fields on the left; Money, Payables, People, Site, Dates, Parts, Flags, All-fields link stacked on the right. People starts below the fold on a laptop.</div></div>
+    <div class="d"><div class="n">61</div><div class="k">raw ClickUp fields</div><div class="v">Shown in "All fields" with their ClickUp names (<code>16. Client NTE 🔴</code>, <code>👣 Parts Order Date</code>). 10 are links, 12 are checkboxes, 5 are stale "Days since…" counters (e.g. <code>-1296</code>).</div></div>
+    <div class="d"><div class="n">×2</div><div class="k">things shown twice</div><div class="v">NTE, cost, invoiced, AM, address, dates: each in a card <em>and</em> in All fields. Nothing tells you which copy is the one to trust or edit.</div></div>
+  </div>
+
+  <!-- ─────────────────────────── OPTIONS ─────────────────────────── -->
+  <section class="block">
+    <h2>Three ways to lay it out</h2>
+    <p class="muted">All three keep the header exactly as it is — WO #, ext ref, client line, status, phase bar and the aging tiles are the best part of the page. They differ in what sits below it.</p>
+
+    <!-- A -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">A</span><h3 class="opt-title">One tab per topic (your sketch)</h3><span class="tag ok">Simple</span></div>
+      <div class="opt-body">
+        <div class="wireframe"><div class="w">
+          <div class="w-head"><div class="w-id"><span class="wo">WO-38893</span><span class="pill">EXT REF 072200862</span><span class="btn">Change status</span></div>
+            <div class="w-meta"><span>WKS · Denny's · Glen Carbon, IL</span><span class="chip">Refrigeration</span><span class="chip">SFM</span><span class="chip">High priority</span><span class="aging"><span>Age 72d</span><span>In status 72d</span><span>SLA —</span></span></div>
+            <div class="w-phase"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="off"></i><i class="on"></i><i class="on"></i></div></div>
+          <div class="w-tabs"><span class="on">Overview</span><span>People</span><span>Money</span><span>Site</span><span>Dates</span><span>Messages</span><span>Audit trail</span><span>All fields<span class="n">61</span></span></div>
+          <div class="w-grid one"><div class="w-col">
+            <div class="w-card"><div class="t">Description</div><div class="ln l"></div><div class="ln m"></div><div class="ln s"></div></div>
+            <div class="w-card"><div class="t">Updates &amp; activity <small>1 event</small></div><div class="ln m"></div><div class="ln l"></div></div>
+            <div class="w-card"><div class="t">Photos</div><div class="ln s"></div></div>
+          </div></div>
+        </div></div>
+        <div class="notes">
+          <p class="h">Trade-offs</p>
+          <p class="pro">Easy to explain: "everything about money is under Money".</p>
+          <p class="pro">Each tab can use the full width — the Site tab gets a proper map, Money gets the payables table.</p>
+          <p class="con">Eight tabs, and three of them (People, Site, Dates) hold five lines each. A tab for three names feels empty and costs a click.</p>
+          <p class="con">The things you need <em>while working</em> — NTE headroom, who the AM is, when the SLA is due — disappear behind tabs. Today's rail, for all its clutter, kept them in view.</p>
+          <p class="con">"All fields" survives as the junk drawer, so the duplication isn't solved.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="opt is-rec">
+      <div class="opt-head"><span class="opt-key">B</span><h3 class="opt-title">Four tabs + an "At a glance" rail</h3><span class="tag rec">Recommended</span></div>
+      <div class="opt-body">
+        <div class="wireframe"><div class="w">
+          <div class="w-head"><div class="w-id"><span class="wo">WO-38893</span><span class="pill">EXT REF 072200862</span><span class="btn">Change status</span></div>
+            <div class="w-meta"><span>WKS · Denny's · Glen Carbon, IL</span><span class="chip">Refrigeration</span><span class="chip">SFM</span><span class="chip">High priority</span><span class="chip new">PH Peter Hope · AM</span><span class="aging"><span>Age 72d</span><span>In status 72d</span><span>SLA —</span></span></div>
+            <div class="w-phase"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="off"></i><i class="on"></i><i class="on"></i></div></div>
+          <div class="w-tabs"><span class="on">Overview</span><span>Details</span><span>Money</span><span>Messages</span><span>History</span></div>
+          <div class="w-grid"><div class="w-col">
+            <div class="w-card"><div class="t">Description</div><div class="ln l"></div><div class="ln m"></div><div class="ln s"></div></div>
+            <div class="w-card"><div class="t">Updates &amp; activity <small>1 event · newest first</small></div><div class="ln m"></div><div class="ln l"></div><div class="ln s"></div></div>
+            <div class="w-card"><div class="t">Photos <small>0 before · 0 after</small></div><div class="ln s"></div></div>
+            <div class="w-card"><div class="t">Soft-close checklist <small>3 of 5</small></div><div class="ln m"></div></div>
+          </div>
+          <div class="w-col">
+            <div class="w-card"><div class="t">At a glance</div>
+              <div class="glance">
+                <div class="g"><span class="ic">$</span><span><b>Invoiced $1,197 · 100% of NTE</b><br>Profit $1,197</span><span class="arr">→ Money</span></div>
+                <div class="g"><span class="ic">PH</span><span><b>Peter Hope</b> AM · <b>Matt Hammond</b> OM book</span><span class="arr">→ Details</span></div>
+                <div class="g"><span class="ic">◎</span><span><b>Denny's #41669</b><br>5714 Broadway Ave, Glen Carbon IL</span><span class="arr">→ Details</span></div>
+                <div class="g"><span class="ic">◷</span><span>Received Jun 19 · Grey flag Jul 20 · <b>SLA —</b></span><span class="arr">→ Details</span></div>
+                <div class="g"><span class="ic">⚑</span><span>No penalty flags · Checked-out</span><span class="arr">→ Details</span></div>
+              </div></div>
+            <div class="w-card ghost"><div class="t">Links</div><div class="kv"><b>Sign-off</b><span>paperform ↗</span><b>SharePoint</b><span>folder ↗</span><b>PDF</b><span>1 file ↗</span></div></div>
+          </div></div>
+        </div></div>
+        <div class="notes">
+          <p class="h">Why this one</p>
+          <p class="pro">Every fact has <em>one</em> home: the rail shows a one-line summary of each area and links to it. No more card-and-dump duplication.</p>
+          <p class="pro">The rail never scrolls out of view: money headroom, people, site, next date and flags are always one glance away, on every tab.</p>
+          <p class="pro"><b>Details</b> replaces "All fields": the same 61 fields, but grouped into Site · People · Dates &amp; SLA · Parts · Quality · Links · Admin, with human labels. The sections are the map below.</p>
+          <p class="pro">Four tabs is a number people remember. <b>History</b> = today's Audit trail, renamed for what it is.</p>
+          <p class="con">Details is a long page (seven sections). It needs a section strip at the top (<em>Site · People · Dates …</em>) that scrolls you down — the wireframe for it is next.</p>
+          <p class="con">Moves the AM into the header chip — a small header change.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- B detail tab -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">B′</span><h3 class="opt-title">The Details tab, sectioned</h3><span class="tag rec">Part of B</span></div>
+      <div class="opt-body">
+        <div class="wireframe"><div class="w">
+          <div class="w-tabs"><span>Overview</span><span class="on">Details</span><span>Money</span><span>Messages</span><span>History</span></div>
+          <div class="sec-strip"><span class="on">Site</span><span>People</span><span>Dates &amp; SLA</span><span>Parts</span><span>Quality &amp; risk</span><span>Links &amp; documents</span><span>Admin</span></div>
+          <div class="w-grid"><div class="w-col">
+            <div class="w-card"><div class="t">Site <small>edit</small></div><div class="kv"><b>Client</b><span>WKS · Denny's Restaurant</span><b>Store</b><span>#41669</span><b>Address</b><span>5714 Broadway Avenue J, Glen Carbon, IL 62034</span><b>Facility manager</b><span>—</span><b>Tech map</b><span>open ↗</span></div></div>
+            <div class="w-card"><div class="t">People</div><div class="kv"><b>Account manager</b><span>Peter Hope</span><b>OM book</b><span>Matt Hammond</span><b>Assignee</b><span>—</span><b>Completion assignee</b><span>—</span><b>Previous</b><span>Matt Hammond</span><b>Sales owner</b><span>Ro</span></div></div>
+            <div class="w-card"><div class="t">Dates &amp; SLA</div><div class="kv"><b>Received</b><span>Jun 19, 2026</span><b>SLA due</b><span>—</span><b>ETA</b><span>—</span><b>Grey flag</b><span>Jul 20, 2026</span><b>Check-in / out</b><span>Checked-out · CI 6.19 2:07pm · CO 6.19 6:10pm</span><b>Invoice date</b><span>Jul 20, 2026</span></div></div>
+            <div class="w-card"><div class="t">Parts</div><div class="kv"><b>Order date</b><span>—</span><b>Order / tracking</b><span>—</span></div></div>
+            <div class="w-card"><div class="t">Quality &amp; risk</div><div class="kv"><b>Flags</b><span>Missed ETA · Late quote · Recall · Penalty — none</span><b>QC</b><span>—</span><b>Manager rating</b><span>5 · "Very professional"</span></div></div>
+            <div class="w-card"><div class="t">Links &amp; documents</div><div class="kv"><b>Sign-off form</b><span>↗</span><b>IVR</b><span>↗ · pin 985954458</span><b>SharePoint</b><span>↗</span><b>PDF</b><span>1 file ↗</span></div></div>
+          </div>
+          <div class="w-col"><div class="w-card"><div class="t">At a glance</div><div class="glance"><div class="g"><span class="ic">$</span><span>Invoiced $1,197 · 100%</span></div><div class="g"><span class="ic">PH</span><span>Peter Hope · Matt Hammond</span></div><div class="g"><span class="ic">◎</span><span>Denny's #41669</span></div></div></div></div></div>
+        </div></div>
+        <div class="notes">
+          <p class="h">Notes</p>
+          <p class="pro">Labels are the product's, not ClickUp's: <code>17. Address</code> → <b>Address</b>, <code>22. FM</code> → <b>Client</b>, <code>👣 Order/Tracking Details</code> → <b>Order / tracking</b>.</p>
+          <p class="pro">Empty values show as <b>—</b> in place, so the layout is the same on every work order and you learn where to look.</p>
+          <p class="pro">Each section can get its own <em>edit</em> later; today none of these is editable from the page.</p>
+          <p class="con">Anything ClickUp-only that we choose to drop (the "Days since…" counters, <code>23. Action</code>) needs a decision — see the map.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="opt">
+      <div class="opt-head"><span class="opt-key">C</span><h3 class="opt-title">No tabs: one long page with a section index</h3><span class="tag meh">Alternative</span></div>
+      <div class="opt-body">
+        <div class="wireframe"><div class="w">
+          <div class="w-grid" style="grid-template-columns:150px 1fr">
+            <div class="w-col"><div class="w-card ghost"><div class="t">On this page</div><div class="kv" style="grid-template-columns:1fr"><span>Overview</span><span>Activity</span><span>Money</span><span>Site</span><span>People</span><span>Dates</span><span>Parts</span><span>Quality</span><span>Links</span><span>History</span></div></div></div>
+            <div class="w-col">
+              <div class="w-card"><div class="t">Description</div><div class="ln l"></div><div class="ln s"></div></div>
+              <div class="w-card"><div class="t">Activity</div><div class="ln m"></div><div class="ln l"></div></div>
+              <div class="w-card"><div class="t">Money</div><div class="meter"><i></i></div><div class="ln m"></div></div>
+              <div class="w-card"><div class="t">Site</div><div class="ln m"></div></div>
+              <div class="w-card"><div class="t">People</div><div class="avatars"><span class="av am">PH</span><span class="av">MH</span><span class="av">RO</span></div></div>
+              <div class="w-card ghost"><div class="t">… Dates · Parts · Quality · Links · History</div></div>
+            </div>
+          </div>
+        </div></div>
+        <div class="notes">
+          <p class="h">Trade-offs</p>
+          <p class="pro">Nothing is hidden; Ctrl-F and printing just work; the sticky index doubles as a table of contents.</p>
+          <p class="pro">No "which tab was that on?" — good for people who open twenty work orders a day.</p>
+          <p class="con">Long. With the activity feed and messages inline, the page becomes a scroll, and Messages (a live conversation) doesn't sit well between static sections.</p>
+          <p class="con">The full-width sections waste the right third of a wide screen; the rail in B uses it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── FIELD MAP ─────────────────────────── -->
+  <section class="block">
+    <h2>Where each of the 61 fields would live</h2>
+    <p class="muted" style="max-width:70ch">Grouped by the question someone is asking when they look for it. Counts are how many of the 28 seeded work orders have a value — a hint of which fields are daily and which are rare.</p>
+    <div class="legend"><span><span class="f">field</span> shown</span><span><span class="f derive">field</span> derived live instead of stored</span><span><span class="f drop">field</span> proposed to drop from the page</span></div>
+
+    <div class="map">
+      <div class="map-row h"><div>Home</div><div>Fields (ClickUp name)</div><div>Shown as</div></div>
+
+      <div class="map-row"><div class="g">Header<small>identity &amp; state — as today, plus AM</small></div><div>
+        <span class="f">WO #</span><span class="f">name → Ext ref</span><span class="f">38. WKO#</span><span class="f">19. CO#</span><span class="f">Trade</span><span class="f">21. Comp</span><span class="f">22. FM / Client</span><span class="f">priority</span><span class="f">status</span><span class="f">AM</span><span class="f">Date-Time Received</span><span class="f">SLA Due Date</span>
+      </div><div class="where">Title line, client line, chips, <b>AM chip (new)</b>, aging tiles (Age / In status / SLA). WKO# and CO# join the ext-ref chip as further client references.</div></div>
+
+      <div class="map-row"><div class="g">Overview<small>the work itself</small></div><div>
+        <span class="f">35. WO Description</span><span class="f">Client Quote</span><span class="f">37. PDF</span><span class="f">✅ Quote Ready To Send</span><span class="f">Quote Check</span><span class="f">Admin Check</span><span class="f">GTG</span><span class="f">✅ On Sheet</span><span class="f drop">23. Action</span>
+      </div><div class="where">Description card; <b>Client Quote</b> (the text sent to the client) under it; the checkboxes are the <b>Soft-close checklist</b>. <code>23. Action</code> is a ClickUp automation trigger — nothing to show.</div></div>
+
+      <div class="map-row"><div class="g">Details › Site</div><div>
+        <span class="f">17. Address</span><span class="f">City</span><span class="f">State</span><span class="f">Zip Code</span><span class="f">Store</span><span class="f">Facility Manager</span><span class="f">Tech Map</span>
+      </div><div class="where">Address block + map; <b>Tech map</b> as a link. City/State/Zip fold into the address line.</div></div>
+
+      <div class="map-row"><div class="g">Details › People</div><div>
+        <span class="f">AM</span><span class="f">Assignee Name TXT</span><span class="f">Completion Assignee</span><span class="f">Previous Assignees</span><span class="f">Sales Owner</span><span class="f">home list → OM book</span>
+      </div><div class="where">One row per role, empty ones shown as —. The place a real assignee field would go when it exists.</div></div>
+
+      <div class="map-row"><div class="g">Details › Dates &amp; SLA</div><div>
+        <span class="f">Date-Time Received</span><span class="f">SLA Due Date</span><span class="f">Act ETA</span><span class="f">Grey Flag Date</span><span class="f">Invoice Date</span><span class="f">QC Date</span><span class="f">QuoteReqCheckoutDate</span><span class="f">18. Check-in/out Status</span><span class="f">20. Last Update</span><span class="f derive">Days Since Grey Flag</span><span class="f derive">Days Since INP</span><span class="f derive">Days Since QC</span><span class="f derive">Days since Done</span><span class="f derive">Days since Invoiced</span>
+      </div><div class="where">A dated list, oldest first. The five "Days since…" values are ClickUp formulas frozen at import (they read <code>-1296</code>) — compute them from the dates instead, or drop them.</div></div>
+
+      <div class="map-row"><div class="g">Details › Parts</div><div>
+        <span class="f">👣 Parts Order Date</span><span class="f">👣 Order/Tracking Details</span>
+      </div><div class="where">Two rows; the tracking text keeps its line breaks. Ties to the "Parts · if parts" phase.</div></div>
+
+      <div class="map-row"><div class="g">Details › Quality &amp; risk</div><div>
+        <span class="f">11. Penalty</span><span class="f">13. Late quote</span><span class="f">14. Missed ETA</span><span class="f">15. Recall</span><span class="f">QC</span><span class="f">QC notes</span><span class="f">MGR-Rating</span><span class="f">MGR-Feedback</span><span class="f">Tech Rating</span>
+      </div><div class="where">Today's <b>Flags</b> row plus the QC and rating fields that belong with it. Any raised flag also surfaces in the rail's glance line.</div></div>
+
+      <div class="map-row"><div class="g">Details › Links &amp; documents</div><div>
+        <span class="f">24. Sign-Off Link</span><span class="f">25. IVR Link</span><span class="f">30. IVR Pin</span><span class="f">28. Sharepoint Link</span><span class="f">29. PDF Link</span><span class="f">26. PPR Link</span><span class="f">27. Yoda Link</span><span class="f">Tech Map</span>
+      </div><div class="where">Named links (<b>Sign-off form</b>, <b>IVR</b> with its pin beside it, <b>SharePoint folder</b>…) instead of raw URLs. PPR and Yoda are the old payment and quote tools — keep as links until this app replaces them.</div></div>
+
+      <div class="map-row"><div class="g">Details › Admin</div><div>
+        <span class="f">Admin Comment</span><span class="f">Tech Quote</span>
+      </div><div class="where">Free-text notes that don't belong to the client-facing story.</div></div>
+
+      <div class="map-row"><div class="g">Money tab</div><div>
+        <span class="f">16. Client NTE 🔴</span><span class="f">34. Cost</span><span class="f">Total Invoiced</span><span class="f">Profit</span><span class="f">Invoice #</span><span class="f">Invoice Date</span><span class="f">1. Not Fully Paid</span><span class="f">Bill For Incurred</span><span class="f">21. Comp</span>
+      </div><div class="where">Today's Money card (NTE meter, quote, cost, invoiced, profit) + <b>Payables</b> + the invoice facts. "Not fully paid" and "Bill for incurred" become status chips at the top of the tab.</div></div>
+    </div>
+  </section>
+
+  <div class="verdict">
+    <h2>Suggested decision</h2>
+    <p class="muted"><b>Option B.</b> Four tabs — Overview · Details · Money · Messages · History — with an always-visible "At a glance" rail, the AM in the header, and "All fields" replaced by the sectioned Details tab using the map above.</p>
+    <ol>
+      <li><b>Decide the map first</b> — especially the strike-throughs and the "Days since…" counters. Everything else follows from it.</li>
+      <li><b>Step 1 (no data change):</b> tabs + rail + Details sections, reading the same <code>fields</code> bag with friendlier labels.</li>
+      <li><b>Step 2:</b> make sections editable one at a time (Site, People, Dates), and retire the ClickUp numbering from the field names in Admin › Fields.</li>
+    </ol>
+  </div>
+</div>

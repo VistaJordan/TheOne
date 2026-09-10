@@ -33,10 +33,7 @@ export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxCha
       </div>
 
       <div className="nte-row">
-        <span className="nte-k">
-          <span className="reddot" aria-hidden="true" />
-          Client NTE
-        </span>
+        <span className="nte-k">Client NTE</span>
         <span className="nte-v">{nte == null ? '—' : usd0(nte)}</span>
       </div>
 
@@ -54,7 +51,12 @@ export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxCha
             <div className="ntemeter-thresh" title={`${NTE_WARN_PCT}% warning threshold`} />
           </div>
           <div className="ntemeter-scale">
-            <span>Quote {usd0(totals.grandTotal)}</span>
+            <span>
+              Quote {usd0(totals.grandTotal)}
+              <span className={`ntemeter-pct${over ? ' is-over' : warn ? ' is-warn' : ''}`}>
+                {Math.round(pct)}%
+              </span>
+            </span>
             <span>NTE {usd0(nte)}</span>
           </div>
           {warn && (
@@ -62,8 +64,8 @@ export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxCha
               <Icon name="alert" size={12} />
               <span>
                 {over
-                  ? `Quote is ${Math.round(pct)}% of NTE — ${usd0(Math.abs(headroom ?? 0))} over`
-                  : `Quote is ${Math.round(pct)}% of NTE — ${usd0(headroom ?? 0)} of headroom`}
+                  ? `${usd0(Math.abs(headroom ?? 0))} over the client NTE`
+                  : `Past the ${NTE_WARN_PCT}% mark — ${usd0(headroom ?? 0)} of headroom`}
               </span>
             </div>
           )}

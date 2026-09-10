@@ -9,8 +9,10 @@ import type { ApiErrorCode } from '@theone/shared';
 
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
+  CONFLICT: 409,
   INTERNAL: 500,
 };
 
@@ -35,6 +37,10 @@ export const forbidden = (message: string, details: unknown = null) =>
   new ApiError('FORBIDDEN', message, details);
 export const badRequest = (message: string, details: unknown = null) =>
   new ApiError('BAD_REQUEST', message, details);
+/** 409 — the request is well-formed and permitted, but the record's state refuses it
+    (e.g. a pending NTE override blocks financial progression, rule 1.5.2). */
+export const conflict = (message: string, details: unknown = null) =>
+  new ApiError('CONFLICT', message, details);
 
 /**
  * Zod parse that throws a BAD_REQUEST ApiError (details = flattened issues) on

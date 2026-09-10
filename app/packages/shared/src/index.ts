@@ -4,7 +4,22 @@
 // imports the DB runtime.
 
 // ── Status groups ────────────────────────────────────────────────────────────
-export type StatusGroup = 'open' | 'active' | 'done' | 'closed';
+// Since 0008 the phase groups live in the `status_group_def` table (admins can
+// add their own), so the type is an open string. The four every install starts
+// with are below; code that needs an order or a fallback uses that list.
+export type StatusGroup = string;
+
+export const DEFAULT_STATUS_GROUPS = ['open', 'active', 'done', 'closed'] as const;
+
+/** One row of `status_group_def` — the vocabulary behind tabs and menus. */
+export interface StatusGroupDef {
+  code: string;
+  label: string;
+  position: number;
+  is_builtin: boolean;
+  /** Statuses currently in the group; present on the admin read. */
+  status_count?: number;
+}
 
 /**
  * Maps a ClickUp status `type` to our `status_group`.
@@ -26,7 +41,7 @@ export const STATUS_GROUP_BY_CLICKUP_TYPE = STATUS_GROUP_BY_TYPE;
 /**
  * The nine lifecycle phases rendered by the WO-detail phase bar. A status maps
  * to exactly one phase, or to `null` for off-pipeline terminal states
- * (`!! canceled/postponed`), which the bar renders as "no phase".
+ * (`Cancelled / Postponed`), which the bar renders as "no phase".
  */
 export type Phase =
   | 'Intake'
@@ -53,32 +68,30 @@ export const PHASE_ORDER: readonly Phase[] = [
 ];
 
 /**
- * Status name → phase. Keyed by the seeded `status.name` verbatim (the 19
- * pipeline statuses plus the archive `invoiced`). The API is the authority:
+ * Status name → phase. Keyed by the seeded `status.name` verbatim (the 17
+ * pipeline statuses plus the archive `Invoiced`). The API is the authority:
  * it stamps `phase` onto every `Status` it returns, so the web never needs to
  * import this map — it exists here so both sides agree on the vocabulary.
  */
 export const PHASE_BY_STATUS_NAME: Record<string, Phase | null> = {
   'Open': 'Intake',
-  'emergency': 'Intake',
-  'assessment scheduled': 'Assessment',
-  'assessment ongoing': 'Assessment',
-  'return trip needed': 'Assessment',
-  'waiting for quote': 'Quote',
-  'quote ready': 'Quote',
-  'approved': 'Approval',
-  '!! waiting for advice': 'Approval',
-  '!! waiting for approval': 'Approval',
-  'job scheduled': 'Scheduled',
-  'pm scheduled': 'Scheduled',
-  'job ongoing': 'In Progress',
-  'please order parts': 'Parts',
-  'waiting for parts': 'Parts',
-  '!! ready to invoice': 'Done',
-  'done/incurred': 'Done',
-  '<< invoiced not paid >>': 'Invoiced',
-  'invoiced': 'Invoiced',
-  '!! canceled/postponed': null,
+  'Assessment Sched': 'Assessment',
+  'On Site (Assessment)': 'Assessment',
+  'Return Trip Needed': 'Assessment',
+  'Waiting for Quote': 'Quote',
+  'Quote Ready': 'Quote',
+  'Waiting for Advice': 'Approval',
+  'Waiting for Approval': 'Approval',
+  'Job Sched': 'Scheduled',
+  'PM Sched': 'Scheduled',
+  'On Site (Job)': 'In Progress',
+  'Please Order Parts': 'Parts',
+  'Waiting for Parts': 'Parts',
+  'Ready to Invoice': 'Done',
+  'Done / Incurred': 'Done',
+  'Invoiced Not Paid': 'Invoiced',
+  'Invoiced': 'Invoiced',
+  'Cancelled / Postponed': null,
 };
 
 // ── Status ───────────────────────────────────────────────────────────────────
@@ -120,6 +133,22 @@ export interface WorkOrderListItem {
   home_list: string | null;
   status: StatusRef;
   age_days: number | null;
+  /** ISO-8601 UTC. Selectable as a list column, hence on the list item. */
+  created_at?: string | null;
+  updated_at?: string | null;
+  /**
+   * Values for the CUSTOM columns the caller asked for, keyed `fields.<key>`.
+   * Projected on demand rather than shipping the whole `fields` bag: a row can
+   * carry ~100 custom keys and the table renders the two that were chosen.
+   */
+  custom?: Record<string, string | null>;
+}
+
+/** One bucket of a grouped list, counted across the whole filtered set (not
+    just the page). `key === null` is the "(empty)" bucket. */
+export interface WorkOrderGroupCount {
+  key: string | null;
+  count: number;
 }
 
 export interface WorkOrderListResponse {
@@ -127,6 +156,225 @@ export interface WorkOrderListResponse {
   total: number;
   limit: number;
   offset: number;
+  /** Present only when the request asked for a `group_by`. */
+  groups?: WorkOrderGroupCount[];
+}
+
+// ── The list's field catalogue, filters and saved views (S6) ─────────────────
+// The list is no longer a fixed table: columns, filters, grouping and sorting
+// are chosen by the user, so the set of addressable FIELDS is data the API
+// serves rather than a union the client can hardcode. See
+// apps/api/src/services/woFields.ts — that module is the authority; these types
+// are the wire shapes both sides agree on.
+
+export type WoFieldType = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'boolean';
+
+export interface WoFieldOption {
+  value: string;
+  label: string;
+  color?: string;
+}
+
+export interface WoFieldDescriptor {
+  /** A promoted column (`client`) or a custom field (`fields.<key>`). */
+  key: string;
+  label: string;
+  type: WoFieldType;
+  /** Section heading in the field picker. */
+  group: string;
+  options?: WoFieldOption[];
+  custom?: boolean;
+  sortable: boolean;
+  numeric?: boolean;
+  /** Custom fields only: the raw field_def type ('short_text', 'long_text',
+      'phone', 'url', 'formula', 'attachment', …). `type` says how a value
+      COMPARES; the subtype says how it should be EDITED. */
+  subtype?: string;
+}
+
+export interface WoFieldCatalogue {
+  fields: WoFieldDescriptor[];
+  default_columns: string[];
+}
+
+/** Every test the filter builder offers. `is_set`/`is_not_set` take no value;
+    `between` takes two; `in`/`not_in` take a list. */
+export type WoFilterOp =
+  | 'is_set'
+  | 'is_not_set'
+  | 'eq'
+  | 'neq'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'between'
+  | 'in'
+  | 'not_in'
+  | 'is_true'
+  | 'is_false';
+
+export interface WoFilterRule {
+  field: string;
+  op: WoFilterOp;
+  value?: string | number | boolean | string[] | null;
+  /** How this rule joins the one before it. Absent on every rule = the set's
+      `match` governs the whole list, which is what the saved-view filter UI
+      still writes. AND binds tighter than OR, so a run of ANDs is one group
+      and OR separates the groups — see compileFilters. Ignored on rule 0. */
+  join?: 'and' | 'or';
+}
+
+export interface WoFilterSet {
+  match: 'all' | 'any';
+  rules: WoFilterRule[];
+}
+
+export interface WoSort {
+  field: string;
+  dir: 'asc' | 'desc';
+}
+
+/** A saved arrangement of the list: columns, filters, grouping, sorting. */
+export interface SavedView {
+  id: string;
+  name: string;
+  entity: string;
+  columns: string[];
+  filters: WoFilterSet;
+  group_by: string | null;
+  sort: WoSort | null;
+  is_shared: boolean;
+  position: number;
+  owner: { id: string; name: string };
+  /** False when the view is somebody else's shared view — read-only here. */
+  can_edit: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Result of a bulk edit: how many rows actually changed, and what was asked. */
+export interface BulkUpdateResult {
+  requested: number;
+  updated: number;
+  /** WO numbers the patch could not be applied to, with the reason. */
+  skipped: { wo_number: string; reason: string }[];
+}
+
+/** One row's outcome from an import run (including a dry run). */
+export interface ImportRowResult {
+  row: number;
+  wo_number: string | null;
+  action: 'create' | 'update' | 'skip' | 'error';
+  message?: string;
+}
+
+export interface ImportResult {
+  dry_run: boolean;
+  created: number;
+  updated: number;
+  skipped: number;
+  errored: number;
+  rows: ImportRowResult[];
+}
+
+// ── Automations (the rules engine) ───────────────────────────────────────────
+// A rule is When (trigger) → If (conditions) → Then (actions). Conditions reuse
+// the list's WoFilterSet verbatim — one filter vocabulary for the whole app.
+// The server (apps/api/src/services/automations.ts) is the authority; these are
+// the wire shapes.
+
+/** 'manual' = the rule never fires on its own — operators enroll selected
+    records from the list (the HubSpot "trigger manually" model). */
+export type AutomationTriggerKind = 'created' | 'changed' | 'manual';
+
+/** What kind of record a rule runs over. Work orders are live; the other three
+    are reserved for their modules (Vendors/Invoicing are placeholders today). */
+export type AutomationEntity = 'work_order' | 'vendor' | 'quote' | 'invoice';
+
+export interface AutomationTrigger {
+  kind: AutomationTriggerKind;
+  /** Catalogue key ('status', 'priority', 'fields.<key>', …) for 'changed'.
+      Null/absent = ANY field changing fires the rule. */
+  field?: string | null;
+  /** Only fire when the field changed TO this value (string-compared,
+      case-insensitive). Null/absent = any new value. */
+  to?: string | null;
+  /** How the new value is tested against `to`. 'eq'/absent = exact match; the
+      comparisons are for money/number fields ("changed to more than 500"). */
+  to_op?: 'eq' | 'gt' | 'gte' | 'lt' | 'lte' | null;
+  /** Compare the new value against ANOTHER field's current value instead of
+      the constant in `to` ("Cost changed to more than NTE" — rule 1.5.2).
+      Both fields must be money/number; `to` is ignored when this is set. */
+  to_field?: string | null;
+  /** Wait this long after the trigger before acting (0/absent = immediately).
+      Conditions are evaluated AFTER the wait — "if the quote is still not
+      ready" — and another matching change restarts the clock. Timers are DB
+      rows (automation_pending), so they survive an API restart. */
+  delay_minutes?: number | null;
+}
+
+/** What one action does. Absent = 'set_field' (every rule saved before
+    approval tasks existed). */
+export type AutomationActionKind = 'set_field' | 'approval_task';
+
+/**
+ * One thing the rule does. 'set_field': set `field` to `value` (null clears
+ * it). 'approval_task': raise an approval task on the work order — `field` is
+ * the literal 'approval_task', `value` the task type (ApprovalTaskType) and
+ * `assign_role` the role code whose inbox it lands in (null = any approver).
+ * `field`/`value` stay filled in both shapes so run logs and summaries read
+ * one way.
+ */
+export interface AutomationAction {
+  kind?: AutomationActionKind;
+  field: string;
+  value: string | null;
+  assign_role?: string | null;
+}
+
+/** The sentinel `field` of an 'approval_task' action. */
+export const APPROVAL_TASK_ACTION_FIELD = 'approval_task';
+
+export interface AutomationItem {
+  id: string;
+  name: string;
+  enabled: boolean;
+  entity: AutomationEntity;
+  trigger: AutomationTrigger;
+  conditions: WoFilterSet;
+  actions: AutomationAction[];
+  run_count: number;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** What POST /automations/:id/enroll did with the selection. */
+export interface AutomationEnrollResult {
+  requested: number;
+  /** Conditions held; actions were applied now. */
+  applied: number;
+  /** The rule has a wait — a timer was armed instead of acting now. */
+  queued: number;
+  /** Conditions did not match, or the work order was gone. */
+  skipped: number;
+  errored: number;
+}
+
+export interface AutomationRunItem {
+  id: number;
+  automation_id: string;
+  wo_number: string | null;
+  /** 'skipped' = a delayed rule came due but its conditions no longer held. */
+  outcome: 'applied' | 'error' | 'skipped';
+  /** What happened, for the run log: fields written, or the error message. */
+  detail: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export interface Membership {
@@ -155,6 +403,9 @@ export interface WorkOrderDetail {
   recent_activity: ActivityEntry[];
   /** S2: the money block powering the NTE meter + financial rows. */
   money: Money;
+  /** 0025: a status change requested under rule 2.4.1 — pending, or decided
+      and not yet acknowledged by whoever asked. Null when there is none. */
+  status_change: StatusChangeState | null;
 }
 
 // ── Money (S2) ───────────────────────────────────────────────────────────────
@@ -334,6 +585,68 @@ export const QUOTE_EDIT_ROLES: readonly string[] = ['senior_om', 'atl', 'tl', 'a
 /** Approve, reject and send a quote to the client CMMS — ATL and above (§1). */
 export const QUOTE_APPROVE_ROLES: readonly string[] = ['atl', 'tl', 'am', 'admin'];
 
+// ── S5 · the role vocabulary ────────────────────────────────────────────────
+// Still free text on `principal.role`, but no longer arbitrary: the admin
+// console validates every assignment against this list, so a typo cannot
+// silently create a role that passes no gate and is impossible to debug.
+// A future migration turns this into a table; the codes are the contract.
+
+export const ROLE_CODES: readonly string[] = [
+  'om',
+  'senior_om',
+  'atl',
+  'tl',
+  'am',
+  'admin',
+];
+
+export const ROLE_LABELS: Record<string, string> = {
+  om: 'OM (dispatcher)',
+  senior_om: 'Senior OM',
+  atl: 'ATL',
+  tl: 'Team Lead',
+  am: 'Account Manager',
+  admin: 'Admin',
+  service: 'Service account',
+};
+
+// ── S5 · authentication ─────────────────────────────────────────────────────
+
+export type AuthMode = 'entra' | 'bypass';
+export type UserStatus = 'invited' | 'active' | 'disabled';
+
+/** A principal as the session endpoints describe it. */
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  is_super_admin: boolean;
+  status: UserStatus;
+}
+
+export interface MeResponse {
+  authenticated: boolean;
+  auth_mode: AuthMode;
+  user: SessionUser | null;
+  acting_as: SessionUser | null;
+  is_impersonating?: boolean;
+}
+
+/** One row in Admin › Users. */
+export interface AdminUserItem extends SessionUser {
+  initials: string | null;
+  last_login_at: string | null;
+  has_signed_in: boolean;
+  active_sessions: number;
+}
+
+export interface RoleInfo {
+  code: string;
+  label: string;
+  capabilities: { quote_edit: boolean; quote_approve: boolean };
+}
+
 // ── Principals (S4.1 · "Viewing as" switcher) ────────────────────────────────
 // GET /api/principals is the pre-auth read surface behind the role switcher:
 // until S5 there is nothing to log into, so the client picks the acting
@@ -452,6 +765,9 @@ export interface Quote {
   totals: QuoteTotals;
   summary: QuoteSummary;
   permissions: QuotePermissions;
+  /** Rule 1.5.2: an NTE override is waiting on a manager for this work
+      order, so approving / sending is refused (409) until it is decided. */
+  nte_override_open: boolean;
 }
 
 /** GET/POST/PUT /api/work-orders/:id/quote and every lifecycle POST. */
@@ -460,7 +776,16 @@ export interface QuoteResponse {
 }
 
 // ── Payment requests (S4) ────────────────────────────────────────────────────
-export type PaymentRequestStatus = 'requested' | 'approved' | 'paid' | 'rejected';
+/**
+ * requested → approved → sent_to_yoda → paid, or rejected from either of the
+ * first two (0016). Yoda is the payment tool the money leaves from; "sent to
+ * Yoda" is the hand-off and "paid" the confirmation that it went out.
+ */
+export type PaymentRequestStatus = 'requested' | 'approved' | 'sent_to_yoda' | 'paid' | 'rejected';
+
+/** Permission path for the processing half (send to Yoda, mark paid). Its
+    `edit` action inherits from `payments` when unset. */
+export const PAYMENT_PROCESS_PERM_KEY = 'payments/process';
 
 /**
  * The methods the request screen offers. `payment_request.method` is free TEXT,
@@ -497,6 +822,46 @@ export interface PaymentRequest {
   status: PaymentRequestStatus;
   requested_by: ActivityActor | null;
   created_at: string;
+  /** Last decision on the row (0016). */
+  updated_at: string;
+  approved_by: ActivityActor | null;
+  approved_at: string | null;
+  rejected_by: ActivityActor | null;
+  rejected_at: string | null;
+  rejection_note: string | null;
+  sent_to_yoda_by: ActivityActor | null;
+  sent_to_yoda_at: string | null;
+  /** Whatever reference Yoda handed back, if the processor recorded one. */
+  yoda_ref: string | null;
+  paid_by: ActivityActor | null;
+  paid_at: string | null;
+}
+
+/** One row of GET /api/payments — the request plus the work order it sits on. */
+export interface PaymentListItem extends PaymentRequest {
+  wo_number: string;
+  title: string | null;
+  client: string | null;
+  /** Rule 1.5.2: an NTE override is waiting on a manager for this work
+      order, so approve / send to Yoda are refused (409) until it is decided. */
+  nte_override_open: boolean;
+  /** The work order's own numbers as they stand NOW (the inbox columns). */
+  wo_due: string | null;
+  wo_nte: number | null;
+  wo_cost: number | null;
+}
+
+/** GET /api/payments — every request across work orders, newest first. */
+export interface PaymentListResponse {
+  items: PaymentListItem[];
+  total: number;
+  /** Row counts per status, for the tab's filter chips. */
+  counts: Record<PaymentRequestStatus, number>;
+}
+
+/** POST /api/payment-requests/:id/{approve,reject,send-to-yoda,mark-paid}. */
+export interface PaymentRequestResponse {
+  item: PaymentRequest;
 }
 
 /** GET /api/work-orders/:id/payment-requests — newest first. */
@@ -512,6 +877,182 @@ export interface PaymentRequestsResponse {
 /** POST /api/work-orders/:id/payment-requests — 201 response. */
 export interface PaymentRequestCreatedResponse {
   item: PaymentRequest;
+}
+
+// ── Approval tasks (0020) — the manager's inbox ──────────────────────────────
+/**
+ * Something on a work order that needs a person with authority to say yes or
+ * no. Rule 1.5.2 (cost over NTE) is the first thing that raises one; the
+ * rules engine can raise any type. open → approved | rejected, or cancelled
+ * when the reason went away on its own.
+ */
+export type ApprovalTaskType = 'nte_override' | 'manager_review' | 'status_change';
+
+export type ApprovalTaskStatus = 'open' | 'approved' | 'rejected' | 'cancelled';
+
+/** Permission path: `view` = the Approvals page; `approve` covers reject and claim. */
+export const APPROVALS_PERM_KEY = 'approvals';
+
+/**
+ * The inbox's sections, each its own permission path under `approvals`
+ * (0025): `view` shows the section, `approve` lets the person decide in it.
+ * An unset action inherits from `approvals`. Quotes and Payments only take
+ * `view` here — deciding those stays with `quotes:approve` and the payments
+ * grant, so the money rules keep one gate.
+ */
+export type ApprovalSectionKey = 'nte' | 'status' | 'reviews' | 'quotes' | 'payments';
+
+export const APPROVAL_SECTIONS: { key: ApprovalSectionKey; label: string; decides: boolean }[] = [
+  { key: 'nte', label: 'NTE increases', decides: true },
+  { key: 'status', label: 'Status changes', decides: true },
+  { key: 'reviews', label: 'Manager reviews', decides: true },
+  { key: 'quotes', label: 'Quotes', decides: false },
+  { key: 'payments', label: 'Payments', decides: false },
+];
+
+export function approvalSectionPermKey(section: ApprovalSectionKey): string {
+  return `${APPROVALS_PERM_KEY}/${section}`;
+}
+
+/** Which section an approval task of this type lives in. */
+export function approvalSectionOf(type: ApprovalTaskType): ApprovalSectionKey {
+  return type === 'nte_override' ? 'nte' : type === 'status_change' ? 'status' : 'reviews';
+}
+
+/**
+ * Permission path for moving a work order's status (0025):
+ *   edit    change it directly
+ *   create  REQUEST a change — a manager decides (rule 2.4.1)
+ * A person with `create` but not `edit` is a Dispatcher for rule 2.4.1. The
+ * Roles screen and the per-user Adjust show the pair as one three-way choice
+ * (STATUS_CHANGE_MODES) rather than two boxes.
+ */
+export const STATUS_PERM_KEY = 'work_orders/status';
+
+export type StatusChangeMode = 'direct' | 'request' | 'none';
+
+export const STATUS_CHANGE_MODES: { code: StatusChangeMode; label: string; hint: string }[] = [
+  { code: 'direct', label: 'Change directly', hint: 'Moves the status straight away' },
+  { code: 'request', label: 'Must request', hint: 'Asks a manager; the status moves when they approve (rule 2.4.1)' },
+  { code: 'none', label: 'Not allowed', hint: 'No status button at all' },
+];
+
+/** How every task type reads, on the inbox and in the audit trail. */
+export const APPROVAL_TASK_LABEL: Record<ApprovalTaskType, string> = {
+  nte_override: 'NTE override',
+  manager_review: 'Manager review',
+  status_change: 'Status change',
+};
+
+/** The `detail` of a status_change task: what was asked (rule 2.4.1). */
+export interface StatusChangeDetail {
+  from_status_id: string;
+  from_status_name: string;
+  to_status_id: string;
+  to_status_name: string;
+}
+
+/**
+ * The status change waiting on (or just decided for) a work order, carried on
+ * the detail payload so the header can draw it before any click: open =
+ * pending a manager; approved / rejected = decided and not yet acknowledged
+ * by the requester (2.4.3 — the dispatcher is told, and says they saw it).
+ */
+export interface StatusChangeState {
+  approval_task_id: string;
+  status: Extract<ApprovalTaskStatus, 'open' | 'approved' | 'rejected'>;
+  to_status: StatusRef;
+  requested_by: ActivityActor | null;
+  decided_by: ActivityActor | null;
+  decided_at: string | null;
+  decision_note: string | null;
+}
+
+/** GET /api/approvals/counts — the sidebar badge, for the acting principal. */
+export interface ApprovalCounts {
+  /** Open items this person may decide (approvers). */
+  to_decide: number;
+  /** This person's own decided requests not yet acknowledged (requesters). */
+  to_acknowledge: number;
+}
+
+/** The task types the automation builder offers, with how each reads.
+    (A status change is asked for by a person, never raised by a rule.) */
+export const APPROVAL_TASK_TYPES: { code: Exclude<ApprovalTaskType, 'status_change'>; label: string; hint: string }[] = [
+  {
+    code: 'nte_override',
+    label: 'NTE override approval',
+    hint: 'The cost is above the client NTE — a manager decides whether to proceed anyway (rule 1.5.2)',
+  },
+  {
+    code: 'manager_review',
+    label: 'Manager review',
+    hint: 'A manager looks at the work order and signs off — the rule name is the reason',
+  },
+];
+
+export interface ApprovalTaskSource {
+  automation_id: string | null;
+  name: string | null;
+}
+
+export interface ApprovalTask {
+  id: string;
+  type: ApprovalTaskType;
+  task_id: string;
+  /** One line saying what is asked, e.g. "Cost $1,200.00 is over the NTE $1,000.00". */
+  title: string;
+  /** The numbers behind the title at the time it was raised (or last refreshed). */
+  detail: Record<string, unknown>;
+  /** Role code whose inbox this lands in; null = anyone who may approve. */
+  assigned_role: string | null;
+  assigned_role_label: string | null;
+  /** Whoever claimed it (or was handed it). */
+  assigned_to: ActivityActor | null;
+  status: ApprovalTaskStatus;
+  source: ApprovalTaskSource | null;
+  created_by: ActivityActor | null;
+  created_at: string;
+  updated_at: string;
+  decided_by: ActivityActor | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  /** 0025: the requester (or an approver) said they saw the decision. A
+      decided status_change stays in the requester's "My requests" until then. */
+  acknowledged_by: ActivityActor | null;
+  acknowledged_at: string | null;
+}
+
+/** One row of GET /api/approvals — the task plus the work order it sits on,
+    with the columns the inbox filters by. */
+export interface ApprovalListItem extends ApprovalTask {
+  wo_number: string;
+  wo_title: string | null;
+  client: string | null;
+  billing_entity: string | null;
+  trade: string | null;
+  /** The work order's own numbers as they stand NOW (the inbox columns). */
+  wo_due: string | null;
+  wo_nte: number | null;
+  wo_cost: number | null;
+}
+
+/** GET /api/approvals — every task across live work orders, open first. */
+export interface ApprovalListResponse {
+  items: ApprovalListItem[];
+  total: number;
+  counts: Record<ApprovalTaskStatus, number>;
+}
+
+/** GET /api/work-orders/:id/approval-tasks — newest first. */
+export interface ApprovalTasksResponse {
+  items: ApprovalTask[];
+  total: number;
+}
+
+/** POST /api/approval-tasks/:id/{approve,reject,claim}. */
+export interface ApprovalTaskResponse {
+  item: ApprovalTask;
 }
 
 // ── Activity log ─────────────────────────────────────────────────────────────
@@ -539,10 +1080,85 @@ export interface Kpis {
   margin: { pct: number; avgProfit: number; placeholder: boolean };
 }
 
+// ── Metrics ──────────────────────────────────────────────────────────────────
+// The audit trail (activity_log) timestamps every field change; these shapes
+// turn those timestamps into dashboard numbers. A MetricEvent names a moment in
+// a work order's life: "<field> changed", or "<field> became <value>".
+
+export interface MetricEvent {
+  /** A catalogue key: 'status', 'priority', 'fields.<custom key>', … */
+  field: string;
+  /** Match only changes TO this value (compared case-insensitively). Absent or
+      null = any change of the field counts. */
+  value?: string | null;
+}
+
+export interface MetricBreakdownBucket {
+  /** Null = the rows where the field is blank. */
+  value: string | null;
+  count: number;
+}
+
+/** GET /api/metrics/breakdown — the filtered set bucketed by one field. */
+export interface MetricBreakdown {
+  field: string;
+  label: string;
+  /** Every matching work order — items may cover only the top buckets. */
+  total: number;
+  /** Rows in buckets beyond the returned items. */
+  other: number;
+  items: MetricBreakdownBucket[];
+}
+
+export interface MetricDurationSample {
+  id: string;
+  wo_number: string;
+  title: string | null;
+  from_at: string;
+  to_at: string;
+  seconds: number;
+}
+
+/** GET /api/metrics/duration — for each work order, the FIRST time the `from`
+    event was recorded and the NEXT `to` event after it; aggregated. Only
+    changes made through the app are measured: imported/seeded values carry no
+    change history. */
+export interface MetricDuration {
+  from: MetricEvent;
+  to: MetricEvent;
+  /** Work orders where both events were found, in order. */
+  count: number;
+  avg_seconds: number | null;
+  median_seconds: number | null;
+  min_seconds: number | null;
+  max_seconds: number | null;
+  /** Newest pairs first, capped — the drill-in list. */
+  samples: MetricDurationSample[];
+}
+
+/** GET /api/work-orders/:id/field-times — one row per field ever changed on
+    the work order. The timestamps exist whether or not any page displays the
+    field; this is how another screen asks "when did X last change". */
+export interface WoFieldTime {
+  /** Catalogue key ('status', 'home_list', 'priority', 'fields.<key>', …). */
+  field: string;
+  changes: number;
+  first_at: string;
+  last_at: string;
+  /** Display value the field last changed to (status name, list name, value). */
+  last_value: string | null;
+}
+
 // ── Error shape ──────────────────────────────────────────────────────────────
 // FORBIDDEN (403) is the S4 role gate: the actor exists, the route exists, but
 // principal.role is below the bar (QUOTE_EDIT_ROLES / QUOTE_APPROVE_ROLES).
-export type ApiErrorCode = 'BAD_REQUEST' | 'FORBIDDEN' | 'NOT_FOUND' | 'INTERNAL';
+export type ApiErrorCode =
+  | 'BAD_REQUEST'
+  | 'UNAUTHORIZED'   // 401 — no valid session (S5 auth)
+  | 'FORBIDDEN'
+  | 'CONFLICT'       // 409 — the state refuses the move (an NTE override is pending, rule 1.5.2)
+  | 'NOT_FOUND'
+  | 'INTERNAL';
 
 export interface ApiError {
   error: {
@@ -551,3 +1167,182 @@ export interface ApiError {
     details: unknown;
   };
 }
+
+// ── Permissions (0015) ───────────────────────────────────────────────────────
+export * from './permissions';
+
+// ── Visits (0021) — check-in / check-out as a log ────────────────────────────
+// One work order, many visits. Each visit has a type, a tech, a method and its
+// own check-in / check-out stamps. The seven legacy bag fields below mirror
+// the LATEST visit so columns, filters, exports and automations keep working;
+// they are no longer written by hand.
+
+export type VisitStatus = 'planned' | 'checked_in' | 'checked_out';
+
+export const VISIT_STATUSES: { code: VisitStatus; label: string }[] = [
+  { code: 'planned', label: 'Not checked in' },
+  { code: 'checked_in', label: 'Checked in' },
+  { code: 'checked_out', label: 'Checked out' },
+];
+
+/** How a tech checks in with the client's system. The FM table
+    (fm_cico_method) holds one of these per FM company, plus the instruction
+    that goes with it (the IVR number, "Submit request on Teams" …). */
+export const VISIT_METHODS = ['IVR', 'Portal', 'Email', 'Operator', 'App', 'Manual'] as const;
+
+/** The legacy 'CICO Method' value for a method + detail pair — the shape the
+    operation wrote by hand before the log ("IVR - (866) 254-8780"). */
+export function cicoMethodText(method: string | null, detail: string | null): string | null {
+  if (!method) return null;
+  return detail ? `${method} - ${detail}` : method;
+}
+
+/** Fallback vocabulary when the 'Visit Type' dropdown is not in the catalogue. */
+export const DEFAULT_VISIT_TYPES = ['Assessment', 'Job', 'Return trip'];
+
+/** Bag keys (task.fields) the visit log writes — the mirror of the latest visit. */
+export const VISIT_MIRROR_KEYS = {
+  visitType: 'Visit Type',
+  status: '18. Check-in/out Status',
+  checkedInAt: 'Checked-in At',
+  checkedOutAt: 'Checked-out At',
+  techName: 'Tech Name',
+  techPhone: 'Tech Phone Number',
+  method: 'CICO Method',
+} as const;
+
+/** Every mirrored bag key: the API refuses a direct write to any of these. */
+export const VISIT_OWNED_KEYS: string[] = Object.values(VISIT_MIRROR_KEYS);
+
+/** The mirrored keys the All-fields tab HIDES (the visit log shows them); the
+    other two (tech name / phone) stay visible, read-only, in Technician. */
+export const VISIT_HIDDEN_KEYS: string[] = [
+  VISIT_MIRROR_KEYS.visitType,
+  VISIT_MIRROR_KEYS.status,
+  VISIT_MIRROR_KEYS.checkedInAt,
+  VISIT_MIRROR_KEYS.checkedOutAt,
+  VISIT_MIRROR_KEYS.method,
+];
+
+/** The field section whose view / edit grant gates the visit log. */
+export const CICO_SECTION_SLUG = 'cico';
+
+// ── The quote clock (rules 2.3.1–2.3.3) and the Due Today view (4.1) ────────
+
+/** COMPUTED bag key: latest Assessment check-out + QUOTE_DUE_HOURS, skipping
+    weekends and holidays as whole days (0024). Re-derived on every visit
+    write by services/visits.ts; the field editor and bulk edit refuse it. */
+export const QUOTE_DUE_KEY = 'Quote Due Date';
+export const QUOTE_DUE_HOURS = 48;
+/** The visit type whose check-out starts the quote clock (rule 2.3.1 — an
+    assessment owes a quote; a job or a return trip does not). */
+export const QUOTE_CLOCK_VISIT_TYPE = 'Assessment';
+
+/** Hand-kept datetime fields the Due Today view reads (0024). */
+export const SCHEDULED_DATE_KEY = 'Scheduled Date';
+export const PARTS_ARRIVAL_KEY = 'Parts Arrival Date';
+export const DUE_DATE_KEY = 'Due Date';
+
+/** Bag keys the API derives and refuses to take from a hand edit. */
+export const COMPUTED_KEYS: string[] = [QUOTE_DUE_KEY];
+
+/** True while a quote is still owed on a work order in this status — before
+    "Quote Ready" or anything after it in the pipeline (rule 2.3.3's "Quote
+    Ready or equivalent submitted status"). Cancelled (phase null) owes
+    nothing. An unknown status (phase unknown) owes nothing either, so the
+    Due Today view never shouts about a status it cannot place. */
+export function isQuoteOwed(statusName: string | null | undefined, phase: Phase | null | undefined): boolean {
+  if (!statusName || !phase) return false;
+  if (statusName === 'Quote Ready') return false;
+  return phase === 'Intake' || phase === 'Assessment' || phase === 'Quote';
+}
+
+/** Business time zone for "today" and the quote clock (rule 2.3.2). */
+export const BUSINESS_TIME_ZONE = 'America/Chicago';
+
+/** 'YYYY-MM-DD' of `now` in the business time zone. */
+export function businessDay(now: Date = new Date()): string {
+  // en-CA prints ISO order; Intl handles DST for the zone.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
+/** One row of the System_Holiday_Table (rule 2.3.2), Admin › Settings. */
+export interface Holiday {
+  /** 'YYYY-MM-DD' */
+  day: string;
+  name: string;
+}
+
+export interface WoVisit {
+  id: string;
+  task_id: string;
+  /** Visit 1, 2, 3… on this work order. Stable once assigned. */
+  seq: number;
+  visit_type: string;
+  status: VisitStatus;
+  /** The old 'Checked-out - RTN': this visit ended, another is needed. */
+  return_trip_needed: boolean;
+  tech_name: string | null;
+  tech_phone: string | null;
+  method: string | null;
+  /** The instruction for this method — the IVR number, "Service Channel",
+      "Submit request on Teams (must add photos)". Copied from the FM table
+      when the visit is logged; editable on the visit. */
+  method_detail: string | null;
+  /** UTC ISO to the second, or null until the status moves. */
+  checked_in_at: string | null;
+  checked_out_at: string | null;
+  checked_in_by: ActivityActor | null;
+  checked_out_by: ActivityActor | null;
+  created_by: ActivityActor | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** POST /api/work-orders/:id/visits and PATCH /api/visits/:id. Every key is
+    optional on PATCH; POST needs `visit_type`. Stamps are ISO datetimes and
+    override the automatic "now" when sent alongside a status change. */
+export interface VisitInput {
+  visit_type?: string;
+  status?: VisitStatus;
+  return_trip_needed?: boolean;
+  tech_name?: string | null;
+  tech_phone?: string | null;
+  method?: string | null;
+  method_detail?: string | null;
+  checked_in_at?: string | null;
+  checked_out_at?: string | null;
+}
+
+/** GET /api/work-orders/:id/visits — oldest first. `default_method` and its
+    detail are what the FM table says for this work order's FM (null when
+    there is no entry), so a new visit can be pre-filled. */
+export interface WoVisitsResponse {
+  items: WoVisit[];
+  fm: string | null;
+  default_method: string | null;
+  default_method_detail: string | null;
+}
+
+/** POST / PATCH replies: the visit touched plus the fresh list. */
+export interface WoVisitResponse {
+  item: WoVisit;
+  items: WoVisit[];
+}
+
+/** One row of the FM → check-in method table (Admin › Custom fields). */
+export interface FmCicoMethod {
+  fm: string;
+  method: string;
+  /** The instruction: phone number, portal, "Submit request on Teams" … */
+  detail: string | null;
+  updated_at: string;
+}
+
+// Rules 2.6.3 / 2.7: Ecotrak allowed transitions (pure table + verdict).
+export * from './ecotrak';

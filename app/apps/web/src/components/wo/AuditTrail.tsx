@@ -1,6 +1,29 @@
-import type { ActivityEntry } from '@theone/shared';
-import { feedTime } from '../../lib/fields';
+import { useMemo, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import {
+  describeEcotrakRefusal,
+  ecotrakTransitionRefused,
+  type ActivityEntry,
+  type EcotrakTransitionVerdict,
+  type WoFieldDescriptor,
+} from '@theone/shared';
+import { getWoFields } from '../../api/client';
+import { DASH, feedTime, initials } from '../../lib/fields';
+import {
+  approvalAskText,
+  approvalRef,
+  automationRef,
+  describeVisitChange,
+  formatValue,
+  labelOf,
+  nameOf,
+  quoteChanges,
+  unwrap,
+  viaLabel,
+} from '../../lib/auditFormat';
 import { Icon } from '../Icon';
+import { useAuth } from '../../auth/AuthProvider';
 
 interface AuditTrailProps {
   entries: ActivityEntry[];
@@ -8,16 +31,26 @@ interface AuditTrailProps {
   error?: boolean;
 }
 
-const ACTION_LABEL: Record<string, string> = {
-  created: 'Created',
-  status_changed: 'Status changed',
-  field_updated: 'Field updated',
-  routed: 'Routed',
-  comment_added: 'Comment added',
-};
-
-/** "Audit trail" tab — the raw activity_log for this WO from GET /api/activity. */
+/**
+ * "Audit trail" tab — every write to this work order, as sentences:
+ * who did what, from which value to which, and when. Field names come from
+ * the same catalogue the Columns and Filter menus use, so renaming a field in
+ * Admin renames it here too, on old entries as well as new. Admin › Audit log
+ * is the same data across every work order.
+ */
 export function AuditTrail({ entries, loading, error }: AuditTrailProps) {
+  const { actingAs } = useAuth();
+  const isAdmin = Boolean(actingAs?.is_super_admin);
+  const catalogue = useQuery({
+    queryKey: ['wo-fields'],
+    queryFn: getWoFields,
+    staleTime: 5 * 60 * 1000,
+  });
+  const byKey = useMemo(
+    () => new Map((catalogue.data?.fields ?? []).map((f) => [f.key, f])),
+    [catalogue.data],
+  );
+
   if (loading) return <div className="tab-empty"><span>Loading audit trail…</span></div>;
 
   if (error) {
@@ -35,43 +68,274 @@ export function AuditTrail({ entries, loading, error }: AuditTrailProps) {
       <div className="tab-empty">
         <Icon name="list" size={22} />
         <b>Nothing logged yet</b>
-        <span>Every write to this work order is appended here.</span>
+        <span>Every change to this work order is recorded here.</span>
       </div>
     );
   }
 
   return (
     <ol className="audit">
-      {entries.map((e) => (
-        <li className="audit-row" key={e.id}>
-          <strong>{ACTION_LABEL[e.action] ?? e.action}</strong>
-          {e.field && <span className="chip chip-sm">{e.field}</span>}
-          <span>{summarize(e)}</span>
-          <span>by {e.actor?.display_name ?? 'system'}</span>
-          <time className="audit-time">{feedTime(e.created_at)}</time>
-        </li>
-      ))}
+      {entries.map((e) => {
+        const who = e.actor?.display_name ?? 'System';
+        // An automation signs its writes as the "Automations" service
+        // principal, but the useful subject is the rule's own name — that is
+        // what a reader wants to open. The avatar still carries the actor, so
+        // the row is legibly machine-made either way.
+        const auto = automationRef(e.after);
+        const subject = auto?.name ?? who;
+        return (
+          <li className="audit-row" key={e.id}>
+            <span
+              className={`audit-av${e.actor?.kind === 'service' ? ' is-service' : ''}`}
+              title={who}
+              aria-hidden="true"
+            >
+              {initials(who)}
+            </span>
+            <p className="audit-text">
+              {auto?.name && isAdmin && auto.id
+                ? (
+                  <Link
+                    className="audit-actor-link"
+                    to={`/admin/automations?rule=${encodeURIComponent(auto.id)}`}
+                    title={`${who} — open this rule`}
+                  >
+                    {subject}
+                  </Link>
+                )
+                : <b>{subject}</b>}
+              {' '}
+              {describe(e, byKey)}
+            </p>
+            <time className="audit-time" dateTime={e.created_at}>{feedTime(e.created_at)}</time>
+          </li>
+        );
+      })}
     </ol>
   );
 }
 
-function summarize(e: ActivityEntry): string {
-  const before = pick(e.before);
-  const after = pick(e.after);
-  if (before && after) return `${before} → ${after}`;
-  if (after) return after;
-  if (before) return before;
-  return '';
+// ── Sentences ────────────────────────────────────────────────────────────────
+
+function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): ReactNode {
+  const via = viaOf(e.after);
+
+  switch (e.action) {
+    case 'status_changed':
+      return (
+        <>
+          changed <b>Status</b> from <Val>{nameOf(e.before, 'status_name')}</Val> to{' '}
+          <Val>{nameOf(e.after, 'status_name')}</Val>
+          {via}
+          {ecotrakNote(e.after)}
+        </>
+      );
+
+    case 'routed':
+      return (
+        <>
+          moved this work order to the <Val>{nameOf(e.after, 'list_name')}</Val> list
+          {nameOf(e.before, 'list_name') !== DASH && (
+            <> (from <Val>{nameOf(e.before, 'list_name')}</Val>)</>
+          )}
+          {via}
+        </>
+      );
+
+    case 'field_updated': {
+      // Pre-diff imports logged one row per file with the column names only.
+      if (e.field === 'import') {
+        const cols = (e.after?.columns as string[] | undefined) ?? [];
+        return (
+          <>
+            updated {cols.length} field{cols.length === 1 ? '' : 's'} via import
+            {cols.length > 0 && <>: {cols.map((c) => labelOf(c, byKey)).join(', ')}</>}
+          </>
+        );
+      }
+      const f = e.field ? byKey.get(e.field) : undefined;
+      const label = e.field ? labelOf(e.field, byKey) : 'a field';
+      const before = formatValue(unwrap(e.before), f);
+      const after = formatValue(unwrap(e.after), f);
+      if (before === DASH && after !== DASH) {
+        return (<>set <b>{label}</b> to <Val>{after}</Val>{via}</>);
+      }
+      if (after === DASH && before !== DASH) {
+        return (<>cleared <b>{label}</b> (was <Val>{before}</Val>){via}</>);
+      }
+      return (
+        <>
+          changed <b>{label}</b> from <Val>{before}</Val> to <Val>{after}</Val>
+          {via}
+        </>
+      );
+    }
+
+    case 'created':
+      return (
+        <>
+          created this work order
+          {e.after?.source === 'import' && <span className="audit-via">via import</span>}
+        </>
+      );
+    case 'deleted':
+      return <>moved this work order to Trash</>;
+    case 'restored':
+      return <>restored this work order from Trash</>;
+    case 'comment_added': {
+      // A decision's comment (0020 / 0025) says what it decided, so the row
+      // reads "posted an internal update: approved the status change request
+      // from A to B — note" rather than a bare "posted an internal update".
+      const ref = approvalRef(e.after);
+      return (
+        <>
+          posted {e.after?.client_visible ? 'a client-visible' : 'an internal'} update
+          {ref && (
+            <>
+              : {ref.status === 'rejected' ? 'rejected' : 'approved'} {approvalAskText(ref)}
+              {ref.note ? <> — {ref.note}</> : null}
+            </>
+          )}
+        </>
+      );
+    }
+    case 'tech_message_sent':
+      return <>sent a message to the technician</>;
+    case 'quote_created':
+      return <>created the quote</>;
+    case 'quote_updated': {
+      // The snapshot says which parts moved; a money change also says where to.
+      const changes = quoteChanges(e.before, e.after);
+      const money = changes.find((c) => c.key === 'grand_total');
+      return (
+        <>
+          revised the quote
+          {changes.length > 0 && <>: {changes.map((c) => c.label.toLowerCase()).join(', ')}</>}
+          {money && (
+            <> (total from <Val>{money.from}</Val> to <Val>{money.to}</Val>)</>
+          )}
+        </>
+      );
+    }
+    case 'quote_submitted':
+      return <>submitted the quote for approval</>;
+    case 'quote_sent':
+      return <>sent the quote to the client</>;
+    case 'quote_approved':
+      return <>approved the quote</>;
+    case 'quote_rejected':
+      return <>rejected the quote</>;
+    case 'payment_requested':
+      return <>requested a technician payment</>;
+    case 'payment_approved':
+      return <>approved a technician payment</>;
+    case 'payment_rejected':
+      return <>rejected a technician payment</>;
+    case 'payment_sent_to_yoda':
+      return <>sent a technician payment to Yoda</>;
+    case 'payment_paid':
+      return <>marked a technician payment paid</>;
+    // Approval tasks (0020): the title says what was asked, the note why it
+    // was decided that way.
+    // A status change request (0025) reads as the ask itself — "requested a
+    // status change from A to B" — so nobody has to open the task to know
+    // what was asked; the other kinds keep their title.
+    case 'approval_task_created': {
+      const ref = approvalRef(e.after);
+      if (ref?.type === 'status_change') {
+        return (
+          <>
+            requested a status change
+            {ref.from && ref.to ? <> from <Val>{ref.from}</Val> to <Val>{ref.to}</Val></> : null}
+          </>
+        );
+      }
+      return (
+        <>
+          raised an approval task
+          {e.after?.title ? <>: <Val>{String(e.after.title)}</Val></> : null}
+          {e.after?.rule ? <> (rule <Val>{String(e.after.rule)}</Val>)</> : null}
+        </>
+      );
+    }
+    case 'approval_task_updated': {
+      const was = approvalRef(e.before);
+      const ref = approvalRef(e.after);
+      return (
+        <>
+          changed a status change request
+          {was?.to ? <> from asking for <Val>{was.to}</Val></> : null}
+          {ref?.to ? <> to asking for <Val>{ref.to}</Val></> : null}
+        </>
+      );
+    }
+    case 'approval_task_claimed':
+    case 'approval_task_approved':
+    case 'approval_task_rejected':
+    case 'approval_task_cancelled':
+    case 'approval_task_acknowledged': {
+      const ref = approvalRef(e.after);
+      const verb =
+        e.action === 'approval_task_claimed'
+          ? 'claimed'
+          : e.action === 'approval_task_approved'
+            ? 'approved'
+            : e.action === 'approval_task_rejected'
+              ? 'rejected'
+              : e.action === 'approval_task_cancelled'
+                ? 'cancelled'
+                : 'acknowledged the decision on';
+      return (
+        <>
+          {verb}{' '}
+          {ref ? (
+            ref.type === 'status_change' ? (
+              <>
+                the status change request
+                {ref.from && ref.to ? <> from <Val>{ref.from}</Val> to <Val>{ref.to}</Val></> : null}
+              </>
+            ) : (
+              <>an approval task{ref.title ? <>: <Val>{ref.title}</Val></> : null}</>
+            )
+          ) : (
+            'an approval task'
+          )}
+          {ref?.note ? <> — {ref.note}</> : null}
+        </>
+      );
+    }
+    // Visits (0021): the snapshots say which visit and what moved.
+    case 'visit_created':
+    case 'visit_updated':
+    case 'visit_deleted':
+      return <>{describeVisitChange(e.before, e.after)}</>;
+    default:
+      return <>{e.action.replace(/_/g, ' ')}</>;
+  }
 }
 
-/** Pull the most human value out of an activity before/after blob. */
-function pick(blob: Record<string, unknown> | null): string | null {
-  if (!blob) return null;
-  const preferred = ['status_name', 'name', 'value', 'client_visible'];
-  for (const k of preferred) {
-    const v = blob[k];
-    if (typeof v === 'string' && v.trim()) return v;
-    if (typeof v === 'boolean') return k === 'client_visible' ? (v ? 'client-visible' : 'internal') : String(v);
-  }
-  return null;
+function Val({ children }: { children: ReactNode }) {
+  return <span className="audit-val">{children}</span>;
+}
+
+/** Rules 2.6.3 / 2.7: the status_changed row carries `ecotrak` when Ecotrak
+    would have refused the transition the move implies (warn mode let it
+    through). Reads "· Ecotrak does not allow Accepted → Arrived (rule 2.6.3)". */
+function ecotrakNote(after: ActivityEntry['after']): ReactNode {
+  const v = after?.ecotrak as EcotrakTransitionVerdict | undefined;
+  if (!v || !ecotrakTransitionRefused(v)) return null;
+  return <span className="audit-ecotrak"> · {describeEcotrakRefusal(v)}</span>;
+}
+
+/**
+ * "via import" / "via bulk". Automations say nothing here — the rule is the
+ * sentence's subject instead (it reads "Change the status to … changed Status
+ * from … to …"), so repeating it at the end would only be noise. A row written
+ * before the rule was recorded has no name to promote, and keeps the actor's
+ * own "Automations" as its subject.
+ */
+function viaOf(after: ActivityEntry['after']): ReactNode {
+  if (automationRef(after)) return null;
+  const via = viaLabel(after);
+  return via ? <span className="audit-via">via {via}</span> : null;
 }

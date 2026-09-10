@@ -1,0 +1,128 @@
+/* ── Approvals — the manager's inbox (/approvals, 0020) ──────────────────────
+   The table, lanes, decision cluster and dialogs reuse the Payments tab's
+   vocabulary (payment.css `.payq-*`): both pages are a queue of things
+   waiting on a person with authority, and they should read as one family.
+   What is only here: the filter row, the type chip in the task cell, and the
+   NTE-override line on the Finances card. Every colour is a token. */
+
+.apq-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  margin: 0 0 12px;
+}
+
+.apq-filter {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.apq-filter .fld-sm { min-width: 140px; }
+
+.apq-filters .linkbtn { align-self: center; margin-top: 14px; }
+
+/* The Columns menu (shared with the work-orders list) closes the filter row
+   on the right; its panel opens right-aligned so it never leaves the page. */
+.apq-columns { margin-left: auto; align-self: flex-end; }
+
+.ct .apq-type { margin-right: 6px; vertical-align: 1px; }
+
+/* Date cells on the Approvals, Payments and Quotes queues. NOT `.col-list`:
+   that name belongs to the Columns menu's flex list (wo-list.css) and turned
+   these <td>s into flex boxes, which painted white gaps on row hover. */
+.ct .col-date { white-space: nowrap; }
+
+/* NTE increase: how far over, in the danger colour (rule 1.5.1); the Cost
+   column cell reads red the same way once it passes the NTE. */
+.ct .apq-over { color: var(--danger); }
+.ct td.is-over-nte { color: var(--danger); font-weight: 600; }
+
+/* The section switcher (All · NTE increases · Quotes · Payments) sits left of
+   the lane switcher in the same head row; below ~760px the two stack. */
+.apq-sections { flex-wrap: wrap; }
+
+/* Rule 1.5.2's hold: an open quote / payment row whose work order has an NTE
+   override waiting. The row dims a touch so the eye goes to what can move. */
+.ct tr.apq-held > td:not(.payq-actions) { opacity: 0.72; }
+.ct tr.apq-held small a { color: var(--ink-2); }
+
+.payq-status .apq-note {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── The NTE override line on the Finances card ─────────────────────────────
+   Rides the meter's caption style; the colour says where the override stands. */
+.nte-override {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 16px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.nte-override.is-open { color: var(--warn); }
+.nte-override.is-approved { color: var(--accent); }
+.nte-override.is-rejected { color: var(--danger); }
+.nte-override small { font-weight: 400; color: var(--ink-3); }
+.nte-override a { color: inherit; }
+
+/* ── Status change requests (0025, rules 2.4.1–3) ───────────────────────────
+   The "Waiting for" cell reads From → To; the arrow is the accent so the eye
+   lands on the ask. A decided request in the requester's lane keeps the
+   decision chip and gains the acknowledge verbs (Continue / Understood). */
+.ct .apq-move { display: inline-flex; align-items: center; gap: 6px; }
+.ct .apq-move .apq-arrow { color: var(--accent); font-weight: 700; }
+.ct .apq-move b { font-weight: 600; }
+
+/* ── The request chip on the work-order header ──────────────────────────────
+   Sits beside the status pill: open = warn, approved = accent, rejected =
+   danger. The verbs are text buttons in the chip's own colour. */
+.scr {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 460px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--chip);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.scr .scr-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scr .scr-text b { font-weight: 600; color: var(--ink); }
+.scr .scr-text small { font-size: 11px; color: var(--ink-3); }
+.scr .scr-note { font-style: italic; }
+.scr-open { border-color: var(--warn); color: var(--warn); }
+.scr-approved { border-color: var(--accent); color: var(--accent); }
+.scr-rejected { border-color: var(--danger); color: var(--danger); }
+.scr .scr-act {
+  flex: none;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+.scr .scr-act.is-primary { background: currentColor; }
+.scr .scr-act.is-primary::after { content: none; }
+.scr-approved .scr-act.is-primary, .scr-rejected .scr-act.is-primary { color: var(--on-accent); }
+.scr-approved .scr-act.is-primary { background: var(--accent); border-color: var(--accent); }
+.scr-rejected .scr-act.is-primary { background: var(--danger); border-color: var(--danger); }
+.scr .scr-act:disabled { opacity: .55; cursor: default; }
+.scr .scr-act:hover:not(:disabled) { filter: brightness(1.08); }
+@media (max-width: 900px) { .scr { max-width: 100%; } }

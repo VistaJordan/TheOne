@@ -27,9 +27,12 @@ import type {
   QuotePermissions,
   ActivityActor,
 } from '@theone/shared';
-import { QUOTE_EDIT_ROLES, QUOTE_APPROVE_ROLES } from '@theone/shared';
 import { ApiError, badRequest, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
+import { Params } from './woFields.js';
+import { woScopeSql } from './woScope.js';
+import { permAllows } from '@theone/shared';
+import { assertNoOpenNteOverride, openNteOverride } from './approvals.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -306,31 +309,55 @@ export function buildAutoSummary(
 // 3 · ROLE GATES
 // ═══════════════════════════════════════════════════════════════════════════
 
+// S5 — these read the capability the SESSION carries, resolved from the `role`
+// table at sign-in (migration 0005). They used to test membership of the
+// hardcoded QUOTE_EDIT_ROLES / QUOTE_APPROVE_ROLES arrays, which meant creating
+// a role that could approve a quote required editing TypeScript. Renaming a
+// role or changing what it may do is now an admin-console action.
+
+// Since 0015 the answer comes from the permission tree — the role's grants
+// plus the person's own overrides — so "this OM specifically may not build
+// quotes" is expressible without inventing a role for one person.
+
 export function canEditQuote(actor: ActingPrincipal): boolean {
-  return QUOTE_EDIT_ROLES.includes(actor.role ?? '');
+  return permAllows(actor.perms, 'quotes', 'edit', actor.isSuperAdmin);
+}
+
+export function canCreateQuote(actor: ActingPrincipal): boolean {
+  return permAllows(actor.perms, 'quotes', 'create', actor.isSuperAdmin);
 }
 
 export function canApproveQuote(actor: ActingPrincipal): boolean {
-  return QUOTE_APPROVE_ROLES.includes(actor.role ?? '');
+  return permAllows(actor.perms, 'quotes', 'approve', actor.isSuperAdmin);
 }
 
 /** 403 FORBIDDEN — the actor exists, the route exists, the role is below the bar. */
 export function assertCanEdit(actor: ActingPrincipal): void {
   if (!canEditQuote(actor)) {
-    throw forbidden('Building and editing quotes requires Senior OM or above', {
+    throw forbidden('You cannot build or edit quotes', {
       actor: actor.name,
-      role: actor.role,
-      required_roles: QUOTE_EDIT_ROLES,
+      role: actor.roleLabel ?? actor.role,
+      required_permission: 'quotes:edit',
+    });
+  }
+}
+
+export function assertCanCreate(actor: ActingPrincipal): void {
+  if (!canCreateQuote(actor)) {
+    throw forbidden('You cannot create quotes', {
+      actor: actor.name,
+      role: actor.roleLabel ?? actor.role,
+      required_permission: 'quotes:create',
     });
   }
 }
 
 export function assertCanApprove(actor: ActingPrincipal): void {
   if (!canApproveQuote(actor)) {
-    throw forbidden('Approving and sending a quote requires ATL or above', {
+    throw forbidden('You cannot approve or send quotes', {
       actor: actor.name,
-      role: actor.role,
-      required_roles: QUOTE_APPROVE_ROLES,
+      role: actor.roleLabel ?? actor.role,
+      required_permission: 'quotes:approve',
     });
   }
 }
@@ -519,6 +546,7 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
   const q = res.rows[0];
 
   const sections = await loadSections(q.id);
+  const nteOverride = await openNteOverride(taskId);
   const totals = computeQuoteTotals({
     sections,
     sales_tax: Number(q.sales_tax ?? 0),
@@ -562,6 +590,7 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     totals,
     summary,
     permissions: permissionsFor(actor),
+    nte_override_open: nteOverride !== null,
   };
 }
 
@@ -596,6 +625,20 @@ export interface QuoteListItem {
   status: QuoteStatus;
   grand_total: number | null;
   updated_at: string | null;
+  /** The work order's own numbers as they stand NOW (the Approvals inbox columns). */
+  wo_due: string | null;
+  wo_nte: number | null;
+  wo_cost: number | null;
+}
+
+/** A bag/column value as a finite number ("$1,610" → 1610), else null. */
+function moneyNum(v: unknown): number | null {
+  if (v === null || v === undefined || typeof v === 'boolean') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const digits = String(v).replace(/[^0-9.-]/g, '');
+  if (!/^-?\d*\.?\d+$/.test(digits)) return null;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -603,7 +646,13 @@ export interface QuoteListItem {
  * grand_total goes through computeQuoteTotals() like every other number on the
  * screen — RULE B included — so the list can never disagree with the builder.
  */
-export async function listQuotes(limit = 200): Promise<{ items: QuoteListItem[]; total: number }> {
+export async function listQuotes(
+  limit = 200,
+  viewer?: ActingPrincipal,
+): Promise<{ items: QuoteListItem[]; total: number }> {
+  // 0026: a scoped viewer's queue holds the quotes on their work orders only.
+  const p = new Params();
+  const scope = viewer ? woScopeSql(viewer, p) : null;
   const res = await query<{
     id: string;
     task_id: string;
@@ -613,16 +662,23 @@ export async function listQuotes(limit = 200): Promise<{ items: QuoteListItem[];
     status: QuoteStatus;
     sales_tax: number | null;
     updated_at: string | null;
+    wo_due: string | null;
+    wo_nte: number | string | null;
+    wo_cost: string | null;
   }>(
     `SELECT q.id::text AS id, q.task_id::text AS task_id, q.status,
             q.sales_tax::float8 AS sales_tax,
             ${ISO('q.updated_at')} AS updated_at,
-            t.wo_number, t.title, t.client
+            t.wo_number, t.title, t.client,
+            t.fields->>'Due Date'   AS wo_due,
+            t.nte::float8           AS wo_nte,
+            t.fields->>'34. Cost'   AS wo_cost
        FROM quote q
        JOIN task t ON t.id = q.task_id
+      WHERE t.deleted_at IS NULL ${scope ? `AND ${scope}` : ''}
       ORDER BY q.updated_at DESC
-      LIMIT $1`,
-    [limit],
+      LIMIT ${p.add(limit)}`,
+    p.values,
   );
 
   const items: QuoteListItem[] = [];
@@ -643,6 +699,9 @@ export async function listQuotes(limit = 200): Promise<{ items: QuoteListItem[];
       status: r.status,
       grand_total: totals.grand_total,
       updated_at: r.updated_at,
+      wo_due: r.wo_due,
+      wo_nte: moneyNum(r.wo_nte),
+      wo_cost: moneyNum(r.wo_cost),
     });
   }
   return { items, total: items.length };
@@ -742,6 +801,11 @@ export async function updateQuote(
 
   const db = getDb();
   await db.transaction(async (tx) => {
+    // Rule 1.2.1: the row carries what the quote looked like before and after,
+    // not just which keys the builder posted. Taken inside the transaction so
+    // a concurrent edit cannot slip between the snapshot and the write.
+    const before = await snapshotQuote(tx, cur.id);
+
     const sets: string[] = [];
     const params: unknown[] = [];
     const set = (col: string, value: unknown) => {
@@ -800,10 +864,12 @@ export async function updateQuote(
       }
     }
 
-    await logQuoteActivity(tx, actor.id, taskId, 'quote_updated', null, {
-      quote_id: cur.id,
-      fields: Object.keys(input),
-    });
+    // The builder autosaves the whole form, so most PUTs change nothing; an
+    // identical snapshot logs no row rather than a "revised" that revised nothing.
+    const after = await snapshotQuote(tx, cur.id);
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      await logQuoteActivity(tx, actor.id, taskId, 'quote_updated', before, after);
+    }
   });
 
   const quote = await getQuote(taskId, actor);
@@ -819,6 +885,114 @@ interface Queryable {
     sql: string,
     params?: unknown[],
   ): Promise<{ rows: T[] }>;
+}
+
+/**
+ * The quote as an activity_log snapshot (rule 1.2.1): the header fields, the
+ * section/line tree with ids and positions stripped (so a re-save of the same
+ * form compares equal), and two reader-friendly derivations — `lines` as one
+ * string per line, `grand_total` from computeQuoteTotals — so the audit tab
+ * can say what moved without re-deriving quote arithmetic. `name` is what the
+ * admin audit page prints as the row's title, like every other snapshot.
+ */
+interface QuoteSnapshot extends Record<string, unknown> {
+  name: string;
+  quote_id: string;
+  sales_tax: number;
+  total_cost: number | null;
+  specs: string | null;
+  note_to_customer: string | null;
+  summary_pinned: string | null;
+  grand_total: number;
+  lines: string[];
+  sections: unknown[];
+}
+
+async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnapshot> {
+  const head = (
+    await tx.query(
+      `SELECT sales_tax::float8 AS sales_tax, total_cost::float8 AS total_cost,
+              specs, note_to_customer, summary_pinned
+         FROM quote WHERE id = $1`,
+      [quoteId],
+    )
+  ).rows[0] as {
+    sales_tax: number | null;
+    total_cost: number | null;
+    specs: string | null;
+    note_to_customer: string | null;
+    summary_pinned: string | null;
+  };
+  const secRows = (
+    await tx.query(
+      `SELECT id::text AS id, kind, name, narrative_reported, scope_lines,
+              include_in_summary, position
+         FROM quote_section
+        WHERE quote_id = $1
+        ORDER BY CASE kind WHEN 'incurred' THEN 0 ELSE 1 END, position ASC, id ASC`,
+      [quoteId],
+    )
+  ).rows as unknown as SectionRow[];
+  const lineRows = (
+    await tx.query(
+      `SELECT l.id::text AS id, l.section_id::text AS section_id, l.line_type, l.description,
+              l.qty::float8 AS qty, l.rate::float8 AS rate, l.day_value, l.ot, l.position
+         FROM quote_line l
+         JOIN quote_section s ON s.id = l.section_id
+        WHERE s.quote_id = $1
+        ORDER BY l.position ASC, l.id ASC`,
+      [quoteId],
+    )
+  ).rows as unknown as LineRow[];
+
+  const money = (n: number) => `$${n.toFixed(2)}`;
+  let optionIndex = 0;
+  const lines: string[] = [];
+  const sections = secRows.map((s) => {
+    const label = s.kind === 'incurred' ? 'Incurred' : `Option ${optionLetter(optionIndex++)}`;
+    const own = lineRows
+      .filter((l) => l.section_id === s.id)
+      .map((l) => {
+        const qty = Number(l.qty ?? 0);
+        const rate = Number(l.rate ?? 0);
+        const ot = l.ot === true;
+        lines.push(
+          `${label} · ${l.description}: ${qty} × ${money(rate)}${ot ? ' OT' : ''} = ${money(computeLineAmount({ qty, rate, ot }))}`,
+        );
+        return { line_type: l.line_type, description: l.description, qty, rate, day_value: l.day_value, ot };
+      });
+    return {
+      kind: s.kind,
+      label,
+      name: s.name,
+      narrative_reported: s.narrative_reported,
+      scope_lines: Array.isArray(s.scope_lines) ? s.scope_lines : [],
+      include_in_summary: s.include_in_summary === true,
+      lines: own,
+    };
+  });
+
+  const sales_tax = Number(head?.sales_tax ?? 0);
+  const total_cost = head?.total_cost == null ? null : Number(head.total_cost);
+  const totals = computeQuoteTotals({
+    sections: sections.map((s, i) => ({ id: String(i), ...s })),
+    sales_tax,
+    total_cost,
+    nte: null,
+  });
+
+  return {
+    name: 'Quote',
+    quote_id: quoteId,
+    sales_tax,
+    total_cost,
+    specs: head?.specs ?? null,
+    note_to_customer: head?.note_to_customer ?? null,
+    summary_pinned: head?.summary_pinned ?? null,
+    grand_total: totals.grand_total,
+    lines,
+    sections,
+  };
 }
 
 async function logQuoteActivity(
@@ -893,9 +1067,11 @@ export async function submitQuote(taskId: string, actor: ActingPrincipal): Promi
   return transition(taskId, ['draft'], 'pending_approval', 'quote_submitted', actor);
 }
 
-/** pending_approval → approved (atl+). Fills money.quote on the WO. */
+/** pending_approval → approved (atl+). Fills money.quote on the WO. Refused
+    (409) while an NTE override waits on a manager — rule 1.5.2. */
 export async function approveQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
+  await assertNoOpenNteOverride(taskId, 'Approving the quote');
   return transition(
     taskId,
     ['pending_approval'],
@@ -915,6 +1091,7 @@ export async function approveQuote(taskId: string, actor: ActingPrincipal): Prom
  */
 export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
+  await assertNoOpenNteOverride(taskId, 'Sending the quote');
 
   // Read the numbers BEFORE the transaction opens (single-connection rule).
   const pre = await getQuote(taskId, actor);

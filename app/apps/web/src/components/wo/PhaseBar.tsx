@@ -3,7 +3,7 @@ import { CONDITIONAL_PHASE, PHASE_ORDER } from '../../lib/phases';
 import { Icon } from '../Icon';
 
 interface PhaseBarProps {
-  /** null → the WO sits outside the pipeline (canceled/postponed): inert bar. */
+  /** null → the WO sits outside the pipeline (Cancelled / Postponed): inert bar. */
   current: Phase | null;
   statusName: string;
 }

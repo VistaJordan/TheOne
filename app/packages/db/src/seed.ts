@@ -48,28 +48,9 @@ function slug(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, '.');
 }
 
-/** ClickUp field type → our field_type enum. */
-const FIELD_TYPE_MAP: Record<string, string> = {
-  attachment: 'attachment',
-  checkbox: 'checkbox',
-  drop_down: 'dropdown',
-  short_text: 'short_text',
-  text: 'long_text',
-  date: 'date',
-  users: 'users',
-  formula: 'formula',
-  number: 'number',
-  currency: 'currency',
-  location: 'location',
-  url: 'url',
-  emoji: 'rating',
-};
-
-/** Non-canonical sample status strings → canonical status name. */
-const STATUS_ALIAS: Record<string, string> = {
-  '!! approved': 'approved',
-  invoiced: 'invoiced', // the archive terminal status seeded below
-};
+/** Non-canonical sample status strings → canonical status name. Empty since
+    the S8 rename normalised the sample data; the seam stays for future data. */
+const STATUS_ALIAS: Record<string, string> = {};
 
 function firstLine(text: string | undefined, fallback: string): string {
   if (!text) return fallback;
@@ -88,6 +69,15 @@ function toDate(v: unknown): string | null {
   if (v === null || v === undefined || v === '') return null;
   const s = String(v);
   return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+}
+
+/** For datetime bag fields: keep the time when the export has one ('YYYY-MM-
+    DDTHH:MM'), fall back to the bare date when it does not. */
+function toDateTime(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null;
+  const s = String(v).replace(' ', 'T');
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return s.slice(0, 16);
+  return toDate(s);
 }
 
 function str(v: unknown): string | null {
@@ -251,6 +241,182 @@ const ROLE_BY_NAME: Record<string, string> = {
  *  builder gate, which is what makes the 403 path testable. 'owner' is admin. */
 const ROLE_BY_CLICKUP_ROLE: Record<string, string> = { member: 'om', owner: 'admin' };
 
+// ── S5 · SUPER ADMINS ────────────────────────────────────────────────────────
+// The four accounts that can reach the admin console. Migration 0004 carries
+// the SAME statements for a pgdata that is migrated but never re-seeded; this
+// seed TRUNCATEs principal, so without this block a fresh `npm run setup`
+// would boot with no super admin at all and nobody could ever create one.
+// Keep the two in step.
+//
+// Elise and Jordan come from the ClickUp export, so their rows are adjusted in
+// place (real address, admin role, super-admin flag) rather than duplicated.
+const SUPER_ADMIN_BY_NAME: Record<string, { email: string }> = {
+  Elise: { email: 'eliseam@byblosvista.com' },
+  'Jordan Brown': { email: 'jordan@byblosvista.com' },
+};
+// Jeff and Jack have no seeded counterpart. They land as 'invited': the row is
+// the invitation, and the display names are placeholders the Users screen can
+// correct — better than inventing surnames.
+const EXTRA_SUPER_ADMINS: { name: string; email: string; initials: string }[] = [
+  { name: 'Jeff S', email: 'jeffs@byblosvista.com', initials: 'JS' },
+  { name: 'Jack', email: 'jack@byblosvista.com', initials: 'J' },
+];
+
+// ── S7 · THE CURATED FIELD CATALOGUE ─────────────────────────────────────────
+// The field_def table used to mirror the ClickUp export verbatim: 102 defs whose
+// key AND label were the raw ClickUp name ("16. Client NTE 🔴"). The catalogue is
+// now curated: the fields the team actually runs on, in the order the admin wants
+// them shown (position = array index = the admin default order; user_pref lets
+// each user override it for themselves).
+//
+// THE KEY NEVER CHANGES. `key` is the address inside task.fields — the detail
+// cards (web lib/fields.ts FIELD), saved views and the audit trail all hold it —
+// so a curated field that existed in ClickUp keeps its ugly key and gets a clean
+// LABEL. Only genuinely new fields get clean keys. Renaming in the admin console
+// edits the label for the same reason.
+//
+// Types use OUR field_type enum directly (no FIELD_TYPE_MAP hop):
+//   text → short_text · long text → long_text · $ → currency · link → url
+//   people → users · function → formula · address → location · phone (0007)
+//
+// `options: null` on a dropdown = vocabulary comes from the ClickUp export
+// (Client, Trade — the founder will refine them in Admin › Custom fields).
+// `options: []` = deliberately empty until the founder supplies values (MoD Call).
+interface CuratedField {
+  key: string;
+  label: string;
+  type: string;
+  options?: string[] | null;
+}
+
+// FM companies — transcribed from the founder's ClickUp dropdown screenshots
+// (2026-08). One entry at the top of the sixth screenshot was cut off and is
+// missing here; it can be re-added in Admin › Custom fields.
+const FM_OPTIONS = [
+  'JDE', 'RCS', 'FmUSA', 'RSM365', 'Envirousa', 'Broadway National', 'DMG',
+  'AAFM', 'Trillium', 'Safety', 'RKB', 'MaintenX', 'Titan', 'Davaco', 'KFM24',
+  'Nest', 'MRA', 'Brandpoint', 'Branded', 'PRS', 'Powerhouse', 'Vanguard',
+  'FrontStreet', 'HFS', 'TrueSource', 'EMCOR', "Grimaldi's", 'RMM', 'Laser',
+  'Vixxo', 'Ferrandino & Son', 'Advanced', 'ED Shelman', 'Pet Supermarket',
+  'Lessen', 'Outback Steakhouse', 'Dynamic', 'Vuori', 'RESQ', 'POWEER', 'TCG',
+  'KBS', 'TFG', 'DWM', 'AG', 'FEON', 'OS', 'AllSystems', 'EVO', 'KINDERCARE',
+  'ONO-BBQ', 'AMERCO', 'HMCB', 'OAP', 'MACYS', 'Board room salon', 'REPI',
+  'Toy Factory', 'CSH', 'Extra Space', 'CCC', 'CHEESECAKE FACTORY', 'HERO',
+  'Bashas', 'FedEx', 'JRSK', 'Rural King', '23rd Goup', 'Ralph Lauren', 'RMH',
+  'COLT', 'EMM', 'Charter Foods', 'Freshco', 'Baldor Foods', 'Patriot',
+  'Honeywell', 'Impact', 'GHC', 'BOSS', 'Uncommon Brands', 'Swig Stores', 'AFS',
+  'First Watch', 'MOD Pizza', 'PCRK', 'TDS', 'Flynn', 'Riser Fitness', 'solt',
+  'SeamGo', 'Portland Leather', 'Mobettahs', 'Puttshack', 'Habit Burger', 'WKS',
+  'AMC', 'Giant Oil', 'RedRoof', 'SizzlingPlatter', 'Learning', 'SunHoldings',
+  '7-Eleven', 'Canteen', "Mimi'sCafe", 'OReilly', "Wendy's", 'DinTai',
+  'NETLeaseCapital', 'CarMart', 'Avolta', 'InnovativeRenalCare', 'Biscuitville',
+  'QDOBA', 'AMP', 'SHEER', 'rf', 'irc', 'BKR', 'FiveGuys', 'nets',
+  'GreenThumbIndustries', 'emc', 'riser', 'DoorDash', 'irz', 'bia',
+  'PlannedParentHood', 'OXXO', 'RFM',
+];
+
+const US_STATES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL',
+  'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT',
+  'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI',
+  'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC',
+];
+
+const CURATED_FIELDS: CuratedField[] = [
+  { key: '✅ Client AFM',            label: 'Client AFM',           type: 'short_text' },
+  { key: '1. Not Fully Paid',        label: 'Not Fully Paid',       type: 'checkbox' },
+  { key: '12. Bad quote',            label: 'Bad Quote',            type: 'checkbox' },
+  { key: '16. Client NTE 🔴',        label: 'Client NTE',           type: 'currency' },
+  { key: '17. Address',              label: 'Address',              type: 'location' },
+  { key: '20. Last Update',          label: 'Last Update',          type: 'short_text' },
+  { key: '21. Comp',                 label: 'Comp',                 type: 'dropdown', options: ['AF', 'SFM', 'BKR', 'TPM', 'EDS', 'RF'] },
+  // The visit log's vocabulary (0021): a visit's type is picked when the visit
+  // is logged, and this field MIRRORS the latest visit — empty means no visit
+  // yet, which feeds the dashboard's "No visit logged" card. Migration 0021
+  // adds 'Return trip' to an already-seeded database — keep the two in step.
+  { key: 'Visit Type',               label: 'Visit Type',           type: 'dropdown', options: ['Assessment', 'Job', 'Return trip'] },
+  { key: '22. FM',                   label: 'FM',                   type: 'dropdown', options: FM_OPTIONS },
+  { key: '24. Sign-Off Link',        label: 'Sign-Off Link',        type: 'short_text' },
+  { key: '25. IVR Link',             label: 'IVR Link',             type: 'short_text' },
+  { key: '26. PPR Link',             label: 'PPR Link',             type: 'short_text' },
+  { key: '27. Yoda Link',            label: 'Yoda Link',            type: 'short_text' },
+  { key: '29. PDF Link',             label: 'PDF Link',             type: 'short_text' },
+  { key: '34. Cost',                 label: 'Cost',                 type: 'currency' },
+  { key: 'Admin Comment',            label: 'Admin Comment',        type: 'long_text' },
+  { key: '18. Check-in/out Status',  label: 'Check-in/out Status',  type: 'dropdown', options: ['Checked-in', 'Checked-out', 'Checked-out - RTN'] },
+  // Stamped by the API the moment the status above moves (services/cicoStamps.ts);
+  // migration 0018 carries the SAME two rows for an already-seeded pgdata.
+  { key: 'Checked-in At',            label: 'Checked-in At',        type: 'datetime' },
+  { key: 'Checked-out At',           label: 'Checked-out At',       type: 'datetime' },
+  { key: 'Client Quote',             label: 'Client Quote',         type: 'long_text' },
+  { key: '28. Sharepoint Link',      label: 'Sharepoint Link',      type: 'url' },
+  { key: 'Days since Done',          label: 'Days Since Done',      type: 'formula' },
+  { key: 'Grey Flag Date',           label: 'Grey Flag Date',       type: 'date' },
+  { key: 'Invoice #',                label: 'Invoice #',            type: 'short_text' },
+  { key: 'Invoice Date',             label: 'Invoice Date',         type: 'date' },
+  { key: 'MoD Call',                 label: 'MoD Call',             type: 'dropdown', options: [] },
+  { key: 'MoD Call Notes',           label: 'MoD Call Notes',       type: 'long_text' },
+  { key: 'QC Date',                  label: 'QC Date',              type: 'date' },
+  { key: 'Quote Check',              label: 'Quote Check',          type: 'checkbox' },
+  { key: 'Total Invoiced',           label: 'Total Invoiced',       type: 'currency' },
+  { key: '❌Today',                  label: 'Today',                type: 'checkbox' },
+  { key: '🚨 SLA Requested',         label: 'SLA Requested',        type: 'checkbox' },
+  { key: '🚨 SLA Updated',           label: 'SLA Updated',          type: 'checkbox' },
+  { key: '30. IVR Pin',              label: 'IVR Pin',              type: 'short_text' },
+  { key: 'Tech Name',                label: 'Tech Name',            type: 'short_text' },
+  { key: 'Tech Phone Number',        label: 'Tech Phone Number',    type: 'phone' },
+  { key: '35. WO Description',       label: 'WO Description',       type: 'long_text' },
+  { key: '37. PDF',                  label: 'PDF',                  type: 'attachment' },
+  { key: 'AM',                       label: 'AM',                   type: 'users' },
+  { key: 'Audited',                  label: 'Audited',              type: 'checkbox' },
+  { key: 'CICO Method',              label: 'CICO Method',          type: 'short_text' },
+  { key: 'City',                     label: 'City',                 type: 'short_text' },
+  { key: 'Client',                   label: 'Client',               type: 'dropdown', options: null },
+  // `users`, like AM/Assignee/TL: the editor then picks from the people in
+  // the system (woFields.customDistinctOptions) instead of free text.
+  { key: 'Completion Assignee',      label: 'Completion Assignee',  type: 'users' },
+  // datetime, not date (0009/0010 — keep in step): these three carry a time of
+  // day. Export values without one ('2026-06-25') stay valid — no time part.
+  { key: 'Date-Time Received',       label: 'Date-Time Received',   type: 'datetime' },
+  // Genuinely new (no ClickUp ancestor), so clean keys. 'Date Created' is
+  // stamped automatically when a work order is created (seed below; the
+  // import path in apps/api woBulk.ts does the same for live creates).
+  { key: 'Date Created',             label: 'Date Created',         type: 'datetime' },
+  { key: 'Due Date',                 label: 'Due Date',             type: 'datetime' },
+  // 0024 — the Due Today view's dates (migration 0024 carries the SAME three
+  // rows for an already-seeded pgdata; keep in step). Scheduled and Parts
+  // Arrival are typed by the dispatcher; Quote Due Date is COMPUTED from the
+  // latest Assessment check-out (services/visits.ts) and refused by hand.
+  { key: 'Scheduled Date',           label: 'Scheduled Date',       type: 'datetime' },
+  { key: 'Parts Arrival Date',       label: 'Parts Arrival Date',   type: 'datetime' },
+  { key: 'Quote Due Date',           label: 'Quote Due Date',       type: 'datetime' },
+  { key: 'Days since Invoiced',      label: 'Days Since Invoiced',  type: 'formula' },
+  { key: 'Days Since QC',            label: 'Days Since QC',        type: 'formula' },
+  { key: 'Discount',                 label: 'Discount',             type: 'currency' },
+  { key: 'Ecotrak ID',               label: 'Ecotrak ID',           type: 'short_text' },
+  // Which client CMMS the work order came from (rule 2.6.1's Client_Portal_Type,
+  // 0027). Extra portals are added from Admin › Custom fields; an integration
+  // that pulls a work order stamps its own name here.
+  { key: 'Client Portal Type',       label: 'Client Portal Type',   type: 'dropdown', options: ['Ecotrak', 'Corrigo', 'ServiceChannel'] },
+  { key: 'GTG',                      label: 'GTG',                  type: 'checkbox' },
+  { key: 'MOD Date',                 label: 'MOD Date',             type: 'date' },
+  { key: 'Previous Assignees',       label: 'Previous Assignees',   type: 'users' },
+  { key: 'Profit',                   label: 'Profit',               type: 'formula' },
+  { key: 'Sales Owner',              label: 'Sales Owner',          type: 'dropdown', options: ['Ro', 'Teresa'] },
+  { key: 'Show in CA',               label: 'Show in CA',           type: 'checkbox' },
+  { key: 'State',                    label: 'State',                type: 'dropdown', options: US_STATES },
+  { key: 'Store',                    label: 'Store',                type: 'short_text' },
+  { key: 'TL',                       label: 'Team Lead',            type: 'users' },
+  { key: 'Tech Map',                 label: 'Tech Map',             type: 'short_text' },
+  { key: 'Tech Quote',               label: 'Tech Quote',           type: 'long_text' },
+  { key: 'Zip Code',                 label: 'Zip Code',             type: 'short_text' },
+  { key: 'Trade',                    label: 'Trade',                type: 'dropdown', options: null },
+  // System field, kept OUT of the founder's curated order: the dispatcher
+  // handling the WO. The header chip, the list's Assignee quick filter and
+  // saved views all address fields.Assignee (see the ASSIGNEE_FIELD note below).
+  { key: 'Assignee',                 label: 'Assignee',             type: 'users' },
+];
+
 // ── S4 · the demo QUOTE for WO-39403 (copy VERBATIM from the approved comp,
 //    quote-comp.tpl.html) ─────────────────────────────────────────────────────
 //
@@ -267,6 +433,60 @@ const ROLE_BY_CLICKUP_ROLE: Record<string, string> = { member: 'om', owner: 'adm
 // the seed carries the four priced lines and the comp's $2,890 total.
 const QUOTE_INCURRED_NARRATIVE =
   'the customer-facing standing freezer at the front of the store was reading +18°F and would not pull down. On arrival the evaporator was iced over and the condenser fan motor was seized — windings read open and the blade would not turn by hand. The compressor cycles on the start capacitor but drops out on overload after roughly 40 seconds, and condenser ambient measured 118°F with the fan down. Product on the top two racks has softened; the store moved the ice cream to the walk-in overnight. Case is safe to leave off until parts land.';
+
+// ── Check-in method by FM (0021 / 0022) ──────────────────────────────────────
+// The operation's real table (Elise, 2026-09-08): which kind of check-in each
+// FM company uses and the instruction that goes with it. Migration 0022
+// carries the SAME rows for an already-migrated database — keep in step.
+const FM_CICO_METHODS: [fm: string, method: string, detail: string][] = [
+  ["FrontStreet", "IVR", "(866) 254-8780"],
+  ["Lessen", "Portal", "Submit request on Teams"],
+  ["Powerhouse", "Portal", "Submit request on Teams (must add photos)"],
+  ["Ferrandino & Son", "Email", "Submit request on Teams"],
+  ["Freshco", "Email", "Submit request on Teams"],
+  ["Impact", "Email", "Submit request on Teams"],
+  ["Advanced", "IVR", "(866) 254-8347"],
+  ["Nest", "IVR", "(877) 374-2054"],
+  ["OReilly", "IVR", "Service Channel"],
+  ["Outback Steakhouse", "IVR", "Service Channel"],
+  ["SHEER", "Operator", "Submit request on Teams"],
+  ["RESQ", "Portal", "Submit request on Teams (must add photos and the manager's name)"],
+  ["HERO", "Email", "Submit request on Teams"],
+  ["Davaco", "IVR", "(833) 948-2261"],
+  ["KFM24", "IVR", "(301) 854-6776"],
+  ["PRS", "IVR", "Service Channel"],
+  ["TrueSource", "Operator", "Submit request on Teams"],
+  ["Vixxo", "IVR", "(888) 928-3276 (if you're new and a live operator answers, hang up)"],
+  ["Canteen", "Email", "Submit request on Teams"],
+  ["Extra Space", "Email", "Submit request on Teams"],
+  ["ONO-BBQ", "Email", "Submit request on Teams"],
+  ["CHEESECAKE FACTORY", "IVR", "Service Channel"],
+  ["DinTai", "IVR", "Service Channel"],
+  ["FedEx", "IVR", "Service Channel"],
+  ["First Watch", "IVR", "Service Channel"],
+  ["JRSK", "IVR", "Service Channel"],
+  ["Habit Burger", "IVR", "Service Channel"],
+  ["KINDERCARE", "IVR", "Service Channel"],
+  ["Mobettahs", "IVR", "Service Channel"],
+  ["Rural King", "IVR", "Service Channel"],
+  ["AMC", "Portal", "Submit request on Teams"],
+  ["Bashas", "Portal", "Submit request on Teams"],
+  ["Learning", "Portal", "Submit request on Teams"],
+  ["MACYS", "Portal", "Submit request on Teams"],
+  ["Portland Leather", "Portal", "Submit request on Teams"],
+  ["SizzlingPlatter", "Portal", "Submit request on Teams"],
+  ["Swig Stores", "Portal", "Submit request on Teams"],
+  ["Uncommon Brands", "Portal", "Submit request on Teams"],
+  ["Vuori", "Portal", "Submit request on Teams"],
+  ["Wendy's", "Portal", "Submit request on Teams"],
+  ["BOSS", "IVR", "(877) 841-0301"],
+];
+const FM_METHOD_BY_NAME = new Map(FM_CICO_METHODS.map((r) => [r[0].trim().toLowerCase(), r]));
+
+/** UTC ISO to the second — the shape the API stamps visits with. */
+function isoSeconds(d: Date): string {
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
 
 const QUOTE_SCOPE_LINES = [
   'Replace the seized condenser fan motor with the OEM assembly and a new blade.',
@@ -312,8 +532,9 @@ const QUOTE_OPTION_A_LINES: SeedLine[] = [
 ];
 
 // ── S4 · the comp's "Previous payments on this work order" table ─────────────
-// Both are PAID, so the screen's "Total paid on this WO" and "Payables total"
-// both read $475.00 — exactly what the comp shows.
+// The two PAID rows make "Total paid on this WO" read $475.00 — exactly what
+// the comp shows. The other two give the Payments tab (0016) something to
+// decide on: one waiting for approval, one approved and waiting for Yoda.
 const SEED_PAYMENTS: {
   purpose: string;
   amount: number;
@@ -323,6 +544,8 @@ const SEED_PAYMENTS: {
 }[] = [
   { purpose: 'Assessment trip charge', amount: 75, method: 'Zelle', status: 'paid', created_at: '2026-07-15T14:20:00Z' },
   { purpose: 'Parts advance', amount: 400, method: 'ACH', status: 'paid', created_at: '2026-07-22T16:05:00Z' },
+  { purpose: 'Return trip charge', amount: 120, method: 'ACH', status: 'approved', created_at: '2026-09-03T15:40:00Z' },
+  { purpose: 'Fulfilment visit labor', amount: 350, method: 'Zelle', status: 'requested', created_at: '2026-09-05T18:10:00Z' },
 ];
 
 async function main() {
@@ -331,6 +554,7 @@ async function main() {
   // ── 0. Idempotent reset ────────────────────────────────────────────────────
   await db.exec(`
     TRUNCATE TABLE
+      wo_visit, fm_cico_method,
       quote_line, quote_section, quote, payment_request,
       quo_message, quo_call, quo_job_segment, quo_conversation,
       attachment, payable, vendor, comment, activity_log,
@@ -368,16 +592,36 @@ async function main() {
 
   // ── 2. Principals (§4.6) ───────────────────────────────────────────────────
   const principalIdByName = new Map<string, string>();
+  let superAdminCount = 0;
   for (const p of data.people) {
-    const email = `${slug(p.name)}${p.email}`;
+    const superAdmin = SUPER_ADMIN_BY_NAME[p.name];
+    const email = superAdmin?.email ?? `${slug(p.name)}${p.email}`;
     // S4: the operating role, not the ClickUp seat type (see ROLE_BY_NAME).
-    const role = ROLE_BY_NAME[p.name] ?? ROLE_BY_CLICKUP_ROLE[p.role] ?? p.role;
+    // S5: a super admin is always 'admin' — mirrors migration 0004.
+    const role = superAdmin
+      ? 'admin'
+      : (ROLE_BY_NAME[p.name] ?? ROLE_BY_CLICKUP_ROLE[p.role] ?? p.role);
+    // Nobody seeded has ever signed in, so every human starts 'invited' —
+    // sign-in flips it to 'active' (see 0004 / services/auth.ts).
     const id = await insertId(
-      `INSERT INTO principal (kind, display_name, email, role, initials)
-       VALUES ('human', $1, $2, $3, $4) RETURNING id`,
-      [p.name, email, role, p.initials],
+      `INSERT INTO principal (kind, display_name, email, role, initials, status, is_super_admin)
+       VALUES ('human', $1, $2, $3, $4, 'invited', $5) RETURNING id`,
+      [p.name, email, role, p.initials, Boolean(superAdmin)],
     );
     principalIdByName.set(p.name, id);
+    if (superAdmin) superAdminCount++;
+  }
+  for (const missing of Object.keys(SUPER_ADMIN_BY_NAME).filter((n) => !principalIdByName.has(n))) {
+    throw new Error(`Super admin "${missing}" not found in the ClickUp export — seed data drifted`);
+  }
+  for (const a of EXTRA_SUPER_ADMINS) {
+    const id = await insertId(
+      `INSERT INTO principal (kind, display_name, email, role, initials, status, is_super_admin)
+       VALUES ('human', $1, $2, 'admin', $3, 'invited', true) RETURNING id`,
+      [a.name, a.email, a.initials],
+    );
+    principalIdByName.set(a.name, id);
+    superAdminCount++;
   }
   const seedBotId = await insertId(
     `INSERT INTO principal (kind, display_name, role, initials) VALUES ('service', $1, 'service', 'SB') RETURNING id`,
@@ -391,6 +635,18 @@ async function main() {
   if (!defaultActorId) throw new Error('Jordan Brown principal not found — default actor missing');
 
   // ── 3. Statuses (§4.2) ─────────────────────────────────────────────────────
+  // The four built-in phase groups, kept in step with migration 0008 (the seed
+  // never truncates status_group_def, so admin-added groups survive a re-seed;
+  // the upsert only guarantees the built-ins exist on a fresh DB).
+  await db.exec(`
+    INSERT INTO status_group_def (code, label, position, is_builtin) VALUES
+      ('open',   'Open',   0, true),
+      ('active', 'Active', 1, true),
+      ('done',   'Done',   2, true),
+      ('closed', 'Closed', 3, true)
+    ON CONFLICT (code) DO NOTHING;
+  `);
+
   const statusSetId = await insertId(
     `INSERT INTO status_set (container_id, name) VALUES ($1, $2) RETURNING id`,
     [spaceId, 'Vista WO Pipeline'],
@@ -409,14 +665,17 @@ async function main() {
     statusIdByName.set(s.name, id);
     statusGroupById.set(id, group);
   }
-  // Archive terminal status "invoiced" (20th) — §4.2 / §10 decision.
+  // Archive terminal status "Invoiced" (18th, slotted between Done / Incurred
+  // and Invoiced Not Paid — the JSON skips order 15 for it) — §4.2 / §10
+  // decision. Purple (the palette's #b660e0) rather than the spec's grey, per
+  // founder request.
   {
     const id = await insertId(
       `INSERT INTO status (status_set_id, name, status_group, color, position, is_archive)
-       VALUES ($1, 'invoiced', 'done', '#656f7d', 19, true) RETURNING id`,
+       VALUES ($1, 'Invoiced', 'done', '#b660e0', 15, true) RETURNING id`,
       [statusSetId],
     );
-    statusIdByName.set('invoiced', id);
+    statusIdByName.set('Invoiced', id);
     statusGroupById.set(id, 'done');
   }
 
@@ -427,32 +686,55 @@ async function main() {
     return id;
   }
 
-  // ── 4. Field definitions (§4.3) ────────────────────────────────────────────
+  // ── 4. Field definitions (§4.3 → S7 curated catalogue) ─────────────────────
+  // The CURATED list replaces the verbatim ClickUp mirror: clean labels + the
+  // founder's types/vocabularies over the SAME task.fields keys (see the
+  // CURATED_FIELDS note). ClickUp fields not in the curated list keep their
+  // values in the bag but get no definition — invisible to the catalogue until
+  // an admin re-adds them in Admin › Custom fields.
   let fieldCount = 0;
   let position = 0;
-  for (const f of data.fields) {
-    const type = FIELD_TYPE_MAP[f.type];
-    if (!type) throw new Error(`Unknown ClickUp field type: ${f.type}`);
+  // ClickUp keeps the task's ASSIGNEE outside the custom-field bag; the list
+  // filters and groups on custom fields, so it stays promoted to one here (a
+  // `users` field, same shape as "AM").
+  const ASSIGNEE_FIELD = 'Assignee';
+  const exportOptionsByName = new Map(data.fields.map((f) => [f.name, f.options ?? []]));
+  for (const f of CURATED_FIELDS) {
     let typeConfig: Record<string, unknown> = {};
-    if (f.type === 'drop_down' && f.options) typeConfig = { options: f.options };
-    else if (f.type === 'formula') typeConfig = { formula: true };
+    if (f.type === 'dropdown') {
+      // `null` = inherit the ClickUp export's vocabulary; an array = curated.
+      typeConfig = { options: f.options ?? exportOptionsByName.get(f.key) ?? [] };
+    } else if (f.type === 'formula') {
+      typeConfig = { formula: true };
+    }
     await query(
       `INSERT INTO field_def (container_id, key, label, type, type_config, position)
-       VALUES ($1, $2, $2, $3, $4::jsonb, $5)`,
-      [spaceId, f.name, type, JSON.stringify(typeConfig), position++],
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+      [spaceId, f.key, f.label, f.type, JSON.stringify(typeConfig), position++],
     );
     fieldCount++;
   }
 
   // ── 5. Tasks (§4.4) + memberships (§4.5) + created activity (§4.9) ──────────
   let taskCount = 0;
+  let visitCount = 0;
   let membershipCount = 0;
   let activityCount = 0;
   const taskIdByWo = new Map<string, string>();
+
+  // 0021 · the FM → check-in method table, before the visits that read it.
+  for (const [fm, method, detail] of FM_CICO_METHODS) {
+    await query(`INSERT INTO fm_cico_method (fm, method, detail) VALUES ($1, $2, $3)`, [fm, method, detail]);
+  }
   const taskMeta = new Map<string, { statusName: string; fields: Record<string, unknown> }>();
 
   for (const t of data.taskSamples) {
-    const f = t.fields ?? {};
+    const f: Record<string, unknown> = { ...(t.fields ?? {}) };
+    if (t.assignees?.length && f[ASSIGNEE_FIELD] == null) f[ASSIGNEE_FIELD] = t.assignees.join(', ');
+    // The two clean-key datetime fields, filled from the sample's own
+    // timestamps — to the minute when the export carries one.
+    if (f['Date Created'] == null && toDateTime(t.created)) f['Date Created'] = toDateTime(t.created);
+    if (f['Due Date'] == null && toDateTime(t.due)) f['Due Date'] = toDateTime(t.due);
     const description = str(f['35. WO Description']);
     const title = firstLine(description ?? undefined, t.name);
     const canonicalStatus = STATUS_ALIAS[t.status] ?? t.status;
@@ -460,6 +742,29 @@ async function main() {
     const statusGroup = statusGroupById.get(statusId)!;
     const homeListId = listIdByName.get(t.list) ?? null;
     const createdAt = toDate(t.created);
+
+    // 0021 · a sample the export left "Checked-out" becomes one closed visit
+    // in the log, and the seven mirrored fields read that visit — the same
+    // state the API would leave after logging and checking out the visit.
+    const legacyCico = str(f['18. Check-in/out Status']);
+    let visit: { type: string; method: string | null; detail: string | null; inAt: string; outAt: string } | null = null;
+    if (legacyCico && /checked.?out/i.test(legacyCico)) {
+      const base = createdAt ? new Date(`${createdAt}T14:00:00Z`) : new Date('2026-08-01T14:00:00Z');
+      const inAt = new Date(base.getTime() + 2 * 86_400_000 + (taskCount % 5) * 37 * 60_000);
+      const outAt = new Date(inAt.getTime() + (95 + (taskCount % 7) * 41) * 60_000);
+      const type = str(f['Visit Type']) ?? (/assess/i.test(canonicalStatus) ? 'Assessment' : 'Job');
+      const entry = FM_METHOD_BY_NAME.get((str(f['22. FM']) ?? '').trim().toLowerCase());
+      const method = entry?.[1] ?? null;
+      const detail = entry?.[2] ?? null;
+      visit = { type, method, detail, inAt: isoSeconds(inAt), outAt: isoSeconds(outAt) };
+      f['Visit Type'] = type;
+      f['18. Check-in/out Status'] = 'Checked-out';
+      f['Checked-in At'] = visit.inAt;
+      f['Checked-out At'] = visit.outAt;
+      // "IVR - (866) 254-8780" — the shape the operation wrote by hand.
+      if (method) f['CICO Method'] = detail ? `${method} - ${detail}` : method;
+      else delete f['CICO Method'];
+    }
 
     const taskId = await insertId(
       `INSERT INTO task (
@@ -495,6 +800,16 @@ async function main() {
     taskMeta.set(t.id, { statusName: canonicalStatus, fields: f });
     taskCount++;
 
+    if (visit) {
+      await query(
+        `INSERT INTO wo_visit
+           (task_id, seq, visit_type, status, method, method_detail, checked_in_at, checked_out_at, created_by)
+         VALUES ($1, 1, $2, 'checked_out', $3, $4, $5::timestamptz, $6::timestamptz, $7)`,
+        [taskId, visit.type, visit.method, visit.detail, visit.inAt, visit.outAt, seedBotId],
+      );
+      visitCount++;
+    }
+
     if (homeListId) {
       await query(
         `INSERT INTO task_list_membership (task_id, list_id, is_home) VALUES ($1, $2, true)`,
@@ -528,18 +843,18 @@ async function main() {
     if (v.name !== QUO_VENDOR_NAME) vendorIds.push(id);
   }
 
-  // ── 7. Payables (§4.8) — a handful for done/incurred|invoiced with cost>0 ──
+  // ── 7. Payables (§4.8) — a handful for Done / Incurred|Invoiced with cost>0 ──
   let payableCount = 0;
   let vi = 0;
   for (const t of data.taskSamples) {
     if (payableCount >= 6) break;
     const meta = taskMeta.get(t.id)!;
-    if (meta.statusName !== 'done/incurred' && meta.statusName !== 'invoiced') continue;
+    if (meta.statusName !== 'Done / Incurred' && meta.statusName !== 'Invoiced') continue;
     const cost = toNumber(meta.fields['34. Cost']);
     if (cost === null || cost <= 0) continue;
     const vendorId = vendorIds[vi % vendorIds.length];
     vi++;
-    const payStatus = meta.statusName === 'invoiced' ? 'paid' : 'approved';
+    const payStatus = meta.statusName === 'Invoiced' ? 'paid' : 'approved';
     await query(
       `INSERT INTO payable (task_id, vendor_id, amount, status)
        VALUES ($1, $2, $3, $4)`,
@@ -659,10 +974,13 @@ async function main() {
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log('seed: done');
   console.log(`  containers        : ${2 + data.routing.length + listCount} (1 workspace, 1 space, ${data.routing.length} folders, ${listCount} lists)`);
-  console.log(`  principals        : ${data.people.length + 2} (${data.people.length} human, 2 service)`);
-  console.log(`  statuses          : ${data.statuses.length + 1} (19 pipeline + 1 archive)`);
-  console.log(`  field_defs        : ${fieldCount}`);
+  console.log(`  principals        : ${data.people.length + EXTRA_SUPER_ADMINS.length + 2} (${data.people.length + EXTRA_SUPER_ADMINS.length} human, 2 service)`);
+  console.log(`  super admins      : ${superAdminCount} (${[...Object.keys(SUPER_ADMIN_BY_NAME), ...EXTRA_SUPER_ADMINS.map((a) => a.name)].join(', ')})`);
+  console.log(`  statuses          : ${data.statuses.length + 1} (17 pipeline + 1 archive)`);
+  console.log(`  field_defs        : ${fieldCount} (curated catalogue, S7)`);
   console.log(`  tasks             : ${taskCount}`);
+  console.log(`  visits            : ${visitCount} (one closed visit per sample the export left checked out)`);
+  console.log(`  fm cico methods   : ${FM_CICO_METHODS.length} (the operation's table; also in migration 0022)`);
   console.log(`  memberships       : ${membershipCount}`);
   console.log(`  vendors           : ${VENDORS.length}`);
   console.log(`  payables          : ${payableCount}`);

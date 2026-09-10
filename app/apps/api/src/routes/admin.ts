@@ -1,0 +1,566 @@
+// Routes: Admin Studio. Every route here is gated on the permission tree
+// (0015): `admin/<section>` view for reads, edit for writes. Super admins hold
+// every permission; any role can be granted a section from the Roles screen.
+//
+//   Users        GET/POST  /admin/users · PATCH /admin/users/:id
+//                GET/PUT   /admin/users/:id/permissions   (super admins only)
+//   Roles        GET/POST  /admin/roles · PATCH/DELETE /admin/roles/:id
+//   Permissions  GET       /admin/permission-fields  (the whole catalogue, for the editor)
+//   Fields       GET       /admin/fields
+//   Workflow     GET       /admin/workflow · POST/PATCH/DELETE /admin/workflow/statuses[/:id]
+//                          POST/PATCH/DELETE /admin/workflow/groups[/:code]
+//   Trash        GET       /admin/trash · POST /admin/trash/:id/restore
+//   Settings     GET       /admin/settings
+//
+// The gate is applied per-route rather than at registration so each 403 can say
+// which permission was missing.
+
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { z } from 'zod';
+import { adminPermKey, permAllows, type PermAction } from '@theone/shared';
+import { ApiError, parse } from '../errors.js';
+import { unauthorized } from '../services/auth.js';
+import {
+  disableUser,
+  getUserPermissions,
+  inviteUser,
+  listUsers,
+  setUserPermissions,
+  updateUser,
+} from '../services/users.js';
+import { createRole, deleteRole, listRoles, updateRole } from '../services/roles.js';
+import { requirePerm } from '../services/permissions.js';
+import { getFieldCatalogue } from '../services/woFields.js';
+import { listFieldDefs, listWorkflow, listTrash, restoreTask, getSettings } from '../services/adminMeta.js';
+import { createFieldDef, updateFieldDef, reorderFieldDefs, FIELD_DEF_TYPES } from '../services/fieldDefs.js';
+import {
+  createStatus,
+  createStatusGroup,
+  deleteStatus,
+  deleteStatusGroup,
+  listStatusGroups,
+  renameStatusGroup,
+  updateStatus,
+} from '../services/statusAdmin.js';
+import { listAuditLog, exportAuditCsv } from '../services/auditLog.js';
+import { deleteCicoMethod, listCicoMethods, setCicoMethod } from '../services/visits.js';
+import { deleteHoliday, listHolidays, setHoliday } from '../services/holidays.js';
+import { logAdminEvent, logExport } from '../services/adminAudit.js';
+import {
+  createAutomation,
+  deleteAutomation,
+  listAutomations,
+  listRuns,
+  updateAutomation,
+} from '../services/automations.js';
+import { filterSetSchema } from './views.js';
+
+type AdminSection =
+  | 'users'
+  | 'roles'
+  | 'settings'
+  | 'automations'
+  | 'fields'
+  | 'themes'
+  | 'audit'
+  | 'trash';
+
+function requireAdmin(req: FastifyRequest, section: AdminSection, action: PermAction = 'view'): string {
+  if (!req.auth) throw unauthorized();
+  // The REAL user, never `actingAs`: impersonating an admin must not hand the
+  // impersonator the ability to edit users and roles as them.
+  requirePerm(
+    req.auth.user,
+    adminPermKey(section),
+    action,
+    action === 'view'
+      ? `Admin › ${section} is not available to you`
+      : `You cannot make changes in Admin › ${section}`,
+  );
+  return req.auth.user.id;
+}
+
+/** The per-user override editor is the one thing a plain admin-console grant
+    does not unlock — it is super admins only, as asked. */
+function requireSuperAdmin(req: FastifyRequest): string {
+  if (!req.auth) throw unauthorized();
+  if (!req.auth.user.isSuperAdmin) {
+    throw new ApiError('FORBIDDEN', 'Only a super admin can adjust one person’s permissions', {
+      required: 'is_super_admin',
+    });
+  }
+  return req.auth.user.id;
+}
+
+const idParams = z.object({ id: z.string().uuid() });
+
+// ── Users ────────────────────────────────────────────────────────────────────
+
+const inviteSchema = z
+  .object({
+    email: z.string().trim().email().max(254),
+    name: z.string().trim().min(1).max(120),
+    role: z.string().trim().min(1),
+    is_super_admin: z.boolean().optional(),
+  })
+  .strict();
+
+const updateUserSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    role: z.string().trim().min(1).optional(),
+    is_super_admin: z.boolean().optional(),
+    status: z.enum(['invited', 'active', 'disabled']).optional(),
+  })
+  .strict();
+
+// path → {view?, create?, edit?, delete?, approve?}. Shaped here; the service
+// normalises (drops empties, ignores non-booleans) before it stores anything.
+const permMapSchema = z.record(
+  z.string().min(1).max(400),
+  z
+    .object({
+      view: z.boolean().optional(),
+      create: z.boolean().optional(),
+      edit: z.boolean().optional(),
+      delete: z.boolean().optional(),
+      approve: z.boolean().optional(),
+    })
+    .strict(),
+);
+
+const userPermissionsSchema = z.object({ overrides: permMapSchema }).strict();
+
+// ── Roles ────────────────────────────────────────────────────────────────────
+
+const createRoleSchema = z
+  .object({
+    code: z.string().trim().max(40).optional(),
+    label: z.string().trim().min(2).max(60),
+    description: z.string().trim().max(500).nullable().optional(),
+    permissions: permMapSchema.optional(),
+    // Legacy spellings, still accepted and folded into the tree.
+    can_edit_quote: z.boolean().optional(),
+    can_approve_quote: z.boolean().optional(),
+    can_manage_users: z.boolean().optional(),
+    can_edit_wo_fields: z.boolean().optional(),
+    can_view_field_history: z.boolean().optional(),
+  })
+  .strict();
+
+const updateRoleSchema = createRoleSchema.partial().strict();
+
+export default async function adminRoutes(app: FastifyInstance): Promise<void> {
+  // ── Users ──────────────────────────────────────────────────────────────────
+  app.get('/admin/users', async (req) => {
+    requireAdmin(req, 'users');
+    return { items: await listUsers() };
+  });
+
+  app.post('/admin/users', async (req, reply) => {
+    const actorId = requireAdmin(req, 'users', 'edit');
+    const user = await inviteUser(parse(inviteSchema, req.body), actorId);
+    return reply.status(201).send({ user });
+  });
+
+  app.patch('/admin/users/:id', async (req) => {
+    const actorId = requireAdmin(req, 'users', 'edit');
+    const { id } = parse(idParams, req.params);
+    return { user: await updateUser(id, parse(updateUserSchema, req.body), actorId) };
+  });
+
+  app.post('/admin/users/:id/disable', async (req) => {
+    const actorId = requireAdmin(req, 'users', 'edit');
+    const { id } = parse(idParams, req.params);
+    return { user: await disableUser(id, actorId) };
+  });
+
+  // Per-user overrides (0015) — super admins only, both ways.
+  app.get('/admin/users/:id/permissions', async (req) => {
+    requireSuperAdmin(req);
+    const { id } = parse(idParams, req.params);
+    return getUserPermissions(id);
+  });
+
+  app.put('/admin/users/:id/permissions', async (req) => {
+    const actorId = requireSuperAdmin(req);
+    const { id } = parse(idParams, req.params);
+    const { overrides } = parse(userPermissionsSchema, req.body);
+    return setUserPermissions(id, overrides, actorId);
+  });
+
+  // ── Roles ──────────────────────────────────────────────────────────────────
+  app.get('/admin/roles', async (req) => {
+    // Users needs the role list for its <select>s, so either grant will do.
+    if (!req.auth) throw unauthorized();
+    const u = req.auth.user;
+    const ok =
+      permAllows(u.perms, adminPermKey('roles'), 'view', u.isSuperAdmin) ||
+      permAllows(u.perms, adminPermKey('users'), 'view', u.isSuperAdmin);
+    if (!ok) throw new ApiError('FORBIDDEN', 'Admin › roles is not available to you');
+    return { items: await listRoles() };
+  });
+
+  app.post('/admin/roles', async (req, reply) => {
+    const actorId = requireAdmin(req, 'roles', 'edit');
+    const role = await createRole(parse(createRoleSchema, req.body), actorId);
+    return reply.status(201).send({ role });
+  });
+
+  app.patch('/admin/roles/:id', async (req) => {
+    const actorId = requireAdmin(req, 'roles', 'edit');
+    const { id } = parse(idParams, req.params);
+    return { role: await updateRole(id, parse(updateRoleSchema, req.body), actorId) };
+  });
+
+  app.delete('/admin/roles/:id', async (req) => {
+    const actorId = requireAdmin(req, 'roles', 'edit');
+    const { id } = parse(idParams, req.params);
+    await deleteRole(id, actorId);
+    return { ok: true };
+  });
+
+  // The permission editor needs EVERY field, including the ones the caller's
+  // own role hides from /wo-fields — you cannot grant what you cannot list.
+  app.get('/admin/permission-fields', async (req) => {
+    if (!req.auth) throw unauthorized();
+    if (!req.auth.user.isSuperAdmin) requireAdmin(req, 'roles');
+    const cat = await getFieldCatalogue();
+    // 0026: the billing entities (Comp) the "Which work orders" row can grant —
+    // the dropdown's defined options plus whatever the data already holds.
+    const entities = new Set<string>();
+    for (const key of ['billing_entity', 'fields.21. Comp']) {
+      for (const o of cat.fields.find((f) => f.key === key)?.options ?? []) {
+        const v = String(o.value ?? '').trim();
+        if (v) entities.add(v);
+      }
+    }
+    return {
+      items: cat.fields.map((f) => ({ key: f.key, label: f.label, custom: Boolean(f.custom) })),
+      entities: [...entities].sort((a, b) => a.localeCompare(b)),
+    };
+  });
+
+  // ── Custom fields (S7: read + the field engine's writes) ───────────────────
+  const fieldTypeSchema = z.enum(FIELD_DEF_TYPES);
+  const createFieldSchema = z
+    .object({
+      label: z.string().trim().min(1).max(120),
+      type: fieldTypeSchema,
+      options: z.array(z.string().trim().min(1).max(120)).max(500).optional(),
+    })
+    .strict();
+  const updateFieldSchema = createFieldSchema.partial().strict();
+  const reorderFieldsSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(500) });
+
+  app.get('/admin/fields', async (req) => {
+    requireAdmin(req, 'fields');
+    return { items: await listFieldDefs() };
+  });
+
+  app.post('/admin/fields', async (req, reply) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const body = parse(createFieldSchema, req.body);
+    return reply.status(201).send({ field: await createFieldDef(body, actorId) });
+  });
+
+  app.patch('/admin/fields/:id', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { id } = parse(idParams, req.params);
+    return { field: await updateFieldDef(id, parse(updateFieldSchema, req.body), actorId) };
+  });
+
+  app.put('/admin/fields/order', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { ids } = parse(reorderFieldsSchema, req.body);
+    return { items: await reorderFieldDefs(ids, actorId) };
+  });
+
+  // ── Statuses & workflow (the status engine's writes) ───────────────────────
+  const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'a #rrggbb hex color');
+  const createStatusSchema = z
+    .object({
+      name: z.string().trim().min(1).max(80),
+      group: z.string().trim().min(1).max(60),
+      color: colorSchema.optional(),
+    })
+    .strict();
+  const updateStatusSchema = z
+    .object({ name: z.string().trim().min(1).max(80).optional(), color: colorSchema.optional() })
+    .strict();
+  const groupLabelSchema = z.object({ label: z.string().trim().min(1).max(60) }).strict();
+  const groupParams = z.object({ code: z.string().trim().min(1).max(60) });
+
+  app.get('/admin/workflow', async (req) => {
+    requireAdmin(req, 'fields');
+    return { items: await listWorkflow(), groups: await listStatusGroups() };
+  });
+
+  app.post('/admin/workflow/statuses', async (req, reply) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const item = await createStatus(parse(createStatusSchema, req.body), actorId);
+    return reply.status(201).send({ item });
+  });
+
+  app.patch('/admin/workflow/statuses/:id', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { id } = parse(idParams, req.params);
+    return { item: await updateStatus(id, parse(updateStatusSchema, req.body), actorId) };
+  });
+
+  app.delete('/admin/workflow/statuses/:id', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { id } = parse(idParams, req.params);
+    await deleteStatus(id, actorId);
+    return { ok: true };
+  });
+
+  app.post('/admin/workflow/groups', async (req, reply) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { label } = parse(groupLabelSchema, req.body);
+    return reply.status(201).send({ item: await createStatusGroup(label, actorId) });
+  });
+
+  app.patch('/admin/workflow/groups/:code', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { code } = parse(groupParams, req.params);
+    const { label } = parse(groupLabelSchema, req.body);
+    return { item: await renameStatusGroup(code, label, actorId) };
+  });
+
+  app.delete('/admin/workflow/groups/:code', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { code } = parse(groupParams, req.params);
+    await deleteStatusGroup(code, actorId);
+    return { ok: true };
+  });
+
+  // ── Automations (the rules engine) ─────────────────────────────────────────
+  // GET/POST /admin/automations · PATCH/DELETE /admin/automations/:id
+  // GET      /admin/automations/:id/runs
+  // Field keys, operators and action targets are validated in the service
+  // against the live field catalogue — the schemas here only shape the JSON.
+
+  const triggerSchema = z
+    .object({
+      // 'manual' = enrolled from the work-orders list only, never event-fired.
+      kind: z.enum(['created', 'changed', 'manual']),
+      field: z.string().trim().min(1).max(200).nullish(),
+      to: z.string().trim().min(1).max(400).nullish(),
+      // How the new value is tested against `to` — the comparisons are for
+      // money/number fields ("changed to more than 500"); eq/absent = exact.
+      to_op: z.enum(['eq', 'gt', 'gte', 'lt', 'lte']).nullish(),
+      // Compare against another field's current value instead of `to`
+      // ("Cost changed to more than NTE").
+      to_field: z.string().trim().min(1).max(200).nullish(),
+      // Wait N minutes after the trigger; conditions run when the wait ends.
+      delay_minutes: z.number().int().min(0).max(43200).nullish(),
+    })
+    .strict();
+
+  const actionSchema = z
+    .object({
+      // Absent = set a field; 'approval_task' raises a task in the inbox (0020).
+      kind: z.enum(['set_field', 'approval_task']).optional(),
+      field: z.string().trim().min(1).max(200),
+      value: z.string().max(4000).nullable(),
+      assign_role: z.string().trim().max(60).nullish(),
+    })
+    .strict();
+
+  const createAutomationSchema = z
+    .object({
+      name: z.string().trim().min(1).max(120),
+      enabled: z.boolean().optional(),
+      // All four are schema-valid; the service rejects the not-yet-live ones
+      // with a message the builder shows verbatim.
+      entity: z.enum(['work_order', 'vendor', 'quote', 'invoice']).optional(),
+      trigger: triggerSchema,
+      conditions: filterSetSchema.optional(),
+      actions: z.array(actionSchema).min(1).max(10),
+    })
+    .strict();
+
+  const updateAutomationSchema = createAutomationSchema.partial().strict();
+
+  const runsQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+  });
+
+  app.get('/admin/automations', async (req) => {
+    requireAdmin(req, 'automations');
+    return { items: await listAutomations() };
+  });
+
+  app.post('/admin/automations', async (req, reply) => {
+    const actorId = requireAdmin(req, 'automations', 'edit');
+    const body = parse(createAutomationSchema, req.body);
+    return reply.status(201).send({ item: await createAutomation(body, actorId) });
+  });
+
+  app.patch('/admin/automations/:id', async (req) => {
+    const actorId = requireAdmin(req, 'automations', 'edit');
+    const { id } = parse(idParams, req.params);
+    return { item: await updateAutomation(id, parse(updateAutomationSchema, req.body), actorId) };
+  });
+
+  app.delete('/admin/automations/:id', async (req) => {
+    const actorId = requireAdmin(req, 'automations', 'edit');
+    const { id } = parse(idParams, req.params);
+    await deleteAutomation(id, actorId);
+    return { ok: true };
+  });
+
+  app.get('/admin/automations/:id/runs', async (req) => {
+    requireAdmin(req, 'automations');
+    const { id } = parse(idParams, req.params);
+    const { limit } = parse(runsQuerySchema, req.query);
+    return { items: await listRuns(id, limit) };
+  });
+
+  // ── Trash ──────────────────────────────────────────────────────────────────
+  app.get('/admin/trash', async (req) => {
+    requireAdmin(req, 'trash');
+    return { items: await listTrash() };
+  });
+
+  app.post('/admin/trash/:id/restore', async (req) => {
+    const actorId = requireAdmin(req, 'trash', 'edit');
+    const { id } = parse(idParams, req.params);
+    return { item: await restoreTask(id, actorId) };
+  });
+
+  // ── Audit log ──────────────────────────────────────────────────────────────
+  // GET /admin/audit          the whole activity_log, filtered and paged —
+  //                           work-order edits, sign-ins AND the admin changes
+  //                           (fields, statuses, roles, users, automations)
+  // GET /admin/audit/export   the same rows as CSV
+
+  const auditQuerySchema = z.object({
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    actor_id: z.string().uuid().optional(),
+    action: z.string().trim().min(1).max(60).optional(),
+    field: z.string().trim().min(1).max(200).optional(),
+    q: z.string().trim().min(1).max(200).optional(),
+    limit: z.coerce.number().int().min(1).max(500).default(100),
+    offset: z.coerce.number().int().min(0).default(0),
+  });
+
+  app.get('/admin/audit', async (req) => {
+    requireAdmin(req, 'audit');
+    return listAuditLog(parse(auditQuerySchema, req.query));
+  });
+
+  app.get('/admin/audit/export', async (req, reply) => {
+    const actorId = requireAdmin(req, 'audit');
+    const { limit: _l, offset: _o, ...filters } = parse(auditQuerySchema, req.query);
+    const { csv, rows } = await exportAuditCsv(filters);
+    const stamp = new Date().toISOString().slice(0, 10);
+    // Rule 1.2.1: the audit log records its own export, like any other button.
+    await logExport(actorId, 'audit_log_exported', {
+      name: `audit-log-${stamp}.csv`,
+      rows,
+      filters: filters as Record<string, unknown>,
+    });
+    return reply
+      .header('Content-Type', 'text/csv; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="audit-log-${stamp}.csv"`)
+      .send(csv);
+  });
+
+  // ── Check-in method by FM (0021) ───────────────────────────────────────────
+  // The "database of the method for each client": a new visit takes its
+  // method from here by the work order's FM. Vocabulary, like the fields, so
+  // it rides on the Custom fields grant.
+  app.get('/admin/cico-methods', async (req) => {
+    requireAdmin(req, 'fields');
+    return { items: await listCicoMethods() };
+  });
+
+  app.put('/admin/cico-methods/:fm', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { fm } = parse(z.object({ fm: z.string().trim().min(1).max(120) }), req.params);
+    const { method, detail } = parse(
+      z.object({
+        method: z.string().trim().min(1).max(60),
+        detail: z.string().trim().max(300).nullable().optional(),
+      }),
+      req.body,
+    );
+    const before = (await listCicoMethods()).find((m) => m.fm === fm) ?? null;
+    const item = await setCicoMethod(fm, method, detail ?? null, actorId);
+    await logAdminEvent({
+      actorId,
+      entity: 'fm_cico_method',
+      entityId: item.fm,
+      action: before ? 'cico_method_changed' : 'cico_method_created',
+      before: before ? { name: before.fm, method: before.method, detail: before.detail } : null,
+      after: { name: item.fm, method: item.method, detail: item.detail },
+    });
+    return { item };
+  });
+
+  app.delete('/admin/cico-methods/:fm', async (req) => {
+    const actorId = requireAdmin(req, 'fields', 'edit');
+    const { fm } = parse(z.object({ fm: z.string().trim().min(1).max(120) }), req.params);
+    const gone = await deleteCicoMethod(fm);
+    if (!gone) throw new ApiError('NOT_FOUND', 'No method is on file for that FM');
+    await logAdminEvent({
+      actorId,
+      entity: 'fm_cico_method',
+      entityId: gone.fm,
+      action: 'cico_method_deleted',
+      before: { name: gone.fm, method: gone.method, detail: gone.detail },
+      after: null,
+    });
+    return { ok: true };
+  });
+
+  // ── Settings ───────────────────────────────────────────────────────────────
+  app.get('/admin/settings', async (req) => {
+    requireAdmin(req, 'settings');
+    return getSettings();
+  });
+
+  // ── Holidays (0024) ────────────────────────────────────────────────────────
+  // The System_Holiday_Table of rule 2.3.2: days the quote clock skips. The
+  // only editable thing under Settings, hence its own edit grant.
+  app.get('/admin/holidays', async (req) => {
+    requireAdmin(req, 'settings');
+    return { items: await listHolidays() };
+  });
+
+  app.put('/admin/holidays/:day', async (req) => {
+    const actorId = requireAdmin(req, 'settings', 'edit');
+    const { day } = parse(z.object({ day: z.string().trim().min(8).max(10) }), req.params);
+    const { name } = parse(z.object({ name: z.string().trim().min(1).max(120) }), req.body);
+    const before = (await listHolidays()).find((h) => h.day === day) ?? null;
+    const item = await setHoliday(day, name);
+    await logAdminEvent({
+      actorId,
+      entity: 'holiday',
+      entityId: item.day,
+      action: before ? 'holiday_changed' : 'holiday_created',
+      before: before ? { name: before.name, day: before.day } : null,
+      after: { name: item.name, day: item.day },
+    });
+    return { item };
+  });
+
+  app.delete('/admin/holidays/:day', async (req) => {
+    const actorId = requireAdmin(req, 'settings', 'edit');
+    const { day } = parse(z.object({ day: z.string().trim().min(8).max(10) }), req.params);
+    const gone = await deleteHoliday(day);
+    if (!gone) throw new ApiError('NOT_FOUND', 'No holiday is on file for that day');
+    await logAdminEvent({
+      actorId,
+      entity: 'holiday',
+      entityId: gone.day,
+      action: 'holiday_deleted',
+      before: { name: gone.name, day: gone.day },
+      after: null,
+    });
+    return { ok: true };
+  });
+}

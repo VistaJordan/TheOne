@@ -11,12 +11,32 @@ import type {
   Status,
   StatusRef,
   Phase,
+  StatusChangeState,
 } from '@theone/shared';
-import { PHASE_BY_STATUS_NAME } from '@theone/shared';
+import {
+  PHASE_BY_STATUS_NAME,
+  ECOTRAK_STATUS_KEY,
+  checkEcotrakTransition,
+  ecotrakTransitionRefused,
+  describeEcotrakRefusal,
+} from '@theone/shared';
 import { ApiError } from '../errors.js';
-import { UUID_RE, CREATED_AT_SQL, resolveActorId, getActivityForTask } from './activity.js';
+import { config } from '../config.js';
+import { logTaskChanges, type ChangeSource, type TaskChange } from './woAudit.js';
+import { dispatchAutomations, type AutoCtx } from './automations.js';
+import { UUID_RE, CREATED_AT_SQL, getActivityForTask, type ActingPrincipal } from './activity.js';
+import { woScopeSql } from './woScope.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
+import {
+  Params,
+  compileFilters,
+  compileGroupExpr,
+  compileSort,
+  resolveField,
+  type FilterSet,
+  type SortSpec,
+} from './woFields.js';
 
 /**
  * Status name → lifecycle phase (S2 contract item 3). The map is a code-level
@@ -31,6 +51,13 @@ export interface ListFilters {
   status_group?: string;
   status_id?: string;
   search?: string;
+  /** The saved-view filter set — any field, any operator (services/woFields.ts). */
+  filters?: FilterSet;
+  sort?: SortSpec | null;
+  /** Bucket the whole filtered set by this field and return per-bucket counts. */
+  group_by?: string | null;
+  /** Column keys the caller will render. Custom ones are projected onto `custom`. */
+  columns?: string[];
   limit: number;
   offset: number;
 }
@@ -54,9 +81,19 @@ interface WoRow {
   status_group: StatusRef['group'];
   status_color: string;
   age_days: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+  /** Aliased custom-field columns (c0, c1, …), present only when requested. */
+  [alias: string]: unknown;
 }
 
-function mapListItem(r: WoRow): WorkOrderListItem {
+/** `customByAlias` maps the c0/c1/… aliases back to their field keys. */
+function mapListItem(r: WoRow, customByAlias: Map<string, string>): WorkOrderListItem {
+  const custom: Record<string, string | null> = {};
+  for (const [alias, key] of customByAlias) {
+    const v = r[alias];
+    custom[key] = v === undefined || v === null ? null : String(v);
+  }
   return {
     id: r.id,
     wo_number: r.wo_number,
@@ -73,6 +110,9 @@ function mapListItem(r: WoRow): WorkOrderListItem {
     home_list: r.home_list,
     status: { id: r.status_id, name: r.status_name, group: r.status_group, color: r.status_color },
     age_days: r.age_days === null ? null : Number(r.age_days),
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    custom: customByAlias.size > 0 ? custom : undefined,
   };
 }
 
@@ -83,7 +123,9 @@ const WO_SELECT = `
   t.date_received::text AS date_received,
   hl.name AS home_list,
   s.id AS status_id, s.name AS status_name, s.status_group AS status_group, s.color AS status_color,
-  (now()::date - t.date_received) AS age_days
+  (now()::date - t.date_received) AS age_days,
+  to_char((t.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+  to_char((t.updated_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
 `;
 
 const WO_FROM = `
@@ -92,44 +134,147 @@ const WO_FROM = `
   LEFT JOIN container hl ON hl.id = t.home_list_id
 `;
 
-export async function listWorkOrders(f: ListFilters): Promise<WorkOrderListResponse> {
+/**
+ * The WHERE clause every list-shaped read shares — the list itself, the export,
+ * the group counts, and "select every row that matches, not just the page I can
+ * see". Built once so those four can never drift apart and show the user a
+ * different set than the one they are acting on.
+ *
+ * Returns the clause plus the parameter accumulator it was built into; the
+ * caller keeps appending to that same accumulator for ORDER BY / LIMIT.
+ */
+async function buildListWhere(
+  f: Omit<ListFilters, 'limit' | 'offset'>,
+  actor?: ActingPrincipal,
+): Promise<{ sql: string; p: Params }> {
+  const p = new Params();
   const where: string[] = ['t.deleted_at IS NULL'];
-  const params: unknown[] = [];
 
-  if (f.status_group) {
-    params.push(f.status_group);
-    where.push(`t.status_group = $${params.length}`);
-  }
-  if (f.status_id) {
-    params.push(f.status_id);
-    where.push(`t.status_id = $${params.length}`);
-  }
+  // 0026: the row scope comes first — a dispatcher's list, export, counts and
+  // "select all" are all "their" work orders before any filter is applied.
+  const scope = actor ? woScopeSql(actor, p) : null;
+  if (scope) where.push(scope);
+
+  // The three legacy scalar params still work: the segmented status-group tabs
+  // and the topbar search predate the filter builder and are cheaper to express
+  // as their own arguments than as a synthesised rule.
+  if (f.status_group) where.push(`t.status_group = ${p.add(f.status_group)}`);
+  if (f.status_id) where.push(`t.status_id = ${p.add(f.status_id)}`);
   if (f.search) {
-    params.push(`%${f.search}%`);
-    const p = `$${params.length}`;
+    const hole = p.add(`%${f.search}%`);
+    // The topbar search is now global, so this is what "find a work order by
+    // anything you can see on the row" has to cover — title and trade included.
     where.push(
-      `(t.wo_number ILIKE ${p} OR t.ext_name ILIKE ${p} OR t.client ILIKE ${p} OR t.city ILIKE ${p})`,
+      `(t.wo_number ILIKE ${hole} OR t.ext_name ILIKE ${hole} OR t.title ILIKE ${hole}
+        OR t.client ILIKE ${hole} OR t.city ILIKE ${hole} OR t.state ILIKE ${hole}
+        OR t.trade ILIKE ${hole})`,
     );
   }
 
-  const whereSql = `WHERE ${where.join(' AND ')}`;
+  const compiled = await compileFilters(f.filters ?? { match: 'all', rules: [] }, p);
+  if (compiled) where.push(compiled);
+
+  return { sql: `WHERE ${where.join(' AND ')}`, p };
+}
+
+/** A `group_by` bucket over the WHOLE filtered set, not just the current page —
+    a collapsed group has to be able to say how many rows it is hiding. */
+async function groupCounts(
+  f: Omit<ListFilters, 'limit' | 'offset'>,
+  whereSql: string,
+  whereParams: unknown[],
+): Promise<{ key: string | null; count: number }[]> {
+  const p = new Params();
+  for (const v of whereParams) p.add(v);
+  const expr = await compileGroupExpr(f.group_by as string, p);
+
+  const res = await query<{ gkey: string | null; n: number | string }>(
+    `SELECT ${expr} AS gkey, COUNT(*)::int AS n
+       ${WO_FROM} ${whereSql}
+      GROUP BY 1
+      ORDER BY 1 ASC NULLS LAST`,
+    p.values,
+  );
+  return res.rows.map((r) => ({
+    // '' and NULL are the same thing to a reader — one "(empty)" bucket.
+    key: r.gkey == null || r.gkey === '' ? null : r.gkey,
+    count: Number(r.n),
+  }));
+}
+
+export async function listWorkOrders(
+  f: ListFilters,
+  actor?: ActingPrincipal,
+): Promise<WorkOrderListResponse> {
+  const { sql: whereSql, p } = await buildListWhere(f, actor);
+  // Snapshot before ORDER BY / LIMIT append to the same accumulator: the count
+  // and the group query need the WHERE parameters and nothing after them.
+  const whereParams = [...p.values];
 
   const totalRes = await query<{ total: number | string }>(
-    `SELECT COUNT(*)::int AS total FROM task t ${whereSql}`,
-    params,
+    `SELECT COUNT(*)::int AS total ${WO_FROM} ${whereSql}`,
+    whereParams,
   );
   const total = Number(totalRes.rows[0].total);
 
-  const limitParam = `$${params.length + 1}`;
-  const offsetParam = `$${params.length + 2}`;
+  // Custom-field columns are projected on demand. Sending the whole `fields`
+  // bag would put ~100 keys on every row to render the two the user picked.
+  const { selectSql, customByAlias } = await customProjection(f.columns ?? [], p);
+
+  // A grouped list has to sort by its group key first, or the buckets interleave.
+  const groupOrder = f.group_by ? `${await compileGroupExpr(f.group_by, p)} ASC NULLS LAST, ` : '';
+  const orderSql = groupOrder + (await compileSort(f.sort ?? null, p));
+
   const rows = await query<WoRow>(
-    `SELECT ${WO_SELECT} ${WO_FROM} ${whereSql}
-     ORDER BY t.created_at DESC, t.wo_number ASC
-     LIMIT ${limitParam} OFFSET ${offsetParam}`,
-    [...params, f.limit, f.offset],
+    `SELECT ${WO_SELECT}${selectSql} ${WO_FROM} ${whereSql}
+      ORDER BY ${orderSql}
+      LIMIT ${p.add(f.limit)} OFFSET ${p.add(f.offset)}`,
+    p.values,
   );
 
-  return { items: rows.rows.map(mapListItem), total, limit: f.limit, offset: f.offset };
+  return {
+    items: rows.rows.map((r) => mapListItem(r, customByAlias)),
+    total,
+    limit: f.limit,
+    offset: f.offset,
+    groups: f.group_by ? await groupCounts(f, whereSql, whereParams) : undefined,
+  };
+}
+
+/** SELECT fragment + alias→key map for the custom fields among `columns`. */
+async function customProjection(
+  columns: string[],
+  p: Params,
+): Promise<{ selectSql: string; customByAlias: Map<string, string> }> {
+  const customByAlias = new Map<string, string>();
+  const parts: string[] = [];
+  for (const key of columns) {
+    if (!key.startsWith('fields.')) continue;
+    const f = await resolveField(key);
+    const alias = `c${customByAlias.size}`;
+    customByAlias.set(alias, key);
+    parts.push(`(t.fields->>${p.add(f.jsonKey)}) AS ${alias}`);
+  }
+  return { selectSql: parts.length ? `, ${parts.join(', ')}` : '', customByAlias };
+}
+
+/**
+ * Every id matching the current filters — what "select all 1,240" and the CSV
+ * export both need. Capped: a bulk edit is a deliberate act on a set the user
+ * can describe, not a way to rewrite the entire database in one request.
+ */
+export const BULK_SELECTION_CAP = 5000;
+
+export async function listMatchingIds(
+  f: Omit<ListFilters, 'limit' | 'offset'>,
+  actor?: ActingPrincipal,
+): Promise<string[]> {
+  const { sql: whereSql, p } = await buildListWhere(f, actor);
+  const res = await query<{ id: string }>(
+    `SELECT t.id ${WO_FROM} ${whereSql} ORDER BY t.created_at DESC LIMIT ${p.add(BULK_SELECTION_CAP)}`,
+    p.values,
+  );
+  return res.rows.map((r) => r.id);
 }
 
 interface DetailBaseRow extends WoRow {
@@ -168,6 +313,13 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
   const quoteTotal = await getBindableQuoteTotal(r.id);
   if (quoteTotal !== null) money.quote = quoteTotal;
 
+  // The bag the page sees carries the FORMULA's Profit (invoiced − cost), not
+  // whatever snapshot an old export stored — so the All-fields tab and the
+  // Finances card can never disagree.
+  const fieldsOut: Record<string, unknown> = { ...(r.fields ?? {}) };
+  if (money.profit === null) delete fieldsOut['Profit'];
+  else fieldsOut['Profit'] = money.profit;
+
   return {
     id: r.id,
     wo_number: r.wo_number,
@@ -188,7 +340,7 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
       group: r.status_group,
       color: r.status_color,
     },
-    fields: r.fields ?? {},
+    fields: fieldsOut,
     money,
     memberships: memRes.rows.map((m) => ({
       list_id: m.list_id,
@@ -196,6 +348,64 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
       is_home: m.is_home,
     })),
     recent_activity: recent,
+    status_change: await pendingStatusChange(r.id),
+  };
+}
+
+/**
+ * 0025 · the status-change request the header should show: the open one, or
+ * the newest decided one nobody has acknowledged yet (rule 2.4.3 — the
+ * dispatcher is told, and says they saw it). Read straight from approval_task
+ * so this module does not import the approvals service (which imports the
+ * automations dispatcher, which imports this).
+ */
+async function pendingStatusChange(taskId: string): Promise<StatusChangeState | null> {
+  const res = await query<{
+    id: string;
+    status: 'open' | 'approved' | 'rejected';
+    detail: { to_status_id?: string; to_status_name?: string } | null;
+    to_id: string | null;
+    to_name: string | null;
+    to_group: StatusRef['group'] | null;
+    to_color: string | null;
+    rb_id: string | null;
+    rb_name: string | null;
+    db_id: string | null;
+    db_name: string | null;
+    decided_at: string | null;
+    decision_note: string | null;
+  }>(
+    `SELECT a.id::text AS id, a.status, a.detail,
+            s.id::text AS to_id, s.name AS to_name, s.status_group AS to_group, s.color AS to_color,
+            rb.id::text AS rb_id, rb.display_name AS rb_name,
+            db.id::text AS db_id, db.display_name AS db_name,
+            to_char((a.decided_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS decided_at,
+            a.decision_note
+       FROM approval_task a
+       LEFT JOIN status s     ON s.id::text = a.detail->>'to_status_id'
+       LEFT JOIN principal rb ON rb.id = a.created_by
+       LEFT JOIN principal db ON db.id = a.decided_by
+      WHERE a.task_id = $1 AND a.type = 'status_change'
+        AND (a.status = 'open' OR (a.status IN ('approved', 'rejected') AND a.acknowledged_at IS NULL))
+      ORDER BY CASE a.status WHEN 'open' THEN 0 ELSE 1 END, a.updated_at DESC
+      LIMIT 1`,
+    [taskId],
+  );
+  const r = res.rows[0];
+  if (!r) return null;
+  return {
+    approval_task_id: r.id,
+    status: r.status,
+    to_status: {
+      id: r.to_id ?? r.detail?.to_status_id ?? '',
+      name: r.to_name ?? r.detail?.to_status_name ?? '',
+      group: r.to_group ?? 'open',
+      color: r.to_color ?? '',
+    },
+    requested_by: r.rb_id ? { id: r.rb_id, display_name: r.rb_name ?? '' } : null,
+    decided_by: r.db_id ? { id: r.db_id, display_name: r.db_name ?? '' } : null,
+    decided_at: r.decided_at,
+    decision_note: r.decision_note,
   };
 }
 
@@ -231,7 +441,11 @@ export async function listStatuses(): Promise<Status[]> {
 export async function changeStatus(
   idOrWo: string,
   statusId: string,
-  actorHeader: string | undefined,
+  actorId: string,
+  auto?: AutoCtx,
+  /** 0025: the approved status-change request behind this move, stamped on
+      the audit row as `via: 'approval_task'` (rule 2.4.3). */
+  source?: ChangeSource,
 ): Promise<WorkOrderDetail> {
   const col = UUID_RE.test(idOrWo) ? 'id' : 'wo_number';
   const db = getDb();
@@ -239,12 +453,15 @@ export async function changeStatus(
   // Resolve the actor BEFORE opening the transaction. PGlite is single-connection:
   // calling the non-transactional query() from inside db.transaction() would queue
   // behind the open transaction and self-deadlock.
-  const actorId = await resolveActorId(actorHeader);
+
+  // Captured for the automations engine, which runs AFTER the commit.
+  let fired: { taskId: string; change: TaskChange } | null = null;
 
   await db.transaction(async (tx) => {
     // Current task + status.
-    const cur = await tx.query<{ task_id: string; status_id: string; status_name: string }>(
-      `SELECT t.id AS task_id, t.status_id, s.name AS status_name
+    const cur = await tx.query<{ task_id: string; status_id: string; status_name: string; ecotrak_status: string | null }>(
+      `SELECT t.id AS task_id, t.status_id, s.name AS status_name,
+              t.fields ->> '${ECOTRAK_STATUS_KEY}' AS ecotrak_status
          FROM task t JOIN status s ON s.id = t.status_id
         WHERE t.${col} = $1 AND t.deleted_at IS NULL
         LIMIT 1`,
@@ -253,7 +470,7 @@ export async function changeStatus(
     if (cur.rows.length === 0) {
       throw new ApiError('NOT_FOUND', 'Work order not found');
     }
-    const { task_id, status_id: currentStatusId, status_name: currentStatusName } = cur.rows[0];
+    const { task_id, status_id: currentStatusId, status_name: currentStatusName, ecotrak_status } = cur.rows[0];
 
     // Target status must exist.
     const target = await tx.query<{ id: string; name: string; status_group: string }>(
@@ -268,23 +485,46 @@ export async function changeStatus(
     // No-op change: return without writing a log row.
     if (currentStatusId === statusId) return;
 
+    // Rules 2.6.3 / 2.7: would Ecotrak accept the transition this move implies?
+    // Only a work order the adapter has stamped with an Ecotrak status is
+    // checked. Nothing is pushed here — the adapter is inbound-only until
+    // go-live — so in 'warn' mode the move goes through and the audit row
+    // carries the verdict; 'block' mode refuses it (ECOTRAK_TRANSITION_MODE).
+    const verdict = checkEcotrakTransition(ecotrak_status, newStatusName);
+    const refused = ecotrakTransitionRefused(verdict);
+    if (refused && config.ecotrakTransitionMode === 'block') {
+      throw new ApiError('CONFLICT', describeEcotrakRefusal(verdict), {
+        code: 'ECOTRAK_TRANSITION',
+        ecotrak: verdict,
+      });
+    }
+
     await tx.query(
       `UPDATE task SET status_id = $1, status_group = $2, updated_at = now() WHERE id = $3`,
       [statusId, newGroup, task_id],
     );
 
-    await tx.query(
-      `INSERT INTO activity_log
-         (actor_principal_id, entity_type, entity_id, action, field, before, after)
-       VALUES ($1, 'task', $2, 'status_changed', 'status_id', $3::jsonb, $4::jsonb)`,
-      [
-        actorId,
-        task_id,
-        JSON.stringify({ status_id: currentStatusId, status_name: currentStatusName }),
-        JSON.stringify({ status_id: statusId, status_name: newStatusName }),
-      ],
-    );
+    const change: TaskChange = {
+      field: 'status_id',
+      before: { status_id: currentStatusId, status_name: currentStatusName },
+      after: {
+        status_id: statusId,
+        status_name: newStatusName,
+        // The refusal rides on the status_changed row itself (one row per
+        // change), so the trail reads "… Ecotrak would refuse Accepted → Arrived".
+        ...(refused ? { ecotrak: verdict } : {}),
+      },
+    };
+    await logTaskChanges(tx, actorId, task_id, [change], auto?.by ?? source);
+    fired = { taskId: task_id, change };
   });
+
+  // Automations react after the commit and before the detail is re-read, so the
+  // caller sees the rule's effect (e.g. an auto-assign) in the response.
+  if (fired !== null) {
+    const f: { taskId: string; change: TaskChange } = fired;
+    await dispatchAutomations({ taskId: f.taskId, kind: 'changed', changes: [f.change] }, auto);
+  }
 
   // Return the fresh detail object (same shape as GET /:id).
   const detail = await getWorkOrderDetail(idOrWo);

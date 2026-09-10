@@ -10,7 +10,7 @@ interface MessagesPanelProps {
   data: MessagesResponse | undefined;
   loading: boolean;
   error: boolean;
-  /** Cleaned WO status name for the thread foot ("— waiting for approval"). */
+  /** Cleaned WO status name for the thread foot ("— Waiting for Approval"). */
   waitingOn: string | null;
   queryKey: readonly unknown[];
 }

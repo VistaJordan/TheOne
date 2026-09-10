@@ -1,0 +1,190 @@
+/* The One — shared form controls.
+
+   The field, switch, link-button and section-badge primitives from the two
+   approved S4 comps, promoted OUT of the `.qb` / `.pay` page scopes they were
+   first ported into. S5 (sign-in, Admin Studio) uses the SAME controls rather
+   than a second set that only looks similar — before this sheet existed the
+   admin screens matched none of these selectors and fell through to the UA's
+   own square grey chrome.
+
+   Declarations are unchanged from the comps. Every page-specific override is
+   left where it was and still wins on specificity (`.qb .lt .fld`,
+   `.pay .field`, `.pay .fselect`…), so the quote builder, the payment request
+   and the S1/S2 work-order screens render exactly as before.
+
+   Loaded BEFORE quote.css / payment.css so those overrides come last. */
+
+/* ── Field + label (§3.1 label above every field) ──────────────────────────── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.lbl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  line-height: 1.3;
+}
+
+/* ── Text / select / textarea ──────────────────────────────────────────────── */
+.fld {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink);
+  background: var(--field-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.fld::placeholder { color: var(--ink-3); }
+
+.fld:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Focus is AUTHORED here (accent rail + 3px accent halo), so the UA ring would
+   only double it — same trade the S4 comps make in s4-forms.css. */
+.fld:focus-visible { outline: none; }
+
+textarea.fld {
+  resize: vertical;
+  line-height: 1.55;
+  padding: 9px 11px;
+  font-size: 13px;
+}
+
+/* The caret is two CSS gradients on the control itself: no wrapper element and
+   no UA arrow, so a <select> is the same object as an <input> in every skin. */
+select.fld {
+  appearance: none;
+  padding-right: 22px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 12px) 13px, calc(100% - 8px) 13px;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+
+/* The OS draws the open list on the page's ground, not the control's. */
+select.fld option {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* ── Toggle switch ─────────────────────────────────────────────────────────── */
+.sw {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sw input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+.sw-track {
+  width: 34px;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 1px solid var(--border-strong);
+  position: relative;
+  flex: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sw-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: var(--ink-3);
+  transition: transform 0.15s, background 0.15s;
+}
+
+/* Keyed on the adjacency alone, not on a `.sw` ancestor, so any hidden checkbox
+   sitting directly before a track lights it (the admin capability rows do). */
+input:checked + .sw-track { background: var(--accent); border-color: transparent; }
+input:checked + .sw-track::after { transform: translateX(15px); background: var(--on-accent); }
+
+.sw input:disabled ~ span { cursor: not-allowed; }
+
+/* The real checkbox is 0×0 and off-screen, so the UA ring lands on nothing —
+   the track carries the keyboard ring instead. Resting state is untouched. */
+.sw input:focus-visible + .sw-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Link button (an action that reads as a link, not a button) ─────────────── */
+.linkbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.linkbtn:hover { text-decoration-thickness: 2px; }
+
+/* ── Section badge / subtotal chip ─────────────────────────────────────────── */
+.sec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: var(--pill-radius);
+  font-family: var(--th-font), 'Barlow Condensed', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--chip);
+  color: var(--ink-2);
+}
+
+.sec-sub { font-size: 12px; color: var(--ink-3); }
+
+.subtotal-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 10px;
+  border-radius: var(--pill-radius);
+  background: var(--thead-bg);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.subtotal-chip b {
+  font-size: 13.5px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.push { margin-left: auto; }

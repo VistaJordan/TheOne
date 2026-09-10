@@ -4,9 +4,9 @@ import type { StatusRef } from '@theone/shared';
 /** Static 3-entry override map (keyed by lower-cased hex) for the three
     day-theme colors whose base formula falls below 4.5:1 (SPRINT1-SPEC §6). */
 const DAY_INK_OVERRIDE: Record<string, string> = {
-  '#f8ae00': '#7c5700', // assessment ongoing / job ongoing → 5.96:1
-  '#6bed5e': '#36772f', // !! ready to invoice              → 5.11:1
-  '#64c6a2': '#326351', // done/incurred                    → 6.27:1
+  '#f8ae00': '#7c5700', // On Site (Assessment) / On Site (Job) → 5.96:1
+  '#6bed5e': '#36772f', // Ready to Invoice                     → 5.11:1
+  '#64c6a2': '#326351', // Done / Incurred                      → 6.27:1
 };
 
 interface PillVars extends CSSProperties {
