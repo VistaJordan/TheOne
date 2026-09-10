@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { ECOTRAK_STATUS_KEY, ecotrakStatusLabel } from '@theone/shared';
 import type { Phase, WorkOrderDetailV2 } from '../../api/client';
 import { DASH, FIELD, dateVal, daysSince, field, isCostOverNte, money, numericDate, str } from '../../lib/fields';
 import { deriveHeaderMeta, resolveMoney } from '../../lib/woDerive';
@@ -60,6 +61,9 @@ interface WoHeaderProps {
 export function WoHeader({ wo, phase, inStatusDays }: WoHeaderProps) {
   const meta = deriveHeaderMeta(wo);
   const f = wo.fields ?? {};
+  // Rules 2.6.3 / 2.7: where the work order sits on Ecotrak (stamped by the
+  // inbound sync); the status menu checks every pick against it.
+  const ecotrakLabel = ecotrakStatusLabel(f[ECOTRAK_STATUS_KEY] as string | undefined);
   const age = daysSince(wo.date_received);
   const openPipeline = wo.status.group === 'open' || wo.status.group === 'active';
   const ageWarn = age != null && age >= AGE_WARN_DAYS && openPipeline;
@@ -138,6 +142,7 @@ export function WoHeader({ wo, phase, inStatusDays }: WoHeaderProps) {
             woId={wo.id}
             current={wo.status}
             align="right"
+            ecotrakStatus={f[ECOTRAK_STATUS_KEY]}
             renderTrigger={({ open, toggle, mode }) => (
               <button
                 type="button"
@@ -194,6 +199,14 @@ export function WoHeader({ wo, phase, inStatusDays }: WoHeaderProps) {
             </span>
           )}
           {meta.billingEntity && <span className="chip chip-accent">{meta.billingEntity}</span>}
+          {ecotrakLabel && (
+            <span
+              className="chip chip-ecotrak"
+              title="Where this work order sits on Ecotrak, as of the last sync (rules 2.6.3 / 2.7 check status changes against it)"
+            >
+              Ecotrak · {ecotrakLabel}
+            </span>
+          )}
           {meta.priorityLabel && (
             <span className="chip chip-warn">
               <Icon name="flag" size={12} />

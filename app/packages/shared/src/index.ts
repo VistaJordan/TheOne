@@ -1343,3 +1343,6 @@ export interface FmCicoMethod {
   detail: string | null;
   updated_at: string;
 }
+
+// Rules 2.6.3 / 2.7: Ecotrak allowed transitions (pure table + verdict).
+export * from './ecotrak';

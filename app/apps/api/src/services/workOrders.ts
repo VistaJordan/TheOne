@@ -13,8 +13,15 @@ import type {
   Phase,
   StatusChangeState,
 } from '@theone/shared';
-import { PHASE_BY_STATUS_NAME } from '@theone/shared';
+import {
+  PHASE_BY_STATUS_NAME,
+  ECOTRAK_STATUS_KEY,
+  checkEcotrakTransition,
+  ecotrakTransitionRefused,
+  describeEcotrakRefusal,
+} from '@theone/shared';
 import { ApiError } from '../errors.js';
+import { config } from '../config.js';
 import { logTaskChanges, type ChangeSource, type TaskChange } from './woAudit.js';
 import { dispatchAutomations, type AutoCtx } from './automations.js';
 import { UUID_RE, CREATED_AT_SQL, getActivityForTask, type ActingPrincipal } from './activity.js';
@@ -452,8 +459,9 @@ export async function changeStatus(
 
   await db.transaction(async (tx) => {
     // Current task + status.
-    const cur = await tx.query<{ task_id: string; status_id: string; status_name: string }>(
-      `SELECT t.id AS task_id, t.status_id, s.name AS status_name
+    const cur = await tx.query<{ task_id: string; status_id: string; status_name: string; ecotrak_status: string | null }>(
+      `SELECT t.id AS task_id, t.status_id, s.name AS status_name,
+              t.fields ->> '${ECOTRAK_STATUS_KEY}' AS ecotrak_status
          FROM task t JOIN status s ON s.id = t.status_id
         WHERE t.${col} = $1 AND t.deleted_at IS NULL
         LIMIT 1`,
@@ -462,7 +470,7 @@ export async function changeStatus(
     if (cur.rows.length === 0) {
       throw new ApiError('NOT_FOUND', 'Work order not found');
     }
-    const { task_id, status_id: currentStatusId, status_name: currentStatusName } = cur.rows[0];
+    const { task_id, status_id: currentStatusId, status_name: currentStatusName, ecotrak_status } = cur.rows[0];
 
     // Target status must exist.
     const target = await tx.query<{ id: string; name: string; status_group: string }>(
@@ -477,6 +485,20 @@ export async function changeStatus(
     // No-op change: return without writing a log row.
     if (currentStatusId === statusId) return;
 
+    // Rules 2.6.3 / 2.7: would Ecotrak accept the transition this move implies?
+    // Only a work order the adapter has stamped with an Ecotrak status is
+    // checked. Nothing is pushed here — the adapter is inbound-only until
+    // go-live — so in 'warn' mode the move goes through and the audit row
+    // carries the verdict; 'block' mode refuses it (ECOTRAK_TRANSITION_MODE).
+    const verdict = checkEcotrakTransition(ecotrak_status, newStatusName);
+    const refused = ecotrakTransitionRefused(verdict);
+    if (refused && config.ecotrakTransitionMode === 'block') {
+      throw new ApiError('CONFLICT', describeEcotrakRefusal(verdict), {
+        code: 'ECOTRAK_TRANSITION',
+        ecotrak: verdict,
+      });
+    }
+
     await tx.query(
       `UPDATE task SET status_id = $1, status_group = $2, updated_at = now() WHERE id = $3`,
       [statusId, newGroup, task_id],
@@ -485,7 +507,13 @@ export async function changeStatus(
     const change: TaskChange = {
       field: 'status_id',
       before: { status_id: currentStatusId, status_name: currentStatusName },
-      after: { status_id: statusId, status_name: newStatusName },
+      after: {
+        status_id: statusId,
+        status_name: newStatusName,
+        // The refusal rides on the status_changed row itself (one row per
+        // change), so the trail reads "… Ecotrak would refuse Accepted → Arrived".
+        ...(refused ? { ecotrak: verdict } : {}),
+      },
     };
     await logTaskChanges(tx, actorId, task_id, [change], auto?.by ?? source);
     fired = { taskId: task_id, change };

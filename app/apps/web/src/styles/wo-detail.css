@@ -119,6 +119,13 @@ textarea {
   border-color: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
+/* Rules 2.6.3 / 2.7: where the work order sits on Ecotrak (header chip). */
+.chip-ecotrak {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn-border);
+}
+
 .chip-warn {
   background: var(--warn-bg);
   color: var(--warn);
@@ -2355,6 +2362,9 @@ textarea {
   text-decoration: none;
 }
 .audit-via-link:hover { text-decoration: underline; }
+
+/* Rules 2.6.3 / 2.7: the status row's "Ecotrak does not allow …" tail. */
+.audit-ecotrak { color: var(--warn); }
 
 /* An automation's row names the rule where a person's row names the person, so
    the link takes the weight `.audit-text b` gives that slot and adds only the
