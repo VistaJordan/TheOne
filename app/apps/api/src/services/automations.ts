@@ -37,12 +37,17 @@ import type {
   AutomationTrigger,
   ApprovalTaskType,
 } from '@theone/shared';
-import { APPROVAL_TASK_ACTION_FIELD } from '@theone/shared';
+import { APPROVAL_TASK_ACTION_FIELD, APPROVAL_TASK_TYPES } from '@theone/shared';
 import {
   createApprovalTask,
   isApprovalTaskType,
   reconcileApprovalTasks,
 } from './approvals.js';
+
+/** The kinds a RULE may raise — the builder's list. A status change is a
+    person's ask (0025) and an acceptance is the system's (0036); neither
+    can come from a rule, whatever the API is handed. */
+const RULE_RAISABLE = new Set<string>(APPROVAL_TASK_TYPES.map((t) => t.code));
 
 const MAX_DEPTH = 5;
 const MAX_ACTIONS = 10;
@@ -310,8 +315,8 @@ async function resolveAction(a: AutomationAction): Promise<ResolvedAction> {
 
   // Raise a task in the Approvals inbox (0026) rather than write a field.
   if (a.kind === 'approval_task' || field === APPROVAL_TASK_ACTION_FIELD) {
-    if (!isApprovalTaskType(value)) {
-      throw new ApiError('BAD_REQUEST', 'An approval task action needs a task type');
+    if (!isApprovalTaskType(value) || !RULE_RAISABLE.has(value)) {
+      throw new ApiError('BAD_REQUEST', 'An approval task action needs a task type a rule can raise');
     }
     const role = a.assign_role?.trim() || null;
     if (role) {

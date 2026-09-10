@@ -31,6 +31,7 @@ import { DASH, feedTime, initials } from '../../lib/fields';
 import {
   actionLabel,
   approvalAskText,
+  approvalDecisionVerb,
   approvalRef,
   automationRef,
   describeVisitChange,
@@ -388,7 +389,7 @@ function changeOf(
         field: kind,
         value: (
           <>
-            {ref.status === 'rejected' ? 'rejected' : 'approved'} {approvalAskText(ref)}
+            {approvalDecisionVerb(ref)} {approvalAskText(ref)}
             {ref.note ? <> — {ref.note}</> : null}
           </>
         ),
@@ -418,7 +419,12 @@ function changeOf(
         };
       }
       return {
-        field: ref.type === 'nte_override' ? 'NTE override' : 'Manager review',
+        field:
+          ref.type === 'nte_override'
+            ? 'NTE override'
+            : ref.type === 'wo_acceptance'
+              ? 'Work order acceptance'
+              : 'Manager review',
         value: (
           <>
             {ref.title ?? DASH}

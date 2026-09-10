@@ -135,6 +135,33 @@ needs no code: nothing pauses a timer and the quote clock keys off visits.
 The status button reads "Request status change" for request-mode users and
 the bulk bar hides its status move for them.
 
+**Pending acceptance** (migration 0036, rules 7.1.1–7.1.4) is the third
+kind riding the same table: an `approval_task` of type `wo_acceptance`,
+inbox section **Pending acceptance** (permission path `approvals/intake`,
+view / approve; 0036 grants it to TL / ATL / AM / Admin). Nothing new on the
+work order: "pending" = the open task + an empty `Assignee` (the status stays
+Open). `raiseAcceptanceTasks(ids, actorId, source)` in `services/approvals.ts`
+is what the creators call **after their transaction commits** — the Ecotrak
+ingest (signed by the `Ecotrak sync` service principal, `services/
+serviceActors.ts`) and the CSV import (after its automations ran, so an
+auto-assign on create needs no acceptance); a row that already has an
+assignee is skipped. Accept = `POST /approval-tasks/:id/approve` with
+`assignee` (a human principal's display name, required, checked against
+`principal`); the decision commits, then the name is written through
+`updateWorkOrderFields` so it is audited as the manager's edit and the 0032
+scope puts the work order in that dispatcher's list (7.1.4). Reject needs the
+reason and, after the commit, calls `changeStatus` to `Cancelled / Postponed`
+(`ACCEPTANCE_REJECT_STATUS_NAME`, looked up by name — 409 if the status is
+gone) with source `{kind:'approval_task'}`. `reconcileApprovalTasks` cancels
+an open acceptance once somebody fills `Assignee` by hand or moves the work
+order to Cancelled / Postponed. The detail payload carries `acceptance`
+(`AcceptanceState`) and the header draws an "Awaiting acceptance · from
+Ecotrak" chip; the inbox row reads Accept (opens the assignee picker) /
+Reject. Rule-raised tasks are still only the two the builder offers
+(`APPROVAL_TASK_TYPES`); a rule cannot raise an acceptance. Deferred: the
+auto-assign suggester (7.1.3's note), and no work order is created by hand
+in the app today, so `source: 'manual'` is reserved.
+
 **Which work orders a person sees** (migration 0032, rule 8.5, the
 roadmap's "my book / my entity") is two more paths in the same permission
 tree, so Roles and per-user Adjust draw it with no UI of its own:

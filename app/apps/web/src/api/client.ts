@@ -978,9 +978,15 @@ function decideApproval(id: string, verb: string, body: Record<string, unknown> 
   });
 }
 
-/** POST …/approve — open → approved, optional note (approvals:approve). */
-export function approveApprovalTask(id: string, note: string | null): Promise<ApprovalTaskResponse> {
-  return decideApproval(id, 'approve', { note });
+/** POST …/approve — open → approved, optional note (approvals:approve).
+    `assignee` is the person a new work order goes to when accepting a
+    wo_acceptance task (0036, rule 7.1.3) — required there, ignored elsewhere. */
+export function approveApprovalTask(
+  id: string,
+  note: string | null,
+  assignee: string | null = null,
+): Promise<ApprovalTaskResponse> {
+  return decideApproval(id, 'approve', { note, assignee });
 }
 
 /** POST …/reject — open → rejected; the note is posted as an internal update

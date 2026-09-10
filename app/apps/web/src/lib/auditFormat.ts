@@ -83,7 +83,17 @@ export function approvalAskText(ref: ApprovalRef): string {
       : 'the status change request';
   }
   if (ref.type === 'nte_override') return ref.title ? `the NTE override (${ref.title})` : 'the NTE override';
+  // 0036: a new work order's acceptance reads as the work order itself —
+  // "accepted the work order — Assigned to X".
+  if (ref.type === 'wo_acceptance') return 'the work order';
   return ref.title ? `the manager review (${ref.title})` : 'the manager review';
+}
+
+/** "approved" / "rejected" as the comment row says it — a new work order is
+    ACCEPTED, not approved (rule 7.1.3). */
+export function approvalDecisionVerb(ref: ApprovalRef): string {
+  if (ref.status === 'rejected') return 'rejected';
+  return ref.type === 'wo_acceptance' ? 'accepted' : 'approved';
 }
 
 // ── Visits (0021) ────────────────────────────────────────────────────────────

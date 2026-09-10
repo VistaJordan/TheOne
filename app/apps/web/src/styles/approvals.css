@@ -125,4 +125,7 @@
 .scr-rejected .scr-act.is-primary { background: var(--danger); border-color: var(--danger); }
 .scr .scr-act:disabled { opacity: .55; cursor: default; }
 .scr .scr-act:hover:not(:disabled) { filter: brightness(1.08); }
+/* 0036: a new work order nobody has accepted — the same warn tone as an open
+   request, with the inbox icon so the two chips never read as one. */
+.scr-intake .scr-text b { color: inherit; }
 @media (max-width: 900px) { .scr { max-width: 100%; } }

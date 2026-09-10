@@ -522,6 +522,7 @@ export function buildPermissionTree(
       actions: ['view', 'approve'],
       note: 'View = the Approvals inbox and the tasks on a work order; approve also covers reject and claim. Each section below can differ.',
       children: [
+        { key: 'approvals/intake', label: 'Pending acceptance', actions: ['view', 'approve'], note: 'New work orders waiting for a manager to accept and assign, or reject (rule 7.1).' },
         { key: 'approvals/nte', label: 'NTE increases', actions: ['view', 'approve'] },
         { key: 'approvals/status', label: 'Status changes', actions: ['view', 'approve'], note: 'Requests raised under rule 2.4.1. A person always sees their own.' },
         { key: 'approvals/reviews', label: 'Manager reviews', actions: ['view', 'approve'] },

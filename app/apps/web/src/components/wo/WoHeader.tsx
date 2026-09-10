@@ -12,6 +12,7 @@ import { StatusChangeMenu } from '../StatusChangeMenu';
 import { StatusPill } from '../StatusPill';
 import { PhaseBar } from './PhaseBar';
 import { StatusChangeBanner } from './StatusChangeBanner';
+import { AcceptanceChip } from './AcceptanceChip';
 
 /** One labelled amount in the worth block. The currency sign is drawn
     separately, smaller and lighter, so label + amount read the way the comp
@@ -144,6 +145,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
             className="pill-lg"
             leading={<span className="pill-dot" aria-hidden="true" />}
           />
+          {wo.acceptance && <AcceptanceChip state={wo.acceptance} />}
           {wo.status_change && (
             <StatusChangeBanner
               state={wo.status_change}

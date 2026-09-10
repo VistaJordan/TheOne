@@ -34,7 +34,11 @@ import { requirePerm } from '../services/permissions.js';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
 const uuidParamsSchema = z.object({ id: z.string().uuid() });
-const approveSchema = z.object({ note: z.string().trim().max(2000).nullable().optional() });
+const approveSchema = z.object({
+  note: z.string().trim().max(2000).nullable().optional(),
+  /** 0036, rule 7.1.3: accepting a new work order names who runs it. */
+  assignee: z.string().trim().max(200).nullable().optional(),
+});
 const rejectSchema = z.object({ note: z.string().trim().min(1).max(2000) });
 
 async function taskIdOf(req: FastifyRequest): Promise<string> {
@@ -63,9 +67,9 @@ export default async function approvalRoutes(app: FastifyInstance): Promise<void
 
   app.post('/approval-tasks/:id/approve', async (req) => {
     const { id } = parse(uuidParamsSchema, req.params);
-    const { note } = parse(approveSchema, req.body ?? {});
+    const { note, assignee } = parse(approveSchema, req.body ?? {});
     const actor = actingPrincipalFromRequest(req);
-    return { item: await approveApprovalTask(id, note?.trim() || null, actor) };
+    return { item: await approveApprovalTask(id, note?.trim() || null, actor, { assignee: assignee ?? null }) };
   });
 
   app.post('/approval-tasks/:id/reject', async (req) => {

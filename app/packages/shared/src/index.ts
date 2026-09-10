@@ -415,6 +415,9 @@ export interface WorkOrderDetail {
   /** 0025: a status change requested under rule 2.4.1 — pending, or decided
       and not yet acknowledged by whoever asked. Null when there is none. */
   status_change: StatusChangeState | null;
+  /** Rule 7.1.1: the open acceptance task on a new work order — a manager
+      has yet to accept and assign it (or reject it). Null once decided. */
+  acceptance: AcceptanceState | null;
 }
 
 // ── Money (S2) ───────────────────────────────────────────────────────────────
@@ -1051,7 +1054,7 @@ export interface SnoozeResponse {
  * rules engine can raise any type. open → approved | rejected, or cancelled
  * when the reason went away on its own.
  */
-export type ApprovalTaskType = 'nte_override' | 'manager_review' | 'status_change';
+export type ApprovalTaskType = 'nte_override' | 'manager_review' | 'status_change' | 'wo_acceptance';
 
 export type ApprovalTaskStatus = 'open' | 'approved' | 'rejected' | 'cancelled';
 
@@ -1065,9 +1068,10 @@ export const APPROVALS_PERM_KEY = 'approvals';
  * `view` here — deciding those stays with `quotes:approve` and the payments
  * grant, so the money rules keep one gate.
  */
-export type ApprovalSectionKey = 'nte' | 'status' | 'reviews' | 'quotes' | 'payments';
+export type ApprovalSectionKey = 'intake' | 'nte' | 'status' | 'reviews' | 'quotes' | 'payments';
 
 export const APPROVAL_SECTIONS: { key: ApprovalSectionKey; label: string; decides: boolean }[] = [
+  { key: 'intake', label: 'Pending acceptance', decides: true },
   { key: 'nte', label: 'NTE increases', decides: true },
   { key: 'status', label: 'Status changes', decides: true },
   { key: 'reviews', label: 'Manager reviews', decides: true },
@@ -1081,7 +1085,13 @@ export function approvalSectionPermKey(section: ApprovalSectionKey): string {
 
 /** Which section an approval task of this type lives in. */
 export function approvalSectionOf(type: ApprovalTaskType): ApprovalSectionKey {
-  return type === 'nte_override' ? 'nte' : type === 'status_change' ? 'status' : 'reviews';
+  return type === 'nte_override'
+    ? 'nte'
+    : type === 'status_change'
+      ? 'status'
+      : type === 'wo_acceptance'
+        ? 'intake'
+        : 'reviews';
 }
 
 /**
@@ -1107,7 +1117,45 @@ export const APPROVAL_TASK_LABEL: Record<ApprovalTaskType, string> = {
   nte_override: 'NTE override',
   manager_review: 'Manager review',
   status_change: 'Status change',
+  wo_acceptance: 'Work order acceptance',
 };
+
+// ── Pending acceptance (rules 7.1.1 – 7.1.4) ─────────────────────────────────
+/**
+ * A new work order nobody has accepted yet. The system (the Ecotrak sync, a
+ * CSV import) raises a `wo_acceptance` task the moment it creates a work
+ * order with no assignee; the task is the manager's Pending Acceptance queue
+ * (rule 7.1.1). Accept asks for the assignee and writes it (7.1.3 — the
+ * work order then shows in that dispatcher's list, 7.1.4); Reject asks for
+ * the reason and moves the work order to ACCEPTANCE_REJECT_STATUS_NAME
+ * (7.1.2). The task is cancelled on its own once somebody assigns or cancels
+ * the work order by hand.
+ */
+export type AcceptanceSource = 'ecotrak' | 'import' | 'manual';
+
+export const ACCEPTANCE_SOURCE_LABEL: Record<AcceptanceSource, string> = {
+  ecotrak: 'Ecotrak',
+  import: 'CSV import',
+  manual: 'Created by hand',
+};
+
+/** Where a rejected work order lands (rule 7.1.2). Looked up by name. */
+export const ACCEPTANCE_REJECT_STATUS_NAME = 'Cancelled / Postponed';
+
+/** The `detail` of a wo_acceptance task. */
+export interface AcceptanceDetail {
+  source: AcceptanceSource;
+  /** Set on approval: the assignee the manager picked. */
+  assignee?: string;
+}
+
+/** The open acceptance on a work order, carried on the detail payload so the
+    header can say "awaiting acceptance" before any click. */
+export interface AcceptanceState {
+  approval_task_id: string;
+  source: AcceptanceSource;
+  raised_at: string;
+}
 
 /** The `detail` of a status_change task: what was asked (rule 2.4.1). */
 export interface StatusChangeDetail {
@@ -1142,8 +1190,13 @@ export interface ApprovalCounts {
 }
 
 /** The task types the automation builder offers, with how each reads.
-    (A status change is asked for by a person, never raised by a rule.) */
-export const APPROVAL_TASK_TYPES: { code: Exclude<ApprovalTaskType, 'status_change'>; label: string; hint: string }[] = [
+    (A status change is asked for by a person, never raised by a rule; an
+    acceptance is raised by whatever created the work order.) */
+export const APPROVAL_TASK_TYPES: {
+  code: Exclude<ApprovalTaskType, 'status_change' | 'wo_acceptance'>;
+  label: string;
+  hint: string;
+}[] = [
   {
     code: 'nte_override',
     label: 'NTE override approval',

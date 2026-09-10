@@ -12,6 +12,7 @@ import { getWoFields } from '../../api/client';
 import { DASH, feedTime, initials } from '../../lib/fields';
 import {
   approvalAskText,
+  approvalDecisionVerb,
   approvalRef,
   automationRef,
   describeVisitChange,
@@ -192,7 +193,7 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
           posted {e.after?.client_visible ? 'a client-visible' : 'an internal'} update
           {ref && (
             <>
-              : {ref.status === 'rejected' ? 'rejected' : 'approved'} {approvalAskText(ref)}
+              : {approvalDecisionVerb(ref)} {approvalAskText(ref)}
               {ref.note ? <> — {ref.note}</> : null}
             </>
           )}
@@ -250,6 +251,10 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
           </>
         );
       }
+      // 0036, rule 7.1.1: the system put the new work order up for acceptance.
+      if (ref?.type === 'wo_acceptance') {
+        return <>put the work order in the Pending Acceptance queue</>;
+      }
       return (
         <>
           raised an approval task
@@ -275,11 +280,12 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
     case 'approval_task_cancelled':
     case 'approval_task_acknowledged': {
       const ref = approvalRef(e.after);
+      const acceptance = ref?.type === 'wo_acceptance';
       const verb =
         e.action === 'approval_task_claimed'
           ? 'claimed'
           : e.action === 'approval_task_approved'
-            ? 'approved'
+            ? acceptance ? 'accepted' : 'approved'
             : e.action === 'approval_task_rejected'
               ? 'rejected'
               : e.action === 'approval_task_cancelled'
@@ -294,6 +300,8 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
                 the status change request
                 {ref.from && ref.to ? <> from <Val>{ref.from}</Val> to <Val>{ref.to}</Val></> : null}
               </>
+            ) : acceptance ? (
+              <>{e.action === 'approval_task_cancelled' ? 'the pending acceptance of the work order' : 'the work order'}</>
             ) : (
               <>an approval task{ref.title ? <>: <Val>{ref.title}</Val></> : null}</>
             )

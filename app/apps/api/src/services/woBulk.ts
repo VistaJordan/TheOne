@@ -18,6 +18,7 @@ import type { ActingPrincipal } from './activity.js';
 import { listCustomFields, resolveField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
+import { raiseAcceptanceTasks } from './approvals.js';
 import { applyProfitFormula } from './money.js';
 import { assertNotVisitOwned } from './visits.js';
 import { quoteFilledTaskIds } from './statusGates.js';
@@ -809,6 +810,10 @@ export async function importWorkOrders(
   for (const r of updatedRows) {
     await dispatchAutomations({ taskId: r.id, kind: 'changed', changes: r.changes });
   }
+  // Rule 7.1.1 (0036): a created row nobody assigned — not the file, not a
+  // rule on create — waits in the manager's Pending Acceptance queue. After
+  // the rules ran, so an auto-assign on create needs no acceptance.
+  await raiseAcceptanceTasks(createdIds, actorId, 'import');
 
   return summary;
 }

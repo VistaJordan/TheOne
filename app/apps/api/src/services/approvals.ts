@@ -22,6 +22,8 @@
 
 import { query, withTransaction } from '../db.js';
 import type {
+  AcceptanceDetail,
+  AcceptanceSource,
   ActivityActor,
   ApprovalCounts,
   ApprovalListItem,
@@ -33,6 +35,8 @@ import type {
   StatusChangeDetail,
 } from '@theone/shared';
 import {
+  ACCEPTANCE_REJECT_STATUS_NAME,
+  ACCEPTANCE_SOURCE_LABEL,
   APPROVAL_TASK_LABEL,
   APPROVAL_TASK_TYPES,
   STATUS_PERM_KEY,
@@ -49,9 +53,17 @@ import { assertStatusGate } from './statusGates.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
-// The rule-raised kinds plus the one a person asks for (0025).
-const TYPES = new Set<string>([...APPROVAL_TASK_TYPES.map((t) => t.code), 'status_change']);
+// The rule-raised kinds, the one a person asks for (0025) and the one the
+// system raises when it creates a work order (0036, rule 7.1.1).
+const TYPES = new Set<string>([
+  ...APPROVAL_TASK_TYPES.map((t) => t.code),
+  'status_change',
+  'wo_acceptance',
+]);
 const STATUSES: ApprovalTaskStatus[] = ['open', 'approved', 'rejected', 'cancelled'];
+
+/** The bag key the Assignee seat writes (the same one woScope.ts filters on). */
+const K_ASSIGNEE = 'Assignee';
 
 export function isApprovalTaskType(v: unknown): v is ApprovalTaskType {
   return typeof v === 'string' && TYPES.has(v);
@@ -301,6 +313,8 @@ export interface RaiseInput {
   cause?: { field_label: string; value: string } | null;
   /** For 'status_change': the status asked for (rule 2.4.1). */
   toStatusId?: string | null;
+  /** For 'wo_acceptance': what created the work order (rule 7.1.1). */
+  acceptanceSource?: AcceptanceSource | null;
 }
 
 /** The title and detail a type carries, from the work order's current numbers. */
@@ -310,6 +324,14 @@ async function describe(
   if (input.type === 'status_change') {
     const d = await statusChangeDetail(input.taskId, input.toStatusId ?? null);
     return { title: `Status change requested: ${d.from_status_name} → ${d.to_status_name}`, detail: { ...d } };
+  }
+  if (input.type === 'wo_acceptance') {
+    const source: AcceptanceSource = input.acceptanceSource ?? 'manual';
+    const d: AcceptanceDetail = { source };
+    return {
+      title: `New work order from ${ACCEPTANCE_SOURCE_LABEL[source]} — accept and assign, or reject`,
+      detail: { ...d },
+    };
   }
   if (input.type === 'nte_override') {
     const m = await costAndNte(input.taskId);
@@ -460,6 +482,7 @@ async function decide(
   to: 'approved' | 'rejected',
   note: string | null,
   actor: ActingPrincipal,
+  opts: DecideOptions = {},
 ): Promise<ApprovalTask> {
   const cur = await getApprovalTask(id);
   if (cur.status !== 'open') {
@@ -469,6 +492,29 @@ async function decide(
   }
   const action = to === 'approved' ? 'approval_task_approved' : 'approval_task_rejected';
   const verb = to === 'approved' ? 'approved' : 'rejected';
+
+  // Rule 7.1.3: accepting a work order IS choosing who runs it. The assignee
+  // must be a person on file — the value lands in the Assignee seat, which
+  // the 0032 scope matches by display name, so a typo would hide the work
+  // order from everyone.
+  let assignee: string | null = null;
+  if (to === 'approved' && cur.type === 'wo_acceptance') {
+    assignee = opts.assignee?.trim() || null;
+    if (!assignee) {
+      throw badRequest('Pick who the work order is assigned to before accepting it (rule 7.1.3)', {
+        approval_task_id: id,
+      });
+    }
+    const hit = await query<{ id: string }>(
+      `SELECT id::text AS id FROM principal
+        WHERE kind = 'human' AND display_name = $1 AND status <> 'disabled' LIMIT 1`,
+      [assignee],
+    );
+    if (!hit.rows[0]) {
+      throw badRequest(`"${assignee}" is not an active person on file`, { assignee });
+    }
+    note = [`Assigned to ${assignee}`, note].filter(Boolean).join(' — ');
+  }
   const body = `${TYPE_LABEL[cur.type]} ${verb} — ${cur.title}${note ? ` — ${note}` : ''}`;
 
   // The target must still exist before anything is written, so an approval
@@ -491,6 +537,22 @@ async function decide(
     await assertStatusGate({ query }, cur.task_id, hit.rows[0].name);
     moveTo = hit.rows[0].id;
   }
+  // Rule 7.1.2: rejecting a new work order parks it in Cancelled / Postponed.
+  // The status is looked up by name, so a renamed pipeline says so up front
+  // instead of leaving the task decided and the work order where it was.
+  if (to === 'rejected' && cur.type === 'wo_acceptance') {
+    const hit = await query<{ id: string }>(
+      `SELECT id::text AS id FROM status WHERE lower(name) = lower($1) LIMIT 1`,
+      [ACCEPTANCE_REJECT_STATUS_NAME],
+    );
+    if (!hit.rows[0]) {
+      throw conflict(
+        `There is no "${ACCEPTANCE_REJECT_STATUS_NAME}" status to move the work order to, so it cannot be rejected here. Add the status under Admin › Statuses first.`,
+        { approval_task_id: id, status_name: ACCEPTANCE_REJECT_STATUS_NAME },
+      );
+    }
+    moveTo = hit.rows[0].id;
+  }
 
   await withTransaction(async (tx) => {
     await tx.query(
@@ -500,6 +562,14 @@ async function decide(
         WHERE id = $4`,
       [to, actor.id, note, id],
     );
+    if (assignee !== null) {
+      // The detail carries who was picked, so the inbox's Done lane and the
+      // audit trail read it without opening the work order.
+      await tx.query(
+        `UPDATE approval_task SET detail = detail || jsonb_build_object('assignee', $1::text) WHERE id = $2`,
+        [assignee, id],
+      );
+    }
     await tx.query(
       `INSERT INTO activity_log
          (actor_principal_id, entity_type, entity_id, action, field, before, after)
@@ -543,13 +613,30 @@ async function decide(
     );
   });
 
-  // Rule 2.4.3, "update WO_Status to requested status": the manager's approval
-  // is the act that moves it, so the manager is the actor on the status row.
+  // Rule 2.4.3, "update WO_Status to requested status" — and rule 7.1.2's
+  // move to Cancelled / Postponed: the manager's decision is the act that
+  // moves it, so the manager is the actor on the status row.
   if (moveTo !== null) {
     const { changeStatus } = await import('./workOrders.js');
     await changeStatus(cur.task_id, moveTo, actor.id, undefined, { kind: 'approval_task', id });
   }
+  // Rule 7.1.3 / 7.1.4: the assignee lands in the Assignee seat through the
+  // ordinary field write (audited as the manager's edit, mirrors and
+  // automations included), which is what puts the work order in that
+  // dispatcher's list. After the commit, since the write opens its own
+  // transaction and dispatches the rules engine.
+  if (assignee !== null) {
+    const { updateWorkOrderFields } = await import('./woFieldValues.js');
+    await updateWorkOrderFields(cur.task_id, { [`fields.${K_ASSIGNEE}`]: assignee }, actor.id);
+  }
   return getApprovalTask(id);
+}
+
+/** What a decision may carry besides the note. */
+export interface DecideOptions {
+  /** wo_acceptance only (rule 7.1.3): the display name of the person the
+      work order is assigned to. Required to approve one. */
+  assignee?: string | null;
 }
 
 /** open → approved (approvals/<section>:approve). */
@@ -557,10 +644,11 @@ export async function approveApprovalTask(
   id: string,
   note: string | null,
   actor: ActingPrincipal,
+  opts: DecideOptions = {},
 ): Promise<ApprovalTask> {
   const cur = await getApprovalTask(id);
   requireDecide(actor, cur.type, 'approve');
-  return decide(id, 'approved', note, actor);
+  return decide(id, 'approved', note, actor, opts);
 }
 
 /** open → rejected, with the reason (approvals/<section>:approve). */
@@ -647,9 +735,77 @@ export async function reconcileApprovalTasks(taskId: string, actorId: string): P
   try {
     await reconcileNteOverride(taskId, actorId);
     await reconcileStatusChange(taskId, actorId);
+    await reconcileAcceptance(taskId, actorId);
   } catch (err) {
     console.error('[approvals] reconcile failed:', err);
   }
+}
+
+/** 0036: an open acceptance whose question was answered by hand — somebody
+    filled the Assignee seat, or cancelled the work order — is closed rather
+    than left for a manager to accept a work order that is already running. */
+async function reconcileAcceptance(taskId: string, actorId: string): Promise<void> {
+  const open = await query<{ id: string; title: string; detail: Record<string, unknown> | null }>(
+    `SELECT id::text AS id, title, detail FROM approval_task
+      WHERE task_id = $1 AND type = 'wo_acceptance' AND status = 'open' LIMIT 1`,
+    [taskId],
+  );
+  const r = open.rows[0];
+  if (!r) return;
+  const cur = await query<{ assignee: string | null; status_name: string }>(
+    `SELECT NULLIF(btrim(t.fields->>$2), '') AS assignee, s.name AS status_name
+       FROM task t JOIN status s ON s.id = t.status_id
+      WHERE t.id = $1 LIMIT 1`,
+    [taskId, K_ASSIGNEE],
+  );
+  const t = cur.rows[0];
+  if (!t) return;
+  const why = t.assignee
+    ? `Assigned to ${t.assignee} directly`
+    : t.status_name.toLowerCase() === ACCEPTANCE_REJECT_STATUS_NAME.toLowerCase()
+      ? `The work order was moved to ${t.status_name} directly`
+      : null;
+  if (!why) return;
+  await cancelTask(taskId, r.id, 'wo_acceptance', r.title, why, actorId, r.detail);
+}
+
+// ── Pending acceptance (rules 7.1.1 – 7.1.4, 0036) ──────────────────────────
+
+/**
+ * Rule 7.1.1: whatever creates a work order — the Ecotrak sync, a CSV import
+ * — calls this AFTER its transaction commits with the ids it created. Each
+ * one that still has no assignee gets a `wo_acceptance` task, which is the
+ * manager's Pending Acceptance queue. A row the creator already assigned
+ * (a rule's auto-assign on create, an import column) needs no acceptance.
+ * Never throws: the work order is created either way, and a queue that
+ * fails to fill must not undo the sync that filled it.
+ */
+export async function raiseAcceptanceTasks(
+  taskIds: string[],
+  actorId: string,
+  source: AcceptanceSource,
+): Promise<number> {
+  let raised = 0;
+  for (const taskId of taskIds) {
+    try {
+      const row = await query<{ assignee: string | null }>(
+        `SELECT NULLIF(btrim(t.fields->>$2), '') AS assignee
+           FROM task t WHERE t.id = $1 AND t.deleted_at IS NULL LIMIT 1`,
+        [taskId, K_ASSIGNEE],
+      );
+      if (!row.rows[0] || row.rows[0].assignee) continue;
+      const { created } = await createApprovalTask({
+        taskId,
+        type: 'wo_acceptance',
+        actorId,
+        acceptanceSource: source,
+      });
+      if (created) raised += 1;
+    } catch (err) {
+      console.error('[approvals] could not raise acceptance for', taskId, err);
+    }
+  }
+  return raised;
 }
 
 async function reconcileNteOverride(taskId: string, actorId: string): Promise<void> {
@@ -814,7 +970,7 @@ export async function withdrawApprovalTask(id: string, actor: ActingPrincipal): 
  */
 export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalCounts> {
   const allow = allowFor(viewer);
-  const decideTypes = (['nte_override', 'status_change', 'manager_review'] as ApprovalTaskType[]).filter(
+  const decideTypes = (['wo_acceptance', 'nte_override', 'status_change', 'manager_review'] as ApprovalTaskType[]).filter(
     (t) => allow(approvalSectionPermKey(approvalSectionOf(t)), 'approve'),
   );
   const p = new Params();

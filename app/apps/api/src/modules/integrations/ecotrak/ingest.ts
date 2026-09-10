@@ -14,6 +14,8 @@ import { EcotrakClient, configFromEnv, type EcotrakWorkOrder } from './client.js
 import { classifyInbound } from './statusMap.js';
 import { resolveTrade } from './tradeMap.js';
 import { planFolder, stateAbbr } from './sharepointPath.js';
+import { raiseAcceptanceTasks } from '../../../services/approvals.js';
+import { ecotrakSyncActorId } from '../../../services/serviceActors.js';
 
 export const MAP_VERSION = '2026-09-01.1';
 
@@ -141,13 +143,25 @@ export async function ingestEcotrak(opts: { sinceDays?: number } = {}): Promise<
   );
   const statusByName = new Map(statusRows.rows.map((s) => [s.name.toLowerCase(), s]));
 
+  // Rule 7.1.1 (0036): every work order this run CREATES goes to the
+  // manager's Pending Acceptance queue. Raised after each commit (the queue
+  // row must never fail the sync), signed by the sync's own service
+  // principal so the trail says which system put it there.
+  const createdIds: string[] = [];
   for (const wo of orders) {
     try {
       await withTransaction(async (tx) => {
-        await upsertOne(tx, conn, wo, statusByName, res);
+        await upsertOne(tx, conn, wo, statusByName, res, createdIds);
       });
     } catch (e) {
       res.errors.push(`WO ${wo.id}: ${(e as Error).message}`);
+    }
+  }
+  if (createdIds.length > 0) {
+    try {
+      await raiseAcceptanceTasks(createdIds, await ecotrakSyncActorId(), 'ecotrak');
+    } catch (e) {
+      res.errors.push(`acceptance queue: ${(e as Error).message}`);
     }
   }
 
@@ -161,6 +175,7 @@ async function upsertOne(
   wo: EcotrakWorkOrder,
   statusByName: Map<string, { id: string; name: string; status_group: string }>,
   res: IngestResult,
+  createdIds: string[],
 ): Promise<void> {
   const externalId = String(wo.id);
 
@@ -259,6 +274,7 @@ async function upsertOne(
     );
     await markProcessed(tx, conn.id, externalId);
     res.created++;
+    createdIds.push(taskId);
     return;
   }
 

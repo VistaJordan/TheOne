@@ -13,6 +13,8 @@ import type {
   StatusRef,
   Phase,
   StatusChangeState,
+  AcceptanceState,
+  AcceptanceSource,
 } from '@theone/shared';
 import {
   PHASE_BY_STATUS_NAME,
@@ -419,7 +421,29 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
     })),
     recent_activity: recent,
     status_change: await pendingStatusChange(r.id),
+    acceptance: await pendingAcceptance(r.id),
   };
+}
+
+/**
+ * 0036 · the open acceptance on a new work order (rule 7.1.1), so the header
+ * can say "awaiting acceptance" and point at the inbox. Read straight from
+ * approval_task for the same import-cycle reason as pendingStatusChange.
+ */
+async function pendingAcceptance(taskId: string): Promise<AcceptanceState | null> {
+  const res = await query<{ id: string; source: string | null; created_at: string }>(
+    `SELECT a.id::text AS id, a.detail->>'source' AS source,
+            to_char((a.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at
+       FROM approval_task a
+      WHERE a.task_id = $1 AND a.type = 'wo_acceptance' AND a.status = 'open'
+      ORDER BY a.created_at DESC LIMIT 1`,
+    [taskId],
+  );
+  const r = res.rows[0];
+  if (!r) return null;
+  const source: AcceptanceSource =
+    r.source === 'ecotrak' || r.source === 'import' ? r.source : 'manual';
+  return { approval_task_id: r.id, source, raised_at: r.created_at };
 }
 
 /**

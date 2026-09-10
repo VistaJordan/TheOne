@@ -27,11 +27,14 @@ import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
+  ACCEPTANCE_REJECT_STATUS_NAME,
+  ACCEPTANCE_SOURCE_LABEL,
   APPROVALS_PERM_KEY,
   APPROVAL_TASK_LABEL,
   STATUS_PERM_KEY,
   approvalSectionOf,
   approvalSectionPermKey,
+  type AcceptanceDetail,
   type ApprovalSectionKey,
 } from '@theone/shared';
 import type {
@@ -49,6 +52,7 @@ import {
   approvePayment,
   approveQuote,
   claimApprovalTask,
+  getPrincipals,
   listApprovals,
   listPayments,
   listQuotes,
@@ -89,6 +93,7 @@ type Kind = Exclude<Section, 'all'>;
 
 const SECTION_LABEL: Record<Section, string> = {
   all: 'All',
+  intake: 'Pending acceptance',
   nte: 'NTE increases',
   status: 'Status changes',
   reviews: 'Manager reviews',
@@ -98,6 +103,7 @@ const SECTION_LABEL: Record<Section, string> = {
 
 /** The chip in the task cell — what kind of thing the row is. */
 const KIND_CHIP: Record<Kind, string> = {
+  intake: 'New work order',
   nte: 'NTE increase',
   status: 'Status change',
   reviews: 'Review',
@@ -116,6 +122,14 @@ export const TYPE_LABEL: Record<ApprovalTaskType, string> = APPROVAL_TASK_LABEL;
 
 /** Rule 1.5.2's hold, as the locked verb explains it. */
 const NTE_HOLD = 'On hold — the NTE override on this work order has to be decided first (rule 1.5.2)';
+
+/** Where the work order came from, as the acceptance row and dialog say it. */
+function acceptanceSource(item: ApprovalListItem): string {
+  const d = item.detail as Partial<AcceptanceDetail>;
+  return d.source && d.source in ACCEPTANCE_SOURCE_LABEL
+    ? ACCEPTANCE_SOURCE_LABEL[d.source]
+    : ACCEPTANCE_SOURCE_LABEL.manual;
+}
 
 // ── Columns ──────────────────────────────────────────────────────────────────
 // WO # opens the row and Decision acts on it, so those two are always there,
@@ -408,7 +422,10 @@ export function ApprovalsPage() {
   const canSeeSection = (s: Kind) => can(approvalSectionPermKey(s), 'view');
   const canDecideTask = (type: ApprovalTaskType) => can(approvalSectionPermKey(approvalSectionOf(type)), 'approve');
   const canApproveAnyTask =
-    canDecideTask('nte_override') || canDecideTask('status_change') || canDecideTask('manager_review');
+    canDecideTask('wo_acceptance') ||
+    canDecideTask('nte_override') ||
+    canDecideTask('status_change') ||
+    canDecideTask('manager_review');
   const canSeeQuotes = can('quotes', 'view') && canSeeSection('quotes');
   const canApproveQuotes = can('quotes', 'approve');
   const canSeePayments = can('payments', 'view') && canSeeSection('payments');
@@ -514,6 +531,7 @@ export function ApprovalsPage() {
   // one exists), plus any section their own requests fall in.
   const sections: Section[] = [
     'all',
+    ...(canSeeSection('intake') ? (['intake'] as Section[]) : []),
     ...(canSeeSection('nte') ? (['nte'] as Section[]) : []),
     ...(canSeeSection('status') || rows.some((r) => r.section === 'status' && r.requester)
       ? (['status'] as Section[])
@@ -548,7 +566,12 @@ export function ApprovalsPage() {
   };
 
   const decide = useMutation({
-    mutationFn: async ({ kind, row, text }: Pending & { text: string | null }) => {
+    mutationFn: async ({
+      kind,
+      row,
+      text,
+      assignee = null,
+    }: Pending & { text: string | null; assignee?: string | null }) => {
       const d = row.data;
       if (kind === 'claim' || kind === 'acknowledge' || kind === 'withdraw') {
         if (d.kind !== 'task') throw new Error('Only tasks can be claimed, acknowledged or withdrawn');
@@ -561,7 +584,7 @@ export function ApprovalsPage() {
       switch (d.kind) {
         case 'task':
           return kind === 'approve'
-            ? approveApprovalTask(d.item.id, text)
+            ? approveApprovalTask(d.item.id, text, assignee)
             : rejectApprovalTask(d.item.id, text ?? '');
         case 'quote':
           return kind === 'approve'
@@ -772,7 +795,24 @@ export function ApprovalsPage() {
         />
       )}
 
-      {pending?.kind === 'approve' && pending.row.data.kind === 'task' && (
+      {pending?.kind === 'approve' &&
+        pending.row.data.kind === 'task' &&
+        pending.row.data.item.type === 'wo_acceptance' && (
+          <AcceptDialog
+            facts={facts(pending.row)}
+            idKey={pending.row.key}
+            woNumber={pending.row.wo_number}
+            busy={busy}
+            onConfirm={(assignee, text) =>
+              decide.mutate({ ...pending, text: text.trim() || null, assignee })
+            }
+            onCancel={() => setPending(null)}
+          />
+        )}
+
+      {pending?.kind === 'approve' &&
+        pending.row.data.kind === 'task' &&
+        pending.row.data.item.type !== 'wo_acceptance' && (
         <TextDialog
           title={
             pending.row.data.item.type === 'nte_override'
@@ -844,12 +884,18 @@ export function ApprovalsPage() {
                   ? 'Reject this NTE increase'
                   : pending.row.data.item.type === 'status_change'
                     ? 'Reject this status change'
-                    : 'Reject this task'
+                    : pending.row.data.item.type === 'wo_acceptance'
+                      ? 'Reject this work order'
+                      : 'Reject this task'
           }
           facts={facts(pending.row)}
           idKey={pending.row.key}
           label="Why is it being rejected?"
-          hint={`Posted as an internal update on ${pending.row.wo_number} — feedback for whoever is running the job, never for the client.`}
+          hint={
+            pending.row.data.kind === 'task' && pending.row.data.item.type === 'wo_acceptance'
+              ? `Moves ${pending.row.wo_number} to ${ACCEPTANCE_REJECT_STATUS_NAME} and posts the reason as an internal update (rule 7.1.2). Never shown to the client.`
+              : `Posted as an internal update on ${pending.row.wo_number} — feedback for whoever is running the job, never for the client.`
+          }
           required
           multiline
           confirmLabel="Reject with note"
@@ -873,6 +919,14 @@ function facts(row: Row): { k: string; v: string }[] {
         row.data.item.type === 'status_change'
           ? (row.data.item.detail as Partial<StatusChangeDetail>)
           : null;
+      if (row.data.item.type === 'wo_acceptance') {
+        return [
+          { k: 'Work order', v: wo },
+          ...(row.wo_title ? [{ k: 'Title', v: row.wo_title }] : []),
+          ...(row.trade ? [{ k: 'Trade', v: row.trade }] : []),
+          { k: 'From', v: acceptanceSource(row.data.item) },
+        ];
+      }
       return [
         move
           ? { k: 'Status', v: `${move.from_status_name ?? '?'} → ${move.to_status_name ?? '?'}` }
@@ -958,6 +1012,23 @@ function Ask({ row }: { row: Row }) {
       // A status change reads From → To (0025); the decision note (the
       // rejection reason) rides in the Status column.
       const move = d.item.type === 'status_change' ? (d.item.detail as Partial<StatusChangeDetail>) : null;
+      // A new work order (0036) says what it is and where it came from; the
+      // work-order title is the thing a manager reads before accepting.
+      if (d.item.type === 'wo_acceptance') {
+        return (
+          <div className="site payq-who">
+            <strong>
+              {chip}
+              {row.wo_title ?? 'Accept and assign, or reject'}
+            </strong>
+            <small>
+              From {acceptanceSource(d.item)}
+              {row.trade ? ` · ${row.trade}` : ''}
+              {row.open ? ' · accept and assign, or reject' : ''}
+            </small>
+          </div>
+        );
+      }
       return (
         <div className="site payq-who">
           <strong>
@@ -1124,7 +1195,7 @@ function InboxRow(props: RowProps) {
 function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayments, busy, onDecide }: RowProps) {
   const verb = (
     label: string,
-    icon: 'check' | 'x' | 'user' | 'check-check' | 'refresh',
+    icon: 'check' | 'x' | 'user' | 'user-plus' | 'check-check' | 'refresh',
     allowed: boolean,
     reason: string,
     onClick: () => void,
@@ -1188,13 +1259,23 @@ function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayme
       const claimedByMe = d.item.assigned_to?.id === myId;
       const may = canDecideTask(d.item.type);
       const need = `Requires ${KIND_CHIP[row.section].toLowerCase()} approval rights`;
+      // Rule 7.1.3: a new work order is ACCEPTED (and assigned), not approved.
+      const accept = d.item.type === 'wo_acceptance';
       return (
         <>
           {row.requester &&
             verb('Withdraw', 'refresh', true, '', () => onDecide('withdraw'), 'plain')}
           {!claimedByMe && verb('Claim', 'user', may, need, () => onDecide('claim'), 'plain')}
           {verb('Reject', 'x', may, need, () => onDecide('reject'), 'danger')}
-          {verb('Approve', 'check', may, need, () => onDecide('approve'), 'primary')}
+          {verb(
+            accept ? 'Accept' : 'Approve',
+            accept ? 'user-plus' : 'check',
+            may,
+            need,
+            () => onDecide('approve'),
+            'primary',
+            'approve',
+          )}
         </>
       );
     }
@@ -1227,6 +1308,112 @@ function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayme
         </>
       );
   }
+}
+
+// ── Accept a new work order (0036, rule 7.1.3) ───────────────────────────────
+// Accepting is choosing who runs it: the assignee is picked from the people
+// on file (the value lands in the Assignee seat, which the 0032 scope matches
+// by name), the note is optional. The auto-assign suggester is a later phase.
+
+function AcceptDialog({
+  facts,
+  idKey,
+  woNumber,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  facts: { k: string; v: string }[];
+  idKey: string;
+  woNumber: string;
+  busy: boolean;
+  onConfirm: (assignee: string, note: string) => void;
+  onCancel: () => void;
+}) {
+  const [assignee, setAssignee] = useState('');
+  const [note, setNote] = useState('');
+  const people = useQuery({ queryKey: ['principals'], queryFn: getPrincipals, retry: 0 });
+  const names = (people.data?.items ?? []).filter((p) => p.kind === 'human').map((p) => p.name);
+  const ok = assignee.trim().length > 0;
+  const whoId = `apq-assignee-${idKey}`;
+  const noteId = `apq-text-${idKey}`;
+
+  return (
+    <div className="modal-scrim" onClick={busy ? undefined : onCancel} role="presentation">
+      <div
+        className="modal is-narrow confirm payq-dialog is-info"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="apq-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-head confirm-head">
+          <span className="confirm-icon" aria-hidden="true">
+            <Icon name="user-plus" size={18} />
+          </span>
+          <h2 id="apq-dialog-title">Accept this work order?</h2>
+        </div>
+        <div className="modal-body">
+          <dl className="kv">
+            {facts.map((f) => (
+              <Fragment key={f.k}>
+                <dt>{f.k}</dt>
+                <dd>{f.v}</dd>
+              </Fragment>
+            ))}
+          </dl>
+          <div className="field">
+            <label className="lbl" htmlFor={whoId}>
+              Assign to
+              <span className="req" aria-hidden="true"> *</span>
+            </label>
+            <select
+              className="fld"
+              id={whoId}
+              value={assignee}
+              autoFocus
+              disabled={people.isLoading}
+              onChange={(e) => setAssignee(e.target.value)}
+            >
+              <option value="">{people.isLoading ? 'Loading people…' : 'Pick a person'}</option>
+              {names.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <span className="hint">
+              {people.isError
+                ? 'The people list could not be loaded — try again.'
+                : `Accepting fills the Assignee seat on ${woNumber}; the work order then shows in that person's list (rule 7.1.4).`}
+            </span>
+          </div>
+          <div className="field">
+            <label className="lbl" htmlFor={noteId}>Note</label>
+            <textarea
+              className="fld"
+              id={noteId}
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+            <span className="hint">Optional — posted as an internal update on {woNumber} with the assignment.</span>
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button type="button" className="btn-sm is-ghost" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn-sm"
+            onClick={() => ok && onConfirm(assignee.trim(), note)}
+            disabled={busy || !ok}
+          >
+            {busy ? 'Saving…' : 'Accept and assign'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── A one-field decision dialog (approval note, rejection reason) ────────────
