@@ -87,6 +87,11 @@ export const ECOTRAK_PUSH_BY_STATUS_NAME: Readonly<Record<string, readonly strin
   'Invoiced': [],
   'Invoiced Not Paid': [],
   'Cancelled / Postponed': ['CANCELLED'],
+  // Statuses that exist only on phase-0-ground; neither is in 2.7. Approved
+  // is the client's own decision (PROPOSAL_APPROVED comes inbound), so
+  // nothing is echoed back; Emergency is a flag, not a place on the wire.
+  'Approved': [],
+  'Emergency': [],
 };
 
 /** Human labels for the wire values, for chips and audit sentences. */

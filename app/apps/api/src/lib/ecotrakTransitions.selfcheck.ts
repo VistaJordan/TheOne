@@ -1,5 +1,12 @@
-// Self-checks for the rule 2.6.3 / 2.7 table. Run: npx tsx packages/shared/src/ecotrak.selfcheck.ts
-import { checkEcotrakTransition, ECOTRAK_PUSH_BY_STATUS_NAME, ECOTRAK_ALLOWED_TRANSITIONS, PHASE_BY_STATUS_NAME } from './index';
+// Self-checks for the rule 2.6.3 / 2.7 table in @theone/shared. Lives under
+// the API (like businessDays.ts) because that is where Node types are.
+// Run from app/: npx tsx apps/api/src/lib/ecotrakTransitions.selfcheck.ts
+import {
+  checkEcotrakTransition,
+  ECOTRAK_PUSH_BY_STATUS_NAME,
+  ECOTRAK_ALLOWED_TRANSITIONS,
+  PHASE_BY_STATUS_NAME,
+} from '@theone/shared';
 
 let failed = 0;
 function is(desc: string, got: unknown, want: unknown) {
@@ -8,8 +15,9 @@ function is(desc: string, got: unknown, want: unknown) {
 }
 const o = (cur: unknown, name: string) => checkEcotrakTransition(cur, name).outcome;
 
-// Every seeded status has a projection, and only seeded statuses do.
-is('projection covers the pipeline', Object.keys(ECOTRAK_PUSH_BY_STATUS_NAME).sort(), Object.keys(PHASE_BY_STATUS_NAME).sort());
+// Every status the phase bar knows has a projection (extra keys are fine: the
+// table also lists statuses that exist only on phase-0-ground).
+is('projection covers the pipeline', Object.keys(PHASE_BY_STATUS_NAME).filter((n) => !(n in ECOTRAK_PUSH_BY_STATUS_NAME)), []);
 // Every target in every allowed list is a status the table knows as a current state or a known wire value.
 for (const [from, rule] of Object.entries(ECOTRAK_ALLOWED_TRANSITIONS)) {
   if (rule === 'locked') continue;
