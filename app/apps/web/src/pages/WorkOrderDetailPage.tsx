@@ -41,7 +41,7 @@ import { phaseForStatus } from '../lib/phases';
 import { deriveHeaderMeta } from '../lib/woDerive';
 import { tradeIcon } from '../lib/tradeIcon';
 import { useAuth } from '../auth/AuthProvider';
-import { tabPermKey } from '@theone/shared';
+import { quoteSectionsHaveData, tabPermKey } from '@theone/shared';
 
 const TAB_IDS = [
   'fields', 'money', 'payables', 'people', 'site', 'dates', 'cico', 'parts',
@@ -262,6 +262,7 @@ export function WorkOrderDetailPage() {
           inStatusDays={inStatusDays}
           obligations={obligations}
           onClockClick={revealObligations}
+          quoteFilled={quoteQuery.data ? quoteSectionsHaveData(quoteQuery.data.quote?.sections) : null}
         />
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">

@@ -1886,6 +1886,19 @@ a.bd-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; 
   color: var(--ink-2);
 }
 
+/* Rules 11.2.1 / 11.2.2: a pick the Quoting & Parts gate would refuse
+   ("Needs quote" / "Needs parts") — same tag shape, our own colour. */
+.status-menu-gate {
+  border-color: var(--danger-border, var(--warn-border));
+  background: var(--danger-bg, var(--warn-bg));
+  color: var(--danger, var(--warn));
+}
+
+/* The Parts card's "Parts Required" list keeps the typed line breaks. */
+.parts-sub.parts-list {
+  white-space: pre-line;
+}
+
 @media (max-width: 900px) {
   /* Too narrow for the full sidebar — pin it to the rail and hide the toggle
      rather than offering a choice the layout can't honour. */

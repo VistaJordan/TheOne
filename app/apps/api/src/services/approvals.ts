@@ -45,6 +45,7 @@ import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
+import { assertStatusGate } from './statusGates.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -476,14 +477,18 @@ async function decide(
   if (to === 'approved' && cur.type === 'status_change') {
     const d = cur.detail as Partial<StatusChangeDetail>;
     const hit = d.to_status_id
-      ? await query<{ id: string }>(`SELECT id::text AS id FROM status WHERE id = $1 LIMIT 1`, [d.to_status_id])
-      : { rows: [] as { id: string }[] };
+      ? await query<{ id: string; name: string }>(`SELECT id::text AS id, name FROM status WHERE id = $1 LIMIT 1`, [d.to_status_id])
+      : { rows: [] as { id: string; name: string }[] };
     if (!hit.rows[0]) {
       throw conflict(
         `The status "${d.to_status_name ?? '?'}" no longer exists, so this request cannot be approved. Reject it with a note instead.`,
         { approval_task_id: id, status_id: d.to_status_id ?? null },
       );
     }
+    // Rules 11.2.1 / 11.2.2: asked again at approval time — the quote or the
+    // parts list may have been emptied since the request — and BEFORE the
+    // decision commits, so a refused move leaves the request open (409).
+    await assertStatusGate({ query }, cur.task_id, hit.rows[0].name);
     moveTo = hit.rows[0].id;
   }
 
@@ -745,6 +750,11 @@ export async function requestStatusChange(
   actor: ActingPrincipal,
 ): Promise<{ item: ApprovalTask; created: boolean }> {
   requirePerm(actor, STATUS_PERM_KEY, 'create', 'You cannot request status changes');
+  // Rules 11.2.1 / 11.2.2: a request for a move the gate would refuse is
+  // refused here, with the same sentence a direct move gets — a manager is
+  // never asked to approve something the system will then block.
+  const to = await query<{ name: string }>(`SELECT name FROM status WHERE id = $1 LIMIT 1`, [toStatusId]);
+  if (to.rows[0]) await assertStatusGate({ query }, taskId, to.rows[0].name);
   return createApprovalTask({
     taskId,
     type: 'status_change',

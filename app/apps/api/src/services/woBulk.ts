@@ -20,7 +20,15 @@ import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
 import { applyProfitFormula } from './money.js';
 import { assertNotVisitOwned } from './visits.js';
-import type { WorkOrderListItem } from '@theone/shared';
+import { quoteFilledTaskIds } from './statusGates.js';
+import {
+  PARTS_REQUIRED_KEY,
+  STATUS_GATE_ERROR_CODE,
+  describeStatusGate,
+  partsRequiredFilled,
+  statusGateFor,
+  type WorkOrderListItem,
+} from '@theone/shared';
 
 /** `$1, $2, …` for a list of values. PGlite's parameter serialisation for
     array types is not exercised anywhere else in this codebase, so the id sets
@@ -152,6 +160,38 @@ export async function bulkUpdate(
   const skipped: { wo_number: string; reason: string }[] = [];
   for (const id of ids) {
     if (!found.has(id)) skipped.push({ wo_number: id, reason: 'Not found or deleted' });
+  }
+
+  // Rules 11.2.1 / 11.2.2: a bulk move into a gated status is refused for the
+  // WHOLE selection when any row would fail — like the scope check, a bulk
+  // edit never half-applies. A Parts Required value in the same patch counts
+  // for every row it lands on.
+  if (targetStatus) {
+    const gate = statusGateFor(targetStatus.name);
+    if (gate) {
+      const target = targetStatus;
+      const moving = rows.rows.filter((r) => r.status_id !== target.id);
+      const partsPatch = customPatch.find((c) => c.key === PARTS_REQUIRED_KEY);
+      const quoteOk = gate === 'quote' ? await quoteFilledTaskIds({ query }, moving.map((r) => r.id)) : null;
+      const blocked = moving.filter((r) =>
+        gate === 'quote'
+          ? !(quoteOk as Set<string>).has(r.id)
+          : !partsRequiredFilled(partsPatch ? partsPatch.value : r.fields?.[PARTS_REQUIRED_KEY]),
+      );
+      if (blocked.length > 0) {
+        const names = blocked.map((r) => r.wo_number);
+        const who =
+          names.length === 1
+            ? `${names[0]} is missing it.`
+            : `${names.length} of the selected work orders are missing it (${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}).`;
+        throw new ApiError('CONFLICT', `${describeStatusGate(gate, target.name)} ${who}`, {
+          code: STATUS_GATE_ERROR_CODE,
+          gate,
+          status: target.name,
+          wo_numbers: names,
+        });
+      }
+    }
   }
 
   let updated = 0;

@@ -122,6 +122,9 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       // first, and its permission path is work_orders/fields/overview/….
       'fields.Emergency',
       'fields.35. WO Description',
+      // Rule 11.2.2's Parts_Required_List (0035): the Parts tab edits it and
+      // Waiting for Parts / Please Order Parts are refused while it is empty.
+      'fields.Parts Required',
       'fields.20. Last Update',
       'fields.29. PDF Link',
       'fields.28. Sharepoint Link',

@@ -1513,3 +1513,5 @@ export interface FmCicoMethod {
 
 // Rules 2.6.3 / 2.7: Ecotrak allowed transitions (pure table + verdict).
 export * from './ecotrak';
+// Rules 11.2.1 / 11.2.2: the Quoting & Parts gate (vocabulary + "filled").
+export * from './statusGates';

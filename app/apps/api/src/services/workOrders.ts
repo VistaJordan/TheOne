@@ -29,6 +29,7 @@ import { UUID_RE, CREATED_AT_SQL, getActivityForTask, type ActingPrincipal } fro
 import { woScopeSql } from './woScope.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
+import { assertStatusGate } from './statusGates.js';
 import { obligationsReady, worstObligationsByTask, evaluateForTask } from './obligations.js';
 import {
   Params,
@@ -552,6 +553,12 @@ export async function changeStatus(
 
     // No-op change: return without writing a log row.
     if (currentStatusId === statusId) return;
+
+    // Rules 11.2.1 / 11.2.2: Quote Ready needs a quote with data; Waiting for
+    // Parts / Please Order Parts need the Parts Required list. A 409 here
+    // covers the single move, an approved request and an automation's status
+    // action alike (the engine records the refusal as an errored run).
+    await assertStatusGate(tx, task_id, newStatusName);
 
     // Rules 2.6.3 / 2.7: would Ecotrak accept the transition this move implies?
     // Only a work order the adapter has stamped with an Ecotrak status is

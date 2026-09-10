@@ -240,6 +240,29 @@ The 2.7 "Proposed Internal Status Transitions" (our own status order) is a
 separate rule, not modelled. Self-checks: `npx tsx
 apps/api/src/lib/ecotrakTransitions.selfcheck.ts` from `app/`.
 
+**Quoting & Parts gate** (rules 11.2.1 / 11.2.2, migration 0035). Two
+statuses cannot be entered empty-handed: **Quote Ready** needs the work
+order's quote to contain data (at least one line item or one non-blank
+scope line in any section — an empty draft does not count; Waiting for
+Quote needs nothing), and **Waiting for Parts / Please Order Parts** need
+the `Parts Required` bag field (0035, long text, Overview section for
+permissions, edited on the Parts tab). Vocabulary and "filled" live in
+`packages/shared/src/statusGates.ts` (`statusGateFor`, `partsRequiredFilled`,
+`quoteSectionsHaveData`, `describeStatusGate`); the database half is
+`apps/api/src/services/statusGates.ts` (`assertStatusGate`, one 409
+`CONFLICT` with `details.code = STATUS_GATE`, `details.gate = quote|parts`).
+It runs in `changeStatus` (so the single move, an approved request and an
+automation's status action are all covered — the engine records the refusal
+as an errored run), in `bulkUpdate` (the whole selection is refused when any
+row would fail, and a Parts Required value in the same patch counts), in
+`requestStatusChange` (a request the gate would refuse is refused up front)
+and in `decide` before an approval commits (asked again, in case the quote
+or the list was emptied since). The status menu tags a pick "Needs quote" /
+"Needs parts" from `gateHints` (the detail page hands it the quote query
+and the bag) and prints the API's sentence after a refused click. Not
+gated on purpose: the CSV import (an upsert that names a status is a data
+load, not a person pausing a job) and the seed's own statuses.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

@@ -405,6 +405,10 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: 'Tech Name',                label: 'Tech Name',            type: 'short_text' },
   { key: 'Tech Phone Number',        label: 'Tech Phone Number',    type: 'phone' },
   { key: '35. WO Description',       label: 'WO Description',       type: 'long_text' },
+  // Rule 11.2.2's Parts_Required_List (migration 0035 carries the SAME row for
+  // an already-seeded database; keep in step). One part per line; a move to
+  // Waiting for Parts / Please Order Parts is refused while it is empty.
+  { key: 'Parts Required',           label: 'Parts Required',       type: 'long_text' },
   { key: '37. PDF',                  label: 'PDF',                  type: 'attachment' },
   { key: 'AM',                       label: 'AM',                   type: 'users' },
   { key: 'Audited',                  label: 'Audited',              type: 'checkbox' },

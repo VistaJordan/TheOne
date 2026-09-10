@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ECOTRAK_STATUS_KEY, ecotrakStatusLabel } from '@theone/shared';
+import { ECOTRAK_STATUS_KEY, PARTS_REQUIRED_KEY, ecotrakStatusLabel } from '@theone/shared';
 import type { ObligationSummary, Phase, WorkOrderDetailV2 } from '../../api/client';
 import { DASH, FIELD, dateVal, daysSince, field, isCostOverNte, isEmergency, money, numericDate, str } from '../../lib/fields';
 import { EmergencyBadge } from '../EmergencyBadge';
@@ -62,9 +62,12 @@ interface WoHeaderProps {
   obligations?: ObligationSummary[];
   /** Clicking a clock chip scrolls the rail's Obligations card into view. */
   onClockClick?: () => void;
+  /** Rule 11.2.1: whether the quote carries data (false = missing or empty,
+      null/undefined = not known here), so the status menu can tag Quote Ready. */
+  quoteFilled?: boolean | null;
 }
 
-export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick }: WoHeaderProps) {
+export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, quoteFilled }: WoHeaderProps) {
   const meta = deriveHeaderMeta(wo);
   const f = wo.fields ?? {};
   // Rules 2.6.3 / 2.7: where the work order sits on Ecotrak (stamped by the
@@ -152,6 +155,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick }:
             current={wo.status}
             align="right"
             ecotrakStatus={f[ECOTRAK_STATUS_KEY]}
+            gateHints={{ quoteFilled: quoteFilled ?? null, partsValue: f[PARTS_REQUIRED_KEY] ?? null }}
             renderTrigger={({ open, toggle, mode }) => (
               <button
                 type="button"
