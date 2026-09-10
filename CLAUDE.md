@@ -238,7 +238,7 @@ comes from the proposal push, CANCELLED is not SP-writable, ACCEPTED is a
 one-time act), the "NA" statuses, and SOFT_COMPLETED as a current state.
 The 2.7 "Proposed Internal Status Transitions" (our own status order) is a
 separate rule, not modelled. Self-checks: `npx tsx
-packages/shared/src/ecotrak.selfcheck.ts` from `app/`.
+apps/api/src/lib/ecotrakTransitions.selfcheck.ts` from `app/`.
 
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
