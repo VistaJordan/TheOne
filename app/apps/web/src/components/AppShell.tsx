@@ -29,6 +29,7 @@ export type NavKey =
   | 'Payments'
   | 'Receivables'
   | 'Incoming Work Orders'
+  | 'WO Intake'
   | 'Approvals'
   | 'Escalations'
   | 'Admin';
@@ -69,6 +70,11 @@ const NAV: NavItem[] = [
   // and assigns them to a dispatcher, or rejects them. Its own queue, not a
   // lane of the inbox — intake is a different job from approving.
   { label: 'Incoming Work Orders', icon: 'download', to: '/incoming', badge: 'incoming' },
+  // Section 14 (0040): the OP Admin's staging area — work orders typed in
+  // by hand wait here as drafts until every intake field and an assignee
+  // are in, then become real work orders. Hidden from everyone without the
+  // `intake` permission (Operations Admin and Admin by default).
+  { label: 'WO Intake', icon: 'pencil', to: '/intake' },
   // The manager's inbox (0026): approval tasks the rules engine raises —
   // the NTE override of rule 1.5.2 first.
   { label: 'Approvals', icon: 'inbox', to: '/approvals', badge: 'approvals' },
@@ -95,6 +101,7 @@ const NAV_PERM: Record<string, string> = {
   Quotes: 'quotes',
   Payments: 'payments',
   'Incoming Work Orders': 'approvals/intake',
+  'WO Intake': 'intake',
   Approvals: 'approvals',
   Escalations: 'work_orders',
   Invoicing: 'invoicing',

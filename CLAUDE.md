@@ -396,6 +396,34 @@ follows `ECOTRAK_TRANSITION_MODE` like a direct move: `block` refuses with
 `status_changed` row. Every inbox row carries `wo_ecotrak_status` and the
 Approvals page tags an open status request Ecotrak would refuse.
 
+**WO Intake** (section 14, migration 0040, `/intake` in the sidebar) is the
+OP Admin's staging area for work orders typed in by hand — the first manual
+creation path (until now only the CSV import and the Ecotrak ingest created
+rows). A draft is a `wo_intake_draft` row, **not a task**: nothing that
+lists work orders knows it exists, so no query changed. Vocabulary in
+`packages/shared/src/intakeDrafts.ts` (`INTAKE_FORM_FIELDS` = WO# + the 13
+fields of 11.1.1 + optional Client; `intakeDraftMissing` reuses
+`intakeMissing`; `intakeDraftReady` adds the assignee), rows and the
+submit in `apps/api/src/services/intake.ts`, routes under `/api/intake/
+drafts`. **Submit** (`submitIntakeDraft`) refuses with a 409
+`INTAKE_SUBMIT` (`details.missing`, `details.assignee_missing`) until every
+required field and an active assignee are in, refuses a WO# that already
+exists, then INSERTs the task the way the import does (status **Open** by
+name, title = first line of the description, promoted columns from the
+bag, `applyProfitFormula`), logs `created` with `source: 'intake'`,
+dispatches the create rules, and writes the Assignee through
+`updateWorkOrderFields` so the assignment is audited, mirrored and scoped
+like any other. **No acceptance task is raised** — the OP Admin's
+assignment is the handoff (14.3.3); rule 7.1 stays for rows the system or a
+client created unassigned. Discard is an UPDATE (`discarded_at`, rule
+8.1.1). Audit: `intake_draft_created|updated|submitted|discarded`, entity
+`intake_draft`, whole snapshots (Admin › Audit links them to the draft).
+Permission path `intake` (view / create / edit; a node in the Roles
+tree); 0040 grants it to Operations Admin (`oa`, the BRD's OP Admin) and
+Admin. The form draws every field from the work-order catalogue
+(`useWoCatalogue`, keyed `fields.<key>`) so types and dropdown options
+match the editor; dates go in as ISO, money as a number.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

@@ -36,7 +36,9 @@ export type AdminEntity =
   // a "system button" all the same (rule 1.2.1).
   | 'saved_view'
   // A CSV download: one row per file, keyed to the person who pulled it.
-  | 'export';
+  | 'export'
+  // A work-order draft in the OP Admin intake (0040, section 14).
+  | 'intake_draft';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

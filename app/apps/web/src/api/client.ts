@@ -1571,6 +1571,45 @@ export function listVisits(idOrNumber: string): Promise<WoVisitsResponse> {
 
 /** POST /api/work-orders/:id/visits — 201 { item, items }. `visit_type` is
     required; `method` defaults to the FM's when omitted. */
+// ── Section 14 (0040) — the OP Admin's work-order intake ─────────────────────
+
+import type {
+  IntakeDraft,
+  IntakeDraftInput,
+  IntakeDraftsResponse,
+  IntakeSubmitResponse,
+} from '@theone/shared';
+
+/** GET /api/intake/drafts — the staging list: open drafts, newest touched first. */
+export function listIntakeDrafts(): Promise<IntakeDraftsResponse> {
+  return request('/intake/drafts');
+}
+
+/** POST /api/intake/drafts — start a draft (201). */
+export function createIntakeDraft(input: IntakeDraftInput): Promise<{ item: IntakeDraft }> {
+  return request('/intake/drafts', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function getIntakeDraft(id: string): Promise<{ item: IntakeDraft }> {
+  return request(`/intake/drafts/${encodeURIComponent(id)}`);
+}
+
+/** PATCH /api/intake/drafts/:id — `fields` merges key by key; null clears one. */
+export function updateIntakeDraft(id: string, input: IntakeDraftInput): Promise<{ item: IntakeDraft }> {
+  return request(`/intake/drafts/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+/** POST /api/intake/drafts/:id/submit — 409 (INTAKE_SUBMIT) with `missing`
+    while a field or the assignee is empty; otherwise the work order it became. */
+export function submitIntakeDraft(id: string): Promise<IntakeSubmitResponse> {
+  return request(`/intake/drafts/${encodeURIComponent(id)}/submit`, { method: 'POST' });
+}
+
+/** POST /api/intake/drafts/:id/discard — marked discarded, never deleted. */
+export function discardIntakeDraft(id: string): Promise<{ item: IntakeDraft }> {
+  return request(`/intake/drafts/${encodeURIComponent(id)}/discard`, { method: 'POST' });
+}
+
 export function createVisit(idOrNumber: string, input: VisitInput): Promise<WoVisitResponse> {
   return request(`/work-orders/${encodeURIComponent(idOrNumber)}/visits`, {
     method: 'POST',

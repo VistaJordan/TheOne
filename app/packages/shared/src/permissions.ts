@@ -535,6 +535,12 @@ export function buildPermissionTree(
         { key: 'approvals/payments', label: 'Payments', actions: ['view'], note: 'Deciding stays with Payments › Approve.' },
       ],
     },
+    {
+      key: 'intake',
+      label: 'WO Intake',
+      actions: ['view', 'create', 'edit'],
+      note: 'The OP Admin staging area (section 14): view = the drafts list; create = start a draft; edit = fill, submit or discard one. Operations Admin and Admin by default.',
+    },
     { key: 'vendors', label: 'Vendors', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
     { key: 'invoicing', label: 'Invoicing', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
     {

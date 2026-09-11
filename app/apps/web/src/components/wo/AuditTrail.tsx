@@ -177,6 +177,7 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
         <>
           created this work order
           {e.after?.source === 'import' && <span className="audit-via">via import</span>}
+          {e.after?.source === 'intake' && <span className="audit-via">via the intake</span>}
         </>
       );
     case 'deleted':

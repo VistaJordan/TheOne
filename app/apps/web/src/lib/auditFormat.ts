@@ -303,6 +303,11 @@ export const ACTION_LABELS: Record<string, string> = {
   // Rule 7.3.2: the email tool's escalations (api/services/escalations.ts).
   escalation_received: 'Escalation received by email',
   escalation_unmatched: 'Escalation email for an unknown work order',
+  // Section 14 (0040): the OP Admin intake (api/services/intake.ts).
+  intake_draft_created: 'Intake draft started',
+  intake_draft_updated: 'Intake draft changed',
+  intake_draft_submitted: 'Intake draft submitted as a work order',
+  intake_draft_discarded: 'Intake draft discarded',
 };
 
 export function actionLabel(action: string): string {
@@ -322,6 +327,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   saved_view: 'Saved view',
   export: 'Export',
   webhook: 'Webhook',
+  intake_draft: 'Intake draft',
 };
 
 export function entityLabel(entityType: string): string {

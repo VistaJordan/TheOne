@@ -25,6 +25,7 @@ import { PulsePage } from './pages/PulsePage';
 import { ReceivablesPage } from './pages/ReceivablesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
+import { IntakePage } from './pages/IntakePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -144,6 +145,16 @@ export function App() {
               <Route
                 path="/incoming"
                 element={<RequireAuth><RequireCan perm="approvals/intake" nav="Incoming Work Orders"><ApprovalsPage mode="intake" /></RequireCan></RequireAuth>}
+              />
+              {/* Section 14 (0040) — the OP Admin's intake: the drafts list and
+                  the manual entry form for one draft. */}
+              <Route
+                path="/intake"
+                element={<RequireAuth><RequireCan perm="intake" nav="WO Intake"><IntakePage /></RequireCan></RequireAuth>}
+              />
+              <Route
+                path="/intake/:draftId"
+                element={<RequireAuth><RequireCan perm="intake" nav="WO Intake"><IntakePage /></RequireCan></RequireAuth>}
               />
               {/* The manager's inbox — approval tasks raised by automations (0026). */}
               <Route

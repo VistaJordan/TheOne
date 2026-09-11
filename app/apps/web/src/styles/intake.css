@@ -1,0 +1,94 @@
+/* The One — the Incoming Work Order Intake (section 14, 0040).
+
+   The staging list reuses the inbox table (.ct) and the form the shared
+   controls (.field / .lbl / .fld from forms.css); only the grid, the
+   "missing" ring and the footer are new. Every colour is a token. */
+
+.intake-page-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.intake-page-head .page-sub { margin: 0; }
+
+.intake-head-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.intake-tbl { overflow-x: auto; }
+
+.intake-list .ct tr.is-link { cursor: pointer; }
+.intake-list .ct tr.is-link:hover td { background: var(--row-hover, var(--surface-2)); }
+
+.intake-dim { color: var(--ink-3); }
+.intake-need { color: var(--warn, var(--ink-2)); }
+
+.intake .card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.intake-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 18px;
+  padding: 4px 0 14px;
+}
+
+.intake-grid .intake-wide { grid-column: 1 / -1; }
+
+@media (max-width: 1100px) {
+  .intake-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .intake-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* A field the API (or the form's own check after a refused submit) says is
+   still empty: the danger ring, the same one a refused amount gets. */
+.intake .field.is-missing .fld {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.intake .field.is-missing .lbl { color: var(--danger); }
+
+.intake-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.intake-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.intake-status .intake-dim {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.intake-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.intake-done { max-width: 640px; }
+.intake-done .intake-actions { margin-top: 12px; }
