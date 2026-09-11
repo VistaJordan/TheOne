@@ -277,6 +277,35 @@ admin unticking the box sticks until the client changes their priority again.
 The `automation` table is not truncated by the seed, so the rule lives in the
 migration only; the field is in `CURATED_FIELDS` too — keep in step.
 
+**Escalation Tracker** (migration 0038, rules 7.3.1–7.3.3; 8.1.3 needs no
+code — 0031 already makes OM / OM Under Probation / Senior OM request-only on
+the status). The Emergency pattern again, in amber: one checkbox custom
+field `Escalated` (`FIELD.escalated`, Overview section, permission path
+`work_orders/fields/overview/fields.Escalated`; 0038 sets the three
+dispatcher tiers to view-only on it, so **Mark as Escalated** in the
+work-order header is a manager's button — whoever has the field's edit).
+Rows project it as `escalated` / `wo_escalated`; `components/
+EscalatedBadge.tsx` + `is-escalated` (`.esc` styles; the red rail wins when
+a row is both). 7.3.3: the Approvals inbox is the "unified to-do list"
+(Elise's call) and `lib/inboxOrder.ts` pins escalated rows above the rest of
+the waiting lanes; the team-wide tracker is a second built-in tab on Work
+Orders, `builtin:escalations` (`lib/escalations.ts`, an ordinary filter set
+`Escalated is_true`, so status tabs / chips / Filter menu still work; not
+saveable or pinnable), opened by the sidebar's Escalations entry via
+`/?view=escalations`. Not the same thing as Due Today's *Escalations* list
+(rule 4.3, a due-date test). 7.3.2: `POST /api/webhooks/email-escalation`
+(`routes/webhooks.ts`, allowlisted in `authGuard`, refused in DEMO_MODE)
+takes `{wo_number, reason?, source_email?, subject?, message_id?}` with the
+shared secret `ESCALATION_WEBHOOK_SECRET` in `x-webhook-secret` or a Bearer
+header (`lib/webhookAuth.ts`, constant-time; unset secret = 403 for every
+call). `services/escalations.ts` sets the flag through
+`updateWorkOrderFields` as the **Email escalations** service principal, so
+the `field_updated` row reads `via: 'webhook'` and automations dispatch,
+then logs the raw payload as `escalation_received` on the work order (or
+`escalation_unmatched`, entity `webhook`, keyed by the number as sent, and
+answers 404). The webhook never clears the flag. The email tool is
+standalone today: the payload shape is the contract to align it to.
+
 **Ecotrak allowed transitions** (rules 2.6.3 / 2.7, no migration). Ecotrak
 only lets a service provider move a work order to a few statuses from
 wherever it sits on THEIR side, and 2.7 says which Ecotrak status each of

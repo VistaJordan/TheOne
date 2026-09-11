@@ -99,6 +99,7 @@ interface WoRow {
   nte: number | null;
   priority: string | null;
   emergency: boolean | null;
+  escalated: boolean | null;
   date_received: string | null;
   home_list: string | null;
   status_id: string;
@@ -132,6 +133,7 @@ function mapListItem(r: WoRow, customByAlias: Map<string, string>): WorkOrderLis
     nte: r.nte === null ? null : Number(r.nte),
     priority: (r.priority as WorkOrderListItem['priority']) ?? null,
     emergency: Boolean(r.emergency),
+    escalated: Boolean(r.escalated),
     date_received: r.date_received,
     home_list: r.home_list,
     status: { id: r.status_id, name: r.status_name, group: r.status_group, color: r.status_color },
@@ -147,6 +149,7 @@ const WO_SELECT = `
   t.id, t.wo_number, t.ext_name, t.title, t.client, t.city, t.state, t.trade,
   t.billing_entity, t.nte::float8 AS nte, t.priority,
   COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS emergency,
+  COALESCE(t.fields->'Escalated' = 'true'::jsonb, false) AS escalated,
   t.date_received::text AS date_received,
   hl.name AS home_list,
   s.id AS status_id, s.name AS status_name, s.status_group AS status_group, s.color AS status_color,

@@ -109,6 +109,7 @@ interface Row {
   wo_nte: number | string | null;
   wo_cost: string | null;
   wo_emergency: boolean | null;
+  wo_escalated: boolean | null;
   /** Rule 11.1.1 (the intake gate): the bag's intake keys plus the three
       promoted columns, so the list can say what is still empty. */
   wo_description: string | null;
@@ -145,6 +146,7 @@ const SELECT_SQL = `
          t.nte::float8           AS wo_nte,
          t.fields->>'34. Cost'   AS wo_cost,
          COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS wo_emergency,
+         COALESCE(t.fields->'Escalated' = 'true'::jsonb, false) AS wo_escalated,
          t.description            AS wo_description,
          t.date_received::text    AS wo_received,
          ${INTAKE_FIELDS_SQL}     AS intake_fields
@@ -203,6 +205,7 @@ function mapListItem(r: Row): ApprovalListItem {
     wo_nte: num(r.wo_nte),
     wo_cost: num(r.wo_cost),
     wo_emergency: Boolean(r.wo_emergency),
+    wo_escalated: Boolean(r.wo_escalated),
     // Rule 11.1.1: only an acceptance row asks; everything else reads [].
     intake_missing:
       r.type === 'wo_acceptance'

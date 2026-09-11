@@ -48,12 +48,16 @@ export const FIELD = {
   quoteCheckoutDate: 'QuoteReqCheckoutDate',
   /** Rule 2.5.1: the Emergency checkbox (0034) — red across every view. */
   emergency: 'Emergency',
+  /** Rules 7.3.x: the Escalated checkbox (0038) — amber everywhere, pinned
+      to the top of the inbox, on the Escalation Tracker. */
+  escalated: 'Escalated',
 } as const;
 
 /** The checkboxes rendered by FlagsRow: Emergency (rule 2.5.1) first, then
     the four penalty-exposure flags. */
 export const FLAG_FIELDS = [
   'Emergency',
+  'Escalated',
   '14. Missed ETA',
   '13. Late quote',
   '15. Recall',
@@ -102,6 +106,12 @@ export function bool(v: unknown): boolean {
     bag; list rows carry `emergency` from the API instead). */
 export function isEmergency(fields: Fields | null | undefined): boolean {
   return bool(field(fields ?? {}, FIELD.emergency));
+}
+
+/** Rules 7.3.x: is this work order flagged Escalated? (list rows carry
+    `escalated` from the API instead). */
+export function isEscalated(fields: Fields | null | undefined): boolean {
+  return bool(field(fields ?? {}, FIELD.escalated));
 }
 
 /** A YYYY-MM-DD (or ISO) date string, else null. Rejects placeholders like

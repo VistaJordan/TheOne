@@ -13,6 +13,7 @@ import { QUOTE_STATUS } from '../components/quote/QuoteStatusPill';
 import { usd } from '../lib/quoteTotals';
 import { numericDate } from '../lib/fields';
 import { EmergencyBadge } from '../components/EmergencyBadge';
+import { EscalatedBadge } from '../components/EscalatedBadge';
 
 export function QuotesPage() {
   const navigate = useNavigate();
@@ -79,7 +80,7 @@ export function QuotesPage() {
                 return (
                   <tr
                     key={q.id}
-                    className={`is-clickable${q.wo_emergency ? ' is-emergency' : ''}`}
+                    className={`is-clickable${q.wo_emergency ? ' is-emergency' : ''}${q.wo_escalated ? ' is-escalated' : ''}`}
                     onClick={() => navigate(href)}
                   >
                     <td className="col-wo">
@@ -91,6 +92,7 @@ export function QuotesPage() {
                         {q.wo_number}
                       </Link>
                       {q.wo_emergency && <EmergencyBadge compact />}
+                      {q.wo_escalated && <EscalatedBadge compact />}
                     </td>
                     <td className="col-client">
                       <div className="site">

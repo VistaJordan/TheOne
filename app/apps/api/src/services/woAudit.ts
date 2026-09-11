@@ -28,7 +28,10 @@ export interface TaskChange {
 // 'visit': a mirror of the latest visit, written by the visit log (0021).
 // An approval task (0025): the status moved because a manager approved a
 // status-change request — the actor is the manager, the stamp names the task.
-export type ChangeSource = 'import' | 'bulk' | 'visit' | AutomationSource | ApprovalSource;
+// 'webhook': the external email tool raised the Escalated flag (rule 7.3.2,
+// services/escalations.ts) — the actor is the 'Email escalations' service
+// principal, the stamp says which door it came through.
+export type ChangeSource = 'import' | 'bulk' | 'visit' | 'webhook' | AutomationSource | ApprovalSource;
 
 /** The rule that made this change, when an automation did. */
 export interface AutomationSource {

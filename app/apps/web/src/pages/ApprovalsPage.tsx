@@ -12,8 +12,9 @@
 
    The section switcher narrows the list; "All" is the unified queue. Three
    lanes cut across the sections: For me (open, and mine to decide), Open
-   (everything waiting) and Done. Open rows sort OLDEST first (rule 7.2.2 —
-   the escalation flag that would pin rows to the top does not exist yet);
+   (everything waiting) and Done. Open rows sort OLDEST first (rule 7.2.2),
+   with the rows of an ESCALATED work order pinned above the rest (rule
+   7.3.3 — this inbox is the manager's unified to-do list; lib/inboxOrder.ts);
    decided rows newest first. Every decision is taken one row at a time
    (rule 7.2.3: no bulk actions).
 
@@ -76,6 +77,8 @@ import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { EmergencyBadge } from '../components/EmergencyBadge';
+import { EscalatedBadge } from '../components/EscalatedBadge';
+import { compareInboxRows } from '../lib/inboxOrder';
 import { ListPagination, PAGE_SIZES } from '../components/ListPagination';
 import { ColumnsMenu, type ColumnChoice } from '../components/wo/list/ColumnsMenu';
 import { PAYMENT_STATUS_LABEL, payeeLabel } from '../components/payments/PaymentsTable';
@@ -218,6 +221,9 @@ interface Row {
   cost: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency — red rail + badge. */
   emergency: boolean;
+  /** Rules 7.3.x: the work order is flagged Escalated — amber, and pinned
+      to the top of the waiting lanes. */
+  escalated: boolean;
   /** When it started waiting — ISO, for the sort and the Raised column. */
   raised_at: string;
   /** Still waiting for a decision. */
@@ -291,6 +297,7 @@ function taskRow(
     nte: item.wo_nte,
     cost: item.wo_cost,
     emergency: item.wo_emergency,
+    escalated: item.wo_escalated,
     raised_at: item.created_at,
     open,
     mine,
@@ -328,6 +335,7 @@ function quoteRow(item: QuoteListItem, canDecide: boolean, held: Set<string>): R
     nte: item.wo_nte,
     cost: item.wo_cost,
     emergency: item.wo_emergency,
+    escalated: item.wo_escalated,
     raised_at: item.updated_at ?? '',
     open,
     mine: open && canDecide,
@@ -388,6 +396,7 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
     nte: item.wo_nte,
     cost: item.wo_cost,
     emergency: item.wo_emergency,
+    escalated: item.wo_escalated,
     raised_at: item.created_at,
     open,
     mine: open && canDecide,
@@ -537,8 +546,8 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
         (!filters.owner || r.owner === filters.owner),
     );
     // Rule 7.2.2: what waits sorts oldest first; what is done, newest first.
-    const dir = lane === 'done' ? -1 : 1;
-    return hit.sort((a, b) => dir * a.raised_at.localeCompare(b.raised_at));
+    // Rule 7.3.3: escalated work orders pin to the top of the waiting lanes.
+    return hit.sort((a, b) => compareInboxRows(lane, a, b));
   }, [sectionRows, filters, lane]);
 
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
@@ -1213,7 +1222,11 @@ function InboxRow(props: RowProps) {
   return (
     <tr
       className={
-        [row.held && row.open ? 'apq-held' : '', row.emergency ? 'is-emergency' : '']
+        [
+          row.held && row.open ? 'apq-held' : '',
+          row.emergency ? 'is-emergency' : '',
+          row.escalated ? 'is-escalated' : '',
+        ]
           .filter(Boolean)
           .join(' ') || undefined
       }
@@ -1223,6 +1236,7 @@ function InboxRow(props: RowProps) {
           {row.wo_number}
         </Link>
         {row.emergency && <EmergencyBadge compact />}
+        {row.escalated && <EscalatedBadge compact />}
       </td>
       {props.columns.map(cell)}
       <td className="payq-actions">

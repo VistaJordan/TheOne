@@ -35,6 +35,7 @@ import prefsRoutes from './routes/prefs.js';
 import automationsRoutes from './routes/automations.js';
 import approvalRoutes from './routes/approvals.js';
 import visitRoutes from './routes/visits.js';
+import webhookRoutes from './routes/webhooks.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
@@ -91,6 +92,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(automationsRoutes, { prefix: '/api' });
   await app.register(approvalRoutes, { prefix: '/api' });
   await app.register(visitRoutes, { prefix: '/api' });
+  // Rule 7.3.2 · machine-to-machine receivers, secret-gated (not sessions).
+  await app.register(webhookRoutes, { prefix: '/api' });
 
   return app;
 }

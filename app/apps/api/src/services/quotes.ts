@@ -632,6 +632,8 @@ export interface QuoteListItem {
   wo_cost: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency. */
   wo_emergency: boolean;
+  /** Rules 7.3.x: the work order is flagged Escalated. */
+  wo_escalated: boolean;
 }
 
 /** A bag/column value as a finite number ("$1,610" → 1610), else null. */
@@ -669,6 +671,7 @@ export async function listQuotes(
     wo_nte: number | string | null;
     wo_cost: string | null;
     wo_emergency: boolean | null;
+    wo_escalated: boolean | null;
   }>(
     `SELECT q.id::text AS id, q.task_id::text AS task_id, q.status,
             q.sales_tax::float8 AS sales_tax,
@@ -677,7 +680,8 @@ export async function listQuotes(
             t.fields->>'Due Date'   AS wo_due,
             t.nte::float8           AS wo_nte,
             t.fields->>'34. Cost'   AS wo_cost,
-            COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS wo_emergency
+            COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS wo_emergency,
+            COALESCE(t.fields->'Escalated' = 'true'::jsonb, false) AS wo_escalated
        FROM quote q
        JOIN task t ON t.id = q.task_id
       WHERE t.deleted_at IS NULL ${scope ? `AND ${scope}` : ''}
@@ -708,6 +712,7 @@ export async function listQuotes(
       wo_nte: moneyNum(r.wo_nte),
       wo_cost: moneyNum(r.wo_cost),
       wo_emergency: Boolean(r.wo_emergency),
+      wo_escalated: Boolean(r.wo_escalated),
     });
   }
   return { items, total: items.length };

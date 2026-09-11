@@ -364,6 +364,9 @@ const CURATED_FIELDS: CuratedField[] = [
   // Rule 2.5.1 (0034): the Emergency flag — red across every view. KEEP IN
   // STEP with migration 0034.
   { key: 'Emergency',                label: 'Emergency',            type: 'checkbox' },
+  // Rules 7.3.1–7.3.3 (0038): the Escalated flag — amber across every view,
+  // pinned to the top of the inbox. KEEP IN STEP with migration 0038.
+  { key: 'Escalated',                label: 'Escalated',            type: 'checkbox' },
   { key: '12. Bad quote',            label: 'Bad Quote',            type: 'checkbox' },
   { key: '16. Client NTE 🔴',        label: 'Client NTE',           type: 'currency' },
   { key: '17. Address',              label: 'Address',              type: 'location' },

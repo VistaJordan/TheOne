@@ -121,6 +121,9 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       // Rule 2.5.1: the Emergency checkbox leads — it is the one thing to know
       // first, and its permission path is work_orders/fields/overview/….
       'fields.Emergency',
+      // Rules 7.3.x: the Escalated flag sits beside it (0038); the dispatcher
+      // tiers are view-only on it, so Mark as Escalated is a manager's button.
+      'fields.Escalated',
       'fields.35. WO Description',
       // Rule 11.2.2's Parts_Required_List (0035): the Parts tab edits it and
       // Waiting for Parts / Please Order Parts are refused while it is empty.

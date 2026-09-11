@@ -71,8 +71,11 @@ export interface AutoCtx {
   fired: Set<string>;
   /** The rule whose actions are being applied, stamped onto the audit rows it
       writes so the trail can name it. Set per rule, so a rule fired by another
-      rule's write is attributed to itself, not to the one that woke it. */
-  by?: AutomationSource;
+      rule's write is attributed to itself, not to the one that woke it.
+      'webhook' (rule 7.3.2): the write that starts the chain came in through
+      the email escalation receiver — its own rows say so; the rules it wakes
+      still stamp themselves. */
+  by?: AutomationSource | 'webhook';
 }
 
 // ── Mirror translation ───────────────────────────────────────────────────────
@@ -624,7 +627,7 @@ async function applyActions(
         type: r.approvalType as ApprovalTaskType,
         assignRole: r.assignRole ?? null,
         actorId,
-        source: ctx.by ? { automationId: ctx.by.id, name: ctx.by.name } : null,
+        source: ctx.by && typeof ctx.by === 'object' ? { automationId: ctx.by.id, name: ctx.by.name } : null,
         cause,
       });
       applied.push({

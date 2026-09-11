@@ -137,6 +137,8 @@ export interface WorkOrderListItem {
   /** Rule 2.5.1: the `Emergency` checkbox, projected on every row so the red
       indicator needs no bag fetch. */
   emergency: boolean;
+  /** Rules 7.3.x: the `Escalated` checkbox, projected the same way. */
+  escalated: boolean;
   date_received: string | null;
   home_list: string | null;
   status: StatusRef;
@@ -863,6 +865,8 @@ export interface PaymentListItem extends PaymentRequest {
   wo_cost: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency. */
   wo_emergency: boolean;
+  /** Rules 7.3.x: the work order is flagged Escalated. */
+  wo_escalated: boolean;
 }
 
 /** GET /api/payments — every request across work orders, newest first. */
@@ -1263,6 +1267,8 @@ export interface ApprovalListItem extends ApprovalTask {
   wo_cost: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency. */
   wo_emergency: boolean;
+  /** Rules 7.3.x: the work order is flagged Escalated — the inbox pins it. */
+  wo_escalated: boolean;
   /** Rule 11.1.1, wo_acceptance rows only: the intake fields still empty on
       the work order (labels, in the rule's order). Accepting is refused
       until this is empty; the Incoming page locks the verb and lists them.

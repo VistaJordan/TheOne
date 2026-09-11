@@ -33,6 +33,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { usd } from '../lib/quoteTotals';
 import { numericDate } from '../lib/fields';
 import { EmergencyBadge } from '../components/EmergencyBadge';
+import { EscalatedBadge } from '../components/EscalatedBadge';
 
 type Lane = 'approval' | 'process' | 'all';
 
@@ -361,12 +362,19 @@ function PaymentRow({ item, canApprove, canProcess, busy, onDecide }: RowProps) 
             : null;
 
   return (
-    <tr className={item.wo_emergency ? 'is-emergency' : undefined}>
+    <tr
+      className={
+        [item.wo_emergency ? 'is-emergency' : '', item.wo_escalated ? 'is-escalated' : '']
+          .filter(Boolean)
+          .join(' ') || undefined
+      }
+    >
       <td className="col-wo">
         <Link className="wo-num wo-num-link" to={woHref}>
           {item.wo_number}
         </Link>
         {item.wo_emergency && <EmergencyBadge compact />}
+        {item.wo_escalated && <EscalatedBadge compact />}
       </td>
       <td className="col-client">
         <div className="site">

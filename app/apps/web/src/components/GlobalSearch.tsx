@@ -18,6 +18,7 @@ import { ADMIN_SECTIONS } from '../lib/adminSections';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
 import { EmergencyBadge } from './EmergencyBadge';
+import { EscalatedBadge } from './EscalatedBadge';
 
 type Group = 'Pages' | 'Work orders' | 'Quotes' | 'People';
 
@@ -30,6 +31,8 @@ interface Hit {
   meta?: string;
   /** Rule 2.5.1: the work order behind the hit is flagged Emergency. */
   emergency?: boolean;
+  /** Rules 7.3.x: the work order behind the hit is flagged Escalated. */
+  escalated?: boolean;
   to: string;
 }
 
@@ -138,6 +141,7 @@ export function GlobalSearch() {
       label: `${w.wo_number} · ${w.ext_name ?? w.title}`,
       meta: [w.client, w.status?.name].filter(Boolean).join(' · ') || undefined,
       emergency: w.emergency,
+      escalated: w.escalated,
       to: `/work-orders/${encodeURIComponent(w.wo_number)}`,
     }));
 
@@ -151,6 +155,7 @@ export function GlobalSearch() {
         label: `Quote · ${qt.wo_number}${qt.title ? ` — ${qt.title}` : ''}`,
         meta: [qt.client, qt.status].filter(Boolean).join(' · ') || undefined,
         emergency: qt.wo_emergency,
+        escalated: qt.wo_escalated,
         to: `/work-orders/${encodeURIComponent(qt.wo_number)}/quote`,
       }));
 
@@ -301,6 +306,7 @@ export function GlobalSearch() {
                         </span>
                         <span className="gs-hit-label">{hit.label}</span>
                         {hit.emergency && <EmergencyBadge compact />}
+                        {hit.escalated && <EscalatedBadge compact />}
                         {hit.meta && <span className="gs-hit-meta">{hit.meta}</span>}
                       </button>
                     );

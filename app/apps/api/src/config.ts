@@ -72,6 +72,11 @@ export interface Config {
       stamps the audit row; 'block' refuses it with a 409. Nothing is pushed
       to Ecotrak in either mode — the adapter is inbound-only until go-live. */
   ecotrakTransitionMode: 'warn' | 'block';
+  /** Rule 7.3.2: the shared secret the external email tool presents on
+      POST /api/webhooks/email-escalation (header `x-webhook-secret`). Unset
+      = the receiver answers 503 to everything — the door exists but is
+      bolted until someone cuts a key. Never logged. */
+  escalationWebhookSecret: string | null;
 }
 
 export interface SignInPolicy {
@@ -157,6 +162,7 @@ function build(): Config {
     demoMode,
     signIn: buildSignIn(),
     ecotrakTransitionMode: (str('ECOTRAK_TRANSITION_MODE') ?? 'warn').toLowerCase() === 'block' ? 'block' : 'warn',
+    escalationWebhookSecret: str('ESCALATION_WEBHOOK_SECRET') ?? null,
   };
 }
 

@@ -319,6 +319,8 @@ export interface QuoteListItem {
   wo_cost: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency. */
   wo_emergency: boolean;
+  /** Rules 7.3.x: the work order is flagged Escalated. */
+  wo_escalated: boolean;
 }
 
 export interface QuoteListResponse {

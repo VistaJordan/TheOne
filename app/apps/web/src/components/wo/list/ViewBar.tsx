@@ -43,6 +43,11 @@ interface ViewBarProps {
       orders". While it is up nothing can be saved, pinned or deleted. */
   builtinActive?: boolean;
   onSelectBuiltin?: () => void;
+  /** The built-in "Escalation Tracker" view (rule 7.3.3, 0038): the flagged
+      work orders, team-wide. Same rules as Due Today: nothing saved, pinned
+      or deleted while it is up. */
+  escalationsActive?: boolean;
+  onSelectEscalations?: () => void;
 }
 
 function CountBadge({ count }: { count: number }) {
@@ -81,10 +86,13 @@ export function ViewBar({
   onTogglePin,
   builtinActive = false,
   onSelectBuiltin,
+  escalationsActive = false,
+  onSelectEscalations,
 }: ViewBarProps) {
   const active = views.find((v) => v.id === activeId) ?? null;
   const badge = count != null ? <CountBadge count={count} /> : null;
-  const plainActive = activeId === null && !builtinActive;
+  const anyBuiltin = builtinActive || escalationsActive;
+  const plainActive = activeId === null && !anyBuiltin;
 
   const viewTab = (v: SavedView) => (
     <button
@@ -142,6 +150,21 @@ export function ViewBar({
           </button>
         )}
 
+        {onSelectEscalations && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={escalationsActive}
+            className={`view-tab is-builtin${escalationsActive ? ' is-on' : ''}`}
+            onClick={onSelectEscalations}
+            title="Built in: every work order flagged Escalated — by a manager or by the email tool (rule 7.3.3)"
+          >
+            <Icon name="alert-circle" size={12} />
+            Escalation Tracker
+            {escalationsActive && badge}
+          </button>
+        )}
+
         {rest.map(viewTab)}
       </div>
 
@@ -186,7 +209,7 @@ export function ViewBar({
 
         {/* Due Today rebuilds its filters from the calendar every day; a copy
             saved now would freeze today's date, so it is not offered. */}
-        {!builtinActive && (
+        {!anyBuiltin && (
           <SaveAsMenu
             suggestion={active ? `${active.name} copy` : ''}
             state={state}

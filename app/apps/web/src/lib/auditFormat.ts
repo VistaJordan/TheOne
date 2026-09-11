@@ -29,6 +29,8 @@ export function viaLabel(after: unknown): string | null {
   if (typeof via !== 'string') return null;
   // The mirror rows the visit log writes (0021) say where they came from; a
   // status moved by a manager's approval (0025) says so in words.
+  // The email escalation receiver (rule 7.3.2) raises the Escalated flag.
+  if (via === 'webhook') return 'the email escalation webhook';
   return via === 'visit' ? 'the visit log' : via === 'approval_task' ? 'an approved status change request' : via;
 }
 
@@ -298,6 +300,9 @@ export const ACTION_LABELS: Record<string, string> = {
   view_deleted: 'View deleted',
   work_orders_exported: 'Work orders exported',
   audit_log_exported: 'Audit log exported',
+  // Rule 7.3.2: the email tool's escalations (api/services/escalations.ts).
+  escalation_received: 'Escalation received by email',
+  escalation_unmatched: 'Escalation email for an unknown work order',
 };
 
 export function actionLabel(action: string): string {
@@ -316,6 +321,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   fm_cico_method: 'Check-in method',
   saved_view: 'Saved view',
   export: 'Export',
+  webhook: 'Webhook',
 };
 
 export function entityLabel(entityType: string): string {

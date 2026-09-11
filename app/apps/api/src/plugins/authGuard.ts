@@ -26,6 +26,9 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/logout',
   '/api/auth/dev-login',
   '/api/auth/dev-candidates',
+  // Rule 7.3.2: the email tool has no session; routes/webhooks.ts checks its
+  // shared secret instead. Nothing else under /api/webhooks is public.
+  '/api/webhooks/email-escalation',
 ]);
 
 function isPublic(req: FastifyRequest): boolean {
