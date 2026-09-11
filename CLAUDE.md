@@ -228,8 +228,8 @@ App / Phone / …, Admin › Custom fields) pre-fills a new visit's method from 
 WO's `22. FM`. The same `CicoCard` renders in the CICO tab and as the CICO
 section of All-fields. Gate: `work_orders/fields/cico` view / edit.
 
-**Quote clock and the Due Today view** (migration 0030, rules 2.3.1–2.3.3 and
-4.1). `Quote Due Date` is a **computed** bag field: the latest *Assessment*
+**Quote clock and the Due Today view** (migration 0030, rules 2.3.1–2.3.3,
+4.1 and 4.3). `Quote Due Date` is a **computed** bag field: the latest *Assessment*
 visit's check-out + 48 wall-clock hours, skipping Saturdays, Sundays and the
 `holiday` table as whole days, in America/Chicago (`apps/api/src/lib/
 businessDays.ts`, pure, self-checks via `tsx`). `syncMirrors` in
@@ -240,20 +240,26 @@ it (`COMPUTED_KEYS` in shared, same guard as `VISIT_OWNED_KEYS`). `Scheduled
 Date` and `Parts Arrival Date` are ordinary hand-typed datetimes; all three
 live in the Dates section. The Work Orders page has a **built-in "Due Today"
 tab** (`lib/dueToday.ts`, id `builtin:due-today`, never saved or pinned):
-under it the status-group segment becomes All · Due date · Scheduled · Quote ·
-Parts arriving, each a filter on "today" (`businessDay()`); Quote is *today or
-earlier* AND status still before Quote Ready (`isQuoteOwed`, phases Intake /
-Assessment / Quote), so a missed quote does not vanish the next day. The
+under it the status-group segment becomes All · Escalations · Scheduled ·
+Quote · Parts arriving, each a filter on a **target day** — rule 4.3's daily
+to-do engine, grouped by day: a second segment offers Today (`businessDay()`,
+the default, rolls over at midnight) · Tomorrow · any date. Escalations is
+Due Date *on or before* the day AND status not Job Sched / On Site (Job)
+(`ESCALATION_EXEMPT_STATUSES`); Quote is Quote Due Date *on* the day AND
+status still before Quote Ready (`isQuoteOwed`, phases Intake / Assessment /
+Quote), widened to *on or earlier* when the day is today so a missed quote
+does not vanish the next day; Scheduled and Parts arriving are equality on
+the day (Parts Arrival Date is 4.3's "Parts ETA"). The
 sections are OR groups in the filter compiler's join mode and the quick-filter
 chips are ANDed into every group; the Filter menu is hidden there. The list
 cell, the Dates card and the CICO summary turn the date red only while the
 quote is still owed (`lib/quoteDue.ts`). Holidays: Admin › Settings card,
 `/api/admin/holidays` (grant `admin/settings` edit), seeded with US federal
 observed dates for 2026–27 by the migration; the table is **not** truncated
-by the seed (configuration, no FKs — the 0012 reasoning). Deferred: record-level
-scoping of the view per user (rule 8.5) and whether the other three sections
-include overdue rows; on phase-0-ground the Pulse's `quote_owed` clock still
-starts at Waiting for Quote and should be rewired to this field after merge.
+by the seed (configuration, no FKs — the 0012 reasoning). Rule 8.5 scoping
+applies to the view like any list (the scope predicate rides in
+`buildListWhere`). Deferred: the Pulse's `quote_owed` clock still starts at
+Waiting for Quote and should be rewired to this field.
 
 **Emergency flag** (migration 0034, rule 2.5.1). One checkbox custom field,
 `Emergency` (`FIELD.emergency`, Overview section, so its permission path is

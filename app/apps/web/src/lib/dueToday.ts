@@ -1,17 +1,22 @@
-// The built-in "Due Today" view (rules 2.3.3 and 4.1, 0024).
+// The built-in "Due Today" view (rules 2.3.3, 4.1 and 4.3, 0030).
 //
 // Not a saved view: it cannot be renamed or deleted, and its filters are
-// rebuilt every render from TODAY (business time zone) and the live status
-// list. Under it the toolbar shows four date sections instead of the status
-// groups — All is their union:
+// rebuilt every render from a TARGET DAY (today in the business time zone
+// unless the user picks another) and the live status list. Under it the
+// toolbar shows date sections instead of the status groups — All is their
+// union. Rule 4.3 is the daily to-do engine, grouped by day:
 //
-//   Due date        'Due Date'           is today
-//   Scheduled       'Scheduled Date'     is today
-//   Quote           'Quote Due Date'     is today OR EARLIER, and the status
-//                                        is still before Quote Ready — a
-//                                        missed quote must not vanish the day
-//                                        after it was due
-//   Parts arriving  'Parts Arrival Date' is today
+//   Escalations     'Due Date'           is the day OR EARLIER, and the
+//                                        status is not Job Sched / On Site
+//                                        (Job) — a job already on the
+//                                        calendar is not an escalation
+//   Scheduled       'Scheduled Date'     is the day
+//   Quote           'Quote Due Date'     is the day, and the status is still
+//                                        before Quote Ready. When the day is
+//                                        today, OR EARLIER too — a missed
+//                                        quote must not vanish the day after
+//                                        it was due (rule 2.3.3)
+//   Parts arriving  'Parts Arrival Date' is the day (rule 4.3's Parts ETA)
 //
 // The union is one filter set in the compiler's join mode (AND binds tighter
 // than OR). The quick-filter chips still work on top: their rules are ANDed
@@ -30,14 +35,22 @@ import { EMPTY_FILTERS, type ViewState } from './woView';
 /** The id the page stores as `activeViewId` while this view is up. */
 export const DUE_TODAY_VIEW_ID = 'builtin:due-today';
 
-export type DueSection = 'all' | 'due' | 'scheduled' | 'quote' | 'parts';
+export type DueSection = 'all' | 'escalations' | 'scheduled' | 'quote' | 'parts';
+
+/** Rule 4.3: a work order whose job is already scheduled or under way is not
+    escalated for its due date, however late it is. Status names as of 0020. */
+export const ESCALATION_EXEMPT_STATUSES = ['Job Sched', 'On Site (Job)'];
 
 export const DUE_SECTIONS: { key: DueSection; label: string; hint: string }[] = [
   { key: 'all', label: 'All', hint: 'Everything on the four lists' },
-  { key: 'due', label: 'Due date', hint: 'Due Date is today' },
-  { key: 'scheduled', label: 'Scheduled', hint: 'Scheduled Date is today' },
-  { key: 'quote', label: 'Quote', hint: 'Quote due today or overdue, and still not Quote Ready' },
-  { key: 'parts', label: 'Parts arriving', hint: 'Parts Arrival Date is today' },
+  {
+    key: 'escalations',
+    label: 'Escalations',
+    hint: 'Due Date on or before the day, and not Job Sched or On Site (Job)',
+  },
+  { key: 'scheduled', label: 'Scheduled', hint: 'Scheduled Date is the day' },
+  { key: 'quote', label: 'Quote', hint: 'Quote due on the day (today: or overdue), and still not Quote Ready' },
+  { key: 'parts', label: 'Parts arriving', hint: 'Parts Arrival Date is the day' },
 ];
 
 /** The four dates lead, after the row's identity. */
@@ -58,19 +71,35 @@ export const DUE_TODAY_VIEW: ViewState = {
   sort: null,
 };
 
-const REAL_SECTIONS: Exclude<DueSection, 'all'>[] = ['due', 'scheduled', 'quote', 'parts'];
+/** `day` + `n` calendar days, both 'YYYY-MM-DD'. Arithmetic in UTC so a DST
+    switch cannot skip or repeat a day. */
+export function shiftDay(day: string, n: number): string {
+  const [y, m, d] = day.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return t.toISOString().slice(0, 10);
+}
 
-function groupFor(section: Exclude<DueSection, 'all'>, today: string, owedStatuses: string[]): WoFilterRule[] {
+const REAL_SECTIONS: Exclude<DueSection, 'all'>[] = ['escalations', 'scheduled', 'quote', 'parts'];
+
+function groupFor(
+  section: Exclude<DueSection, 'all'>,
+  day: string,
+  includeOverdue: boolean,
+  owedStatuses: string[],
+): WoFilterRule[] {
   switch (section) {
-    case 'due':
-      return [{ field: `fields.${DUE_DATE_KEY}`, op: 'eq', value: today }];
+    case 'escalations':
+      return [
+        { field: `fields.${DUE_DATE_KEY}`, op: 'lte', value: day },
+        { field: 'status', op: 'not_in', value: ESCALATION_EXEMPT_STATUSES },
+      ];
     case 'scheduled':
-      return [{ field: `fields.${SCHEDULED_DATE_KEY}`, op: 'eq', value: today }];
+      return [{ field: `fields.${SCHEDULED_DATE_KEY}`, op: 'eq', value: day }];
     case 'parts':
-      return [{ field: `fields.${PARTS_ARRIVAL_KEY}`, op: 'eq', value: today }];
+      return [{ field: `fields.${PARTS_ARRIVAL_KEY}`, op: 'eq', value: day }];
     case 'quote':
       return [
-        { field: `fields.${QUOTE_DUE_KEY}`, op: 'lte', value: today },
+        { field: `fields.${QUOTE_DUE_KEY}`, op: includeOverdue ? 'lte' : 'eq', value: day },
         // No status owes a quote → match nothing. (An empty `in` would be
         // dropped as a half-written rule and the section would show every
         // dated row instead; the sentinel is a status name nobody has.)
@@ -80,19 +109,22 @@ function groupFor(section: Exclude<DueSection, 'all'>, today: string, owedStatus
 }
 
 /**
- * The filter set the API receives. `extra` is whatever the quick-filter chips
- * wrote (plain AND rules); each is repeated inside every OR group.
+ * The filter set the API receives. `day` is the target day; `includeOverdue`
+ * is true when that day is today (the Quote list then reaches back to what
+ * was missed). `extra` is whatever the quick-filter chips wrote (plain AND
+ * rules); each is repeated inside every OR group.
  */
 export function dueTodayFilters(
   section: DueSection,
-  today: string,
+  day: string,
+  includeOverdue: boolean,
   owedStatuses: string[],
   extra: WoFilterRule[] = [],
 ): WoFilterSet {
   const sections = section === 'all' ? REAL_SECTIONS : [section];
   const rules: WoFilterRule[] = [];
   sections.forEach((s, gi) => {
-    const group = [...groupFor(s, today, owedStatuses), ...extra];
+    const group = [...groupFor(s, day, includeOverdue, owedStatuses), ...extra];
     group.forEach((r, ri) => {
       const join: WoFilterRule['join'] | undefined = ri === 0 ? (gi === 0 ? undefined : 'or') : 'and';
       rules.push(join ? { ...r, join } : { ...r, join: undefined });

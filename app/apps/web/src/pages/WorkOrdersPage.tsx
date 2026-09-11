@@ -37,6 +37,7 @@ import {
   DUE_TODAY_VIEW,
   DUE_TODAY_VIEW_ID,
   dueTodayFilters,
+  shiftDay,
   type DueSection,
 } from '../lib/dueToday';
 import {
@@ -110,7 +111,7 @@ export function WorkOrdersPage() {
   // a reload lands back in "just looking".
   const [editing, setEditing] = useState(false);
 
-  // ── The built-in Due Today view (0024, rules 2.3.3 / 4.1) ──────────────────
+  // ── The built-in Due Today view (0030, rules 2.3.3 / 4.1 / 4.3) ────────────
   // Its filters are not in `view.filters`: they are rebuilt from the calendar
   // and the live status list on every render (lib/dueToday.ts), and the
   // quick-filter chips' rules ride along inside them.
@@ -123,6 +124,11 @@ export function WorkOrdersPage() {
     const t = setInterval(() => setToday(businessDay()), 60_000);
     return () => clearInterval(t);
   }, []);
+  // Rule 4.3 groups the to-do by day: null follows today (so the midnight
+  // roll-over still happens), a string is a day the user picked.
+  const [targetDay, setTargetDay] = useState<string | null>(null);
+  const dueDay = targetDay ?? today;
+  const tomorrow = shiftDay(today, 1);
   // The Quote section needs the statuses a quote is still owed in.
   const statusesQuery = useQuery({
     queryKey: ['statuses'],
@@ -198,14 +204,16 @@ export function WorkOrdersPage() {
   const criteria = useMemo(
     () => ({
       filters: sendableFilters(
-        isDueToday ? dueTodayFilters(dueSection, today, owedStatuses, view.filters.rules) : view.filters,
+        isDueToday
+          ? dueTodayFilters(dueSection, dueDay, dueDay === today, owedStatuses, view.filters.rules)
+          : view.filters,
       ),
       sort: view.sort ?? undefined,
       group_by: view.group_by ?? undefined,
       columns: view.columns,
       breach: byBreach || undefined,
     }),
-    [view, byBreach, isDueToday, dueSection, today, owedStatuses],
+    [view, byBreach, isDueToday, dueSection, dueDay, today, owedStatuses],
   );
 
   // ── The status tabs ────────────────────────────────────────────────────────
@@ -290,6 +298,7 @@ export function WorkOrdersPage() {
     setActiveViewId(DUE_TODAY_VIEW_ID);
     setView(DUE_TODAY_VIEW);
     setDueSection('all');
+    setTargetDay(null);
     setEditing(false);
   }, []);
 
@@ -468,22 +477,52 @@ export function WorkOrdersPage() {
 
         <div className="toolbar">
           {isDueToday ? (
-            // Due Today cuts by DATE, not status: the four lists of rule 4.1,
-            // one at a time, or all of them.
-            <div className="seg" role="group" aria-label="Due today lists">
-              {DUE_SECTIONS.map((s) => (
+            // Due Today cuts by DATE, not status: the four lists of rules 4.1
+            // and 4.3, one at a time or all of them, for the chosen day.
+            <>
+              <div className="seg" role="group" aria-label="To-do lists">
+                {DUE_SECTIONS.map((s) => (
+                  <button
+                    type="button"
+                    key={s.key}
+                    aria-pressed={dueSection === s.key}
+                    title={s.hint}
+                    className={`seg-btn${dueSection === s.key ? ' is-on' : ''}`}
+                    onClick={() => setDueSection(s.key)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              <div className="seg due-day" role="group" aria-label="Which day">
                 <button
                   type="button"
-                  key={s.key}
-                  aria-pressed={dueSection === s.key}
-                  title={s.hint}
-                  className={`seg-btn${dueSection === s.key ? ' is-on' : ''}`}
-                  onClick={() => setDueSection(s.key)}
+                  aria-pressed={dueDay === today}
+                  title="Today, in business time"
+                  className={`seg-btn${dueDay === today ? ' is-on' : ''}`}
+                  onClick={() => setTargetDay(null)}
                 >
-                  {s.label}
+                  Today
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  aria-pressed={dueDay === tomorrow}
+                  title="Tomorrow"
+                  className={`seg-btn${dueDay === tomorrow ? ' is-on' : ''}`}
+                  onClick={() => setTargetDay(tomorrow)}
+                >
+                  Tomorrow
+                </button>
+                <input
+                  type="date"
+                  aria-label="Any day"
+                  title="Any day"
+                  className={`due-day-input${dueDay !== today && dueDay !== tomorrow ? ' is-on' : ''}`}
+                  value={dueDay}
+                  onChange={(e) => setTargetDay(e.target.value && e.target.value !== today ? e.target.value : null)}
+                />
+              </div>
+            </>
           ) : (
           <div className="seg" role="group" aria-label="Status groups">
             {filters.map((f) => {

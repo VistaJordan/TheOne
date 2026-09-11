@@ -134,7 +134,7 @@ export function ViewBar({
             aria-selected={builtinActive}
             className={`view-tab is-builtin${builtinActive ? ' is-on' : ''}`}
             onClick={onSelectBuiltin}
-            title="Built in: due today, scheduled today, quotes due, parts arriving"
+            title="Built in: escalations, scheduled, quotes due, parts arriving — today or any day"
           >
             <Icon name="clock" size={12} />
             Due Today
