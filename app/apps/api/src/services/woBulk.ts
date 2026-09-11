@@ -19,6 +19,7 @@ import { listCustomFields, resolveField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
 import { raiseAcceptanceTasks } from './approvals.js';
+import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { assertNotVisitOwned } from './visits.js';
 import { quoteFilledTaskIds } from './statusGates.js';
@@ -253,6 +254,15 @@ export async function bulkUpdate(
             if (c.value === null || c.value === '') delete merged[c.key];
             else merged[c.key] = c.value;
             log.push({ field: `fields.${c.key}`, before: row.fields?.[c.key] ?? null, after: c.value });
+          }
+          // Rule 11.1.1: a bulk fill of the Assignee seat on a work order still
+          // waiting in Incoming is gated like an accept (against the merged
+          // bag); the 409 names the work order so the selection can be fixed.
+          if (
+            changed.some((c) => c.key === 'Assignee' && c.value !== null && String(c.value).trim() !== '') &&
+            (await awaitingAcceptance(tx, row.id))
+          ) {
+            await assertReadyToAssign(tx, row.id, merged);
           }
           // Profit = Total Invoiced − Cost, kept in step on every bag write.
           applyProfitFormula(merged);

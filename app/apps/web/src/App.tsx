@@ -139,6 +139,12 @@ export function App() {
                 path="/payments"
                 element={<RequireAuth><RequireCan perm="payments" nav="Payments"><PaymentsPage /></RequireCan></RequireAuth>}
               />
+              {/* Rule 7.1.1 (0036) — new work orders waiting to be accepted and
+                  assigned. The same inbox page in its intake mode. */}
+              <Route
+                path="/incoming"
+                element={<RequireAuth><RequireCan perm="approvals/intake" nav="Incoming Work Orders"><ApprovalsPage mode="intake" /></RequireCan></RequireAuth>}
+              />
               {/* The manager's inbox — approval tasks raised by automations (0026). */}
               <Route
                 path="/approvals"

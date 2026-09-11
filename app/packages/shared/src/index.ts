@@ -1155,6 +1155,9 @@ export interface AcceptanceState {
   approval_task_id: string;
   source: AcceptanceSource;
   raised_at: string;
+  /** Rule 11.1.1: the intake fields still empty (labels). The header chip
+      says how many stand between the work order and its dispatcher. */
+  missing: string[];
 }
 
 /** The `detail` of a status_change task: what was asked (rule 2.4.1). */
@@ -1183,8 +1186,13 @@ export interface StatusChangeState {
 
 /** GET /api/approvals/counts — the sidebar badge, for the acting principal. */
 export interface ApprovalCounts {
-  /** Open items this person may decide (approvers). */
+  /** Open items this person may decide (approvers) — the Approvals badge.
+      New work orders waiting to be accepted are NOT in here: they have
+      their own queue and badge (`to_accept`). */
   to_decide: number;
+  /** New work orders waiting in Incoming for this person to accept and
+      assign, or reject (rule 7.1.1) — the Incoming Work Orders badge. */
+  to_accept: number;
   /** This person's own decided requests not yet acknowledged (requesters). */
   to_acknowledge: number;
 }
@@ -1255,6 +1263,11 @@ export interface ApprovalListItem extends ApprovalTask {
   wo_cost: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency. */
   wo_emergency: boolean;
+  /** Rule 11.1.1, wo_acceptance rows only: the intake fields still empty on
+      the work order (labels, in the rule's order). Accepting is refused
+      until this is empty; the Incoming page locks the verb and lists them.
+      Always empty on every other task type. */
+  intake_missing: string[];
 }
 
 /** GET /api/approvals — every task across live work orders, open first. */
@@ -1568,3 +1581,4 @@ export interface FmCicoMethod {
 export * from './ecotrak';
 // Rules 11.2.1 / 11.2.2: the Quoting & Parts gate (vocabulary + "filled").
 export * from './statusGates';
+export * from './intakeGate';

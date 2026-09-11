@@ -165,6 +165,8 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       'fields.Date-Time Received',
       'fields.Date Created',
       'fields.Due Date',
+      // 0037 — rule 11.1.1's SLA, a hand-typed datetime the intake gate needs.
+      'fields.SLA Due Date',
       // 0024 — the Due Today view's other three dates. Quote Due Date is
       // computed from the assessment check-out (rule 2.3.2), never typed.
       'fields.Scheduled Date',

@@ -38,6 +38,8 @@ import {
   ACCEPTANCE_REJECT_STATUS_NAME,
   ACCEPTANCE_SOURCE_LABEL,
   APPROVAL_TASK_LABEL,
+  INTAKE_REQUIRED_FIELDS,
+  intakeMissing,
   APPROVAL_TASK_TYPES,
   STATUS_PERM_KEY,
   approvalSectionOf,
@@ -50,6 +52,7 @@ import { woScopeSql } from './woScope.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
 import { assertStatusGate } from './statusGates.js';
+import { assertReadyToAssign } from './intakeGate.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -106,7 +109,19 @@ interface Row {
   wo_nte: number | string | null;
   wo_cost: string | null;
   wo_emergency: boolean | null;
+  /** Rule 11.1.1 (the intake gate): the bag's intake keys plus the three
+      promoted columns, so the list can say what is still empty. */
+  wo_description: string | null;
+  wo_received: string | null;
+  intake_fields: Record<string, unknown> | null;
 }
+
+/** The intake keys as one small object off the bag — the list never ships
+    the whole ~100-key bag per row. Keys are literals from the shared
+    vocabulary (none carries a quote). */
+const INTAKE_FIELDS_SQL = `jsonb_build_object(${INTAKE_REQUIRED_FIELDS.map(
+  (f) => `'${f.key}', t.fields->'${f.key}'`,
+).join(', ')})`;
 
 const SELECT_SQL = `
   SELECT a.id::text            AS id,
@@ -129,7 +144,10 @@ const SELECT_SQL = `
          t.fields->>'Due Date'   AS wo_due,
          t.nte::float8           AS wo_nte,
          t.fields->>'34. Cost'   AS wo_cost,
-         COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS wo_emergency
+         COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS wo_emergency,
+         t.description            AS wo_description,
+         t.date_received::text    AS wo_received,
+         ${INTAKE_FIELDS_SQL}     AS intake_fields
     FROM approval_task a
     JOIN task t            ON t.id = a.task_id
     LEFT JOIN role r       ON r.code = a.assigned_role
@@ -185,6 +203,16 @@ function mapListItem(r: Row): ApprovalListItem {
     wo_nte: num(r.wo_nte),
     wo_cost: num(r.wo_cost),
     wo_emergency: Boolean(r.wo_emergency),
+    // Rule 11.1.1: only an acceptance row asks; everything else reads [].
+    intake_missing:
+      r.type === 'wo_acceptance'
+        ? intakeMissing({
+            fields: r.intake_fields,
+            date_received: r.wo_received,
+            description: r.wo_description,
+            nte: r.wo_nte,
+          }).map((f) => f.label)
+        : [],
   };
 }
 
@@ -513,6 +541,10 @@ async function decide(
     if (!hit.rows[0]) {
       throw badRequest(`"${assignee}" is not an active person on file`, { assignee });
     }
+    // Rule 11.1.1: accepting IS assigning, so the intake fields must be
+    // filled first. Asked before anything is written — a refused accept
+    // leaves the task open in Incoming with the list of what to fill.
+    await assertReadyToAssign({ query }, cur.task_id);
     note = [`Assigned to ${assignee}`, note].filter(Boolean).join(' — ');
   }
   const body = `${TYPE_LABEL[cur.type]} ${verb} — ${cur.title}${note ? ` — ${note}` : ''}`;
@@ -987,10 +1019,14 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
     p.values,
   );
   let to_decide = 0;
+  let to_accept = 0;
   let to_acknowledge = 0;
   for (const r of res.rows) {
     const n = Number(r.n);
-    if (r.status === 'open' && decideTypes.includes(r.type)) to_decide += n;
+    // New work orders have their own queue (Incoming) and their own badge.
+    if (r.status === 'open' && r.type === 'wo_acceptance') {
+      if (decideTypes.includes(r.type)) to_accept += n;
+    } else if (r.status === 'open' && decideTypes.includes(r.type)) to_decide += n;
     if ((r.status === 'approved' || r.status === 'rejected') && r.mine && !r.acked) to_acknowledge += n;
   }
   // The inbox's "For me" lane also holds the quotes and technician payments
@@ -1012,5 +1048,5 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
     );
     to_decide += Number(pr.rows[0]?.n ?? 0);
   }
-  return { to_decide, to_acknowledge };
+  return { to_decide, to_accept, to_acknowledge };
 }

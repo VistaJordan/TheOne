@@ -14,6 +14,7 @@
      dollar     the coin flips
      card       the signature strip writes itself in
      inbox      the tray's lip writes itself in
+     download   the arrow drops into the tray (Incoming Work Orders)
      sliders    the knobs slide
 
    Paths are copied verbatim from the sprite, so the icons look identical at
@@ -94,6 +95,15 @@ const DRAWINGS: Partial<Record<IconName, JSX.Element>> = {
     <>
       <path d="M5.5 5.1 3.3 11.3A2 2 0 0 0 3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-.3-.7L18.5 5.1A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.9 1.1Z" />
       <polyline className="ni-line" points="3 12 8 12 9.5 15 14.5 15 16 12 21 12" pathLength={1} />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <g className="ni-drop">
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
+      </g>
     </>
   ),
   sliders: (

@@ -13,6 +13,7 @@ import { ApiError } from '../errors.js';
 import { resolveField, type ResolvedField } from './woFields.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations, type AutoCtx } from './automations.js';
+import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { assertNotVisitOwned } from './visits.js';
 import { getWorkOrderDetail } from './workOrders.js';
@@ -136,6 +137,15 @@ export async function updateWorkOrderFields(
   }
 
   if (log.length > 0) {
+    // Rule 11.1.1: filling the Assignee seat on a work order still waiting in
+    // Incoming is the same act as accepting it, so the intake fields must be
+    // filled — checked against the bag as this save leaves it.
+    if (
+      log.some((c) => c.field === 'fields.Assignee' && c.after !== null && String(c.after).trim() !== '') &&
+      (await awaitingAcceptance({ query }, task.id))
+    ) {
+      await assertReadyToAssign({ query }, task.id, merged);
+    }
     // Profit = Total Invoiced − Cost, recomputed on every write. Derived, so
     // no activity row of its own (the mirror-column rule) — the trail shows
     // the input that moved.

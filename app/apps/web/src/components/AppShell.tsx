@@ -28,6 +28,7 @@ export type NavKey =
   | 'Quotes'
   | 'Payments'
   | 'Receivables'
+  | 'Incoming Work Orders'
   | 'Approvals'
   | 'Admin';
 
@@ -43,7 +44,7 @@ interface NavItem {
   to?: string;
   /** Marks the item whose badge carries the live work-order count — or, for
       Approvals (0025), what waits on the viewer: to decide, or to acknowledge. */
-  badge?: 'total' | 'approvals';
+  badge?: 'total' | 'approvals' | 'incoming';
   /** A section with enough destinations to deserve its own disclosure. The
       header stops navigating and becomes the toggle; the children are the
       routes (Signals in the reference nav works the same way). */
@@ -63,6 +64,10 @@ const NAV: NavItem[] = [
   // Payables: the queue where technician payment requests are approved and
   // handed to Yoda. Receivables (AR) sits beside it.
   { label: 'Payments', icon: 'card', to: '/payments' },
+  // Rule 7.1.1 (0036): new work orders wait here until a manager accepts
+  // and assigns them to a dispatcher, or rejects them. Its own queue, not a
+  // lane of the inbox — intake is a different job from approving.
+  { label: 'Incoming Work Orders', icon: 'download', to: '/incoming', badge: 'incoming' },
   // The manager's inbox (0026): approval tasks the rules engine raises —
   // the NTE override of rule 1.5.2 first.
   { label: 'Approvals', icon: 'inbox', to: '/approvals', badge: 'approvals' },
@@ -85,6 +90,7 @@ const NAV_PERM: Record<string, string> = {
   Vendors: 'vendors',
   Quotes: 'quotes',
   Payments: 'payments',
+  'Incoming Work Orders': 'approvals/intake',
   Approvals: 'approvals',
   Invoicing: 'invoicing',
 };
@@ -150,6 +156,8 @@ export function AppShell({
   const approvalsWaiting = countsQuery.data
     ? countsQuery.data.to_decide + countsQuery.data.to_acknowledge
     : undefined;
+  // 0036 · the Incoming badge: new work orders this person may accept.
+  const incomingWaiting = countsQuery.data?.to_accept || undefined;
 
   // 0015 · a section the acting principal may not view leaves the nav; an
   // Admin group with no visible section leaves with it. The Admin group follows
@@ -284,7 +292,9 @@ export function AppShell({
                   ? total
                   : item.badge === 'approvals' && approvalsWaiting
                     ? approvalsWaiting
-                    : undefined;
+                    : item.badge === 'incoming' && incomingWaiting
+                      ? incomingWaiting
+                      : undefined;
 
               // ── Group: header discloses the children, it does not navigate ──
               if (item.children) {

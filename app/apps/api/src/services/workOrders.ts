@@ -32,6 +32,7 @@ import { woScopeSql } from './woScope.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
 import { assertStatusGate } from './statusGates.js';
+import { intakeMissingFor } from './intakeGate.js';
 import { obligationsReady, worstObligationsByTask, evaluateForTask } from './obligations.js';
 import {
   Params,
@@ -443,7 +444,12 @@ async function pendingAcceptance(taskId: string): Promise<AcceptanceState | null
   if (!r) return null;
   const source: AcceptanceSource =
     r.source === 'ecotrak' || r.source === 'import' ? r.source : 'manual';
-  return { approval_task_id: r.id, source, raised_at: r.created_at };
+  return {
+    approval_task_id: r.id,
+    source,
+    raised_at: r.created_at,
+    missing: await intakeMissingFor({ query }, taskId),
+  };
 }
 
 /**

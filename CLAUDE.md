@@ -135,10 +135,15 @@ needs no code: nothing pauses a timer and the quote clock keys off visits.
 The status button reads "Request status change" for request-mode users and
 the bulk bar hides its status move for them.
 
-**Pending acceptance** (migration 0036, rules 7.1.1–7.1.4) is the third
-kind riding the same table: an `approval_task` of type `wo_acceptance`,
-inbox section **Pending acceptance** (permission path `approvals/intake`,
-view / approve; 0036 grants it to TL / ATL / AM / Admin). Nothing new on the
+**Pending acceptance / Incoming Work Orders** (migration 0036, rules
+7.1.1–7.1.4) is the third kind riding the same table: an `approval_task` of
+type `wo_acceptance`, section `intake` (permission path `approvals/intake`,
+view / approve; 0036 grants it to TL / ATL / AM / Admin). It has its **own
+sidebar page, Incoming Work Orders** (`/incoming`): the same `ApprovalsPage`
+in `mode="intake"`, which shows only intake rows, while `/approvals` never
+shows them (intake is a different job from approving). `GET
+/approvals/counts` carries `to_accept` for its badge; `to_decide` no longer
+counts acceptances. Nothing new on the
 work order: "pending" = the open task + an empty `Assignee` (the status stays
 Open). `raiseAcceptanceTasks(ids, actorId, source)` in `services/approvals.ts`
 is what the creators call **after their transaction commits** — the Ecotrak
@@ -155,12 +160,35 @@ reason and, after the commit, calls `changeStatus` to `Cancelled / Postponed`
 gone) with source `{kind:'approval_task'}`. `reconcileApprovalTasks` cancels
 an open acceptance once somebody fills `Assignee` by hand or moves the work
 order to Cancelled / Postponed. The detail payload carries `acceptance`
-(`AcceptanceState`) and the header draws an "Awaiting acceptance · from
-Ecotrak" chip; the inbox row reads Accept (opens the assignee picker) /
-Reject. Rule-raised tasks are still only the two the builder offers
+(`AcceptanceState`, with `missing`) and the header draws an "Awaiting
+acceptance · from Ecotrak · N intake fields to fill" chip linking to
+`/incoming`; the Incoming row reads Accept (opens the assignee picker,
+dispatcher tiers first) / Reject. Rule-raised tasks are still only the two the builder offers
 (`APPROVAL_TASK_TYPES`); a rule cannot raise an acceptance. Deferred: the
 auto-assign suggester (7.1.3's note), and no work order is created by hand
 in the app today, so `source: 'manual'` is reserved.
+
+**Ready to Assign gate** (migration 0037, rules 11.1.1 / 11.1.2). A work
+order cannot be assigned until Received on, Due date, SLA, Address, City,
+State, Zip code, Store, Trade, WO description, FM, Comp and Client NTE are
+filled (WO# is the row key; a $0.00 NTE counts as filled; Received on / WO
+description / Client NTE also accept their promoted `task` columns, which is
+what the Ecotrak ingest writes). Vocabulary in `packages/shared/src/
+intakeGate.ts` (`INTAKE_REQUIRED_FIELDS`, `intakeMissing`,
+`describeIntakeGate`); `apps/api/src/services/intakeGate.ts` reads the row
+and `assertReadyToAssign` throws a **409 `CONFLICT`** (`details.code =
+INTAKE_GATE`, `details.missing`). It runs on Accept in `decide` (before the
+decision commits, so a refused accept stays open), and on a direct or bulk
+write of `Assignee` **while a `wo_acceptance` task is open**
+(`awaitingAcceptance`), checked against the bag as the save leaves it —
+filling Address and Assignee in one save is fine. Work orders nobody is
+waiting to accept are never gated. Every `/approvals` row carries
+`intake_missing` (labels; `[]` on non-acceptance rows) so the Incoming page
+locks Accept with the list and the row says "Fill before assigning: …" with
+a link to the work order. 0037 defines `SLA Due Date` as a datetime
+(Dates section) — the header and Pulse already read that key, but no
+field_def declared it, so nobody could type it; seed.ts carries the same
+row. Self-checks: `tests/intake-gate.test.ts`.
 
 **Which work orders a person sees** (migration 0032, rule 8.5, the
 roadmap's "my book / my entity") is two more paths in the same permission

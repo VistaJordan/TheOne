@@ -21,7 +21,17 @@
    on a work order, the quote and payment rows of that work order draw their
    Approve verb locked — the API refuses the move with a 409 regardless, this
    just says so before the click. A verb the viewer may not use stays VISIBLE
-   and locked with the reason — the same rule the Payments tab follows. */
+   and locked with the reason — the same rule the Payments tab follows.
+
+   The same page renders twice (`mode`): as the inbox at /approvals, and as
+   Incoming Work Orders at /incoming — the intake queue of rule 7.1.1, where
+   new work orders wait for a manager to accept and assign them to a
+   dispatcher, or reject them. Intake is one section of the same table, so
+   the row shape, lanes, filters and dialogs are shared; the inbox simply
+   never shows intake rows and the intake page shows nothing else. Rule
+   11.1.1 rides on the acceptance row: `intake_missing` lists the intake
+   fields still empty, the Accept verb is locked with that list, and the
+   line under the title says what to fill and where. */
 
 import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -34,6 +44,7 @@ import {
   STATUS_PERM_KEY,
   approvalSectionOf,
   approvalSectionPermKey,
+  describeIntakeGate,
   type AcceptanceDetail,
   type ApprovalSectionKey,
 } from '@theone/shared';
@@ -222,6 +233,9 @@ interface Row {
   /** 0025: the viewer asked for this — it shows in their My requests lane
       while open, and after a decision until they acknowledge it. */
   requester: boolean;
+  /** Rule 11.1.1, acceptance rows: the intake fields still empty (labels).
+      Non-empty locks Accept. Always [] on every other row. */
+  missing: string[];
   data: RowData;
 }
 
@@ -294,6 +308,7 @@ function taskRow(
     requester:
       item.created_by?.id === myId &&
       (open || ((item.status === 'approved' || item.status === 'rejected') && !item.acknowledged_at)),
+    missing: item.intake_missing ?? [],
     data: { kind: 'task', item },
   };
 }
@@ -325,6 +340,7 @@ function quoteRow(item: QuoteListItem, canDecide: boolean, held: Set<string>): R
     },
     held: held.has(item.task_id),
     requester: false,
+    missing: [],
     data: { kind: 'quote', item },
   };
 }
@@ -388,6 +404,7 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
     },
     held: item.nte_override_open || held.has(item.task_id),
     requester: false,
+    missing: [],
     data: { kind: 'payment', item },
   };
 }
@@ -413,7 +430,12 @@ interface Filters {
 
 const NO_FILTERS: Filters = { entity: '', client: '', trade: '', owner: '' };
 
-export function ApprovalsPage() {
+/** 'inbox' = /approvals (every section but intake); 'intake' = /incoming
+    (Incoming Work Orders — the intake section alone, rule 7.1.1). */
+export type ApprovalsMode = 'inbox' | 'intake';
+
+export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {}) {
+  const intake = mode === 'intake';
   const queryClient = useQueryClient();
   const { can, actingAs } = useAuth();
   // 0025: every section is its own path under `approvals` — view shows it,
@@ -456,13 +478,13 @@ export function ApprovalsPage() {
     queryKey: ['quotes'],
     queryFn: listQuotes,
     retry: 0,
-    enabled: canSeeQuotes,
+    enabled: canSeeQuotes && !intake,
   });
   const paymentsQuery = useQuery({
     queryKey: ['payments'],
     queryFn: listPayments,
     retry: 0,
-    enabled: canSeePayments,
+    enabled: canSeePayments && !intake,
   });
 
   const rows = useMemo<Row[]>(() => {
@@ -477,9 +499,11 @@ export function ApprovalsPage() {
       out.push(quoteRow(q, canApproveQuotes, held));
     }
     for (const p of paymentsQuery.data?.items ?? []) out.push(paymentRow(p, canApprovePayments, held));
-    return out;
+    // Intake is its own page (Incoming Work Orders): the inbox never shows
+    // it, and the intake page shows nothing else.
+    return out.filter((r) => (r.section === 'intake') === intake);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- canDecideTask closes over `can`
-  }, [approvalsQuery.data, quotesQuery.data, paymentsQuery.data, myId, myRole, canApproveQuotes, canApprovePayments, can]);
+  }, [approvalsQuery.data, quotesQuery.data, paymentsQuery.data, myId, myRole, canApproveQuotes, canApprovePayments, can, intake]);
 
   const inLane = (r: Row, l: Lane) =>
     l === 'requests' ? r.requester : l === 'mine' ? r.mine : l === 'open' ? r.open : !r.open;
@@ -531,7 +555,6 @@ export function ApprovalsPage() {
   // one exists), plus any section their own requests fall in.
   const sections: Section[] = [
     'all',
-    ...(canSeeSection('intake') ? (['intake'] as Section[]) : []),
     ...(canSeeSection('nte') ? (['nte'] as Section[]) : []),
     ...(canSeeSection('status') || rows.some((r) => r.section === 'status' && r.requester)
       ? (['status'] as Section[])
@@ -632,6 +655,12 @@ export function ApprovalsPage() {
 
   const emptyText = anyFilter
     ? 'Nothing matches these filters.'
+    : intake
+      ? lane === 'mine'
+        ? 'No new work orders are waiting on you.'
+        : lane === 'open'
+          ? 'No new work orders are waiting to be accepted — the queue is clear.'
+          : 'No work order has been accepted or rejected yet.'
     : lane === 'requests'
       ? 'No requests of yours are waiting or undecided — you are up to date.'
     : lane === 'mine'
@@ -643,18 +672,21 @@ export function ApprovalsPage() {
         : 'Nothing has been decided yet.';
 
   return (
-    <AppShell active="Approvals">
+    <AppShell active={intake ? 'Incoming Work Orders' : 'Approvals'}>
       <div className="page-head">
         <p className="page-sub">
           {loading
             ? 'Loading…'
-            : `${filtered.length} item${filtered.length === 1 ? '' : 's'} · ${
-                section === 'all' ? 'all sections' : SECTION_LABEL[section].toLowerCase()
-              } · ${LANE_LABEL[lane].toLowerCase()}`}
+            : intake
+              ? `${filtered.length} new work order${filtered.length === 1 ? '' : 's'} · ${LANE_LABEL[lane].toLowerCase()} · accept and assign to a dispatcher, or reject`
+              : `${filtered.length} item${filtered.length === 1 ? '' : 's'} · ${
+                  section === 'all' ? 'all sections' : SECTION_LABEL[section].toLowerCase()
+                } · ${LANE_LABEL[lane].toLowerCase()}`}
         </p>
       </div>
 
       <div className="payq-head">
+        {!intake && (
         <div className="seg payq-lanes apq-sections" role="group" aria-label="Approval sections">
           {sections.map((s) => {
             const n = sectionCount(s);
@@ -674,6 +706,7 @@ export function ApprovalsPage() {
             );
           })}
         </div>
+        )}
         <div className="seg payq-lanes" role="group" aria-label="Approval lanes">
           {lanes.map((l) => {
             const n = laneCount(l);
@@ -727,7 +760,7 @@ export function ApprovalsPage() {
       {approvalsQuery.isError && (
         <div className="quotes-empty">
           <Icon name="inbox" size={22} />
-          <b>{notServed ? 'No approval tasks to list yet' : 'Could not load approval tasks'}</b>
+          <b>{notServed ? (intake ? 'No new work orders to list yet' : 'No approval tasks to list yet') : intake ? 'Could not load the incoming queue' : 'Could not load approval tasks'}</b>
           <span>
             {notServed
               ? 'Tasks are raised by automations — Admin › Automations is where the rules live.'
@@ -752,7 +785,7 @@ export function ApprovalsPage() {
             </thead>
             <tbody>
               {loading && (
-                <tr className="ct-empty"><td colSpan={columns.length + 2}>Loading the inbox…</td></tr>
+                <tr className="ct-empty"><td colSpan={columns.length + 2}>{intake ? 'Loading the incoming queue…' : 'Loading the inbox…'}</td></tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr className="ct-empty"><td colSpan={columns.length + 2}>{emptyText}</td></tr>
@@ -1026,6 +1059,15 @@ function Ask({ row }: { row: Row }) {
               {row.trade ? ` · ${row.trade}` : ''}
               {row.open ? ' · accept and assign, or reject' : ''}
             </small>
+            {/* Rule 11.1.1: what still has to be typed before Accept unlocks —
+                and the way to the work order, where it gets typed. */}
+            {row.open && row.missing.length > 0 && (
+              <small className="apq-missing">
+                <Icon name="alert-circle" size={12} />
+                Fill before assigning: {row.missing.join(', ')} ·{' '}
+                <Link to={`/work-orders/${encodeURIComponent(row.wo_number)}`}>open the work order</Link>
+              </small>
+            )}
           </div>
         );
       }
@@ -1261,6 +1303,9 @@ function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayme
       const need = `Requires ${KIND_CHIP[row.section].toLowerCase()} approval rights`;
       // Rule 7.1.3: a new work order is ACCEPTED (and assigned), not approved.
       const accept = d.item.type === 'wo_acceptance';
+      // Rule 11.1.1: accepting is assigning, so it waits on the intake fields.
+      // Locked with the list rather than hidden — the API refuses regardless.
+      const gated = accept && row.missing.length > 0;
       return (
         <>
           {row.requester &&
@@ -1270,8 +1315,8 @@ function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayme
           {verb(
             accept ? 'Accept' : 'Approve',
             accept ? 'user-plus' : 'check',
-            may,
-            need,
+            may && !gated,
+            gated && may ? describeIntakeGate(row.missing.map((label) => ({ label }))) : need,
             () => onDecide('approve'),
             'primary',
             'approve',
@@ -1310,6 +1355,10 @@ function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayme
   }
 }
 
+/** The dispatcher tiers (role codes) — the people rule 7.1.4 hands a new
+    work order to. Ops Coordinator dispatches too (0031 leaves it direct). */
+const DISPATCHER_ROLES = new Set(['om', 'senior_om', 'om_probation', 'ops_coord']);
+
 // ── Accept a new work order (0036, rule 7.1.3) ───────────────────────────────
 // Accepting is choosing who runs it: the assignee is picked from the people
 // on file (the value lands in the Assignee seat, which the 0032 scope matches
@@ -1333,7 +1382,11 @@ function AcceptDialog({
   const [assignee, setAssignee] = useState('');
   const [note, setNote] = useState('');
   const people = useQuery({ queryKey: ['principals'], queryFn: getPrincipals, retry: 0 });
-  const names = (people.data?.items ?? []).filter((p) => p.kind === 'human').map((p) => p.name);
+  // Rule 7.1.4 hands the work order to a DISPATCHER, so the dispatcher tiers
+  // come first; everyone else stays available below (a manager may keep one).
+  const humans = (people.data?.items ?? []).filter((p) => p.kind === 'human');
+  const dispatchers = humans.filter((p) => p.role !== null && DISPATCHER_ROLES.has(p.role)).map((p) => p.name);
+  const others = humans.filter((p) => p.role === null || !DISPATCHER_ROLES.has(p.role)).map((p) => p.name);
   const ok = assignee.trim().length > 0;
   const whoId = `apq-assignee-${idKey}`;
   const noteId = `apq-text-${idKey}`;
@@ -1375,10 +1428,21 @@ function AcceptDialog({
               disabled={people.isLoading}
               onChange={(e) => setAssignee(e.target.value)}
             >
-              <option value="">{people.isLoading ? 'Loading people…' : 'Pick a person'}</option>
-              {names.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
+              <option value="">{people.isLoading ? 'Loading people…' : 'Pick a dispatcher'}</option>
+              {dispatchers.length > 0 && (
+                <optgroup label="Dispatchers">
+                  {dispatchers.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </optgroup>
+              )}
+              {others.length > 0 && (
+                <optgroup label={dispatchers.length > 0 ? 'Everyone else' : 'People'}>
+                  {others.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             <span className="hint">
               {people.isError

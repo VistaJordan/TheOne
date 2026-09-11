@@ -128,4 +128,18 @@
 /* 0036: a new work order nobody has accepted — the same warn tone as an open
    request, with the inbox icon so the two chips never read as one. */
 .scr-intake .scr-text b { color: inherit; }
+/* Rule 11.1.1: the intake fields still to fill, on the chip and under the
+   Incoming row's title — warn tone, never red: nothing is wrong, something
+   is owed. */
+.scr-intake .scr-gate { color: var(--warn); }
+.ct .payq-who .apq-missing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--warn);
+  white-space: normal;
+}
+.ct .payq-who .apq-missing .ic { flex: none; }
+.ct .payq-who .apq-missing a { color: inherit; text-decoration: underline; }
 @media (max-width: 900px) { .scr { max-width: 100%; } }

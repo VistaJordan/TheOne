@@ -426,6 +426,10 @@ const CURATED_FIELDS: CuratedField[] = [
   // import path in apps/api woBulk.ts does the same for live creates).
   { key: 'Date Created',             label: 'Date Created',         type: 'datetime' },
   { key: 'Due Date',                 label: 'Due Date',             type: 'datetime' },
+  // 0037 — rule 11.1.1's SLA: the client's SLA deadline, typed at intake.
+  // The header and the Pulse already read this key; the row makes it editable.
+  // (migration 0037 carries the SAME row for an already-seeded database.)
+  { key: 'SLA Due Date',             label: 'SLA Due Date',         type: 'datetime' },
   // 0024 — the Due Today view's dates (migration 0024 carries the SAME three
   // rows for an already-seeded pgdata; keep in step). Scheduled and Parts
   // Arrival are typed by the dispatcher; Quote Due Date is COMPUTED from the
