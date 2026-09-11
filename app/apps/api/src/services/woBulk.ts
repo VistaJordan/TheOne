@@ -22,13 +22,14 @@ import { raiseAcceptanceTasks } from './approvals.js';
 import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { assertNotVisitOwned } from './visits.js';
-import { quoteFilledTaskIds } from './statusGates.js';
+import { doneGateMissingFor, quoteFilledTaskIds } from './statusGates.js';
 import {
   PARTS_REQUIRED_KEY,
   STATUS_GATE_ERROR_CODE,
   describeStatusGate,
   partsRequiredFilled,
   statusGateFor,
+  type DoneGateCheck,
   type WorkOrderListItem,
 } from '@theone/shared';
 
@@ -175,10 +176,17 @@ export async function bulkUpdate(
       const moving = rows.rows.filter((r) => r.status_id !== target.id);
       const partsPatch = customPatch.find((c) => c.key === PARTS_REQUIRED_KEY);
       const quoteOk = gate === 'quote' ? await quoteFilledTaskIds({ query }, moving.map((r) => r.id)) : null;
+      // Rules 11.3.1–11.3.3: the Done gate reads visits, cost and quote per row.
+      const doneMissing = new Map<string, DoneGateCheck[]>();
+      if (gate === 'done') {
+        for (const r of moving) doneMissing.set(r.id, await doneGateMissingFor({ query }, r.id));
+      }
       const blocked = moving.filter((r) =>
         gate === 'quote'
           ? !(quoteOk as Set<string>).has(r.id)
-          : !partsRequiredFilled(partsPatch ? partsPatch.value : r.fields?.[PARTS_REQUIRED_KEY]),
+          : gate === 'done'
+            ? (doneMissing.get(r.id)?.length ?? 0) > 0
+            : !partsRequiredFilled(partsPatch ? partsPatch.value : r.fields?.[PARTS_REQUIRED_KEY]),
       );
       if (blocked.length > 0) {
         const names = blocked.map((r) => r.wo_number);

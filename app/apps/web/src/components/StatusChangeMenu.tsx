@@ -6,10 +6,13 @@ import {
   checkEcotrakTransition,
   describeEcotrakRefusal,
   describeStatusGate,
+  doneGateMissing,
   ecotrakTransitionRefused,
   partsRequiredFilled,
   statusGateFor,
   statusGateTag,
+  type DoneGateCheck,
+  type StatusGate,
   type StatusRef,
 } from '@theone/shared';
 import { ApiRequestError, getStatuses, patchStatus, requestStatusChange } from '../api/client';
@@ -50,11 +53,33 @@ interface StatusChangeMenuProps {
       when the caller has it. Rules 2.6.3 / 2.7: a pick Ecotrak would refuse
       is marked before the click; the API decides whether it goes through. */
   ecotrakStatus?: unknown;
-  /** Rules 11.2.1 / 11.2.2, when the caller knows: `quoteFilled` false = the
-      quote is missing or empty (null = unknown, no tag); `partsValue` = the
-      Parts Required bag value. A pick the gate would refuse is tagged before
-      the click; the API is still the judge and answers 409 with the sentence. */
-  gateHints?: { quoteFilled?: boolean | null; partsValue?: unknown };
+  /** Rules 11.2.1 / 11.2.2 / 11.3.x, when the caller knows: `quoteFilled`
+      false = the quote is missing or empty (null = unknown, no tag);
+      `partsValue` = the Parts Required bag value; `visitComplete` = a visit
+      has both stamps; `costValue` = the Cost bag value. A pick the gate
+      would refuse is tagged before the click; the API is still the judge
+      and answers 409 with the sentence. */
+  gateHints?: GateHints;
+}
+
+export interface GateHints {
+  quoteFilled?: boolean | null;
+  partsValue?: unknown;
+  visitComplete?: boolean | null;
+  costValue?: unknown;
+}
+
+/** What the hints say the gate would find missing, or null when the pick
+    may go ahead as far as the caller knows. An unknown hint never tags. */
+function hintedBlock(gate: StatusGate, h: GateHints): { missing: DoneGateCheck[] } | null {
+  if (gate === 'quote') return h.quoteFilled === false ? { missing: ['quote'] } : null;
+  if (gate === 'parts') return 'partsValue' in h && !partsRequiredFilled(h.partsValue) ? { missing: [] } : null;
+  const missing = doneGateMissing({
+    visitComplete: h.visitComplete ?? true,
+    costValue: 'costValue' in h ? h.costValue : 0,
+    quoteFilled: h.quoteFilled !== false,
+  });
+  return missing.length > 0 ? { missing } : null;
 }
 
 /** Click the trigger → dropdown of all statuses (grouped) → PATCH (or, for a
@@ -223,13 +248,8 @@ export function StatusChangeMenu({
                   // Rules 11.2.1 / 11.2.2: tag the pick when the caller's
                   // hints say the gate would refuse it.
                   const gate = active ? null : statusGateFor(s.name);
-                  const gateBlocked =
-                    gate && gateHints
-                      ? gate === 'quote'
-                        ? gateHints.quoteFilled === false
-                        : 'partsValue' in gateHints && !partsRequiredFilled(gateHints.partsValue)
-                      : false;
-                  const gateNote = gate && gateBlocked ? describeStatusGate(gate, s.name) : null;
+                  const gateHit = gate && gateHints ? hintedBlock(gate, gateHints) : null;
+                  const gateNote = gate && gateHit ? describeStatusGate(gate, s.name, gateHit.missing) : null;
                   return (
                     <button
                       type="button"
@@ -248,9 +268,9 @@ export function StatusChangeMenu({
                     >
                       <StatusCircle group={b.code} color={s.color} fraction={s.fraction} size={16} />
                       <span className="status-menu-name">{s.name}</span>
-                      {gate && gateNote && (
+                      {gate && gateHit && gateNote && (
                         <span className="status-menu-ecotrak status-menu-gate" aria-label={gateNote}>
-                          {statusGateTag(gate)}
+                          {statusGateTag(gate, gateHit.missing)}
                         </span>
                       )}
                       {refusal && (

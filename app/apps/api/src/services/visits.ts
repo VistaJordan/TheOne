@@ -27,6 +27,11 @@
 //
 // A new visit takes its method from the FM table (fm_cico_method) keyed by the
 // work order's '22. FM' — "we have a database of the method for each client".
+//
+// Rule 2.2.2: a CHECK-IN moves the work order On Site — (Assessment) for an
+// assessment visit, (Job) for a job or a return trip (moveOnSite, after the
+// visit's own transaction). The reply carries `status_move` so the card can
+// say when the move was refused; the check-in itself always stands.
 
 import { query, withTransaction } from '../db.js';
 import { ApiError } from '../errors.js';
@@ -41,12 +46,15 @@ import {
   VISIT_METHODS,
   VISIT_MIRROR_KEYS,
   VISIT_OWNED_KEYS,
+  onSiteStatusNameForVisitType,
   type ActivityActor,
   type ActivityEntry,
   type FmCicoMethod,
   type VisitInput,
   type VisitStatus,
+  type VisitStatusMove,
   type WoVisit,
+  type WoVisitResponse,
   type WoVisitsResponse,
 } from '@theone/shared';
 import type { ActingPrincipal } from './activity.js';
@@ -447,13 +455,51 @@ async function logVisitEvent(
   );
 }
 
+// ── Rule 2.2.2 · a check-in moves the work order On Site ─────────────────────
+
+/**
+ * After a visit is checked in: move the work order to On Site (Assessment)
+ * or On Site (Job) by the visit's type. Runs OUTSIDE the visit's transaction
+ * (changeStatus opens its own and dispatches automations after it) and as a
+ * system consequence of the check-in, so the status permission is not asked
+ * — a dispatcher who may only REQUEST a status change still checks techs in
+ * — while the status gates and the Ecotrak check still apply. A refusal
+ * never undoes the check-in: it comes back as the reason. The audit row
+ * reads `via: 'visit'`, like the mirrored keys.
+ */
+async function moveOnSite(taskId: string, visitType: string, actorId: string): Promise<VisitStatusMove | null> {
+  const name = onSiteStatusNameForVisitType(visitType);
+  if (!name) return null;
+  const res = await query<{ current: string; target: string | null }>(
+    `SELECT t.status_id::text AS current, s.id::text AS target
+       FROM task t
+       LEFT JOIN status s ON lower(s.name) = lower($2)
+      WHERE t.id = $1
+      LIMIT 1`,
+    [taskId, name],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  if (!row.target) return { status: name, moved: false, reason: `There is no "${name}" status` };
+  if (row.current === row.target) return { status: name, moved: false, reason: null };
+  try {
+    // Dynamic: workOrders.ts sits above this module in the import graph.
+    const { changeStatus } = await import('./workOrders.js');
+    await changeStatus(taskId, row.target, actorId, undefined, 'visit');
+    return { status: name, moved: true, reason: null };
+  } catch (err) {
+    if (err instanceof ApiError) return { status: name, moved: false, reason: err.message };
+    throw err;
+  }
+}
+
 // ── Writes ───────────────────────────────────────────────────────────────────
 
 export async function createVisit(
   taskId: string,
   input: VisitInput,
   actor: ActingPrincipal,
-): Promise<{ item: WoVisit; items: WoVisit[] }> {
+): Promise<WoVisitResponse> {
   requireVisitEdit(actor);
   const c = clean(input, true);
 
@@ -516,14 +562,16 @@ export async function createVisit(
   // Rules on the mirrored fields ("when Check-in/out Status changes to …")
   // fire after the commit, exactly as a hand edit of the old field did.
   await dispatchAutomations({ taskId, kind: 'changed', changes: mirror });
-  return { item: created!, items };
+  // Rule 2.2.2: a visit logged straight as checked in is a check-in.
+  const status_move = status === 'checked_in' ? await moveOnSite(taskId, c.visit_type!, actor.id) : null;
+  return { item: created!, items, status_move };
 }
 
 export async function updateVisit(
   visitId: string,
   input: VisitInput,
   actor: ActingPrincipal,
-): Promise<{ item: WoVisit; items: WoVisit[] }> {
+): Promise<WoVisitResponse> {
   requireVisitEdit(actor);
   const c = clean(input, false);
   if (Object.keys(c).length === 0) throw new ApiError('BAD_REQUEST', 'Nothing to change');
@@ -601,7 +649,11 @@ export async function updateVisit(
     items = await rowsForTask(tx, cur.task_id);
   });
   await dispatchAutomations({ taskId: cur.task_id, kind: 'changed', changes: mirror });
-  return { item: updated!, items };
+  // Rule 2.2.2: only the move INTO checked_in is a check-in — correcting a
+  // stamp on a visit that is already in, or checking out, moves nothing.
+  const checkedInNow = c.status === 'checked_in' && cur.status !== 'checked_in';
+  const status_move = checkedInNow ? await moveOnSite(cur.task_id, next.visit_type, actor.id) : null;
+  return { item: updated!, items, status_move };
 }
 
 export async function deleteVisit(visitId: string, actor: ActingPrincipal): Promise<{ items: WoVisit[] }> {

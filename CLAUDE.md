@@ -353,6 +353,49 @@ and the bag) and prints the API's sentence after a refused click. Not
 gated on purpose: the CSV import (an upsert that names a status is a data
 load, not a person pausing a job) and the seed's own statuses.
 
+**Job is Done gate** (rules 11.3.1–11.3.3, no migration) is the third gate
+in the same two files: **Done / Incurred** needs a visit that checked in AND
+out (any `wo_visit` row with both stamps — 11.3.1), the final vendor cost
+(the `34. Cost` bag key, `FINAL_COST_KEY`, hand-typed in V1 — 11.3.2) and a
+quote with data (the 11.2.1 test — 11.3.3). `statusGateFor` answers `done`,
+`doneGateMissing` / `doneGateMissingFor` say which of `visit|cost|quote` is
+absent, the 409 carries `details.missing`, and the sentence and the menu
+tag ("Needs check-out" / "Needs cost" / "Needs quote", "Not ready" for
+several) name only what is missing. The header's hints for the tag read the
+mirrored keys of the LATEST visit and the Cost field; the API reads every
+visit. Deferred with the subsystems they need: the After-photo / BFI check
+(11.3.4, no drive) and the tech rating (11.3.5 / 3.3.1, no tech database).
+
+**Check-in moves On Site** (rule 2.2.2, no migration). A visit moving INTO
+`checked_in` — created as checked in, or planned → checked in — moves the
+work order to **On Site (Assessment)** for an Assessment visit and **On Site
+(Job)** for a Job *or a Return trip* (`onSiteStatusNameForVisitType` in
+`packages/shared/src/visitStatus.ts`; an unknown visit type moves nothing).
+`moveOnSite` in `services/visits.ts` runs after the visit's transaction
+through the ordinary `changeStatus` with source `'visit'` (the audit row
+reads `via: 'visit'`), does **not** ask the status permission (a request-mode
+dispatcher checking a tech in still moves it — a system consequence, not a
+pick), and still runs the gates and the Ecotrak check. A refusal never
+undoes the check-in: the reply's `status_move` carries the reason and the
+CICO card prints it. Correcting a stamp or checking out moves nothing.
+
+**Reassignment lock** (rule 8.5.4, migration 0039) is one permission, not
+code: OM / OM Under Probation / Senior OM are view-only on
+`work_orders/fields/people/fields.Assignee`, so `assertFieldWrites` refuses
+their Assignee writes and the editor draws it read-only; Accept & assign
+(0036) and a manager's edit are untouched. Loosen it per role in Admin ›
+Roles or per person with Adjust.
+
+**Status requests vs Ecotrak** (rule 2.6.4). `assertEcotrakAllowsMove` in
+`services/approvals.ts` runs at request time and again in `decide` BEFORE
+the decision commits (so an approval never lands without its move — in
+block mode the old order approved the task and then 409'd the move). It
+follows `ECOTRAK_TRANSITION_MODE` like a direct move: `block` refuses with
+"API Violation: Ecotrack does not allow this status transition." plus the
+2.6.3 sentence; `warn` (default) lets it through and stamps the
+`status_changed` row. Every inbox row carries `wo_ecotrak_status` and the
+Approvals page tags an open status request Ecotrak would refuse.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

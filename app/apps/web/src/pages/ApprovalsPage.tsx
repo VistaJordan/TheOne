@@ -45,7 +45,10 @@ import {
   STATUS_PERM_KEY,
   approvalSectionOf,
   approvalSectionPermKey,
+  checkEcotrakTransition,
+  describeEcotrakRefusal,
   describeIntakeGate,
+  ecotrakTransitionRefused,
   type AcceptanceDetail,
   type ApprovalSectionKey,
 } from '@theone/shared';
@@ -1054,6 +1057,12 @@ function Ask({ row }: { row: Row }) {
       // A status change reads From → To (0025); the decision note (the
       // rejection reason) rides in the Status column.
       const move = d.item.type === 'status_change' ? (d.item.detail as Partial<StatusChangeDetail>) : null;
+      // Rule 2.6.4: an open request Ecotrak would refuse (rules 2.6.3 / 2.7)
+      // is tagged before the manager decides; in block mode the API refuses
+      // the approval with the same sentence.
+      const ecotrakVerdict =
+        move && row.open ? checkEcotrakTransition(d.item.wo_ecotrak_status, move.to_status_name ?? '') : null;
+      const ecotrakNote = ecotrakVerdict && ecotrakTransitionRefused(ecotrakVerdict) ? describeEcotrakRefusal(ecotrakVerdict) : null;
       // A new work order (0036) says what it is and where it came from; the
       // work-order title is the thing a manager reads before accepting.
       if (d.item.type === 'wo_acceptance') {
@@ -1093,6 +1102,11 @@ function Ask({ row }: { row: Row }) {
                 <span>{move.from_status_name ?? '?'}</span>
                 <span className="apq-arrow" aria-hidden="true">→</span>
                 <b>{move.to_status_name ?? '?'}</b>
+                {ecotrakNote && (
+                  <span className="status-menu-ecotrak" title={ecotrakNote} aria-label={ecotrakNote}>
+                    Ecotrak
+                  </span>
+                )}
               </span>
             ) : (
               d.item.title

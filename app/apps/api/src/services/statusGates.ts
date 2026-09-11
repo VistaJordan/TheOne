@@ -11,11 +11,14 @@
 // because the quote or the parts may have been emptied since the request).
 
 import {
+  FINAL_COST_KEY,
   PARTS_REQUIRED_KEY,
   STATUS_GATE_ERROR_CODE,
   describeStatusGate,
+  doneGateMissing,
   partsRequiredFilled,
   statusGateFor,
+  type DoneGateCheck,
   type StatusGate,
 } from '@theone/shared';
 import type { Queryable } from '../db.js';
@@ -40,19 +43,54 @@ export async function quoteFilledTaskIds(q: Queryable, ids: readonly string[]): 
 }
 
 /**
+ * Rules 11.3.1–11.3.3 against the rows: which of the Done gate's checks
+ * fail for one work order. 11.3.1 reads the visit log (0021) — "both stamps
+ * NOT NULL" is a visit that checked in and checked out, any visit, since a
+ * planned return trip after a finished job must not undo the job; 11.3.2
+ * reads the Cost bag key; 11.3.3 asks the 11.2.1 question of the quote.
+ */
+export async function doneGateMissingFor(q: Queryable, taskId: string): Promise<DoneGateCheck[]> {
+  const res = await q.query<{ visit_complete: boolean; cost: unknown }>(
+    `SELECT EXISTS (SELECT 1 FROM wo_visit v
+                     WHERE v.task_id = t.id
+                       AND v.checked_in_at IS NOT NULL
+                       AND v.checked_out_at IS NOT NULL) AS visit_complete,
+            t.fields -> $2::text AS cost
+       FROM task t
+      WHERE t.id = $1
+      LIMIT 1`,
+    [taskId, FINAL_COST_KEY],
+  );
+  const row = res.rows[0];
+  const quoteFilled = (await quoteFilledTaskIds(q, [taskId])).has(taskId);
+  return doneGateMissing({
+    visitComplete: Boolean(row?.visit_complete),
+    costValue: row?.cost ?? null,
+    quoteFilled,
+  });
+}
+
+/**
  * Why a move of ONE work order into `targetStatusName` would be refused, or
  * null when it may go ahead. `partsValue` lets a caller that already holds
  * (or is about to write) the bag value skip the read — the bulk editor may
- * set Parts Required and the status in the same patch.
+ * set Parts Required and the status in the same patch. For the Done gate
+ * `missing` says which of the three checks failed.
  */
 export async function statusGateBlocker(
   q: Queryable,
   taskId: string,
   targetStatusName: string,
   partsValue?: unknown,
-): Promise<{ gate: StatusGate; message: string } | null> {
+): Promise<{ gate: StatusGate; message: string; missing?: DoneGateCheck[] } | null> {
   const gate = statusGateFor(targetStatusName);
   if (!gate) return null;
+  if (gate === 'done') {
+    const missing = await doneGateMissingFor(q, taskId);
+    return missing.length === 0
+      ? null
+      : { gate, message: describeStatusGate(gate, targetStatusName, missing), missing };
+  }
   let ok: boolean;
   if (gate === 'quote') {
     ok = (await quoteFilledTaskIds(q, [taskId])).has(taskId);
@@ -82,6 +120,7 @@ export async function assertStatusGate(
       code: STATUS_GATE_ERROR_CODE,
       gate: blocked.gate,
       status: targetStatusName,
+      ...(blocked.missing ? { missing: blocked.missing } : {}),
     });
   }
 }

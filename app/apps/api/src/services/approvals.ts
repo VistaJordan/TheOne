@@ -44,6 +44,10 @@ import {
   STATUS_PERM_KEY,
   approvalSectionOf,
   approvalSectionPermKey,
+  ECOTRAK_STATUS_KEY,
+  checkEcotrakTransition,
+  describeEcotrakRefusal,
+  ecotrakTransitionRefused,
 } from '@theone/shared';
 import { ApiError, badRequest, conflict } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -115,6 +119,8 @@ interface Row {
   wo_description: string | null;
   wo_received: string | null;
   intake_fields: Record<string, unknown> | null;
+  /** Rule 2.6.4: the work order's Ecotrak status, for the inbox's tag. */
+  wo_ecotrak_status: string | null;
 }
 
 /** The intake keys as one small object off the bag — the list never ships
@@ -149,7 +155,8 @@ const SELECT_SQL = `
          COALESCE(t.fields->'Escalated' = 'true'::jsonb, false) AS wo_escalated,
          t.description            AS wo_description,
          t.date_received::text    AS wo_received,
-         ${INTAKE_FIELDS_SQL}     AS intake_fields
+         ${INTAKE_FIELDS_SQL}     AS intake_fields,
+         t.fields->>'${ECOTRAK_STATUS_KEY}' AS wo_ecotrak_status
     FROM approval_task a
     JOIN task t            ON t.id = a.task_id
     LEFT JOIN role r       ON r.code = a.assigned_role
@@ -196,6 +203,7 @@ function mapTask(r: Row): ApprovalTask {
 function mapListItem(r: Row): ApprovalListItem {
   return {
     ...mapTask(r),
+    wo_ecotrak_status: r.wo_ecotrak_status,
     wo_number: r.wo_number,
     wo_title: r.wo_title,
     client: r.client,
@@ -570,6 +578,8 @@ async function decide(
     // parts list may have been emptied since the request — and BEFORE the
     // decision commits, so a refused move leaves the request open (409).
     await assertStatusGate({ query }, cur.task_id, hit.rows[0].name);
+    // Rule 2.6.4: same again for Ecotrak's allowed transitions.
+    await assertEcotrakAllowsMove(cur.task_id, hit.rows[0].name);
     moveTo = hit.rows[0].id;
   }
   // Rule 7.1.2: rejecting a new work order parks it in Cancelled / Postponed.
@@ -930,6 +940,34 @@ async function cancelTask(
 // ── Status change requests (rules 2.4.1 – 2.4.3, 0025) ──────────────────────
 
 /**
+ * Rule 2.6.4: a status-change request that Ecotrak's allowed transitions
+ * (rules 2.6.3 / 2.7) would refuse is refused with the rule's own words —
+ * at request time, so a manager is never asked, and again at approval
+ * time, BEFORE the decision commits, so an approval never lands without
+ * its move. It follows ECOTRAK_TRANSITION_MODE like a direct move: only
+ * 'block' refuses; in 'warn' (the default while the adapter is inbound-only
+ * and the stored Ecotrak status is stale by construction) the move goes
+ * through and the status_changed row carries the verdict, and the inbox
+ * tags the row from `wo_ecotrak_status` so the manager sees it first.
+ */
+async function assertEcotrakAllowsMove(taskId: string, targetStatusName: string): Promise<void> {
+  // Lazy: config.ts validates the auth env when it loads, and the vitest
+  // files import this module with no env at all.
+  const { config } = await import('../config.js');
+  if (config.ecotrakTransitionMode !== 'block') return;
+  const res = await query<{ es: string | null }>(
+    `SELECT fields->>'${ECOTRAK_STATUS_KEY}' AS es FROM task WHERE id = $1 LIMIT 1`,
+    [taskId],
+  );
+  const verdict = checkEcotrakTransition(res.rows[0]?.es ?? null, targetStatusName);
+  if (!ecotrakTransitionRefused(verdict)) return;
+  throw conflict(
+    `API Violation: Ecotrack does not allow this status transition. ${describeEcotrakRefusal(verdict)}`,
+    { code: 'ECOTRAK_TRANSITION', ecotrak: verdict },
+  );
+}
+
+/**
  * Rule 2.4.1: a person who may only REQUEST a status change (work_orders/
  * status:create without :edit) asks here. One open request per work order —
  * asking again replaces the target and makes the request theirs. The
@@ -945,7 +983,11 @@ export async function requestStatusChange(
   // refused here, with the same sentence a direct move gets — a manager is
   // never asked to approve something the system will then block.
   const to = await query<{ name: string }>(`SELECT name FROM status WHERE id = $1 LIMIT 1`, [toStatusId]);
-  if (to.rows[0]) await assertStatusGate({ query }, taskId, to.rows[0].name);
+  if (to.rows[0]) {
+    await assertStatusGate({ query }, taskId, to.rows[0].name);
+    // Rule 2.6.4, at request time.
+    await assertEcotrakAllowsMove(taskId, to.rows[0].name);
+  }
   return createApprovalTask({
     taskId,
     type: 'status_change',

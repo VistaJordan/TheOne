@@ -1269,6 +1269,10 @@ export interface ApprovalListItem extends ApprovalTask {
   wo_emergency: boolean;
   /** Rules 7.3.x: the work order is flagged Escalated — the inbox pins it. */
   wo_escalated: boolean;
+  /** Rule 2.6.4: the work order's current Ecotrak status (the `Ecotrak
+      Status` bag key, null when not linked), so the inbox can tag a status
+      request Ecotrak would refuse before the manager approves it. */
+  wo_ecotrak_status: string | null;
   /** Rule 11.1.1, wo_acceptance rows only: the intake fields still empty on
       the work order (labels, in the rule's order). Accepting is refused
       until this is empty; the Incoming page locks the verb and lists them.
@@ -1568,10 +1572,22 @@ export interface WoVisitsResponse {
   default_method_detail: string | null;
 }
 
-/** POST / PATCH replies: the visit touched plus the fresh list. */
+/** Rule 2.2.2: what a check-in did to the work order's status. `moved`
+    false with a reason = the move was refused (a status gate, Ecotrak in
+    block mode) and the check-in itself stood; false with no reason = the
+    work order was already there. */
+export interface VisitStatusMove {
+  status: string;
+  moved: boolean;
+  reason: string | null;
+}
+
+/** POST / PATCH replies: the visit touched plus the fresh list. `status_move`
+    rides on a check-in (rule 2.2.2), null or absent on every other write. */
 export interface WoVisitResponse {
   item: WoVisit;
   items: WoVisit[];
+  status_move?: VisitStatusMove | null;
 }
 
 /** One row of the FM → check-in method table (Admin › Custom fields). */
@@ -1588,3 +1604,4 @@ export * from './ecotrak';
 // Rules 11.2.1 / 11.2.2: the Quoting & Parts gate (vocabulary + "filled").
 export * from './statusGates';
 export * from './intakeGate';
+export * from './visitStatus';

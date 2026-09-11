@@ -30,6 +30,7 @@ import {
   fieldSectionPermKey,
   type ActivityEntry,
   type VisitInput,
+  type WoVisitResponse,
   type VisitStatus,
   type WoVisit,
 } from '@theone/shared';
@@ -325,6 +326,13 @@ function VisitLog({
 
   const [composing, setComposing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Rule 2.2.2: the check-in stood but the On Site move was refused (a gate,
+  // Ecotrak in block mode) — the reply says why; shown until the next write.
+  const [moveNote, setMoveNote] = useState<string | null>(null);
+  const noteMove = (res: WoVisitResponse) => {
+    const m = res.status_move;
+    setMoveNote(m && !m.moved && m.reason ? `Checked in, but the status stayed put: ${m.reason}` : null);
+  };
 
   const invalidate = (opts?: { deleted?: boolean }) => {
     void qc.invalidateQueries({ queryKey: ['wo-visits', wo.id] });
@@ -342,17 +350,17 @@ function VisitLog({
 
   const create = useMutation({
     mutationFn: (input: VisitInput) => createVisit(wo.id, input),
-    onSuccess: () => { invalidate(); setComposing(false); setError(null); },
+    onSuccess: (res) => { invalidate(); setComposing(false); setError(null); noteMove(res); },
     onError: fail,
   });
   const update = useMutation({
     mutationFn: (v: { id: string; input: VisitInput }) => updateVisit(v.id, v.input),
-    onSuccess: () => { invalidate(); setError(null); },
+    onSuccess: (res) => { invalidate(); setError(null); noteMove(res); },
     onError: fail,
   });
   const remove = useMutation({
     mutationFn: (id: string) => deleteVisit(id),
-    onSuccess: () => { invalidate({ deleted: true }); setError(null); },
+    onSuccess: () => { invalidate({ deleted: true }); setError(null); setMoveNote(null); },
     onError: fail,
   });
   const busy = create.isPending || update.isPending || remove.isPending;
@@ -432,6 +440,7 @@ function VisitLog({
       )}
 
       {error && <p className="afp-error cv-error" role="alert">{error}</p>}
+      {moveNote && <p className="afp-error cv-error" role="status">{moveNote}</p>}
 
       {canEdit && (
         composing ? (

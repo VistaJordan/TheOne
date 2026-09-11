@@ -1,5 +1,11 @@
 import { useRef, useState } from 'react';
-import { ECOTRAK_STATUS_KEY, PARTS_REQUIRED_KEY, ecotrakStatusLabel } from '@theone/shared';
+import {
+  ECOTRAK_STATUS_KEY,
+  FINAL_COST_KEY,
+  PARTS_REQUIRED_KEY,
+  VISIT_MIRROR_KEYS,
+  ecotrakStatusLabel,
+} from '@theone/shared';
 import type { ObligationSummary, Phase, WorkOrderDetailV2 } from '../../api/client';
 import { DASH, FIELD, dateVal, daysSince, field, isCostOverNte, isEmergency, isEscalated, money, numericDate, str } from '../../lib/fields';
 import { EmergencyBadge } from '../EmergencyBadge';
@@ -167,7 +173,14 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
             current={wo.status}
             align="right"
             ecotrakStatus={f[ECOTRAK_STATUS_KEY]}
-            gateHints={{ quoteFilled: quoteFilled ?? null, partsValue: f[PARTS_REQUIRED_KEY] ?? null }}
+            gateHints={{
+              quoteFilled: quoteFilled ?? null,
+              partsValue: f[PARTS_REQUIRED_KEY] ?? null,
+              // Rule 11.3.1 from the mirrored keys (the LATEST visit): a hint,
+              // the API reads every visit.
+              visitComplete: Boolean(f[VISIT_MIRROR_KEYS.checkedInAt] && f[VISIT_MIRROR_KEYS.checkedOutAt]),
+              costValue: f[FINAL_COST_KEY] ?? null,
+            }}
             renderTrigger={({ open, toggle, mode }) => (
               <button
                 type="button"
