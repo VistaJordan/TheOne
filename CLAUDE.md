@@ -291,8 +291,8 @@ a row is both). 7.3.3: the Approvals inbox is the "unified to-do list"
 the waiting lanes; the team-wide tracker is a second built-in tab on Work
 Orders, `builtin:escalations` (`lib/escalations.ts`, an ordinary filter set
 `Escalated is_true`, so status tabs / chips / Filter menu still work; not
-saveable or pinnable), opened by the sidebar's Escalations entry via
-`/?view=escalations`. Not the same thing as Due Today's *Escalations* list
+saveable or pinnable), reached only from the Work Orders view strip; the
+sidebar entry was dropped 2026-09-15 as redundant). Not the same thing as Due Today's *Escalations* list
 (rule 4.3, a due-date test). 7.3.2: `POST /api/webhooks/email-escalation`
 (`routes/webhooks.ts`, allowlisted in `authGuard`, refused in DEMO_MODE)
 takes `{wo_number, reason?, source_email?, subject?, message_id?}` with the

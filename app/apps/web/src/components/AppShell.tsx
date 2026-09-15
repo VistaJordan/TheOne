@@ -31,7 +31,6 @@ export type NavKey =
   | 'Incoming Work Orders'
   | 'WO Intake'
   | 'Approvals'
-  | 'Escalations'
   | 'Admin';
 
 interface NavChild {
@@ -78,9 +77,6 @@ const NAV: NavItem[] = [
   // The manager's inbox (0026): approval tasks the rules engine raises —
   // the NTE override of rule 1.5.2 first.
   { label: 'Approvals', icon: 'inbox', to: '/approvals', badge: 'approvals' },
-  // Rule 7.3.3 (0038): the team-wide Escalation Tracker — the Work Orders
-  // list opened on its built-in "every work order flagged Escalated" view.
-  { label: 'Escalations', icon: 'alert-circle', to: '/?view=escalations' },
   // AR — completion audit + invoicing, ported from the Support Automation
   // shadow-audit assistant. Subtabs live inside the page.
   { label: 'Receivables', icon: 'dollar', to: '/receivables' },
@@ -103,7 +99,6 @@ const NAV_PERM: Record<string, string> = {
   'Incoming Work Orders': 'approvals/intake',
   'WO Intake': 'intake',
   Approvals: 'approvals',
-  Escalations: 'work_orders',
   Invoicing: 'invoicing',
 };
 

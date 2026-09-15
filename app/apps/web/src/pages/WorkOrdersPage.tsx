@@ -40,7 +40,7 @@ import {
   shiftDay,
   type DueSection,
 } from '../lib/dueToday';
-import { ESCALATIONS_VIEW, ESCALATIONS_VIEW_ID, ESCALATIONS_VIEW_PARAM } from '../lib/escalations';
+import { ESCALATIONS_VIEW, ESCALATIONS_VIEW_ID } from '../lib/escalations';
 import {
   DEFAULT_VIEW,
   loadStoredView,
@@ -89,25 +89,15 @@ export function WorkOrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only snapshot
   const linkedFilters = useMemo(() => parseFilterParam(searchParams.get('filter')), []);
-  // `/?view=escalations` (the sidebar's Escalations entry) opens the list on
-  // the built-in Escalation Tracker (rule 7.3.3). Seeded here for the first
-  // render; the effect below the selectors handles the click while the list
-  // is already up (same route, no remount) and strips the param.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only snapshot
-  const openOnEscalations = useMemo(() => searchParams.get('view') === ESCALATIONS_VIEW_PARAM, []);
 
   // The arrangement on screen, and which saved view it came from. Restored from
   // the last session so a reload does not throw away the columns you set up.
   const stored = useMemo(loadStoredView, []);
   const [view, setView] = useState<ViewState>(
-    linkedFilters
-      ? { ...DEFAULT_VIEW, filters: linkedFilters }
-      : openOnEscalations
-        ? ESCALATIONS_VIEW
-        : (stored?.state ?? DEFAULT_VIEW),
+    linkedFilters ? { ...DEFAULT_VIEW, filters: linkedFilters } : (stored?.state ?? DEFAULT_VIEW),
   );
   const [activeViewId, setActiveViewId] = useState<string | null>(
-    linkedFilters ? null : openOnEscalations ? ESCALATIONS_VIEW_ID : (stored?.viewId ?? null),
+    linkedFilters ? null : (stored?.viewId ?? null),
   );
 
   // S5 — the "Sort by breach" toggle: worst obligation first, server-ordered
@@ -328,14 +318,6 @@ export function WorkOrdersPage() {
     setView(ESCALATIONS_VIEW);
     setEditing(false);
   }, []);
-  // The sidebar's Escalations entry while the list is already up: same route,
-  // so no remount and no re-read of the mount-only snapshot above.
-  const viewParam = searchParams.get('view');
-  useEffect(() => {
-    if (viewParam !== ESCALATIONS_VIEW_PARAM) return;
-    onSelectEscalations();
-    setSearchParams({}, { replace: true });
-  }, [viewParam, onSelectEscalations, setSearchParams]);
 
   // ── Pinned view ────────────────────────────────────────────────────────────
   // The local value wins the moment the pin is toggled; the server pref is the
@@ -429,7 +411,7 @@ export function WorkOrdersPage() {
   const cardRef = useRef<HTMLDivElement>(null);
 
   return (
-    <AppShell total={total} active={isEscalations ? 'Escalations' : 'Work Orders'}>
+    <AppShell total={total} active="Work Orders">
       {/* The frame fills the canvas cell exactly and hands scrolling to the
           table card (.wo-list in wo-list.css), so the view strip, the toolbar
           and the column headers stay pinned while the rows move. */}
