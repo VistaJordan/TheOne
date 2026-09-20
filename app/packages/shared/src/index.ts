@@ -1606,3 +1606,5 @@ export * from './statusGates';
 export * from './intakeGate';
 export * from './intakeDrafts';
 export * from './visitStatus';
+// 0041: the manual create form — which fields it offers is configuration.
+export * from './woCreate';

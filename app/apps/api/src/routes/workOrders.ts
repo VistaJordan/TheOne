@@ -38,6 +38,7 @@ import { getMessages, resolveConversationId, sendMessage } from '../services/mes
 import { evaluateForTask } from '../services/obligations.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
 import { assertIdsInScope } from '../services/woScope.js';
+import { checkWoNumber, createWorkOrder, getCreateForm, requireWoCreate } from '../services/woCreate.js';
 import { logExport } from '../services/adminAudit.js';
 import {
   allowFor,
@@ -138,6 +139,22 @@ const importBodySchema = z.object({
   rows: z.array(z.record(z.string(), z.string().nullable())).min(1).max(IMPORT_CAP),
   mode: z.enum(['create', 'upsert']).default('upsert'),
   dry_run: z.boolean().default(false),
+});
+
+// 0041 · "Add work order". The bag is whatever the configured form offered;
+// the service drops any key that is not on it, so a stale tab cannot write a
+// field an admin has since switched off.
+const createBodySchema = z
+  .object({
+    wo_number: z.string().trim().min(1).max(60),
+    fields: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strict();
+
+const checkQuerySchema = z.object({
+  wo_number: z.string().max(60).default(''),
+  store: z.string().max(200).optional(),
+  trade: z.string().max(200).optional(),
 });
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
@@ -292,6 +309,41 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     for (const row of rows) for (const k of Object.keys(row)) keys.add(k);
     assertFieldWrites(allow, [...keys].filter((k) => k !== 'wo_number' && k !== 'title' && k !== 'status'));
     return importWorkOrders(rows, { mode, dry_run }, actorIdFromRequest(req));
+  });
+
+  // ── Raising one by hand (0041) ─────────────────────────────────────────────
+  //
+  // Static paths, registered before `/:id` so they are never read as an id.
+  // The form itself is configuration (field_def.create_mode), so the browser
+  // asks for it rather than carrying a hard-coded list of fields.
+
+  app.get('/work-orders/new/form', async (req) => {
+    const { p } = acting(req);
+    requireWoCreate(p);
+    return getCreateForm();
+  });
+
+  // Runs on every keystroke of the WO # box. `taken` blocks Create; `near`
+  // only warns.
+  app.get('/work-orders/new/check', async (req) => {
+    const { p } = acting(req);
+    requireWoCreate(p);
+    const q = parse(checkQuerySchema, req.query);
+    return checkWoNumber(q.wo_number, { store: q.store ?? null, trade: q.trade ?? null });
+  });
+
+  app.post('/work-orders', async (req, reply) => {
+    const { p, allow } = acting(req);
+    requireWoCreate(p);
+    const body = parse(createBodySchema, req.body);
+    // The same per-field gate the import and the bulk editor run: a field
+    // this role may not edit cannot be filled in on the way in either.
+    assertFieldWrites(
+      allow,
+      Object.keys(body.fields ?? {}).map((k) => `fields.${k}`),
+    );
+    const created = await createWorkOrder(body, p);
+    return reply.status(201).send(created);
   });
 
   app.get('/work-orders/:id', async (req) => {

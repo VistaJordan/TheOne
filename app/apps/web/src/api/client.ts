@@ -14,6 +14,11 @@ import type {
   WoVisit,
   WoVisitResponse,
   WoVisitsResponse,
+  // 0041 · "Add work order": the form is configuration, so its shape is shared.
+  WoCreateForm,
+  WoCreateInput,
+  WoCreateMode,
+  WoNumberCheck,
 } from '@theone/shared';
 import type {
   Kpis,
@@ -1405,6 +1410,9 @@ export interface AdminFieldItem {
   /** The dropdown vocabulary, for the options editor (S7). */
   options: string[];
   used_by: number;
+  /** 0041 · what "Add work order" does with this field: 'off' (not on the
+      form), 'optional' (on it) or 'required'. Set in Admin › Custom fields. */
+  create_mode: WoCreateMode;
 }
 
 export function listAdminFields(): Promise<{ items: AdminFieldItem[] }> {
@@ -1417,6 +1425,8 @@ export interface AdminFieldInput {
   label?: string;
   type?: string;
   options?: string[];
+  /** 0041 · move the field on or off the create form. */
+  create_mode?: WoCreateMode;
 }
 
 export function createAdminField(
@@ -1513,6 +1523,31 @@ export function importWorkOrders(input: {
   dry_run: boolean;
 }): Promise<ImportResult> {
   return request('/work-orders/import', { method: 'POST', body: JSON.stringify(input) });
+}
+
+// ── 0041 · Add work order ────────────────────────────────────────────────────
+
+/** Which fields the form offers, and which of them are required. Configured
+    per field in Admin › Custom fields, so this is read, never hard-coded. */
+export function getWoCreateForm(): Promise<WoCreateForm> {
+  return request('/work-orders/new/form');
+}
+
+/** Is this WO # free, and is something like it already open? `taken` blocks
+    Create; `near` is only a warning. */
+export function checkWoNumber(input: {
+  wo_number: string;
+  store?: string | null;
+  trade?: string | null;
+}): Promise<WoNumberCheck> {
+  const q = new URLSearchParams({ wo_number: input.wo_number });
+  if (input.store) q.set('store', input.store);
+  if (input.trade) q.set('trade', input.trade);
+  return request(`/work-orders/new/check?${q.toString()}`);
+}
+
+export function createWorkOrder(input: WoCreateInput): Promise<{ task_id: string; wo_number: string }> {
+  return request('/work-orders', { method: 'POST', body: JSON.stringify(input) });
 }
 
 // ── Saved views ──────────────────────────────────────────────────────────────

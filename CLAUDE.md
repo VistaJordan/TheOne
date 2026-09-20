@@ -424,6 +424,34 @@ Admin. The form draws every field from the work-order catalogue
 (`useWoCatalogue`, keyed `fields.<key>`) so types and dropdown options
 match the editor; dates go in as ISO, money as a number.
 
+**Add work order** (migration 0041, `services/woCreate.ts`,
+`components/wo/list/CreateWorkOrderDialog.tsx`) is the same act without the
+draft: the list's accent button, gated on `work_orders:create`, opens a form
+and POSTs `/api/work-orders`. **The form is configuration**:
+`field_def.create_mode` (`off` | `optional` | `required`) says per field
+whether it is offered and whether Create refuses without it, set from the
+"Add work order" column in Admin › Custom fields and read back by
+`GET /work-orders/new/form` — so putting a field on intake needs no deploy.
+0041 switches on the 18 keys of `WO_CREATE_DEFAULT_KEYS`
+(`packages/shared/src/woCreate.ts`), all `optional`; the seed re-applies the
+same list (keep in step). WO # is not a field_def (`task.wo_number`, NOT NULL
+UNIQUE) so it is always shown, always required, and drawn as its own row.
+**Duplicates, two kinds:** the WO # is identity — `GET /work-orders/new/check`
+(debounced, live) and `createWorkOrder` both refuse a repeat with 409
+`WO_NUMBER_TAKEN`, trash included, matching on
+`normalizeWoNumber` (case, punctuation and a leading "WO" dropped, mirrored in
+SQL so the browser and the API agree); a **near match** — same Store and Trade,
+still open, inside `WO_NEAR_DUPLICATE_DAYS` — only warns with links, because a
+store really can break twice. There is no override (Elise, 2026-09-20). The
+INSERT is the intake submit's, verbatim: status **Open** by name, title = first
+line of the description, promoted columns, `applyProfitFormula`, `created`
+logged with `source: 'manual'`, then the create rules, then the Assignee
+through `updateWorkOrderFields`. Per-field edit grants are checked on the way
+in (`assertFieldWrites`), and a key the form does not offer is dropped rather
+than written. Creation stays lighter than assignment on purpose: rule 11.1.1
+still holds the work order back from a dispatcher until its 13 fields are in,
+whatever is required here.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

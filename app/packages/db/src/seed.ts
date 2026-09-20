@@ -7,7 +7,7 @@
 import { exec, query, closePool } from './client.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { STATUS_GROUP_BY_TYPE, type StatusGroup } from '@theone/shared';
+import { STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, type StatusGroup } from '@theone/shared';
 // S5 · the demo-state anchors below are computed with the SAME business-time
 // arithmetic the obligation engine evaluates with, so the seeded tiers are
 // exact rather than approximated by calendar offsets — a 4-business-hour clock
@@ -902,6 +902,13 @@ async function main() {
     );
     fieldCount++;
   }
+
+  // 0041 · the create form — which fields "Add work order" offers. Kept in
+  // step with migrations/0041_wo_create_form.sql: change one, change the
+  // other. WO # is task.wo_number, not a field_def, so it is not listed here.
+  await query(`UPDATE field_def SET create_mode = 'optional' WHERE key = ANY($1::text[])`, [
+    [...WO_CREATE_DEFAULT_KEYS],
+  ]);
 
   // ── 5. Tasks (§4.4) + memberships (§4.5) + created activity (§4.9) ──────────
   let taskCount = 0;

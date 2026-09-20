@@ -24,11 +24,15 @@ export interface FieldDefItem {
   options: string[];
   /** How many work orders actually carry a value for this key. */
   used_by: number;
+  /** 0041 · what "Add work order" does with this field: 'off' (not on the
+      form), 'optional' (on it) or 'required' (on it, and Create refuses
+      while it is empty). */
+  create_mode: string;
 }
 
 export async function listFieldDefs(): Promise<FieldDefItem[]> {
   const res = await query<Omit<FieldDefItem, 'options'> & { options: unknown }>(
-    `SELECT f.id, f.key, f.label, f.type::text AS type, f.position,
+    `SELECT f.id, f.key, f.label, f.type::text AS type, f.position, f.create_mode,
             c.name AS container,
             COALESCE(jsonb_array_length(
               CASE WHEN jsonb_typeof(f.type_config->'options') = 'array'

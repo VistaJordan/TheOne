@@ -22,6 +22,7 @@
 // <key>', the same key the work-order value edits use — so filtering the audit
 // log by one field shows its definition changes beside its value changes.
 
+import { isWoCreateMode } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { invalidateFieldCache } from './woFields.js';
@@ -32,7 +33,7 @@ import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 /** What the audit log keeps of a definition: enough to read a rename, a type
     change or an options edit back without the row. */
 function snapshot(f: FieldDefItem): Snapshot {
-  return { name: f.label, key: f.key, type: f.type, options: f.options };
+  return { name: f.label, key: f.key, type: f.type, options: f.options, create_mode: f.create_mode };
 }
 
 /** Everything the field_type enum accepts (0001 + phone from 0007 + datetime
@@ -143,6 +144,8 @@ export interface FieldDefPatch {
   label?: string;
   type?: string;
   options?: string[];
+  /** 0041 · 'off' | 'optional' | 'required' — the create form's setting. */
+  create_mode?: string;
 }
 
 export async function updateFieldDef(
@@ -161,13 +164,24 @@ export async function updateFieldDef(
 
   const options = patch.options !== undefined ? cleanOptions(patch.options) : current.options;
 
+  // 0041 · the create-form setting. Only the three words the column's CHECK
+  // accepts get through, so a typo cannot take the form down.
+  let createMode = current.create_mode;
+  if (patch.create_mode !== undefined) {
+    if (!isWoCreateMode(patch.create_mode)) {
+      throw new ApiError('BAD_REQUEST', `Unknown create-form setting "${patch.create_mode}"`);
+    }
+    createMode = patch.create_mode;
+  }
+
   await query(
     `UPDATE field_def
         SET label = COALESCE($2, label),
             type = $3,
-            type_config = $4::jsonb
+            type_config = $4::jsonb,
+            create_mode = $5
       WHERE id = $1`,
-    [id, label ?? null, type, JSON.stringify(typeConfigFor(type, options))],
+    [id, label ?? null, type, JSON.stringify(typeConfigFor(type, options)), createMode],
   );
 
   invalidateFieldCache();

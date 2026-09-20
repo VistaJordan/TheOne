@@ -1243,6 +1243,20 @@
   border-top: 1px solid var(--border);
 }
 
+/* 0041 · the near-duplicate warning on "Add work order": work orders already
+   open on this store and trade. A warning, not a block, so it sits inside the
+   hint rather than the error line. */
+.near-dupes {
+  margin: 6px 0 4px;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+
+.near-dupes li {
+  list-style: disc;
+}
+
 .import-step h3 {
   display: flex;
   align-items: center;

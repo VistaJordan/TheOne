@@ -62,7 +62,10 @@ import {
   APPROVAL_TASK_TYPES,
   QUOTE_DUE_HOURS,
   VISIT_METHODS,
+  WO_CREATE_MODES,
+  WO_CREATE_MODE_LABELS,
   businessDay,
+  type WoCreateMode,
 } from '@theone/shared';
 
 // ══ SETTINGS ═════════════════════════════════════════════════════════════════
@@ -2141,6 +2144,13 @@ export function AdminFieldsPage() {
   return (
     <AdminShell
       title="Custom fields"
+      subtitle={
+        'Every field a work order can carry. The "Add work order" column decides which of them the ' +
+        'manual create form offers, and which it refuses to save without — WO # is always required ' +
+        'and is not listed, because it is the work order\'s identity. Assignment is stricter than ' +
+        'creation: rule 11.1.1 still holds a work order back from a dispatcher until its 13 intake ' +
+        'fields are in, whatever is set here.'
+      }
       actions={
         <button type="button" className="btn btn-primary" onClick={() => setAdding((v) => !v)}>
           <Icon name="plus" size={14} />
@@ -2175,6 +2185,8 @@ export function AdminFieldsPage() {
                 <th>Field</th>
                 <th>Type</th>
                 <th>Options</th>
+                {/* 0041 · what "Add work order" does with this field. */}
+                <th>Add work order</th>
                 <th className="num">Used by</th>
               </tr>
             </thead>
@@ -2199,6 +2211,7 @@ export function AdminFieldsPage() {
                   optionsOpen={optionsFor === f.id}
                   onToggleOptions={() => setOptionsFor(optionsFor === f.id ? null : f.id)}
                   onOptions={(options) => update.mutate({ id: f.id, input: { options } })}
+                  onCreateMode={(create_mode) => update.mutate({ id: f.id, input: { create_mode } })}
                   reorder={reorder}
                 />
               ))}
@@ -2422,7 +2435,7 @@ function CicoMethodsCard() {
 
 function FieldRow({
   field: f, index, busy, renaming, renameDraft, onRenameDraft, onStartRename,
-  onCancelRename, onCommitRename, onType, optionsOpen, onToggleOptions, onOptions, reorder,
+  onCancelRename, onCommitRename, onType, optionsOpen, onToggleOptions, onOptions, onCreateMode, reorder,
 }: {
   field: AdminFieldItem;
   index: number;
@@ -2437,6 +2450,7 @@ function FieldRow({
   optionsOpen: boolean;
   onToggleOptions: () => void;
   onOptions: (options: string[]) => void;
+  onCreateMode: (mode: WoCreateMode) => void;
   reorder: ReturnType<typeof useReorder>;
 }) {
   const isDropdown = f.type === 'dropdown';
@@ -2506,12 +2520,27 @@ function FieldRow({
             <span className="faint">—</span>
           )}
         </td>
+        {/* 0041 · on the create form, and required there? Saves on change —
+            the form is read from this, so it takes effect immediately. */}
+        <td>
+          <select
+            className="fld fld-sm"
+            value={f.create_mode}
+            disabled={busy}
+            aria-label={`${f.label} on the Add work order form`}
+            onChange={(e) => onCreateMode(e.target.value as WoCreateMode)}
+          >
+            {WO_CREATE_MODES.map((m) => (
+              <option key={m} value={m}>{WO_CREATE_MODE_LABELS[m]}</option>
+            ))}
+          </select>
+        </td>
         <td className="num">{f.used_by || '—'}</td>
       </tr>
       {isDropdown && optionsOpen && (
         <tr className="foptions-row">
           <td />
-          <td colSpan={4}>
+          <td colSpan={5}>
             <OptionsEditor
               label={f.label}
               options={f.options}

@@ -17,7 +17,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { adminPermKey, permAllows, type PermAction } from '@theone/shared';
+import { WO_CREATE_MODES, adminPermKey, permAllows, type PermAction } from '@theone/shared';
 import { ApiError, parse } from '../errors.js';
 import { unauthorized } from '../services/auth.js';
 import {
@@ -250,7 +250,11 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       options: z.array(z.string().trim().min(1).max(120)).max(500).optional(),
     })
     .strict();
-  const updateFieldSchema = createFieldSchema.partial().strict();
+  // 0041 · the create-form setting rides the same PATCH as a rename.
+  const updateFieldSchema = createFieldSchema
+    .partial()
+    .extend({ create_mode: z.enum(WO_CREATE_MODES).optional() })
+    .strict();
   const reorderFieldsSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(500) });
 
   app.get('/admin/fields', async (req) => {

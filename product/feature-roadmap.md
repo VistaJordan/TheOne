@@ -160,3 +160,35 @@ Vendor portal + preferred-vendor auto-assign escalation · VoIP click-to-call ·
 3. **Per-person ClickUp lists = OM books?** — confirm before S3 routing + S17 import mapping.
 4. **Build capacity assumption** — sprints sized for one full-time builder + AI agents; resize if that changes.
 5. **Facilio as fallback** — portfolio pricing from ~$25K/yr; if The One stalls, the evaluation checklist is ready. Keep it as leverage, not Plan A.
+
+## Facilio parity — build batches (added 2026-09-20)
+
+Decision of 2026-09-20: the product should match the Facilio platform map
+module for module, keeping everything we already have. The gap list, the target
+sidebar and the batch scope live in **`product/facilio-parity.md`**; the layers
+and sprints above stay as they are. The batches, in build order:
+
+1. **Vendors** (0041, 0042) — vendor records, contacts, trades + coverage,
+   rates, certificates of insurance, preferred vendor, and vendor assignment on
+   the work order. First because the sidebar item is inert and a work order
+   cannot be assigned to a company; it unlocks L4 wholesale.
+2. **Portfolio + Assets** (0043, 0044) — sites, buildings, spaces, assets as
+   records, linked to work orders; clients get a table; scoping by site. L2.
+3. **Creating a work order + attachments** (0045) — the disabled "Add work
+   order" button becomes the full Facilio create form, with duplicate detection
+   and uploads that work.
+4. **The work-order record** (0046) — Summary right rail, Tasks, Cost
+   Breakdown, Timelog & Metrics, Related, and the header actions (Cancel,
+   Increase NTE, Pause, ETA, Tag, Complete Service).
+5. **Money** (0047, 0048) — invoices as records (AR + vendor bills), contracts
+   and labor rates, tiered approval, and the quote document upgrade. L5.
+6. **Dashboards** (0049) — library, folders, role sharing, chart/gauge widgets,
+   drill-down. L7. Its vendor and SLA cards depend on batches 1–2.
+7. **Setup** — our Admin regrouped into Facilio's sections, plus Delegates,
+   security policy, site scoping, customization and the log types.
+
+Deliberately last: Lease Management, Space Viewer, Energy Analytics, AFE and
+Cost Center — those are the building owner's tools, not a service provider's.
+
+Migration numbers are provisional: next free is 0041 at the time of writing,
+and every batch re-checks before claiming one.
