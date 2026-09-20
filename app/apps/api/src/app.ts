@@ -37,6 +37,7 @@ import approvalRoutes from './routes/approvals.js';
 import visitRoutes from './routes/visits.js';
 import webhookRoutes from './routes/webhooks.js';
 import intakeRoutes from './routes/intake.js';
+import dashboardRoutes from './routes/dashboards.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
@@ -97,6 +98,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(webhookRoutes, { prefix: '/api' });
   // Section 14 (0040) · the OP Admin's work-order intake staging area.
   await app.register(intakeRoutes, { prefix: '/api' });
+  // 0042 · dashboards as records: folders, widgets, shared to roles.
+  await app.register(dashboardRoutes, { prefix: '/api' });
 
   return app;
 }

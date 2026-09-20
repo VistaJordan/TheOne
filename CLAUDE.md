@@ -452,6 +452,38 @@ than written. Creation stays lighter than assignment on purpose: rule 11.1.1
 still holds the work order back from a dispatcher until its 13 fields are in,
 whatever is required here.
 
+**Dashboards** (migration 0042, `services/dashboards.ts`,
+`components/dash/DashboardBoard.tsx`) are records now, not one person's
+prefs: `dashboard_folder` → `dashboard` → `dashboard_widget`. **Sharing is
+not scope** — `shared_all` / `shared_roles` (role codes) decide who may OPEN
+one; what its cards COUNT still goes through `woScopeSql` per viewer (0026),
+so two dispatchers open the same board and each sees their own book, and
+sharing can never leak a row. Edit is the owner's or a super admin's.
+A widget is `{kind: number|bar|donut|table, config:{metric: count|sum|avg,
+value_field, group_field, filters, limit}}`; `metricWidget` in
+`woMetrics.ts` answers it (`compileNumericExpr` in `woFields.ts` refuses a
+non-numeric field rather than totalling zero), the headline number is its
+own query (an average of averages is not an average), and one bad card
+reports its own error instead of failing the page. `GET /dashboards/:id/data`
+answers every card in ONE call so the whole board is measured at one
+instant. The three we ship (Dispatch Center, Approvals & bottlenecks, Money)
+live in `packages/shared/src/dashboards.ts` and are upserted by
+`ensureSystemDashboards()` on first read, keyed by `system_key` — **not** in
+the migration and **not** in the seed, which is the pair that kept drifting;
+it INSERTs only what is missing, so an edited one stays edited. Every card
+uses data that exists today: vendor, site and invoice cards wait for those
+modules, because a board with blanks reads as broken. Charts are Recharts,
+**lazily loaded** (`WidgetCharts.tsx`, its own 380KB chunk) — the palette and
+row shape live in `chartPalette.ts` precisely so `WidgetCard` can draw a
+table without pulling the library in; import them from the wrong side and
+the split silently stops working. The eight `--chart-N` tokens per theme
+(`theme/tokens.css`) were validated, not eyeballed: lightness band, chroma
+floor, 3:1 on their own surface, and every adjacent pair separated under
+deuteranopia, protanopia and tritanopia. Permission path `dashboard`
+(view / **create** = build and share); 0042 grants create to admin / tl /
+atl / am. The old per-user cards (`DashCards`, user_pref
+`dashboard.cards`) stay exactly as they were, on the Main Dashboard tab.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

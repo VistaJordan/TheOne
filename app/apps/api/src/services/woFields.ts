@@ -631,6 +631,25 @@ export async function compileGroupExpr(key: string, p: Params): Promise<string> 
   return `(${exprFor(f, p, true)})::text`;
 }
 
+/**
+ * 0042 · the expression a dashboard widget SUMs or AVGs. Only a number can be
+ * added up, so anything else is refused here rather than quietly totalling
+ * zero: a money card reading $0 because it was pointed at a text field is
+ * worse than a card that says what is wrong with it.
+ *
+ * Custom fields keep `exprFor`'s guarded cast, so one malformed value counts
+ * as no value instead of failing the whole card.
+ */
+export async function compileNumericExpr(key: string, p: Params): Promise<string> {
+  const f = await resolveField(key);
+  if (f.type !== 'number' && f.type !== 'money') {
+    throw new ApiError('BAD_REQUEST', `"${f.label}" is not a number, so it cannot be totalled`, {
+      field: key,
+    });
+  }
+  return `(${exprFor(f, p)})::numeric`;
+}
+
 /** The SELECT fragment for one requested column, when it is a custom field.
     Core columns are already in the base projection. */
 export function customSelect(f: ResolvedField, alias: string, p: Params): string {

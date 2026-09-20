@@ -44,6 +44,41 @@
   --kpi-font:'Barlow'; --kpi-weight:600; --kpi-ls:-.02em;
 }
 
+/* ══ 0042 — the chart palette (dashboards) ═════════════════════════════════
+   Eight categorical slots, given to a series IN ORDER and never cycled: a
+   ninth category folds into "other" rather than repeating a hue. Both skins
+   run the same hue order — blue, amber, teal, red, violet, green, pink,
+   brown — so a series keeps its identity when the theme is switched; only the
+   step changes, because a colour that reads on white is not the one that
+   reads on black.
+
+   Both sets were CHECKED, not eyeballed, against their own surface (day on
+   #ffffff, night on #0c0d0e): every slot sits inside its mode's lightness
+   band and above the chroma floor, clears 3:1 against the surface, and every
+   adjacent pair stays apart under deuteranopia, protanopia and tritanopia as
+   well as normal vision. Re-run that check before changing a value here.
+
+   These are FILLS for marks. Text never wears them — values, labels and
+   legends stay on the ink tokens, and the coloured mark beside them carries
+   the identity.                                                             */
+:root[data-theme="day"] {
+  --chart-1:#2563eb;  --chart-2:#d97706;  --chart-3:#0d9488;  --chart-4:#dc2626;
+  --chart-5:#7c3aed;  --chart-6:#16a34a;  --chart-7:#c2266f;  --chart-8:#92400e;
+  /* Everything past the card's limit, and the "not set" bucket — a neutral on
+     purpose, so it never reads as one more category. */
+  --chart-other:#8b94a3;
+  /* The 2px gap drawn between touching marks, and the grid behind them. */
+  --chart-gap:#ffffff;
+  --chart-grid:#edf0f3;
+}
+:root[data-theme="night"] {
+  --chart-1:#3b82f6;  --chart-2:#b8760a;  --chart-3:#0f9c8d;  --chart-4:#ef4444;
+  --chart-5:#8b5cf6;  --chart-6:#1eab52;  --chart-7:#ec4899;  --chart-8:#b0652f;
+  --chart-other:#6b7280;
+  --chart-gap:#0c0d0e;
+  --chart-grid:rgba(255,255,255,.075);
+}
+
 /* ══ S2 — warn ramp (folded in from the approved WO-detail comp) ════════════
    S1 shipped no "warn" ramp (it only ever needed --danger). The detail page
    needs a third, NON-FATAL severity for aging / NTE-pressure. Both values are

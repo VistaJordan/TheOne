@@ -458,7 +458,15 @@ export function buildPermissionTree(
   }
 
   return [
-    { key: 'dashboard', label: 'Dashboard', actions: ['view'] },
+    {
+      key: 'dashboard',
+      label: 'Dashboard',
+      // 0042 · create = build a dashboard and share it. Opening a shared one
+      // never widens what its cards count: they are scoped to the viewer like
+      // every other query, so sharing spreads the QUESTION, not the rows.
+      actions: ['view', 'create'],
+      note: 'Create = build a dashboard of your own and share it with other roles.',
+    },
     {
       key: 'work_orders',
       label: 'Work orders',

@@ -1,11 +1,20 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import type { WoFilterSet } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
+import { Icon } from '../components/Icon';
 import { KpiRow } from '../components/KpiRow';
 import { DashCards } from '../components/dash/DashCards';
-import { getKpis, listApprovals, listWorkOrders } from '../api/client';
+import { DashboardBoard } from '../components/dash/DashboardBoard';
+import {
+  ApiRequestError,
+  createDashboard,
+  getKpis,
+  listApprovals,
+  listDashboards,
+  listWorkOrders,
+} from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { filterUrl } from '../lib/woView';
 import { VISIT_TYPE_FIELD_KEY } from '../lib/woFieldSections';
@@ -17,7 +26,9 @@ import { VISIT_TYPE_FIELD_KEY } from '../lib/woFieldSections';
     KPIs live here rather than on the Work Orders list — that page is a
     working table, this one is the summary. */
 
-type DashTab = 'attention' | 'main';
+/** The two built-in views, plus (0042) one tab per dashboard record the
+    viewer may open — those tabs carry the dashboard's id. */
+type DashTab = 'attention' | 'main' | (string & {});
 
 /** The rows behind the "No visit logged" card — also the filter its click
     hands to the list, so the card and the landing page can never disagree.
@@ -30,6 +41,14 @@ const VISIT_TYPE_UNSET: WoFilterSet = {
 
 export function DashboardPage() {
   const [tab, setTab] = useState<DashTab>('attention');
+  const [naming, setNaming] = useState(false);
+
+  // 0042 · the shared dashboards. Failing to load them must not take the
+  // built-in views down with it, so the query does not retry and the tabs
+  // simply do not appear.
+  const dashQuery = useQuery({ queryKey: ['dashboards'], queryFn: listDashboards, retry: 0 });
+  const dashboards = dashQuery.data?.items ?? [];
+  const current = dashboards.find((d) => d.id === tab);
 
   const kpiQuery = useQuery({ queryKey: ['kpis'], queryFn: getKpis });
   // Only for the sidebar's Work Orders badge, so the nav reads the same here as
@@ -50,6 +69,9 @@ export function DashboardPage() {
   // the inbox, so the card never shows a 403 as a mystery.
   const { can } = useAuth();
   const canSeeApprovals = can('approvals', 'view');
+  // 0042 · building a dashboard is a create grant on the same path the
+  // section is gated on.
+  const canBuild = can('dashboard', 'create');
   const approvalsQuery = useQuery({
     queryKey: ['approvals'],
     queryFn: listApprovals,
@@ -77,6 +99,25 @@ export function DashboardPage() {
         >
           Main Dashboard
         </button>
+        {/* 0042 · the shared dashboards, in folder order. Everyone in a team
+            opens the same one and sees their own work orders in it. */}
+        {dashboards.map((d) => (
+          <button
+            key={d.id}
+            type="button"
+            className={`seg-btn${tab === d.id ? ' is-on' : ''}`}
+            aria-pressed={tab === d.id}
+            onClick={() => setTab(d.id)}
+            title={d.folder_name ? `${d.folder_name} · ${d.description ?? ''}` : (d.description ?? undefined)}
+          >
+            {d.name}
+          </button>
+        ))}
+        {canBuild && (
+          <button type="button" className="seg-btn is-add" onClick={() => setNaming(true)} title="Build a dashboard">
+            +
+          </button>
+        )}
       </div>
 
       {tab === 'attention' ? (
@@ -99,15 +140,94 @@ export function DashboardPage() {
             />
           )}
         </div>
-      ) : (
+      ) : tab === 'main' ? (
         <>
           <KpiRow kpis={kpiQuery.data} loading={kpiQuery.isLoading} />
           {/* The build-your-own half: cards over any catalogue field, plus
-              durations measured from the audit trail's change timestamps. */}
+              durations measured from the audit trail's change timestamps.
+              These stay PERSONAL — 0042's dashboards are the shared ones. */}
           <DashCards />
         </>
+      ) : current ? (
+        <DashboardBoard dashboard={current} />
+      ) : (
+        <p className="hint">
+          {dashQuery.isLoading ? 'Loading dashboards…' : 'That dashboard is no longer there.'}
+        </p>
+      )}
+
+      {naming && (
+        <NewDashboardDialog
+          onClose={() => setNaming(false)}
+          onCreated={(id) => {
+            setNaming(false);
+            setTab(id);
+          }}
+        />
       )}
     </AppShell>
+  );
+}
+
+/** Name it, and it exists — private until its owner shares it. */
+function NewDashboardDialog({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}) {
+  const qc = useQueryClient();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: () => createDashboard({ name: name.trim(), description: description.trim() || null }),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ['dashboards'] });
+      onCreated(res.dashboard.id);
+    },
+    onError: (err: unknown) =>
+      setError(err instanceof ApiRequestError ? err.message : 'The dashboard was not created'),
+  });
+
+  return (
+    <div className="modal-scrim" onClick={onClose} role="presentation">
+      <div className="modal" role="dialog" aria-modal="true" aria-label="New dashboard" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>New dashboard</h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="field">
+            <label className="lbl" htmlFor="d-name">What is it called?</label>
+            <input id="d-name" className="fld" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="field">
+            <label className="lbl" htmlFor="d-desc">What is it for? (optional)</label>
+            <input id="d-desc" className="fld" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <p className="hint">
+            It starts private. Share it with everyone once the cards are on it.
+          </p>
+          {error && <p className="modal-error">{error}</p>}
+        </div>
+        <div className="modal-foot">
+          <button type="button" className="btn-sm is-ghost" onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="btn-sm is-primary"
+            disabled={name.trim() === '' || create.isPending}
+            onClick={() => create.mutate()}
+          >
+            {create.isPending ? 'Creating…' : 'Create dashboard'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -19,17 +19,24 @@
 // imported/seeded values carry no change history.
 
 import { query } from '../db.js';
-import type {
-  MetricBreakdown,
-  MetricDuration,
-  MetricDurationSample,
-  MetricEvent,
-  WoFieldTime,
+import { ApiError } from '../errors.js';
+import {
+  WIDGET_DEFAULT_LIMIT,
+  WIDGET_MAX_LIMIT,
+  type MetricBreakdown,
+  type MetricDuration,
+  type MetricDurationSample,
+  type MetricEvent,
+  type WidgetBucket,
+  type WidgetConfig,
+  type WidgetMetric,
+  type WoFieldTime,
 } from '@theone/shared';
 import {
   Params,
   compileFilters,
   compileGroupExpr,
+  compileNumericExpr,
   resolveField,
   type FilterSet,
   type ResolvedField,
@@ -89,6 +96,98 @@ export async function metricBreakdown(
   const items = buckets.slice(0, limit);
   const other = total - items.reduce((n, b) => n + b.count, 0);
   return { field: f.key, label: f.label, total, other, items };
+}
+
+// ── Widgets (0042) ───────────────────────────────────────────────────────────
+
+/**
+ * One dashboard widget's answer: a number, or a number per bucket.
+ *
+ * Three things this deliberately does NOT do:
+ *   it does not assume the widget's field still exists — `resolveField`
+ *   throws, and the route turns that into a card that says so rather than a
+ *   page that fails;
+ *   it does not bypass the viewer's scope — `woScopeSql` applies exactly as
+ *   the list applies it, so sharing a dashboard widens which QUESTIONS people
+ *   see asked, never which work orders they see;
+ *   it does not add the buckets up to get the total — an average of averages
+ *   is not an average, so the headline number is its own query.
+ */
+export async function metricWidget(
+  config: WidgetConfig,
+  viewer?: ActingPrincipal,
+): Promise<{ total: number; buckets: WidgetBucket[]; other: number }> {
+  const metric: WidgetMetric = config.metric ?? 'count';
+  const limit = Math.min(Math.max(config.limit ?? WIDGET_DEFAULT_LIMIT, 1), WIDGET_MAX_LIMIT);
+
+  /** The same WHERE for both queries, rebuilt so the two share no params. */
+  const whereFor = async (p: Params) => {
+    const where = ['t.deleted_at IS NULL'];
+    const scope = viewer ? woScopeSql(viewer, p) : null; // 0026
+    if (scope) where.push(scope);
+    if (config.filters) {
+      const w = await compileFilters(config.filters as FilterSet, p);
+      if (w) where.push(w);
+    }
+    return where.join(' AND ');
+  };
+
+  /** COUNT(*), SUM(x) or AVG(x) — the reduction itself. */
+  const aggFor = async (p: Params) => {
+    if (metric === 'count') return 'COUNT(*)::float8';
+    if (!config.value_field) {
+      throw new ApiError('BAD_REQUEST', 'This card needs a field to total');
+    }
+    const expr = await compileNumericExpr(config.value_field, p);
+    return metric === 'sum' ? `COALESCE(SUM(${expr}), 0)::float8` : `AVG(${expr})::float8`;
+  };
+
+  // The headline number, over everything that matched.
+  const tp = new Params();
+  const tAgg = await aggFor(tp);
+  const tWhere = await whereFor(tp);
+  const totalRes = await query<{ n: number | string | null }>(
+    `SELECT ${tAgg} AS n ${WO_FROM} WHERE ${tWhere}`,
+    tp.values,
+  );
+  const total = Number(totalRes.rows[0]?.n ?? 0);
+
+  if (!config.group_field) return { total, buckets: [], other: 0 };
+
+  const p = new Params();
+  const agg = await aggFor(p);
+  const expr = await compileGroupExpr(config.group_field, p);
+  const where = await whereFor(p);
+  const res = await query<{ v: string | null; n: number | string | null }>(
+    `SELECT ${expr} AS v, ${agg} AS n
+       ${WO_FROM}
+      WHERE ${where}
+      GROUP BY 1`,
+    p.values,
+  );
+
+  // '' and NULL read as one bucket ("not set"), as in metricBreakdown.
+  const byValue = new Map<string | null, number>();
+  for (const r of res.rows) {
+    const v = r.v === '' ? null : r.v;
+    const n = Number(r.n ?? 0);
+    // Averages cannot be merged by adding. The blank and empty-string buckets
+    // are the only pair that ever merges, so taking the larger side is honest
+    // and never double-counts.
+    if (metric === 'avg') byValue.set(v, Math.max(byValue.get(v) ?? 0, n));
+    else byValue.set(v, (byValue.get(v) ?? 0) + n);
+  }
+
+  const all = [...byValue.entries()]
+    .map(([value, n]) => ({ value, n }))
+    .sort((a, b) => b.n - a.n || String(a.value ?? '').localeCompare(String(b.value ?? '')));
+
+  const buckets = all.slice(0, limit);
+  // What the chart is not drawing. Meaningless for an average, so it is only
+  // reported where adding up is the right thing to do.
+  const other = metric === 'avg' ? 0 : all.slice(limit).reduce((n, b) => n + b.n, 0);
+
+  return { total, buckets, other };
 }
 
 // ── Duration between two events ──────────────────────────────────────────────

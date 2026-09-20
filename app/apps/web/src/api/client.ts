@@ -19,6 +19,13 @@ import type {
   WoCreateInput,
   WoCreateMode,
   WoNumberCheck,
+  // 0042 · dashboards as records, shared to roles.
+  Dashboard,
+  DashboardsResponse,
+  WidgetConfig,
+  WidgetKind,
+  WidgetResult,
+  WidgetWidth,
 } from '@theone/shared';
 import type {
   Kpis,
@@ -1548,6 +1555,68 @@ export function checkWoNumber(input: {
 
 export function createWorkOrder(input: WoCreateInput): Promise<{ task_id: string; wo_number: string }> {
   return request('/work-orders', { method: 'POST', body: JSON.stringify(input) });
+}
+
+// ── 0042 · dashboards ────────────────────────────────────────────────────────
+
+/** Every dashboard this person may OPEN. What its cards count is scoped to
+    them separately, by the same rule the list uses. */
+export function listDashboards(): Promise<DashboardsResponse> {
+  return request('/dashboards');
+}
+
+/** Each card's answer, worked out for the person asking. */
+export function getDashboardData(id: string): Promise<{ results: WidgetResult[] }> {
+  return request(`/dashboards/${id}/data`);
+}
+
+/** The card editor's live preview: an unsaved config, answered. */
+export function previewWidget(config: WidgetConfig): Promise<WidgetResult> {
+  return request('/dashboards/preview', { method: 'POST', body: JSON.stringify(config) });
+}
+
+export function createDashboard(input: {
+  name: string;
+  description?: string | null;
+  shared_roles?: string[];
+  shared_all?: boolean;
+}): Promise<{ dashboard: Dashboard }> {
+  return request('/dashboards', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateDashboard(
+  id: string,
+  input: { name?: string; description?: string | null; shared_roles?: string[]; shared_all?: boolean },
+): Promise<{ dashboard: Dashboard }> {
+  return request(`/dashboards/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteDashboard(id: string): Promise<void> {
+  return request(`/dashboards/${id}`, { method: 'DELETE' });
+}
+
+export function addDashboardWidget(
+  dashboardId: string,
+  input: { kind: WidgetKind; label: string; config: WidgetConfig; width?: WidgetWidth },
+): Promise<{ dashboard: Dashboard }> {
+  return request(`/dashboards/${dashboardId}/widgets`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateDashboardWidget(
+  widgetId: string,
+  input: { kind?: WidgetKind; label?: string; config?: WidgetConfig; width?: WidgetWidth },
+): Promise<{ dashboard: Dashboard }> {
+  return request(`/dashboards/widgets/${widgetId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteDashboardWidget(widgetId: string): Promise<void> {
+  return request(`/dashboards/widgets/${widgetId}`, { method: 'DELETE' });
 }
 
 // ── Saved views ──────────────────────────────────────────────────────────────
