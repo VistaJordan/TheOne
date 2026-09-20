@@ -19,7 +19,7 @@
 import { Suspense, lazy, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { WidgetConfig, WidgetResult, DashboardWidget, WoFilterSet } from '@theone/shared';
-import { widgetSubtitle } from '@theone/shared';
+import { formatBucket, widgetSubtitle } from '@theone/shared';
 import { Icon } from '../Icon';
 import { filterUrl } from '../../lib/woView';
 import { CHART_OTHER, EVERYTHING_ELSE, colorFor, type ChartDatum } from './chartPalette';
@@ -27,6 +27,7 @@ import { CHART_OTHER, EVERYTHING_ELSE, colorFor, type ChartDatum } from './chart
 const Charts = {
   Bars: lazy(() => import('./WidgetCharts').then((m) => ({ default: m.WidgetBars }))),
   Donut: lazy(() => import('./WidgetCharts').then((m) => ({ default: m.WidgetDonut }))),
+  Line: lazy(() => import('./WidgetCharts').then((m) => ({ default: m.WidgetLine }))),
 };
 
 interface WidgetCardProps {
@@ -72,15 +73,19 @@ export function WidgetCard({ widget, result, loading, onEdit, onRemove }: Widget
   const navigate = useNavigate();
   const fmt = useMemo(() => formatter(widget.config), [widget.config]);
 
+  const overTime = widget.kind === 'line';
+
   const data: ChartDatum[] = useMemo(() => {
     const buckets = result?.buckets ?? [];
     const rows: ChartDatum[] = buckets.map((b, i) => ({
-      name: b.value ?? 'Not set',
+      // A line's buckets are points in time, not categories: they keep the
+      // order the API sent and share one hue.
+      name: overTime ? formatBucket(b.value ?? '', widget.config.bucket) : (b.value ?? 'Not set'),
       value: b.n,
       raw: b.value,
-      color: colorFor(i, b.value),
+      color: overTime ? 'var(--chart-1)' : colorFor(i, b.value),
     }));
-    if ((result?.other ?? 0) > 0) {
+    if (!overTime && (result?.other ?? 0) > 0) {
       rows.push({
         name: EVERYTHING_ELSE,
         value: result?.other ?? 0,
@@ -89,7 +94,7 @@ export function WidgetCard({ widget, result, loading, onEdit, onRemove }: Widget
       });
     }
     return rows;
-  }, [result]);
+  }, [result, overTime, widget.config.bucket]);
 
   const pick = (d: ChartDatum) => {
     // "Everything else" has no single value to filter on, so it opens the
@@ -152,6 +157,8 @@ export function WidgetCard({ widget, result, loading, onEdit, onRemove }: Widget
         <Suspense fallback={<p className="hint">Drawing…</p>}>
           {widget.kind === 'bar' ? (
             <Charts.Bars data={data} fmt={fmt} onPick={pick} />
+          ) : widget.kind === 'line' ? (
+            <Charts.Line data={data} fmt={fmt} onPick={() => navigate(drillUrl(widget.config))} />
           ) : (
             <Charts.Donut data={data} fmt={fmt} onPick={pick} />
           )}

@@ -484,6 +484,39 @@ deuteranopia, protanopia and tritanopia. Permission path `dashboard`
 atl / am. The old per-user cards (`DashCards`, user_pref
 `dashboard.cards`) stay exactly as they were, on the Main Dashboard tab.
 
+**Attachments** (migration 0043, `services/attachments.ts`,
+`components/wo/PhotosCard.tsx`) turn the three disabled upload buttons on.
+Files live in a **private Vercel Blob store**; `attachment.storage_key` is the
+blob pathname and **no URL is ever stored or handed out** — every read goes
+back through `GET /work-orders/:id/attachments/:attId`, which runs
+`resolveTaskId` first, so a photo is exactly as visible as its work order and
+a copied link is useless to anyone else. The token is
+`BLOB_READ_WRITE_TOKEN`; without it `storageReady()` is false, the list says
+so and the buttons explain themselves rather than failing on click. An upload
+is base64 JSON (one hop, no multipart) capped at `ATTACHMENT_MAX_BYTES` (4MB)
+against an allow-list of types — and the BROWSER shrinks a photo first
+(`lib/upload.ts`, 2000px longest edge), because a phone picture is several
+times what a serverless request body will take; HEIC cannot be decoded on a
+canvas so it goes up as-is or is refused. Images group before/after by
+`client_visible` (internal = the assessment, client-visible = sign-off);
+anything else lists underneath. Logged `attachment_added|removed` under field
+`attachment:<id>`. Permission path `work_orders/attachments` (create /
+delete); reading needs only `work_orders` view.
+
+**Trend cards and the board's period** (migration 0044, rule-free, the
+dashboards' second half). A fifth widget kind, `line`, cuts by WHEN instead of
+by a category: `config.time_field` + `bucket` (day/week/month),
+`compileDateTruncExpr` in `woFields.ts` (refuses a non-date), newest-first out
+of SQL so the limit keeps RECENT points, reversed on the way out so it reads
+left to right. It wears one hue — consecutive months are not separate
+categories — and has no "everything else" bucket. The **period** is one
+control for the whole board (`resolvePeriod` in shared, computed in UTC so
+browser and API agree on which month it is): presets All time / month /
+quarter / year / last 30, with ‹ › stepping on the three that can step. It
+ANDs `date_received` into every card's own filters rather than replacing them,
+and defaults to All time so a board means what it meant before anyone touched
+it.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

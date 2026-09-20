@@ -19,8 +19,11 @@
  */
 
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
+  CartesianGrid,
   Cell,
   Pie,
   PieChart,
@@ -148,5 +151,63 @@ export function WidgetDonut({
         ))}
       </ul>
     </div>
+  );
+}
+
+/** A line over time (0044).
+ *
+ * The only card that reads left-to-right rather than biggest-first, because
+ * that is what a trend is. One series, so no legend — the card's title names
+ * it — and a dot on every point so a single month still shows something. The
+ * area under the line is a faint wash of the same hue: it makes the shape
+ * readable at a glance without adding a second colour to decode.
+ */
+export function WidgetLine({
+  data,
+  fmt,
+  onPick,
+}: {
+  data: ChartDatum[];
+  fmt: (n: number) => string;
+  onPick?: (d: ChartDatum) => void;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
+        <defs>
+          <linearGradient id="widget-line-wash" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.28} />
+            <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+        <XAxis
+          dataKey="name"
+          tickLine={false}
+          axisLine={{ stroke: 'var(--chart-grid)' }}
+          tick={{ fill: 'var(--ink-3)', fontSize: 10.5 }}
+          minTickGap={16}
+        />
+        <YAxis
+          width={44}
+          tickLine={false}
+          axisLine={false}
+          tick={{ fill: 'var(--ink-3)', fontSize: 10.5 }}
+          tickFormatter={(v: unknown) => fmt(Number(v ?? 0))}
+        />
+        <Tooltip content={(props) => <CardTooltip {...(props as unknown as TooltipProps)} fmt={fmt} />} />
+        <Area
+          type="monotone"
+          dataKey="value"
+          stroke="var(--chart-1)"
+          strokeWidth={2}
+          fill="url(#widget-line-wash)"
+          isAnimationActive={false}
+          activeDot={{ r: 5, cursor: onPick ? 'pointer' : 'default' }}
+          dot={{ r: 3, fill: 'var(--chart-1)', strokeWidth: 0 }}
+          onClick={(d: unknown) => onPick?.((d as { payload: ChartDatum }).payload ?? (d as ChartDatum))}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }

@@ -640,6 +640,31 @@ export async function compileGroupExpr(key: string, p: Params): Promise<string> 
  * Custom fields keep `exprFor`'s guarded cast, so one malformed value counts
  * as no value instead of failing the whole card.
  */
+/**
+ * 0044 · the expression a LINE buckets on: a date field truncated to the day,
+ * week or month, as a plain 'YYYY-MM-DD' string.
+ *
+ * Only a date can be a timeline, so anything else is refused here. A custom
+ * field keeps `exprFor`'s guarded cast, so a row whose value is not a date
+ * drops out of the line instead of failing it — and the bucket name is built
+ * with date_trunc rather than string slicing, so weeks start where Postgres
+ * says they start rather than where a substring happens to fall.
+ */
+export async function compileDateTruncExpr(
+  key: string,
+  bucket: 'day' | 'week' | 'month',
+  p: Params,
+): Promise<string> {
+  const f = await resolveField(key);
+  if (f.type !== 'date' && f.type !== 'datetime') {
+    throw new ApiError('BAD_REQUEST', `"${f.label}" is not a date, so it cannot be a timeline`, {
+      field: key,
+    });
+  }
+  const unit = bucket === 'day' ? 'day' : bucket === 'week' ? 'week' : 'month';
+  return `to_char(date_trunc('${unit}', ${exprFor(f, p)}), 'YYYY-MM-DD')`;
+}
+
 export async function compileNumericExpr(key: string, p: Params): Promise<string> {
   const f = await resolveField(key);
   if (f.type !== 'number' && f.type !== 'money') {

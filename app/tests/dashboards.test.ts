@@ -15,6 +15,10 @@ import {
   WIDGET_KINDS,
   WIDGET_METRICS,
   WIDGET_WIDTHS,
+  TIME_BUCKETS,
+  formatBucket,
+  periodSteps,
+  resolvePeriod,
   widgetSubtitle,
 } from '../packages/shared/src/dashboards';
 
@@ -45,10 +49,13 @@ describe('the dashboards we ship', () => {
     }
   });
 
-  it('give every chart a field to group by, and never give one to a figure', () => {
+  it('give every chart something to cut by — a category, or time', () => {
     for (const w of ALL_WIDGETS) {
       if (w.kind === 'number') continue;
-      expect(w.config.group_field, `${w.dashboard} › ${w.label}`).toBeTruthy();
+      // A line cuts by WHEN; every other chart cuts by a category. Neither
+      // can draw without one, which is what this guards.
+      const cutBy = w.kind === 'line' ? w.config.time_field : w.config.group_field;
+      expect(cutBy, `${w.dashboard} › ${w.label}`).toBeTruthy();
     }
   });
 
@@ -99,5 +106,85 @@ describe('how a card words its own number', () => {
 
   it('falls back to the field key when no label is to hand', () => {
     expect(widgetSubtitle({ metric: 'sum', value_field: 'fields.34. Cost' })).toContain('34. Cost');
+  });
+});
+
+describe('the period the whole board is read over (0044)', () => {
+  // A fixed instant, so "this month" is a fact rather than whenever the suite
+  // happens to run.
+  const NOW = new Date('2026-09-20T15:00:00Z');
+
+  it('means everything until someone chooses otherwise', () => {
+    const p = resolvePeriod({ preset: 'all', offset: 0 }, NOW);
+    expect(p.from).toBeNull();
+    expect(p.to).toBeNull();
+    expect(p.label).toBe('All time');
+  });
+
+  it('covers a whole month, first day to last', () => {
+    const p = resolvePeriod({ preset: 'month', offset: 0 }, NOW);
+    expect(p.from).toBe('2026-09-01');
+    expect(p.to).toBe('2026-09-30');
+    expect(p.label).toBe('September 2026');
+  });
+
+  it('steps back a month at a time, across a year boundary', () => {
+    expect(resolvePeriod({ preset: 'month', offset: -1 }, NOW).from).toBe('2026-08-01');
+    const back = resolvePeriod({ preset: 'month', offset: -9 }, NOW);
+    expect(back.from).toBe('2025-12-01');
+    expect(back.to).toBe('2025-12-31');
+    expect(back.label).toBe('December 2025');
+  });
+
+  it('knows which quarter a month is in, and steps quarters', () => {
+    expect(resolvePeriod({ preset: 'quarter', offset: 0 }, NOW)).toMatchObject({
+      from: '2026-07-01',
+      to: '2026-09-30',
+      label: 'Q3 2026',
+    });
+    expect(resolvePeriod({ preset: 'quarter', offset: -1 }, NOW).label).toBe('Q2 2026');
+  });
+
+  it('covers a calendar year', () => {
+    expect(resolvePeriod({ preset: 'year', offset: 0 }, NOW)).toMatchObject({
+      from: '2026-01-01',
+      to: '2026-12-31',
+      label: '2026',
+    });
+  });
+
+  it('counts the last 30 days inclusively — 30 days, not 31', () => {
+    const p = resolvePeriod({ preset: 'last_30', offset: 0 }, NOW);
+    expect(p.to).toBe('2026-09-20');
+    expect(p.from).toBe('2026-08-22');
+    const days =
+      (Date.parse(`${p.to}T00:00:00Z`) - Date.parse(`${p.from}T00:00:00Z`)) / 86_400_000 + 1;
+    expect(days).toBe(30);
+  });
+
+  it('only puts arrows on the presets that can step', () => {
+    expect(periodSteps('month')).toBe(true);
+    expect(periodSteps('quarter')).toBe(true);
+    expect(periodSteps('year')).toBe(true);
+    expect(periodSteps('all')).toBe(false);
+    expect(periodSteps('last_30')).toBe(false);
+  });
+});
+
+describe('a line card', () => {
+  it('runs along a date instead of a category', () => {
+    const line = PREBUILT_DASHBOARDS.flatMap((d) => d.widgets).filter((w) => w.kind === 'line');
+    expect(line.length).toBeGreaterThan(0);
+    for (const w of line) {
+      expect(w.config.time_field).toBeTruthy();
+      expect(w.config.group_field).toBeUndefined();
+      expect(TIME_BUCKETS).toContain(w.config.bucket);
+    }
+  });
+
+  it('labels its points as dates', () => {
+    expect(formatBucket('2026-09-01', 'month')).toBe('Sep 26');
+    expect(formatBucket('2026-09-07', 'week')).toBe('Sep 7');
+    expect(formatBucket('not-a-date', 'month')).toBe('not-a-date');
   });
 });

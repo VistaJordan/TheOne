@@ -1,7 +1,10 @@
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { postWorkOrderComment } from '../../api/client';
+import { useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ATTACHMENT_ALLOWED_TYPES, ATTACHMENT_MAX_BYTES, formatBytes } from '@theone/shared';
+import { listAttachments, postWorkOrderComment, uploadAttachment } from '../../api/client';
 import { useInvalidateObligations } from '../../hooks/useObligations';
+import { useAuth } from '../../auth/AuthProvider';
+import { prepareFile } from '../../lib/upload';
 import { Icon } from '../Icon';
 
 /** Matches the API's Zod bound (body: string 1..4000). */
@@ -33,6 +36,48 @@ export function UpdateComposer({ woId, woNumber }: UpdateComposerProps) {
       invalidateObligations();
     },
   });
+
+  // 0043 · photos and files. The two tool buttons below were disabled until
+  // there was somewhere to put a file. The photo one asks a phone for its
+  // camera; the clip one takes anything on the allowed list. A photo is
+  // shrunk in the browser first — a phone picture is several times the size
+  // the API will accept, and 2000px is more than a work order ever needs.
+  const { can } = useAuth();
+  const canAttach = can('work_orders/attachments', 'create');
+  const fileInput = useRef<HTMLInputElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(0);
+
+  const attachments = useQuery({
+    queryKey: ['wo-attachments', woId],
+    queryFn: () => listAttachments(woId),
+    enabled: canAttach,
+    retry: 0,
+  });
+  const storageReady = attachments.data?.storage_ready ?? true;
+
+  const sendFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadError(null);
+    setUploading(files.length);
+    try {
+      // One at a time: the size limit is per request, and a failure should
+      // name the file that caused it rather than losing the whole batch.
+      for (const file of Array.from(files)) {
+        const prepared = await prepareFile(file);
+        await uploadAttachment(woId, { ...prepared, client_visible: clientVisible });
+      }
+      await qc.invalidateQueries({ queryKey: ['wo-attachments', woId] });
+      await qc.invalidateQueries({ queryKey: ['wo-activity', woId] });
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'That file did not upload');
+    } finally {
+      setUploading(0);
+      if (fileInput.current) fileInput.current.value = '';
+      if (photoInput.current) photoInput.current.value = '';
+    }
+  };
 
   const trimmed = body.trim();
   const tooLong = trimmed.length > MAX_BODY;
@@ -78,13 +123,60 @@ export function UpdateComposer({ woId, woNumber }: UpdateComposerProps) {
 
       <div className="composer-foot">
         <div className="composer-tools">
-          <button type="button" className="tool-btn" aria-label="Attach file" disabled title="Attachments land in a later sprint">
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            accept={ATTACHMENT_ALLOWED_TYPES.join(',')}
+            style={{ display: 'none' }}
+            onChange={(e) => void sendFiles(e.target.files)}
+          />
+          <input
+            ref={photoInput}
+            type="file"
+            multiple
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={(e) => void sendFiles(e.target.files)}
+          />
+          <button
+            type="button"
+            className="tool-btn"
+            aria-label="Attach file"
+            disabled={!canAttach || !storageReady || uploading > 0}
+            title={
+              !canAttach ? 'You cannot add files to work orders'
+              : !storageReady ? 'File storage is not connected to this environment yet'
+              : `Attach a file (up to ${formatBytes(ATTACHMENT_MAX_BYTES)})`
+            }
+            onClick={() => fileInput.current?.click()}
+          >
             <Icon name="clip" size={14} />
           </button>
-          <button type="button" className="tool-btn" aria-label="Add photo" disabled title="Photo upload lands in a later sprint">
+          <button
+            type="button"
+            className="tool-btn"
+            aria-label="Add photo"
+            disabled={!canAttach || !storageReady || uploading > 0}
+            title={
+              !canAttach ? 'You cannot add photos to work orders'
+              : !storageReady ? 'File storage is not connected to this environment yet'
+              : 'Add a photo — a large one is shrunk before it is sent'
+            }
+            onClick={() => photoInput.current?.click()}
+          >
             <Icon name="image" size={14} />
           </button>
+          {uploading > 0 && (
+            <span className="composer-count">
+              Uploading {uploading === 1 ? 'a file' : `${uploading} files`}…
+            </span>
+          )}
         </div>
+        {uploadError && (
+          <span className="composer-err" role="alert">{uploadError}</span>
+        )}
         {mutation.isError && (
           <span className="composer-err" role="alert">
             {(mutation.error as Error).message || 'Could not post the update.'}

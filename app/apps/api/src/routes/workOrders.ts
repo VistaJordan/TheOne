@@ -39,6 +39,14 @@ import { evaluateForTask } from '../services/obligations.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
 import { assertIdsInScope } from '../services/woScope.js';
 import { checkWoNumber, createWorkOrder, getCreateForm, requireWoCreate } from '../services/woCreate.js';
+import {
+  addAttachment,
+  listAttachments,
+  readAttachment,
+  removeAttachment,
+  storageReady,
+} from '../services/attachments.js';
+import { query } from '../db.js';
 import { logExport } from '../services/adminAudit.js';
 import {
   allowFor,
@@ -155,6 +163,23 @@ const checkQuerySchema = z.object({
   wo_number: z.string().max(60).default(''),
   store: z.string().max(200).optional(),
   trade: z.string().max(200).optional(),
+});
+
+// 0043 · an upload arrives as base64 in JSON: one hop, no multipart parser,
+// and the browser has already shrunk any photograph.
+const attachmentSchema = z
+  .object({
+    file_name: z.string().trim().min(1).max(200),
+    content_type: z.string().trim().min(1).max(120),
+    data: z.string().min(1),
+    client_visible: z.boolean().optional(),
+    visit_id: z.string().uuid().nullable().optional(),
+  })
+  .strict();
+
+const attachmentParamsSchema = z.object({
+  id: z.string().min(1),
+  attachmentId: z.string().uuid(),
 });
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
@@ -344,6 +369,59 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     );
     const created = await createWorkOrder(body, p);
     return reply.status(201).send(created);
+  });
+
+  // ── Attachments (0043) ─────────────────────────────────────────────────────
+  //
+  // Files live in a private blob store; nothing is served from a storage URL.
+  // Every read comes back through here so the work order's scope is checked
+  // first — a photo is exactly as visible as the work order it is on.
+
+  app.get('/work-orders/:id/attachments', async (req) => {
+    const { p } = acting(req);
+    const { id } = parse(idParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    return { items: await listAttachments(taskId, p), storage_ready: storageReady() };
+  });
+
+  app.post('/work-orders/:id/attachments', async (req, reply) => {
+    const { p } = acting(req);
+    const { id } = parse(idParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    const body = parse(attachmentSchema, req.body);
+    // The number leads the storage path, so the store stays browsable.
+    const wo = await query<{ wo_number: string }>('SELECT wo_number FROM task WHERE id = $1', [
+      taskId,
+    ]);
+    const item = await addAttachment(taskId, wo.rows[0]?.wo_number ?? id, body, p);
+    return reply.status(201).send({ item });
+  });
+
+  // The bytes. An <img src> hits this, so it answers with the file itself
+  // rather than a redirect to storage.
+  app.get('/work-orders/:id/attachments/:attachmentId', async (req, reply) => {
+    const { p } = acting(req);
+    const { id, attachmentId } = parse(attachmentParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    const file = await readAttachment(taskId, attachmentId, p);
+    return reply
+      .header('Content-Type', file.contentType)
+      .header('Content-Disposition', `inline; filename="${file.fileName.replace(/"/g, '')}"`)
+      // Private, and only to the browser that asked: never a shared cache.
+      .header('Cache-Control', 'private, max-age=300')
+      .send(file.stream);
+  });
+
+  app.delete('/work-orders/:id/attachments/:attachmentId', async (req, reply) => {
+    const { p } = acting(req);
+    const { id, attachmentId } = parse(attachmentParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    await removeAttachment(taskId, attachmentId, p);
+    return reply.status(204).send();
   });
 
   app.get('/work-orders/:id', async (req) => {

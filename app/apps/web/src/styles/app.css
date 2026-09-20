@@ -2338,3 +2338,30 @@ a.dash-widget-total:hover strong { color: var(--accent-text); }
    focus ring is the one that should show. */
 .dash-widget .recharts-wrapper:focus,
 .dash-widget .recharts-surface:focus { outline: none; }
+
+/* ── 0044 · the board's period ───────────────────────────────────────────────
+   One control for the whole dashboard, above the cards: a board whose cards
+   each covered a different stretch of time could not be read as a whole. */
+.dash-period {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.dash-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.dash-stepper strong {
+  min-width: 108px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.dash-stepper .icon-btn:disabled { opacity: 0.4; cursor: default; }

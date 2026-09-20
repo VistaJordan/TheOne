@@ -21,6 +21,8 @@
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 import {
+  LINE_DEFAULT_LIMIT,
+  PERIOD_FIELD,
   WIDGET_DEFAULT_LIMIT,
   WIDGET_MAX_LIMIT,
   type MetricBreakdown,
@@ -34,6 +36,7 @@ import {
 } from '@theone/shared';
 import {
   Params,
+  compileDateTruncExpr,
   compileFilters,
   compileGroupExpr,
   compileNumericExpr,
@@ -116,9 +119,15 @@ export async function metricBreakdown(
 export async function metricWidget(
   config: WidgetConfig,
   viewer?: ActingPrincipal,
+  /** 0044 · the board's period, ANDed into every card on it. */
+  period?: { from?: string | null; to?: string | null },
 ): Promise<{ total: number; buckets: WidgetBucket[]; other: number }> {
   const metric: WidgetMetric = config.metric ?? 'count';
-  const limit = Math.min(Math.max(config.limit ?? WIDGET_DEFAULT_LIMIT, 1), WIDGET_MAX_LIMIT);
+  const overTime = Boolean(config.time_field);
+  const limit = Math.min(
+    Math.max(config.limit ?? (overTime ? LINE_DEFAULT_LIMIT : WIDGET_DEFAULT_LIMIT), 1),
+    WIDGET_MAX_LIMIT,
+  );
 
   /** The same WHERE for both queries, rebuilt so the two share no params. */
   const whereFor = async (p: Params) => {
@@ -129,6 +138,11 @@ export async function metricWidget(
       const w = await compileFilters(config.filters as FilterSet, p);
       if (w) where.push(w);
     }
+    // The board's period, on the one date every work order has. It ANDs with
+    // the card's own filters rather than replacing them, so a card that asks
+    // about open work still asks about open work — just inside the window.
+    if (period?.from) where.push(`t.${PERIOD_FIELD} >= ${p.add(period.from)}::date`);
+    if (period?.to) where.push(`t.${PERIOD_FIELD} <= ${p.add(period.to)}::date`);
     return where.join(' AND ');
   };
 
@@ -151,6 +165,30 @@ export async function metricWidget(
     tp.values,
   );
   const total = Number(totalRes.rows[0]?.n ?? 0);
+
+  // A line cuts by WHEN, and reads in date order — a trend sorted biggest
+  // first is not a trend.
+  if (overTime) {
+    const p = new Params();
+    const agg = await aggFor(p);
+    const expr = await compileDateTruncExpr(config.time_field as string, config.bucket ?? 'month', p);
+    const where = await whereFor(p);
+    const res = await query<{ v: string | null; n: number | string | null }>(
+      `SELECT ${expr} AS v, ${agg} AS n
+         ${WO_FROM}
+        WHERE ${where} AND ${expr} IS NOT NULL
+        GROUP BY 1
+        ORDER BY 1 DESC
+        LIMIT ${limit}`,
+      p.values,
+    );
+    // Newest first out of SQL (so the limit keeps the RECENT points, not the
+    // oldest), oldest first on the way out (so the line reads left to right).
+    const buckets = res.rows
+      .map((r) => ({ value: r.v, n: Number(r.n ?? 0) }))
+      .reverse();
+    return { total, buckets, other: 0 };
+  }
 
   if (!config.group_field) return { total, buckets: [], other: 0 };
 

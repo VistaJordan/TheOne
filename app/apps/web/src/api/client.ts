@@ -26,6 +26,10 @@ import type {
   WidgetKind,
   WidgetResult,
   WidgetWidth,
+  // 0043 · the photos and files a work order carries.
+  Attachment,
+  AttachmentUpload,
+  AttachmentsResponse,
 } from '@theone/shared';
 import type {
   Kpis,
@@ -1566,8 +1570,17 @@ export function listDashboards(): Promise<DashboardsResponse> {
 }
 
 /** Each card's answer, worked out for the person asking. */
-export function getDashboardData(id: string): Promise<{ results: WidgetResult[] }> {
-  return request(`/dashboards/${id}/data`);
+export function getDashboardData(
+  id: string,
+  /** 0044 · the board's period. Worked out in the browser from the preset, so
+      the two sides never disagree about which month "September" is. */
+  period?: { from?: string | null; to?: string | null },
+): Promise<{ results: WidgetResult[] }> {
+  const q = new URLSearchParams();
+  if (period?.from) q.set('from', period.from);
+  if (period?.to) q.set('to', period.to);
+  const qs = q.toString();
+  return request(`/dashboards/${id}/data${qs ? `?${qs}` : ''}`);
 }
 
 /** The card editor's live preview: an unsaved config, answered. */
@@ -1617,6 +1630,33 @@ export function updateDashboardWidget(
 
 export function deleteDashboardWidget(widgetId: string): Promise<void> {
   return request(`/dashboards/widgets/${widgetId}`, { method: 'DELETE' });
+}
+
+// ── 0043 · attachments ───────────────────────────────────────────────────────
+
+export function listAttachments(woId: string): Promise<AttachmentsResponse> {
+  return request(`/work-orders/${woId}/attachments`);
+}
+
+export function uploadAttachment(
+  woId: string,
+  input: AttachmentUpload,
+): Promise<{ item: Attachment }> {
+  return request(`/work-orders/${woId}/attachments`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAttachment(woId: string, attachmentId: string): Promise<void> {
+  return request(`/work-orders/${woId}/attachments/${attachmentId}`, { method: 'DELETE' });
+}
+
+/** Where the bytes are. Same-origin and cookie-authenticated, so an <img src>
+    works — and the permission check runs on every read, which is exactly why
+    the file is never served from a storage URL. */
+export function attachmentUrl(woId: string, attachmentId: string): string {
+  return `/api/work-orders/${woId}/attachments/${attachmentId}`;
 }
 
 // ── Saved views ──────────────────────────────────────────────────────────────

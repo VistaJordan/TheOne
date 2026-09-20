@@ -1608,5 +1608,7 @@ export * from './intakeDrafts';
 export * from './visitStatus';
 // 0041: the manual create form — which fields it offers is configuration.
 export * from './woCreate';
+// 0043: attachments — the photos and files a work order carries.
+export * from './attachments';
 // 0042: dashboards as records — widgets, sharing, and the ones we ship.
 export * from './dashboards';

@@ -16,7 +16,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { WIDGET_KINDS, WIDGET_METRICS, WIDGET_WIDTHS } from '@theone/shared';
+import { TIME_BUCKETS, WIDGET_KINDS, WIDGET_METRICS, WIDGET_WIDTHS } from '@theone/shared';
 import { parse } from '../errors.js';
 import { actingPrincipalFromRequest } from '../services/activity.js';
 import {
@@ -34,11 +34,20 @@ import { filterSetSchema } from './views.js';
 
 const idParams = z.object({ id: z.string().uuid() });
 
+// 0044 · the board's period arrives as two days; the browser works them out
+// from the preset so both sides agree on which month "September" is.
+const periodQuery = z.object({
+  from: z.string().regex(/^d{4}-d{2}-d{2}$/).optional(),
+  to: z.string().regex(/^d{4}-d{2}-d{2}$/).optional(),
+});
+
 const configSchema = z
   .object({
     metric: z.enum(WIDGET_METRICS).default('count'),
     value_field: z.string().min(1).max(200).optional(),
     group_field: z.string().min(1).max(200).optional(),
+    time_field: z.string().min(1).max(200).optional(),
+    bucket: z.enum(TIME_BUCKETS).optional(),
     filters: filterSetSchema.optional(),
     limit: z.number().int().min(1).max(50).optional(),
   })
@@ -70,7 +79,8 @@ export default async function dashboardRoutes(app: FastifyInstance): Promise<voi
 
   app.get('/dashboards/:id/data', async (req) => {
     const { id } = parse(idParams, req.params);
-    return readDashboardData(id, actingPrincipalFromRequest(req));
+    const period = parse(periodQuery, req.query);
+    return readDashboardData(id, actingPrincipalFromRequest(req), period);
   });
 
   app.post('/dashboards/preview', async (req) => {

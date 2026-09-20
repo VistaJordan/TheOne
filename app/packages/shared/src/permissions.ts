@@ -471,7 +471,7 @@ export function buildPermissionTree(
       key: 'work_orders',
       label: 'Work orders',
       actions: ['view', 'create', 'edit', 'delete'],
-      note: 'Create = import; edit = field values and status; delete = bulk delete to Trash.',
+      note: 'Create = import and Add work order; edit = field values and status; delete = bulk delete to Trash.',
       children: [
         {
           key: WO_SCOPE_PERM_KEY,
@@ -493,6 +493,14 @@ export function buildPermissionTree(
           choices: STATUS_MODE_CHOICES,
         },
         { key: 'work_orders/comments', label: 'Post updates', actions: ['create'] },
+        {
+          // 0043 · seeing a file is seeing the work order (the read is scoped
+          // like any other), so only adding and removing are granted here.
+          key: 'work_orders/attachments',
+          label: 'Photos and files',
+          actions: ['create', 'delete'],
+          note: 'Create = upload a photo or file; delete = remove one.',
+        },
         { key: 'work_orders/export', label: 'Export to CSV', actions: ['view'] },
         { key: 'work_orders/history', label: 'Field history', actions: ['view'] },
         {

@@ -12,6 +12,13 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  DEFAULT_PERIOD,
+  PERIOD_LABELS,
+  PERIOD_PRESETS,
+  TIME_BUCKETS,
+  TIME_BUCKET_LABELS,
+  periodSteps,
+  resolvePeriod,
   WIDGET_KINDS,
   WIDGET_KIND_LABELS,
   WIDGET_METRICS,
@@ -20,6 +27,9 @@ import {
   type Dashboard,
   type DashboardWidget,
   type WidgetConfig,
+  type DashboardPeriod,
+  type PeriodPreset,
+  type TimeBucket,
   type WidgetKind,
   type WidgetWidth,
   type WoFilterSet,
@@ -56,13 +66,17 @@ function scopeOf(config: WidgetConfig): string {
 
 export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
   const qc = useQueryClient();
+  // 0044 · one period for the whole board. A dashboard whose cards each
+  // covered a different stretch of time could not be read as a whole.
+  const [period, setPeriod] = useState<DashboardPeriod>(DEFAULT_PERIOD);
+  const window = useMemo(() => resolvePeriod(period), [period]);
   const [editing, setEditing] = useState<DashboardWidget | 'new' | null>(null);
   const [removing, setRemoving] = useState<DashboardWidget | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const dataQuery = useQuery({
-    queryKey: ['dashboard-data', dashboard.id],
-    queryFn: () => getDashboardData(dashboard.id),
+    queryKey: ['dashboard-data', dashboard.id, window.from, window.to],
+    queryFn: () => getDashboardData(dashboard.id, { from: window.from, to: window.to }),
     staleTime: 30_000,
   });
 
@@ -92,6 +106,45 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
     <>
       {dashboard.description && <p className="dash-desc">{dashboard.description}</p>}
 
+      <div className="dash-period">
+        <div className="seg" role="group" aria-label="Period">
+          {PERIOD_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              className={`seg-btn${period.preset === preset ? ' is-on' : ''}`}
+              aria-pressed={period.preset === preset}
+              onClick={() => setPeriod({ preset, offset: 0 })}
+            >
+              {PERIOD_LABELS[preset]}
+            </button>
+          ))}
+        </div>
+        {periodSteps(period.preset) && (
+          <span className="dash-stepper">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Earlier"
+              onClick={() => setPeriod((p) => ({ ...p, offset: p.offset - 1 }))}
+            >
+              <Icon name="chev-l" size={14} />
+            </button>
+            <strong>{window.label}</strong>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Later"
+              disabled={period.offset >= 0}
+              onClick={() => setPeriod((p) => ({ ...p, offset: Math.min(0, p.offset + 1) }))}
+            >
+              <Icon name="chev-r" size={14} />
+            </button>
+          </span>
+        )}
+        {!periodSteps(period.preset) && <span className="card-meta">{window.label}</span>}
+      </div>
+
       <div className="dash-bar">
         <span className="card-meta">
           {dashboard.shared_all
@@ -101,7 +154,8 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
               : 'Only you can see this dashboard'}
           {dashboard.owner && ` · built by ${dashboard.owner.display_name}`}
           {' · '}
-          Each card counts the work orders you can see.
+          Each card counts the work orders you can see
+          {window.from ? ', received in this period.' : '.'}
         </span>
         {dashboard.can_edit && (
           <span className="dash-bar-tools">
@@ -198,12 +252,19 @@ function WidgetDialog({
     () => fields.filter((f) => f.type !== 'number' && f.type !== 'money'),
     [fields],
   );
+  // Only a date can be a timeline.
+  const dateFields = useMemo(
+    () => fields.filter((f) => f.type === 'date' || f.type === 'datetime'),
+    [fields],
+  );
 
   const [label, setLabel] = useState(widget?.label ?? '');
   const [kind, setKind] = useState<WidgetKind>(widget?.kind ?? 'number');
   const [metric, setMetric] = useState(widget?.config.metric ?? 'count');
   const [valueField, setValueField] = useState(widget?.config.value_field ?? '');
   const [groupField, setGroupField] = useState(widget?.config.group_field ?? '');
+  const [timeField, setTimeField] = useState(widget?.config.time_field ?? 'date_received');
+  const [bucket, setBucket] = useState<TimeBucket>(widget?.config.bucket ?? 'month');
   const [scope, setScope] = useState(scopeOf(widget?.config ?? { metric: 'count' }));
   const [width, setWidth] = useState<WidgetWidth>(widget?.width ?? 'half');
   const [error, setError] = useState<string | null>(null);
@@ -211,7 +272,8 @@ function WidgetDialog({
   const config: WidgetConfig = {
     metric,
     ...(metric === 'count' ? {} : { value_field: valueField }),
-    ...(kind === 'number' ? {} : { group_field: groupField }),
+    ...(kind === 'line' ? { time_field: timeField, bucket } : {}),
+    ...(kind === 'number' || kind === 'line' ? {} : { group_field: groupField }),
     ...(SCOPES.find((s) => s.id === scope)?.filters ? { filters: SCOPES.find((s) => s.id === scope)!.filters } : {}),
   };
 
@@ -220,9 +282,11 @@ function WidgetDialog({
       ? 'a name'
       : metric !== 'count' && !valueField
         ? 'a field to total'
-        : kind !== 'number' && !groupField
-          ? 'a field to group by'
-          : null;
+        : kind === 'line' && !timeField
+          ? 'a date to run along'
+          : kind !== 'number' && kind !== 'line' && !groupField
+            ? 'a field to group by'
+            : null;
 
   const save = useMutation({
     mutationFn: () =>
@@ -292,7 +356,34 @@ function WidgetDialog({
               </select>
             </div>
 
-            {kind !== 'number' && (
+            {kind === 'line' && (
+              <>
+                <div className="field">
+                  <label className="lbl" htmlFor="w-time">Along which date?</label>
+                  <select id="w-time" className="fld" value={timeField} onChange={(e) => setTimeField(e.target.value)}>
+                    <option value="">Pick a date field</option>
+                    {dateFields.map((f) => (
+                      <option key={f.key} value={f.key}>{f.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="lbl" htmlFor="w-bucket">Grouped</label>
+                  <select
+                    id="w-bucket"
+                    className="fld"
+                    value={bucket}
+                    onChange={(e) => setBucket(e.target.value as TimeBucket)}
+                  >
+                    {TIME_BUCKETS.map((b) => (
+                      <option key={b} value={b}>{TIME_BUCKET_LABELS[b]}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {kind !== 'number' && kind !== 'line' && (
               <div className="field">
                 <label className="lbl" htmlFor="w-group">Cut it by</label>
                 <select id="w-group" className="fld" value={groupField} onChange={(e) => setGroupField(e.target.value)}>

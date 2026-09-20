@@ -177,6 +177,8 @@ async function rowById(id: string): Promise<DashRow> {
 export async function readDashboardData(
   id: string,
   viewer: ActingPrincipal,
+  /** 0044 · the board's period: one window, applied to every card on it. */
+  period?: { from?: string | null; to?: string | null },
 ): Promise<{ results: WidgetResult[] }> {
   requireDashboardView(viewer);
   const row = await rowById(id);
@@ -194,7 +196,7 @@ export async function readDashboardData(
     widgets.rows.map(async (w): Promise<WidgetResult> => {
       const widget = widgetOf(w);
       try {
-        const out = await metricWidget(widget.config, viewer);
+        const out = await metricWidget(widget.config, viewer, period);
         return { widget_id: widget.id, ...out };
       } catch (err) {
         return {
@@ -215,9 +217,10 @@ export async function readDashboardData(
 export async function previewWidget(
   config: WidgetConfig,
   viewer: ActingPrincipal,
+  period?: { from?: string | null; to?: string | null },
 ): Promise<WidgetResult> {
   requireDashboardView(viewer);
-  const out = await metricWidget(config, viewer);
+  const out = await metricWidget(config, viewer, period);
   return { widget_id: 'preview', ...out };
 }
 
@@ -323,9 +326,12 @@ function assertWidget(input: WidgetInput): void {
   if (cfg && cfg.metric !== 'count' && !cfg.value_field) {
     throw badRequest('Totalling and averaging both need a field to work on');
   }
-  // bar / donut / table are per-bucket drawings: without a field to cut by
-  // there is nothing to draw, so it is refused at the door.
-  if (cfg && input.kind && input.kind !== 'number' && !cfg.group_field) {
+  // A line cuts by time; bar / donut / table cut by a category. Either way a
+  // per-bucket drawing with nothing to cut by has nothing to draw.
+  if (cfg && input.kind === 'line' && !cfg.time_field) {
+    throw badRequest('A line needs a date field to run along');
+  }
+  if (cfg && input.kind && input.kind !== 'number' && input.kind !== 'line' && !cfg.group_field) {
     throw badRequest('This card needs a field to group by');
   }
 }
