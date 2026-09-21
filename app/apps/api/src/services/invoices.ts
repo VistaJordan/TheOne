@@ -43,7 +43,9 @@ import { requirePerm } from './permissions.js';
 import { woScopeSql } from './woScope.js';
 import { Params } from './woFields.js';
 import type { ActingPrincipal } from './activity.js';
-import { computeLineAmount, computeQuoteTotals } from './quotes.js';
+import { OT_MULTIPLIER, computeLineAmount, computeQuoteTotals } from './quotes.js';
+import { contractForTask, hoursOnSite } from './contracts.js';
+import { assertTierAllows } from './approvalTiers.js';
 
 const PERM = 'invoicing';
 
@@ -243,6 +245,9 @@ interface QuoteLineRow {
   qty: string | number;
   rate: string | number;
   ot: boolean;
+  tax_pct: string | number | null;
+  markup_pct: string | number | null;
+  ot_multiplier: string | number | null;
   kind: string;
   include_in_summary: boolean;
   position: number;
@@ -251,14 +256,15 @@ interface QuoteLineRow {
 /**
  * The lines an invoice starts with: the incurred work, plus every option the
  * quote included in its summary — which is exactly what the client agreed to
- * (rule B of the quote's own arithmetic). Overtime is folded into the unit
- * price here, because an invoice line says what it costs, not how the rate
- * was arrived at.
+ * (rule B of the quote's own arithmetic). Overtime and markup are folded into
+ * the unit price here, because an invoice line says what it costs, not how
+ * the rate was arrived at; the quote's per-line tax (0048) comes back as the
+ * invoice's tax figure.
  */
-async function prefillFromQuote(taskId: string): Promise<InvoiceLineInput[]> {
+async function prefillFromQuote(taskId: string): Promise<{ lines: InvoiceLineInput[]; tax: number }> {
   const res = await query<QuoteLineRow>(
-    `SELECT l.line_type, l.description, l.qty, l.rate, l.ot,
-            s.kind, s.include_in_summary, l.position
+    `SELECT l.line_type, l.description, l.qty, l.rate, l.ot, l.tax_pct, l.markup_pct,
+            q.ot_multiplier, s.kind, s.include_in_summary, l.position
        FROM quote q
        JOIN quote_section s ON s.quote_id = q.id
        JOIN quote_line l ON l.section_id = s.id
@@ -268,13 +274,17 @@ async function prefillFromQuote(taskId: string): Promise<InvoiceLineInput[]> {
     [taskId],
   );
 
-  return res.rows
+  let taxCents = 0;
+  const lines = res.rows
     .filter((r) => String(r.description ?? '').trim() !== '')
     .map((r) => {
       const qty = n(r.qty);
-      const amount = computeLineAmount({ qty, rate: n(r.rate), ot: r.ot });
+      const mult = r.ot_multiplier === null ? OT_MULTIPLIER : n(r.ot_multiplier);
+      const math = { qty, rate: n(r.rate), ot: r.ot, tax_pct: n(r.tax_pct), markup_pct: n(r.markup_pct) };
+      const amount = computeLineAmount(math, mult);
+      if (math.tax_pct > 0) taxCents += Math.round((amount * math.tax_pct) / 100 * 100);
       // Unit price back out of the amount, so qty × unit price always equals
-      // what the quote said — including the overtime multiplier.
+      // what the quote said — including the overtime multiplier and markup.
       const unit = qty === 0 ? 0 : Math.round((amount / qty) * 100) / 100;
       return {
         kind: r.line_type,
@@ -283,6 +293,38 @@ async function prefillFromQuote(taskId: string): Promise<InvoiceLineInput[]> {
         unit_price: unit,
       };
     });
+  return { lines, tax: taxCents / 100 };
+}
+
+/**
+ * 0046 · no quote, but a time-and-materials contract covers the work order:
+ * bill the hours on site (every completed visit, to the quarter hour) at the
+ * contract's standard rate, plus its trip charge per visit. Returns nothing
+ * when the contract states no hourly rate or no visit has been completed.
+ */
+async function prefillFromContract(taskId: string): Promise<{ lines: InvoiceLineInput[]; basis: string } | null> {
+  const match = await contractForTask(taskId);
+  if (!match || match.contract.kind !== 'tm') return null;
+  const { hours, visits } = await hoursOnSite(taskId);
+  const lines: InvoiceLineInput[] = [];
+  if (match.rates.standard !== null && hours > 0) {
+    lines.push({
+      kind: 'labor',
+      description: `Labor — ${hours} h on site at contract rate (${match.contract.name})`,
+      quantity: hours,
+      unit_price: match.rates.standard,
+    });
+  }
+  if (match.rates.trip_charge !== null && match.rates.trip_charge > 0 && visits > 0) {
+    lines.push({
+      kind: 'trip',
+      description: `Trip charge × ${visits} visit${visits === 1 ? '' : 's'} (${match.contract.name})`,
+      quantity: visits,
+      unit_price: match.rates.trip_charge,
+    });
+  }
+  if (lines.length === 0) return null;
+  return { lines, basis: match.contract.name };
 }
 
 /** The work order's own money, for the fallback and for the margin. */
@@ -320,11 +362,24 @@ export async function createInvoice(taskId: string, actor: ActingPrincipal): Pro
   const task = taskRes.rows[0];
   if (!task) throw notFound('Work order not found');
 
-  let lines = await prefillFromQuote(taskId);
-  // No quote, or a quote with nothing on it: start from what the work order
-  // says it is worth, so AR has a line to correct rather than a blank page.
+  const fromQuote = await prefillFromQuote(taskId);
+  let lines = fromQuote.lines;
+  let tax = fromQuote.tax;
+  let basis = 'quote';
+  // No quote: under a time-and-materials contract (0046) the bill is the
+  // hours on site at the contract rate, plus the trip charge.
+  if (lines.length === 0) {
+    const fromContract = await prefillFromContract(taskId);
+    if (fromContract) {
+      lines = fromContract.lines;
+      basis = `contract: ${fromContract.basis}`;
+    }
+  }
+  // Still nothing: start from what the work order says it is worth, so AR
+  // has a line to correct rather than a blank page.
   if (lines.length === 0) {
     const fallback = Number(task.invoiced ?? '') || n(task.nte);
+    basis = 'work order';
     lines = [
       {
         kind: 'service',
@@ -334,10 +389,11 @@ export async function createInvoice(taskId: string, actor: ActingPrincipal): Pro
       },
     ];
   }
+  if (!(tax > 0)) tax = 0;
 
   const { subtotal, total } = invoiceTotals(
     lines.map((l) => ({ quantity: l.quantity ?? 1, unit_price: l.unit_price ?? 0 })),
-    0,
+    tax,
     0,
   );
   const cost = Number(task.cost ?? '');
@@ -366,7 +422,7 @@ export async function createInvoice(taskId: string, actor: ActingPrincipal): Pro
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO invoice
          (task_id, number, billing_entity, client, status, subtotal, tax, discount, total, cost, created_by, due_at)
-       VALUES ($1, $2, $3, $4, 'draft', $5, 0, 0, $6, $7, $8, (now() + ($9 || ' days')::interval)::date)
+       VALUES ($1, $2, $3, $4, 'draft', $5, $10, 0, $6, $7, $8, (now() + ($9 || ' days')::interval)::date)
        RETURNING id::text AS id`,
       [
         taskId,
@@ -378,6 +434,7 @@ export async function createInvoice(taskId: string, actor: ActingPrincipal): Pro
         Number.isFinite(cost) && cost > 0 ? cost : null,
         actor.id,
         String(INVOICE_DEFAULT_TERMS_DAYS),
+        tax,
       ],
     );
     invoiceId = ins.rows[0].id;
@@ -400,7 +457,7 @@ export async function createInvoice(taskId: string, actor: ActingPrincipal): Pro
         actor.id,
         taskId,
         `invoice:${invoiceId}`,
-        JSON.stringify({ number, total, lines: lines.length }),
+        JSON.stringify({ number, total, lines: lines.length, basis }),
       ],
     );
   });
@@ -514,6 +571,8 @@ async function move(
 
   if (to === 'sent') {
     requireInvoiceSend(actor);
+    // Rule 6.2.3: the amount's band may exclude this role (0047).
+    await assertTierAllows('invoice', n(current.total), actor, 'Sending an invoice');
     if (n(current.total) <= 0) {
       throw badRequest('An invoice for nothing cannot be sent — add a line first');
     }

@@ -5,8 +5,9 @@
    without it "Grand Total $2,890" beside "Incurred subtotal $930" reads like an
    arithmetic bug. */
 
+import type { QuoteRates } from '@theone/shared';
 import type { QuoteTotals } from '../../lib/quoteTotals';
-import { NTE_WARN_PCT, parseTax, usd, usd0 } from '../../lib/quoteTotals';
+import { NTE_WARN_PCT, OT_MULTIPLIER, parseTax, usd, usd0 } from '../../lib/quoteTotals';
 import { Icon } from '../Icon';
 
 interface MoneyRailProps {
@@ -16,14 +17,17 @@ interface MoneyRailProps {
   editable: boolean;
   comp: string | null;
   onSalesTaxChange: (v: string) => void;
+  /** 0046 · the rates the quote is priced with, and the contract they came from. */
+  rates?: QuoteRates | null;
 }
 
-export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxChange }: MoneyRailProps) {
+export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxChange, rates }: MoneyRailProps) {
   const pct = nte != null && nte > 0 ? (totals.grandTotal / nte) * 100 : null;
   const warn = pct != null && pct >= NTE_WARN_PCT;
   const over = pct != null && pct > 100;
   const headroom = nte == null ? null : nte - totals.grandTotal;
   const taxErr = Number.isNaN(parseTax(salesTax));
+  const mult = rates?.ot_multiplier ?? OT_MULTIPLIER;
 
   return (
     <section className="card">
@@ -31,6 +35,24 @@ export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxCha
         <h2 className="card-title grow">Money</h2>
         {comp && <span className="card-meta">Comp {comp}</span>}
       </div>
+
+      {/* 0046 · where the price comes from. A contract names itself; the
+          house default says so, so nobody wonders why OT is 1.5×. */}
+      <p className="money-basis">
+        <Icon name={rates?.contract ? 'briefcase' : 'info'} size={12} />
+        <span>
+          {rates?.contract ? (
+            <>
+              Priced under <b>{rates.contract.name}</b>
+              {rates.standard != null && ` · ${usd(rates.standard)}/h`}
+              {rates.trip_charge != null && rates.trip_charge > 0 && ` · trip ${usd(rates.trip_charge)}`}
+              {` · OT ${mult}×`}
+            </>
+          ) : (
+            <>No contract covers this work order — house rates, OT {mult}×</>
+          )}
+        </span>
+      </p>
 
       <div className="nte-row">
         <span className="nte-k">Client NTE</span>
@@ -120,6 +142,13 @@ export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxCha
             )}
           </dd>
         </div>
+
+        {totals.lineTax > 0 && (
+          <div className="kvrow">
+            <dt>Line tax</dt>
+            <dd>{usd(totals.lineTax)}</dd>
+          </div>
+        )}
 
         <div className="kvrow is-total">
           <dt>Grand Total</dt>

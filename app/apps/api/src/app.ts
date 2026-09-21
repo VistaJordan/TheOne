@@ -39,6 +39,8 @@ import webhookRoutes from './routes/webhooks.js';
 import intakeRoutes from './routes/intake.js';
 import dashboardRoutes from './routes/dashboards.js';
 import invoiceRoutes from './routes/invoices.js';
+import contractRoutes from './routes/contracts.js';
+import vendorBillRoutes from './routes/vendorBills.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
@@ -103,6 +105,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(dashboardRoutes, { prefix: '/api' });
   // 0045 · invoices — the bill to the client, as a record at last.
   await app.register(invoiceRoutes, { prefix: '/api' });
+  // 0046 · contracts and labor rates; 0047 · vendor bills (AP) and tiers.
+  await app.register(contractRoutes, { prefix: '/api' });
+  await app.register(vendorBillRoutes, { prefix: '/api' });
 
   return app;
 }

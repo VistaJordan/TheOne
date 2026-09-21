@@ -12,8 +12,19 @@
 
 import type { DraftLine, DraftQuote, DraftSection } from './quoteDraft';
 
-/** Overtime multiplier — DECIDED at ×1.5 on the line rate (requirements §4.1). */
+/** Overtime multiplier — the HOUSE default, ×1.5 on the line rate
+    (requirements §4.1). Since 0046 a quote priced under a contract carries its
+    own (`quote.rates.ot_multiplier`), passed into computeQuoteTotals. */
 export const OT_MULTIPLIER = 1.5;
+
+/** A percentage typed into the Tax % or Markup % box: '' is 0, otherwise a
+    plain number with at most two decimals. NaN is the error state. */
+export function parsePct(v: string | null | undefined): number {
+  const raw = String(v ?? '').replace(/[%\s,]/g, '');
+  if (raw === '') return 0;
+  if (!/^\d+(\.\d{1,2})?$/.test(raw)) return NaN;
+  return parseFloat(raw);
+}
 
 /** The NTE meter turns amber at this share of the client NTE (S2 parity). */
 export const NTE_WARN_PCT = 85;
@@ -64,11 +75,22 @@ export function usd0(n: number | null | undefined): string {
 /** A line's computed amount, or null when the line is not yet valid. Amount is
     never an input (§3.6 read-only-distinction): qty × rate, ×1.5 when OT.
     The Day column is NOT part of this — its value is stored verbatim. */
-export function lineAmount(line: DraftLine): number | null {
+export function lineAmount(line: DraftLine, otMultiplier: number = OT_MULTIPLIER): number | null {
   const q = parseMoney(line.qty);
   const r = parseMoney(line.rate);
-  if (Number.isNaN(q) || Number.isNaN(r)) return null;
-  return round2(q * r * (line.ot ? OT_MULTIPLIER : 1));
+  const markup = parsePct(line.markup_pct);
+  if (Number.isNaN(q) || Number.isNaN(r) || Number.isNaN(markup)) return null;
+  return round2(q * r * (1 + markup / 100) * (line.ot ? otMultiplier : 1));
+}
+
+/** 0048 · the tax a line carries from its own rate; 0 when none, null when
+    the line does not compute. */
+export function lineTax(line: DraftLine, otMultiplier: number = OT_MULTIPLIER): number | null {
+  const amt = lineAmount(line, otMultiplier);
+  const pct = parsePct(line.tax_pct);
+  if (amt == null || Number.isNaN(pct)) return null;
+  if (pct <= 0) return 0;
+  return round2((amt * pct) / 100);
 }
 
 /** Per-field errors on one line. An empty object means the line is billable. */
@@ -76,6 +98,8 @@ export interface LineErrors {
   description?: string;
   qty?: string;
   rate?: string;
+  tax_pct?: string;
+  markup_pct?: string;
 }
 
 export function lineErrors(line: DraftLine): LineErrors {
@@ -87,6 +111,8 @@ export function lineErrors(line: DraftLine): LineErrors {
   if (Number.isNaN(parseMoney(line.rate))) {
     errs.rate = line.rate.trim() === '' ? 'Rate is required' : 'Enter a rate greater than $0';
   }
+  if (Number.isNaN(parsePct(line.tax_pct))) errs.tax_pct = 'Tax is a percentage';
+  if (Number.isNaN(parsePct(line.markup_pct))) errs.markup_pct = 'Markup is a percentage';
   return errs;
 }
 
@@ -96,15 +122,22 @@ export function hasLineError(line: DraftLine): boolean {
 
 /** Sum of the lines that currently compute. Invalid lines are EXCLUDED (and the
     section footer says so) rather than counted as zero. */
-export function sumLines(lines: DraftLine[]): { total: number; excluded: number[] } {
+export function sumLines(
+  lines: DraftLine[],
+  otMultiplier: number = OT_MULTIPLIER,
+): { total: number; tax: number; excluded: number[] } {
   let total = 0;
+  let tax = 0;
   const excluded: number[] = [];
   lines.forEach((line, i) => {
-    const amt = lineAmount(line);
+    const amt = lineAmount(line, otMultiplier);
     if (amt == null || hasLineError(line)) excluded.push(i + 1);
-    else total = round2(total + amt);
+    else {
+      total = round2(total + amt);
+      tax = round2(tax + (lineTax(line, otMultiplier) ?? 0));
+    }
   });
-  return { total, excluded };
+  return { total, tax, excluded };
 }
 
 /** "Line 5 is excluded from the subtotal until it is complete." — the comp's
@@ -136,6 +169,8 @@ export interface QuoteTotals {
   /** Sum of the option sections with include_in_summary = true. */
   includedOptions: number;
   salesTax: number;
+  /** 0048 · the per-line taxes of the included options. */
+  lineTax: number;
   grandTotal: number;
   totalCost: number | null;
   profit: number | null;
@@ -158,14 +193,22 @@ export interface QuoteTotals {
  * `totalCost` is our cost on the proposed work (server-held, not part of the
  * draft form), passed in so profit/margin land in the same result.
  */
-export function computeQuoteTotals(draft: DraftQuote, totalCost: number | null = null): QuoteTotals {
+export function computeQuoteTotals(
+  draft: DraftQuote,
+  totalCost: number | null = null,
+  otMultiplier: number = OT_MULTIPLIER,
+): QuoteTotals {
+  const mult = otMultiplier > 0 ? otMultiplier : OT_MULTIPLIER;
   const incurredSection = draft.sections.find((s) => s.kind === 'incurred');
-  const incurred = sumLines(incurredSection ? incurredSection.lines : []);
+  const incurred = sumLines(incurredSection ? incurredSection.lines : [], mult);
 
+  let lineTax = 0;
   const options: OptionTotal[] = draft.sections
     .filter((s) => s.kind === 'option')
     .map((opt, i) => {
-      const sum = sumLines(opt.lines);
+      const sum = sumLines(opt.lines, mult);
+      // 0048 · per-line tax rides with the option it sits in.
+      if (opt.include_in_summary) lineTax = round2(lineTax + sum.tax);
       return {
         key: opt.key,
         label: `Option ${String.fromCharCode(65 + i)}`,
@@ -184,7 +227,7 @@ export function computeQuoteTotals(draft: DraftQuote, totalCost: number | null =
   const salesTax = Number.isNaN(parsedTax) ? 0 : parsedTax;
 
   // ── RULE B — flip to (a) incurred+options here if Jordan reverses ──────────
-  const grandTotal = round2(includedOptions + salesTax);
+  const grandTotal = round2(includedOptions + lineTax + salesTax);
 
   const profit = totalCost == null ? null : round2(grandTotal - totalCost);
   const marginPct = profit == null || grandTotal <= 0 ? null : (profit / grandTotal) * 100;
@@ -195,6 +238,7 @@ export function computeQuoteTotals(draft: DraftQuote, totalCost: number | null =
     options,
     includedOptions,
     salesTax,
+    lineTax,
     grandTotal,
     totalCost,
     profit,

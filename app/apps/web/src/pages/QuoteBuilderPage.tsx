@@ -118,9 +118,12 @@ export function QuoteBuilderPage() {
   const totalCost = quote?.totals.total_cost ?? null;
   const nte = quote?.totals.nte ?? woQuery.data?.money?.nte ?? woQuery.data?.nte ?? null;
 
+  // 0046 · the OT multiplier the quote was priced with (its contract's, or
+  // the house ×1.5). Every live figure on the screen uses the same one.
+  const otMult = quote?.rates?.ot_multiplier ?? 1.5;
   const totals = useMemo(
-    () => (draft ? computeQuoteTotals(draft, totalCost) : null),
-    [draft, totalCost],
+    () => (draft ? computeQuoteTotals(draft, totalCost, otMult) : null),
+    [draft, totalCost, otMult],
   );
   const problems = useMemo(() => (draft ? quoteProblems(draft) : []), [draft]);
 
@@ -305,7 +308,7 @@ export function QuoteBuilderPage() {
   const fields = wo?.fields ?? {};
   const incurred = draft.sections[0];
   const options = draft.sections.slice(1);
-  const incurredTotals = sumLines(incurred.lines);
+  const incurredTotals = sumLines(incurred.lines, otMult);
   const incurredNote = excludedNote(incurredTotals.excluded);
   const includedCount = options.filter((o) => o.include_in_summary).length;
 
@@ -377,6 +380,23 @@ export function QuoteBuilderPage() {
               </span>
             )}
             <span className="chip chip-sm">Rev {quote.rev}</span>
+            {/* 0048 · the document number, and the printable document. */}
+            {quote.number && (
+              <span className="q-wo" title="Quote number — issued per billing entity per year, never reused">
+                <span className="q-wo-v">{quote.number}</span>
+                <CopyButton value={quote.number} label="Copy quote number" size={12} />
+              </span>
+            )}
+            <Link
+              className="chip chip-sm"
+              to={`/work-orders/${encodeURIComponent(quote.wo_number)}/quote/print`}
+              onClick={guard(`/work-orders/${encodeURIComponent(quote.wo_number)}/quote/print`)}
+              style={{ textDecoration: 'none' }}
+              title="Open the printable document (save as PDF from the print dialog)"
+            >
+              <Icon name="file" size={12} />
+              Print / PDF
+            </Link>
           </div>
           <div className="qhead-right">
             <AutosaveChip
@@ -604,6 +624,7 @@ export function QuoteBuilderPage() {
               lines={incurred.lines}
               editable={editable}
               showErrors={showErrors}
+              otMultiplier={otMult}
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
 
@@ -616,7 +637,7 @@ export function QuoteBuilderPage() {
               )}
               <span className="lt-note">
                 <Icon name={incurredNote ? 'alert' : 'info'} size={12} />
-                {incurredNote ?? 'Amount is computed (qty × rate, ×1.5 when OT) and read-only.'}
+                {incurredNote ?? `Amount is computed (qty × unit price, plus markup, ×${otMult} when OT) and read-only.`}
               </span>
               <span className="subtotal-chip" style={{ marginLeft: 'auto' }}>
                 Incurred subtotal <b className="num">{usd(incurredTotals.total)}</b>
@@ -657,6 +678,7 @@ export function QuoteBuilderPage() {
                 index={i}
                 editable={editable}
                 showErrors={showErrors}
+                otMultiplier={otMult}
                 onChange={(next) => setSection(i + 1, next)}
                 onRemove={() =>
                   update({ ...draft, sections: removeAt(draft.sections, i + 1) })
@@ -689,7 +711,58 @@ export function QuoteBuilderPage() {
             editable={editable}
             comp={wo?.billing_entity ?? null}
             onSalesTaxChange={(sales_tax) => update({ ...draft, sales_tax })}
+            rates={quote.rates}
           />
+
+          {/* 0048 · the document fields: what the printed quote calls
+              itself, who it is billed to, where the work ships. */}
+          <section className="card">
+            <div className="card-head">
+              <h2 className="card-title grow">Document</h2>
+              {quote.number && <span className="card-meta mono">{quote.number}</span>}
+            </div>
+            <div className="card-pad">
+              <div className="field">
+                <label className="lbl" htmlFor="doc-type">Document type</label>
+                <select
+                  className="fld"
+                  id="doc-type"
+                  value={draft.document_type}
+                  disabled={!editable}
+                  onChange={(e) => update({ ...draft, document_type: e.target.value as DraftQuote['document_type'] })}
+                >
+                  <option value="quote">Quote</option>
+                  <option value="proposal">Proposal</option>
+                  <option value="estimate">Estimate</option>
+                </select>
+              </div>
+              <div className="field">
+                <label className="lbl" htmlFor="doc-bill-to">Bill to</label>
+                <textarea
+                  className="fld"
+                  id="doc-bill-to"
+                  rows={2}
+                  value={draft.bill_to}
+                  disabled={!editable}
+                  placeholder={wo?.client ?? 'Client name and billing address'}
+                  onChange={(e) => update({ ...draft, bill_to: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label className="lbl" htmlFor="doc-ship-to">Ship to / site</label>
+                <textarea
+                  className="fld"
+                  id="doc-ship-to"
+                  rows={2}
+                  value={draft.ship_to}
+                  disabled={!editable}
+                  placeholder={site?.name ?? 'Defaults to the work order site'}
+                  onChange={(e) => update({ ...draft, ship_to: e.target.value })}
+                />
+                <span className="hint">Blank = the work order's site on the printed document.</span>
+              </div>
+            </div>
+          </section>
 
           <section className="card">
             <div className="card-head">

@@ -542,6 +542,70 @@ and view/create to am + tl. The Ready lane is still DERIVED from the audit
 (clean + Admin + Quote ticked, and not already billed); everything past it is
 a record.
 
+**Contracts and labor rates** (migration 0046, `services/contracts.ts`,
+`/contracts` in the sidebar, permission path `contracts`) are the client rate
+cards: hourly / overtime / double-time / trip charge / markup on parts, for a
+client (or all), an entity (or all), some sites and trades (or all), between
+two dates. `contractForTask(taskId)` picks the most specific card in force
+(`pickContract` + `resolveRates` in `packages/shared/src/contracts.ts`, pure
+and tested). Two readers: **the quote builder** snapshots `quote.contract_id`
++ `quote.ot_multiplier` (overtime ÷ standard, else the house ×1.5) when a
+quote is created, so an approved quote never re-prices; **the invoice**, when
+a work order has no quote and a T&M contract covers it, bills hours on site
+(every checked-out `wo_visit`, to the quarter hour) at the standard rate plus
+the trip charge per visit (`prefillFromContract`). Logged as admin changes
+(`contract_created|updated|deleted`).
+
+**Vendor bills** (migration 0047, `services/vendorBills.ts`, Payments ›
+Vendor bills lane and the `VendorBillsCard` on the Payables tab) are the AP
+half of invoicing: the vendor's own invoice against a work order, `received →
+approved → paid`, or `disputed` (internal comment, back to received on
+resolve) or `void`. Same integer-cent arithmetic as the client invoice. Gates
+reuse Payments: `payments:create` records, `payments:approve` approves,
+`payments/process:edit` pays. Logged `vendor_bill_created|updated|
+status_changed` under field `vendor_bill:<id>`.
+
+**Approval tiers by amount** (0047, rule 6.2.3, `services/approvalTiers.ts`,
+Admin › Settings card, `/api/admin/approval-tiers` under `admin/settings`
+edit) are bands of money per decision kind (`payment`, `vendor_bill`,
+`invoice`) naming the roles that may say yes inside them; empty roles = anyone
+with the base permission; super admins never restricted. Enforced at the
+decision — payment approve, vendor-bill approve, invoice send — as a **403**
+with `details.code = APPROVAL_TIER`; the queue rows carry `tier: {label,
+allowed}` so the button locks with the reason first. 0047 seeds the BRD's
+bands (under $500 anyone · $500–3,000 tl/atl/am/admin · over $3,000 tl/admin;
+invoices $10,000+ ar/tl/admin) only when the table is empty; the seed never
+touches it.
+
+**The quote as a document** (migration 0048): `quote.number`
+(`Q-SFM-2026-0001`, per entity per year from `quote_sequence`, issued at
+create, existing quotes back-numbered by the migration), `document_type`
+(quote / proposal / estimate), `currency`, `bill_to`, `ship_to`; per line
+`uom`, `tax_pct`, `markup_pct`. Amount = qty × rate × (1 + markup) × (OT ?
+multiplier : 1); a line's tax rides with its option and lands in
+`totals.line_tax`, added to the grand total beside the manual sales tax — both
+sides of the parity test (web `lib/quoteTotals.ts`, API `computeQuoteTotals`)
+take the multiplier as a parameter and default to the old figures. The
+printable document is `/work-orders/:wo/quote/print` (`QuotePrintPage`, its
+own print stylesheet in `quote.css`, "save as PDF" is the browser's print
+dialog — no server renderer). The Quotes list has status lanes and the number.
+
+**Dashboards, the rest of the library** (migration 0049): card kinds `gauge`
+(a figure against `config.target`, or the largest plain figure on the board),
+`live` (re-reads every `refresh_seconds`, the fastest card sets the board's
+`refetchInterval`), `narrative`, `image`, `link` (furniture — never queried,
+`widgetAsksQuestion`). A card may name a **source** other than work orders —
+`invoices`, `payments`, `vendor_bills` — with `SOURCE_FIELDS` as the only
+columns it may total, cut by or run along and `source_status` /
+`source_overdue` as its narrowing (`metricSourceWidget` in `woMetrics.ts`,
+still joined to `task` for the viewer's scope). The board has a **filter bar**
+(client, entity, trade, store, dispatcher — `PAGE_FILTER_FIELDS`) that ANDs
+into every work-order card like the period does (`?filters=` on `/data`).
+Date filter rules may say `today`, `today+7`, `today-1` (resolved to
+`CURRENT_DATE` in `compileRule`), which is what the new **Service levels**
+board runs on; the **Accounting** board is built from the money records.
+Prebuilt boards are still upserted by `system_key` on first read.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is
@@ -590,7 +654,9 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
 
 - Entra mode has not been exercised against a real tenant yet (no app
   registration existed at build time); the code path is complete and typed.
-- Vendors and Invoicing appear in the sidebar but are inert placeholders.
+- Vendors appears in the sidebar but is an inert placeholder (batch 1 of
+  `product/facilio-parity.md`). Invoicing is live since 0045 (Receivables ›
+  Invoicing); vendor bills since 0047 (Payments › Vendor bills).
 - React Router prints v7 future-flag warnings in the console; harmless.
 - `public/brand/logo-the-one-2.png` is an unused leftover of the previous
   logo (committed for safekeeping, referenced nowhere) — safe to delete.

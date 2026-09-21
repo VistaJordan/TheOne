@@ -5,12 +5,16 @@
  * disagree — the oldest trap in dashboards is a card that says 41 and a list
  * that shows 38.
  *
- * Four drawings, one meaning:
- *   number   the headline figure alone
- *   bar      one row per bucket, biggest first
- *   donut    the same buckets as a share of the whole, with a legend
- *   table    the same buckets as rows — the accessible reading of any chart,
- *            and the better choice when the labels matter more than the shape
+ * The drawings, one meaning:
+ *   number     the headline figure alone
+ *   gauge      the figure against a target (0049)
+ *   live       the figure, re-read on a timer (0049)
+ *   bar        one row per bucket, biggest first
+ *   donut      the same buckets as a share of the whole, with a legend
+ *   table      the same buckets as rows — the accessible reading of any chart,
+ *              and the better choice when the labels matter more than the shape
+ *   line       the figure over time
+ *   narrative  text; image: a picture; link: a button (0049 — no question asked)
  *
  * Recharts is loaded lazily, so a page without a chart on it never downloads
  * the library.
@@ -19,7 +23,7 @@
 import { Suspense, lazy, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { WidgetConfig, WidgetResult, DashboardWidget, WoFilterSet } from '@theone/shared';
-import { formatBucket, widgetSubtitle } from '@theone/shared';
+import { SOURCE_DRILL_PATH, formatBucket, widgetSubtitle } from '@theone/shared';
 import { Icon } from '../Icon';
 import { filterUrl } from '../../lib/woView';
 import { CHART_OTHER, EVERYTHING_ELSE, colorFor, type ChartDatum } from './chartPalette';
@@ -34,6 +38,9 @@ interface WidgetCardProps {
   widget: DashboardWidget;
   result?: WidgetResult;
   loading: boolean;
+  /** 0049 · the largest plain figure on the board — a gauge with no target
+      of its own reads against it. */
+  boardMax?: number;
   /** Shown only to someone who may edit this dashboard. */
   onEdit?: () => void;
   onRemove?: () => void;
@@ -42,7 +49,9 @@ interface WidgetCardProps {
 /** Money reads as money, counts read as counts, and an average keeps one
     decimal so "1.0 visits" is not rounded into "1". */
 function formatter(config: WidgetConfig): (n: number) => string {
-  const isMoney = config.metric !== 'count' && /nte|cost|invoiced|profit|amount|price/i.test(config.value_field ?? '');
+  const isMoney =
+    config.metric !== 'count' &&
+    /nte|cost|invoiced|profit|amount|price|total|subtotal|tax/i.test(config.value_field ?? '');
   return (n: number) => {
     if (!Number.isFinite(n)) return '—';
     if (isMoney) {
@@ -56,8 +65,9 @@ function formatter(config: WidgetConfig): (n: number) => string {
 }
 
 /** The list this card's rows live in: the card's own filters, plus the bucket
-    the person clicked. */
+    the person clicked. A card over the money records opens its queue. */
 function drillUrl(config: WidgetConfig, bucket?: { raw: string | null }): string {
+  if (config.source && config.source !== 'work_orders') return SOURCE_DRILL_PATH[config.source];
   const base: WoFilterSet = config.filters ?? { match: 'all', rules: [] };
   if (!bucket || !config.group_field) return filterUrl(base);
   const rules = [...base.rules];
@@ -69,11 +79,13 @@ function drillUrl(config: WidgetConfig, bucket?: { raw: string | null }): string
   return filterUrl({ match: base.match, rules });
 }
 
-export function WidgetCard({ widget, result, loading, onEdit, onRemove }: WidgetCardProps) {
+export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRemove }: WidgetCardProps) {
   const navigate = useNavigate();
   const fmt = useMemo(() => formatter(widget.config), [widget.config]);
 
   const overTime = widget.kind === 'line';
+  const figure = widget.kind === 'number' || widget.kind === 'gauge' || widget.kind === 'live';
+  const furniture = widget.kind === 'narrative' || widget.kind === 'image' || widget.kind === 'link';
 
   const data: ChartDatum[] = useMemo(() => {
     const buckets = result?.buckets ?? [];
@@ -102,26 +114,75 @@ export function WidgetCard({ widget, result, loading, onEdit, onRemove }: Widget
     navigate(d.name === EVERYTHING_ELSE ? drillUrl(widget.config) : drillUrl(widget.config, d));
   };
 
+  const tools = (onEdit || onRemove) && (
+    <span className="dash-widget-tools">
+      {onEdit && (
+        <button type="button" className="linkbtn" onClick={onEdit}>
+          Edit
+        </button>
+      )}
+      {onRemove && (
+        <button type="button" className="linkbtn" onClick={onRemove}>
+          Remove
+        </button>
+      )}
+    </span>
+  );
+
+  // ── Furniture: no question, no result ─────────────────────────────────────
+  if (furniture) {
+    const url = (widget.config.url ?? '').trim();
+    const external = /^https?:\/\//i.test(url);
+    return (
+      <section className={`card dash-widget is-${widget.width} is-${widget.kind}`}>
+        <div className="card-head">
+          <h3 className="card-title">{widget.label}</h3>
+          <span className="card-meta">{tools}</span>
+        </div>
+        {widget.kind === 'narrative' && (
+          <div className="dash-narrative">
+            {(widget.config.text ?? '')
+              .split(/\n{2,}/)
+              .filter((p) => p.trim() !== '')
+              .map((p, i) => (
+                <p key={i}>{p}</p>
+              ))}
+          </div>
+        )}
+        {widget.kind === 'image' && url && (
+          <img className="dash-image" src={url} alt={widget.label} loading="lazy" />
+        )}
+        {widget.kind === 'link' && url && (
+          external ? (
+            <a className="btn btn-primary dash-link" href={url} target="_blank" rel="noreferrer">
+              <Icon name="ext" size={14} />
+              {widget.config.button_label?.trim() || 'Open'}
+            </a>
+          ) : (
+            <Link className="btn btn-primary dash-link" to={url}>
+              <Icon name="arrow-r" size={14} />
+              {widget.config.button_label?.trim() || 'Open'}
+            </Link>
+          )
+        )}
+      </section>
+    );
+  }
+
+  const total = result?.total ?? 0;
+  const target = widget.kind === 'gauge' ? (widget.config.target && widget.config.target > 0 ? widget.config.target : boardMax) : 0;
+  const share = target > 0 ? Math.min(100, Math.max(0, (total / target) * 100)) : 0;
+
   return (
-    <section className={`card dash-widget is-${widget.width}`}>
+    <section className={`card dash-widget is-${widget.width} is-${widget.kind}`}>
       <div className="card-head">
-        <h3 className="card-title">{widget.label}</h3>
-        <span className="card-meta">
-          {(onEdit || onRemove) && (
-            <span className="dash-widget-tools">
-              {onEdit && (
-                <button type="button" className="linkbtn" onClick={onEdit}>
-                  Edit
-                </button>
-              )}
-              {onRemove && (
-                <button type="button" className="linkbtn" onClick={onRemove}>
-                  Remove
-                </button>
-              )}
-            </span>
+        <h3 className="card-title">
+          {widget.label}
+          {widget.kind === 'live' && (
+            <span className="dash-live-dot" title={`Re-reads every ${widget.config.refresh_seconds ?? 30}s`} aria-label="live" />
           )}
-        </span>
+        </h3>
+        <span className="card-meta">{tools}</span>
       </div>
 
       {result?.error ? (
@@ -130,10 +191,22 @@ export function WidgetCard({ widget, result, loading, onEdit, onRemove }: Widget
         </p>
       ) : loading ? (
         <p className="hint">Working it out…</p>
-      ) : widget.kind === 'number' ? (
+      ) : figure ? (
         <Link className="dash-figure" to={drillUrl(widget.config)}>
-          <span className="dash-figure-n">{fmt(result?.total ?? 0)}</span>
-          <span className="dash-figure-sub">{widgetSubtitle(widget.config)}</span>
+          <span className="dash-figure-n">{fmt(total)}</span>
+          <span className="dash-figure-sub">
+            {widgetSubtitle(widget.config)}
+            {widget.kind === 'gauge' && target > 0 && ` · of ${fmt(target)}`}
+          </span>
+          {widget.kind === 'gauge' && (
+            <span className="dash-gauge" role="img" aria-label={`${Math.round(share)} percent of target`}>
+              <span
+                className={`dash-gauge-fill${share >= 100 ? ' is-full' : share >= 80 ? ' is-near' : ''}`}
+                style={{ width: `${share}%` }}
+              />
+              <span className="dash-gauge-pct">{target > 0 ? `${Math.round(share)}%` : 'no target'}</span>
+            </span>
+          )}
         </Link>
       ) : data.length === 0 ? (
         <p className="hint">Nothing matches this card yet.</p>
@@ -167,9 +240,9 @@ export function WidgetCard({ widget, result, loading, onEdit, onRemove }: Widget
 
       {/* The total under a chart is the figure the card would show as a
           number, so the two readings of the same question always agree. */}
-      {widget.kind !== 'number' && !result?.error && data.length > 0 && (
+      {!figure && !result?.error && data.length > 0 && (
         <Link className="dash-widget-total" to={drillUrl(widget.config)}>
-          {widgetSubtitle(widget.config)}: <strong>{fmt(result?.total ?? 0)}</strong>
+          {widgetSubtitle(widget.config)}: <strong>{fmt(total)}</strong>
         </Link>
       )}
     </section>

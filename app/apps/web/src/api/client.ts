@@ -35,6 +35,20 @@ import type {
   InvoiceCreateInput,
   InvoiceUpdateInput,
   InvoicesResponse,
+  // 0046 · contracts and labor rates.
+  Contract,
+  ContractInput,
+  ContractsResponse,
+  ResolvedRates,
+  // 0047 · vendor bills and approval tiers.
+  VendorBill,
+  VendorBillCreateInput,
+  VendorBillUpdateInput,
+  VendorBillsResponse,
+  ApprovalTier,
+  ApprovalTierInput,
+  // 0048 · the quote as a document.
+  QuoteDocumentType,
 } from '@theone/shared';
 import type {
   Kpis,
@@ -298,6 +312,10 @@ export interface QuoteLineInput {
   /** Day column: stored VERBATIM, no math (semantics TBD — requirements §4.1). */
   day_value: string | null;
   ot: boolean;
+  /** 0048 · unit of measure and the line's own tax / markup percentages. */
+  uom: string | null;
+  tax_pct: number;
+  markup_pct: number;
 }
 
 /** One section of the PUT body. Sections are REPLACED whole, in array order:
@@ -321,6 +339,11 @@ export interface QuoteUpdateInput {
       the auto-sync. Null = the summary tracks the generated `summary.auto`. */
   summary_pinned: string | null;
   sections: QuoteSectionInput[];
+  /** 0048 · the document fields. */
+  document_type?: QuoteDocumentType;
+  currency?: string;
+  bill_to?: string | null;
+  ship_to?: string | null;
 }
 
 /** GET /api/quotes — the sidebar "Quotes" list page. Not part of the shared
@@ -329,6 +352,8 @@ export interface QuoteListItem {
   id: string;
   task_id: string;
   wo_number: string;
+  /** 0048 · the document number (Q-SFM-2026-0001). */
+  number: string | null;
   title: string | null;
   client: string | null;
   status: SharedQuoteStatus;
@@ -1580,17 +1605,27 @@ export function getDashboardData(
   /** 0044 · the board's period. Worked out in the browser from the preset, so
       the two sides never disagree about which month "September" is. */
   period?: { from?: string | null; to?: string | null },
+  /** 0049 · the board's filter bar, ANDed into every work-order card. */
+  filters?: WoFilterSet | null,
 ): Promise<{ results: WidgetResult[] }> {
   const q = new URLSearchParams();
   if (period?.from) q.set('from', period.from);
   if (period?.to) q.set('to', period.to);
+  if (filters && filters.rules.length > 0) q.set('filters', JSON.stringify(filters));
   const qs = q.toString();
   return request(`/dashboards/${id}/data${qs ? `?${qs}` : ''}`);
 }
 
 /** The card editor's live preview: an unsaved config, answered. */
-export function previewWidget(config: WidgetConfig): Promise<WidgetResult> {
-  return request('/dashboards/preview', { method: 'POST', body: JSON.stringify(config) });
+export function previewWidget(
+  config: WidgetConfig,
+  period?: { from?: string | null; to?: string | null },
+  filters?: WoFilterSet | null,
+): Promise<WidgetResult> {
+  return request('/dashboards/preview', {
+    method: 'POST',
+    body: JSON.stringify({ config, from: period?.from ?? null, to: period?.to ?? null, filters: filters ?? null }),
+  });
 }
 
 export function createDashboard(input: {
@@ -1683,6 +1718,100 @@ export function voidInvoice(id: string): Promise<{ invoice: Invoice }> {
 
 export function reopenInvoice(id: string): Promise<{ invoice: Invoice }> {
   return request(`/invoices/${id}/reopen`, { method: 'POST' });
+}
+
+// ── 0046 · contracts and labor rates ─────────────────────────────────────────
+
+export function listContracts(): Promise<ContractsResponse> {
+  return request('/contracts');
+}
+
+export function createContract(input: ContractInput): Promise<{ contract: Contract }> {
+  return request('/contracts', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateContract(id: string, input: ContractInput): Promise<{ contract: Contract }> {
+  return request(`/contracts/${id}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function deleteContract(id: string): Promise<void> {
+  return request(`/contracts/${id}`, { method: 'DELETE' });
+}
+
+/** The contract in force for a work order today, its resolved rates, and the
+    hours on site so far — the basis a quote or an invoice prices against. */
+export function getWorkOrderContract(idOrNumber: string): Promise<{
+  contract: Contract | null;
+  rates: ResolvedRates | null;
+  hours: { hours: number; visits: number } | null;
+}> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/contract`);
+}
+
+// ── 0047 · vendor bills (AP) ─────────────────────────────────────────────────
+
+export function listVendorBills(): Promise<VendorBillsResponse> {
+  return request('/vendor-bills');
+}
+
+export function getWorkOrderVendorBills(idOrNumber: string): Promise<{ items: VendorBill[] }> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/vendor-bills`);
+}
+
+export function createVendorBill(input: VendorBillCreateInput): Promise<{ bill: VendorBill }> {
+  return request('/vendor-bills', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateVendorBill(id: string, input: VendorBillUpdateInput): Promise<{ bill: VendorBill }> {
+  return request(`/vendor-bills/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function approveVendorBill(id: string): Promise<{ bill: VendorBill }> {
+  return request(`/vendor-bills/${id}/approve`, { method: 'POST' });
+}
+
+export function markVendorBillPaid(
+  id: string,
+  reference?: string | null,
+  paymentRequestId?: string | null,
+): Promise<{ bill: VendorBill }> {
+  return request(`/vendor-bills/${id}/paid`, {
+    method: 'POST',
+    body: JSON.stringify({ reference: reference ?? null, payment_request_id: paymentRequestId ?? null }),
+  });
+}
+
+export function disputeVendorBill(id: string, note: string): Promise<{ bill: VendorBill }> {
+  return request(`/vendor-bills/${id}/dispute`, { method: 'POST', body: JSON.stringify({ note }) });
+}
+
+export function resolveVendorBill(id: string): Promise<{ bill: VendorBill }> {
+  return request(`/vendor-bills/${id}/resolve`, { method: 'POST' });
+}
+
+export function voidVendorBill(id: string): Promise<{ bill: VendorBill }> {
+  return request(`/vendor-bills/${id}/void`, { method: 'POST' });
+}
+
+// ── 0047 · approval tiers (Admin › Settings) ─────────────────────────────────
+
+export function listApprovalTiers(): Promise<{ items: ApprovalTier[] }> {
+  return request('/admin/approval-tiers');
+}
+
+export function createApprovalTier(input: ApprovalTierInput): Promise<{ item: ApprovalTier }> {
+  return request('/admin/approval-tiers', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateApprovalTier(
+  id: string,
+  input: Partial<ApprovalTierInput>,
+): Promise<{ item: ApprovalTier }> {
+  return request(`/admin/approval-tiers/${id}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function deleteApprovalTier(id: string): Promise<{ ok: true }> {
+  return request(`/admin/approval-tiers/${id}`, { method: 'DELETE' });
 }
 
 // ── 0043 · attachments ───────────────────────────────────────────────────────

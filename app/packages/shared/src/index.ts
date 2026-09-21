@@ -699,8 +699,40 @@ export interface QuoteLine {
   rate: number;
   day_value: string | null;
   ot: boolean;
+  /** 0048 · unit of measure ('hr', 'ea', 'trip'); free text, may be null. */
+  uom: string | null;
+  /** 0048 · per-line tax and markup, as percentages. 0 = none. */
+  tax_pct: number;
+  markup_pct: number;
   position: number;
+  /** qty × rate × (1 + markup) × (ot ? multiplier : 1), computed. */
   amount: number;
+  /** amount × tax_pct, computed. */
+  tax: number;
+}
+
+/** 0048 · what the printed document calls itself. */
+export const QUOTE_DOCUMENT_TYPES = ['quote', 'proposal', 'estimate'] as const;
+export type QuoteDocumentType = (typeof QUOTE_DOCUMENT_TYPES)[number];
+export const QUOTE_DOCUMENT_TYPE_LABELS: Record<QuoteDocumentType, string> = {
+  quote: 'Quote',
+  proposal: 'Proposal',
+  estimate: 'Estimate',
+};
+
+/** The units the builder offers; anything else may be typed. */
+export const QUOTE_UOMS = ['hr', 'ea', 'trip', 'day', 'lot', 'ft', 'sq ft'] as const;
+
+/** 0048 · the rates a quote was priced with, and where they came from. */
+export interface QuoteRates {
+  /** Applied to a line flagged OT. From the contract when one covers the
+      work order, else the house ×1.5. */
+  ot_multiplier: number;
+  standard: number | null;
+  overtime: number | null;
+  trip_charge: number | null;
+  markup_pct: number | null;
+  contract: { id: string; name: string } | null;
 }
 
 /**
@@ -743,6 +775,9 @@ export interface QuoteTotals {
   option_totals: QuoteOptionTotal[];
   grand_total: number;
   sales_tax: number;
+  /** 0048 · the per-line taxes of the included options, added into the
+      grand total beside the manual sales tax. 0 until a line carries a rate. */
+  line_tax: number;
   nte: number | null;
   total_cost: number | null;
   profit: number | null;
@@ -765,6 +800,14 @@ export interface Quote {
   id: string;
   task_id: string;
   wo_number: string;
+  /** 0048 · Q-SFM-2026-0001: per billing entity per year, never reused. */
+  number: string | null;
+  document_type: QuoteDocumentType;
+  currency: string;
+  bill_to: string | null;
+  ship_to: string | null;
+  /** 0048 · the multiplier and default rates this quote is priced with. */
+  rates: QuoteRates;
   status: QuoteStatus;
   rev: number;
   specs: string | null;
@@ -859,6 +902,9 @@ export interface PaymentListItem extends PaymentRequest {
   /** Rule 1.5.2: an NTE override is waiting on a manager for this work
       order, so approve / send to Yoda are refused (409) until it is decided. */
   nte_override_open: boolean;
+  /** Rule 6.2.3 (0047): the amount band this request falls in, and whether
+      the viewer's role may approve inside it. Null when no band is set. */
+  tier: { label: string; allowed: boolean } | null;
   /** The work order's own numbers as they stand NOW (the inbox columns). */
   wo_due: string | null;
   wo_nte: number | null;
@@ -1614,3 +1660,8 @@ export * from './invoices';
 export * from './attachments';
 // 0042: dashboards as records — widgets, sharing, and the ones we ship.
 export * from './dashboards';
+// 0046: contracts and labor rates — what a client has agreed the work costs.
+export * from './contracts';
+// 0047: vendor bills (the AP half of invoicing) and approval tiers (6.2.3).
+export * from './vendorBills';
+export * from './approvalTiers';

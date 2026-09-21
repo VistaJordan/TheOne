@@ -31,6 +31,7 @@ export type NavKey =
   | 'Incoming Work Orders'
   | 'WO Intake'
   | 'Approvals'
+  | 'Contracts'
   | 'Admin';
 
 interface NavChild {
@@ -80,6 +81,9 @@ const NAV: NavItem[] = [
   // AR — completion audit + invoicing, ported from the Support Automation
   // shadow-audit assistant. Subtabs live inside the page.
   { label: 'Receivables', icon: 'dollar', to: '/receivables' },
+  // 0046 — the rate cards quotes and invoices price against (Facilio's
+  // Contracts › Contract + Labor Rates). Hidden without the `contracts` grant.
+  { label: 'Contracts', icon: 'briefcase', to: '/contracts' },
   // S5 — Admin is six sections deep, so it renders as a group rather than a
   // single item that hides five destinations behind an in-page rail.
   {
@@ -100,6 +104,7 @@ const NAV_PERM: Record<string, string> = {
   'WO Intake': 'intake',
   Approvals: 'approvals',
   Invoicing: 'invoicing',
+  Contracts: 'contracts',
 };
 
 interface AppShellProps {

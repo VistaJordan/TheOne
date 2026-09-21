@@ -16,7 +16,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { TIME_BUCKETS, WIDGET_KINDS, WIDGET_METRICS, WIDGET_WIDTHS } from '@theone/shared';
+import { TIME_BUCKETS, WIDGET_KINDS, WIDGET_METRICS, WIDGET_SOURCES, WIDGET_WIDTHS } from '@theone/shared';
 import { parse } from '../errors.js';
 import { actingPrincipalFromRequest } from '../services/activity.js';
 import {
@@ -37,9 +37,22 @@ const idParams = z.object({ id: z.string().uuid() });
 // 0044 · the board's period arrives as two days; the browser works them out
 // from the preset so both sides agree on which month "September" is.
 const periodQuery = z.object({
-  from: z.string().regex(/^d{4}-d{2}-d{2}$/).optional(),
-  to: z.string().regex(/^d{4}-d{2}-d{2}$/).optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // 0049 · the board's filter bar, as the JSON of a filter set.
+  filters: z.string().max(4000).optional(),
 });
+
+/** The filter bar arrives as JSON in a query string; anything malformed is
+    ignored rather than failing the whole board. */
+function pageFiltersOf(raw: string | undefined) {
+  if (!raw) return null;
+  try {
+    return filterSetSchema.parse(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
 
 const configSchema = z
   .object({
@@ -50,6 +63,24 @@ const configSchema = z
     bucket: z.enum(TIME_BUCKETS).optional(),
     filters: filterSetSchema.optional(),
     limit: z.number().int().min(1).max(50).optional(),
+    // 0049
+    source: z.enum(WIDGET_SOURCES).optional(),
+    source_status: z.array(z.string().min(1).max(40)).max(20).optional(),
+    source_overdue: z.boolean().optional(),
+    target: z.number().min(0).max(1_000_000_000).optional(),
+    refresh_seconds: z.number().int().min(1).max(3600).optional(),
+    text: z.string().max(4000).optional(),
+    url: z.string().max(2000).optional(),
+    button_label: z.string().max(80).optional(),
+  })
+  .strict();
+
+const previewSchema = z
+  .object({
+    config: configSchema,
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    filters: filterSetSchema.nullable().optional(),
   })
   .strict();
 
@@ -79,11 +110,18 @@ export default async function dashboardRoutes(app: FastifyInstance): Promise<voi
 
   app.get('/dashboards/:id/data', async (req) => {
     const { id } = parse(idParams, req.params);
-    const period = parse(periodQuery, req.query);
-    return readDashboardData(id, actingPrincipalFromRequest(req), period);
+    const { from, to, filters } = parse(periodQuery, req.query);
+    return readDashboardData(id, actingPrincipalFromRequest(req), { from, to }, pageFiltersOf(filters));
   });
 
   app.post('/dashboards/preview', async (req) => {
+    // The editor sends {config, from, to, filters}; a bare config (the 0042
+    // shape) still works.
+    const body = req.body as Record<string, unknown> | null;
+    if (body && typeof body === 'object' && 'config' in body) {
+      const { config, from, to, filters } = parse(previewSchema, body);
+      return previewWidget(config, actingPrincipalFromRequest(req), { from, to }, filters ?? null);
+    }
     const config = parse(configSchema, req.body);
     return previewWidget(config, actingPrincipalFromRequest(req));
   });

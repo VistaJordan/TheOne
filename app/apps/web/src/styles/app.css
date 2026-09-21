@@ -2365,3 +2365,76 @@ a.dash-widget-total:hover strong { color: var(--accent-text); }
 }
 
 .dash-stepper .icon-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ── 0049 · the board's filter bar and the wider card library ─────────────── */
+.dash-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-3);
+}
+.dash-filters > svg { margin-bottom: 8px; }
+.dash-filter { display: flex; flex-direction: column; gap: 3px; min-width: 140px; }
+.dash-filter > span { font-size: 11px; font-weight: 600; color: var(--ink-2); }
+.dash-filter .fld { min-height: 30px; font-size: 12px; }
+.dash-filters .linkbtn { margin-bottom: 7px; }
+
+.dash-gauge {
+  position: relative;
+  display: block;
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--row-border);
+  overflow: hidden;
+}
+.dash-gauge-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--chart-1);
+}
+.dash-gauge-fill.is-near { background: var(--warn, var(--chart-4)); }
+.dash-gauge-fill.is-full { background: var(--ok, var(--chart-3)); }
+.dash-gauge-pct {
+  position: absolute;
+  right: 0;
+  top: 12px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.dash-widget.is-gauge a.dash-figure { padding-bottom: 20px; }
+
+.dash-live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--ok, var(--chart-3));
+  vertical-align: middle;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dash-live-dot { animation: dash-live-pulse 2s ease-in-out infinite; }
+  @keyframes dash-live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+}
+
+.dash-narrative { font-size: 12.5px; color: var(--ink-2); }
+.dash-narrative p { margin: 0 0 8px; }
+.dash-narrative p:last-child { margin-bottom: 0; }
+.dash-image { display: block; max-width: 100%; height: auto; border-radius: var(--radius-sm); }
+.dash-link { display: inline-flex; margin-top: 4px; }
+.dash-status-picks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+
+.modal.modal-wide { width: min(860px, calc(100vw - 32px)); }
+
+.adm-tier-kind { margin-top: 14px; }
+.adm-tier-title { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; }
+.adm-tier-table td { vertical-align: middle; }
+.adm-tier-roles { display: flex; flex-wrap: wrap; gap: 4px 12px; }

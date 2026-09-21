@@ -23,6 +23,7 @@ import { SoftCloseChecklist } from '../components/wo/SoftCloseChecklist';
 import { MoneyCard } from '../components/wo/MoneyCard';
 import { ClientQuoteCard } from '../components/wo/ClientQuoteCard';
 import { InvoiceCard } from '../components/wo/InvoiceCard';
+import { VendorBillsCard } from '../components/wo/VendorBillsCard';
 import { PayablesFieldsCard, PaymentHistoryCard } from '../components/wo/PayablesCard';
 import { PeopleCard } from '../components/wo/PeopleCard';
 import { SiteCard } from '../components/wo/SiteCard';
@@ -373,6 +374,9 @@ export function WorkOrderDetailPage() {
           {tab === 'payables' && (
             <div role="tabpanel" aria-label="Payables" className="pay-grid">
               <PayablesFieldsCard wo={wo} />
+              {/* 0047 · the vendor's own invoice — the document the payment
+                  request should be settling. */}
+              <VendorBillsCard wo={wo} />
               <PaymentHistoryCard
                 woNumber={wo.wo_number}
                 items={paymentsQuery.data?.items ?? []}

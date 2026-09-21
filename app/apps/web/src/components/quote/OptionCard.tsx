@@ -18,11 +18,13 @@ interface OptionCardProps {
   showErrors: boolean;
   onChange: (next: DraftSection) => void;
   onRemove: () => void;
+  /** 0046 · the multiplier an OT line bills at; the house ×1.5 by default. */
+  otMultiplier?: number;
 }
 
-export function OptionCard({ section, index, editable, showErrors, onChange, onRemove }: OptionCardProps) {
+export function OptionCard({ section, index, editable, showErrors, onChange, onRemove, otMultiplier }: OptionCardProps) {
   const label = `Option ${optionTag(index)}`;
-  const totals = sumLines(section.lines);
+  const totals = sumLines(section.lines, otMultiplier);
   const note = excludedNote(totals.excluded);
   const nameId = `opt-${section.key}-name`;
   const narrId = `opt-${section.key}-narr`;
@@ -112,6 +114,7 @@ export function OptionCard({ section, index, editable, showErrors, onChange, onR
           lines={section.lines}
           editable={editable}
           showErrors={showErrors}
+          otMultiplier={otMultiplier}
           onChange={setLines}
         />
       </div>

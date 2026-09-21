@@ -21,7 +21,8 @@ import type {
   QuoteSectionInput,
   QuoteUpdateInput,
 } from '../api/client';
-import { parseMoney, parseTax } from './quoteTotals';
+import type { QuoteDocumentType } from '@theone/shared';
+import { parseMoney, parsePct, parseTax } from './quoteTotals';
 
 // ── Vocabulary ───────────────────────────────────────────────────────────────
 
@@ -61,6 +62,11 @@ export interface DraftLine {
   /** '' = nothing selected. */
   day_value: string;
   ot: boolean;
+  /** 0048 · unit of measure ('' = none) and the line's own tax / markup
+      percentages as RAW strings ('' = 0). */
+  uom: string;
+  tax_pct: string;
+  markup_pct: string;
 }
 
 export interface DraftSection {
@@ -86,6 +92,10 @@ export interface DraftQuote {
   /** "Show all options as separate quotes" — UI-only. Migration 0003 has no
       column for it, so it is deliberately not sent and not persisted. */
   separate_quotes: boolean;
+  /** 0048 · the document fields. */
+  document_type: QuoteDocumentType;
+  bill_to: string;
+  ship_to: string;
 }
 
 let seq = 0;
@@ -119,6 +129,9 @@ export function blankLine(): DraftLine {
     rate: '',
     day_value: '',
     ot: false,
+    uom: '',
+    tax_pct: '',
+    markup_pct: '',
   };
 }
 
@@ -164,6 +177,9 @@ function sectionToDraft(section: QuoteSection): DraftSection {
       rate: rateToInput(line.rate),
       day_value: line.day_value ?? '',
       ot: line.ot,
+      uom: line.uom ?? '',
+      tax_pct: line.tax_pct > 0 ? String(line.tax_pct) : '',
+      markup_pct: line.markup_pct > 0 ? String(line.markup_pct) : '',
     })),
   };
 }
@@ -187,6 +203,9 @@ export function fromQuote(quote: Quote): DraftQuote {
     note_to_customer: quote.note_to_customer ?? '',
     summary_pinned: quote.summary.pinned,
     separate_quotes: false,
+    document_type: quote.document_type ?? 'quote',
+    bill_to: quote.bill_to ?? '',
+    ship_to: quote.ship_to ?? '',
   };
 }
 
@@ -224,6 +243,9 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
         rate: toNumber(line.rate),
         day_value: line.day_value === '' ? null : line.day_value,
         ot: line.ot,
+        uom: line.uom.trim() === '' ? null : line.uom.trim(),
+        tax_pct: Number.isNaN(parsePct(line.tax_pct)) ? 0 : parsePct(line.tax_pct),
+        markup_pct: Number.isNaN(parsePct(line.markup_pct)) ? 0 : parsePct(line.markup_pct),
       })),
   };
 }
@@ -236,6 +258,9 @@ export function toUpdateInput(draft: DraftQuote): QuoteUpdateInput {
     note_to_customer: draft.note_to_customer.trim() === '' ? null : draft.note_to_customer,
     summary_pinned: draft.summary_pinned,
     sections: draft.sections.map(sectionToInput),
+    document_type: draft.document_type,
+    bill_to: draft.bill_to.trim() === '' ? null : draft.bill_to,
+    ship_to: draft.ship_to.trim() === '' ? null : draft.ship_to,
   };
 }
 

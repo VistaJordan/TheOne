@@ -19,9 +19,14 @@
 // it, and the change sticks.
 
 import {
+  LIVE_MIN_SECONDS,
   PREBUILT_DASHBOARDS,
+  SOURCE_FIELDS,
   WIDGET_KINDS,
+  WIDGET_SOURCES,
   WIDGET_WIDTHS,
+  widgetAsksQuestion,
+  type WoFilterSet,
   type Dashboard,
   type DashboardFolder,
   type DashboardWidget,
@@ -179,6 +184,8 @@ export async function readDashboardData(
   viewer: ActingPrincipal,
   /** 0044 · the board's period: one window, applied to every card on it. */
   period?: { from?: string | null; to?: string | null },
+  /** 0049 · the board's filter bar, applied to every work-order card. */
+  page?: WoFilterSet | null,
 ): Promise<{ results: WidgetResult[] }> {
   requireDashboardView(viewer);
   const row = await rowById(id);
@@ -195,8 +202,12 @@ export async function readDashboardData(
   const results = await Promise.all(
     widgets.rows.map(async (w): Promise<WidgetResult> => {
       const widget = widgetOf(w);
+      // 0049 · text, a picture or a button asks nothing of the records.
+      if (!widgetAsksQuestion(widget.kind)) {
+        return { widget_id: widget.id, total: 0, buckets: [], other: 0 };
+      }
       try {
-        const out = await metricWidget(widget.config, viewer, period);
+        const out = await metricWidget(widget.config, viewer, period, page);
         return { widget_id: widget.id, ...out };
       } catch (err) {
         return {
@@ -218,9 +229,10 @@ export async function previewWidget(
   config: WidgetConfig,
   viewer: ActingPrincipal,
   period?: { from?: string | null; to?: string | null },
+  page?: WoFilterSet | null,
 ): Promise<WidgetResult> {
   requireDashboardView(viewer);
-  const out = await metricWidget(config, viewer, period);
+  const out = await metricWidget(config, viewer, period, page);
   return { widget_id: 'preview', ...out };
 }
 
@@ -323,16 +335,53 @@ function assertWidget(input: WidgetInput): void {
     throw badRequest(`Unknown card width "${input.width}"`);
   }
   const cfg = input.config;
+  const kind = input.kind as (typeof WIDGET_KINDS)[number] | undefined;
+
+  // 0049 · the furniture: no question, so no field rules — just its own bit.
+  if (kind === 'narrative') {
+    if (cfg && !(cfg.text ?? '').trim()) throw badRequest('A text card needs some text');
+    return;
+  }
+  if (kind === 'image' || kind === 'link') {
+    const url = (cfg?.url ?? '').trim();
+    if (cfg && !url) throw badRequest(kind === 'image' ? 'A picture needs a URL' : 'A button needs somewhere to go');
+    if (url && !/^(https?:\/\/|\/)/.test(url)) throw badRequest('The URL must start with http(s):// or /');
+    return;
+  }
+
+  if (cfg && cfg.source !== undefined && !(WIDGET_SOURCES as readonly string[]).includes(cfg.source)) {
+    throw badRequest(`Unknown source "${cfg.source}"`);
+  }
   if (cfg && cfg.metric !== 'count' && !cfg.value_field) {
     throw badRequest('Totalling and averaging both need a field to work on');
   }
+  // A card over the money records may only name the columns the source has.
+  if (cfg && cfg.source && cfg.source !== 'work_orders') {
+    const allowed = SOURCE_FIELDS[cfg.source];
+    for (const [what, key] of [
+      ['number', cfg.value_field],
+      ['field', cfg.group_field],
+      ['date', cfg.time_field],
+    ] as const) {
+      if (key && !allowed.some((f) => f.key === key)) {
+        throw badRequest(`"${key}" is not a ${what} the ${cfg.source} source has`);
+      }
+    }
+  }
   // A line cuts by time; bar / donut / table cut by a category. Either way a
   // per-bucket drawing with nothing to cut by has nothing to draw.
-  if (cfg && input.kind === 'line' && !cfg.time_field) {
+  if (cfg && kind === 'line' && !cfg.time_field) {
     throw badRequest('A line needs a date field to run along');
   }
-  if (cfg && input.kind && input.kind !== 'number' && input.kind !== 'line' && !cfg.group_field) {
+  const figure = kind === 'number' || kind === 'gauge' || kind === 'live';
+  if (cfg && kind && !figure && kind !== 'line' && !cfg.group_field) {
     throw badRequest('This card needs a field to group by');
+  }
+  if (cfg && kind === 'gauge' && cfg.target !== undefined && !(cfg.target > 0)) {
+    throw badRequest('A gauge reads against a target above zero');
+  }
+  if (cfg && kind === 'live' && cfg.refresh_seconds !== undefined && cfg.refresh_seconds < LIVE_MIN_SECONDS) {
+    throw badRequest(`A live card re-reads no faster than every ${LIVE_MIN_SECONDS} seconds`);
   }
 }
 

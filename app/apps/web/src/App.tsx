@@ -19,8 +19,10 @@ import { DashboardPage } from './pages/DashboardPage';
 import { WorkOrdersPage } from './pages/WorkOrdersPage';
 import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage';
 import { QuoteBuilderPage } from './pages/QuoteBuilderPage';
+import { QuotePrintPage } from './pages/QuotePrintPage';
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
+import { ContractsPage } from './pages/ContractsPage';
 import { PulsePage } from './pages/PulsePage';
 import { ReceivablesPage } from './pages/ReceivablesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
@@ -121,6 +123,12 @@ export function App() {
                 path="/work-orders/:woNumber/quote"
                 element={<RequireAuth><RequireCan perm="quotes" nav="Work Orders"><QuoteBuilderPage /></RequireCan></RequireAuth>}
               />
+              {/* 0048 — the quote as a document, laid out for the print dialog
+                  (save as PDF). No AppShell: the page IS the paper. */}
+              <Route
+                path="/work-orders/:woNumber/quote/print"
+                element={<RequireAuth><RequireCan perm="quotes" nav="Work Orders"><QuotePrintPage /></RequireCan></RequireAuth>}
+              />
               <Route
                 path="/work-orders/:woNumber/request-payment"
                 element={<RequireAuth><RequireCan perm="payments" nav="Work Orders"><RequestPaymentPage /></RequireCan></RequireAuth>}
@@ -128,6 +136,11 @@ export function App() {
               <Route
                 path="/quotes"
                 element={<RequireAuth><RequireCan perm="quotes" nav="Quotes"><QuotesPage /></RequireCan></RequireAuth>}
+              />
+              {/* 0046 — the rate cards quotes and invoices price against. */}
+              <Route
+                path="/contracts"
+                element={<RequireAuth><RequireCan perm="contracts" nav="Contracts"><ContractsPage /></RequireCan></RequireAuth>}
               />
               {/* S5 — the Pulse: every open obligation, by how much clock is left. */}
               <Route path="/pulse" element={<RequireAuth><PulsePage /></RequireAuth>} />

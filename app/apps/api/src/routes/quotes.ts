@@ -43,6 +43,10 @@ const lineSchema = z.object({
   /** Stored VERBATIM — the Day column's semantics are TBD, no math is done on it. */
   day_value: z.string().trim().max(40).nullable().optional(),
   ot: z.boolean().optional(),
+  /** 0048 · unit of measure, and the line's own tax and markup percentages. */
+  uom: z.string().trim().max(20).nullable().optional(),
+  tax_pct: z.number().min(0).max(100).optional(),
+  markup_pct: z.number().min(0).max(1000).optional(),
 });
 
 const sectionSchema = z.object({
@@ -63,6 +67,11 @@ const updateSchema = z
     /** null clears the pin and hands the summary back to the auto-generator. */
     summary_pinned: z.string().max(20000).nullable().optional(),
     sections: z.array(sectionSchema).max(20).optional(),
+    /** 0048 · the document fields. */
+    document_type: z.enum(['quote', 'proposal', 'estimate']).optional(),
+    currency: z.string().trim().min(3).max(3).optional(),
+    bill_to: z.string().trim().max(1000).nullable().optional(),
+    ship_to: z.string().trim().max(1000).nullable().optional(),
   })
   .strict();
 

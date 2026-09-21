@@ -640,3 +640,9 @@
 }
 .payq-dialog .kv dt { color: var(--ink-3); }
 .payq-dialog .kv dd { margin: 0; color: var(--ink); font-weight: 500; }
+
+/* ── 0047 · vendor bills and the amount band on a row ─────────────────────── */
+.payq-tier { color: var(--ink-3); font-size: 10.5px; white-space: nowrap; }
+.payq-actions { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.payq-inline { display: inline-flex; align-items: center; gap: 6px; }
+.payq-inline .fld { min-height: 28px; font-size: 12px; width: 200px; }

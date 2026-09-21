@@ -25,6 +25,8 @@ import type {
   QuoteOptionTotal,
   QuoteSummary,
   QuotePermissions,
+  QuoteRates,
+  QuoteDocumentType,
   ActivityActor,
 } from '@theone/shared';
 import { ApiError, badRequest, forbidden } from '../errors.js';
@@ -32,8 +34,9 @@ import type { ActingPrincipal } from './activity.js';
 import { evaluateForTask } from './obligations.js';
 import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
-import { permAllows } from '@theone/shared';
+import { DEFAULT_OT_MULTIPLIER, permAllows } from '@theone/shared';
 import { assertNoOpenNteOverride, openNteOverride } from './approvals.js';
+import { contractForTask } from './contracts.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -41,8 +44,10 @@ const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T
 // 1 · ARITHMETIC
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Overtime is a flat rate multiplier (Jordan, 2026-07-30: "OT = overtime, ×1.5 rate"). */
-export const OT_MULTIPLIER = 1.5;
+/** Overtime is a flat rate multiplier (Jordan, 2026-07-30: "OT = overtime,
+    ×1.5 rate") — the HOUSE default. Since 0046 a quote raised under a contract
+    carries its own (`quote.ot_multiplier`), passed in through TotalsInput. */
+export const OT_MULTIPLIER = DEFAULT_OT_MULTIPLIER;
 
 /** Kill float noise: 2.5 × 180 × 1.5 must be 675, not 674.9999999999999. */
 function round2(n: number): number {
@@ -54,6 +59,9 @@ export interface TotalsLineInput {
   qty: number;
   rate: number;
   ot: boolean;
+  /** 0048 · percentages; absent = 0. */
+  tax_pct?: number;
+  markup_pct?: number;
 }
 
 /** The minimum shape computeQuoteTotals needs from a section. */
@@ -71,17 +79,28 @@ export interface TotalsInput {
   sales_tax: number;
   total_cost: number | null;
   nte: number | null;
+  /** 0048 · the quote's own OT multiplier; absent = the house default. */
+  ot_multiplier?: number;
 }
 
 /**
- * One line's money: qty × rate, ×1.5 when the OT flag is set.
+ * One line's money: qty × rate, × (1 + markup) when a markup is set, × the
+ * OT multiplier when the OT flag is set (the house ×1.5, or the contract's).
  * The Day column is NOT part of this — its value is stored verbatim and no math
  * is done on it anywhere (semantics TBD pending the real quote-builder import).
  */
-export function computeLineAmount(line: TotalsLineInput): number {
+export function computeLineAmount(line: TotalsLineInput, otMultiplier: number = OT_MULTIPLIER): number {
   const qty = Number.isFinite(line.qty) ? line.qty : 0;
   const rate = Number.isFinite(line.rate) ? line.rate : 0;
-  return round2(qty * rate * (line.ot ? OT_MULTIPLIER : 1));
+  const markup = Number.isFinite(line.markup_pct ?? 0) ? (line.markup_pct ?? 0) : 0;
+  return round2(qty * rate * (1 + markup / 100) * (line.ot ? otMultiplier : 1));
+}
+
+/** 0048 · the tax a line carries, from its own rate. 0 when it has none. */
+export function computeLineTax(line: TotalsLineInput, otMultiplier: number = OT_MULTIPLIER): number {
+  const pct = Number.isFinite(line.tax_pct ?? 0) ? (line.tax_pct ?? 0) : 0;
+  if (pct <= 0) return 0;
+  return round2((computeLineAmount(line, otMultiplier) * pct) / 100);
 }
 
 /**
@@ -99,12 +118,14 @@ export function computeLineAmount(line: TotalsLineInput): number {
  * `margin_pct` is profit / grand_total × 100, to one decimal.
  */
 export function computeQuoteTotals(input: TotalsInput): QuoteTotals {
+  const mult = input.ot_multiplier && input.ot_multiplier > 0 ? input.ot_multiplier : OT_MULTIPLIER;
   let incurred_subtotal = 0;
+  let line_tax = 0;
   const option_totals: QuoteOptionTotal[] = [];
 
   for (const section of input.sections) {
     const subtotal = round2(
-      section.lines.reduce((sum, line) => sum + computeLineAmount(line), 0),
+      section.lines.reduce((sum, line) => sum + computeLineAmount(line, mult), 0),
     );
     if (section.kind === 'incurred') {
       incurred_subtotal = round2(incurred_subtotal + subtotal);
@@ -116,12 +137,19 @@ export function computeQuoteTotals(input: TotalsInput): QuoteTotals {
         include_in_summary: section.include_in_summary,
         total: subtotal,
       });
+      // 0048 · per-line tax rides with the option it sits in, so an option
+      // left out of the summary takes its tax with it.
+      if (section.include_in_summary) {
+        line_tax = round2(
+          line_tax + section.lines.reduce((sum, line) => sum + computeLineTax(line, mult), 0),
+        );
+      }
     }
   }
 
   // ── RULE B ────────────────────────────────────────────────────────────────
   const grand_total = round2(
-    option_totals.reduce((sum, o) => sum + (o.include_in_summary ? o.total : 0), 0),
+    option_totals.reduce((sum, o) => sum + (o.include_in_summary ? o.total : 0), 0) + line_tax,
   );
 
   const sales_tax = round2(Number.isFinite(input.sales_tax) ? input.sales_tax : 0);
@@ -135,6 +163,7 @@ export function computeQuoteTotals(input: TotalsInput): QuoteTotals {
     option_totals,
     grand_total,
     sales_tax,
+    line_tax,
     nte: input.nte === null ? null : round2(input.nte),
     total_cost,
     profit,
@@ -398,6 +427,15 @@ interface QuoteRow {
   title: string | null;
   nte: number | null;
   store: string | null;
+  /** 0048 · the document fields. */
+  number: string | null;
+  document_type: string;
+  currency: string;
+  bill_to: string | null;
+  ship_to: string | null;
+  contract_id: string | null;
+  contract_name: string | null;
+  ot_multiplier: number | null;
 }
 
 const QUOTE_SQL = `
@@ -407,6 +445,10 @@ const QUOTE_SQL = `
          q.sales_tax::float8              AS sales_tax,
          q.total_cost::float8             AS total_cost,
          q.specs, q.note_to_customer, q.summary_pinned,
+         q.number, q.document_type, q.currency, q.bill_to, q.ship_to,
+         q.contract_id::text              AS contract_id,
+         c.name                           AS contract_name,
+         q.ot_multiplier::float8          AS ot_multiplier,
          ${ISO('q.sent_at')}              AS sent_at,
          ${ISO('q.created_at')}           AS created_at,
          ${ISO('q.updated_at')}           AS updated_at,
@@ -418,6 +460,7 @@ const QUOTE_SQL = `
          t.fields ->> 'Store'             AS store
     FROM quote q
     JOIN task t ON t.id = q.task_id
+    LEFT JOIN contract c ON c.id = q.contract_id
     LEFT JOIN principal cb ON cb.id = q.created_by
     LEFT JOIN principal ab ON ab.id = q.approved_by
     LEFT JOIN principal sb ON sb.id = q.sent_by
@@ -444,8 +487,15 @@ interface LineRow {
   rate: number | null;
   day_value: string | null;
   ot: boolean;
+  uom: string | null;
+  tax_pct: number | null;
+  markup_pct: number | null;
   position: number | string;
 }
+
+const LINE_COLUMNS = `l.id::text AS id, l.section_id::text AS section_id, l.line_type, l.description,
+            l.qty::float8 AS qty, l.rate::float8 AS rate, l.day_value, l.ot,
+            l.uom, l.tax_pct::float8 AS tax_pct, l.markup_pct::float8 AS markup_pct, l.position`;
 
 function actorOf(
   id: string | null,
@@ -480,7 +530,7 @@ function toStringArray(v: unknown): string[] {
 }
 
 /** Sections + their lines, incurred first, options in position order. */
-async function loadSections(quoteId: string): Promise<QuoteSection[]> {
+async function loadSections(quoteId: string, otMultiplier: number = OT_MULTIPLIER): Promise<QuoteSection[]> {
   const secRes = await query<SectionRow>(
     `SELECT id::text AS id, kind, name, narrative_reported, scope_lines,
             include_in_summary, position
@@ -490,8 +540,7 @@ async function loadSections(quoteId: string): Promise<QuoteSection[]> {
     [quoteId],
   );
   const lineRes = await query<LineRow>(
-    `SELECT l.id::text AS id, l.section_id::text AS section_id, l.line_type, l.description,
-            l.qty::float8 AS qty, l.rate::float8 AS rate, l.day_value, l.ot, l.position
+    `SELECT ${LINE_COLUMNS}
        FROM quote_line l
        JOIN quote_section s ON s.id = l.section_id
       WHERE s.quote_id = $1
@@ -501,16 +550,27 @@ async function loadSections(quoteId: string): Promise<QuoteSection[]> {
 
   const linesBySection = new Map<string, QuoteLine[]>();
   for (const l of lineRes.rows) {
+    const math = {
+      qty: Number(l.qty ?? 0),
+      rate: Number(l.rate ?? 0),
+      ot: l.ot === true,
+      tax_pct: Number(l.tax_pct ?? 0),
+      markup_pct: Number(l.markup_pct ?? 0),
+    };
     const line: QuoteLine = {
       id: l.id,
       line_type: l.line_type,
       description: l.description,
-      qty: Number(l.qty ?? 0),
-      rate: Number(l.rate ?? 0),
+      qty: math.qty,
+      rate: math.rate,
       day_value: l.day_value,
-      ot: l.ot === true,
+      ot: math.ot,
+      uom: l.uom,
+      tax_pct: math.tax_pct,
+      markup_pct: math.markup_pct,
       position: Number(l.position),
-      amount: computeLineAmount({ qty: Number(l.qty ?? 0), rate: Number(l.rate ?? 0), ot: l.ot === true }),
+      amount: computeLineAmount(math, otMultiplier),
+      tax: computeLineTax(math, otMultiplier),
     };
     const bucket = linesBySection.get(l.section_id);
     if (bucket) bucket.push(line);
@@ -546,13 +606,34 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
   if (res.rows.length === 0) return null;
   const q = res.rows[0];
 
-  const sections = await loadSections(q.id);
+  // 0048 · the multiplier the quote was priced with. A quote raised before
+  // the contract existed (ot_multiplier NULL) keeps computing what it did.
+  const match = await contractForTask(taskId);
+  const otMultiplier =
+    q.ot_multiplier !== null && q.ot_multiplier > 0
+      ? Number(q.ot_multiplier)
+      : match?.rates.ot_multiplier ?? OT_MULTIPLIER;
+  const rates: QuoteRates = {
+    ot_multiplier: otMultiplier,
+    standard: match?.rates.standard ?? null,
+    overtime: match?.rates.overtime ?? null,
+    trip_charge: match?.rates.trip_charge ?? null,
+    markup_pct: match?.rates.markup_pct ?? null,
+    contract: q.contract_id
+      ? { id: q.contract_id, name: q.contract_name ?? 'Contract' }
+      : match
+        ? { id: match.contract.id, name: match.contract.name }
+        : null,
+  };
+
+  const sections = await loadSections(q.id, otMultiplier);
   const nteOverride = await openNteOverride(taskId);
   const totals = computeQuoteTotals({
     sections,
     sales_tax: Number(q.sales_tax ?? 0),
     total_cost: q.total_cost === null ? null : Number(q.total_cost),
     nte: q.nte === null ? null : Number(q.nte),
+    ot_multiplier: otMultiplier,
   });
 
   const summary: QuoteSummary = {
@@ -577,6 +658,12 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     id: q.id,
     task_id: q.task_id,
     wo_number: q.wo_number,
+    number: q.number,
+    document_type: (q.document_type || 'quote') as QuoteDocumentType,
+    currency: q.currency || 'USD',
+    bill_to: q.bill_to,
+    ship_to: q.ship_to,
+    rates,
     status: q.status,
     rev: Number(q.rev),
     specs: q.specs,
@@ -601,18 +688,21 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
  * to — "an approved quote fills money.quote" (product/quotes-payments.md §1).
  */
 export async function getBindableQuoteTotal(taskId: string): Promise<number | null> {
-  const res = await query<{ id: string; sales_tax: number | null; total_cost: number | null }>(
-    `SELECT id::text AS id, sales_tax::float8 AS sales_tax, total_cost::float8 AS total_cost
+  const res = await query<{ id: string; sales_tax: number | null; total_cost: number | null; ot_multiplier: number | null }>(
+    `SELECT id::text AS id, sales_tax::float8 AS sales_tax, total_cost::float8 AS total_cost,
+            ot_multiplier::float8 AS ot_multiplier
        FROM quote WHERE task_id = $1 AND status IN ('approved','sent') LIMIT 1`,
     [taskId],
   );
   if (res.rows.length === 0) return null;
-  const sections = await loadSections(res.rows[0].id);
+  const mult = res.rows[0].ot_multiplier ?? OT_MULTIPLIER;
+  const sections = await loadSections(res.rows[0].id, mult);
   return computeQuoteTotals({
     sections,
     sales_tax: Number(res.rows[0].sales_tax ?? 0),
     total_cost: null,
     nte: null,
+    ot_multiplier: mult,
   }).grand_total;
 }
 
@@ -621,6 +711,8 @@ export interface QuoteListItem {
   id: string;
   task_id: string;
   wo_number: string;
+  /** 0048 · the document number. */
+  number: string | null;
   title: string | null;
   client: string | null;
   status: QuoteStatus;
@@ -666,6 +758,8 @@ export async function listQuotes(
     client: string | null;
     status: QuoteStatus;
     sales_tax: number | null;
+    number: string | null;
+    ot_multiplier: number | null;
     updated_at: string | null;
     wo_due: string | null;
     wo_nte: number | string | null;
@@ -675,6 +769,7 @@ export async function listQuotes(
   }>(
     `SELECT q.id::text AS id, q.task_id::text AS task_id, q.status,
             q.sales_tax::float8 AS sales_tax,
+            q.number, q.ot_multiplier::float8 AS ot_multiplier,
             ${ISO('q.updated_at')} AS updated_at,
             t.wo_number, t.title, t.client,
             t.fields->>'Due Date'   AS wo_due,
@@ -692,17 +787,20 @@ export async function listQuotes(
 
   const items: QuoteListItem[] = [];
   for (const r of res.rows) {
-    const sections = await loadSections(r.id);
+    const mult = r.ot_multiplier ?? OT_MULTIPLIER;
+    const sections = await loadSections(r.id, mult);
     const totals = computeQuoteTotals({
       sections,
       sales_tax: Number(r.sales_tax ?? 0),
       total_cost: null,
       nte: null,
+      ot_multiplier: mult,
     });
     items.push({
       id: r.id,
       task_id: r.task_id,
       wo_number: r.wo_number,
+      number: r.number,
       title: r.title,
       client: r.client,
       status: r.status,
@@ -739,6 +837,10 @@ export interface LineInput {
   rate: number;
   day_value?: string | null;
   ot?: boolean;
+  /** 0048 */
+  uom?: string | null;
+  tax_pct?: number;
+  markup_pct?: number;
 }
 
 export interface QuoteUpdateInput {
@@ -748,6 +850,11 @@ export interface QuoteUpdateInput {
   note_to_customer?: string | null;
   summary_pinned?: string | null;
   sections?: SectionInput[];
+  /** 0048 · the document fields. */
+  document_type?: QuoteDocumentType;
+  currency?: string;
+  bill_to?: string | null;
+  ship_to?: string | null;
 }
 
 /** Statuses a quote may still be edited in (§1: edits stop once approved). */
@@ -768,10 +875,43 @@ export async function createQuote(taskId: string, actor: ActingPrincipal): Promi
     throw badRequest('A quote already exists for this work order');
   }
 
+  // 0048 · the number belongs to the billing entity and the year; 0046 · the
+  // contract in force today is snapshotted so the price never drifts under
+  // an approved quote. Both read BEFORE the transaction (single-connection).
+  const taskRow = await query<{ client: string | null; billing_entity: string | null }>(
+    `SELECT client, billing_entity FROM task WHERE id = $1`,
+    [taskId],
+  );
+  const entity =
+    (taskRow.rows[0]?.billing_entity ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'Q';
+  const match = await contractForTask(taskId);
+
   await withTransaction(async (tx) => {
+    const year = new Date().getUTCFullYear();
+    await tx.query(
+      `INSERT INTO quote_sequence (billing_entity, year, next_number)
+       VALUES ($1, $2, 1) ON CONFLICT (billing_entity, year) DO NOTHING`,
+      [entity, year],
+    );
+    const seq = await tx.query<{ next_number: number }>(
+      `UPDATE quote_sequence SET next_number = next_number + 1
+        WHERE billing_entity = $1 AND year = $2
+        RETURNING next_number - 1 AS next_number`,
+      [entity, year],
+    );
+    const number = `Q-${entity}-${year}-${String(seq.rows[0].next_number).padStart(4, '0')}`;
+
     const ins = await tx.query<{ id: string }>(
-      `INSERT INTO quote (task_id, status, created_by) VALUES ($1, 'draft', $2) RETURNING id::text AS id`,
-      [taskId, actor.id],
+      `INSERT INTO quote (task_id, status, created_by, number, bill_to, contract_id, ot_multiplier)
+       VALUES ($1, 'draft', $2, $3, $4, $5::uuid, $6) RETURNING id::text AS id`,
+      [
+        taskId,
+        actor.id,
+        number,
+        taskRow.rows[0]?.client ?? null,
+        match?.contract.id ?? null,
+        match ? match.rates.ot_multiplier : null,
+      ],
     );
     // Every quote opens with its INCURRED section: the comp has no "add incurred"
     // affordance, it is always there.
@@ -829,6 +969,10 @@ export async function updateQuote(
     if (input.specs !== undefined) set('specs', input.specs);
     if (input.note_to_customer !== undefined) set('note_to_customer', input.note_to_customer);
     if (input.summary_pinned !== undefined) set('summary_pinned', input.summary_pinned);
+    if (input.document_type !== undefined) set('document_type', input.document_type);
+    if (input.currency !== undefined) set('currency', input.currency);
+    if (input.bill_to !== undefined) set('bill_to', input.bill_to);
+    if (input.ship_to !== undefined) set('ship_to', input.ship_to);
     if (sets.length > 0) {
       params.push(cur.id);
       await tx.query(`UPDATE quote SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
@@ -859,8 +1003,8 @@ export async function updateQuote(
         for (const line of section.lines ?? []) {
           await tx.query(
             `INSERT INTO quote_line
-               (section_id, line_type, description, qty, rate, day_value, ot, position)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+               (section_id, line_type, description, qty, rate, day_value, ot, position, uom, tax_pct, markup_pct)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
             [
               sectionId,
               line.line_type,
@@ -870,6 +1014,9 @@ export async function updateQuote(
               line.day_value ?? null,
               line.ot ?? false,
               linePos++,
+              line.uom?.trim() || null,
+              line.tax_pct ?? 0,
+              line.markup_pct ?? 0,
             ],
           );
         }
@@ -924,7 +1071,9 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
   const head = (
     await tx.query(
       `SELECT sales_tax::float8 AS sales_tax, total_cost::float8 AS total_cost,
-              specs, note_to_customer, summary_pinned
+              specs, note_to_customer, summary_pinned,
+              number, document_type, currency, bill_to, ship_to,
+              ot_multiplier::float8 AS ot_multiplier
          FROM quote WHERE id = $1`,
       [quoteId],
     )
@@ -934,7 +1083,14 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
     specs: string | null;
     note_to_customer: string | null;
     summary_pinned: string | null;
+    number: string | null;
+    document_type: string | null;
+    currency: string | null;
+    bill_to: string | null;
+    ship_to: string | null;
+    ot_multiplier: number | null;
   };
+  const mult = head?.ot_multiplier ?? OT_MULTIPLIER;
   const secRows = (
     await tx.query(
       `SELECT id::text AS id, kind, name, narrative_reported, scope_lines,
@@ -947,8 +1103,7 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
   ).rows as unknown as SectionRow[];
   const lineRows = (
     await tx.query(
-      `SELECT l.id::text AS id, l.section_id::text AS section_id, l.line_type, l.description,
-              l.qty::float8 AS qty, l.rate::float8 AS rate, l.day_value, l.ot, l.position
+      `SELECT ${LINE_COLUMNS}
          FROM quote_line l
          JOIN quote_section s ON s.id = l.section_id
         WHERE s.quote_id = $1
@@ -968,10 +1123,29 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
         const qty = Number(l.qty ?? 0);
         const rate = Number(l.rate ?? 0);
         const ot = l.ot === true;
+        const tax_pct = Number(l.tax_pct ?? 0);
+        const markup_pct = Number(l.markup_pct ?? 0);
+        const extras = [
+          ot ? 'OT' : '',
+          markup_pct > 0 ? `+${markup_pct}% markup` : '',
+          tax_pct > 0 ? `${tax_pct}% tax` : '',
+        ]
+          .filter(Boolean)
+          .join(', ');
         lines.push(
-          `${label} · ${l.description}: ${qty} × ${money(rate)}${ot ? ' OT' : ''} = ${money(computeLineAmount({ qty, rate, ot }))}`,
+          `${label} · ${l.description}: ${qty}${l.uom ? ` ${l.uom}` : ''} × ${money(rate)}${extras ? ` (${extras})` : ''} = ${money(computeLineAmount({ qty, rate, ot, tax_pct, markup_pct }, mult))}`,
         );
-        return { line_type: l.line_type, description: l.description, qty, rate, day_value: l.day_value, ot };
+        return {
+          line_type: l.line_type,
+          description: l.description,
+          qty,
+          rate,
+          day_value: l.day_value,
+          ot,
+          uom: l.uom ?? null,
+          tax_pct,
+          markup_pct,
+        };
       });
     return {
       kind: s.kind,
@@ -991,11 +1165,17 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
     sales_tax,
     total_cost,
     nte: null,
+    ot_multiplier: mult,
   });
 
   return {
-    name: 'Quote',
+    name: head?.number ? `Quote ${head.number}` : 'Quote',
     quote_id: quoteId,
+    number: head?.number ?? null,
+    document_type: head?.document_type ?? 'quote',
+    bill_to: head?.bill_to ?? null,
+    ship_to: head?.ship_to ?? null,
+    ot_multiplier: mult,
     sales_tax,
     total_cost,
     specs: head?.specs ?? null,

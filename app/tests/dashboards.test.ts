@@ -12,6 +12,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   PREBUILT_DASHBOARDS,
+  SOURCE_FIELDS,
+  SOURCE_STATUSES,
   WIDGET_KINDS,
   WIDGET_METRICS,
   WIDGET_WIDTHS,
@@ -19,6 +21,8 @@ import {
   formatBucket,
   periodSteps,
   resolvePeriod,
+  widgetAsksQuestion,
+  widgetIsFigure,
   widgetSubtitle,
 } from '../packages/shared/src/dashboards';
 
@@ -49,9 +53,32 @@ describe('the dashboards we ship', () => {
     }
   });
 
+  it('give every card over the money records only fields that source has (0049)', () => {
+    for (const w of ALL_WIDGETS) {
+      const source = w.config.source;
+      if (!source || source === 'work_orders') continue;
+      const allowed = SOURCE_FIELDS[source].map((f) => f.key);
+      for (const key of [w.config.value_field, w.config.group_field, w.config.time_field]) {
+        if (key) expect(allowed, `${w.dashboard} › ${w.label}: ${key}`).toContain(key);
+      }
+      for (const s of w.config.source_status ?? []) {
+        expect(SOURCE_STATUSES[source], `${w.dashboard} › ${w.label}: ${s}`).toContain(s);
+      }
+    }
+  });
+
+  it('give every piece of furniture its own bit — text, a picture, a button (0049)', () => {
+    for (const w of ALL_WIDGETS) {
+      if (widgetAsksQuestion(w.kind)) continue;
+      if (w.kind === 'narrative') expect(w.config.text?.trim(), `${w.dashboard} › ${w.label}`).toBeTruthy();
+      else expect(w.config.url?.trim(), `${w.dashboard} › ${w.label}`).toBeTruthy();
+    }
+  });
+
   it('give every chart something to cut by — a category, or time', () => {
     for (const w of ALL_WIDGETS) {
-      if (w.kind === 'number') continue;
+      // A figure (number, gauge, live) and the furniture cut by nothing.
+      if (widgetIsFigure(w.kind) || !widgetAsksQuestion(w.kind)) continue;
       // A line cuts by WHEN; every other chart cuts by a category. Neither
       // can draw without one, which is what this guards.
       const cutBy = w.kind === 'line' ? w.config.time_field : w.config.group_field;

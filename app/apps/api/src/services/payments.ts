@@ -35,6 +35,7 @@ import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
 import { requirePerm } from './permissions.js';
 import { assertNoOpenNteOverride } from './approvals.js';
+import { assertTierAllows, listApprovalTiers, tierSummary } from './approvalTiers.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -173,12 +174,13 @@ function mapPayment(r: PaymentRow): PaymentRequest {
   };
 }
 
-function mapListItem(r: PaymentRow): PaymentListItem {
+function mapListItem(r: PaymentRow, tier: PaymentListItem['tier'] = null): PaymentListItem {
   return {
     ...mapPayment(r),
     wo_number: r.wo_number,
     title: r.title,
     client: r.client,
+    tier,
     nte_override_open: Boolean(r.nte_override_open),
     wo_due: r.wo_due,
     wo_nte: moneyNum(r.wo_nte),
@@ -258,7 +260,13 @@ export async function listAllPaymentRequests(
       LIMIT ${p.add(limit)}`,
     p.values,
   );
-  const items = res.rows.map(mapListItem);
+  // Rule 6.2.3 (0047): each row says which amount band it falls in and
+  // whether THIS viewer may approve inside it, so the button locks with the
+  // reason before the click. One tier query for the whole queue.
+  const tiers = viewer ? await listApprovalTiers() : [];
+  const items = res.rows.map((r) =>
+    mapListItem(r, viewer ? tierSummary(tiers, 'payment', Number(r.amount ?? 0), viewer) : null),
+  );
   const counts = Object.fromEntries(STATUSES.map((s) => [s, 0])) as Record<PaymentRequestStatus, number>;
   for (const i of items) counts[i.status] += 1;
   return { items, total: items.length, counts };
@@ -494,6 +502,9 @@ async function decide(
     override waits on a manager — rule 1.5.2. */
 export async function approvePaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
   requirePerm(actor, 'payments', 'approve', 'You cannot approve payment requests');
+  // Rule 6.2.3 (0047): the amount's band may exclude this role.
+  const pending = await getPaymentRequest(id);
+  await assertTierAllows('payment', pending.amount, actor, 'Approving a payment request');
   return decide(id, 'approve', actor, null, 'Approving this payment');
 }
 

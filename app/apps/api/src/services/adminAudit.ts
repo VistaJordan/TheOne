@@ -38,7 +38,11 @@ export type AdminEntity =
   // A CSV download: one row per file, keyed to the person who pulled it.
   | 'export'
   // A work-order draft in the OP Admin intake (0040, section 14).
-  | 'intake_draft';
+  | 'intake_draft'
+  // A client rate card (0046).
+  | 'contract'
+  // An approval band by amount (0047, rule 6.2.3).
+  | 'approval_tier';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

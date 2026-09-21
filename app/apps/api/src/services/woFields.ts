@@ -553,7 +553,16 @@ function compileRule(f: ResolvedField, rule: FilterRule, p: Params): string {
   }
 
   const e = f.type === 'date' || f.type === 'datetime' ? dateExpr(f, p) : exprFor(f, p);
-  const hole = p.add(coerce(f, rule.value));
+  // 0049 · a date rule may say `today`, `today+7` or `today-1` instead of a
+  // literal day, so a saved card ("past SLA") stays true tomorrow. Resolved
+  // in SQL, on the database's clock, so every card on a board agrees.
+  const relative =
+    (f.type === 'date' || f.type === 'datetime') && typeof rule.value === 'string'
+      ? /^today([+-]\d{1,3})?$/.exec(rule.value.trim())
+      : null;
+  const hole = relative
+    ? `(CURRENT_DATE + ${p.add(Number(relative[1] ?? 0))}::int)`
+    : p.add(coerce(f, rule.value));
   switch (rule.op) {
     case 'eq':
       return `${e} = ${hole}`;

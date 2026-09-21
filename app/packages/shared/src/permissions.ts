@@ -564,7 +564,14 @@ export function buildPermissionTree(
       key: 'invoicing',
       label: 'Invoicing',
       actions: ['view', 'create', 'edit', 'approve'],
-      note: 'Create = raise a draft; edit = change a draft; approve = send it to the client.',
+      note: 'Create = raise a draft; edit = change a draft; approve = send it to the client (rule 6.2.3 tiers apply by amount).',
+    },
+    {
+      // 0046 · the rate cards a quote and an invoice price against.
+      key: 'contracts',
+      label: 'Contracts and rates',
+      actions: ['view', 'create', 'edit', 'delete'],
+      note: 'The client rate cards: hourly, overtime, trip charge, markup. View = read them and see which one a quote used; edit = change the terms.',
     },
     {
       key: 'admin',

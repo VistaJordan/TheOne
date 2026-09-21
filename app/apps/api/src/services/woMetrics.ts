@@ -32,7 +32,9 @@ import {
   type WidgetBucket,
   type WidgetConfig,
   type WidgetMetric,
+  type WidgetSource,
   type WoFieldTime,
+  type WoFilterSet,
 } from '@theone/shared';
 import {
   Params,
@@ -103,6 +105,146 @@ export async function metricBreakdown(
 
 // ── Widgets (0042) ───────────────────────────────────────────────────────────
 
+// ── Other sources (0049) ─────────────────────────────────────────────────────
+//
+// A card may ask its question of the invoices, the payment requests or the
+// vendor bills instead of the work orders. Each source is a small fixed
+// model: the table, its join to `task` (for the viewer's scope — money is
+// not an exception to 0026), and the columns a card may name. Nothing here
+// interpolates a field name the model does not list.
+
+interface SourceModel {
+  from: string;
+  /** SQL for each allowed field key, aliased as it should be read. */
+  fields: Record<string, string>;
+  /** The date the board's period narrows on. */
+  periodField: string;
+  /** The predicate for "past due and unpaid", when the source has one. */
+  overdue?: string;
+}
+
+const SOURCE_MODELS: Record<Exclude<WidgetSource, 'work_orders'>, SourceModel> = {
+  invoices: {
+    from: `FROM invoice x JOIN task t ON t.id = x.task_id`,
+    fields: {
+      total: 'x.total',
+      subtotal: 'x.subtotal',
+      tax: 'x.tax',
+      status: 'x.status',
+      client: 'x.client',
+      billing_entity: 'x.billing_entity',
+      created_at: 'x.created_at',
+      issued_at: 'x.issued_at',
+      due_at: 'x.due_at',
+      paid_at: 'x.paid_at',
+    },
+    periodField: 'x.created_at',
+    overdue: `x.status = 'sent' AND x.due_at IS NOT NULL AND x.due_at < CURRENT_DATE`,
+  },
+  payments: {
+    from: `FROM payment_request x JOIN task t ON t.id = x.task_id LEFT JOIN vendor v ON v.id = x.vendor_id`,
+    fields: {
+      amount: 'x.amount',
+      status: 'x.status',
+      method: 'x.method',
+      payee: 'COALESCE(v.name, x.payee_name)',
+      client: 't.client',
+      created_at: 'x.created_at',
+      approved_at: 'x.approved_at',
+      paid_at: 'x.paid_at',
+    },
+    periodField: 'x.created_at',
+  },
+  vendor_bills: {
+    from: `FROM vendor_bill x JOIN task t ON t.id = x.task_id`,
+    fields: {
+      total: 'x.total',
+      status: 'x.status',
+      vendor_name: 'x.vendor_name',
+      client: 't.client',
+      received_on: 'x.received_on',
+      due_on: 'x.due_on',
+      paid_at: 'x.paid_at',
+    },
+    periodField: 'x.received_on',
+    overdue: `x.status IN ('received', 'approved', 'disputed') AND x.due_on IS NOT NULL AND x.due_on < CURRENT_DATE`,
+  },
+};
+
+function sourceField(model: SourceModel, key: string | undefined, what: string): string {
+  const expr = key ? model.fields[key] : undefined;
+  if (!expr) throw new ApiError('BAD_REQUEST', `This card names a ${what} the source does not have`);
+  return expr;
+}
+
+async function metricSourceWidget(
+  source: Exclude<WidgetSource, 'work_orders'>,
+  config: WidgetConfig,
+  viewer?: ActingPrincipal,
+  period?: { from?: string | null; to?: string | null },
+): Promise<{ total: number; buckets: WidgetBucket[]; other: number }> {
+  const model = SOURCE_MODELS[source];
+  const metric: WidgetMetric = config.metric ?? 'count';
+  const overTime = Boolean(config.time_field);
+  const limit = Math.min(
+    Math.max(config.limit ?? (overTime ? LINE_DEFAULT_LIMIT : WIDGET_DEFAULT_LIMIT), 1),
+    WIDGET_MAX_LIMIT,
+  );
+
+  const whereFor = (p: Params) => {
+    const where = ['t.deleted_at IS NULL'];
+    const scope = viewer ? woScopeSql(viewer, p) : null;
+    if (scope) where.push(scope);
+    if (config.source_status && config.source_status.length > 0) {
+      where.push(`x.status IN (${config.source_status.map((s) => p.add(s)).join(', ')})`);
+    }
+    if (config.source_overdue && model.overdue) where.push(`(${model.overdue})`);
+    if (period?.from) where.push(`${model.periodField} >= ${p.add(period.from)}::date`);
+    if (period?.to) where.push(`${model.periodField} <= ${p.add(period.to)}::date`);
+    return where.join(' AND ');
+  };
+  const aggFor = () => {
+    if (metric === 'count') return 'COUNT(*)::float8';
+    const expr = sourceField(model, config.value_field, 'number');
+    return metric === 'sum' ? `COALESCE(SUM(${expr}), 0)::float8` : `AVG(${expr})::float8`;
+  };
+
+  const tp = new Params();
+  const totalRes = await query<{ n: number | string | null }>(
+    `SELECT ${aggFor()} AS n ${model.from} WHERE ${whereFor(tp)}`,
+    tp.values,
+  );
+  const total = Number(totalRes.rows[0]?.n ?? 0);
+
+  if (overTime) {
+    const p = new Params();
+    const col = sourceField(model, config.time_field, 'date');
+    const bucket = config.bucket ?? 'month';
+    const expr = `to_char(date_trunc(${p.add(bucket)}, ${col}::timestamptz), 'YYYY-MM-DD')`;
+    const res = await query<{ v: string | null; n: number | string | null }>(
+      `SELECT ${expr} AS v, ${aggFor()} AS n ${model.from}
+        WHERE ${whereFor(p)} AND ${col} IS NOT NULL
+        GROUP BY 1 ORDER BY 1 DESC LIMIT ${limit}`,
+      p.values,
+    );
+    return { total, buckets: res.rows.map((r) => ({ value: r.v, n: Number(r.n ?? 0) })).reverse(), other: 0 };
+  }
+
+  if (!config.group_field) return { total, buckets: [], other: 0 };
+  const p = new Params();
+  const expr = `(${sourceField(model, config.group_field, 'field')})::text`;
+  const res = await query<{ v: string | null; n: number | string | null }>(
+    `SELECT ${expr} AS v, ${aggFor()} AS n ${model.from} WHERE ${whereFor(p)} GROUP BY 1`,
+    p.values,
+  );
+  const all = res.rows
+    .map((r) => ({ value: r.v === '' ? null : r.v, n: Number(r.n ?? 0) }))
+    .sort((a, b) => b.n - a.n || String(a.value ?? '').localeCompare(String(b.value ?? '')));
+  const buckets = all.slice(0, limit);
+  const other = metric === 'avg' ? 0 : all.slice(limit).reduce((n, b) => n + b.n, 0);
+  return { total, buckets, other };
+}
+
 /**
  * One dashboard widget's answer: a number, or a number per bucket.
  *
@@ -121,7 +263,15 @@ export async function metricWidget(
   viewer?: ActingPrincipal,
   /** 0044 · the board's period, ANDed into every card on it. */
   period?: { from?: string | null; to?: string | null },
+  /** 0049 · the board's filter bar (client, store, …), ANDed into every
+      work-order card. Other sources ignore it: an invoice has no trade. */
+  page?: WoFilterSet | null,
 ): Promise<{ total: number; buckets: WidgetBucket[]; other: number }> {
+  // 0049 · a card over the money records takes its own path.
+  if (config.source && config.source !== 'work_orders') {
+    return metricSourceWidget(config.source, config, viewer, period);
+  }
+
   const metric: WidgetMetric = config.metric ?? 'count';
   const overTime = Boolean(config.time_field);
   const limit = Math.min(
@@ -136,6 +286,10 @@ export async function metricWidget(
     if (scope) where.push(scope);
     if (config.filters) {
       const w = await compileFilters(config.filters as FilterSet, p);
+      if (w) where.push(w);
+    }
+    if (page && page.rules.length > 0) {
+      const w = await compileFilters(page as FilterSet, p);
       if (w) where.push(w);
     }
     // The board's period, on the one date every work order has. It ANDs with

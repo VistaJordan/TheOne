@@ -19,7 +19,18 @@ import type { WoFilterSet } from './index';
 
 // ── Widgets ──────────────────────────────────────────────────────────────────
 
-export const WIDGET_KINDS = ['number', 'bar', 'donut', 'table', 'line'] as const;
+export const WIDGET_KINDS = [
+  'number',
+  'bar',
+  'donut',
+  'table',
+  'line',
+  'gauge',
+  'live',
+  'narrative',
+  'image',
+  'link',
+] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];
 
 export const WIDGET_KIND_LABELS: Record<WidgetKind, string> = {
@@ -28,7 +39,143 @@ export const WIDGET_KIND_LABELS: Record<WidgetKind, string> = {
   donut: 'A donut',
   table: 'A table',
   line: 'A line over time',
+  gauge: 'A gauge against a target',
+  live: 'A live number (re-reads itself)',
+  narrative: 'A block of text',
+  image: 'A picture',
+  link: 'A button to a page',
 };
+
+/** 0049 · the kinds that ASK something of the records. The other three are
+    furniture — text, a picture, a button — and never run a query. */
+export const QUERY_WIDGET_KINDS: readonly WidgetKind[] = ['number', 'bar', 'donut', 'table', 'line', 'gauge', 'live'];
+export function widgetAsksQuestion(kind: WidgetKind): boolean {
+  return QUERY_WIDGET_KINDS.includes(kind);
+}
+/** The kinds whose answer is one figure rather than buckets. */
+export function widgetIsFigure(kind: WidgetKind): boolean {
+  return kind === 'number' || kind === 'gauge' || kind === 'live';
+}
+
+/** How often a live card re-reads, when the card does not say. */
+export const LIVE_DEFAULT_SECONDS = 30;
+export const LIVE_MIN_SECONDS = 5;
+
+// ── Sources (0049) ───────────────────────────────────────────────────────────
+//
+// A card used to ask its question of the work-order set only. Invoices
+// (0045), payment requests and vendor bills (0047) are records now, so a card
+// may ask them instead. Each source lists the fields a card can total, cut
+// by, or run along; anything else is refused on the way in so a card cannot
+// name a column that is not there.
+
+export const WIDGET_SOURCES = ['work_orders', 'invoices', 'payments', 'vendor_bills'] as const;
+export type WidgetSource = (typeof WIDGET_SOURCES)[number];
+
+export const WIDGET_SOURCE_LABELS: Record<WidgetSource, string> = {
+  work_orders: 'Work orders',
+  invoices: 'Client invoices',
+  payments: 'Payment requests',
+  vendor_bills: 'Vendor bills',
+};
+
+/** What a count of this source is called. */
+export const WIDGET_SOURCE_NOUNS: Record<WidgetSource, string> = {
+  work_orders: 'Work orders',
+  invoices: 'Invoices',
+  payments: 'Payment requests',
+  vendor_bills: 'Vendor bills',
+};
+
+export interface SourceField {
+  key: string;
+  label: string;
+  type: 'number' | 'text' | 'date';
+}
+
+/** The vocabulary of each non-work-order source. Work orders use the field
+    catalogue (any core column or custom field), so they are not listed. */
+export const SOURCE_FIELDS: Record<Exclude<WidgetSource, 'work_orders'>, SourceField[]> = {
+  invoices: [
+    { key: 'total', label: 'Total', type: 'number' },
+    { key: 'subtotal', label: 'Subtotal', type: 'number' },
+    { key: 'tax', label: 'Tax', type: 'number' },
+    { key: 'status', label: 'Status', type: 'text' },
+    { key: 'client', label: 'Client', type: 'text' },
+    { key: 'billing_entity', label: 'Billing entity', type: 'text' },
+    { key: 'created_at', label: 'Raised on', type: 'date' },
+    { key: 'issued_at', label: 'Sent on', type: 'date' },
+    { key: 'due_at', label: 'Due on', type: 'date' },
+    { key: 'paid_at', label: 'Paid on', type: 'date' },
+  ],
+  payments: [
+    { key: 'amount', label: 'Amount', type: 'number' },
+    { key: 'status', label: 'Status', type: 'text' },
+    { key: 'method', label: 'Method', type: 'text' },
+    { key: 'payee', label: 'Payee', type: 'text' },
+    { key: 'client', label: 'Client', type: 'text' },
+    { key: 'created_at', label: 'Requested on', type: 'date' },
+    { key: 'approved_at', label: 'Approved on', type: 'date' },
+    { key: 'paid_at', label: 'Paid on', type: 'date' },
+  ],
+  vendor_bills: [
+    { key: 'total', label: 'Total', type: 'number' },
+    { key: 'status', label: 'Status', type: 'text' },
+    { key: 'vendor_name', label: 'Vendor', type: 'text' },
+    { key: 'client', label: 'Client', type: 'text' },
+    { key: 'received_on', label: 'Received on', type: 'date' },
+    { key: 'due_on', label: 'Due on', type: 'date' },
+    { key: 'paid_at', label: 'Paid on', type: 'date' },
+  ],
+};
+
+/** The statuses each source may be narrowed to. */
+export const SOURCE_STATUSES: Record<Exclude<WidgetSource, 'work_orders'>, string[]> = {
+  invoices: ['draft', 'sent', 'paid', 'void'],
+  payments: ['requested', 'approved', 'sent_to_yoda', 'paid', 'rejected'],
+  vendor_bills: ['received', 'approved', 'paid', 'disputed', 'void'],
+};
+
+/** Where a card over this source drills through to. */
+export const SOURCE_DRILL_PATH: Record<WidgetSource, string> = {
+  work_orders: '/',
+  invoices: '/receivables/invoicing',
+  payments: '/payments',
+  vendor_bills: '/payments?lane=bills',
+};
+
+// ── Page filters (0049) ──────────────────────────────────────────────────────
+//
+// Facilio's boards carry a filter bar (vendor, site) that narrows every card
+// at once. Ours narrows on the fields a dispatcher actually reaches for; the
+// values come from the field catalogue's option lists, or are typed. They
+// AND into every card on the board, like the period does.
+
+export interface PageFilterField {
+  key: string;
+  label: string;
+}
+
+export const PAGE_FILTER_FIELDS: readonly PageFilterField[] = [
+  { key: 'client', label: 'Client' },
+  { key: 'billing_entity', label: 'Billing entity' },
+  { key: 'trade', label: 'Trade' },
+  { key: 'fields.Store', label: 'Store' },
+  { key: 'fields.Assignee', label: 'Dispatcher' },
+];
+
+export interface PageFilter {
+  field: string;
+  value: string;
+}
+
+/** The board's filter bar as filter rules, ANDed into every card. */
+export function pageFiltersToSet(filters: PageFilter[]): WoFilterSet | null {
+  const rules = filters
+    .filter((f) => f.field && f.value.trim() !== '')
+    .map((f) => ({ field: f.field, op: 'eq' as const, value: f.value.trim() }));
+  return rules.length === 0 ? null : { match: 'all', rules };
+}
 
 /** How a line buckets time. A line is the only card that does not group by a
     category — it groups by WHEN, and draws in date order rather than by size,
@@ -76,6 +223,22 @@ export interface WidgetConfig {
   /** Which work orders are in scope for this widget at all. */
   filters?: WoFilterSet;
   limit?: number;
+  /** 0049 · which records the question is asked of. Absent = work orders. */
+  source?: WidgetSource;
+  /** 0049 · for a non-work-order source: only these statuses. */
+  source_status?: string[];
+  /** 0049 · for invoices / vendor bills: only rows past their due date and unpaid. */
+  source_overdue?: boolean;
+  /** 0049 · gauge: the figure the total is read against. */
+  target?: number;
+  /** 0049 · live: seconds between re-reads. */
+  refresh_seconds?: number;
+  /** 0049 · narrative: the text. Plain text with blank lines as paragraphs. */
+  text?: string;
+  /** 0049 · image: what to show; link: where the button goes. */
+  url?: string;
+  /** 0049 · link: what the button says. */
+  button_label?: string;
 }
 
 export interface DashboardWidget {
@@ -139,7 +302,7 @@ export interface WidgetResult {
 
 /** How a widget's numbers are worded, for the drill-through link's title. */
 export function widgetSubtitle(config: WidgetConfig, fieldLabel?: string): string {
-  if (config.metric === 'count') return 'Work orders';
+  if (config.metric === 'count') return WIDGET_SOURCE_NOUNS[config.source ?? 'work_orders'];
   const what = fieldLabel ?? config.value_field ?? 'value';
   return config.metric === 'sum' ? `Total ${what}` : `Average ${what}`;
 }
@@ -385,6 +548,225 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
         label: 'Profit by client',
         width: 'full',
         config: { metric: 'sum', value_field: 'fields.Profit', group_field: 'client', limit: 15 },
+      },
+    ],
+  },
+  {
+    // 0049 · built from the money records that exist now: invoices (0045),
+    // payment requests, vendor bills (0047). Every card names its source.
+    key: 'accounting',
+    name: 'Accounting',
+    description: 'Cash in and cash out: what is billed, what is owed to us, what we owe.',
+    folder: 'Finance',
+    shared_all: false,
+    shared_roles: ['admin', 'ar', 'ap', 'tl', 'am'],
+    widgets: [
+      {
+        kind: 'number',
+        label: 'Outstanding (sent, unpaid)',
+        width: 'quarter',
+        config: { metric: 'sum', value_field: 'total', source: 'invoices', source_status: ['sent'] },
+      },
+      {
+        kind: 'number',
+        label: 'Overdue',
+        width: 'quarter',
+        config: {
+          metric: 'sum',
+          value_field: 'total',
+          source: 'invoices',
+          source_status: ['sent'],
+          source_overdue: true,
+        },
+      },
+      {
+        kind: 'number',
+        label: 'Payments awaiting approval',
+        width: 'quarter',
+        config: { metric: 'sum', value_field: 'amount', source: 'payments', source_status: ['requested'] },
+      },
+      {
+        kind: 'number',
+        label: 'Vendor bills on file, unpaid',
+        width: 'quarter',
+        config: {
+          metric: 'sum',
+          value_field: 'total',
+          source: 'vendor_bills',
+          source_status: ['received', 'approved', 'disputed'],
+        },
+      },
+      {
+        kind: 'donut',
+        label: 'Invoices by status',
+        width: 'half',
+        config: { metric: 'sum', value_field: 'total', group_field: 'status', source: 'invoices' },
+      },
+      {
+        kind: 'bar',
+        label: 'Billed by client',
+        width: 'half',
+        config: {
+          metric: 'sum',
+          value_field: 'total',
+          group_field: 'client',
+          source: 'invoices',
+          source_status: ['sent', 'paid'],
+          limit: 10,
+        },
+      },
+      {
+        kind: 'line',
+        label: 'Invoiced per month',
+        width: 'half',
+        config: {
+          metric: 'sum',
+          value_field: 'total',
+          source: 'invoices',
+          source_status: ['sent', 'paid'],
+          time_field: 'issued_at',
+          bucket: 'month',
+          limit: 12,
+        },
+      },
+      {
+        kind: 'bar',
+        label: 'Paid to vendors, by vendor',
+        width: 'half',
+        config: {
+          metric: 'sum',
+          value_field: 'total',
+          group_field: 'vendor_name',
+          source: 'vendor_bills',
+          source_status: ['paid'],
+          limit: 10,
+        },
+      },
+      {
+        kind: 'narrative',
+        label: 'How to read this board',
+        width: 'full',
+        config: {
+          metric: 'count',
+          text:
+            'Outstanding is every invoice that has been sent and not yet paid; Overdue is the part of it past its due date. Payments awaiting approval is money technicians have asked for and a manager has not yet decided on. Each card opens the queue behind it.',
+        },
+      },
+    ],
+  },
+  {
+    // 0049 · service levels, on the SLA Due Date the intake gate stamps
+    // (0037). "today" is resolved by the API on the day the card is read.
+    key: 'service-levels',
+    name: 'Service levels',
+    description: 'Which work orders are past, at, or near their SLA.',
+    folder: 'Operations',
+    shared_all: true,
+    shared_roles: [],
+    widgets: [
+      {
+        kind: 'number',
+        label: 'Past SLA',
+        width: 'quarter',
+        config: {
+          metric: 'count',
+          filters: {
+            match: 'all',
+            rules: [
+              { field: 'fields.SLA Due Date', op: 'lt', value: 'today' },
+              { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' },
+            ],
+          },
+        },
+      },
+      {
+        kind: 'number',
+        label: 'SLA due today',
+        width: 'quarter',
+        config: {
+          metric: 'count',
+          filters: {
+            match: 'all',
+            rules: [
+              { field: 'fields.SLA Due Date', op: 'gte', value: 'today' },
+              { field: 'fields.SLA Due Date', op: 'lt', value: 'today+1', join: 'and' },
+              { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' },
+            ],
+          },
+        },
+      },
+      {
+        kind: 'number',
+        label: 'SLA due within 7 days',
+        width: 'quarter',
+        config: {
+          metric: 'count',
+          filters: {
+            match: 'all',
+            rules: [
+              { field: 'fields.SLA Due Date', op: 'gte', value: 'today' },
+              { field: 'fields.SLA Due Date', op: 'lt', value: 'today+7', join: 'and' },
+              { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' },
+            ],
+          },
+        },
+      },
+      {
+        kind: 'gauge',
+        label: 'Open work inside SLA',
+        width: 'quarter',
+        config: {
+          metric: 'count',
+          // Read against the open total: the gauge's target is filled in by
+          // the board from the "Open work orders" figure when none is set.
+          filters: {
+            match: 'all',
+            rules: [
+              { field: 'fields.SLA Due Date', op: 'gte', value: 'today' },
+              { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' },
+            ],
+          },
+        },
+      },
+      {
+        kind: 'bar',
+        label: 'Past SLA by client',
+        width: 'half',
+        config: {
+          metric: 'count',
+          group_field: 'client',
+          filters: {
+            match: 'all',
+            rules: [
+              { field: 'fields.SLA Due Date', op: 'lt', value: 'today' },
+              { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' },
+            ],
+          },
+          limit: 10,
+        },
+      },
+      {
+        kind: 'table',
+        label: 'Past SLA by dispatcher',
+        width: 'half',
+        config: {
+          metric: 'count',
+          group_field: 'fields.Assignee',
+          filters: {
+            match: 'all',
+            rules: [
+              { field: 'fields.SLA Due Date', op: 'lt', value: 'today' },
+              { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' },
+            ],
+          },
+          limit: 12,
+        },
+      },
+      {
+        kind: 'line',
+        label: 'SLA deadlines by week',
+        width: 'full',
+        config: { metric: 'count', time_field: 'fields.SLA Due Date', bucket: 'week', filters: OPEN_WORK, limit: 16 },
       },
     ],
   },

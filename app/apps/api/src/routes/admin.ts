@@ -45,6 +45,13 @@ import {
 import { listAuditLog, exportAuditCsv } from '../services/auditLog.js';
 import { deleteCicoMethod, listCicoMethods, setCicoMethod } from '../services/visits.js';
 import { deleteHoliday, listHolidays, setHoliday } from '../services/holidays.js';
+import {
+  createApprovalTier,
+  deleteApprovalTier,
+  listApprovalTiers,
+  updateApprovalTier,
+} from '../services/approvalTiers.js';
+import { APPROVAL_TIER_KINDS } from '@theone/shared';
 import { logAdminEvent, logExport } from '../services/adminAudit.js';
 import {
   createAutomation,
@@ -563,6 +570,73 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       entityId: gone.day,
       action: 'holiday_deleted',
       before: { name: gone.name, day: gone.day },
+      after: null,
+    });
+    return { ok: true };
+  });
+
+  // ── Approval tiers (0047, rule 6.2.3) ──────────────────────────────────────
+  // Bands of money and the roles that may say yes inside them. Configuration
+  // under Settings, so the same edit grant as the holiday table.
+  const tierSchema = z
+    .object({
+      kind: z.enum(APPROVAL_TIER_KINDS),
+      label: z.string().trim().max(80).optional().default(''),
+      min_amount: z.number().min(0).max(1_000_000_000),
+      max_amount: z.number().min(0).max(1_000_000_000).nullable().optional(),
+      roles: z.array(z.string().trim().min(1).max(60)).max(50).optional(),
+      position: z.number().int().min(0).max(999).optional(),
+    })
+    .strict();
+  const tierName = (t: { kind: string; label: string }) => `${t.kind} · ${t.label}`;
+
+  app.get('/admin/approval-tiers', async (req) => {
+    requireAdmin(req, 'settings');
+    return { items: await listApprovalTiers() };
+  });
+
+  app.post('/admin/approval-tiers', async (req, reply) => {
+    const actorId = requireAdmin(req, 'settings', 'edit');
+    const body = parse(tierSchema, req.body);
+    const item = await createApprovalTier(body);
+    await logAdminEvent({
+      actorId,
+      entity: 'approval_tier',
+      entityId: item.id,
+      action: 'approval_tier_created',
+      after: { name: tierName(item), ...item },
+    });
+    return reply.status(201).send({ item });
+  });
+
+  app.put('/admin/approval-tiers/:id', async (req) => {
+    const actorId = requireAdmin(req, 'settings', 'edit');
+    const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
+    const body = parse(tierSchema.partial(), req.body);
+    const before = (await listApprovalTiers()).find((t) => t.id === id) ?? null;
+    const item = await updateApprovalTier(id, body);
+    await logAdminEvent({
+      actorId,
+      entity: 'approval_tier',
+      entityId: id,
+      action: 'approval_tier_changed',
+      before: before ? { name: tierName(before), ...before } : null,
+      after: { name: tierName(item), ...item },
+    });
+    return { item };
+  });
+
+  app.delete('/admin/approval-tiers/:id', async (req) => {
+    const actorId = requireAdmin(req, 'settings', 'edit');
+    const { id } = parse(z.object({ id: z.string().uuid() }), req.params);
+    const gone = await deleteApprovalTier(id);
+    if (!gone) throw new ApiError('NOT_FOUND', 'No such tier');
+    await logAdminEvent({
+      actorId,
+      entity: 'approval_tier',
+      entityId: id,
+      action: 'approval_tier_deleted',
+      before: { name: tierName(gone), ...gone },
       after: null,
     });
     return { ok: true };

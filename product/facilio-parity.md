@@ -129,6 +129,13 @@ arrive from Ecotrak, CSV import, or the OP Admin's intake drafts.
 
 ### Batch 5 · Money  (0047, 0048)
 
+> **Built 2026-09-21** as migrations 0045 (invoices, the day before), 0046
+> (contracts and labor rates), 0047 (vendor bills + approval tiers, rule 6.2.3)
+> and 0048 (the quote as a document: number, type, bill/ship to, per-line UOM /
+> tax / markup, print view). Not done from this list: auto-generate on
+> completion is on-demand (Raise invoice reads the contract), and "PDF output
+> via templates" is the browser's print dialog over one print stylesheet.
+
 - **Invoices as records.** Receivables › Invoicing is front-end only today:
   ticks and stages live in page state and are lost on reload, and no invoice is
   ever saved.
@@ -147,6 +154,13 @@ arrive from Ecotrak, CSV import, or the OP Admin's intake drafts.
   via templates, and Approved / Pending views on the Quotes list.
 
 ### Batch 6 · Dashboards  (0049)
+
+> **Built 2026-09-21** as 0042 (library, folders, role sharing, drill-through),
+> 0044 (line cards + the period stepper) and 0049 (gauge, live, narrative,
+> image and button cards; cards over invoices / payments / vendor bills; the
+> filter bar; `today±n` date rules; the Accounting and Service levels boards).
+> Not done: tabs and groups inside one dashboard; the vendor / asset / store
+> boards still wait on batches 1–2 for their records.
 
 Library with folders per team, sharing to roles, tabs and groups inside a
 dashboard, page filters (vendor, site), period stepper, and widget types beyond

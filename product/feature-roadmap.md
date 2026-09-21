@@ -180,10 +180,13 @@ and sprints above stay as they are. The batches, in build order:
 4. **The work-order record** (0046) — Summary right rail, Tasks, Cost
    Breakdown, Timelog & Metrics, Related, and the header actions (Cancel,
    Increase NTE, Pause, ETA, Tag, Complete Service).
-5. **Money** (0047, 0048) — invoices as records (AR + vendor bills), contracts
-   and labor rates, tiered approval, and the quote document upgrade. L5.
-6. **Dashboards** (0049) — library, folders, role sharing, chart/gauge widgets,
-   drill-down. L7. Its vendor and SLA cards depend on batches 1–2.
+5. **Money** — **BUILT 2026-09-21** as 0045 (invoices), 0046 (contracts and
+   labor rates), 0047 (vendor bills + approval tiers, 6.2.3) and 0048 (the
+   quote as a document). L5.
+6. **Dashboards** — **BUILT 2026-09-21** as 0042 / 0044 / 0049 (library,
+   folders, role sharing, drill-down, gauge / live / text / picture / button
+   cards, cards over the money records, the filter bar, the Accounting and
+   Service levels boards). L7. Vendor and asset boards wait on batches 1–2.
 7. **Setup** — our Admin regrouped into Facilio's sections, plus Delegates,
    security policy, site scoping, customization and the log types.
 

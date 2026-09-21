@@ -13,8 +13,9 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PAYMENT_PROCESS_PERM_KEY } from '@theone/shared';
+import { VendorBillsLane } from '../components/payments/VendorBillsLane';
 import type { PaymentListItem, PaymentRequestStatus } from '../api/client';
 import {
   ApiRequestError,
@@ -35,18 +36,22 @@ import { numericDate } from '../lib/fields';
 import { EmergencyBadge } from '../components/EmergencyBadge';
 import { EscalatedBadge } from '../components/EscalatedBadge';
 
-type Lane = 'approval' | 'process' | 'all';
+/** 0047 · 'bills' is the vendor-bill queue (the AP document), drawn by
+    VendorBillsLane; the other three are payment requests. */
+type Lane = 'approval' | 'process' | 'all' | 'bills';
 
 const LANE_LABEL: Record<Lane, string> = {
   approval: 'Needs approval',
   process: 'To process',
   all: 'All requests',
+  bills: 'Vendor bills',
 };
 
 const LANE_STATUSES: Record<Lane, PaymentRequestStatus[] | null> = {
   approval: ['requested'],
   process: ['approved', 'sent_to_yoda'],
   all: null,
+  bills: null,
 };
 
 /** Status → chip flavour, matching the ledger on the work order. */
@@ -73,7 +78,11 @@ export function PaymentsPage() {
 
   // Land on the lane that is this person's job: approvers on what needs a
   // decision, AP on what needs paying, everyone else on the whole ledger.
-  const [lane, setLane] = useState<Lane>(canApprove ? 'approval' : canProcess ? 'process' : 'all');
+  // A dashboard card over the vendor bills drills through to ?lane=bills.
+  const [search] = useSearchParams();
+  const [lane, setLane] = useState<Lane>(
+    search.get('lane') === 'bills' ? 'bills' : canApprove ? 'approval' : canProcess ? 'process' : 'all',
+  );
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,7 +100,7 @@ export function PaymentsPage() {
   const pageItems = laneItems.slice(offset, offset + pageSize);
 
   const laneCount = (l: Lane): number | undefined => {
-    if (!counts) return undefined;
+    if (!counts || l === 'bills') return undefined;
     const allowed = LANE_STATUSES[l];
     return allowed ? allowed.reduce((n, s) => n + counts[s], 0) : items.length;
   };
@@ -147,7 +156,7 @@ export function PaymentsPage() {
 
       <div className="payq-head">
         <div className="seg payq-lanes" role="group" aria-label="Payment lanes">
-          {(['approval', 'process', 'all'] as const).map((l) => {
+          {(['approval', 'process', 'all', 'bills'] as const).map((l) => {
             const n = laneCount(l);
             return (
               <button
@@ -165,7 +174,7 @@ export function PaymentsPage() {
             );
           })}
         </div>
-        {!paymentsQuery.isLoading && !paymentsQuery.isError && (
+        {lane !== 'bills' && !paymentsQuery.isLoading && !paymentsQuery.isError && (
           <div className="payq-sum">
             <span>
               Awaiting approval <b>{usd(inLane((i) => i.status === 'requested'))}</b>
@@ -185,7 +194,9 @@ export function PaymentsPage() {
         </p>
       )}
 
-      {paymentsQuery.isError && (
+      {lane === 'bills' && <VendorBillsLane />}
+
+      {lane !== 'bills' && paymentsQuery.isError && (
         <div className="quotes-empty">
           <Icon name="card" size={22} />
           <b>{notServed ? 'No payment requests to list yet' : 'Could not load payment requests'}</b>
@@ -197,7 +208,7 @@ export function PaymentsPage() {
         </div>
       )}
 
-      {!paymentsQuery.isError && (
+      {lane !== 'bills' && !paymentsQuery.isError && (
         <div className="table-wrap">
           <table className="ct">
             <thead>
@@ -244,7 +255,7 @@ export function PaymentsPage() {
         </div>
       )}
 
-      {!paymentsQuery.isError && (
+      {lane !== 'bills' && !paymentsQuery.isError && (
         <ListPagination
           total={paymentsQuery.isLoading ? undefined : laneItems.length}
           offset={offset}
@@ -460,6 +471,10 @@ function Decisions({ item, canApprove, canProcess, busy, onDecide }: RowProps) {
   // money out are on hold — the API refuses them with a 409, this says so first.
   const hold = item.nte_override_open;
   const HOLD = 'On hold — the NTE override on this work order has to be decided first (rule 1.5.2)';
+  // Rule 6.2.3 (0047): the amount's band may exclude this role. The API
+  // refuses with a 403; this says so first, naming the band.
+  const tierBlocked = item.tier !== null && !item.tier.allowed;
+  const TIER = `${item.tier?.label ?? 'This amount'} needs a role allowed for the band (rule 6.2.3)`;
 
   switch (item.status) {
     case 'requested':
@@ -470,8 +485,8 @@ function Decisions({ item, canApprove, canProcess, busy, onDecide }: RowProps) {
             'Approve',
             'check',
             'approve',
-            canApprove && !hold,
-            canApprove ? HOLD : 'Requires payment approval rights',
+            canApprove && !hold && !tierBlocked,
+            !canApprove ? 'Requires payment approval rights' : hold ? HOLD : TIER,
             'primary',
           )}
         </>

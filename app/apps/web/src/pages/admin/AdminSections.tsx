@@ -56,6 +56,11 @@ import {
   deleteHoliday,
   listHolidays,
   setHoliday,
+  // 0047 · approval tiers by amount (rule 6.2.3).
+  createApprovalTier,
+  deleteApprovalTier,
+  listApprovalTiers,
+  updateApprovalTier,
 } from '../../api/client';
 import {
   APPROVAL_TASK_ACTION_FIELD,
@@ -66,6 +71,13 @@ import {
   WO_CREATE_MODE_LABELS,
   businessDay,
   type WoCreateMode,
+  // 0047 · approval tiers by amount (rule 6.2.3).
+  APPROVAL_TIER_KINDS,
+  APPROVAL_TIER_KIND_LABELS,
+  APPROVAL_TIER_KIND_VERBS,
+  describeTierBand,
+  type ApprovalTier,
+  type ApprovalTierKind,
 } from '@theone/shared';
 
 // ══ SETTINGS ═════════════════════════════════════════════════════════════════
@@ -132,7 +144,180 @@ export function AdminSettingsPage() {
       )}
 
       <HolidaysCard />
+      <ApprovalTiersCard />
     </AdminShell>
+  );
+}
+
+/** Approval tiers by amount (0047, rule 6.2.3): the bands of money and the
+    roles that may say yes inside each. One table per kind of decision. */
+function ApprovalTiersCard() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['admin-approval-tiers'], queryFn: listApprovalTiers, retry: 0 });
+  const rolesQ = useQuery({ queryKey: ['roles'], queryFn: listRoles, retry: 0 });
+  const roleCodes = (rolesQ.data?.items ?? []).map((r) => r.code).filter((c) => c !== 'service');
+  const items = q.data?.items ?? [];
+  const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState<ApprovalTierKind | null>(null);
+  const [min, setMin] = useState('');
+  const [max, setMax] = useState('');
+  const [roles, setRoles] = useState<string[]>([]);
+
+  const done = () => {
+    setError(null);
+    void qc.invalidateQueries({ queryKey: ['admin-approval-tiers'] });
+  };
+  const fail = (err: unknown) =>
+    setError(err instanceof ApiRequestError ? err.message : 'The change did not save');
+  const create = useMutation({
+    mutationFn: (kind: ApprovalTierKind) =>
+      createApprovalTier({
+        kind,
+        label: '',
+        min_amount: Number(min) || 0,
+        max_amount: max.trim() === '' ? null : Number(max),
+        roles,
+      }),
+    onSuccess: () => {
+      done();
+      setAdding(null);
+      setMin('');
+      setMax('');
+      setRoles([]);
+    },
+    onError: fail,
+  });
+  const update = useMutation({
+    mutationFn: (v: { id: string; roles: string[] }) => updateApprovalTier(v.id, { roles: v.roles }),
+    onSuccess: done,
+    onError: fail,
+  });
+  const del = useMutation({ mutationFn: (id: string) => deleteApprovalTier(id), onSuccess: done, onError: fail });
+  const busy = create.isPending || update.isPending || del.isPending;
+
+  const toggleRole = (t: ApprovalTier, code: string) => {
+    const next = t.roles.includes(code) ? t.roles.filter((r) => r !== code) : [...t.roles, code];
+    update.mutate({ id: t.id, roles: next });
+  };
+
+  return (
+    <section className="card adm-cico">
+      <div className="card-head">
+        <Icon name="layers" size={14} />
+        <h3 className="card-title">Approval tiers by amount</h3>
+        <span className="card-meta">rule 6.2.3</span>
+      </div>
+      <p className="adm-cico-note">
+        Each band names the roles that may decide inside it. A band with no roles restricts
+        nobody who already holds the base permission. Super admins are never restricted. Bands
+        are checked at the moment of decision; the queues lock the button with the reason before it.
+      </p>
+
+      {error && (
+        <div className="callout adm-cico-err" role="alert">
+          <Icon name="alert" size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {APPROVAL_TIER_KINDS.map((kind) => {
+        const list = items.filter((t) => t.kind === kind).sort((a, b) => a.position - b.position);
+        return (
+          <div key={kind} className="adm-tier-kind">
+            <h4 className="adm-tier-title">
+              {APPROVAL_TIER_KIND_LABELS[kind]}
+              <span className="card-meta"> · who may {APPROVAL_TIER_KIND_VERBS[kind]}</span>
+            </h4>
+            <table className="ct adm-tier-table">
+              <thead>
+                <tr>
+                  <th>Band</th>
+                  <th>Roles allowed</th>
+                  <th className="num" />
+                </tr>
+              </thead>
+              <tbody>
+                {list.length === 0 && (
+                  <tr className="ct-empty"><td colSpan={3}>No bands — any approver, any amount.</td></tr>
+                )}
+                {list.map((t) => (
+                  <tr key={t.id}>
+                    <td><b>{t.label || describeTierBand(t.min_amount, t.max_amount)}</b></td>
+                    <td>
+                      <div className="adm-tier-roles">
+                        {roleCodes.map((code) => (
+                          <label key={code} className="ck">
+                            <input
+                              type="checkbox"
+                              checked={t.roles.includes(code)}
+                              disabled={busy}
+                              onChange={() => toggleRole(t, code)}
+                            />
+                            <span>{code}</span>
+                          </label>
+                        ))}
+                        {t.roles.length === 0 && <span className="hint">anyone with the base permission</span>}
+                      </div>
+                    </td>
+                    <td className="num">
+                      <button
+                        type="button"
+                        className="afp-act"
+                        title="Remove this band"
+                        aria-label={`Remove ${t.label}`}
+                        disabled={busy}
+                        onClick={() => del.mutate(t.id)}
+                      >
+                        <Icon name="trash" size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {adding === kind ? (
+              <form
+                className="adm-cico-add"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  create.mutate(kind);
+                }}
+              >
+                <label className="field">
+                  <span className="lbl">From $</span>
+                  <input className="fld" inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} disabled={busy} />
+                </label>
+                <label className="field">
+                  <span className="lbl">Up to $ (blank = no ceiling)</span>
+                  <input className="fld" inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} disabled={busy} />
+                </label>
+                <div className="field adm-cico-detailfield">
+                  <span className="lbl">Roles</span>
+                  <div className="adm-tier-roles">
+                    {roleCodes.map((code) => (
+                      <label key={code} className="ck">
+                        <input
+                          type="checkbox"
+                          checked={roles.includes(code)}
+                          onChange={(e) => setRoles(e.target.checked ? [...roles, code] : roles.filter((r) => r !== code))}
+                        />
+                        <span>{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>Add band</button>
+                <button type="button" className="btn btn-sm" onClick={() => setAdding(null)}>Cancel</button>
+              </form>
+            ) : (
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setAdding(kind)}>
+                <Icon name="plus" size={12} /> Add a band
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
