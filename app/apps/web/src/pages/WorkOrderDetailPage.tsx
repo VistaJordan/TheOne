@@ -22,6 +22,7 @@ import { PhotosCard } from '../components/wo/PhotosCard';
 import { SoftCloseChecklist } from '../components/wo/SoftCloseChecklist';
 import { MoneyCard } from '../components/wo/MoneyCard';
 import { ClientQuoteCard } from '../components/wo/ClientQuoteCard';
+import { InvoiceCard } from '../components/wo/InvoiceCard';
 import { PayablesFieldsCard, PaymentHistoryCard } from '../components/wo/PayablesCard';
 import { PeopleCard } from '../components/wo/PeopleCard';
 import { SiteCard } from '../components/wo/SiteCard';
@@ -363,6 +364,9 @@ export function WorkOrderDetailPage() {
                   quoteQuery.isSuccess ? (quoteQuery.data.quote?.status ?? null) : undefined
                 }
               />
+              {/* 0045 · what the client was actually billed. This tab used to
+                  stop at the quote, which is only what we proposed. */}
+              <InvoiceCard wo={wo} />
             </div>
           )}
 

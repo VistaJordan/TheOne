@@ -30,6 +30,11 @@ import type {
   Attachment,
   AttachmentUpload,
   AttachmentsResponse,
+  // 0045 · the bill to the client.
+  Invoice,
+  InvoiceCreateInput,
+  InvoiceUpdateInput,
+  InvoicesResponse,
 } from '@theone/shared';
 import type {
   Kpis,
@@ -1630,6 +1635,54 @@ export function updateDashboardWidget(
 
 export function deleteDashboardWidget(widgetId: string): Promise<void> {
   return request(`/dashboards/widgets/${widgetId}`, { method: 'DELETE' });
+}
+
+// ── 0045 · invoices ──────────────────────────────────────────────────────────
+
+/** The queue, scoped to the work orders this person can see. */
+export function listInvoices(): Promise<InvoicesResponse> {
+  return request('/invoices');
+}
+
+export function getInvoice(id: string): Promise<{ invoice: Invoice }> {
+  return request(`/invoices/${id}`);
+}
+
+/** The invoice raised against one work order, or null. */
+export function getWorkOrderInvoice(woId: string): Promise<{ invoice: Invoice | null }> {
+  return request(`/work-orders/${woId}/invoice`);
+}
+
+/** Raise a draft. Lines are pre-filled from the approved quote. */
+export function createInvoice(input: InvoiceCreateInput): Promise<{ invoice: Invoice }> {
+  return request('/invoices', { method: 'POST', body: JSON.stringify(input) });
+}
+
+/** Drafts only — a sent invoice is what the client holds. */
+export function updateInvoice(
+  id: string,
+  input: InvoiceUpdateInput,
+): Promise<{ invoice: Invoice }> {
+  return request(`/invoices/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function sendInvoice(id: string): Promise<{ invoice: Invoice }> {
+  return request(`/invoices/${id}/send`, { method: 'POST' });
+}
+
+export function markInvoicePaid(id: string, reference?: string | null): Promise<{ invoice: Invoice }> {
+  return request(`/invoices/${id}/paid`, {
+    method: 'POST',
+    body: JSON.stringify({ reference: reference ?? null }),
+  });
+}
+
+export function voidInvoice(id: string): Promise<{ invoice: Invoice }> {
+  return request(`/invoices/${id}/void`, { method: 'POST' });
+}
+
+export function reopenInvoice(id: string): Promise<{ invoice: Invoice }> {
+  return request(`/invoices/${id}/reopen`, { method: 'POST' });
 }
 
 // ── 0043 · attachments ───────────────────────────────────────────────────────

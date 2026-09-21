@@ -2605,3 +2605,51 @@ a.photo-img.is-real img {
 
 .file-list a:hover { color: var(--accent-text); text-decoration: underline; }
 .file-meta { color: var(--ink-3); font-size: 11px; }
+
+/* ══ 0045 — the client invoice on the Finances tab ═════════════════════════ */
+.inv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.inv-number {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.inv-lines { width: 100%; }
+.inv-lines td { padding: 5px 6px; font-size: 12px; vertical-align: top; }
+.inv-lines td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.inv-line-meta {
+  display: block;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.inv-lines tfoot td {
+  border-top: 1px solid var(--row-border);
+  color: var(--ink-2);
+}
+
+.inv-lines tfoot tr.inv-total td {
+  color: var(--ink);
+  font-weight: 700;
+  border-top: 1px solid var(--border-strong);
+}
+
+.inv-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.inv-actions { display: inline-flex; align-items: center; gap: 8px; }
+.inv-empty { display: grid; gap: 10px; justify-items: start; }

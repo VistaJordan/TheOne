@@ -38,6 +38,7 @@ import visitRoutes from './routes/visits.js';
 import webhookRoutes from './routes/webhooks.js';
 import intakeRoutes from './routes/intake.js';
 import dashboardRoutes from './routes/dashboards.js';
+import invoiceRoutes from './routes/invoices.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
@@ -100,6 +101,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(intakeRoutes, { prefix: '/api' });
   // 0042 · dashboards as records: folders, widgets, shared to roles.
   await app.register(dashboardRoutes, { prefix: '/api' });
+  // 0045 · invoices — the bill to the client, as a record at last.
+  await app.register(invoiceRoutes, { prefix: '/api' });
 
   return app;
 }

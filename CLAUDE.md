@@ -517,6 +517,31 @@ ANDs `date_received` into every card's own filters rather than replacing them,
 and defaults to All time so a board means what it meant before anyone touched
 it.
 
+**Invoices** (migration 0045, `services/invoices.ts`,
+`components/rcv/InvoicingTab.tsx`, `components/wo/InvoiceCard.tsx`) are the
+last money record to become real: Receivables › Invoicing kept its stages in
+React state and derived "Invoice #" from the work order's id, so a reload
+undid the lot. Decisions (Elise, 2026-09-20): **one invoice per work order**
+(consolidating a month of jobs becomes a join table when it is wanted, not a
+rewrite); the amount **starts from the approved quote** — incurred plus every
+option flagged `include_in_summary`, overtime folded into the unit price —
+and stays editable until it is sent; the **number is per billing entity and
+year** (`SFM-2026-0007`), claimed by an UPDATE on `invoice_sequence` inside
+the issuing transaction so two simultaneous Creates cannot collide, and never
+reused. Lines are a **snapshot**, not a join: a sent invoice keeps saying what
+it said when it was sent. `draft → sent → paid`, or `void` (which keeps the
+number and can be reopened); the transition table is enforced in `move()`, not
+just hidden in the UI, and only `invoicing:approve` may send. **Money is
+computed in integer hundredths** (`lineAmount`, `invoiceTotals` in shared):
+`1.5 × 99.99` is 149.985, which must bill as 149.99 — rounding the double
+gives 149.98 and short-changes the client a cent. The queue is scoped by
+`woScopeSql` like every other read. Logged `invoice_created|updated|
+status_changed` under field `invoice:<id>`. Permission path `invoicing` (view
+/ create / edit / **approve** = send); 0045 grants the full set to admin + ar
+and view/create to am + tl. The Ready lane is still DERIVED from the audit
+(clean + Admin + Quote ticked, and not already billed); everything past it is
+a record.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

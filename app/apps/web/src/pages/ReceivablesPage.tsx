@@ -3,13 +3,17 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
-import { listWorkOrders } from '../api/client';
+// 0045 · the invoicing lane moved into its own file when invoices became
+// records. The stat cards and the money formatting are shared, so the two
+// subtabs still read as one page rather than two that drifted apart.
+import { InvoicingTab } from '../components/rcv/InvoicingTab';
+import { StatCard, money } from '../components/rcv/bits';
+import { listInvoices, listWorkOrders } from '../api/client';
 import {
   buildCheckLines,
   computeAuditIssues,
   deriveReceivables,
   invoiceAmount,
-  invoiceNoFor,
   overallStatus,
   summarizeIssues,
 } from '../lib/receivables';
@@ -20,8 +24,6 @@ import type {
   AuditStatus,
   AuditSummary,
   CheckOutcome,
-  InvoiceRow,
-  InvoiceStage,
 } from '../lib/receivables';
 
 /**
@@ -39,9 +41,6 @@ import type {
 
 type SubTab = 'audit' | 'invoicing';
 
-const money = (n: number) =>
-  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
-
 export function ReceivablesPage() {
   const { tab } = useParams();
   const navigate = useNavigate();
@@ -56,8 +55,14 @@ export function ReceivablesPage() {
   // The user's toggle state overlays the seeded defaults. Kept at page level so
   // a tick survives switching subtabs (and is what promotes a WO to "Ready").
   const [checkOverrides, setCheckOverrides] = useState<Record<string, Partial<AuditChecks>>>({});
-  // Prototype-local lifecycle: Generate invoice → invoiced, Mark paid → paid.
-  const [stageOverrides, setStageOverrides] = useState<Record<string, InvoiceStage>>({});
+  // 0045 · invoices are records now. What was page state — "Generate invoice"
+  // then "Mark paid", both lost on reload — is a row with a number on it.
+  const invoiceQuery = useQuery({ queryKey: ['invoices'], queryFn: listInvoices, retry: 0 });
+  const invoices = invoiceQuery.data?.items ?? [];
+  const invoiceByTask = useMemo(
+    () => new Map(invoices.map((i) => [i.task_id, i])),
+    [invoices],
+  );
 
   const { queue, history } = useMemo(() => deriveReceivables(items), [items]);
 
@@ -71,22 +76,20 @@ export function ReceivablesPage() {
     [queue, checkOverrides],
   );
 
-  // Released = clean audit AND both gate boxes ticked → the Ready lane.
-  const invoiceRows: InvoiceRow[] = useMemo(() => {
-    const ready = audited
-      .filter((a) => a.status === 'clean' && a.checks.admin && a.checks.quote)
-      .map((a) => ({
-        wo: a.row.wo,
-        stage: stageOverrides[a.row.wo.id] ?? ('ready' as const),
-        amount: invoiceAmount(a.row.wo),
-        invoiceNo: invoiceNoFor(a.row.wo),
-        agedDays: 0,
-      }));
-    const past = history.map((h) => ({ ...h, stage: stageOverrides[h.wo.id] ?? h.stage }));
-    return [...ready, ...past];
-  }, [audited, history, stageOverrides]);
+  // Released = clean audit AND both gate boxes ticked, and not already billed
+  // → the Ready lane. Everything past Ready is a real invoice, so the two
+  // lanes come from different places on purpose: one is a judgement about a
+  // work order, the other is a document that exists.
+  const readyRows = useMemo(
+    () =>
+      audited
+        .filter((a) => a.status === 'clean' && a.checks.admin && a.checks.quote)
+        .filter((a) => !invoiceByTask.has(a.row.wo.id))
+        .map((a) => ({ wo: a.row.wo, amount: invoiceAmount(a.row.wo) })),
+    [audited, invoiceByTask],
+  );
 
-  const blockedCount = audited.length - invoiceRows.filter((r) => r.stage === 'ready').length;
+  const blockedCount = audited.length - readyRows.length - invoiceByTask.size;
 
   function setCheck(id: string, key: keyof AuditChecks, value: boolean) {
     setCheckOverrides((prev) => ({ ...prev, [id]: { ...prev[id], [key]: value } }));
@@ -123,7 +126,9 @@ export function ReceivablesPage() {
           <Icon name="dollar" size={12} />
           Invoicing
           <span className="rcv-tab-count">
-            {woQuery.isLoading ? '—' : invoiceRows.filter((r) => r.stage !== 'paid').length}
+            {woQuery.isLoading
+              ? '—'
+              : readyRows.length + invoices.filter((i) => i.status === 'draft' || i.status === 'sent').length}
           </span>
         </button>
       </div>
@@ -137,11 +142,12 @@ export function ReceivablesPage() {
         />
       ) : (
         <InvoicingTab
-          rows={invoiceRows}
-          blockedCount={blockedCount}
-          loading={woQuery.isLoading}
+          ready={readyRows}
+          invoices={invoices}
+          totals={invoiceQuery.data?.totals}
+          blockedCount={Math.max(0, blockedCount)}
+          loading={woQuery.isLoading || invoiceQuery.isLoading}
           error={woQuery.isError}
-          onAdvance={(id, next) => setStageOverrides((prev) => ({ ...prev, [id]: next }))}
         />
       )}
     </AppShell>
@@ -511,211 +517,4 @@ function CheckToggle({
   );
 }
 
-function StatCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number | string;
-  tone: 'neutral' | 'major' | 'minor' | 'clean';
-}) {
-  return (
-    <div className={`rcv-stat is-${tone}`}>
-      <span className="rcv-stat-label">
-        <span className="rcv-stat-dot" aria-hidden="true" />
-        {label}
-      </span>
-      <span className="rcv-stat-value">{value}</span>
-    </div>
-  );
-}
 
-// ═══ Invoicing subtab — downstream of the audit ═════════════════════════════
-
-type StageFilter = 'all' | InvoiceStage;
-
-const STAGE_FILTERS: { key: StageFilter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'ready', label: 'Ready' },
-  { key: 'invoiced', label: 'Invoiced' },
-  { key: 'paid', label: 'Paid' },
-];
-
-const STAGE_LABEL: Record<InvoiceStage, string> = {
-  ready: 'Ready to invoice',
-  invoiced: 'Invoiced — awaiting payment',
-  paid: 'Paid',
-};
-
-function InvoicingTab({
-  rows,
-  blockedCount,
-  loading,
-  error,
-  onAdvance,
-}: {
-  rows: InvoiceRow[];
-  blockedCount: number;
-  loading: boolean;
-  error: boolean;
-  onAdvance: (id: string, next: InvoiceStage) => void;
-}) {
-  const [filter, setFilter] = useState<StageFilter>('all');
-
-  const ready = rows.filter((r) => r.stage === 'ready');
-  const invoiced = rows.filter((r) => r.stage === 'invoiced');
-  const paid = rows.filter((r) => r.stage === 'paid');
-  const outstanding = invoiced.reduce((sum, r) => sum + r.amount, 0);
-  const collected = paid.reduce((sum, r) => sum + r.amount, 0);
-
-  const visible = filter === 'all' ? rows : rows.filter((r) => r.stage === filter);
-  const COLS = 7;
-
-  return (
-    <>
-      <p className="rcv-lede">
-        Everything the audit released, staged to cash. A work order lands here the moment its audit
-        is clean and both release checks are ticked.
-      </p>
-
-      <div className="rcv-stats">
-        <StatCard label="Ready to invoice" value={loading ? '—' : ready.length} tone="clean" />
-        <StatCard label="Awaiting payment" value={loading ? '—' : invoiced.length} tone="minor" />
-        <StatCard label="Outstanding" value={loading ? '—' : money(outstanding)} tone="major" />
-        <StatCard label="Collected (30d)" value={loading ? '—' : money(collected)} tone="neutral" />
-      </div>
-
-      {blockedCount > 0 && !loading && (
-        <div className="rcv-blocked">
-          <Icon name="flag" size={12} />
-          {blockedCount} work order{blockedCount === 1 ? ' is' : 's are'} still held by the
-          completion audit —{' '}
-          <Link to="/receivables" className="rcv-blocked-link">
-            clear them in the Audit tab
-          </Link>
-          .
-        </div>
-      )}
-
-      <div className="toolbar">
-        <div className="seg" role="tablist" aria-label="Filter by invoice stage">
-          {STAGE_FILTERS.map((f) => (
-            <button
-              type="button"
-              key={f.key}
-              role="tab"
-              aria-selected={filter === f.key}
-              className={`seg-btn${filter === f.key ? ' is-on' : ''}`}
-              onClick={() => setFilter(f.key)}
-            >
-              {f.label}
-              <span className="rcv-tab-count">
-                {f.key === 'all' ? rows.length : rows.filter((r) => r.stage === f.key).length}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="table-wrap">
-        <table className="ct rcv-table">
-          <thead>
-            <tr>
-              <th className="col-wo">WO #</th>
-              <th>Client / Site</th>
-              <th>Billing entity</th>
-              <th>Invoice</th>
-              <th className="num">Amount</th>
-              <th>Stage</th>
-              <th className="rcv-action-th">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr className="ct-empty">
-                <td colSpan={COLS}>Loading the invoicing pipeline…</td>
-              </tr>
-            )}
-            {error && !loading && (
-              <tr className="ct-empty">
-                <td colSpan={COLS}>Failed to load work orders. Is the API running on :5174?</td>
-              </tr>
-            )}
-            {!loading && !error && visible.length === 0 && (
-              <tr className="ct-empty">
-                <td colSpan={COLS}>
-                  {filter === 'ready' || filter === 'all'
-                    ? 'Nothing is ready yet — clean WOs with Admin + Quote ticked appear here.'
-                    : 'Nothing in this stage.'}
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              !error &&
-              visible.map((r) => (
-                <tr key={r.wo.id}>
-                  <td className="col-wo">
-                    <Link
-                      className="wo-num wo-num-link"
-                      to={`/work-orders/${encodeURIComponent(r.wo.wo_number)}`}
-                    >
-                      {r.wo.wo_number}
-                    </Link>
-                  </td>
-                  <td>
-                    <div className="site">
-                      <strong>{r.wo.client ?? '—'}</strong>
-                      <small>
-                        {[r.wo.city, r.wo.state].filter(Boolean).join(', ') || '—'}
-                      </small>
-                    </div>
-                  </td>
-                  <td className="rcv-trunc">{r.wo.billing_entity ?? r.wo.client ?? '—'}</td>
-                  <td className="rcv-co">
-                    {r.stage === 'ready' ? <span className="rcv-none">—</span> : r.invoiceNo}
-                  </td>
-                  <td className="num rcv-amount">{money(r.amount)}</td>
-                  <td>
-                    <span className={`rcv-stage is-${r.stage}`}>
-                      <span className="rcv-status-dot" aria-hidden="true" />
-                      {STAGE_LABEL[r.stage]}
-                      {r.stage === 'invoiced' && (
-                        <span className="rcv-status-extra"> · {r.agedDays}d</span>
-                      )}
-                    </span>
-                  </td>
-                  <td className="rcv-action-td">
-                    {r.stage === 'ready' ? (
-                      <button
-                        type="button"
-                        className="rcv-btn is-primary"
-                        onClick={() => onAdvance(r.wo.id, 'invoiced')}
-                      >
-                        <Icon name="send" size={12} />
-                        Generate invoice
-                      </button>
-                    ) : r.stage === 'invoiced' ? (
-                      <button
-                        type="button"
-                        className="rcv-btn"
-                        onClick={() => onAdvance(r.wo.id, 'paid')}
-                      >
-                        <Icon name="check" size={12} />
-                        Mark paid
-                      </button>
-                    ) : (
-                      <span className="rcv-paid-mark">
-                        <Icon name="check-circle" size={12} />
-                        Settled
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}

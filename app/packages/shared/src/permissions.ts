@@ -558,7 +558,14 @@ export function buildPermissionTree(
       note: 'The OP Admin staging area (section 14): view = the drafts list; create = start a draft; edit = fill, submit or discard one. Operations Admin and Admin by default.',
     },
     { key: 'vendors', label: 'Vendors', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
-    { key: 'invoicing', label: 'Invoicing', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
+    {
+      // 0045 · live. Approve is the act of SENDING a bill to the client, not
+      // a separate sign-off step: once it has gone out it is what they hold.
+      key: 'invoicing',
+      label: 'Invoicing',
+      actions: ['view', 'create', 'edit', 'approve'],
+      note: 'Create = raise a draft; edit = change a draft; approve = send it to the client.',
+    },
     {
       key: 'admin',
       label: 'Admin console',
