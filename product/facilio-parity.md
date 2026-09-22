@@ -132,9 +132,15 @@ arrive from Ecotrak, CSV import, or the OP Admin's intake drafts.
 > **Built 2026-09-21** as migrations 0045 (invoices, the day before), 0046
 > (contracts and labor rates), 0047 (vendor bills + approval tiers, rule 6.2.3)
 > and 0048 (the quote as a document: number, type, bill/ship to, per-line UOM /
-> tax / markup, print view). Not done from this list: auto-generate on
-> completion is on-demand (Raise invoice reads the contract), and "PDF output
-> via templates" is the browser's print dialog over one print stylesheet.
+> tax / markup, print view). "PDF output via templates" is the browser's
+> print dialog over one print stylesheet.
+>
+> **2026-09-22, migration 0053 (BRD §6.4):** auto-generate on completion is
+> built — a contract (client rate card or, new, vendor terms) with "Bill
+> automatically on completion" proposes the invoice / vendor bill when the
+> work order lands in the done group; Confirm files it, Dismiss does not. The
+> invoice snapshots the work order's title, site and vendor. Quotes approve /
+> decline from the Finances card and the Quotes list.
 
 - **Invoices as records.** Receivables › Invoicing is front-end only today:
   ticks and stages live in page state and are lost on reload, and no invoice is

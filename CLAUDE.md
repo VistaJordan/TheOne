@@ -564,6 +564,36 @@ a work order has no quote and a T&M contract covers it, bills hours on site
 the trip charge per visit (`prefillFromContract`). Logged as admin changes
 (`contract_created|updated|deleted`).
 
+**The Financial tab, the rest of BRD §6.4** (migration 0053,
+`services/billingProposals.ts`, `components/wo/BillingProposalBlock.tsx`,
+`components/quote/QuoteDecision.tsx`). A contract now has a **party**:
+`client` (what we bill, matched as before) or `vendor` (what the vendor bills
+us, matched by `contract.vendor_name` against the work order's vendor —
+`taskVendor`: the latest visit's `Tech Name`, else the newest payment
+request's payee; vendors are still names on a work order). `contractScore`
+refuses the other party, so a vendor card never prices a client invoice.
+**`contract.auto_invoice`** ("Bill automatically on completion") is the
+switch: when `changeStatus` lands a work order in the `done` group from
+outside it, `proposeBillingOnCompletion` (after the commit, never throws)
+writes at most one pending **`billing_proposal`** per kind — `invoice` from
+the client card (the approved quote's lines, else hours × rate + trip charge:
+`draftInvoice`, the same lines Raise invoice would write) and `vendor_bill`
+from the vendor card (hours × rate + trip charge, `contractBillingLines` in
+`packages/shared/src/billing.ts`, tested). A proposal is not a document: no
+number, no queue totals. **Confirm** (`POST /billing-proposals/:id/confirm`,
+needs the kind's `create` grant — `invoicing` or `payments`) files the
+invoice / vendor bill with exactly the proposal's lines, through the normal
+`createInvoice` / `createVendorBill`; **Dismiss** files nothing and keeps the
+note. Drawn on the Finances card (Confirm invoice), the Payables card
+(Confirm bill) and as a **Proposed** lane in Receivables › Invoicing. Logged
+`billing_proposed|billing_proposal_confirmed|dismissed` under field
+`proposal:<id>`. The invoice also snapshots `title`, `site` (Store + address
+line), `vendor_name` / `vendor_contact` and `contract_id` when raised
+(BRD "invoice contents"); a vendor bill keeps its `contract_id`. Quotes can
+be approved / declined from the Finances card and from the Quotes list rows
+(`QuoteDecision`: approve then send, like the builder's CTA; decline needs a
+note), gated by `quote.permissions.can_approve` / `quotes:approve`.
+
 **Vendor bills** (migration 0047, `services/vendorBills.ts`, Payments ›
 Vendor bills lane and the `VendorBillsCard` on the Payables tab) are the AP
 half of invoicing: the vendor's own invoice against a work order, `received →

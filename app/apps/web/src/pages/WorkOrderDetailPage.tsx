@@ -371,6 +371,7 @@ export function WorkOrderDetailPage() {
                 quoteStatus={
                   quoteQuery.isSuccess ? (quoteQuery.data.quote?.status ?? null) : undefined
                 }
+                quote={quoteQuery.isSuccess ? quoteQuery.data.quote : null}
               />
               {/* 0045 · what the client was actually billed. This tab used to
                   stop at the quote, which is only what we proposed. */}

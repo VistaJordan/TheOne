@@ -58,9 +58,30 @@ export interface ContractRate {
   position: number;
 }
 
+/** 0053 · whose terms these are. A client contract prices what WE bill the
+    client; a vendor contract prices what a vendor bills US for the same
+    hours. Matching is by client / entity / trade / site for the first and by
+    the vendor's name (plus trade / site) for the second. */
+export const CONTRACT_PARTIES = ['client', 'vendor'] as const;
+export type ContractParty = (typeof CONTRACT_PARTIES)[number];
+
+export const CONTRACT_PARTY_LABELS: Record<ContractParty, string> = {
+  client: 'Client rate card — what we bill',
+  vendor: 'Vendor terms — what the vendor bills us',
+};
+
 export interface Contract {
   id: string;
   name: string;
+  /** 0053 · 'client' or 'vendor'. */
+  party: ContractParty;
+  /** 0053 · party = 'vendor': the vendor these terms belong to. NULL = any
+      vendor (a house rate for every sub-contractor). */
+  vendor_name: string | null;
+  /** 0053 · BRD §6.4: when the work order completes, propose the invoice
+      (client) or the vendor bill (vendor) from these rates and the hours on
+      site, for a person to confirm. */
+  auto_invoice: boolean;
   client: string | null;
   billing_entity: string | null;
   kind: ContractKind;
@@ -91,6 +112,9 @@ export interface ContractRateInput {
 
 export interface ContractInput {
   name: string;
+  party?: ContractParty;
+  vendor_name?: string | null;
+  auto_invoice?: boolean;
   client?: string | null;
   billing_entity?: string | null;
   kind?: ContractKind;
@@ -115,6 +139,11 @@ export interface ContractSubject {
   trade: string | null;
   /** The work order's store number or site name, whichever the site carries. */
   site: string | null;
+  /** 0053 · which side is asking. Defaults to 'client'; a vendor contract
+      never prices a client invoice and the other way round. */
+  party?: ContractParty;
+  /** 0053 · the vendor on the job (party = 'vendor' only). */
+  vendor?: string | null;
 }
 
 /** Case-insensitive, trimmed equality — client names arrive from three CMMSs. */
@@ -147,11 +176,16 @@ export function contractInForce(
  */
 export function contractScore(c: Contract, s: ContractSubject, on: string): number {
   if (!contractInForce(c, on)) return -1;
+  // 0053 · the two parties never compete: a vendor's terms are not a price
+  // for the client, and a vendor card naming a vendor applies to that vendor.
+  if ((c.party ?? 'client') !== (s.party ?? 'client')) return -1;
+  if (c.party === 'vendor' && c.vendor_name !== null && !same(c.vendor_name, s.vendor)) return -1;
   if (c.client !== null && !same(c.client, s.client)) return -1;
   if (c.billing_entity !== null && !same(c.billing_entity, s.billing_entity)) return -1;
   if (!coversList(c.trades_covered, s.trade)) return -1;
   if (!coversList(c.sites_covered, s.site)) return -1;
   let score = 0;
+  if (c.party === 'vendor' && c.vendor_name !== null) score += 16;
   if (c.client !== null) score += 8;
   if (c.billing_entity !== null) score += 4;
   if (c.trades_covered.length > 0) score += 2;

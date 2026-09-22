@@ -16,12 +16,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CONTRACT_KIND_LABELS,
   CONTRACT_KINDS,
+  CONTRACT_PARTIES,
+  CONTRACT_PARTY_LABELS,
   RATE_TYPES,
   RATE_TYPE_LABELS,
   RATE_TYPE_UNITS,
   type Contract,
   type ContractInput,
   type ContractKind,
+  type ContractParty,
   type ContractRateInput,
   type RateType,
 } from '@theone/shared';
@@ -149,8 +152,10 @@ export function ContractsPage() {
                   <div className="site">
                     <strong>{c.name}</strong>
                     <small>
+                      {c.party === 'vendor' ? `Vendor terms · ${c.vendor_name ?? 'any vendor'} · ` : ''}
                       {CONTRACT_KIND_LABELS[c.kind]}
                       {c.account_code ? ` · ${c.account_code}` : ''}
+                      {c.auto_invoice ? ' · bills on completion' : ''}
                       {!c.active ? ' · inactive' : !c.in_force ? ' · not in force' : ''}
                     </small>
                   </div>
@@ -231,6 +236,9 @@ function ContractDialog({
   onSaved: () => void;
 }) {
   const [name, setName] = useState(contract?.name ?? '');
+  const [party, setParty] = useState<ContractParty>(contract?.party ?? 'client');
+  const [vendorName, setVendorName] = useState(contract?.vendor_name ?? '');
+  const [autoInvoice, setAutoInvoice] = useState(contract?.auto_invoice ?? false);
   const [client, setClient] = useState(contract?.client ?? '');
   const [entity, setEntity] = useState(contract?.billing_entity ?? '');
   const [kind, setKind] = useState<ContractKind>(contract?.kind ?? 'tm');
@@ -255,6 +263,9 @@ function ContractDialog({
   const list = (s: string) => s.split(',').map((x) => x.trim()).filter((x) => x.length > 0);
   const input = (): ContractInput => ({
     name: name.trim(),
+    party,
+    vendor_name: party === 'vendor' ? vendorName.trim() || null : null,
+    auto_invoice: autoInvoice,
     client: client.trim() || null,
     billing_entity: entity.trim() || null,
     kind,
@@ -296,6 +307,20 @@ function ContractDialog({
               <label className="lbl" htmlFor="c-name">Name</label>
               <input id="c-name" className="fld" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Wendy's T&M 2026" />
             </div>
+            <div className="field">
+              <label className="lbl" htmlFor="c-party">Whose terms</label>
+              <select id="c-party" className="fld" value={party} onChange={(e) => setParty(e.target.value as ContractParty)}>
+                {CONTRACT_PARTIES.map((p) => (
+                  <option key={p} value={p}>{CONTRACT_PARTY_LABELS[p]}</option>
+                ))}
+              </select>
+            </div>
+            {party === 'vendor' && (
+              <div className="field">
+                <label className="lbl" htmlFor="c-vendor">Vendor (blank = every vendor)</label>
+                <input id="c-vendor" className="fld" value={vendorName} onChange={(e) => setVendorName(e.target.value)} placeholder="As on the visit's Tech Name" />
+              </div>
+            )}
             <div className="field">
               <label className="lbl" htmlFor="c-client">Client (blank = every client)</label>
               <input id="c-client" className="fld" value={client} onChange={(e) => setClient(e.target.value)} />
@@ -340,6 +365,19 @@ function ContractDialog({
               <label className="ck">
                 <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
                 <span>Active</span>
+              </label>
+            </div>
+            <div className="field intake-wide">
+              <label className="ck">
+                <input type="checkbox" checked={autoInvoice} onChange={(e) => setAutoInvoice(e.target.checked)} />
+                <span>
+                  Bill automatically on completion
+                  <small className="hint" style={{ display: 'block' }}>
+                    {party === 'vendor'
+                      ? 'When a covered work order completes, propose the vendor bill from hours on site × these rates for AP to confirm.'
+                      : 'When a covered work order completes, propose the invoice (the approved quote, else hours on site × these rates) for AR to confirm.'}
+                  </small>
+                </span>
               </label>
             </div>
           </div>

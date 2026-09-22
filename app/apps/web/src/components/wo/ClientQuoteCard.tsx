@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
+import type { Quote as SharedQuote } from '@theone/shared';
 import type { WorkOrderDetailV2, QuoteStatus } from '../../api/client';
 import { FIELD, field, str } from '../../lib/fields';
 import { QUOTE_STATUS } from '../quote/QuoteStatusPill';
+import { QuoteDecision } from '../quote/QuoteDecision';
 import { Icon } from '../Icon';
 import { useAuth } from '../../auth/AuthProvider';
 import { InlineField } from './fieldEdit';
@@ -12,12 +14,16 @@ interface ClientQuoteCardProps {
       undefined while the lookup is still in flight (the button waits rather
       than flickering "Create quote" at a WO that already has one). */
   quoteStatus?: QuoteStatus | null;
+  /** 0053 · the quote itself, when one exists: its permissions decide
+      whether Approve / Decline draw here (BRD §6.4 — "from this tab or from
+      Financials › Quote"). */
+  quote?: SharedQuote | null;
 }
 
 /** The Client Quote, in full, beside the Finances card — it used to render
     inside it clamped to two lines. The text edits in place; the quote-builder
     entry point lives in this card's footer because both are about the quote. */
-export function ClientQuoteCard({ wo, quoteStatus }: ClientQuoteCardProps) {
+export function ClientQuoteCard({ wo, quoteStatus, quote }: ClientQuoteCardProps) {
   const clientQuote = str(field(wo.fields ?? {}, FIELD.clientQuote));
   // 0015 · the entry point follows the quote permissions: no view, no button;
   // no create, no "Create quote" at a WO that has none yet.
@@ -31,6 +37,7 @@ export function ClientQuoteCard({ wo, quoteStatus }: ClientQuoteCardProps) {
     <section className="card quote-card">
       <div className="card-head">
         <h2 className="card-title">Client quote</h2>
+        {quote?.number && <span className="card-meta mono">{quote.number}</span>}
       </div>
       <div className="quote-card-body">
         <InlineField wo={wo} fieldKey={`fields.${FIELD.clientQuote}`} label="Client quote">
@@ -51,6 +58,15 @@ export function ClientQuoteCard({ wo, quoteStatus }: ClientQuoteCardProps) {
           </Link>
           {quoteStatus !== null && (
             <span className="chip chip-sm">{QUOTE_STATUS[quoteStatus]?.label ?? quoteStatus}</span>
+          )}
+          {quote && (
+            <QuoteDecision
+              woNumber={wo.wo_number}
+              status={quote.status}
+              canApprove={quote.permissions?.can_approve ?? can('quotes', 'approve')}
+              nteHold={quote.nte_override_open}
+              size="card"
+            />
           )}
         </div>
       )}

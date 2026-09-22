@@ -10,14 +10,17 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { VENDOR_BILL_STATUS_HINTS, VENDOR_BILL_STATUS_LABELS } from '@theone/shared';
-import { getWorkOrderVendorBills, type WorkOrderDetailV2 } from '../../api/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { getWorkOrderBillingProposals, getWorkOrderVendorBills, type WorkOrderDetailV2 } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
 import { usd } from '../../lib/quoteTotals';
 import { RecordBillDialog, VendorBillActions, useVendorBillActions } from '../payments/VendorBillsLane';
+import { BillingProposalBlock } from './BillingProposalBlock';
 
 export function VendorBillsCard({ wo }: { wo: WorkOrderDetailV2 }) {
   const { can } = useAuth();
+  const qc = useQueryClient();
   const canView = can('payments', 'view');
   const canRecord = can('payments', 'create');
   const q = useQuery({
@@ -26,6 +29,14 @@ export function VendorBillsCard({ wo }: { wo: WorkOrderDetailV2 }) {
     enabled: canView,
     retry: 0,
   });
+  // 0053 · what the vendor's contract proposed to bill when the job completed.
+  const proposalsQ = useQuery({
+    queryKey: ['wo-billing-proposals', wo.id],
+    queryFn: () => getWorkOrderBillingProposals(wo.id),
+    enabled: canView,
+    retry: 0,
+  });
+  const pending = (proposalsQ.data?.items ?? []).find((p) => p.kind === 'vendor_bill' && p.status === 'pending') ?? null;
   const [recording, setRecording] = useState(false);
   const { act, error } = useVendorBillActions();
 
@@ -38,11 +49,24 @@ export function VendorBillsCard({ wo }: { wo: WorkOrderDetailV2 }) {
       <div className="card-head">
         <h2 className="card-title">Vendor bills</h2>
         <span className="card-meta">
-          {items.length === 0 ? 'None on file' : `${items.length} on file · ${usd(unpaid)} unpaid`}
+          {items.length === 0 ? (pending ? 'Proposed — waiting to be confirmed' : 'None on file') : `${items.length} on file · ${usd(unpaid)} unpaid`}
         </span>
       </div>
 
       {error && <p className="composer-err" role="alert">{error}</p>}
+
+      {pending && (
+        <BillingProposalBlock
+          proposal={pending}
+          canDecide={canRecord}
+          confirmLabel="Confirm bill"
+          onDone={() => {
+            void qc.invalidateQueries({ queryKey: ['wo-vendor-bills', wo.id] });
+            void qc.invalidateQueries({ queryKey: ['vendor-bills'] });
+            void qc.invalidateQueries({ queryKey: ['wo-activity', wo.id] });
+          }}
+        />
+      )}
 
       {q.isLoading ? (
         <p className="hint">Looking…</p>

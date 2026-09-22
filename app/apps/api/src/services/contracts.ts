@@ -14,6 +14,7 @@
 import {
   CONTRACT_PERM_KEY,
   CONTRACT_KINDS,
+  CONTRACT_PARTIES,
   RATE_TYPES,
   billableHours,
   contractInForce,
@@ -45,6 +46,9 @@ function requireContractEdit(p: ActingPrincipal, action: 'create' | 'edit' | 'de
 interface Row {
   id: string;
   name: string;
+  party: string;
+  vendor_name: string | null;
+  auto_invoice: boolean;
   client: string | null;
   billing_entity: string | null;
   kind: string;
@@ -73,7 +77,8 @@ interface RateRow {
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
 const SELECT = `
-  SELECT c.id::text AS id, c.name, c.client, c.billing_entity, c.kind, c.account_code,
+  SELECT c.id::text AS id, c.name, c.party, c.vendor_name, c.auto_invoice,
+         c.client, c.billing_entity, c.kind, c.account_code,
          to_char(c.starts_on, 'YYYY-MM-DD') AS starts_on,
          to_char(c.ends_on, 'YYYY-MM-DD') AS ends_on,
          c.active, c.sites_covered, c.trades_covered, c.notes,
@@ -91,6 +96,9 @@ function mapRow(r: Row, rates: ContractRate[]): Contract {
   const base = {
     id: r.id,
     name: r.name,
+    party: (r.party === 'vendor' ? 'vendor' : 'client') as Contract['party'],
+    vendor_name: r.vendor_name,
+    auto_invoice: Boolean(r.auto_invoice),
     client: r.client,
     billing_entity: r.billing_entity,
     kind: r.kind as Contract['kind'],
@@ -183,7 +191,7 @@ export async function contractForTask(taskId: string): Promise<ContractMatch | n
   const s = subj.rows[0];
   if (!s) return null;
 
-  const candidates = await loadAll(`WHERE c.active`);
+  const candidates = await loadAll(`WHERE c.active AND c.party = 'client'`);
   if (candidates.length === 0) return null;
 
   const subject = {
@@ -201,6 +209,66 @@ export async function contractForTask(taskId: string): Promise<ContractMatch | n
       : null);
   if (!contract) return null;
   return { contract, rates: resolveRates(contract.rates, s.trade) };
+}
+
+/**
+ * 0053 · The vendor on a work order, by name: the technician on the latest
+ * visit (the `Tech Name` mirror), else the payee on its most recent payment
+ * request. Vendors are still names, not records, on a work order — the
+ * Vendors batch promotes this to `task.vendor_id`.
+ */
+export async function taskVendor(taskId: string): Promise<{ name: string | null; phone: string | null }> {
+  const res = await query<{ tech_name: string | null; tech_phone: string | null; payee: string | null }>(
+    `SELECT t.fields->>'Tech Name' AS tech_name,
+            t.fields->>'Tech Phone Number' AS tech_phone,
+            (SELECT COALESCE(v.name, pr.payee_name)
+               FROM payment_request pr LEFT JOIN vendor v ON v.id = pr.vendor_id
+              WHERE pr.task_id = t.id ORDER BY pr.created_at DESC LIMIT 1) AS payee
+       FROM task t WHERE t.id = $1`,
+    [taskId],
+  );
+  const r = res.rows[0];
+  if (!r) return { name: null, phone: null };
+  const name = [r.tech_name, r.payee].map((v) => (v ?? '').trim()).find((v) => v !== '') ?? null;
+  return { name, phone: (r.tech_phone ?? '').trim() || null };
+}
+
+/**
+ * 0053 · The VENDOR contract in force for a work order: the terms the vendor
+ * on the job bills us at. Same specificity rules as the client card, keyed
+ * by the vendor's name; null when no vendor is known or no card covers them.
+ */
+export async function vendorContractForTask(taskId: string): Promise<(ContractMatch & { vendor: string }) | null> {
+  const vendor = await taskVendor(taskId);
+  if (!vendor.name) return null;
+  const subj = await query<SubjectRow>(
+    `SELECT t.client, t.billing_entity, t.trade,
+            t.fields->>'Store' AS store,
+            s.store_number AS site_store, s.name AS site_name
+       FROM task t
+       LEFT JOIN site s ON s.id = t.site_id
+      WHERE t.id = $1`,
+    [taskId],
+  );
+  const s = subj.rows[0];
+  if (!s) return null;
+  const candidates = await loadAll(`WHERE c.active AND c.party = 'vendor'`);
+  if (candidates.length === 0) return null;
+  const subject = {
+    party: 'vendor' as const,
+    vendor: vendor.name,
+    client: s.client,
+    billing_entity: s.billing_entity,
+    trade: s.trade,
+    site: s.store ?? s.site_store ?? s.site_name,
+  };
+  const contract =
+    pickContract(candidates, subject, today()) ??
+    (s.site_name && subject.site !== s.site_name
+      ? pickContract(candidates, { ...subject, site: s.site_name }, today())
+      : null);
+  if (!contract) return null;
+  return { contract, rates: resolveRates(contract.rates, s.trade), vendor: vendor.name };
 }
 
 /** Hours on site across every completed visit on the work order (0021), to
@@ -230,6 +298,8 @@ function cleanInput(input: ContractInput): Required<Omit<ContractInput, 'rates'>
   if (name === '') throw badRequest('A contract needs a name');
   const kind = input.kind ?? 'tm';
   if (!(CONTRACT_KINDS as readonly string[]).includes(kind)) throw badRequest(`Unknown contract kind "${kind}"`);
+  const party = input.party ?? 'client';
+  if (!(CONTRACT_PARTIES as readonly string[]).includes(party)) throw badRequest(`Unknown contract party "${party}"`);
   const starts_on = input.starts_on ?? today();
   const ends_on = input.ends_on ?? null;
   if (ends_on && ends_on < starts_on) throw badRequest('A contract cannot end before it starts');
@@ -244,6 +314,9 @@ function cleanInput(input: ContractInput): Required<Omit<ContractInput, 'rates'>
     (v ?? []).map((s) => String(s).trim()).filter((s) => s.length > 0);
   return {
     name,
+    party,
+    vendor_name: party === 'vendor' ? input.vendor_name?.trim() || null : null,
+    auto_invoice: input.auto_invoice ?? false,
     client: input.client?.trim() || null,
     billing_entity: input.billing_entity?.trim() || null,
     kind,
@@ -261,6 +334,9 @@ function cleanInput(input: ContractInput): Required<Omit<ContractInput, 'rates'>
 function snapshot(c: Contract): Record<string, unknown> & { name: string } {
   return {
     name: c.name,
+    party: c.party,
+    vendor_name: c.vendor_name,
+    auto_invoice: c.auto_invoice,
     client: c.client,
     billing_entity: c.billing_entity,
     kind: c.kind,
@@ -294,12 +370,13 @@ export async function createContract(input: ContractInput, actor: ActingPrincipa
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO contract
          (name, client, billing_entity, kind, account_code, starts_on, ends_on, active,
-          sites_covered, trades_covered, notes, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8, $9::text[], $10::text[], $11, $12)
+          sites_covered, trades_covered, notes, created_by, party, vendor_name, auto_invoice)
+       VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8, $9::text[], $10::text[], $11, $12, $13, $14, $15)
        RETURNING id::text AS id`,
       [
         v.name, v.client, v.billing_entity, v.kind, v.account_code, v.starts_on, v.ends_on,
         v.active, v.sites_covered, v.trades_covered, v.notes, actor.id,
+        v.party, v.vendor_name, v.auto_invoice,
       ],
     );
     id = ins.rows[0].id;
@@ -319,11 +396,13 @@ export async function updateContract(id: string, input: ContractInput, actor: Ac
       `UPDATE contract
           SET name = $2, client = $3, billing_entity = $4, kind = $5, account_code = $6,
               starts_on = $7::date, ends_on = $8::date, active = $9,
-              sites_covered = $10::text[], trades_covered = $11::text[], notes = $12
+              sites_covered = $10::text[], trades_covered = $11::text[], notes = $12,
+              party = $13, vendor_name = $14, auto_invoice = $15
         WHERE id = $1`,
       [
         id, v.name, v.client, v.billing_entity, v.kind, v.account_code, v.starts_on, v.ends_on,
         v.active, v.sites_covered, v.trades_covered, v.notes,
+        v.party, v.vendor_name, v.auto_invoice,
       ],
     );
     await writeRates(tx, id, v.rates);

@@ -21,6 +21,8 @@ import { usd } from '../lib/quoteTotals';
 import { numericDate } from '../lib/fields';
 import { EmergencyBadge } from '../components/EmergencyBadge';
 import { EscalatedBadge } from '../components/EscalatedBadge';
+import { QuoteDecision } from '../components/quote/QuoteDecision';
+import { useAuth } from '../auth/AuthProvider';
 
 type Lane = 'all' | QuoteStatus;
 
@@ -35,6 +37,9 @@ const LANES: { key: Lane; label: string }[] = [
 export function QuotesPage() {
   const navigate = useNavigate();
   const quotesQuery = useQuery({ queryKey: ['quotes'], queryFn: listQuotes, retry: 0 });
+  // 0053 · BRD §6.4: approve or decline from the sidebar list, not only the builder.
+  const { can } = useAuth();
+  const canApprove = can('quotes', 'approve');
 
   const items = useMemo(() => quotesQuery.data?.items ?? [], [quotesQuery.data]);
   const [lane, setLane] = useState<Lane>('all');
@@ -174,6 +179,7 @@ export function QuotesPage() {
                     <td className="col-nte num">{q.grand_total == null ? '—' : usd(q.grand_total)}</td>
                     <td className="col-date">{numericDate(q.updated_at) ?? '—'}</td>
                     <td className="rcv-action-td">
+                      <QuoteDecision woNumber={q.wo_number} status={q.status} canApprove={canApprove} size="row" />
                       <Link
                         className="rcv-btn"
                         to={`${href}/print`}

@@ -34,6 +34,7 @@ import { getBindableQuoteTotal } from './quotes.js';
 import { assertStatusGate } from './statusGates.js';
 import { intakeMissingFor } from './intakeGate.js';
 import { obligationsReady, worstObligationsByTask, evaluateForTask } from './obligations.js';
+import { proposeBillingOnCompletion } from './billingProposals.js';
 import {
   Params,
   compileFilters,
@@ -557,12 +558,12 @@ export async function changeStatus(
   // behind the open transaction and self-deadlock.
 
   // Captured for the automations engine, which runs AFTER the commit.
-  let fired: { taskId: string; change: TaskChange } | null = null;
+  let fired: { taskId: string; change: TaskChange; fromGroup: string | null; toGroup: string } | null = null;
 
   await withTransaction(async (tx) => {
     // Current task + status.
-    const cur = await tx.query<{ task_id: string; status_id: string; status_name: string; ecotrak_status: string | null }>(
-      `SELECT t.id AS task_id, t.status_id, s.name AS status_name,
+    const cur = await tx.query<{ task_id: string; status_id: string; status_name: string; status_group: string | null; ecotrak_status: string | null }>(
+      `SELECT t.id AS task_id, t.status_id, s.name AS status_name, t.status_group,
               t.fields ->> '${ECOTRAK_STATUS_KEY}' AS ecotrak_status
          FROM task t JOIN status s ON s.id = t.status_id
         WHERE t.${col} = $1 AND t.deleted_at IS NULL
@@ -572,7 +573,7 @@ export async function changeStatus(
     if (cur.rows.length === 0) {
       throw new ApiError('NOT_FOUND', 'Work order not found');
     }
-    const { task_id, status_id: currentStatusId, status_name: currentStatusName, ecotrak_status } = cur.rows[0];
+    const { task_id, status_id: currentStatusId, status_name: currentStatusName, status_group: currentGroup, ecotrak_status } = cur.rows[0];
 
     // Target status must exist.
     const target = await tx.query<{ id: string; name: string; status_group: string }>(
@@ -624,7 +625,7 @@ export async function changeStatus(
       },
     };
     await logTaskChanges(tx, actorId, task_id, [change], auto?.by ?? source);
-    fired = { taskId: task_id, change };
+    fired = { taskId: task_id, change, fromGroup: currentGroup, toGroup: newGroup };
   });
 
   // Automations react after the commit and before the detail is re-read, so the
@@ -644,5 +645,15 @@ export async function changeStatus(
   // transaction has committed (PGlite is single-connection). evaluateForTask
   // never throws, so the status change cannot fail because of a clock.
   await evaluateForTask(detail.id);
+
+  // 0053 · BRD §6.4: the work order is done — a contract with "bill
+  // automatically on completion" proposes the invoice or the vendor bill for
+  // a person to confirm. After the commit, and it never throws.
+  if (fired !== null) {
+    const f: { toGroup: string; fromGroup: string | null; taskId: string } = fired;
+    if (f.toGroup === 'done' && f.fromGroup !== 'done') {
+      await proposeBillingOnCompletion(f.taskId, actorId);
+    }
+  }
   return detail;
 }

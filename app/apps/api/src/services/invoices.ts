@@ -26,6 +26,7 @@ import {
   INVOICE_DEFAULT_TERMS_DAYS,
   INVOICE_EXISTS_CODE,
   INVOICE_LOCKED_CODE,
+  contractBillingLines,
   formatInvoiceNumber,
   invoiceTotals,
   isEditable,
@@ -44,7 +45,7 @@ import { woScopeSql } from './woScope.js';
 import { Params } from './woFields.js';
 import type { ActingPrincipal } from './activity.js';
 import { OT_MULTIPLIER, computeLineAmount, computeQuoteTotals } from './quotes.js';
-import { contractForTask, hoursOnSite } from './contracts.js';
+import { contractForTask, hoursOnSite, taskVendor } from './contracts.js';
 import { assertTierAllows } from './approvalTiers.js';
 
 const PERM = 'invoicing';
@@ -81,6 +82,12 @@ interface Row {
   discount: string | number;
   total: string | number;
   cost: string | number | null;
+  title: string | null;
+  site: string | null;
+  vendor_name: string | null;
+  vendor_contact: string | null;
+  contract_id: string | null;
+  contract_name: string | null;
   note: string | null;
   issued_at: string | null;
   due_at: string | null;
@@ -103,6 +110,8 @@ const SELECT = `
          t.wo_number,
          i.number, i.billing_entity, i.client, i.status,
          i.subtotal, i.tax, i.discount, i.total, i.cost, i.note,
+         i.title, i.site, i.vendor_name, i.vendor_contact,
+         i.contract_id::text AS contract_id, c.name AS contract_name,
          ${ISO('i.issued_at')} AS issued_at,
          to_char(i.due_at, 'YYYY-MM-DD') AS due_at,
          ${ISO('i.paid_at')} AS paid_at,
@@ -116,7 +125,8 @@ const SELECT = `
     FROM invoice i
     JOIN task t ON t.id = i.task_id
     LEFT JOIN principal cb ON cb.id = i.created_by
-    LEFT JOIN principal sb ON sb.id = i.sent_by`;
+    LEFT JOIN principal sb ON sb.id = i.sent_by
+    LEFT JOIN contract c ON c.id = i.contract_id`;
 
 const n = (v: string | number | null | undefined): number => (v === null || v === undefined ? 0 : Number(v));
 
@@ -134,6 +144,12 @@ function mapRow(r: Row, lines: InvoiceLine[]): Invoice {
     discount: n(r.discount),
     total: n(r.total),
     cost: r.cost === null ? null : n(r.cost),
+    title: r.title,
+    site: r.site,
+    vendor_name: r.vendor_name,
+    vendor_contact: r.vendor_contact,
+    contract_id: r.contract_id,
+    contract_name: r.contract_name,
     note: r.note,
     issued_at: r.issued_at,
     due_at: r.due_at,
@@ -302,42 +318,127 @@ async function prefillFromQuote(taskId: string): Promise<{ lines: InvoiceLineInp
  * contract's standard rate, plus its trip charge per visit. Returns nothing
  * when the contract states no hourly rate or no visit has been completed.
  */
-async function prefillFromContract(taskId: string): Promise<{ lines: InvoiceLineInput[]; basis: string } | null> {
+async function prefillFromContract(
+  taskId: string,
+): Promise<{ lines: InvoiceLineInput[]; basis: string; contract_id: string; hours: number; visits: number } | null> {
   const match = await contractForTask(taskId);
   if (!match || match.contract.kind !== 'tm') return null;
   const { hours, visits } = await hoursOnSite(taskId);
-  const lines: InvoiceLineInput[] = [];
-  if (match.rates.standard !== null && hours > 0) {
-    lines.push({
-      kind: 'labor',
-      description: `Labor — ${hours} h on site at contract rate (${match.contract.name})`,
-      quantity: hours,
-      unit_price: match.rates.standard,
-    });
-  }
-  if (match.rates.trip_charge !== null && match.rates.trip_charge > 0 && visits > 0) {
-    lines.push({
-      kind: 'trip',
-      description: `Trip charge × ${visits} visit${visits === 1 ? '' : 's'} (${match.contract.name})`,
-      quantity: visits,
-      unit_price: match.rates.trip_charge,
-    });
-  }
+  const lines = contractBillingLines(match.rates, hours, visits, match.contract.name);
   if (lines.length === 0) return null;
-  return { lines, basis: match.contract.name };
+  return { lines, basis: match.contract.name, contract_id: match.contract.id, hours, visits };
 }
 
-/** The work order's own money, for the fallback and for the margin. */
+/** The work order's own money, for the fallback and for the margin — and,
+    since 0053, the name, location and vendor the invoice snapshots. */
 interface TaskMoneyRow {
   wo_number: string;
+  title: string | null;
   client: string | null;
   billing_entity: string | null;
   nte: string | number | null;
   cost: string | null;
   invoiced: string | null;
+  store: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  tech_name: string | null;
+  tech_phone: string | null;
 }
 
-export async function createInvoice(taskId: string, actor: ActingPrincipal): Promise<Invoice> {
+const TASK_MONEY_SQL = `
+  SELECT t.wo_number, t.title, t.client, t.billing_entity, t.nte,
+         t.fields->>'34. Cost' AS cost,
+         t.fields->>'Total Invoiced' AS invoiced,
+         t.fields->>'Store' AS store,
+         t.fields->>'17. Address' AS address,
+         t.fields->>'City' AS city,
+         t.fields->>'State' AS state,
+         t.fields->>'Zip Code' AS zip,
+         t.fields->>'Tech Name' AS tech_name,
+         t.fields->>'Tech Phone Number' AS tech_phone
+    FROM task t WHERE t.id = $1 AND t.deleted_at IS NULL`;
+
+/** "Store 1234 · 12 Main St, Austin, TX 78701" — whatever the work order has. */
+function siteLine(t: TaskMoneyRow): string | null {
+  const place = [t.address, [t.city, t.state].filter(Boolean).join(', '), t.zip]
+    .map((v) => String(v ?? '').trim())
+    .filter((v) => v !== '')
+    .join(', ');
+  const parts = [t.store ? `Store ${t.store}` : null, place || null].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/** What an invoice would start from, before one exists: the approved
+    quote's lines, else the contract's hours on site, else the work order's
+    own figure. Exported so a completion proposal (0053) shows the same lines
+    Raise invoice would write. */
+export interface InvoiceDraft {
+  lines: InvoiceLineInput[];
+  tax: number;
+  basis: string;
+  contract_id: string | null;
+  hours: number;
+  visits: number;
+}
+
+export async function draftInvoice(taskId: string, task?: TaskMoneyRow): Promise<InvoiceDraft> {
+  const t = task ?? (await query<TaskMoneyRow>(TASK_MONEY_SQL, [taskId])).rows[0];
+  if (!t) throw notFound('Work order not found');
+
+  const fromQuote = await prefillFromQuote(taskId);
+  let lines = fromQuote.lines;
+  let tax = fromQuote.tax;
+  let basis = 'quote';
+  let contractId: string | null = null;
+  let hours = 0;
+  let visits = 0;
+  // No quote: under a time-and-materials contract (0046) the bill is the
+  // hours on site at the contract rate, plus the trip charge.
+  if (lines.length === 0) {
+    const fromContract = await prefillFromContract(taskId);
+    if (fromContract) {
+      lines = fromContract.lines;
+      basis = `contract: ${fromContract.basis}`;
+      contractId = fromContract.contract_id;
+      hours = fromContract.hours;
+      visits = fromContract.visits;
+    }
+  }
+  // Still nothing: start from what the work order says it is worth, so AR
+  // has a line to correct rather than a blank page.
+  if (lines.length === 0) {
+    const fallback = Number(t.invoiced ?? '') || n(t.nte);
+    basis = 'work order';
+    lines = [
+      {
+        kind: 'service',
+        description: `Work order ${t.wo_number}`,
+        quantity: 1,
+        unit_price: Math.round(fallback * 100) / 100,
+      },
+    ];
+  }
+  if (!(tax > 0)) tax = 0;
+  if (contractId === null) {
+    // A quote priced against a contract carries it; the invoice inherits.
+    const q = await query<{ contract_id: string | null }>(
+      `SELECT contract_id::text AS contract_id FROM quote WHERE task_id = $1 LIMIT 1`,
+      [taskId],
+    );
+    contractId = q.rows[0]?.contract_id ?? null;
+  }
+  return { lines, tax, basis, contract_id: contractId, hours, visits };
+}
+
+export async function createInvoice(
+  taskId: string,
+  actor: ActingPrincipal,
+  /** 0053 · a confirmed proposal's lines, written as they were shown. */
+  from?: Pick<InvoiceDraft, 'lines' | 'tax' | 'basis' | 'contract_id'>,
+): Promise<Invoice> {
   requireInvoiceCreate(actor);
 
   const already = await query<{ id: string; number: string }>(
@@ -352,44 +453,18 @@ export async function createInvoice(taskId: string, actor: ActingPrincipal): Pro
     });
   }
 
-  const taskRes = await query<TaskMoneyRow>(
-    `SELECT t.wo_number, t.client, t.billing_entity, t.nte,
-            t.fields->>'34. Cost' AS cost,
-            t.fields->>'Total Invoiced' AS invoiced
-       FROM task t WHERE t.id = $1 AND t.deleted_at IS NULL`,
-    [taskId],
-  );
+  const taskRes = await query<TaskMoneyRow>(TASK_MONEY_SQL, [taskId]);
   const task = taskRes.rows[0];
   if (!task) throw notFound('Work order not found');
 
-  const fromQuote = await prefillFromQuote(taskId);
-  let lines = fromQuote.lines;
-  let tax = fromQuote.tax;
-  let basis = 'quote';
-  // No quote: under a time-and-materials contract (0046) the bill is the
-  // hours on site at the contract rate, plus the trip charge.
-  if (lines.length === 0) {
-    const fromContract = await prefillFromContract(taskId);
-    if (fromContract) {
-      lines = fromContract.lines;
-      basis = `contract: ${fromContract.basis}`;
-    }
-  }
-  // Still nothing: start from what the work order says it is worth, so AR
-  // has a line to correct rather than a blank page.
-  if (lines.length === 0) {
-    const fallback = Number(task.invoiced ?? '') || n(task.nte);
-    basis = 'work order';
-    lines = [
-      {
-        kind: 'service',
-        description: `Work order ${task.wo_number}`,
-        quantity: 1,
-        unit_price: Math.round(fallback * 100) / 100,
-      },
-    ];
-  }
-  if (!(tax > 0)) tax = 0;
+  const draft = from ?? (await draftInvoice(taskId, task));
+  const lines = draft.lines;
+  const tax = draft.tax > 0 ? draft.tax : 0;
+  const basis = draft.basis;
+  // BRD §6.4 "vendor details": the technician on the job, by name and phone.
+  const vendor = await taskVendor(taskId);
+  const vendorName = vendor.name;
+  const vendorContact = vendor.phone ?? ((task.tech_phone ?? '').trim() || null);
 
   const { subtotal, total } = invoiceTotals(
     lines.map((l) => ({ quantity: l.quantity ?? 1, unit_price: l.unit_price ?? 0 })),
@@ -421,8 +496,10 @@ export async function createInvoice(taskId: string, actor: ActingPrincipal): Pro
 
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO invoice
-         (task_id, number, billing_entity, client, status, subtotal, tax, discount, total, cost, created_by, due_at)
-       VALUES ($1, $2, $3, $4, 'draft', $5, $10, 0, $6, $7, $8, (now() + ($9 || ' days')::interval)::date)
+         (task_id, number, billing_entity, client, status, subtotal, tax, discount, total, cost, created_by, due_at,
+          title, site, vendor_name, vendor_contact, contract_id)
+       VALUES ($1, $2, $3, $4, 'draft', $5, $10, 0, $6, $7, $8, (now() + ($9 || ' days')::interval)::date,
+               $11, $12, $13, $14, $15::uuid)
        RETURNING id::text AS id`,
       [
         taskId,
@@ -435,6 +512,11 @@ export async function createInvoice(taskId: string, actor: ActingPrincipal): Pro
         actor.id,
         String(INVOICE_DEFAULT_TERMS_DAYS),
         tax,
+        (task.title ?? '').trim() || null,
+        siteLine(task),
+        vendorName,
+        vendorContact,
+        draft.contract_id,
       ],
     );
     invoiceId = ins.rows[0].id;

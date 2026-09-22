@@ -67,6 +67,9 @@ export interface VendorBill {
   paid_at: string | null;
   paid_reference: string | null;
   payment_request_id: string | null;
+  /** 0053 · the vendor contract whose rates this bill was proposed from. */
+  contract_id: string | null;
+  contract_name: string | null;
   created_by: { id: string; display_name: string } | null;
   created_at: string;
   updated_at: string;
@@ -105,6 +108,8 @@ export interface VendorBillCreateInput {
   tax?: number;
   note?: string | null;
   lines: VendorBillLineInput[];
+  /** 0053 · set when the bill is confirmed from a contract's proposal. */
+  contract_id?: string | null;
 }
 
 export interface VendorBillUpdateInput {

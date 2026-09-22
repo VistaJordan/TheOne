@@ -52,6 +52,7 @@ const createSchema = z
     tax: z.number().min(0).max(1_000_000).optional(),
     note: z.string().trim().max(2000).nullable().optional(),
     lines: z.array(lineSchema).min(1).max(200),
+    contract_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 

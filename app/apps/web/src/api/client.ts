@@ -3,6 +3,7 @@
 // boundary (SPRINT1-SPEC §8 Card C). Web never imports @theone/db.
 import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
 import type { PmOccurrence, PmSchedule, PmScheduleInput, PmSchedulesResponse } from '@theone/shared';
+import type { BillingProposal, BillingProposalsResponse } from '@theone/shared';
 import type {
   ApprovalCounts,
   ApprovalListResponse,
@@ -1837,6 +1838,37 @@ export function getWorkOrderContract(idOrNumber: string): Promise<{
   hours: { hours: number; visits: number } | null;
 }> {
   return request(`/work-orders/${encodeURIComponent(idOrNumber)}/contract`);
+}
+
+// ── 0053 · billing proposals (BRD §6.4: bill on completion, confirm to file) ─
+
+/** Every pending proposal this person may decide, oldest first. */
+export function listBillingProposals(): Promise<BillingProposalsResponse> {
+  return request('/billing-proposals');
+}
+
+/** The proposals on one work order — pending and decided. */
+export function getWorkOrderBillingProposals(idOrNumber: string): Promise<BillingProposalsResponse> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/billing-proposals`);
+}
+
+/** Yes: files the invoice or the vendor bill with the proposal's lines. */
+export function confirmBillingProposal(
+  id: string,
+  note?: string | null,
+): Promise<{ proposal: BillingProposal; result_id: string }> {
+  return request(`/billing-proposals/${id}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ note: note ?? null }),
+  });
+}
+
+/** No: files nothing, keeps the reason. */
+export function dismissBillingProposal(id: string, note?: string | null): Promise<{ proposal: BillingProposal }> {
+  return request(`/billing-proposals/${id}/dismiss`, {
+    method: 'POST',
+    body: JSON.stringify({ note: note ?? null }),
+  });
 }
 
 // ── 0047 · vendor bills (AP) ─────────────────────────────────────────────────

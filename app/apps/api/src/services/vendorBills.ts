@@ -78,6 +78,8 @@ interface Row {
   paid_at: string | null;
   paid_reference: string | null;
   payment_request_id: string | null;
+  contract_id: string | null;
+  contract_name: string | null;
   created_by_id: string | null;
   created_by_name: string | null;
   created_at: string;
@@ -98,6 +100,7 @@ const SELECT = `
          b.paid_by::text AS paid_by_id, pb.display_name AS paid_by_name,
          ${ISO('b.paid_at')} AS paid_at, b.paid_reference,
          b.payment_request_id::text AS payment_request_id,
+         b.contract_id::text AS contract_id, c.name AS contract_name,
          b.created_by::text AS created_by_id, cb.display_name AS created_by_name,
          ${ISO('b.created_at')} AS created_at,
          ${ISO('b.updated_at')} AS updated_at,
@@ -107,7 +110,8 @@ const SELECT = `
     JOIN task t ON t.id = b.task_id
     LEFT JOIN principal ab ON ab.id = b.approved_by
     LEFT JOIN principal pb ON pb.id = b.paid_by
-    LEFT JOIN principal cb ON cb.id = b.created_by`;
+    LEFT JOIN principal cb ON cb.id = b.created_by
+    LEFT JOIN contract c ON c.id = b.contract_id`;
 
 const n = (v: string | number | null | undefined): number => (v === null || v === undefined ? 0 : Number(v));
 
@@ -138,6 +142,8 @@ function mapRow(
     paid_at: r.paid_at,
     paid_reference: r.paid_reference,
     payment_request_id: r.payment_request_id,
+    contract_id: r.contract_id,
+    contract_name: r.contract_name,
     created_by: r.created_by_id ? { id: r.created_by_id, display_name: r.created_by_name ?? '—' } : null,
     created_at: r.created_at,
     updated_at: r.updated_at,
@@ -272,12 +278,13 @@ export async function createVendorBill(input: VendorBillCreateInput, actor: Acti
   await withTransaction(async (tx) => {
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO vendor_bill
-         (task_id, vendor_id, vendor_name, bill_number, received_on, due_on, status, subtotal, tax, total, note, created_by)
-       VALUES ($1, $2::uuid, $3, $4, COALESCE($5::date, CURRENT_DATE), $6::date, 'received', $7, $8, $9, $10, $11)
+         (task_id, vendor_id, vendor_name, bill_number, received_on, due_on, status, subtotal, tax, total, note, created_by, contract_id)
+       VALUES ($1, $2::uuid, $3, $4, COALESCE($5::date, CURRENT_DATE), $6::date, 'received', $7, $8, $9, $10, $11, $12::uuid)
        RETURNING id::text AS id`,
       [
         input.task_id, input.vendor_id ?? null, vendorName, input.bill_number?.trim() || null,
         input.received_on ?? null, input.due_on ?? null, subtotal, tax, total, input.note?.trim() || null, actor.id,
+        input.contract_id ?? null,
       ],
     );
     id = ins.rows[0].id;

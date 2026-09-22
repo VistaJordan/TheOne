@@ -308,6 +308,14 @@
 
 .rcv-stage.is-paid .rcv-status-dot { background: var(--ink-3); }
 
+/* 0053 · a proposal from a contract on completion — not a document yet. */
+.rcv-stage.is-proposed {
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+  color: var(--warn);
+}
+.rcv-stage.is-proposed .rcv-status-dot { background: var(--warn-solid); }
+
 .rcv-status-extra {
   font-weight: 500;
   opacity: 0.75;

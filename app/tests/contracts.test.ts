@@ -28,6 +28,9 @@ const rate = (rate_type: ContractRate['rate_type'], amount: number, trade: strin
 const contract = (over: Partial<Contract>): Contract => ({
   id: over.id ?? 'c',
   name: over.name ?? 'Card',
+  party: 'client',
+  vendor_name: null,
+  auto_invoice: false,
   client: null,
   billing_entity: null,
   kind: 'tm',

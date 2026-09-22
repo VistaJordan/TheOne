@@ -22,6 +22,7 @@ import {
 import {
   ApiRequestError,
   createInvoice,
+  getWorkOrderBillingProposals,
   getWorkOrderInvoice,
   markInvoicePaid,
   sendInvoice,
@@ -29,6 +30,7 @@ import {
 } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
+import { BillingProposalBlock } from './BillingProposalBlock';
 
 const money = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
@@ -49,11 +51,21 @@ export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
     retry: 0,
   });
 
+  // 0053 · what a contract proposed to bill when the job completed (BRD §6.4).
+  const proposalsQ = useQuery({
+    queryKey: ['wo-billing-proposals', wo.id],
+    queryFn: () => getWorkOrderBillingProposals(wo.id),
+    enabled: canView,
+    retry: 0,
+  });
+  const pending = (proposalsQ.data?.items ?? []).find((p) => p.kind === 'invoice' && p.status === 'pending') ?? null;
+
   const done = () => {
     setError(null);
     void qc.invalidateQueries({ queryKey: ['wo-invoice', wo.id] });
     void qc.invalidateQueries({ queryKey: ['invoices'] });
     void qc.invalidateQueries({ queryKey: ['wo-activity', wo.id] });
+    void qc.invalidateQueries({ queryKey: ['wo-billing-proposals', wo.id] });
   };
   const fail = (err: unknown) =>
     setError(err instanceof ApiRequestError ? err.message : 'That did not go through');
@@ -84,7 +96,7 @@ export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
       <div className="card-head">
         <h2 className="card-title">Client invoice</h2>
         <span className="card-meta">
-          {invoice ? INVOICE_STATUS_HINTS[invoice.status] : 'Not raised yet'}
+          {invoice ? INVOICE_STATUS_HINTS[invoice.status] : pending ? 'Proposed — waiting to be confirmed' : 'Not raised yet'}
         </span>
       </div>
 
@@ -99,6 +111,13 @@ export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
           canSend={canSend}
           onSend={() => send.mutate(invoice.id)}
           onPaid={() => pay.mutate(invoice.id)}
+        />
+      ) : pending ? (
+        <BillingProposalBlock
+          proposal={pending}
+          canDecide={canRaise}
+          confirmLabel="Confirm invoice"
+          onDone={done}
         />
       ) : (
         <div className="inv-empty">
@@ -149,6 +168,33 @@ function InvoiceBody({
         </span>
       </div>
 
+      {/* 0053 · BRD §6.4 "invoice contents": the job, where, and who did it. */}
+      {(invoice.title || invoice.site || invoice.vendor_name) && (
+        <dl className="inv-meta">
+          {invoice.title && (
+            <div>
+              <dt>Work order</dt>
+              <dd>{invoice.title}</dd>
+            </div>
+          )}
+          {invoice.site && (
+            <div>
+              <dt>Location</dt>
+              <dd>{invoice.site}</dd>
+            </div>
+          )}
+          {invoice.vendor_name && (
+            <div>
+              <dt>Vendor</dt>
+              <dd>
+                {invoice.vendor_name}
+                {invoice.vendor_contact ? ` · ${invoice.vendor_contact}` : ''}
+              </dd>
+            </div>
+          )}
+        </dl>
+      )}
+
       <table className="ct inv-lines">
         <tbody>
           {invoice.lines.map((l) => (
@@ -191,6 +237,7 @@ function InvoiceBody({
       <div className="inv-foot">
         <span className="card-meta">
           {invoice.due_at ? `Due ${invoice.due_at}` : 'No due date'}
+          {invoice.contract_name ? ` · priced by ${invoice.contract_name}` : ''}
           {invoice.sent_by ? ` · sent by ${invoice.sent_by.display_name}` : ''}
           {invoice.paid_reference ? ` · ref ${invoice.paid_reference}` : ''}
         </span>

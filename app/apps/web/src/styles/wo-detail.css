@@ -2653,3 +2653,37 @@ a.photo-img.is-real img {
 
 .inv-actions { display: inline-flex; align-items: center; gap: 8px; }
 .inv-empty { display: grid; gap: 10px; justify-items: start; }
+
+/* 0053 · the invoice's own header facts (BRD §6.4 "invoice contents"). */
+.inv-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px 14px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--chip);
+}
+.inv-meta div { min-width: 0; }
+.inv-meta dt { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); }
+.inv-meta dd { margin: 0; font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
+
+/* 0053 · a billing proposal: what the contract worked out on completion,
+   waiting on a person. Warn tint — it is not a document yet. */
+.inv-proposal {
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.inv-proposal-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; color: var(--warn); }
+.inv-proposal-head b { display: block; font-size: 12px; color: var(--ink); }
+.inv-proposal-head small { display: block; font-size: 11px; color: var(--ink-3); }
+.inv-proposal-note { display: grid; gap: 8px; margin-top: 8px; justify-items: end; }
+.inv-proposal-note .lbl, .inv-proposal-note .fld { justify-self: stretch; }
+
+/* 0053 · approve / decline a quote from a card or a list row. */
+.qd { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.qd-err { font-size: 11px; color: var(--danger); }

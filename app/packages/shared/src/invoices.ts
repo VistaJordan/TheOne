@@ -76,6 +76,15 @@ export interface Invoice {
   total: number;
   /** What the job cost us — carried so margin survives on the invoice. */
   cost: number | null;
+  /** 0053 · BRD §6.4 "invoice contents": the work order's name and location
+      and the vendor on the job, snapshotted when the invoice is raised. */
+  title: string | null;
+  site: string | null;
+  vendor_name: string | null;
+  vendor_contact: string | null;
+  /** 0053 · the contract that priced it, when one did. */
+  contract_id: string | null;
+  contract_name: string | null;
   note: string | null;
   issued_at: string | null;
   due_at: string | null;

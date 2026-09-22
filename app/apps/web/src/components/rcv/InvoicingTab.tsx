@@ -16,7 +16,7 @@
  */
 
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   INVOICE_STATUS_HINTS,
@@ -27,7 +27,10 @@ import {
 } from '@theone/shared';
 import {
   ApiRequestError,
+  confirmBillingProposal,
   createInvoice,
+  dismissBillingProposal,
+  listBillingProposals,
   markInvoicePaid,
   sendInvoice,
   type WorkOrderListItemV2,
@@ -36,10 +39,11 @@ import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
 import { StatCard, money } from './bits';
 
-export type StageFilter = 'all' | 'ready' | InvoiceStatus;
+export type StageFilter = 'all' | 'ready' | 'proposed' | InvoiceStatus;
 
 const STAGE_FILTERS: { key: StageFilter; label: string }[] = [
   { key: 'all', label: 'All' },
+  { key: 'proposed', label: 'Proposed' },
   { key: 'ready', label: 'Ready' },
   { key: 'draft', label: 'Drafts' },
   { key: 'sent', label: 'Sent' },
@@ -75,9 +79,16 @@ export function InvoicingTab({
   const canRaise = can('invoicing', 'create');
   const canSend = can('invoicing', 'approve');
 
+  // 0053 · BRD §6.4: invoices a contract proposed on completion, waiting on
+  // AR. Confirming files one (it then appears below as a draft); dismissing
+  // files nothing. Vendor-bill proposals belong to Payments, not here.
+  const proposalsQ = useQuery({ queryKey: ['billing-proposals'], queryFn: listBillingProposals, retry: 0 });
+  const proposed = (proposalsQ.data?.items ?? []).filter((p) => p.kind === 'invoice');
+
   const done = () => {
     setFailure(null);
     void qc.invalidateQueries({ queryKey: ['invoices'] });
+    void qc.invalidateQueries({ queryKey: ['billing-proposals'] });
   };
   const fail = (err: unknown) =>
     setFailure(err instanceof ApiRequestError ? err.message : 'That did not go through');
@@ -89,23 +100,28 @@ export function InvoicingTab({
     onSuccess: done,
     onError: fail,
   });
-  const busy = raise.isPending || send.isPending || pay.isPending;
+  const confirm = useMutation({ mutationFn: (id: string) => confirmBillingProposal(id), onSuccess: done, onError: fail });
+  const dismiss = useMutation({ mutationFn: (id: string) => dismissBillingProposal(id), onSuccess: done, onError: fail });
+  const busy = raise.isPending || send.isPending || pay.isPending || confirm.isPending || dismiss.isPending;
 
   const showReady = filter === 'all' || filter === 'ready';
+  const showProposed = filter === 'all' || filter === 'proposed';
   const visibleInvoices =
     filter === 'all'
       ? invoices
-      : filter === 'ready'
+      : filter === 'ready' || filter === 'proposed'
         ? []
         : invoices.filter((i) => i.status === filter);
   const COLS = 7;
 
   const countFor = (key: StageFilter) =>
     key === 'all'
-      ? ready.length + invoices.length
+      ? proposed.length + ready.length + invoices.length
       : key === 'ready'
         ? ready.length
-        : invoices.filter((i) => i.status === key).length;
+        : key === 'proposed'
+          ? proposed.length
+          : invoices.filter((i) => i.status === key).length;
 
   return (
     <>
@@ -198,15 +214,76 @@ export function InvoicingTab({
                 <td colSpan={COLS}>Failed to load work orders. Is the API running on :5174?</td>
               </tr>
             )}
-            {!loading && !error && ready.length === 0 && visibleInvoices.length === 0 && (
+            {!loading && !error && ready.length === 0 && visibleInvoices.length === 0 && !(showProposed && proposed.length > 0) && (
               <tr className="ct-empty">
                 <td colSpan={COLS}>
-                  {filter === 'ready' || filter === 'all'
-                    ? 'Nothing is ready yet — clean WOs with Admin + Quote ticked appear here.'
-                    : 'Nothing in this stage.'}
+                  {filter === 'proposed'
+                    ? 'Nothing proposed — a contract with "bill automatically on completion" fills this lane when its work orders complete.'
+                    : filter === 'ready' || filter === 'all'
+                      ? 'Nothing is ready yet — clean WOs with Admin + Quote ticked appear here.'
+                      : 'Nothing in this stage.'}
                 </td>
               </tr>
             )}
+
+            {/* 0053 · Proposed on completion: no number yet, so nothing to show there. */}
+            {!loading &&
+              !error &&
+              showProposed &&
+              proposed.map((p) => (
+                <tr key={p.id}>
+                  <td className="col-wo">
+                    <Link
+                      className="wo-num wo-num-link"
+                      to={`/work-orders/${encodeURIComponent(p.wo_number)}`}
+                    >
+                      {p.wo_number}
+                    </Link>
+                  </td>
+                  <td>
+                    <div className="site">
+                      <strong>{p.client ?? '—'}</strong>
+                      <small>
+                        From {p.contract_name}
+                        {p.hours > 0 ? ` · ${p.hours} h on site` : ''}
+                        {p.visits > 0 ? ` · ${p.visits} visit${p.visits === 1 ? '' : 's'}` : ''}
+                      </small>
+                    </div>
+                  </td>
+                  <td className="rcv-trunc">{p.billing_entity ?? p.client ?? '—'}</td>
+                  <td className="rcv-co">
+                    <span className="rcv-none">—</span>
+                  </td>
+                  <td className="num rcv-amount">{money(p.total)}</td>
+                  <td>
+                    <span className="rcv-stage is-proposed" title="Generated by the contract when the work order completed">
+                      <span className="rcv-status-dot" aria-hidden="true" />
+                      Proposed
+                    </span>
+                  </td>
+                  <td className="rcv-action-td">
+                    <button
+                      type="button"
+                      className="rcv-btn is-primary"
+                      disabled={!canRaise || busy}
+                      title={canRaise ? 'File the invoice with exactly these lines' : 'You cannot raise invoices'}
+                      onClick={() => confirm.mutate(p.id)}
+                    >
+                      <Icon name="check" size={12} />
+                      {confirm.isPending ? 'Filing…' : 'Confirm'}
+                    </button>{' '}
+                    <button
+                      type="button"
+                      className="rcv-btn"
+                      disabled={!canRaise || busy}
+                      title="File nothing"
+                      onClick={() => dismiss.mutate(p.id)}
+                    >
+                      Dismiss
+                    </button>
+                  </td>
+                </tr>
+              ))}
 
             {/* Ready: no invoice yet, so there is no number to show. */}
             {!loading &&

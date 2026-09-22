@@ -11,7 +11,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { CONTRACT_KINDS, RATE_TYPES } from '@theone/shared';
+import { CONTRACT_KINDS, CONTRACT_PARTIES, RATE_TYPES } from '@theone/shared';
 import { parse } from '../errors.js';
 import { actingPrincipalFromRequest, resolveTaskId } from '../services/activity.js';
 import {
@@ -38,6 +38,10 @@ const rateSchema = z.object({
 const contractSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
+    // 0053 · whose terms, and whether completion proposes a bill from them.
+    party: z.enum(CONTRACT_PARTIES).optional(),
+    vendor_name: z.string().trim().max(200).nullable().optional(),
+    auto_invoice: z.boolean().optional(),
     client: z.string().trim().max(200).nullable().optional(),
     billing_entity: z.string().trim().max(60).nullable().optional(),
     kind: z.enum(CONTRACT_KINDS).optional(),
