@@ -67,7 +67,11 @@ function usePermissionTree(enabled: boolean): PermNode[] {
     retry: 0,
   });
   return useMemo(
-    () => buildPermissionTree(q.data?.items ?? [], { entities: q.data?.entities ?? [] }),
+    () =>
+      buildPermissionTree(q.data?.items ?? [], {
+        entities: q.data?.entities ?? [],
+        dashboards: q.data?.dashboards ?? [],
+      }),
     [q.data],
   );
 }

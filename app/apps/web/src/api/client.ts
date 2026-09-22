@@ -1,7 +1,7 @@
 // Typed fetch wrappers over same-origin /api/* (Vite proxies to :5174).
 // TYPE-ONLY imports from @theone/shared — no runtime value ever crosses this
 // boundary (SPRINT1-SPEC §8 Card C). Web never imports @theone/db.
-import type { PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
+import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
 import type {
   ApprovalCounts,
   ApprovalListResponse,
@@ -562,8 +562,17 @@ export function getStatusGroups(): Promise<{ items: StatusGroupItem[] }> {
   return request(`/status-groups`);
 }
 
-export function getKpis(): Promise<Kpis> {
-  return request<Kpis>(`/kpis`);
+/** 0050 · the built-in dashboard page a read is counted for — the server
+    applies that page's "Which work orders it counts" choice. */
+export type DashBoardRef = 'attention' | 'main';
+
+export function getKpis(board?: DashBoardRef): Promise<Kpis> {
+  return request<Kpis>(`/kpis${toQuery({ board })}`);
+}
+
+/** GET /api/work-orders/count — just the total, for count cards (0050). */
+export function countWorkOrders(filters?: WoFilterSet, board?: DashBoardRef): Promise<{ total: number }> {
+  return request(`/work-orders/count${toQuery({ filters, board })}`);
 }
 
 // ── Metrics — the dashboard's card engine ────────────────────────────────────
@@ -573,8 +582,9 @@ export function getMetricBreakdown(
   field: string,
   filters?: WoFilterSet,
   limit?: number,
+  board?: DashBoardRef,
 ): Promise<MetricBreakdown> {
-  return request<MetricBreakdown>(`/metrics/breakdown${toQuery({ field, filters, limit })}`);
+  return request<MetricBreakdown>(`/metrics/breakdown${toQuery({ field, filters, limit, board })}`);
 }
 
 /** GET /api/metrics/duration — per work order, first `from` event → next `to`
@@ -584,8 +594,9 @@ export function getMetricDuration(
   from: MetricEvent,
   to: MetricEvent,
   filters?: WoFilterSet,
+  board?: DashBoardRef,
 ): Promise<MetricDuration> {
-  return request<MetricDuration>(`/metrics/duration${toQuery({ from, to, filters })}`);
+  return request<MetricDuration>(`/metrics/duration${toQuery({ from, to, filters, board })}`);
 }
 
 /** GET /api/work-orders/:id/field-times — when each field first/last changed
@@ -1235,7 +1246,12 @@ export interface RoleInput {
 }
 
 /** Every field the permission editor can list — unfiltered, unlike /wo-fields. */
-export function listPermissionFields(): Promise<{ items: PermFieldInfo[]; entities: string[] }> {
+export function listPermissionFields(): Promise<{
+  items: PermFieldInfo[];
+  entities: string[];
+  /** 0050 · every dashboard record, for Dashboard › Which dashboards. */
+  dashboards?: PermDashboardInfo[];
+}> {
   return request('/admin/permission-fields');
 }
 
@@ -1621,10 +1637,18 @@ export function previewWidget(
   config: WidgetConfig,
   period?: { from?: string | null; to?: string | null },
   filters?: WoFilterSet | null,
+  /** 0050 · the dashboard being edited, so the preview counts with its scope. */
+  dashboardId?: string | null,
 ): Promise<WidgetResult> {
   return request('/dashboards/preview', {
     method: 'POST',
-    body: JSON.stringify({ config, from: period?.from ?? null, to: period?.to ?? null, filters: filters ?? null }),
+    body: JSON.stringify({
+      config,
+      from: period?.from ?? null,
+      to: period?.to ?? null,
+      filters: filters ?? null,
+      dashboard_id: dashboardId ?? null,
+    }),
   });
 }
 

@@ -81,6 +81,8 @@ const previewSchema = z
     from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     filters: filterSetSchema.nullable().optional(),
+    // 0050 · the dashboard being edited, so the preview counts with its scope.
+    dashboard_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -119,8 +121,14 @@ export default async function dashboardRoutes(app: FastifyInstance): Promise<voi
     // shape) still works.
     const body = req.body as Record<string, unknown> | null;
     if (body && typeof body === 'object' && 'config' in body) {
-      const { config, from, to, filters } = parse(previewSchema, body);
-      return previewWidget(config, actingPrincipalFromRequest(req), { from, to }, filters ?? null);
+      const { config, from, to, filters, dashboard_id } = parse(previewSchema, body);
+      return previewWidget(
+        config,
+        actingPrincipalFromRequest(req),
+        { from, to },
+        filters ?? null,
+        dashboard_id ?? null,
+      );
     }
     const config = parse(configSchema, req.body);
     return previewWidget(config, actingPrincipalFromRequest(req));

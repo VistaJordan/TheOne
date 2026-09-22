@@ -13,7 +13,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse } from '../errors.js';
 import { metricBreakdown, metricDuration } from '../services/woMetrics.js';
-import { actingPrincipalFromRequest } from '../services/activity.js';
+import { actingPrincipalFromRequest, type ActingPrincipal } from '../services/activity.js';
+import { boardViewer, requireBoardView } from '../services/dashboards.js';
+import { boardQuery } from './kpis.js';
 import { filterSetSchema } from './views.js';
 import { jsonParam } from './workOrders.js';
 
@@ -22,13 +24,22 @@ const eventSchema = z.object({
   value: z.string().max(500).nullish(),
 });
 
-const breakdownQuerySchema = z.object({
+/** 0050 · ?board=main counts as that dashboard page does: it must be ticked
+    for them, and its own "Which work orders it counts" applies. */
+function viewerFor(req: Parameters<typeof actingPrincipalFromRequest>[0], board?: 'attention' | 'main'): ActingPrincipal {
+  const viewer = actingPrincipalFromRequest(req);
+  if (!board) return viewer;
+  requireBoardView(viewer, board);
+  return boardViewer(viewer, board);
+}
+
+const breakdownQuerySchema = boardQuery.extend({
   field: z.string().min(1).max(200),
   filters: jsonParam(filterSetSchema).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(12),
 });
 
-const durationQuerySchema = z.object({
+const durationQuerySchema = boardQuery.extend({
   from: jsonParam(eventSchema),
   to: jsonParam(eventSchema),
   filters: jsonParam(filterSetSchema).optional(),
@@ -37,11 +48,11 @@ const durationQuerySchema = z.object({
 export default async function metricsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/metrics/breakdown', async (req) => {
     const q = parse(breakdownQuerySchema, req.query);
-    return metricBreakdown(q.field, q.filters, q.limit, actingPrincipalFromRequest(req));
+    return metricBreakdown(q.field, q.filters, q.limit, viewerFor(req, q.board));
   });
 
   app.get('/metrics/duration', async (req) => {
     const q = parse(durationQuerySchema, req.query);
-    return metricDuration(q.from, q.to, q.filters, actingPrincipalFromRequest(req));
+    return metricDuration(q.from, q.to, q.filters, viewerFor(req, q.board));
   });
 }

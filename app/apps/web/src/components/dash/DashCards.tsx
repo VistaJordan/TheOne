@@ -3,13 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import type { MetricEvent, WoFieldDescriptor, WoFilterRule, WoFilterSet } from '../../api/client';
 import {
+  countWorkOrders,
   getMetricBreakdown,
   getMetricDuration,
   getUserPref,
   getWoFields,
-  listWorkOrders,
   setUserPref,
 } from '../../api/client';
+
+/** 0050 · these cards live on the Main Dashboard, so they are counted with
+    that page's "Which work orders it counts" (Admin › Roles). */
+const BOARD = 'main' as const;
 import { filterUrl, opLabel } from '../../lib/woView';
 import {
   DASH_CARDS_PREF,
@@ -131,7 +135,7 @@ function CountCard({ card }: { card: DashCard }) {
   const filters = card.filters ?? { match: 'all', rules: [] };
   const q = useQuery({
     queryKey: ['dash-count', card.id, filters],
-    queryFn: () => listWorkOrders({ filters, limit: 1 }),
+    queryFn: () => countWorkOrders(filters, BOARD),
   });
   const count = q.isError ? null : q.data?.total;
   const hot = typeof count === 'number' && count > 0;
@@ -168,7 +172,7 @@ function BreakdownCard({ card }: { card: DashCard }) {
   const descriptor = fieldsQuery.data?.fields.find((f) => f.key === field);
   const q = useQuery({
     queryKey: ['dash-breakdown', card.id, field],
-    queryFn: () => getMetricBreakdown(field, undefined, BREAKDOWN_ROWS),
+    queryFn: () => getMetricBreakdown(field, undefined, BREAKDOWN_ROWS, BOARD),
   });
   const items = q.data?.items ?? [];
   const max = items.reduce((m, b) => Math.max(m, b.count), 0);
@@ -210,7 +214,7 @@ function DurationCard({ card }: { card: DashCard }) {
   const to = card.to as MetricEvent;
   const q = useQuery({
     queryKey: ['dash-duration', card.id, from, to],
-    queryFn: () => getMetricDuration(from, to),
+    queryFn: () => getMetricDuration(from, to, undefined, BOARD),
   });
   const d = q.data;
   return (

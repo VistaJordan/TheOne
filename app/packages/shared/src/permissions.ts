@@ -337,6 +337,10 @@ export interface PermNode {
       the status-change mode (direct / request / none) is the only one so far.
       Each choice is the grant it stores; "inherit" is no entry at all. */
   choices?: { code: string; label: string; hint?: string; grant: PermGrant }[];
+  /** 0050: answered at THIS path only — no walk up the tree. A choice whose
+      grant is empty is the "nothing set" answer (the dashboard scope's
+      "Same as work orders"), and picking it removes the entry. */
+  exact?: boolean;
 }
 
 /** The three-way status-change choice as the grants it stores (0025). */
@@ -396,15 +400,99 @@ export function resolveWoScope(set: PermissionSet | null | undefined, superAdmin
   return { all: false, entities: entities.sort() };
 }
 
+// ── Which dashboards a role opens, and what each one counts (0050) ───────────
+// Every dashboard is a path under `dashboard/boards`: the two built-in pages
+// (Needs Attention, Main Dashboard) by a fixed ref, a shipped dashboard by its
+// system_key, one somebody built by its id. `view` there = the tab shows up.
+// A new dashboard inherits the `dashboard/boards` row, which 0050 sets to
+// "no" on every role, so it stays with its builder until it is ticked (from
+// Roles, or with the Share button on the dashboard itself, which writes the
+// same paths). The builder and super admins always see it.
+//
+// Under each one, `…/scope` says which work orders its cards count, read at
+// that exact path (never inherited from the view tick above it):
+//   unset  = the same as the person's "Which work orders" (the default)
+//   true   = every work order
+//   false  = only the ones assigned to them (+ the entities ticked there)
+// It changes what the cards COUNT only. Clicking through to the list lands on
+// the list, which is still scoped by "Which work orders".
+export const DASH_BOARDS_PERM_ROOT = 'dashboard/boards';
+
+/** The two pages every Dashboard section has, whatever records exist. */
+export const DASH_BUILTIN_BOARDS: { ref: string; label: string }[] = [
+  { ref: 'attention', label: 'Needs Attention' },
+  { ref: 'main', label: 'Main Dashboard' },
+];
+
+/** A dashboard record's ref: its system_key when we ship it (so the grant
+    survives the row being re-created), its id otherwise. */
+export function dashboardRef(d: { id: string; system_key: string | null }): string {
+  return d.system_key ?? d.id;
+}
+
+export function dashboardPermKey(ref: string): string {
+  return `${DASH_BOARDS_PERM_ROOT}/${encodeURIComponent(ref)}`;
+}
+
+export function dashboardScopePermKey(ref: string): string {
+  return `${dashboardPermKey(ref)}/scope`;
+}
+
+export const DASH_SCOPE_CHOICES: NonNullable<PermNode['choices']> = [
+  { code: 'same', label: 'Same as work orders', hint: 'Counts what their "Which work orders" row allows', grant: {} },
+  { code: 'all', label: 'Everything', hint: 'Counts every work order, not just theirs', grant: { view: true } },
+  {
+    code: 'assigned',
+    label: 'Only theirs',
+    hint: 'Counts only the work orders assigned to them, plus any entity ticked under "Which work orders"',
+    grant: { view: false },
+  },
+];
+
+/** A dashboard's own scope choice: true = everything, false = only theirs,
+    undefined = follow the work-order scope. The person's override first,
+    then the role, at the exact path. */
+export function resolveDashboardScope(
+  set: PermissionSet | null | undefined,
+  ref: string,
+): boolean | undefined {
+  const key = dashboardScopePermKey(ref);
+  const own = set?.overrides?.[key]?.view;
+  if (typeof own === 'boolean') return own;
+  const role = set?.role?.[key]?.view;
+  return typeof role === 'boolean' ? role : undefined;
+}
+
+/** The permission set a dashboard's cards are counted with: the person's own,
+    with "Which work orders" replaced by the dashboard's choice when it has
+    one. Everything else (field grants, entity ticks) is untouched. */
+export function withDashboardScope(set: PermissionSet, ref: string): PermissionSet {
+  const all = resolveDashboardScope(set, ref);
+  if (all === undefined) return set;
+  return {
+    role: set.role,
+    overrides: { ...set.overrides, [WO_SCOPE_PERM_KEY]: { ...set.overrides[WO_SCOPE_PERM_KEY], view: all } },
+  };
+}
+
 export interface PermFieldInfo {
   key: string;
   label: string;
   custom?: boolean;
 }
 
+export interface PermDashboardInfo {
+  ref: string;
+  label: string;
+  note?: string;
+}
+
 export interface PermissionTreeOptions {
   /** Billing-entity codes (Comp) to offer under "Which work orders". */
   entities?: string[];
+  /** 0050 · the dashboard records, listed under Dashboard › Which dashboards
+      after the two built-in pages. */
+  dashboards?: PermDashboardInfo[];
 }
 
 /**
@@ -466,6 +554,30 @@ export function buildPermissionTree(
       // every other query, so sharing spreads the QUESTION, not the rows.
       actions: ['view', 'create'],
       note: 'Create = build a dashboard of your own and share it with other roles.',
+      children: [
+        {
+          key: DASH_BOARDS_PERM_ROOT,
+          label: 'Which dashboards',
+          actions: ['view'],
+          note: 'Tick the dashboards this role can open. A new dashboard follows this row until it is ticked on its own; whoever built it always sees it.',
+          children: [...DASH_BUILTIN_BOARDS, ...(opts.dashboards ?? [])].map((b: PermDashboardInfo) => ({
+            key: dashboardPermKey(b.ref),
+            label: b.label,
+            actions: ['view'] as PermAction[],
+            note: b.note,
+            children: [
+              {
+                key: dashboardScopePermKey(b.ref),
+                label: 'Which work orders it counts',
+                actions: ['view'] as PermAction[],
+                note: 'Changes what the cards count, not the list they open.',
+                choices: DASH_SCOPE_CHOICES,
+                exact: true,
+              },
+            ],
+          })),
+        },
+      ],
     },
     {
       key: 'work_orders',

@@ -606,6 +606,28 @@ Date filter rules may say `today`, `today+7`, `today-1` (resolved to
 board runs on; the **Accounting** board is built from the money records.
 Prebuilt boards are still upserted by `system_key` on first read.
 
+**Which dashboards a role opens** (migration 0050). Visibility left the
+dashboard row and joined the permission tree, so Admin › Roles (and per-user
+Adjust) decide it: Dashboard › **Which dashboards** has one row per page —
+Needs Attention and Main Dashboard (`DASH_BUILTIN_BOARDS`, refs `attention` /
+`main`) and every record (ref = `system_key`, else the id;
+`/admin/permission-fields` returns `dashboards`) at
+`dashboard/boards/<ref>` view. Under each, **"Which work orders it counts"**
+(`…/scope`, `DASH_SCOPE_CHOICES`): Same as work orders (unset) / Everything /
+Only theirs. That path is read **exactly** (`resolveDashboardScope`, PermNode
+`exact`), never inherited from the tick above it; `withDashboardScope` swaps it
+in for `work_orders/scope` and `boardViewer` in `services/dashboards.ts` is
+what `/dashboards/:id/data`, the preview and `?board=main|attention` on
+`/kpis`, `/metrics/*` and the new count-only `/work-orders/count` count with.
+It widens or narrows the **counts only**: the list a card opens stays scoped
+by "Which work orders", and `/work-orders/count` returns no rows for that
+reason. 0050 copies each dashboard's old sharing into grants, sets
+`dashboard/boards` to no (a new dashboard stays with its builder) and both
+built-in pages to yes; a shipped board inserted later takes its
+`shared_roles` as grants in `ensureSystemDashboards`. The Share button writes
+the same role grants through `updateRole` (so each is a `role_updated` audit
+row); `shared_roles` / `shared_all` are kept in step and decide nothing.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

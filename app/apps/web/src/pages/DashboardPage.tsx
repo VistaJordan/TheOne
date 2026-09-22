@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import type { WoFilterSet } from '@theone/shared';
+import { dashboardPermKey, type WoFilterSet } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
 import { KpiRow } from '../components/KpiRow';
@@ -9,6 +9,7 @@ import { DashCards } from '../components/dash/DashCards';
 import { DashboardBoard } from '../components/dash/DashboardBoard';
 import {
   ApiRequestError,
+  countWorkOrders,
   createDashboard,
   getKpis,
   listApprovals,
@@ -40,7 +41,12 @@ const VISIT_TYPE_UNSET: WoFilterSet = {
 };
 
 export function DashboardPage() {
-  const [tab, setTab] = useState<DashTab>('attention');
+  const { can } = useAuth();
+  // 0050 · which of the two built-in pages this person opens is a tick under
+  // Admin › Roles › Dashboard › Which dashboards, like every other dashboard.
+  const canAttention = can(dashboardPermKey('attention'), 'view');
+  const canMain = can(dashboardPermKey('main'), 'view');
+  const [picked, setPicked] = useState<DashTab | null>(null);
   const [naming, setNaming] = useState(false);
 
   // 0042 · the shared dashboards. Failing to load them must not take the
@@ -48,9 +54,17 @@ export function DashboardPage() {
   // simply do not appear.
   const dashQuery = useQuery({ queryKey: ['dashboards'], queryFn: listDashboards, retry: 0 });
   const dashboards = dashQuery.data?.items ?? [];
+  // The first page they may open, until they pick one.
+  const tab: DashTab | null =
+    picked ?? (canAttention ? 'attention' : canMain ? 'main' : (dashboards[0]?.id ?? null));
+  const setTab = (t: DashTab) => setPicked(t);
   const current = dashboards.find((d) => d.id === tab);
 
-  const kpiQuery = useQuery({ queryKey: ['kpis'], queryFn: getKpis });
+  const kpiQuery = useQuery({
+    queryKey: ['kpis', 'main'],
+    queryFn: () => getKpis('main'),
+    enabled: canMain && tab === 'main',
+  });
   // Only for the sidebar's Work Orders badge, so the nav reads the same here as
   // it does on the list itself. One row is enough — we want `total`, not items.
   const countQuery = useQuery({
@@ -61,13 +75,13 @@ export function DashboardPage() {
   // only `total` is read.
   const visitTypeQuery = useQuery({
     queryKey: ['work-orders', { attention: 'visit-type' }],
-    queryFn: () => listWorkOrders({ filters: VISIT_TYPE_UNSET, limit: 1 }),
+    queryFn: () => countWorkOrders(VISIT_TYPE_UNSET, 'attention'),
+    enabled: canAttention,
   });
   const visitTypeCount = visitTypeQuery.data?.total;
 
   // The inbox's open count (0026) — only asked for when this person may see
   // the inbox, so the card never shows a 403 as a mystery.
-  const { can } = useAuth();
   const canSeeApprovals = can('approvals', 'view');
   // 0042 · building a dashboard is a create grant on the same path the
   // section is gated on.
@@ -75,7 +89,7 @@ export function DashboardPage() {
   const approvalsQuery = useQuery({
     queryKey: ['approvals'],
     queryFn: listApprovals,
-    enabled: canSeeApprovals,
+    enabled: canSeeApprovals && canAttention,
     retry: 0,
   });
   const openApprovals = approvalsQuery.data?.counts.open;
@@ -83,22 +97,26 @@ export function DashboardPage() {
   return (
     <AppShell active="Dashboard" total={countQuery.data?.total}>
       <div className="seg dash-tabs" role="group" aria-label="Dashboard pages">
-        <button
-          type="button"
-          className={`seg-btn${tab === 'attention' ? ' is-on' : ''}`}
-          aria-pressed={tab === 'attention'}
-          onClick={() => setTab('attention')}
-        >
-          Needs Attention
-        </button>
-        <button
-          type="button"
-          className={`seg-btn${tab === 'main' ? ' is-on' : ''}`}
-          aria-pressed={tab === 'main'}
-          onClick={() => setTab('main')}
-        >
-          Main Dashboard
-        </button>
+        {canAttention && (
+          <button
+            type="button"
+            className={`seg-btn${tab === 'attention' ? ' is-on' : ''}`}
+            aria-pressed={tab === 'attention'}
+            onClick={() => setTab('attention')}
+          >
+            Needs Attention
+          </button>
+        )}
+        {canMain && (
+          <button
+            type="button"
+            className={`seg-btn${tab === 'main' ? ' is-on' : ''}`}
+            aria-pressed={tab === 'main'}
+            onClick={() => setTab('main')}
+          >
+            Main Dashboard
+          </button>
+        )}
         {/* 0042 · the shared dashboards, in folder order. Everyone in a team
             opens the same one and sees their own work orders in it. */}
         {dashboards.map((d) => (
@@ -120,7 +138,11 @@ export function DashboardPage() {
         )}
       </div>
 
-      {tab === 'attention' ? (
+      {tab === null ? (
+        <p className="hint">
+          {dashQuery.isLoading ? 'Loading dashboards…' : 'No dashboard has been shared with you yet.'}
+        </p>
+      ) : tab === 'attention' && canAttention ? (
         <div className="attn-row">
           <AttentionCard
             label="No visit logged"
@@ -140,7 +162,7 @@ export function DashboardPage() {
             />
           )}
         </div>
-      ) : tab === 'main' ? (
+      ) : tab === 'main' && canMain ? (
         <>
           <KpiRow kpis={kpiQuery.data} loading={kpiQuery.isLoading} />
           {/* The build-your-own half: cards over any catalogue field, plus

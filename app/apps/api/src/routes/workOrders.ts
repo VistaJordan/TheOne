@@ -38,6 +38,8 @@ import { getMessages, resolveConversationId, sendMessage } from '../services/mes
 import { evaluateForTask } from '../services/obligations.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
 import { assertIdsInScope } from '../services/woScope.js';
+import { boardViewer, requireBoardView } from '../services/dashboards.js';
+import { boardQuery } from './kpis.js';
 import { checkWoNumber, createWorkOrder, getCreateForm, requireWoCreate } from '../services/woCreate.js';
 import {
   addAttachment,
@@ -265,6 +267,22 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // These three sit BEFORE /work-orders/:id in source order for readability
   // only — Fastify's radix router prefers a static segment over a parameter, so
   // 'export' can never be mistaken for a work-order id.
+
+  // 0050 · a count and nothing else, for the dashboard's count cards. With
+  // ?board= it is counted as that dashboard page counts (its own "Which work
+  // orders it counts"), which is why it returns no rows: a dashboard may be
+  // set to count more than the person may open.
+  app.get('/work-orders/count', async (req) => {
+    const { p } = requireView(req);
+    const q = parse(listCriteriaSchema.merge(boardQuery), req.query);
+    let viewer = p;
+    if (q.board) {
+      requireBoardView(p, q.board);
+      viewer = boardViewer(p, q.board);
+    }
+    const page = await listWorkOrders({ ...criteriaOf(q), columns: [], limit: 1, offset: 0 }, viewer);
+    return { total: page.total };
+  });
 
   // Every id the current filters match, so "select all 1,240" acts on the whole
   // result set and not just the page the browser happens to be holding.

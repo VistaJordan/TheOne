@@ -217,7 +217,7 @@ export function PermissionMatrix({
                 disabled={disabled}
                 onPick={(grant) => {
                   const next: PermMap = { ...value };
-                  if (grant === null) delete next[node.key];
+                  if (grant === null || Object.keys(grant).length === 0) delete next[node.key];
                   else next[node.key] = { ...grant };
                   onChange(next);
                 }}
@@ -312,6 +312,19 @@ function effectiveChoice(
   node: PermNode,
   choices: Choice[],
 ): { choice: Choice | null; source: Source } {
+  if (node.exact) {
+    // 0050: this path alone, then the role's copy of it, then the empty-grant
+    // choice ("Same as work orders") — never what a row above says.
+    const matchOf = (g: PermMap[string] | undefined) =>
+      g && node.actions.some((a) => typeof g[a] === 'boolean')
+        ? (choices.find((c) => node.actions.every((a) => g[a] === c.grant[a])) ?? null)
+        : undefined;
+    const own = matchOf(value[node.key]);
+    if (own !== undefined) return { choice: own, source: 'self' };
+    const fromBase = matchOf(base?.[node.key]);
+    if (fromBase !== undefined) return { choice: fromBase, source: 'base' };
+    return { choice: choices.find((c) => Object.keys(c.grant).length === 0) ?? null, source: 'default' };
+  }
   const own = value[node.key];
   if (own && Object.keys(own).length > 0) {
     const hit = choices.find((c) => node.actions.every((a) => (own[a] ?? false) === (c.grant[a] ?? false)));

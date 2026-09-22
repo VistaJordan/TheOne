@@ -3,14 +3,20 @@
 // Sharing and scope are different questions, and keeping them apart is the
 // whole safety argument of this file:
 //
-//   sharing   decides who may OPEN a dashboard: its owner, the roles named in
-//             shared_roles, everyone if shared_all, and super admins always.
+//   sharing   decides who may OPEN a dashboard: its owner, super admins
+//             always, and since 0050 every role (or person) granted
+//             `dashboard/boards/<ref>` view in the permission tree. The Share
+//             button writes those same role grants; shared_roles / shared_all
+//             on the row are kept in step for older readers but decide nothing.
 //   scope     decides what the numbers on it COUNT, and is applied per viewer
-//             by metricWidget → woScopeSql (0026/0032).
+//             by metricWidget → woScopeSql (0026/0032). 0050 lets a role pick
+//             it per dashboard (`…/scope`: everything / only theirs); unset,
+//             it is the person's own "Which work orders".
 //
 // So two dispatchers open the same shared "Dispatch Center" and each sees
-// their own book in it. Sharing a dashboard cannot leak a work order; the
-// worst it can do is show someone a question whose answer is zero.
+// their own book in it — unless the Roles screen says that dashboard counts
+// everything for them, which is a decision made there on purpose. The list a
+// card opens is always scoped by "Which work orders", never by the dashboard.
 //
 // The three dashboards we ship live in packages/shared/src/dashboards.ts and
 // are upserted here by system_key on first read — never in the migration and
@@ -19,6 +25,12 @@
 // it, and the change sticks.
 
 import {
+  dashboardPermKey,
+  dashboardRef,
+  permAllows,
+  withDashboardScope,
+  type PermDashboardInfo,
+  type PermMap,
   LIVE_MIN_SECONDS,
   PREBUILT_DASHBOARDS,
   SOURCE_FIELDS,
@@ -41,11 +53,25 @@ import { ApiError, badRequest, notFound } from '../errors.js';
 import { requirePerm } from './permissions.js';
 import type { ActingPrincipal } from './activity.js';
 import { metricWidget } from './woMetrics.js';
+import { updateRole } from './roles.js';
 
 const PERM_KEY = 'dashboard';
 
 export function requireDashboardView(p: ActingPrincipal): void {
   requirePerm(p, PERM_KEY, 'view', 'You cannot view dashboards');
+}
+
+/** 0050 · one dashboard page (a built-in ref or a record's ref) must be ticked
+    for this person under Dashboard › Which dashboards. */
+export function requireBoardView(p: ActingPrincipal, ref: string): void {
+  requireDashboardView(p);
+  requirePerm(p, dashboardPermKey(ref), 'view', 'You cannot open this dashboard');
+}
+
+/** 0050 · the viewer a dashboard's cards are counted as: the same person,
+    with "Which work orders" replaced by that dashboard's own choice. */
+export function boardViewer(p: ActingPrincipal, ref: string): ActingPrincipal {
+  return { ...p, perms: withDashboardScope(p.perms, ref) };
 }
 
 /** Building and sharing a dashboard is a create grant on the same path. */
@@ -80,13 +106,91 @@ interface WidgetRow {
   position: number;
 }
 
-/** Owner, a named role, everyone, or a super admin. */
+const refOf = (row: { id: string; system_key: string | null }) => dashboardRef(row);
+
+/** A super admin, its builder, or anyone ticked for it in the permission
+    tree (0050 — their role, or their own Adjust override). */
 function canSee(row: DashRow, viewer: ActingPrincipal): boolean {
   if (viewer.isSuperAdmin) return true;
-  if (row.shared_all) return true;
   if (row.owner_id && row.owner_id === viewer.id) return true;
-  const role = viewer.role ?? '';
-  return role !== '' && (row.shared_roles ?? []).includes(role);
+  return permAllows(viewer.perms, dashboardPermKey(refOf(row)), 'view');
+}
+
+interface RolePerms {
+  id: string;
+  code: string;
+  permissions: PermMap;
+}
+
+async function rolePerms(): Promise<RolePerms[]> {
+  const res = await query<RolePerms>(
+    `SELECT id::text AS id, code, permissions FROM role ORDER BY position, label`,
+  );
+  return res.rows.map((r) => ({ ...r, permissions: r.permissions ?? {} }));
+}
+
+/** Which roles open this dashboard, read back from their grants. "Everyone"
+    = every role that can open the Dashboard section at all. */
+function sharingOf(ref: string, roles: RolePerms[]): { shared_roles: string[]; shared_all: boolean } {
+  const opens = (r: RolePerms, key: string) => permAllows({ role: r.permissions, overrides: {} }, key, 'view');
+  const withSection = roles.filter((r) => opens(r, 'dashboard'));
+  const shared = withSection.filter((r) => opens(r, dashboardPermKey(ref)));
+  return {
+    shared_roles: shared.map((r) => r.code),
+    shared_all: withSection.length > 0 && shared.length === withSection.length,
+  };
+}
+
+/** The Share button (0050): write the dashboard's view grant on every role
+    whose answer changes, through updateRole so each change is a role_updated
+    row in the audit log, exactly like an edit on the Roles screen. */
+async function applySharing(
+  row: DashRow,
+  input: { shared_roles?: string[]; shared_all?: boolean },
+  viewer: ActingPrincipal,
+): Promise<void> {
+  if (input.shared_roles === undefined && input.shared_all === undefined) return;
+  const ref = refOf(row);
+  const key = dashboardPermKey(ref);
+  const wanted = new Set(input.shared_roles ?? []);
+  const roles = await rolePerms();
+  const current = sharingOf(ref, roles);
+  for (const r of roles) {
+    // Only the roles that can open the section at all are offered; the rest
+    // are left exactly as they are.
+    if (!permAllows({ role: r.permissions, overrides: {} }, 'dashboard', 'view')) continue;
+    const want = input.shared_all === true || wanted.has(r.code);
+    if (want === current.shared_roles.includes(r.code)) continue;
+    await updateRole(
+      r.id,
+      { permissions: { ...r.permissions, [key]: { ...r.permissions[key], view: want } } },
+      viewer.id,
+    );
+  }
+  const after = sharingOf(ref, await rolePerms());
+  await query(`UPDATE dashboard SET shared_roles = $2::text[], shared_all = $3 WHERE id = $1`, [
+    row.id,
+    after.shared_roles,
+    after.shared_all,
+  ]);
+}
+
+/** Dashboard › Which dashboards on the Roles screen: every record, in the
+    order the Dashboard page shows them. */
+export async function listDashboardPermInfo(): Promise<PermDashboardInfo[]> {
+  await ensureSystemDashboards();
+  const res = await query<{ id: string; name: string; system_key: string | null; owner_name: string | null }>(
+    `SELECT d.id::text AS id, d.name, d.system_key, p.display_name AS owner_name
+       FROM dashboard d
+       LEFT JOIN dashboard_folder f ON f.id = d.folder_id
+       LEFT JOIN principal p ON p.id = d.owner_id
+      ORDER BY f.position NULLS LAST, d.position, d.name`,
+  );
+  return res.rows.map((r) => ({
+    ref: refOf(r),
+    label: r.name,
+    note: r.system_key ? undefined : `Built by ${r.owner_name ?? 'someone no longer here'}`,
+  }));
 }
 
 /** Its owner or a super admin. A shared dashboard is read-only to everyone
@@ -144,7 +248,9 @@ export async function listDashboards(viewer: ActingPrincipal): Promise<Dashboard
     `SELECT id::text AS id, name, position FROM dashboard_folder ORDER BY position, name`,
   );
 
+  const roles = await rolePerms();
   const items: Dashboard[] = visible.map((r) => ({
+    ...sharingOf(refOf(r), roles),
     id: r.id,
     folder_id: r.folder_id,
     folder_name: r.folder_name,
@@ -152,8 +258,6 @@ export async function listDashboards(viewer: ActingPrincipal): Promise<Dashboard
     description: r.description,
     system_key: r.system_key,
     owner: r.owner_id ? { id: r.owner_id, display_name: r.owner_name ?? '—' } : null,
-    shared_roles: r.shared_roles ?? [],
-    shared_all: r.shared_all,
     position: r.position,
     can_edit: canEdit(r, viewer),
     widgets: byDash.get(r.id) ?? [],
@@ -190,6 +294,8 @@ export async function readDashboardData(
   requireDashboardView(viewer);
   const row = await rowById(id);
   if (!canSee(row, viewer)) throw notFound('No such dashboard');
+  // 0050 · the cards count what this dashboard's scope choice says.
+  const counted = boardViewer(viewer, refOf(row));
 
   const widgets = await query<WidgetRow>(
     `SELECT id::text AS id, dashboard_id::text AS dashboard_id, kind, label, config, width, position
@@ -207,7 +313,7 @@ export async function readDashboardData(
         return { widget_id: widget.id, total: 0, buckets: [], other: 0 };
       }
       try {
-        const out = await metricWidget(widget.config, viewer, period, page);
+        const out = await metricWidget(widget.config, counted, period, page);
         return { widget_id: widget.id, ...out };
       } catch (err) {
         return {
@@ -230,9 +336,17 @@ export async function previewWidget(
   viewer: ActingPrincipal,
   period?: { from?: string | null; to?: string | null },
   page?: WoFilterSet | null,
+  /** 0050 · the dashboard being edited, so the preview counts what it will. */
+  dashboardId?: string | null,
 ): Promise<WidgetResult> {
   requireDashboardView(viewer);
-  const out = await metricWidget(config, viewer, period, page);
+  let counted = viewer;
+  if (dashboardId) {
+    const row = await rowById(dashboardId);
+    if (!canSee(row, viewer)) throw notFound('No such dashboard');
+    counted = boardViewer(viewer, refOf(row));
+  }
+  const out = await metricWidget(config, counted, period, page);
   return { widget_id: 'preview', ...out };
 }
 
@@ -264,12 +378,15 @@ export async function createDashboard(
       input.description ?? null,
       input.folder_id ?? null,
       viewer.id,
-      input.shared_roles ?? [],
-      input.shared_all ?? false,
+      [],
+      false,
       input.position ?? 0,
     ],
   );
-  return getOne(res.rows[0].id, viewer);
+  const id = res.rows[0].id;
+  // 0050 · sharing is a role grant; a new dashboard starts with its builder.
+  await applySharing(await rowById(id), input, viewer);
+  return getOne(id, viewer);
 }
 
 export async function updateDashboard(
@@ -290,20 +407,11 @@ export async function updateDashboard(
         SET name = COALESCE($2, name),
             description = COALESCE($3, description),
             folder_id = COALESCE($4::uuid, folder_id),
-            shared_roles = COALESCE($5::text[], shared_roles),
-            shared_all = COALESCE($6, shared_all),
-            position = COALESCE($7, position)
+            position = COALESCE($5, position)
       WHERE id = $1`,
-    [
-      id,
-      name ?? null,
-      input.description ?? null,
-      input.folder_id ?? null,
-      input.shared_roles ?? null,
-      input.shared_all ?? null,
-      input.position ?? null,
-    ],
+    [id, name ?? null, input.description ?? null, input.folder_id ?? null, input.position ?? null],
   );
+  await applySharing(row, input, viewer);
   return getOne(id, viewer);
 }
 
@@ -525,6 +633,17 @@ export async function ensureSystemDashboards(): Promise<void> {
       );
       const dashId = ins.rows[0]?.id;
       if (!dashId) continue; // another process won the race; its widgets are in
+
+      // 0050 · who opens it is a role grant now. Its shipped sharing becomes
+      // the grant on every role that has not decided yet, so a re-created
+      // dashboard keeps whatever the Roles screen already says about it.
+      await tx.query(
+        `UPDATE role
+            SET permissions = permissions
+              || jsonb_build_object($1::text, jsonb_build_object('view', $2::boolean OR code = ANY($3::text[])))
+          WHERE NOT (permissions ? $1::text)`,
+        [dashboardPermKey(d.key), d.shared_all, d.shared_roles],
+      );
 
       let position = 0;
       for (const w of d.widgets) {

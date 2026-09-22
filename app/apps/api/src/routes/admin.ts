@@ -31,6 +31,7 @@ import {
 import { createRole, deleteRole, listRoles, updateRole } from '../services/roles.js';
 import { requirePerm } from '../services/permissions.js';
 import { getFieldCatalogue } from '../services/woFields.js';
+import { listDashboardPermInfo } from '../services/dashboards.js';
 import { listFieldDefs, listWorkflow, listTrash, restoreTask, getSettings } from '../services/adminMeta.js';
 import { createFieldDef, updateFieldDef, reorderFieldDefs, FIELD_DEF_TYPES } from '../services/fieldDefs.js';
 import {
@@ -245,6 +246,8 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     return {
       items: cat.fields.map((f) => ({ key: f.key, label: f.label, custom: Boolean(f.custom) })),
       entities: [...entities].sort((a, b) => a.localeCompare(b)),
+      // 0050: every dashboard record, for Dashboard › Which dashboards.
+      dashboards: await listDashboardPermInfo(),
     };
   });
 
