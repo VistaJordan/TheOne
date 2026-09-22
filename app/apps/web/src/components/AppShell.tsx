@@ -2,8 +2,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { adminPermKey } from '@theone/shared';
-import { getApprovalCounts } from '../api/client';
+import { INTAKE_PERM_KEY, adminPermKey } from '@theone/shared';
+import { getApprovalCounts, listIntakeDrafts } from '../api/client';
 import { LOGO } from '../lib/brand';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { Icon, IconSprite } from './Icon';
@@ -29,7 +29,6 @@ export type NavKey =
   | 'Payments'
   | 'Receivables'
   | 'Incoming Work Orders'
-  | 'WO Intake'
   | 'Approvals'
   | 'Contracts'
   | 'Admin';
@@ -66,15 +65,15 @@ const NAV: NavItem[] = [
   // Payables: the queue where technician payment requests are approved and
   // handed to Yoda. Receivables (AR) sits beside it.
   { label: 'Payments', icon: 'card', to: '/payments' },
-  // Rule 7.1.1 (0036): new work orders wait here until a manager accepts
-  // and assigns them to a dispatcher, or rejects them. Its own queue, not a
-  // lane of the inbox — intake is a different job from approving.
+  // One door for every work order on its way in. Rule 7.1.1 (0036): new
+  // work orders wait here until a manager accepts and assigns them to a
+  // dispatcher, or rejects them (`approvals/intake`). Section 14 (0040): the
+  // OP Admin's drafts — work orders typed in by hand — wait on the Drafts
+  // tab of the same page until every intake field and an assignee are in
+  // (`intake`). Each person sees the tab(s) their role grants; the item
+  // stays for anyone with either. Its own queue, not a lane of the inbox —
+  // intake is a different job from approving.
   { label: 'Incoming Work Orders', icon: 'download', to: '/incoming', badge: 'incoming' },
-  // Section 14 (0040): the OP Admin's staging area — work orders typed in
-  // by hand wait here as drafts until every intake field and an assignee
-  // are in, then become real work orders. Hidden from everyone without the
-  // `intake` permission (Operations Admin and Admin by default).
-  { label: 'WO Intake', icon: 'pencil', to: '/intake' },
   // The manager's inbox (0026): approval tasks the rules engine raises —
   // the NTE override of rule 1.5.2 first.
   { label: 'Approvals', icon: 'inbox', to: '/approvals', badge: 'approvals' },
@@ -93,15 +92,15 @@ const NAV: NavItem[] = [
   },
 ];
 
-/** Nav label → the permission path its section is gated on (0015). */
-const NAV_PERM: Record<string, string> = {
+/** Nav label → the permission path(s) its section is gated on (0015). A
+    list means ANY of them shows the item (Incoming has two doors). */
+const NAV_PERM: Record<string, string | string[]> = {
   Dashboard: 'dashboard',
   'Work Orders': 'work_orders',
   Vendors: 'vendors',
   Quotes: 'quotes',
   Payments: 'payments',
-  'Incoming Work Orders': 'approvals/intake',
-  'WO Intake': 'intake',
+  'Incoming Work Orders': ['approvals/intake', INTAKE_PERM_KEY],
   Approvals: 'approvals',
   Invoicing: 'invoicing',
   Contracts: 'contracts',
@@ -168,8 +167,19 @@ export function AppShell({
   const approvalsWaiting = countsQuery.data
     ? countsQuery.data.to_decide + countsQuery.data.to_acknowledge
     : undefined;
-  // 0036 · the Incoming badge: new work orders this person may accept.
-  const incomingWaiting = countsQuery.data?.to_accept || undefined;
+  // 0036 · the Incoming badge: new work orders this person may accept, plus
+  // (0040) the drafts still to finish if they may type work orders in. Each
+  // half is read only when the person holds that door.
+  const draftsQuery = useQuery({
+    queryKey: ['intake-drafts'],
+    queryFn: listIntakeDrafts,
+    enabled: !!actingAs && can(INTAKE_PERM_KEY, 'view'),
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    retry: 0,
+  });
+  const incomingWaiting =
+    (countsQuery.data?.to_accept ?? 0) + (draftsQuery.data?.items.length ?? 0) || undefined;
 
   // 0015 · a section the acting principal may not view leaves the nav; an
   // Admin group with no visible section leaves with it. The Admin group follows
@@ -189,7 +199,8 @@ export function AppShell({
     // An item with no permission of its own (a module the tree does not know
     // yet) stays: hiding it would be a silent regression, not protection.
     const perm = NAV_PERM[item.label];
-    return perm ? can(perm, 'view') : true;
+    if (!perm) return true;
+    return (Array.isArray(perm) ? perm : [perm]).some((p) => can(p, 'view'));
   });
 
   // ── Hover flyout ──────────────────────────────────────────────────────────

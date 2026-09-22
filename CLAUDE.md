@@ -141,8 +141,15 @@ type `wo_acceptance`, section `intake` (permission path `approvals/intake`,
 view / approve; 0036 grants it to TL / ATL / AM / Admin). It has its **own
 sidebar page, Incoming Work Orders** (`/incoming`): the same `ApprovalsPage`
 in `mode="intake"`, which shows only intake rows, while `/approvals` never
-shows them (intake is a different job from approving). `GET
-/approvals/counts` carries `to_accept` for its badge; `to_decide` no longer
+shows them (intake is a different job from approving). Since the drafts of
+section 14 joined it, that page has **two tabs — To accept** (this queue,
+`approvals/intake` view) **and Drafts** (`/incoming/drafts`, `intake`
+view) — drawn by `components/IncomingTabs.tsx` only for someone who holds
+both grants; with one grant the page simply is that queue, and `/incoming`
+sends a drafts-only person on to the Drafts tab (`IncomingRoute` in
+`App.tsx`). The sidebar item shows for either grant (`NAV_PERM` takes a
+list) and its badge adds the open drafts to `to_accept`. `GET
+/approvals/counts` carries `to_accept`; `to_decide` no longer
 counts acceptances. Nothing new on the
 work order: "pending" = the open task + an empty `Assignee` (the status stays
 Open). `raiseAcceptanceTasks(ids, actorId, source)` in `services/approvals.ts`
@@ -396,7 +403,8 @@ follows `ECOTRAK_TRANSITION_MODE` like a direct move: `block` refuses with
 `status_changed` row. Every inbox row carries `wo_ecotrak_status` and the
 Approvals page tags an open status request Ecotrak would refuse.
 
-**WO Intake** (section 14, migration 0040, `/intake` in the sidebar) is the
+**WO Intake** (section 14, migration 0040, the **Drafts tab of Incoming Work
+Orders**, `/incoming/drafts`; the old `/intake` URLs redirect there) is the
 OP Admin's staging area for work orders typed in by hand — the first manual
 creation path (until now only the CSV import and the Ecotrak ingest created
 rows). A draft is a `wo_intake_draft` row, **not a task**: nothing that

@@ -281,7 +281,7 @@ function adminHref(e: AuditLogEntry): string | null {
     case 'saved_view':
       return '/work-orders';
     case 'intake_draft':
-      return `/intake/${encodeURIComponent(e.entity_id)}`;
+      return `/incoming/drafts/${encodeURIComponent(e.entity_id)}`;
     default:
       return null;
   }

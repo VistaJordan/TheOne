@@ -29,7 +29,10 @@
    new work orders wait for a manager to accept and assign them to a
    dispatcher, or reject them. Intake is one section of the same table, so
    the row shape, lanes, filters and dialogs are shared; the inbox simply
-   never shows intake rows and the intake page shows nothing else. Rule
+   never shows intake rows and the intake page shows nothing else. Since
+   the drafts of section 14 joined it, /incoming is one page with two
+   doors: this queue is its To accept tab and IntakePage its Drafts tab —
+   IncomingTabs draws the strip for whoever holds both. Rule
    11.1.1 rides on the acceptance row: `intake_missing` lists the intake
    fields still empty, the Accept verb is locked with that list, and the
    line under the title says what to fill and where. */
@@ -79,6 +82,7 @@ import {
 import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
+import { IncomingTabs } from '../components/IncomingTabs';
 import { EmergencyBadge } from '../components/EmergencyBadge';
 import { EscalatedBadge } from '../components/EscalatedBadge';
 import { compareInboxRows } from '../lib/inboxOrder';
@@ -685,6 +689,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
 
   return (
     <AppShell active={intake ? 'Incoming Work Orders' : 'Approvals'}>
+      {intake && <IncomingTabs tab="accept" />}
       <div className="page-head">
         <p className="page-sub">
           {loading

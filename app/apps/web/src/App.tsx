@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { ThemeProvider } from './theme/ThemeProvider';
+import { INTAKE_PERM_KEY } from '@theone/shared';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AppShell, type NavKey } from './components/AppShell';
 import { Icon } from './components/Icon';
@@ -28,6 +29,7 @@ import { ReceivablesPage } from './pages/ReceivablesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { IntakePage } from './pages/IntakePage';
+import { INCOMING_ACCEPT_PERM } from './components/IncomingTabs';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,18 +81,38 @@ function RequireCan({
   children: ReactNode;
 }) {
   const { can } = useAuth();
-  if (!can(perm, 'view')) {
-    return (
-      <AppShell active={nav}>
-        <div className="wo-state">
-          <Icon name="lock" size={22} />
-          <b>This section is not available to you</b>
-          <span>Your role does not include it. Ask a super admin if you need access.</span>
-        </div>
-      </AppShell>
-    );
-  }
+  if (!can(perm, 'view')) return <Locked nav={nav} />;
   return <>{children}</>;
+}
+
+function Locked({ nav }: { nav: NavKey }) {
+  return (
+    <AppShell active={nav}>
+      <div className="wo-state">
+        <Icon name="lock" size={22} />
+        <b>This section is not available to you</b>
+        <span>Your role does not include it. Ask a super admin if you need access.</span>
+      </div>
+    </AppShell>
+  );
+}
+
+/** /incoming — one page, two doors. A manager (`approvals/intake`) lands on
+    the acceptance queue; a person who may only type work orders in
+    (`intake`) lands on the Drafts tab; anyone with both gets the tab strip
+    (IncomingTabs) and starts on To accept. Neither: the locked screen. */
+function IncomingRoute() {
+  const { can } = useAuth();
+  if (can(INCOMING_ACCEPT_PERM, 'view')) return <ApprovalsPage mode="intake" />;
+  if (can(INTAKE_PERM_KEY, 'view')) return <Navigate to="/incoming/drafts" replace />;
+  return <Locked nav="Incoming Work Orders" />;
+}
+
+/** The drafts lived at /intake before they joined Incoming Work Orders;
+    bookmarks and audit links from then still land. */
+function LegacyIntakeRedirect() {
+  const { draftId } = useParams<{ draftId: string }>();
+  return <Navigate to={draftId ? `/incoming/drafts/${encodeURIComponent(draftId)}` : '/incoming/drafts'} replace />;
 }
 
 export function App() {
@@ -153,22 +175,23 @@ export function App() {
                 path="/payments"
                 element={<RequireAuth><RequireCan perm="payments" nav="Payments"><PaymentsPage /></RequireCan></RequireAuth>}
               />
-              {/* Rule 7.1.1 (0036) — new work orders waiting to be accepted and
-                  assigned. The same inbox page in its intake mode. */}
+              {/* Incoming Work Orders — one page for everything on its way in.
+                  Rule 7.1.1 (0036): new work orders waiting to be accepted and
+                  assigned (the inbox page in its intake mode). Section 14
+                  (0040): the Drafts tab — the OP Admin's staging list and the
+                  manual entry form for one draft. /intake is where the drafts
+                  used to live. */}
+              <Route path="/incoming" element={<RequireAuth><IncomingRoute /></RequireAuth>} />
               <Route
-                path="/incoming"
-                element={<RequireAuth><RequireCan perm="approvals/intake" nav="Incoming Work Orders"><ApprovalsPage mode="intake" /></RequireCan></RequireAuth>}
-              />
-              {/* Section 14 (0040) — the OP Admin's intake: the drafts list and
-                  the manual entry form for one draft. */}
-              <Route
-                path="/intake"
-                element={<RequireAuth><RequireCan perm="intake" nav="WO Intake"><IntakePage /></RequireCan></RequireAuth>}
+                path="/incoming/drafts"
+                element={<RequireAuth><RequireCan perm={INTAKE_PERM_KEY} nav="Incoming Work Orders"><IntakePage /></RequireCan></RequireAuth>}
               />
               <Route
-                path="/intake/:draftId"
-                element={<RequireAuth><RequireCan perm="intake" nav="WO Intake"><IntakePage /></RequireCan></RequireAuth>}
+                path="/incoming/drafts/:draftId"
+                element={<RequireAuth><RequireCan perm={INTAKE_PERM_KEY} nav="Incoming Work Orders"><IntakePage /></RequireCan></RequireAuth>}
               />
+              <Route path="/intake" element={<LegacyIntakeRedirect />} />
+              <Route path="/intake/:draftId" element={<LegacyIntakeRedirect />} />
               {/* The manager's inbox — approval tasks raised by automations (0026). */}
               <Route
                 path="/approvals"

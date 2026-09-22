@@ -4,6 +4,10 @@
    controls (.field / .lbl / .fld from forms.css); only the grid, the
    "missing" ring and the footer are new. Every colour is a token. */
 
+/* The To accept / Drafts strip at the top of Incoming Work Orders. */
+.incoming-tabs { margin-bottom: 14px; }
+.incoming-tabs .seg-btn { gap: 6px; }
+
 .intake-page-head {
   display: flex;
   align-items: center;

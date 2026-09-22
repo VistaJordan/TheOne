@@ -1,16 +1,18 @@
-/* /intake and /intake/:draftId — the Incoming Work Order Intake (section
-   14, 0040): the OP Admin's staging area.
+/* /incoming/drafts and /incoming/drafts/:draftId — the Incoming Work Order
+   Intake (section 14, 0040): the OP Admin's staging area, the Drafts tab
+   of Incoming Work Orders (IncomingTabs draws the strip; /intake redirects
+   here).
 
-   /intake          the staging list (14.3.1): every draft started or saved
-                    that has not been submitted — what still has to be
-                    typed, who it is meant for, who touched it last.
-   /intake/new      handled by the list: "New work order" starts a draft on
-                    the API and opens it.
-   /intake/:id      the manual entry form (14.2.x): WO#, the thirteen
-                    11.1.1 fields, Client, and the Assignee dropdown. Save
-                    keeps a draft; Submit needs every required field AND an
-                    assignee (14.3.2) and turns the draft into a real work
-                    order, then opens it (14.3.3).
+   /incoming/drafts      the staging list (14.3.1): every draft started or
+                         saved that has not been submitted — what still has
+                         to be typed, who it is meant for, who touched it
+                         last. "New work order" starts a draft on the API
+                         and opens it.
+   /incoming/drafts/:id  the manual entry form (14.2.x): WO#, the thirteen
+                         11.1.1 fields, Client, and the Assignee dropdown.
+                         Save keeps a draft; Submit needs every required
+                         field AND an assignee (14.3.2) and turns the draft
+                         into a real work order, then opens it (14.3.3).
 
    The fields are drawn from the same catalogue the work-order editor uses
    (types and dropdown options), keyed `fields.<bag key>`, so a value typed
@@ -42,6 +44,7 @@ import {
 } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
+import { IncomingTabs } from '../components/IncomingTabs';
 import { useWoCatalogue } from '../components/wo/fieldEdit';
 
 const DASH = '—';
@@ -129,7 +132,7 @@ function DraftsList() {
     mutationFn: () => createIntakeDraft({}),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['intake-drafts'] });
-      navigate(`/intake/${encodeURIComponent(res.item.id)}`);
+      navigate(`/incoming/drafts/${encodeURIComponent(res.item.id)}`);
     },
     onError: (err) => setError(err instanceof ApiRequestError ? err.message : 'Could not start a work order'),
   });
@@ -137,7 +140,8 @@ function DraftsList() {
   const items = drafts.data?.items ?? [];
 
   return (
-    <AppShell active="WO Intake">
+    <AppShell active="Incoming Work Orders">
+      <IncomingTabs tab="drafts" />
       <div className="page-head intake-page-head">
         <p className="page-sub">
           {drafts.isLoading
@@ -187,7 +191,7 @@ function DraftsList() {
                     <tr
                       key={d.id}
                       className="is-link"
-                      onClick={() => navigate(`/intake/${encodeURIComponent(d.id)}`)}
+                      onClick={() => navigate(`/incoming/drafts/${encodeURIComponent(d.id)}`)}
                     >
                       <td className="mono">{d.wo_number?.trim() || <span className="intake-dim">No WO# yet</span>}</td>
                       <td>
@@ -323,7 +327,7 @@ function DraftForm({ id }: { id: string }) {
     mutationFn: () => discardIntakeDraft(id),
     onSuccess: () => {
       invalidate();
-      navigate('/intake');
+      navigate('/incoming/drafts');
     },
     onError: fail('Could not discard the draft'),
   });
@@ -333,10 +337,12 @@ function DraftForm({ id }: { id: string }) {
 
   const crumbs = (
     <nav className="crumbs" aria-label="Breadcrumb">
-      <button type="button" className="crumb-back" aria-label="Back to the intake" onClick={() => navigate('/intake')}>
+      <button type="button" className="crumb-back" aria-label="Back to the drafts" onClick={() => navigate('/incoming/drafts')}>
         <Icon name="arrow-l" size={14} />
       </button>
-      <Link className="crumb" to="/intake">WO Intake</Link>
+      <Link className="crumb" to="/incoming">Incoming Work Orders</Link>
+      <span className="crumb-sep" aria-hidden="true">/</span>
+      <Link className="crumb" to="/incoming/drafts">Drafts</Link>
       <span className="crumb-sep" aria-hidden="true">/</span>
       <span className="crumb-cur" aria-current="page">
         {draft?.wo_number?.trim() ? draft.wo_number : 'New work order'}
@@ -346,17 +352,17 @@ function DraftForm({ id }: { id: string }) {
 
   if (draftQuery.isLoading || (draft && values === null && catalogue.size === 0)) {
     return (
-      <AppShell active="WO Intake" breadcrumb={crumbs}>
+      <AppShell active="Incoming Work Orders" breadcrumb={crumbs}>
         <div className="wo-state"><b>Loading the draft…</b></div>
       </AppShell>
     );
   }
   if (draftQuery.isError || !draft) {
     return (
-      <AppShell active="WO Intake" breadcrumb={crumbs}>
+      <AppShell active="Incoming Work Orders" breadcrumb={crumbs}>
         <div className="wo-state">
           <b>This draft could not be loaded.</b>
-          <Link className="btn" to="/intake">Back to the intake</Link>
+          <Link className="btn" to="/incoming/drafts">Back to the drafts</Link>
         </div>
       </AppShell>
     );
@@ -364,7 +370,7 @@ function DraftForm({ id }: { id: string }) {
   if (draft.submitted_at) {
     const wo = draft.submitted_wo_number ?? draft.wo_number ?? '';
     return (
-      <AppShell active="WO Intake" breadcrumb={crumbs}>
+      <AppShell active="Incoming Work Orders" breadcrumb={crumbs}>
         <section className="card intake-done">
           <h1 className="pg-title">Submitted</h1>
           <p>
@@ -373,7 +379,7 @@ function DraftForm({ id }: { id: string }) {
           </p>
           <div className="intake-actions">
             <Link className="btn btn-primary" to={`/work-orders/${encodeURIComponent(wo)}`}>Open the work order</Link>
-            <Link className="btn" to="/intake">Back to the intake</Link>
+            <Link className="btn" to="/incoming/drafts">Back to the drafts</Link>
           </div>
         </section>
       </AppShell>
@@ -381,12 +387,12 @@ function DraftForm({ id }: { id: string }) {
   }
   if (draft.discarded_at) {
     return (
-      <AppShell active="WO Intake" breadcrumb={crumbs}>
+      <AppShell active="Incoming Work Orders" breadcrumb={crumbs}>
         <section className="card intake-done">
           <h1 className="pg-title">Discarded</h1>
           <p>This draft was discarded on {when(draft.discarded_at)}. It is kept for the audit trail only.</p>
           <div className="intake-actions">
-            <Link className="btn" to="/intake">Back to the intake</Link>
+            <Link className="btn" to="/incoming/drafts">Back to the drafts</Link>
           </div>
         </section>
       </AppShell>
@@ -440,7 +446,7 @@ function DraftForm({ id }: { id: string }) {
   };
 
   return (
-    <AppShell active="WO Intake" breadcrumb={crumbs}>
+    <AppShell active="Incoming Work Orders" breadcrumb={crumbs}>
       <div className="canvas-inner intake">
         <section className="card">
           <div className="card-head">
