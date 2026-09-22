@@ -17,7 +17,6 @@ import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
 import { WoHeader } from '../components/wo/WoHeader';
 import { UpdatesFeed } from '../components/wo/UpdatesFeed';
-import { UpdateComposer } from '../components/wo/UpdateComposer';
 import { PhotosCard } from '../components/wo/PhotosCard';
 import { SoftCloseChecklist } from '../components/wo/SoftCloseChecklist';
 import { MoneyCard } from '../components/wo/MoneyCard';
@@ -234,11 +233,10 @@ export function WorkOrderDetailPage() {
     );
   }
 
-  const conversation = messagesQuery.data?.conversation ?? null;
-  // The comp's badge counts logged calls + texts (segments are dividers).
-  const threadCount = conversation
-    ? conversation.counts.calls + conversation.counts.texts
-    : null;
+  const conversation = messagesQuery.data?.quo.conversation ?? null;
+  // 0052 · the badge counts the work order's own messages; the Quo thread
+  // keeps its own counts in the rail.
+  const threadCount = messagesQuery.data ? messagesQuery.data.items.length : null;
 
   const obligations = obligationsQuery.data ?? [];
 
@@ -319,7 +317,15 @@ export function WorkOrderDetailPage() {
                   loading={feedQuery.isLoading}
                   error={feedQuery.isError}
                 />
-                <UpdateComposer woId={wo.id} woNumber={wo.wo_number} />
+                {/* 0052 · posting moved to the Messages tab; the feed is the read. */}
+                {show('messages') && (
+                  <div className="feed-to-messages">
+                    <button type="button" className="btn btn-sm" onClick={() => setTab('messages')}>
+                      <Icon name="msg" size={12} />
+                      Write a message
+                    </button>
+                  </div>
+                )}
               </section>
 
               <PhotosCard wo={wo} />
@@ -330,6 +336,7 @@ export function WorkOrderDetailPage() {
           {tab === 'messages' && (
             <MessagesPanel
               woId={wo.id}
+              woNumber={wo.wo_number}
               data={messagesQuery.data}
               loading={messagesQuery.isLoading}
               error={messagesQuery.isError}
@@ -413,7 +420,7 @@ export function WorkOrderDetailPage() {
 
         {tab === 'messages' && conversation && (
           <aside className="rail">
-            <MessagesRail conversation={conversation} items={messagesQuery.data?.items ?? []} />
+            <MessagesRail conversation={conversation} items={messagesQuery.data?.quo.items ?? []} />
           </aside>
         )}
       </div>

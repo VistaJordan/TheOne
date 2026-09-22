@@ -739,7 +739,7 @@ async function main() {
       wo_visit, fm_cico_method,
       quote_line, quote_section, quote, payment_request,
       quo_message, quo_call, quo_job_segment, quo_conversation,
-      attachment, payable, vendor, comment, activity_log,
+      attachment, payable, vendor, comment_delivery, comment, activity_log,
       task_list_membership, task, field_def, status, status_set,
       principal, container
     RESTART IDENTITY CASCADE;

@@ -604,7 +604,23 @@ export function buildPermissionTree(
           note: 'Change directly, or must ask a manager (rule 2.4.1). Set per role here; per person from Adjust.',
           choices: STATUS_MODE_CHOICES,
         },
-        { key: 'work_orders/comments', label: 'Post updates', actions: ['create'] },
+        {
+          // 0052 · the Messages tab. Create = post at all; edit = change one's
+          // own message while no client system has accepted it. The child is
+          // whether a client-visible message may be posted (unset inherits).
+          key: 'work_orders/comments',
+          label: 'Messages',
+          actions: ['create', 'edit'],
+          note: 'Create = post a message; edit = change their own message before it is sent.',
+          children: [
+            {
+              key: 'work_orders/comments/client',
+              label: 'Message the client',
+              actions: ['create'],
+              note: 'May post client-visible messages — the ones the client CMMS receives.',
+            },
+          ],
+        },
         {
           // 0043 · seeing a file is seeing the work order (the read is scoped
           // like any other), so only adding and removing are granted here.

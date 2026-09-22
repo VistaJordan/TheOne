@@ -8,10 +8,11 @@
 // database's job, not JavaScript's. Other activity actions (e.g. the
 // 'comment_added' audit row written alongside every comment) are deliberately
 // NOT surfaced — the comment itself is the feed item; the log row is audit.
+// Posting moved to services/woMessages.ts with the Messages tab (0052); the
+// feed only reads.
 
-import { query, withTransaction } from '../db.js';
-import type { FeedItem, FeedComment, FeedResponse, FeedActor } from '@theone/shared';
-import { ApiError } from '../errors.js';
+import { query } from '../db.js';
+import type { FeedItem, FeedResponse, FeedActor } from '@theone/shared';
 
 // Same ISO-8601 UTC rendering the S1 activity endpoint uses, so every timestamp
 // the API emits is byte-identical in shape regardless of PGlite's date parsing.
@@ -23,9 +24,11 @@ interface FeedRow {
   id: string;
   body: string | null;
   client_visible: boolean | null;
-  actor_id: string;
-  actor_name: string;
-  actor_kind: 'human' | 'service';
+  source: 'staff' | 'client' | null;
+  external_author: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  actor_kind: 'human' | 'service' | null;
   before_status: string | null;
   after_status: string | null;
   via: string | null;
@@ -33,12 +36,19 @@ interface FeedRow {
 }
 
 function mapFeedRow(r: FeedRow): FeedItem {
-  const actor: FeedActor = { id: r.actor_id, name: r.actor_name, kind: r.actor_kind };
+  // A client-sourced message (0052) has no principal behind it.
+  const actor: FeedActor = {
+    id: r.actor_id ?? '',
+    name: r.actor_name ?? r.external_author ?? 'Client',
+    kind: r.actor_kind ?? 'service',
+  };
   if (r.type === 'comment') {
     return {
       type: 'comment',
       id: r.id,
-      author: actor,
+      author: r.actor_id ? actor : null,
+      source: r.source === 'client' ? 'client' : 'staff',
+      external_author: r.external_author,
       client_visible: r.client_visible === true,
       body: r.body ?? '',
       created_at: r.created_at,
@@ -67,6 +77,8 @@ const FEED_SQL = `
            c.id::text                     AS id,
            c.body                         AS body,
            c.client_visible               AS client_visible,
+           c.source                       AS source,
+           c.external_author              AS external_author,
            p.id                           AS actor_id,
            p.display_name                 AS actor_name,
            p.kind::text                   AS actor_kind,
@@ -77,13 +89,15 @@ const FEED_SQL = `
            0::bigint                      AS sort_key,
            ${ISO('c.created_at')}         AS created_at
       FROM comment c
-      JOIN principal p ON p.id = c.author_principal_id
+      LEFT JOIN principal p ON p.id = c.author_principal_id
      WHERE c.task_id = $1
     UNION ALL
     SELECT a.action::text,
            a.id::text,
            NULL::text,
            NULL::boolean,
+           NULL::text,
+           NULL::text,
            p.id,
            p.display_name,
            p.kind::text,
@@ -107,59 +121,4 @@ export async function getFeed(taskId: string): Promise<FeedResponse> {
   const res = await query<FeedRow>(FEED_SQL, [taskId]);
   const items = res.rows.map(mapFeedRow);
   return { items, total: items.length };
-}
-
-/**
- * Post a comment (S2 contract item 2). In ONE transaction: insert the comment
- * and an `activity_log` row `action='comment_added'` with
- * `after = {comment_id, client_visible}` — the audit trail never misses a write.
- * Returns the created feed item.
- *
- * The actor MUST be resolved before the transaction opens: PGlite is
- * single-connection, so a non-transactional query() issued inside
- * db.transaction() queues behind it and self-deadlocks (same note as S1's
- * changeStatus).
- */
-export async function addComment(
-  taskId: string,
-  body: string,
-  clientVisible: boolean,
-  actor: FeedActor,
-): Promise<FeedComment> {
-  let created: { id: string; created_at: string } | null = null;
-
-  await withTransaction(async (tx) => {
-    const ins = await tx.query<{ id: string; created_at: string }>(
-      `INSERT INTO comment (task_id, author_principal_id, body, client_visible)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id::text AS id, ${ISO('created_at')} AS created_at`,
-      [taskId, actor.id, body, clientVisible],
-    );
-    const row = ins.rows[0];
-
-    await tx.query(
-      `INSERT INTO activity_log
-         (actor_principal_id, entity_type, entity_id, action, field, before, after)
-       VALUES ($1, 'task', $2, 'comment_added', NULL, NULL, $3::jsonb)`,
-      [
-        actor.id,
-        taskId,
-        JSON.stringify({ comment_id: row.id, client_visible: clientVisible }),
-      ],
-    );
-
-    created = row;
-  });
-
-  if (!created) throw new ApiError('INTERNAL', 'Comment insert produced no row');
-  const row = created as { id: string; created_at: string };
-
-  return {
-    type: 'comment',
-    id: row.id,
-    author: actor,
-    client_visible: clientVisible,
-    body,
-    created_at: row.created_at,
-  };
 }

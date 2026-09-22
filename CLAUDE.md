@@ -664,6 +664,36 @@ work orders (`pm_schedule_id` → NULL). Admin audit entity `pm_schedule`
 (`pm_schedule_created|updated|deleted|skipped`). Not built: the work-order
 detail does not yet show its schedule; sites / assets stay text until batch 2.
 
+**Messages** (migration 0052, `services/woMessages.ts`, `components/wo/
+messages/`). The Messages tab is the work order's own conversation on EVERY
+work order: a message is internal (the team) or client-visible, and the
+Overview composer moved here (the Updates feed only reads now, with a "Write
+a message" button). The store is still the `comment` table: 0052 adds
+`source` (`staff` | `client` — a note the client wrote in their CMMS has no
+principal, `external_author` / `external_target` / `external_id` say who and
+where, unique on the last two so a re-sync never duplicates), `edited_at`,
+and the **outbox** `comment_delivery` — one row per (message, client system)
+for a client-visible message on a work order whose `Client Portal Type` names
+Ecotrak / Corrigo / ServiceChannel (`clientMessageTarget` in
+`packages/shared/src/messaging.ts`); `pending` until an adapter sends it,
+then `sent` (external id) or `failed` (error). **No adapter is registered**
+(`modules/integrations/clientMessages.ts` is the port; Ecotrak stays out
+until go-live, Corrigo and ServiceChannel are not built), so every delivery
+sits at pending and the bubble says "Queued for X · sends once that
+integration is live". Rules: **no edits once sent** (any `sent` row locks it,
+409 `MESSAGE_SENT`), only the author edits, never a client-sourced note;
+editing can flip visibility (queues / drops the pending row). Routes:
+`GET|POST /work-orders/:id/messages`, `PATCH …/messages/:messageId`; the Quo
+technician thread moved to `…/messages/quo` and rides in the same GET under
+`quo`. Permissions: `work_orders/comments` create (post) / edit (own unsent),
+child `work_orders/comments/client` create = "Message the client" in Roles
+(unset inherits; 0052 sets it false for om_probation and ops_coord). Audit:
+`comment_added` (+ `source`, `delivery`), `message_edited` (before/after body
+and visibility), `client_message_sent|failed|received`. The obligations
+engine counts only a `staff` client-visible message as a chase. Inbound
+(`receiveClientMessage`) is the function an adapter calls; no route yet.
+Deferred: email as a delivery target, and the adapters themselves.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

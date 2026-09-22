@@ -445,11 +445,15 @@ export interface FeedActor {
   kind: 'human' | 'service';
 }
 
-/** A comment/update — the client-visibility boundary lives here. */
+/** A comment/update — the client-visibility boundary lives here. Since 0052
+ *  a message may have come in FROM the client (`source: 'client'`): then there
+ *  is no principal author and `external_author` names who wrote it. */
 export interface FeedComment {
   type: 'comment';
   id: string;
-  author: FeedActor;
+  author: FeedActor | null;
+  source: 'staff' | 'client';
+  external_author: string | null;
   client_visible: boolean;
   body: string;
   created_at: string;
@@ -580,9 +584,27 @@ export interface MessagesResponse {
   items: ThreadItem[];
 }
 
-/** POST /api/work-orders/:id/messages — 201 response. */
+/** POST /api/work-orders/:id/messages/quo — 201 response. */
 export interface MessageCreatedResponse {
   item: ThreadMessage;
+}
+
+// ── Messages on the work order (0052) ────────────────────────────────────────
+// The Messages tab's own thread: internal and client-visible messages on every
+// work order (vocabulary and rules in ./messaging), plus the Quo technician
+// thread above when one is linked, so the tab is one round trip.
+
+/** GET /api/work-orders/:id/messages — `items` is OLDEST-FIRST. */
+export interface WoMessagesResponse {
+  items: WoMessage[];
+  /** The client CMMS this work order is linked to, or null. */
+  client_system: ClientSystem | null;
+  quo: MessagesResponse;
+}
+
+/** POST (201) / PATCH (200) /api/work-orders/:id/messages[/:messageId]. */
+export interface WoMessageResponse {
+  item: WoMessage;
 }
 
 // ── Roles & gates (S4) ───────────────────────────────────────────────────────
@@ -1459,6 +1481,8 @@ export interface ApiError {
 
 // ── Permissions (0015) ───────────────────────────────────────────────────────
 export * from './permissions';
+export * from './messaging';
+import type { ClientSystem, WoMessage } from './messaging';
 
 // ── Visits (0021) — check-in / check-out as a log ────────────────────────────
 // One work order, many visits. Each visit has a type, a tech, a method and its

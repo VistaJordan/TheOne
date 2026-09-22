@@ -39,7 +39,7 @@ export function UpdatesFeed({ items, statuses, loading, error }: UpdatesFeedProp
       <div className="tab-empty">
         <Icon name="inbox" size={22} />
         <b>No updates yet</b>
-        <span>Post the first update below — it becomes this WO's paper trail.</span>
+        <span>Write the first message on the Messages tab — it becomes this WO's paper trail.</span>
       </div>
     );
   }
@@ -51,18 +51,21 @@ export function UpdatesFeed({ items, statuses, loading, error }: UpdatesFeedProp
 
         if (item.type === 'comment') {
           const client = item.client_visible;
+          // 0052: a message the client wrote in their CMMS has no principal.
+          const fromClient = item.source === 'client';
+          const who = item.author?.name ?? item.external_author ?? (fromClient ? 'Client' : 'Unknown');
           return (
             <li className="fi" key={key}>
               <span className={`fi-node ${client ? 'is-client' : 'is-avatar'}`} aria-hidden="true">
-                {client ? <Icon name="globe" size={14} /> : initials(item.author?.name)}
+                {client ? <Icon name="globe" size={14} /> : initials(who)}
               </span>
               <div className="fi-body">
                 <div className={`fi-card${client ? ' fi-client-card' : ''}`}>
                   <div className="fi-meta">
-                    <span className="fi-who">{item.author?.name ?? 'Unknown'}</span>
+                    <span className="fi-who">{who}</span>
                     <span className={`tag${client ? ' tag-client' : ''}`}>
-                      <Icon name={client ? 'globe' : 'lock'} size={12} />
-                      {client ? 'Client' : 'Internal'}
+                      <Icon name={fromClient ? 'ext' : client ? 'globe' : 'lock'} size={12} />
+                      {fromClient ? 'From client' : client ? 'Client' : 'Internal'}
                     </span>
                     <time className="fi-time">{feedTime(item.created_at)}</time>
                   </div>
@@ -70,7 +73,7 @@ export function UpdatesFeed({ items, statuses, loading, error }: UpdatesFeedProp
                   {client && (
                     <span className="fi-sync">
                       <Icon name="ext" size={12} />
-                      Visible to the client · syncs to their CMMS
+                      {fromClient ? 'Written by the client in their CMMS' : 'Visible to the client · delivery on the Messages tab'}
                     </span>
                   )}
                 </div>

@@ -457,6 +457,84 @@ a.btn[aria-disabled="true"] { opacity: 0.55; pointer-events: none; }
 .info-b { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
 .info-b b { color: var(--ink); font-weight: 600; }
 
+/* ── 0052. The work order's own thread ───────────────────────────────────── */
+/* Ours sit on the right (.msg-out). A client-visible one keeps the accent
+   bubble; an internal one is neutral and dashed — the visibility must read at
+   a glance. A note the client wrote sits on the left with an accent hairline. */
+.msg-internal .bubble {
+  background: var(--thead-bg);
+  border: 1px dashed var(--border-strong);
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius-sm);
+}
+
+.msg-internal .msg-av {
+  background: var(--chip);
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+
+.msg-internal .msg-time { color: var(--ink-3); }
+
+.msg-from-client .bubble { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+.msg-from-client .msg-av {
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.msg-foot.is-internal { color: var(--ink-3); }
+.msg-foot.is-unlinked { color: var(--ink-3); }
+.msg-foot.is-sent { color: var(--accent-text); }
+.msg-foot.is-failed { color: var(--danger); }
+
+.msg-edited {
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--ink-3);
+}
+
+.msg-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--pill-radius);
+}
+
+.msg-edit-btn:hover { color: var(--ink); background: var(--chip); }
+
+.msg-locked { display: inline-flex; margin-left: 6px; color: var(--ink-3); }
+
+.msg-editing { margin-top: 4px; }
+.msg-editing .composer-input { min-height: 72px; }
+
+.msg-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.msg-edit-actions .seg { margin-right: auto; }
+
+/* The Overview feed no longer composes; it points at the Messages tab. */
+.feed-to-messages {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--row-border);
+}
+
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 1240px) {
   .wo-grid.is-messages { grid-template-columns: minmax(0, 1fr); }

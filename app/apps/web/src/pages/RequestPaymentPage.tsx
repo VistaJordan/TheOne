@@ -70,7 +70,7 @@ export function RequestPaymentPage() {
   const items = useMemo(() => paymentsQuery.data?.items ?? [], [paymentsQuery.data]);
 
   const linkedPayee: Payee | null = useMemo(() => {
-    const vendor = messagesQuery.data?.conversation?.vendor;
+    const vendor = messagesQuery.data?.quo.conversation?.vendor;
     if (vendor) return { vendor_id: vendor.id, name: vendor.name, phone: vendor.phone };
     const prior = items.find((p) => p.payee.vendor_id || p.payee.name);
     if (prior) {

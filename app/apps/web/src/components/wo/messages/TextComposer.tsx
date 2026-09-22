@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { MessagesResponse, QuoConversation } from '../../../api/client';
-import { MESSAGE_MAX, postWorkOrderMessage } from '../../../api/client';
+import type { QuoConversation, WoMessagesResponse } from '../../../api/client';
+import { MESSAGE_MAX, postWorkOrderQuoText } from '../../../api/client';
 import { Icon } from '../../Icon';
 import { optimisticMessage, smsSegments } from '../../../lib/quo';
 import { useInvalidateObligations } from '../../../hooks/useObligations';
@@ -23,14 +23,17 @@ export function TextComposer({ woId, conversation, queryKey }: TextComposerProps
   const vendor = conversation.vendor;
 
   const mutation = useMutation({
-    mutationFn: (text: string) => postWorkOrderMessage(woId, { body: text }),
+    mutationFn: (text: string) => postWorkOrderQuoText(woId, { body: text }),
     // Optimistic append: the bubble shows immediately with pending-sync
     // styling, which is also its FINAL state (the API stores pending_sync=true).
     onMutate: async (text: string) => {
       await qc.cancelQueries({ queryKey });
-      const previous = qc.getQueryData<MessagesResponse>(queryKey);
-      qc.setQueryData<MessagesResponse>(queryKey, (curr) =>
-        curr ? { ...curr, items: [...curr.items, optimisticMessage(text, conversation.id)] } : curr,
+      const previous = qc.getQueryData<WoMessagesResponse>(queryKey);
+      // 0052: the Quo thread rides under `quo` in the Messages tab's response.
+      qc.setQueryData<WoMessagesResponse>(queryKey, (curr) =>
+        curr
+          ? { ...curr, quo: { ...curr.quo, items: [...curr.quo.items, optimisticMessage(text, conversation.id)] } }
+          : curr,
       );
       return { previous };
     },

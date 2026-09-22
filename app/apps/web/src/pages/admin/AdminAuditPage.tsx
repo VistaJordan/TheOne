@@ -42,6 +42,7 @@ import {
   quoteChanges,
   snapshotChanges,
   snapshotSummary,
+  clientSystemLabel,
   unwrap,
   viaLabel,
   type SnapshotChange,
@@ -384,6 +385,18 @@ function changeOf(
     }
     case 'created':
       return { field: DASH, value: e.after?.source === 'import' ? 'via import' : DASH };
+    // 0052 · the work order's own thread and its outbox.
+    case 'message_edited':
+      return {
+        field: e.after?.client_visible ? 'client-visible' : 'internal',
+        value: String(e.after?.body ?? DASH),
+      };
+    case 'client_message_sent':
+      return { field: clientSystemLabel(e.after?.target), value: String(e.after?.external_id ?? 'sent') };
+    case 'client_message_failed':
+      return { field: clientSystemLabel(e.after?.target), value: String(e.after?.error ?? 'failed') };
+    case 'client_message_received':
+      return { field: clientSystemLabel(e.after?.target), value: String(e.after?.external_author ?? 'client') };
     case 'comment_added': {
       // A decision's comment (0020 / 0025) says what it decided.
       const ref = approvalRef(e.after);

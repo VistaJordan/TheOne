@@ -17,6 +17,7 @@ import {
   automationRef,
   describeVisitChange,
   formatValue,
+  clientSystemLabel,
   labelOf,
   nameOf,
   quoteChanges,
@@ -191,7 +192,7 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       const ref = approvalRef(e.after);
       return (
         <>
-          posted {e.after?.client_visible ? 'a client-visible' : 'an internal'} update
+          posted {e.after?.client_visible ? 'a client-visible' : 'an internal'} message
           {ref && (
             <>
               : {approvalDecisionVerb(ref)} {approvalAskText(ref)}
@@ -201,8 +202,35 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
         </>
       );
     }
+    // 0052 · the work order's own thread and its outbox.
+    case 'message_edited':
+      return (
+        <>
+          edited {e.after?.client_visible ? 'a client-visible' : 'an internal'} message
+          {e.before?.client_visible !== e.after?.client_visible && (
+            <> (was {e.before?.client_visible ? 'client-visible' : 'internal'})</>
+          )}
+        </>
+      );
+    case 'client_message_sent':
+      return <>sent a message to the client on {clientSystemLabel(e.after?.target)}</>;
+    case 'client_message_failed':
+      return (
+        <>
+          could not send a message to the client on {clientSystemLabel(e.after?.target)}
+          {e.after?.error ? <>: {String(e.after.error)}</> : null}
+        </>
+      );
+    case 'client_message_received':
+      return (
+        <>
+          received a message from the client
+          {e.after?.external_author ? <> ({String(e.after.external_author)})</> : null} on{' '}
+          {clientSystemLabel(e.after?.target)}
+        </>
+      );
     case 'tech_message_sent':
-      return <>sent a message to the technician</>;
+      return <>sent a text to the technician</>;
     case 'quote_created':
       return <>created the quote</>;
     case 'quote_updated': {

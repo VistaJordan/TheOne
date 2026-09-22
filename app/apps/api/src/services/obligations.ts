@@ -495,6 +495,7 @@ async function collectDesired(
         undefined,
         `NOT EXISTS (SELECT 1 FROM comment c
                       WHERE c.task_id = b.task_id AND c.client_visible
+                        AND c.source = 'staff'
                         AND c.created_at > b.opened_at)`,
         scopeTaskId,
       );

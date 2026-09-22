@@ -16,7 +16,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { fieldPermKey, tabPermKey } from '@theone/shared';
+import { CLIENT_MESSAGE_PERM_KEY, MESSAGE_PERM_KEY, WO_MESSAGE_MAX, fieldPermKey, tabPermKey } from '@theone/shared';
 import { ApiError, parse, notFound, badRequest } from '../errors.js';
 import {
   listWorkOrders,
@@ -33,8 +33,9 @@ import {
 } from '../services/activity.js';
 import { updateWorkOrderFields, getFieldHistory } from '../services/woFieldValues.js';
 import { getFieldTimes } from '../services/woMetrics.js';
-import { getFeed, addComment } from '../services/feed.js';
-import { getMessages, resolveConversationId, sendMessage } from '../services/messages.js';
+import { getFeed } from '../services/feed.js';
+import { getMessages as getQuoMessages, resolveConversationId, sendMessage } from '../services/messages.js';
+import { editMessage, listMessages, postMessage } from '../services/woMessages.js';
 import { evaluateForTask } from '../services/obligations.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
 import { assertIdsInScope } from '../services/woScope.js';
@@ -232,15 +233,30 @@ function patchKeys(patch: z.output<typeof bulkPatchSchema>): string[] {
   ];
 }
 
-// S2: an update is 1..4000 chars of real text (whitespace-only is empty).
-const commentBodySchema = z.object({
-  body: z.string().trim().min(1).max(4000),
+// 0052: a message is 1..4000 chars of real text (whitespace-only is empty).
+const messageBodySchema = z.object({
+  body: z.string().trim().min(1).max(WO_MESSAGE_MAX),
   client_visible: z.boolean(),
+});
+
+// An edit may change the text, the visibility, or both — never nothing.
+const messageEditSchema = z
+  .object({
+    body: z.string().trim().min(1).max(WO_MESSAGE_MAX).optional(),
+    client_visible: z.boolean().optional(),
+  })
+  .refine((v) => v.body !== undefined || v.client_visible !== undefined, {
+    message: 'Nothing to change',
+  });
+
+const messageParamsSchema = z.object({
+  id: z.string().min(1),
+  messageId: z.string().uuid(),
 });
 
 // S3: one SMS is 1..1600 chars of real text (1600 = the 10-segment concatenated
 // SMS ceiling carriers accept; whitespace-only is empty).
-const messageBodySchema = z.object({
+const quoTextSchema = z.object({
   body: z.string().trim().min(1).max(1600),
 });
 
@@ -526,44 +542,77 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     return getFeed(taskId);
   });
 
-  // S2 · the second write path: post an internal or client-visible update.
-  app.post('/work-orders/:id/comments', async (req, reply) => {
-    const { p } = acting(req);
-    requirePerm(p, 'work_orders/comments', 'create', 'You cannot post updates');
+  // 0052 · the Messages tab: the work order's own thread (internal and
+  // client-visible), the client system it is linked to, and the Quo technician
+  // thread when one is correlated. Oldest-first.
+  app.get('/work-orders/:id/messages', async (req) => {
+    const { p, allow } = requireView(req);
+    requirePerm(p, tabPermKey('messages'), 'view', 'You cannot view messages');
     const { id } = parse(idParamsSchema, req.params);
-    const { body, client_visible } = parse(commentBodySchema, req.body);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    return listMessages(taskId, p, allow);
+  });
+
+  // 0052 · post a message. Internal needs `work_orders/comments` create;
+  // client-visible also needs `work_orders/comments/client` create — the
+  // one the Roles screen calls "Message the client".
+  app.post('/work-orders/:id/messages', async (req, reply) => {
+    const { p, allow } = acting(req);
+    requirePerm(p, MESSAGE_PERM_KEY, 'create', 'You cannot post messages');
+    const { id } = parse(idParamsSchema, req.params);
+    const input = parse(messageBodySchema, req.body);
+    if (input.client_visible) {
+      requirePerm(p, CLIENT_MESSAGE_PERM_KEY, 'create', 'You cannot message the client');
+    }
     const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
 
-    // Resolved outside the transaction — PGlite is single-connection (see feed.ts).
-    const actor = actorFromRequest(req);
-    const item = await addComment(taskId, body, client_visible, actor);
+    const item = await postMessage(taskId, input, p, allow);
 
-    // S5 · a comment is EVIDENCE. Any comment acknowledges an emergency; a
+    // S5 · a message is EVIDENCE. Any message acknowledges an emergency; a
     // client-visible one is the chase that silences approval_followup.
     await evaluateForTask(taskId);
     return reply.status(201).send({ item });
   });
 
+  // 0052 · edit one's own message while no client system has accepted it
+  // (409 MESSAGE_SENT afterwards, 403 for anyone but the author).
+  app.patch('/work-orders/:id/messages/:messageId', async (req) => {
+    const { p, allow } = acting(req);
+    requirePerm(p, MESSAGE_PERM_KEY, 'edit', 'You cannot edit messages');
+    const { id, messageId } = parse(messageParamsSchema, req.params);
+    const input = parse(messageEditSchema, req.body);
+    if (input.client_visible === true) {
+      requirePerm(p, CLIENT_MESSAGE_PERM_KEY, 'create', 'You cannot message the client');
+    }
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+
+    const item = await editMessage(taskId, messageId, input, p, allow);
+    await evaluateForTask(taskId);
+    return { item };
+  });
+
   // S3 · the Quo conversation mirror — oldest-first thread + its channel header.
   // A WO with no linked Quo line is NOT an error: it returns conversation:null
-  // and the web renders the empty state.
-  app.get('/work-orders/:id/messages', async (req) => {
+  // and the web renders the empty state. (Also carried by GET /messages.)
+  app.get('/work-orders/:id/messages/quo', async (req) => {
     const { p } = requireView(req);
     requirePerm(p, tabPermKey('messages'), 'view', 'You cannot view messages');
     const { id } = parse(idParamsSchema, req.params);
     const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
-    return getMessages(taskId);
+    return getQuoMessages(taskId);
   });
 
-  // S3 · the third write path: send a text to the technician. Local-only until
-  // the real Quo pipe lands, hence pending_sync=true on the stored row.
-  app.post('/work-orders/:id/messages', async (req, reply) => {
+  // S3 · send a text to the technician. Local-only until the real Quo pipe
+  // lands, hence pending_sync=true on the stored row.
+  app.post('/work-orders/:id/messages/quo', async (req, reply) => {
     const { p } = acting(req);
     requirePerm(p, tabPermKey('messages'), 'view', 'You cannot send messages');
     const { id } = parse(idParamsSchema, req.params);
-    const { body } = parse(messageBodySchema, req.body);
+    const { body } = parse(quoTextSchema, req.body);
     const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
 

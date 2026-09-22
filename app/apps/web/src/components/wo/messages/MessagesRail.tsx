@@ -121,8 +121,8 @@ export function MessagesRail({ conversation, items }: MessagesRailProps) {
           <div>
             <div className="info-t">External tech channel</div>
             <p className="info-b">
-              Messages are the external tech channel — <b>never client-visible</b>. Client updates
-              live in <b>Overview → Updates</b>.
+              Technician texts are the external tech channel — <b>never client-visible</b>. Messages
+              to the client are posted in the <b>Messages</b> thread above, marked client-visible.
             </p>
           </div>
         </div>

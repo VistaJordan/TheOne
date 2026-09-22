@@ -233,6 +233,16 @@ export function formatValue(v: unknown, f: WoFieldDescriptor | undefined): strin
 }
 
 /** Short human labels for the action vocabulary; fallback humanises the code. */
+/** 0052 · the client system a delivery row names, as the audit trail says it. */
+export function clientSystemLabel(target: unknown): string {
+  switch (target) {
+    case 'ecotrak': return 'Ecotrak';
+    case 'corrigo': return 'Corrigo';
+    case 'servicechannel': return 'ServiceChannel';
+    default: return typeof target === 'string' && target ? target : 'the client CMMS';
+  }
+}
+
 export const ACTION_LABELS: Record<string, string> = {
   created: 'Created',
   status_changed: 'Status changed',
@@ -240,8 +250,12 @@ export const ACTION_LABELS: Record<string, string> = {
   routed: 'Routed',
   deleted: 'Moved to Trash',
   restored: 'Restored',
-  comment_added: 'Update posted',
-  tech_message_sent: 'Message sent',
+  comment_added: 'Message posted',
+  message_edited: 'Message edited',
+  client_message_sent: 'Sent to client',
+  client_message_failed: 'Send to client failed',
+  client_message_received: 'Message from client',
+  tech_message_sent: 'Text to technician',
   quote_created: 'Quote created',
   quote_updated: 'Quote revised',
   quote_submitted: 'Quote submitted',

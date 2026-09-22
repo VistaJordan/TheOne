@@ -95,6 +95,8 @@ import type {
   MetricDuration,
   WoFieldTime,
 } from '@theone/shared';
+// 0052 — used by the Messages tab's own response shape below.
+import type { ClientSystem, WoMessage, WoMessageResponse } from '@theone/shared';
 
 // ── S2 contract types ────────────────────────────────────────────────────────
 // The Sprint-2 shapes are authored in @theone/shared alongside the S1 ones.
@@ -123,6 +125,13 @@ export type {
   FeedItem,
   FeedResponse,
   CommentCreatedResponse,
+  // 0052 — messages on the work order.
+  WoMessage,
+  WoMessageResponse,
+  MessageDelivery,
+  MessageSource,
+  ClientSystem,
+  ClientMessageTarget,
   AutomationItem,
   AutomationRunItem,
   AutomationTrigger,
@@ -229,11 +238,21 @@ export interface MessagesResponse {
   items: ThreadItem[];
 }
 
-/** POST /api/work-orders/:id/messages — 201 { item }. */
+/** POST /api/work-orders/:id/messages/quo — 201 { item }. */
 export interface MessageCreatedResponse { item: ThreadMessage }
 
 /** The API's Zod bound on the outbound text body. */
 export const MESSAGE_MAX = 1600;
+
+/** GET /api/work-orders/:id/messages (0052) — the work order's own thread
+    (oldest-first), the client system it is linked to, and the Quo technician
+    thread above. Declared here rather than re-exported so `quo` carries the
+    browser-side Quo types the Messages tab already renders from. */
+export interface WoMessagesResponse {
+  items: WoMessage[];
+  client_system: ClientSystem | null;
+  quo: MessagesResponse;
+}
 
 export interface ListWorkOrdersParams {
   /** A status_group_def code (admins can add groups beyond the built-in five). */
@@ -507,31 +526,46 @@ export function getWorkOrderFeed(idOrNumber: string): Promise<FeedResponse> {
   return request<FeedResponse>(`/work-orders/${encodeURIComponent(idOrNumber)}/feed`);
 }
 
-/** POST /api/work-orders/:id/comments — 201 { item: FeedItem(comment) }. */
-export function postWorkOrderComment(
+/** GET /api/work-orders/:id/messages (0052) — the work order's own thread plus
+    the Quo mirror (`quo.conversation: null` = no Quo line correlated). */
+export function getWorkOrderMessages(idOrNumber: string): Promise<WoMessagesResponse> {
+  return request<WoMessagesResponse>(`/work-orders/${encodeURIComponent(idOrNumber)}/messages`);
+}
+
+/** POST /api/work-orders/:id/messages — 201 { item }. Internal or
+    client-visible; the latter needs the "Message the client" grant. */
+export function postWorkOrderMessage(
   idOrNumber: string,
   input: { body: string; client_visible: boolean },
-): Promise<CommentCreatedResponse> {
-  return request<CommentCreatedResponse>(
-    `/work-orders/${encodeURIComponent(idOrNumber)}/comments`,
+): Promise<WoMessageResponse> {
+  return request<WoMessageResponse>(
+    `/work-orders/${encodeURIComponent(idOrNumber)}/messages`,
     { method: 'POST', body: JSON.stringify(input) },
   );
 }
 
-/** GET /api/work-orders/:id/messages — the Quo conversation mirror.
-    `conversation: null` means no Quo thread is correlated to this WO. */
-export function getWorkOrderMessages(idOrNumber: string): Promise<MessagesResponse> {
-  return request<MessagesResponse>(`/work-orders/${encodeURIComponent(idOrNumber)}/messages`);
+/** PATCH /api/work-orders/:id/messages/:messageId — edit one's own unsent
+    message (409 MESSAGE_SENT once a client system accepted it). */
+export function patchWorkOrderMessage(
+  idOrNumber: string,
+  messageId: string,
+  input: { body?: string; client_visible?: boolean },
+): Promise<WoMessageResponse> {
+  return request<WoMessageResponse>(
+    `/work-orders/${encodeURIComponent(idOrNumber)}/messages/${encodeURIComponent(messageId)}`,
+    { method: 'PATCH', body: JSON.stringify(input) },
+  );
 }
 
-/** POST /api/work-orders/:id/messages — queues an outbound text (direction
-    'out', pending_sync=true) and writes a `tech_message_sent` activity row. */
-export function postWorkOrderMessage(
+/** POST /api/work-orders/:id/messages/quo — queues an outbound text to the
+    technician (direction 'out', pending_sync=true) and writes a
+    `tech_message_sent` activity row. */
+export function postWorkOrderQuoText(
   idOrNumber: string,
   input: { body: string },
 ): Promise<MessageCreatedResponse> {
   return request<MessageCreatedResponse>(
-    `/work-orders/${encodeURIComponent(idOrNumber)}/messages`,
+    `/work-orders/${encodeURIComponent(idOrNumber)}/messages/quo`,
     { method: 'POST', body: JSON.stringify(input) },
   );
 }
