@@ -636,6 +636,34 @@ built-in pages to yes; a shipped board inserted later takes its
 the same role grants through `updateRole` (so each is a `role_updated` audit
 row); `shared_roles` / `shared_all` are kept in step and decide nothing.
 
+**Planned maintenance** (migration 0051, `services/plannedMaintenance.ts`,
+`/planned-maintenance` in the sidebar, permission path `planned_maintenance`:
+admin / tl / atl / am full, the OM tiers + ops_coord + oa view). A
+`pm_schedule` is one job at one place on a rhythm — client / entity / store /
+site / address / trade / description / NTE / assignee (a display name, checked
+like intake's), `every` × `unit` (day / week / month / year) from
+`starts_on` to `ends_on`, `lead_days` ahead — with a sequence code
+`PM-0001`. The date arithmetic is pure in `packages/shared/src/
+plannedMaintenance.ts` (`nextDueOn`: whole periods from the anchor, month
+ends clamped without drifting; tests in `tests/planned-maintenance.test.ts`).
+`raiseDueWorkOrders` raises one work order per due date inside the lead
+window (12 at most per schedule per run): a `pm_occurrence` row is claimed
+first (UNIQUE schedule_id + due_on, so the page read, the button and the
+cron cannot double-raise), then the same task INSERT the intake Submit runs
+(WO # `<code>-<due>`, `ext_name` = code, status **PM Sched** falling back to
+Open, `Scheduled Date` / `Due Date` = the due date, `task.pm_schedule_id`,
+'created' activity with `source: 'planned_maintenance'`, automations, then
+the assignee through the field path), signed by the 'Planned maintenance'
+service principal. No 7.1 acceptance task: planned work was accepted when it
+was scheduled. It runs on every GET of the list, after create/update, on
+**Raise now** (next date, lead window or not), and daily from Vercel's cron
+(`vercel.json` → GET `/api/webhooks/planned-maintenance-run`, allowlisted in
+authGuard, checks `CRON_SECRET` — unset = 403, the other triggers still
+work). **Skip** records a skipped occurrence. Deleting a schedule keeps its
+work orders (`pm_schedule_id` → NULL). Admin audit entity `pm_schedule`
+(`pm_schedule_created|updated|deleted|skipped`). Not built: the work-order
+detail does not yet show its schedule; sites / assets stay text until batch 2.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

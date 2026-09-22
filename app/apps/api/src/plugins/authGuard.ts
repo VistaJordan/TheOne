@@ -29,6 +29,9 @@ const PUBLIC_PATHS = new Set([
   // Rule 7.3.2: the email tool has no session; routes/webhooks.ts checks its
   // shared secret instead. Nothing else under /api/webhooks is public.
   '/api/webhooks/email-escalation',
+  // 0051: the daily cron that raises planned-maintenance work orders; the
+  // route checks CRON_SECRET instead.
+  '/api/webhooks/planned-maintenance-run',
 ]);
 
 function isPublic(req: FastifyRequest): boolean {

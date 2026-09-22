@@ -77,6 +77,10 @@ export interface Config {
       = the receiver answers 503 to everything — the door exists but is
       bolted until someone cuts a key. Never logged. */
   escalationWebhookSecret: string | null;
+  /** 0051: what the scheduler presents on GET /api/webhooks/planned-
+      maintenance-run (Vercel sends `Authorization: Bearer <CRON_SECRET>`).
+      Unset = 403; the page read and the Raise now button still raise. */
+  cronSecret: string | null;
 }
 
 export interface SignInPolicy {
@@ -163,6 +167,7 @@ function build(): Config {
     signIn: buildSignIn(),
     ecotrakTransitionMode: (str('ECOTRAK_TRANSITION_MODE') ?? 'warn').toLowerCase() === 'block' ? 'block' : 'warn',
     escalationWebhookSecret: str('ESCALATION_WEBHOOK_SECRET') ?? null,
+    cronSecret: str('CRON_SECRET') ?? null,
   };
 }
 

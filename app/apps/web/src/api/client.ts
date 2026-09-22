@@ -2,6 +2,7 @@
 // TYPE-ONLY imports from @theone/shared — no runtime value ever crosses this
 // boundary (SPRINT1-SPEC §8 Card C). Web never imports @theone/db.
 import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
+import type { PmOccurrence, PmSchedule, PmScheduleInput, PmSchedulesResponse } from '@theone/shared';
 import type {
   ApprovalCounts,
   ApprovalListResponse,
@@ -1760,6 +1761,38 @@ export function updateContract(id: string, input: ContractInput): Promise<{ cont
 
 export function deleteContract(id: string): Promise<void> {
   return request(`/contracts/${id}`, { method: 'DELETE' });
+}
+
+// ── Planned maintenance (0051) ───────────────────────────────────────────────
+
+export function listPmSchedules(): Promise<PmSchedulesResponse> {
+  return request('/planned-maintenance');
+}
+
+export function getPmSchedule(id: string): Promise<{ schedule: PmSchedule; occurrences: PmOccurrence[] }> {
+  return request(`/planned-maintenance/${id}`);
+}
+
+export function createPmSchedule(input: PmScheduleInput): Promise<{ schedule: PmSchedule }> {
+  return request('/planned-maintenance', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updatePmSchedule(id: string, input: PmScheduleInput): Promise<{ schedule: PmSchedule }> {
+  return request(`/planned-maintenance/${id}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function deletePmSchedule(id: string): Promise<void> {
+  return request(`/planned-maintenance/${id}`, { method: 'DELETE' });
+}
+
+/** Raise the schedule's next due date as a work order now. */
+export function raisePmNext(id: string): Promise<{ schedule: PmSchedule; task_id: string | null }> {
+  return request(`/planned-maintenance/${id}/raise`, { method: 'POST' });
+}
+
+/** Skip the schedule's next due date. */
+export function skipPmNext(id: string): Promise<{ schedule: PmSchedule }> {
+  return request(`/planned-maintenance/${id}/skip`, { method: 'POST' });
 }
 
 /** The contract in force for a work order today, its resolved rates, and the

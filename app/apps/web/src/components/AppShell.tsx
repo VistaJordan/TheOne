@@ -31,6 +31,7 @@ export type NavKey =
   | 'Incoming Work Orders'
   | 'Approvals'
   | 'Contracts'
+  | 'Planned Maintenance'
   | 'Admin';
 
 interface NavChild {
@@ -74,6 +75,9 @@ const NAV: NavItem[] = [
   // stays for anyone with either. Its own queue, not a lane of the inbox —
   // intake is a different job from approving.
   { label: 'Incoming Work Orders', icon: 'download', to: '/incoming', badge: 'incoming' },
+  // 0051 — the recurring jobs, raised as work orders by the calendar. Hidden
+  // without the `planned_maintenance` grant.
+  { label: 'Planned Maintenance', icon: 'refresh', to: '/planned-maintenance' },
   // The manager's inbox (0026): approval tasks the rules engine raises —
   // the NTE override of rule 1.5.2 first.
   { label: 'Approvals', icon: 'inbox', to: '/approvals', badge: 'approvals' },
@@ -104,6 +108,7 @@ const NAV_PERM: Record<string, string | string[]> = {
   Approvals: 'approvals',
   Invoicing: 'invoicing',
   Contracts: 'contracts',
+  'Planned Maintenance': 'planned_maintenance',
 };
 
 interface AppShellProps {

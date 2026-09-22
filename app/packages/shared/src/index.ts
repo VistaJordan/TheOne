@@ -1662,6 +1662,8 @@ export * from './attachments';
 export * from './dashboards';
 // 0046: contracts and labor rates — what a client has agreed the work costs.
 export * from './contracts';
+// 0051: planned maintenance — schedules that raise work orders by the calendar.
+export * from './plannedMaintenance';
 // 0047: vendor bills (the AP half of invoicing) and approval tiers (6.2.3).
 export * from './vendorBills';
 export * from './approvalTiers';

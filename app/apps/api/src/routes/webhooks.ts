@@ -27,6 +27,7 @@ import { config } from '../config.js';
 import { ApiError, parse } from '../errors.js';
 import { checkWebhookSecret, presentedSecret } from '../lib/webhookAuth.js';
 import { escalateFromEmail } from '../services/escalations.js';
+import { raiseDueWorkOrders } from '../services/plannedMaintenance.js';
 
 const optionalText = (max: number) =>
   z
@@ -46,6 +47,22 @@ const emailEscalationSchema = z.object({
 });
 
 export default async function webhookRoutes(app: FastifyInstance): Promise<void> {
+  // 0051 · the clock. Vercel's cron (vercel.json) GETs this once a day with
+  // `Authorization: Bearer <CRON_SECRET>`; a POST with the same secret works
+  // for a hand run. Raises every planned-maintenance work order that is due.
+  const cronRun = async (req: { headers: Record<string, unknown> }) => {
+    if (config.demoMode) throw new ApiError('FORBIDDEN', 'Webhooks are disabled in the public demo.');
+    const outcome = checkWebhookSecret(presentedSecret(req.headers), config.cronSecret);
+    if (outcome === 'unconfigured') {
+      throw new ApiError('FORBIDDEN', 'The cron is not configured (CRON_SECRET is unset).');
+    }
+    if (outcome !== 'ok') throw new ApiError('UNAUTHORIZED', 'Cron secret missing or invalid');
+    const { raised } = await raiseDueWorkOrders();
+    return { ok: true, raised };
+  };
+  app.get('/webhooks/planned-maintenance-run', async (req) => cronRun(req));
+  app.post('/webhooks/planned-maintenance-run', async (req) => cronRun(req));
+
   app.post('/webhooks/email-escalation', async (req) => {
     // The public demo runs on seed data with the dev bypass; a reachable
     // receiver there would let anyone flag demo rows from the internet.

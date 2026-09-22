@@ -24,6 +24,7 @@ import { QuotePrintPage } from './pages/QuotePrintPage';
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
+import { PlannedMaintenancePage } from './pages/PlannedMaintenancePage';
 import { PulsePage } from './pages/PulsePage';
 import { ReceivablesPage } from './pages/ReceivablesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
@@ -163,6 +164,10 @@ export function App() {
               <Route
                 path="/contracts"
                 element={<RequireAuth><RequireCan perm="contracts" nav="Contracts"><ContractsPage /></RequireCan></RequireAuth>}
+              />
+              <Route
+                path="/planned-maintenance"
+                element={<RequireAuth><RequireCan perm="planned_maintenance" nav="Planned Maintenance"><PlannedMaintenancePage /></RequireCan></RequireAuth>}
               />
               {/* S5 — the Pulse: every open obligation, by how much clock is left. */}
               <Route path="/pulse" element={<RequireAuth><PulsePage /></RequireAuth>} />

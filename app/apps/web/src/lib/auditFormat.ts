@@ -328,6 +328,9 @@ export const ENTITY_LABELS: Record<string, string> = {
   export: 'Export',
   webhook: 'Webhook',
   intake_draft: 'Intake draft',
+  contract: 'Contract',
+  approval_tier: 'Approval tier',
+  pm_schedule: 'Maintenance schedule',
 };
 
 export function entityLabel(entityType: string): string {

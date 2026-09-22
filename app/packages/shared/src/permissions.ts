@@ -686,6 +686,13 @@ export function buildPermissionTree(
       note: 'The client rate cards: hourly, overtime, trip charge, markup. View = read them and see which one a quote used; edit = change the terms.',
     },
     {
+      // 0051 · schedules that raise work orders by the calendar.
+      key: 'planned_maintenance',
+      label: 'Planned maintenance',
+      actions: ['view', 'create', 'edit', 'delete'],
+      note: 'The recurring jobs: view = the schedules and their history; edit = change one, raise or skip its next date.',
+    },
+    {
       key: 'admin',
       label: 'Admin console',
       actions: ['view', 'edit'],

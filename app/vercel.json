@@ -3,6 +3,9 @@
   "framework": null,
   "buildCommand": "npm run build -w @theone/web && node scripts/bundle-api.mjs",
   "outputDirectory": "apps/web/dist",
+  "crons": [
+    { "path": "/api/webhooks/planned-maintenance-run", "schedule": "0 12 * * *" }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
