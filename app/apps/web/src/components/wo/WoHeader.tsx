@@ -21,6 +21,7 @@ import { StatusPill } from '../StatusPill';
 import { PhaseBar } from './PhaseBar';
 import { StatusChangeBanner } from './StatusChangeBanner';
 import { AcceptanceChip } from './AcceptanceChip';
+import { CallButton } from './calls/CallButton';
 
 /** One labelled amount in the worth block. The currency sign is drawn
     separately, smaller and lighter, so label + amount read the way the comp
@@ -200,6 +201,8 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               </button>
             )}
           />
+          {/* 0054 · call through Quo; optionally draft a quote from the call. */}
+          <CallButton wo={wo} />
           {canEscalate && (
             <button
               type="button"

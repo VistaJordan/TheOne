@@ -81,6 +81,16 @@ export interface Config {
       maintenance-run (Vercel sends `Authorization: Bearer <CRON_SECRET>`).
       Unset = 403; the page read and the Raise now button still raise. */
   cronSecret: string | null;
+  /** 0054: the signing key Quo shows when the webhook is created (Settings ›
+      Webhooks, or the API's `key`). POST /api/webhooks/quo verifies every
+      event's signature with it. Unset = 403; calls can still be placed and
+      a transcript pasted by hand. Never logged. */
+  quoWebhookSecret: string | null;
+  /** 0054: the Claude API key that drafts a quote from a call transcript.
+      Unset = the draft page says AI drafting is not configured. Never logged. */
+  anthropicApiKey: string | null;
+  /** 0054: the Claude model that drafts quotes (QUOTE_AI_MODEL). */
+  quoteAiModel: string;
 }
 
 export interface SignInPolicy {
@@ -168,6 +178,9 @@ function build(): Config {
     ecotrakTransitionMode: (str('ECOTRAK_TRANSITION_MODE') ?? 'warn').toLowerCase() === 'block' ? 'block' : 'warn',
     escalationWebhookSecret: str('ESCALATION_WEBHOOK_SECRET') ?? null,
     cronSecret: str('CRON_SECRET') ?? null,
+    quoWebhookSecret: str('QUO_WEBHOOK_SECRET') ?? null,
+    anthropicApiKey: str('ANTHROPIC_API_KEY') ?? null,
+    quoteAiModel: str('QUOTE_AI_MODEL') ?? 'claude-opus-5',
   };
 }
 

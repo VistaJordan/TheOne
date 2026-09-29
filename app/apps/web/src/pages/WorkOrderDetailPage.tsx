@@ -33,6 +33,7 @@ import { FlagsRow } from '../components/wo/FlagsRow';
 import { AllFieldsPanel } from '../components/wo/AllFieldsPanel';
 import { AuditTrail } from '../components/wo/AuditTrail';
 import { MessagesPanel } from '../components/wo/messages/MessagesPanel';
+import { CallsCard } from '../components/wo/calls/CallsCard';
 import { MessagesRail } from '../components/wo/messages/MessagesRail';
 import { ObligationsCard, OBLIGATIONS_CARD_ID } from '../components/obligations/ObligationsCard';
 import { useWoObligations } from '../hooks/useObligations';
@@ -333,6 +334,9 @@ export function WorkOrderDetailPage() {
             </div>
           )}
 
+          {/* 0054 · calls placed through Quo from this work order, and the
+              way into the AI quote draft — above the written thread. */}
+          {tab === 'messages' && <CallsCard woId={wo.id} woNumber={wo.wo_number} />}
           {tab === 'messages' && (
             <MessagesPanel
               woId={wo.id}

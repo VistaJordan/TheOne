@@ -724,6 +724,47 @@ engine counts only a `staff` client-visible message as a chase. Inbound
 (`receiveClientMessage`) is the function an adapter calls; no route yet.
 Deferred: email as a delivery target, and the adapters themselves.
 
+**Calls through Quo and the AI quote draft** (migration 0054,
+`services/woCalls.ts`, `services/aiQuote.ts`, `lib/aiQuotePrompt.ts`,
+`components/wo/calls/`, `pages/AiQuoteReviewPage.tsx`). Quo's API **cannot
+start a call**, so the **Call** button in the work-order header records the
+intent first — a `wo_call` row (who, E.164 phone, purpose `call` | `quote` =
+"Just call" / "Call and draft a quote") — then hands `tel:+1…` to the Quo
+desktop app (it must be the Windows tel: handler). Quo's webhooks come back to
+`POST /api/webhooks/quo` (public path; signature checked in
+`lib/quoSignature.ts` against `QUO_WEBHOOK_SECRET`, legacy
+`openphone-signature` and Standard Webhooks both accepted; unset = 403):
+`call.completed` matches the newest unmatched row for the dialled number
+placed ≤30 min before / 5 min after the call started and stamps
+`quo_call_id`; `call.transcript.completed` stores the dialogue by that id (or
+by number when it beats the completed event); `call.summary.completed`
+stores Quo's summary. **A call nobody placed from a work order is dropped** —
+the webhook sees every call on the line. A `dialing` row with nothing from
+Quo after 3 h reads `expired` (derived, `displayCallStatus`). A transcript can
+be pasted by hand (`parsePastedTranscript`, "Name: text" lines). The call log
+is a Calls card at the top of the Messages tab (polls every 15 s while a call
+waits on Quo). **The AI draft** (`quote_ai_draft`, one per call):
+`POST …/calls/:callId/quote-draft` sends the transcript, the work order and
+its client contract rates (`contractForTask`) to Claude (`ANTHROPIC_API_KEY`,
+`QUOTE_AI_MODEL` default `claude-opus-5`, structured JSON output, server-side
+refusal fallback) and stores the answer as **the quote builder's PUT body**
+plus `assumptions` / `missing_info`. Prices are never invented: stated client
+price → vendor cost + contract markup → contract hourly / trip rate → rate 0
+and a `missing_info` entry. The review page shows the draft in the builder's
+own editors beside the transcript, autosaves edits to the draft (`PUT`), and
+**Submit quote** runs the ordinary `createQuote` + `updateQuote` — same
+number, permissions and `quote_updated` row as typing it — then lands in the
+builder. A quote with content is replaced only after a confirm (409
+`QUOTE_HAS_CONTENT` → `replace: true`); approved / sent is never touched (409
+`QUOTE_LOCKED`). Generation runs inside the request (20–60 s), hence
+`functions["api/index.js"].maxDuration = 300` in `vercel.json`. Permissions:
+`work_orders/calls` view / create (0054 grants both to every role); drafting
+and submitting also need `quotes` edit (create when the WO has no quote).
+Audit: `call_placed`, `call_completed`, `call_transcribed` (the 'Quo' service
+principal, or the person who pasted), `quote_ai_drafted|redrafted|submitted|
+discarded`. Next: past quotes from the ClickUp import as pricing references
+(vector search) go into `buildUserMessage`.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

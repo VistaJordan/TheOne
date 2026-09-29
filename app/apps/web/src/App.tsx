@@ -21,6 +21,7 @@ import { WorkOrdersPage } from './pages/WorkOrdersPage';
 import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage';
 import { QuoteBuilderPage } from './pages/QuoteBuilderPage';
 import { QuotePrintPage } from './pages/QuotePrintPage';
+import { AiQuoteReviewPage } from './pages/AiQuoteReviewPage';
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
@@ -145,6 +146,12 @@ export function App() {
               <Route
                 path="/work-orders/:woNumber/quote"
                 element={<RequireAuth><RequireCan perm="quotes" nav="Work Orders"><QuoteBuilderPage /></RequireCan></RequireAuth>}
+              />
+              {/* 0054 — the quote the AI drafted from a Quo call, reviewed
+                  before Submit quote fills the real one. */}
+              <Route
+                path="/work-orders/:woNumber/calls/:callId/quote"
+                element={<RequireAuth><RequireCan perm="quotes" nav="Work Orders"><AiQuoteReviewPage /></RequireCan></RequireAuth>}
               />
               {/* 0048 — the quote as a document, laid out for the print dialog
                   (save as PDF). No AppShell: the page IS the paper. */}

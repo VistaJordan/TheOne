@@ -2136,3 +2136,86 @@ export interface RoutingList {
 export function listRoutingLists(): Promise<{ items: RoutingList[] }> {
   return request('/lists');
 }
+
+// ── 0054 — calls through Quo, and the AI quote draft ─────────────────────────
+
+import type {
+  AiQuoteDraftResponse,
+  PlaceCallResponse,
+  QuoteDraftBody,
+  WoCall,
+  WoCallContactRole,
+  WoCallPurpose,
+  WoCallsResponse,
+} from '@theone/shared';
+
+const callsPath = (idOrNumber: string, suffix = '') =>
+  `/work-orders/${encodeURIComponent(idOrNumber)}/calls${suffix}`;
+
+/** GET /api/work-orders/:id/calls — the call log, newest first. */
+export function listWoCalls(idOrNumber: string): Promise<WoCallsResponse> {
+  return request<WoCallsResponse>(callsPath(idOrNumber));
+}
+
+/** POST /api/work-orders/:id/calls — records the call, returns the tel: link
+    the browser hands to the Quo app. */
+export function placeWoCall(
+  idOrNumber: string,
+  input: { phone: string; contact_name: string | null; contact_role: WoCallContactRole; purpose: WoCallPurpose },
+): Promise<PlaceCallResponse> {
+  return request<PlaceCallResponse>(callsPath(idOrNumber), {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** POST …/calls/:callId/transcript — a transcript pasted by hand. */
+export function pasteCallTranscript(idOrNumber: string, callId: string, text: string): Promise<{ call: WoCall }> {
+  return request(callsPath(idOrNumber, `/${encodeURIComponent(callId)}/transcript`), {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  });
+}
+
+const draftPath = (idOrNumber: string, callId: string, suffix = '') =>
+  callsPath(idOrNumber, `/${encodeURIComponent(callId)}/quote-draft${suffix}`);
+
+export function getAiQuoteDraft(idOrNumber: string, callId: string): Promise<AiQuoteDraftResponse> {
+  return request<AiQuoteDraftResponse>(draftPath(idOrNumber, callId));
+}
+
+/** POST …/quote-draft — Claude drafts (or redrafts) the quote. Takes 20–60 s. */
+export function generateAiQuoteDraft(idOrNumber: string, callId: string): Promise<AiQuoteDraftResponse> {
+  return request<AiQuoteDraftResponse>(draftPath(idOrNumber, callId), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export function saveAiQuoteDraft(idOrNumber: string, callId: string, draft: QuoteDraftBody): Promise<{ ok: true }> {
+  return request(draftPath(idOrNumber, callId), {
+    method: 'PUT',
+    body: JSON.stringify({ draft }),
+  });
+}
+
+/** POST …/quote-draft/submit — fills the work order's quote through the
+    ordinary builder save. 409 QUOTE_HAS_CONTENT until `replace` is true. */
+export function submitAiQuoteDraft(
+  idOrNumber: string,
+  callId: string,
+  draft: QuoteDraftBody,
+  replace: boolean,
+): Promise<QuoteResponse> {
+  return request<QuoteResponse>(draftPath(idOrNumber, callId, '/submit'), {
+    method: 'POST',
+    body: JSON.stringify({ draft, replace }),
+  });
+}
+
+export function discardAiQuoteDraft(idOrNumber: string, callId: string): Promise<{ call: WoCall }> {
+  return request(draftPath(idOrNumber, callId, '/discard'), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}

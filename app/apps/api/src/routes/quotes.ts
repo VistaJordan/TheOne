@@ -49,7 +49,8 @@ const lineSchema = z.object({
   markup_pct: z.number().min(0).max(1000).optional(),
 });
 
-const sectionSchema = z.object({
+/** Exported for the AI quote draft (routes/calls.ts), which saves the same shape. */
+export const sectionSchema = z.object({
   kind: z.enum(['incurred', 'option']),
   name: z.string().trim().max(200).nullable().optional(),
   narrative_reported: z.string().max(8000).nullable().optional(),

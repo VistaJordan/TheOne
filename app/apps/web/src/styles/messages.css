@@ -546,3 +546,44 @@ a.btn[aria-disabled="true"] { opacity: 0.55; pointer-events: none; }
   .chan-help { text-align: left; }
   .tr-who { width: 64px; }
 }
+
+/* ── 0054 · Calls through Quo (call log + Call dialog) ────────────────────── */
+.calls-card { margin-bottom: 14px; }
+.calls-list { list-style: none; margin: 0; padding: 12px 14px 14px; display: grid; gap: 10px; }
+.call-row.is-quote .call { box-shadow: inset 3px 0 0 var(--accent); }
+.call-body { min-width: 0; }
+.call-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 3px; font-size: 12px; color: var(--ink-3); }
+.call-state { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.call-state.is-transcribed { color: var(--accent-text); }
+.call-state.is-missed,
+.call-state.is-expired { color: var(--danger); }
+.call-sum-list { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.call-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.call-paste { display: grid; gap: 6px; margin-top: 10px; }
+.call-paste textarea { width: 100%; resize: vertical; font-size: 12.5px; }
+
+.call-sheet { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+.call-field { margin-top: 14px; display: grid; gap: 6px; }
+.call-field .seg { flex-wrap: wrap; }
+.call-field .seg-btn { display: inline-flex; align-items: center; gap: 5px; }
+.call-contacts { display: grid; gap: 6px; }
+.call-contact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.call-contact.is-on { border-color: var(--accent); background: var(--tab-on-bg); }
+.call-contact-main { display: grid; gap: 1px; font-size: 12.5px; color: var(--ink-2); min-width: 0; }
+.call-contact-main b { color: var(--ink); font-weight: 600; }
+.call-contact-src { grid-column: 2 / -1; font-size: 11px; color: var(--ink-3); }
+.call-other { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.call-other .field:last-child { grid-column: 1 / -1; }
+.call-hint { display: flex; gap: 6px; align-items: flex-start; margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--ink-3); }
+@media (max-width: 520px) {
+  .call-other { grid-template-columns: 1fr; }
+}

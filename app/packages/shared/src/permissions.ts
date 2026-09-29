@@ -622,6 +622,14 @@ export function buildPermissionTree(
           ],
         },
         {
+          // 0054 · the Call button (through the Quo app) and the call log with
+          // its transcripts. Drafting a quote from a call needs quotes too.
+          key: 'work_orders/calls',
+          label: 'Calls (Quo)',
+          actions: ['view', 'create'],
+          note: 'View = the call log and transcripts on a work order; create = place a call or paste a transcript.',
+        },
+        {
           // 0043 · seeing a file is seeing the work order (the read is scoped
           // like any other), so only adding and removing are granted here.
           key: 'work_orders/attachments',

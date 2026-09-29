@@ -20,14 +20,25 @@
 //
 // The tool is standalone today; the shape above is the contract to align it
 // to. What each call does is in services/escalations.ts.
+//
+// POST /api/webhooks/quo — 0054. Quo (Settings › Webhooks) posts call events
+// for the monitored lines: call.completed, call.transcript.completed,
+// call.summary.completed. Signed with the webhook's key (QUO_WEBHOOK_SECRET),
+// verified in lib/quoSignature.ts. Every well-signed event gets a 200 — one
+// that matches no call placed from a work order is acknowledged and dropped,
+// so Quo never retries it. 401 bad signature, 403 unconfigured / DEMO_MODE.
+// What each event does is in services/woCalls.ts.
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { ApiError, parse } from '../errors.js';
 import { checkWebhookSecret, presentedSecret } from '../lib/webhookAuth.js';
+import { verifyQuoSignature } from '../lib/quoSignature.js';
 import { escalateFromEmail } from '../services/escalations.js';
 import { raiseDueWorkOrders } from '../services/plannedMaintenance.js';
+import { handleQuoEvent } from '../services/woCalls.js';
+import type { QuoEvent } from '../services/woCalls.js';
 
 const optionalText = (max: number) =>
   z
@@ -79,5 +90,17 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
     const body = parse(emailEscalationSchema, req.body);
     const result = await escalateFromEmail(body);
     return { ok: true, ...result };
+  });
+
+  app.post('/webhooks/quo', async (req) => {
+    if (config.demoMode) throw new ApiError('FORBIDDEN', 'Webhooks are disabled in the public demo.');
+    const outcome = verifyQuoSignature(req.headers, req.rawBody ?? '', config.quoWebhookSecret);
+    if (outcome === 'unconfigured') {
+      throw new ApiError('FORBIDDEN', 'The Quo webhook is not configured (QUO_WEBHOOK_SECRET is unset).');
+    }
+    if (outcome !== 'ok') throw new ApiError('UNAUTHORIZED', `Quo signature ${outcome}`);
+    const event = (req.body ?? {}) as QuoEvent;
+    const result = await handleQuoEvent(event);
+    return { ok: true, event: event.id ?? null, ...result };
   });
 }

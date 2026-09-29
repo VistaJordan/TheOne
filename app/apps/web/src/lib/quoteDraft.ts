@@ -21,7 +21,7 @@ import type {
   QuoteSectionInput,
   QuoteUpdateInput,
 } from '../api/client';
-import type { QuoteDocumentType } from '@theone/shared';
+import type { QuoteDocumentType, QuoteDraftBody, QuoteDraftSection } from '@theone/shared';
 import { parseMoney, parsePct, parseTax } from './quoteTotals';
 
 // ── Vocabulary ───────────────────────────────────────────────────────────────
@@ -161,7 +161,9 @@ function blankIncurred(): DraftSection {
 
 // ── wire → draft ─────────────────────────────────────────────────────────────
 
-function sectionToDraft(section: QuoteSection): DraftSection {
+/** Takes a saved section or an AI draft section (0054) — the draft is the
+    builder's PUT body, so its lines carry every field the form reads. */
+function sectionToDraft(section: QuoteSection | QuoteDraftSection): DraftSection {
   return {
     key: uid(section.kind === 'incurred' ? 'inc' : 'opt'),
     kind: section.kind,
@@ -261,6 +263,39 @@ export function toUpdateInput(draft: DraftQuote): QuoteUpdateInput {
     document_type: draft.document_type,
     bill_to: draft.bill_to.trim() === '' ? null : draft.bill_to,
     ship_to: draft.ship_to.trim() === '' ? null : draft.ship_to,
+  };
+}
+
+// ── AI quote draft (0054) ────────────────────────────────────────────────────
+
+/** The AI draft (stored server-side as the builder's PUT body) → the form.
+    What a draft does not carry — sales tax, the document fields, a pinned
+    summary — takes the builder's defaults and is never sent on Submit quote,
+    so the quote keeps its own values for them. */
+export function fromDraftBody(body: QuoteDraftBody): DraftQuote {
+  const incurred = body.sections.find((s) => s.kind === 'incurred');
+  const options = body.sections.filter((s) => s.kind === 'option');
+  return {
+    sections: [incurred ? sectionToDraft(incurred) : blankIncurred(), ...options.map(sectionToDraft)],
+    sales_tax: '0.00',
+    specs: body.specs ?? '',
+    note_to_customer: body.note_to_customer ?? '',
+    summary_pinned: null,
+    separate_quotes: false,
+    document_type: 'quote',
+    bill_to: '',
+    ship_to: '',
+  };
+}
+
+/** The form → the AI draft body: the same conversion the builder saves with,
+    trimmed to the three things a draft holds. */
+export function toDraftBody(draft: DraftQuote): QuoteDraftBody {
+  const input = toUpdateInput(draft);
+  return {
+    sections: draft.sections.map(sectionToInput),
+    specs: input.specs ?? null,
+    note_to_customer: input.note_to_customer ?? null,
   };
 }
 

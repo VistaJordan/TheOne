@@ -32,6 +32,9 @@ const PUBLIC_PATHS = new Set([
   // 0051: the daily cron that raises planned-maintenance work orders; the
   // route checks CRON_SECRET instead.
   '/api/webhooks/planned-maintenance-run',
+  // 0054: Quo's call / transcript / summary events; the route verifies Quo's
+  // signature (QUO_WEBHOOK_SECRET) instead.
+  '/api/webhooks/quo',
 ]);
 
 function isPublic(req: FastifyRequest): boolean {
