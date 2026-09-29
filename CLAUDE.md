@@ -765,6 +765,53 @@ principal, or the person who pasted), `quote_ai_drafted|redrafted|submitted|
 discarded`. Next: past quotes from the ClickUp import as pricing references
 (vector search) go into `buildUserMessage`.
 
+**Client Updates** (migration 0055, `services/clientUpdates.ts`,
+`pages/ClientUpdatesPage.tsx`, sidebar "Client Updates"). Replaces the
+per-client tracking spreadsheets (e.g. "SUN Holdings Tracking"). A
+**tracker** (`client_update`) is a saved question, never a copy of rows: a
+client (`task.client`), a filter set (saved-view shape), ordered **columns**
+— each `{key, label, shared}`, `shared=false` = team only — charts
+`{field, kind: bar|donut, shared}`, sections (`group_by`, default status),
+sort, and the **client-note column** (`note_field`, default `fields.20. Last
+Update`) typed straight into the row via `PATCH /work-orders/:id/fields`.
+The page: headline tiles (`SUMMARY_TILES` in `packages/shared/src/
+clientUpdates.ts`, each carrying the rules that drill to what it counted),
+clickable charts (each drilled chart is recounted without its own pick, so
+every bar stays visible), drill chips, "Client view" (shared columns and
+charts only), and the list from the ordinary `/work-orders` endpoint with
+`trackerFilters()` — `andFilters()` distributes a drill over an "any of"
+filter's OR groups. Our page follows the viewer's rule-8.5 scope; everything
+the CLIENT gets (link, email, client CSV) is the whole tracker, shared
+columns only, via `buildView` with no viewer. Five **computed columns**
+joined the field catalogue for every list (`COMPUTED_WO_COLUMNS`; SQL in
+`woFields.ts`, projected into a row's `custom` map only when asked):
+`location` (City, ST), `completed_on` (first move into done/closed after the
+last move out, Chicago day; NULL for rows imported already closed),
+`age_band`, `last_client_message(_at)`, `last_sent_to_client`.
+**Sharing** needs `client_updates/share` (edit): a read-only public link
+`/share/client-updates/<32-char token>` (`pages/ClientSharePage.tsx`, no
+AppShell, no session; `authGuard` allows exactly
+`/api/public/client-updates/<token>(/csv)` by pattern; revocable,
+regenerable, optional expiry, `share_origin` remembers the site so cron
+emails carry the right link), and **email** from `MAIL_FROM` (default
+contact@seamlessfm.com) through `services/mailer.ts` — `MAIL_PROVIDER=graph`
+(Graph sendMail as that mailbox; the app registration needs the **Mail.Send
+application permission** with admin consent; creds `MAIL_GRAPH_*` fall back
+to `ENTRA_*`) or `resend` (`RESEND_API_KEY`); unset = not configured, the
+UI says so and a send records a failed delivery. The body is
+`lib/clientUpdateEmail.ts` (pure, inline styles, tested); CSV attached
+optionally. **Schedules** (daily / weekdays / weekly / monthly at HH:MM
+America/Chicago, `nextRunAt` DST-correct) are sent by the hourly Vercel cron
+`/api/webhooks/client-updates-run` (`CRON_SECRET`), each tracker claimed by
+compare-and-set on `next_run_at` so overlapping runs never double-send;
+signed by the "Client updates" service principal. Every send is a
+`client_update_delivery` row (sent / failed + error) and an admin audit row
+(`client_update_sent|test_sent|send_failed`, plus `_created|_updated|
+_deleted|_link_*|_exported`, token never logged); a real send also writes
+`client_update_sent` on each work order in it, which the approval follow-up
+obligation counts as a chase. Grants (0055): admin/tl/atl/am full + share;
+om tiers and ops_coord view.
+
 `packages/db/migrations/000N_*.sql` run once each (ledger table). `seed.ts`
 truncates and rebuilds the sample data. Because `setup` runs migrate **then**
 seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is

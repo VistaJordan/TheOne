@@ -496,7 +496,12 @@ async function collectDesired(
         `NOT EXISTS (SELECT 1 FROM comment c
                       WHERE c.task_id = b.task_id AND c.client_visible
                         AND c.source = 'staff'
-                        AND c.created_at > b.opened_at)`,
+                        AND c.created_at > b.opened_at)
+         -- 0055 · a client update that carried this work order is a chase too.
+         AND NOT EXISTS (SELECT 1 FROM activity_log a
+                          WHERE a.entity_type = 'task' AND a.entity_id = b.task_id::text
+                            AND a.action = 'client_update_sent'
+                            AND a.created_at > b.opened_at)`,
         scopeTaskId,
       );
       for (const r of rows) {

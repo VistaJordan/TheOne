@@ -229,7 +229,8 @@ const MONEY = new Intl.NumberFormat('en-US', {
 /** The RAW value behind a column, before formatting — also what grouping and
     the CSV clipboard read. */
 export function rawCell(item: WorkOrderListItem, key: string): unknown {
-  if (key.startsWith('fields.')) return item.custom?.[key] ?? null;
+  // 0055 · computed columns (location, completed_on, …) ride in `custom` too.
+  if (key.startsWith('fields.') || (item.custom && key in item.custom)) return item.custom?.[key] ?? null;
   switch (key) {
     case 'status':
       return item.status.name;

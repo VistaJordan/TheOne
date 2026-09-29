@@ -35,12 +35,18 @@ const PUBLIC_PATHS = new Set([
   // 0054: Quo's call / transcript / summary events; the route verifies Quo's
   // signature (QUO_WEBHOOK_SECRET) instead.
   '/api/webhooks/quo',
+  // 0055: the hourly cron that sends scheduled client updates (CRON_SECRET).
+  '/api/webhooks/client-updates-run',
 ]);
+
+// 0055: a client's read-only tracker link. Exactly a 32-character share token
+// (and its CSV) — the token IS the credential, checked in services/clientUpdates.
+const PUBLIC_PATTERNS: RegExp[] = [/^\/api\/public\/client-updates\/[A-Za-z0-9_-]{32}(\/csv)?$/];
 
 function isPublic(req: FastifyRequest): boolean {
   // Compare the PATH only — a query string must never widen the allowlist.
   const path = req.url.split('?')[0].replace(/\/+$/, '') || '/';
-  return PUBLIC_PATHS.has(path);
+  return PUBLIC_PATHS.has(path) || PUBLIC_PATTERNS.some((re) => re.test(path));
 }
 
 export default fp(async function authGuard(app: FastifyInstance) {

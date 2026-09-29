@@ -44,7 +44,9 @@ export type AdminEntity =
   // An approval band by amount (0047, rule 6.2.3).
   | 'approval_tier'
   // A planned-maintenance schedule (0051).
-  | 'pm_schedule';
+  | 'pm_schedule'
+  // A client-update tracker (0055): its settings, its link, its sends.
+  | 'client_update';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

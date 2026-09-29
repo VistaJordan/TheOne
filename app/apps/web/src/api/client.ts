@@ -5,6 +5,17 @@ import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@
 import type { PmOccurrence, PmSchedule, PmScheduleInput, PmSchedulesResponse } from '@theone/shared';
 import type { BillingProposal, BillingProposalsResponse } from '@theone/shared';
 import type {
+  ClientUpdate,
+  ClientUpdateChart,
+  ClientUpdateDelivery,
+  ClientUpdateInput,
+  ClientUpdateInsights,
+  ClientUpdatePublicView,
+  ClientUpdateRecipient,
+  ClientUpdatesResponse,
+  MailStatus,
+} from '@theone/shared';
+import type {
   ApprovalCounts,
   ApprovalListResponse,
   ApprovalTask,
@@ -2218,4 +2229,86 @@ export function discardAiQuoteDraft(idOrNumber: string, callId: string): Promise
     method: 'POST',
     body: JSON.stringify({}),
   });
+}
+
+// ── Client updates (0055) ────────────────────────────────────────────────────
+
+export function listClientUpdates(): Promise<ClientUpdatesResponse> {
+  return request('/client-updates');
+}
+
+export function createClientUpdate(input: ClientUpdateInput): Promise<{ item: ClientUpdate }> {
+  return request('/client-updates', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateClientUpdate(id: string, input: ClientUpdateInput): Promise<{ item: ClientUpdate }> {
+  return request(`/client-updates/${id}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function deleteClientUpdate(id: string): Promise<void> {
+  return request(`/client-updates/${id}`, { method: 'DELETE' });
+}
+
+/** Tiles + charts over a filter set, scoped to the viewer (the page's own view). */
+export function getClientUpdateInsights(
+  filters: WoFilterSet,
+  charts: ClientUpdateChart[],
+): Promise<ClientUpdateInsights> {
+  return request('/client-updates/insights', { method: 'POST', body: JSON.stringify({ filters, charts }) });
+}
+
+export function setClientUpdateLink(
+  id: string,
+  input: { enabled: boolean; regenerate?: boolean; expires_at?: string | null; origin?: string | null },
+): Promise<{ item: ClientUpdate }> {
+  return request(`/client-updates/${id}/link`, { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export interface ClientUpdateEmailPreview {
+  subject: string;
+  html: string;
+  from: string;
+  to: ClientUpdateRecipient[];
+  cc: ClientUpdateRecipient[];
+  row_count: number;
+  link: string | null;
+  mail: MailStatus;
+}
+
+export function getClientUpdateEmailPreview(id: string): Promise<ClientUpdateEmailPreview> {
+  return request(`/client-updates/${id}/email-preview`);
+}
+
+export function sendClientUpdate(
+  id: string,
+  input: {
+    trigger: 'manual' | 'test';
+    to?: ClientUpdateRecipient[];
+    cc?: ClientUpdateRecipient[];
+    subject?: string | null;
+    intro?: string | null;
+  },
+): Promise<{ delivery: ClientUpdateDelivery }> {
+  return request(`/client-updates/${id}/send`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function listClientUpdateDeliveries(id: string): Promise<{ items: ClientUpdateDelivery[] }> {
+  return request(`/client-updates/${id}/deliveries`);
+}
+
+export function clientUpdateCsvUrl(id: string): string {
+  return `/api/client-updates/${id}/csv`;
+}
+
+/** The client's read-only view. Plain fetch: a public page must never trip
+    the signed-in session handler on an error. */
+export async function getPublicClientUpdate(token: string): Promise<ClientUpdatePublicView> {
+  const res = await fetch(`/api/public/client-updates/${encodeURIComponent(token)}`, { credentials: 'omit' });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiRequestError(res.status, body, `Request failed: ${res.status}`);
+  return body as ClientUpdatePublicView;
+}
+
+export function publicClientUpdateCsvUrl(token: string): string {
+  return `/api/public/client-updates/${encodeURIComponent(token)}/csv`;
 }

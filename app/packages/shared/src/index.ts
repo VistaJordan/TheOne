@@ -200,6 +200,9 @@ export interface WoFieldDescriptor {
       'phone', 'url', 'formula', 'attachment', …). `type` says how a value
       COMPARES; the subtype says how it should be EDITED. */
   subtype?: string;
+  /** 0055 · derived at read time (location, completed_on, …): never editable,
+      and delivered in a list row's `custom` map under its own key. */
+  computed?: boolean;
 }
 
 export interface WoFieldCatalogue {
@@ -1695,3 +1698,5 @@ export * from './approvalTiers';
 export * from './billing';
 // 0054: calls placed from a work order through Quo, and AI quote drafts.
 export * from './calls';
+// 0055: client updates — per-client trackers, shared by link or email.
+export * from './clientUpdates';

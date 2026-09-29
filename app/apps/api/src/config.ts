@@ -91,6 +91,44 @@ export interface Config {
   anthropicApiKey: string | null;
   /** 0054: the Claude model that drafts quotes (QUOTE_AI_MODEL). */
   quoteAiModel: string;
+  /** 0055: outbound email (Client Updates). Everything is sent FROM one
+      address (MAIL_FROM, default contact@seamlessfm.com). `provider` is null
+      until one is configured, and always null in the public demo. */
+  mail: MailConfig;
+}
+
+export interface MailConfig {
+  /** MAIL_PROVIDER: 'graph' = Microsoft Graph sendMail as MAIL_FROM (needs the
+      app registration to hold the Mail.Send application permission);
+      'resend' = the Resend API (RESEND_API_KEY). Unset = Resend when its key is
+      present, else nothing. */
+  provider: 'graph' | 'resend' | null;
+  from: string;
+  fromName: string;
+  replyTo: string | null;
+  resendApiKey: string | null;
+  /** MAIL_GRAPH_TENANT_ID / _CLIENT_ID / _CLIENT_SECRET, falling back to the
+      ENTRA_* sign-in registration. */
+  graph: { tenantId: string; clientId: string; clientSecret: string } | null;
+}
+
+function buildMail(entra: EntraConfig | null, demoMode: boolean): MailConfig {
+  const from = str('MAIL_FROM') ?? 'contact@seamlessfm.com';
+  const fromName = str('MAIL_FROM_NAME') ?? 'Seamless FM';
+  const replyTo = str('MAIL_REPLY_TO') ?? null;
+  const resendApiKey = str('RESEND_API_KEY') ?? null;
+  const tenantId = str('MAIL_GRAPH_TENANT_ID') ?? entra?.tenantId;
+  const clientId = str('MAIL_GRAPH_CLIENT_ID') ?? entra?.clientId;
+  const clientSecret = str('MAIL_GRAPH_CLIENT_SECRET') ?? entra?.clientSecret;
+  const graph = tenantId && clientId && clientSecret ? { tenantId, clientId, clientSecret } : null;
+  const want = (str('MAIL_PROVIDER') ?? '').toLowerCase();
+  let provider: MailConfig['provider'] = null;
+  if (want === 'graph') provider = graph ? 'graph' : null;
+  else if (want === 'resend') provider = resendApiKey ? 'resend' : null;
+  else if (want === '' && resendApiKey) provider = 'resend';
+  // The public demo runs on seed data; it must never mail a real address.
+  if (demoMode) provider = null;
+  return { provider, from, fromName, replyTo, resendApiKey, graph };
 }
 
 export interface SignInPolicy {
@@ -181,6 +219,7 @@ function build(): Config {
     quoWebhookSecret: str('QUO_WEBHOOK_SECRET') ?? null,
     anthropicApiKey: str('ANTHROPIC_API_KEY') ?? null,
     quoteAiModel: str('QUOTE_AI_MODEL') ?? 'claude-opus-5',
+    mail: buildMail(entra, demoMode),
   };
 }
 

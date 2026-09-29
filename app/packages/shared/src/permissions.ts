@@ -717,6 +717,21 @@ export function buildPermissionTree(
       note: 'The recurring jobs: view = the schedules and their history; edit = change one, raise or skip its next date.',
     },
     {
+      // 0055 · per-client trackers (the old tracking spreadsheets).
+      key: 'client_updates',
+      label: 'Client updates',
+      actions: ['view', 'create', 'edit', 'delete'],
+      note: 'The per-client trackers: view = open them (the list is still limited to the work orders the person may see); edit = change the columns, charts and filters.',
+      children: [
+        {
+          key: 'client_updates/share',
+          label: 'Share with clients',
+          actions: ['edit'],
+          note: 'Email a tracker from the company address, schedule it, and turn its read-only client link on or off. What is shared is the whole tracker, not only the person’s own work orders.',
+        },
+      ],
+    },
+    {
       key: 'admin',
       label: 'Admin console',
       actions: ['view', 'edit'],

@@ -32,6 +32,7 @@ export type NavKey =
   | 'Approvals'
   | 'Contracts'
   | 'Planned Maintenance'
+  | 'Client Updates'
   | 'Admin';
 
 interface NavChild {
@@ -87,6 +88,9 @@ const NAV: NavItem[] = [
   // 0046 — the rate cards quotes and invoices price against (Facilio's
   // Contracts › Contract + Labor Rates). Hidden without the `contracts` grant.
   { label: 'Contracts', icon: 'briefcase', to: '/contracts' },
+  // 0055 — one live tracker per client, shared by link or email. Hidden
+  // without the `client_updates` grant.
+  { label: 'Client Updates', icon: 'send', to: '/client-updates' },
   // S5 — Admin is six sections deep, so it renders as a group rather than a
   // single item that hides five destinations behind an in-page rail.
   {
@@ -109,6 +113,7 @@ const NAV_PERM: Record<string, string | string[]> = {
   Invoicing: 'invoicing',
   Contracts: 'contracts',
   'Planned Maintenance': 'planned_maintenance',
+  'Client Updates': 'client_updates',
 };
 
 interface AppShellProps {

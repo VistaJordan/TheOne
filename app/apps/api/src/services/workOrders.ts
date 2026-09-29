@@ -22,6 +22,7 @@ import {
   checkEcotrakTransition,
   ecotrakTransitionRefused,
   describeEcotrakRefusal,
+  isComputedWoColumn,
 } from '@theone/shared';
 import { ApiError } from '../errors.js';
 import { config } from '../config.js';
@@ -326,11 +327,13 @@ async function customProjection(
   const customByAlias = new Map<string, string>();
   const parts: string[] = [];
   for (const key of columns) {
-    if (!key.startsWith('fields.')) continue;
+    if (!key.startsWith('fields.') && !isComputedWoColumn(key)) continue;
     const f = await resolveField(key);
     const alias = `c${customByAlias.size}`;
     customByAlias.set(alias, key);
-    parts.push(`(t.fields->>${p.add(f.jsonKey)}) AS ${alias}`);
+    // 0055 · a computed column rides in `custom` too, under its own key, so
+    // the base projection (and every list that never asks) pays nothing.
+    parts.push(f.custom ? `(t.fields->>${p.add(f.jsonKey)}) AS ${alias}` : `(${f.sql})::text AS ${alias}`);
   }
   return { selectSql: parts.length ? `, ${parts.join(', ')}` : '', customByAlias };
 }

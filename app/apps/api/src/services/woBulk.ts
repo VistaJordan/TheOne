@@ -31,6 +31,7 @@ import {
   statusGateFor,
   type DoneGateCheck,
   type WorkOrderListItem,
+  isComputedWoColumn,
 } from '@theone/shared';
 
 /** `$1, $2, …` for a list of values. PGlite's parameter serialisation for
@@ -364,7 +365,7 @@ export const EXPORT_CAP = 10_000;
 
 /** Pull a value out of a list item by field key, for CSV and nothing else. */
 function cellFor(item: WorkOrderListItem, key: string): unknown {
-  if (key.startsWith('fields.')) return item.custom?.[key] ?? '';
+  if (key.startsWith('fields.') || isComputedWoColumn(key)) return item.custom?.[key] ?? '';
   switch (key) {
     case 'status':
       return item.status.name;

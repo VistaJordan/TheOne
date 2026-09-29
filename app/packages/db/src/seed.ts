@@ -740,6 +740,7 @@ async function main() {
       quote_line, quote_section, quote, payment_request,
       quo_message, quo_call, quo_job_segment, quo_conversation,
       quote_ai_draft, wo_call,
+      client_update_delivery, client_update,
       attachment, payable, vendor, comment_delivery, comment, activity_log,
       task_list_membership, task, field_def, status, status_set,
       principal, container

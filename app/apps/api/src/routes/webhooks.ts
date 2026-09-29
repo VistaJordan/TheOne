@@ -39,6 +39,7 @@ import { escalateFromEmail } from '../services/escalations.js';
 import { raiseDueWorkOrders } from '../services/plannedMaintenance.js';
 import { handleQuoEvent } from '../services/woCalls.js';
 import type { QuoEvent } from '../services/woCalls.js';
+import { runDueClientUpdates } from '../services/clientUpdates.js';
 
 const optionalText = (max: number) =>
   z
@@ -73,6 +74,20 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
   };
   app.get('/webhooks/planned-maintenance-run', async (req) => cronRun(req));
   app.post('/webhooks/planned-maintenance-run', async (req) => cronRun(req));
+
+  // 0055 · the client-update schedule. Vercel's cron calls it hourly (same
+  // CRON_SECRET); each call sends every tracker whose next_run_at has come.
+  const clientUpdatesRun = async (req: { headers: Record<string, unknown> }) => {
+    if (config.demoMode) throw new ApiError('FORBIDDEN', 'Webhooks are disabled in the public demo.');
+    const outcome = checkWebhookSecret(presentedSecret(req.headers), config.cronSecret);
+    if (outcome === 'unconfigured') {
+      throw new ApiError('FORBIDDEN', 'The cron is not configured (CRON_SECRET is unset).');
+    }
+    if (outcome !== 'ok') throw new ApiError('UNAUTHORIZED', 'Cron secret missing or invalid');
+    return { ok: true, ...(await runDueClientUpdates()) };
+  };
+  app.get('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));
+  app.post('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));
 
   app.post('/webhooks/email-escalation', async (req) => {
     // The public demo runs on seed data with the dev bypass; a reachable

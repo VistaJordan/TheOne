@@ -26,6 +26,8 @@ import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
 import { PlannedMaintenancePage } from './pages/PlannedMaintenancePage';
+import { ClientUpdatesPage } from './pages/ClientUpdatesPage';
+import { ClientSharePage } from './pages/ClientSharePage';
 import { PulsePage } from './pages/PulsePage';
 import { ReceivablesPage } from './pages/ReceivablesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
@@ -124,8 +126,10 @@ export function App() {
         <BrowserRouter>
           <AuthProvider>
             <Routes>
-              {/* The only route outside the guard. */}
+              {/* Outside the guard: sign-in, and a client's read-only tracker
+                  link (0055) — its token is the credential, no session. */}
               <Route path="/sign-in" element={<SignInPage />} />
+              <Route path="/share/client-updates/:token" element={<ClientSharePage />} />
 
               <Route
                 path="/dashboard"
@@ -171,6 +175,10 @@ export function App() {
               <Route
                 path="/contracts"
                 element={<RequireAuth><RequireCan perm="contracts" nav="Contracts"><ContractsPage /></RequireCan></RequireAuth>}
+              />
+              <Route
+                path="/client-updates"
+                element={<RequireAuth><RequireCan perm="client_updates" nav="Client Updates"><ClientUpdatesPage /></RequireCan></RequireAuth>}
               />
               <Route
                 path="/planned-maintenance"

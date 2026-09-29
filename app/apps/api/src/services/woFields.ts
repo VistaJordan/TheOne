@@ -15,6 +15,7 @@
 // `t.fields->>$n` with the key BOUND AS A PARAMETER, so a field key containing
 // a quote is data, not syntax. Filter values are always parameters.
 
+import { AGE_BANDS } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 
@@ -43,6 +44,9 @@ export interface FieldDescriptor {
       'attachment', …). The 6-value `type` says how to COMPARE a value; the
       subtype says how to EDIT one — textarea vs input, or not at all. */
   subtype?: string;
+  /** 0055 · derived at read time (never stored, never editable). Projected into
+      a list row's `custom` map only when a view asks for the column. */
+  computed?: boolean;
 }
 
 // ── Core (promoted column) fields ────────────────────────────────────────────
@@ -70,6 +74,49 @@ const GROUP_OPTIONS: FieldOption[] = [
   { value: 'closed', label: 'Closed' },
 ];
 
+// ── 0055 · computed columns ──────────────────────────────────────────────────
+// Constants like every other core `sql`. Dates are read in the business time
+// zone so "completed on" is the day Chicago saw it happen.
+
+const LOCATION_SQL = `NULLIF(concat_ws(', ', NULLIF(btrim(t.city), ''), NULLIF(btrim(t.state), '')), '')`;
+
+/** The day the work order last ENTERED the done/closed groups: the first move
+    into them after its last move out. NULL while it is still open, and for a
+    row that was imported already closed (no status history to read). */
+const COMPLETED_ON_SQL = `(CASE WHEN t.status_group IN ('done', 'closed') THEN (
+    SELECT (min(a.created_at) AT TIME ZONE 'America/Chicago')::date
+      FROM activity_log a
+      JOIN status sd ON sd.id::text = a.after->>'status_id'
+     WHERE a.entity_type = 'task' AND a.entity_id = t.id::text AND a.action = 'status_changed'
+       AND sd.status_group IN ('done', 'closed')
+       AND a.created_at > COALESCE((
+             SELECT max(a2.created_at)
+               FROM activity_log a2
+               JOIN status so ON so.id::text = a2.after->>'status_id'
+              WHERE a2.entity_type = 'task' AND a2.entity_id = t.id::text AND a2.action = 'status_changed'
+                AND so.status_group NOT IN ('done', 'closed')), '-infinity'::timestamptz)
+  ) END)`;
+
+const AGE_BAND_SQL = `(CASE
+    WHEN t.date_received IS NULL THEN NULL
+    WHEN (now()::date - t.date_received) <= 7  THEN '${AGE_BANDS[0]}'
+    WHEN (now()::date - t.date_received) <= 14 THEN '${AGE_BANDS[1]}'
+    WHEN (now()::date - t.date_received) <= 30 THEN '${AGE_BANDS[2]}'
+    WHEN (now()::date - t.date_received) <= 60 THEN '${AGE_BANDS[3]}'
+    ELSE '${AGE_BANDS[4]}' END)`;
+
+/** The newest client-visible message on the work order (ours or theirs). */
+const LAST_CLIENT_MESSAGE_SQL = `(SELECT c.body FROM comment c
+    WHERE c.task_id = t.id AND c.client_visible
+    ORDER BY c.created_at DESC LIMIT 1)`;
+
+/** The last day the work order went out in a client update email (0055). */
+const LAST_SENT_TO_CLIENT_SQL = `(SELECT (max(a.created_at) AT TIME ZONE 'America/Chicago')::date FROM activity_log a
+    WHERE a.entity_type = 'task' AND a.entity_id = t.id::text AND a.action = 'client_update_sent')`;
+
+const LAST_CLIENT_MESSAGE_AT_SQL = `(SELECT (max(c.created_at) AT TIME ZONE 'America/Chicago')::date FROM comment c
+    WHERE c.task_id = t.id AND c.client_visible)`;
+
 const CORE_FIELDS: CoreField[] = [
   { key: 'wo_number',      label: 'WO #',           type: 'text',   group: 'Work order', sql: 't.wo_number',      sortable: true },
   { key: 'ext_name',       label: 'Client WO #',    type: 'text',   group: 'Work order', sql: 't.ext_name',       sortable: true },
@@ -89,6 +136,14 @@ const CORE_FIELDS: CoreField[] = [
   { key: 'status_group',   label: 'Status group',   type: 'select', group: 'Status',     sql: 't.status_group::text', sortable: true, options: GROUP_OPTIONS },
   { key: 'created_at',     label: 'Created',        type: 'date',   group: 'Dates',      sql: 't.created_at',     sortable: true },
   { key: 'updated_at',     label: 'Last updated',   type: 'date',   group: 'Dates',      sql: 't.updated_at',     sortable: true },
+  // 0055 · computed columns for Client Updates (and any list that wants them).
+  // Read-only, derived from the row and its history at read time.
+  { key: 'location',       label: 'Location',       type: 'text',   group: 'Site',       sql: LOCATION_SQL,       sortable: true, computed: true },
+  { key: 'completed_on',   label: 'Completed on',   type: 'date',   group: 'Dates',      sql: COMPLETED_ON_SQL,   sortable: true, computed: true },
+  { key: 'age_band',       label: 'Age band',       type: 'select', group: 'Dates',      sql: AGE_BAND_SQL,       sortable: false, computed: true, options: AGE_BANDS.map((b) => ({ value: b, label: b })) },
+  { key: 'last_client_message',    label: 'Last client message',    type: 'text', group: 'Messages', sql: LAST_CLIENT_MESSAGE_SQL,    sortable: false, computed: true },
+  { key: 'last_client_message_at', label: 'Last client message on', type: 'date', group: 'Messages', sql: LAST_CLIENT_MESSAGE_AT_SQL, sortable: true,  computed: true },
+  { key: 'last_sent_to_client',    label: 'Last sent to client',    type: 'date', group: 'Messages', sql: LAST_SENT_TO_CLIENT_SQL,    sortable: true,  computed: true },
 ];
 
 const CORE_BY_KEY = new Map(CORE_FIELDS.map((f) => [f.key, f]));
@@ -308,6 +363,8 @@ export interface ResolvedField {
   jsonKey?: string;
   /** Raw SQL for core fields (a constant from this module). */
   sql?: string;
+  /** 0055 · a computed core column (see COMPUTED_WO_COLUMNS). */
+  computed?: boolean;
 }
 
 /** Turn a field key from a request into something safe to put in SQL, or throw.
@@ -317,7 +374,7 @@ export interface ResolvedField {
 export async function resolveField(key: string): Promise<ResolvedField> {
   const core = CORE_BY_KEY.get(key);
   if (core) {
-    return { key, label: core.label, type: core.type, custom: false, sql: core.sql };
+    return { key, label: core.label, type: core.type, custom: false, sql: core.sql, computed: core.computed };
   }
   if (key.startsWith('fields.')) {
     const jsonKey = key.slice('fields.'.length);

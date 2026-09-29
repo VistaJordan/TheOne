@@ -44,6 +44,7 @@ import contractRoutes from './routes/contracts.js';
 import vendorBillRoutes from './routes/vendorBills.js';
 import plannedMaintenanceRoutes from './routes/plannedMaintenance.js';
 import billingProposalRoutes from './routes/billingProposals.js';
+import clientUpdateRoutes from './routes/clientUpdates.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
@@ -116,6 +117,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(plannedMaintenanceRoutes, { prefix: '/api' });
   // 0053 — what a contract proposes to bill on completion (BRD §6.4).
   await app.register(billingProposalRoutes, { prefix: '/api' });
+  // 0055 — per-client trackers, shared by link or email.
+  await app.register(clientUpdateRoutes, { prefix: '/api' });
 
   return app;
 }

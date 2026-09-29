@@ -251,6 +251,18 @@ export const ACTION_LABELS: Record<string, string> = {
   deleted: 'Moved to Trash',
   restored: 'Restored',
   comment_added: 'Message posted',
+  // 0055 · the work order went out in a client update (email).
+  client_update_sent: 'Client update sent',
+  client_update_send_failed: 'Client update failed to send',
+  client_update_test_sent: 'Client update test sent',
+  client_update_created: 'Client tracker created',
+  client_update_updated: 'Client tracker changed',
+  client_update_deleted: 'Client tracker deleted',
+  client_update_link_enabled: 'Client link turned on',
+  client_update_link_disabled: 'Client link turned off',
+  client_update_link_updated: 'Client link changed',
+  client_update_link_regenerated: 'Client link replaced',
+  client_update_exported: 'Client update downloaded',
   message_edited: 'Message edited',
   client_message_sent: 'Sent to client',
   client_message_failed: 'Send to client failed',
@@ -353,6 +365,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   contract: 'Contract',
   approval_tier: 'Approval tier',
   pm_schedule: 'Maintenance schedule',
+  client_update: 'Client update',
 };
 
 export function entityLabel(entityType: string): string {
