@@ -285,6 +285,11 @@ function adminHref(e: AuditLogEntry): string | null {
       return `/incoming/drafts/${encodeURIComponent(e.entity_id)}`;
     case 'pm_schedule':
       return '/planned-maintenance';
+    case 'vendor':
+      return `/vendors/${encodeURIComponent(e.entity_id)}`;
+    case 'vendor_setting':
+    case 'preferred_vendor':
+      return '/admin/vendors';
     case 'client_update':
       return `/client-updates?t=${encodeURIComponent(e.entity_id)}`;
     default:

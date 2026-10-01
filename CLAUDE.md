@@ -765,6 +765,166 @@ principal, or the person who pasted), `quote_ai_drafted|redrafted|submitted|
 discarded`. Next: past quotes from the ClickUp import as pricing references
 (vector search) go into `buildUserMessage`.
 
+**Vendors, technicians and the technician map** (migrations 0056 + 0057,
+`services/vendors.ts`, `services/vendorMap.ts`, `services/geo.ts`,
+`routes/vendors.ts`, `packages/shared/src/vendors.ts`, `pages/VendorsPage.tsx`,
+`pages/VendorDetailPage.tsx`, `pages/admin/AdminVendorsPage.tsx`,
+`components/wo/tech/`, `components/map/VendorMap.tsx`). The One's own copy of
+what **VR - CRM** and **Tech Locator** do. Those two apps keep running,
+untouched, until The One replaces them: **nothing here reads or writes their
+code or their database**, and the module starts with no imported data.
+One `vendor` table (0001, grown by 0057) holds both kinds: `kind 'vendor'` (a
+company the VR team recruited — Tech Locator's "VR Data") and `kind 'tech'` (a
+technician a dispatcher has worked with). Columns carry what the list and the
+map read; the long tail of the CRM profile lives in `vendor.details` (jsonb),
+keyed by `VENDOR_DETAIL_SECTIONS` in shared, so a new profile section needs no
+migration. `trades` (0001) is kept as primary + secondary (the Quo thread and
+payables read it). Removal is a soft delete (`deleted_at`).
+*Geo (0056):* `geo_zip` (GeoNames) and `geo_city` (Census places + towns) are
+centre points in our own database — **no outside geocoder**. `geoLookup` takes
+a ZIP first, else city + state through `cityKey` (must match
+`geo_city.name_key`); `workOrderPlace` reads the work order's `Zip Code`, the
+ZIP at the tail of `17. Address`, else city + state. A vendor's home city is
+its primary `vendor_location` (lat/lng NULL when it cannot be placed → "Not on
+the map"); a technician may have several.
+*Rules:* a new vendor whose name or any phone matches one on file is a 409
+`VENDOR_DUPLICATE` until `override_duplicate` (then saved flagged); a
+technician is a duplicate by phone only. `compliance_status` is **derived**
+(`recomputeCompliance`): a current insurance date in the past → EXPIRED; W-9 +
+MSA + COI received **and the COI approved** → APPROVED, which is also when a
+New / Interested / Ready vendor turns Active (not on upload); only the latest
+`vendor_expiry` date per (company, type) counts. Statuses, brand sources and
+vendor trades are tables every dropdown reads (`vendor_status`,
+`vendor_brand_source`, `vendor_trade`). Dispatchers never remove a technician:
+they add a `vendor_note` or **blacklist** (flag + required reason, visible to
+all, sorts last; clearing is `vendors/blacklist` edit).
+*The map* opens **from a work order only** (People tab › Technicians › Find a
+technician; `GET /work-orders/:id/tech-map`), centred on the work order, radius
+from `vendor_setting.map_radius_miles` (100). Who is on it is the role's
+`vendor_map/*` grants (`resolveVendorMapScope`): VR vendors (`/vr`), all
+technicians or only theirs (`/techs`, choices row), statewide, nationwide,
+subcontractors, add a technician. "Theirs" = `vendor_dispatcher` links, added
+when a person adds a technician, **hires one, or logs a visit with one picked
+from the records** (`linkVisitVendor`, called by the visit routes after
+`createVisit` / `updateVisit`; `wo_visit.vendor_id`). Nothing filters on vendor
+status or paperwork; Hire **warns, never blocks** (`complianceWarning`).
+Preferred vendors (`preferred_vendor`: client and/or trade, optional state,
+ranked) are marked and sorted first (`preferredRuleScore`, most specific rule
+wins). A statewide / nationwide vendor with no placed city is pinned at the
+work order, as Tech Locator did. Each open is logged (`vendor_map_log`);
+over `map_daily_alert` a day shows in Admin › Vendors & map — alert only.
+Postgres cannot type a bound parameter the statement never uses, so the map
+query binds the state only for roles that see statewide vendors.
+*Hiring:* `wo_technician` (the People tab's Technicians card); Call goes
+through the Quo `CallDialog` (`preset`). The visit forms' Technician box is
+`TechPicker`: free text as before, with any technician on file underneath
+(hired ones first, whoever owns them).
+*The map canvas* is MapLibre GL over OpenFreeMap (Positron by day, Dark at
+night), lazy-loaded in its own chunk; marker colours are the `--map-*` tokens
+read off `:root`; vendors sharing a city centre are fanned out by
+`spreadOverlaps`. Vendors › Coverage map is the same canvas over every placed
+location — the admin's "where do we recruit next" view, not the work-order map.
+*Permissions:* `vendors` (view/create/edit/delete — 0057 overwrites 0021's
+placeholder: managers, admin and VR Officer in, everyone else out),
+`vendors/scope` (everything / only theirs), `vendors/blacklist`,
+`vendor_map` (view = open, create = hire) and its children, `admin/vendors`.
+Audit: entity `vendor` (`vendor_created|updated|deleted|note_added|
+blacklisted|blacklist_cleared|expiry_added|expiry_removed`), `vendor_setting`,
+`preferred_vendor`; `tech_hired|tech_released|tech_added` on the work order.
+*Payments dashboard:* a prebuilt `payments` board (shared `PREBUILT_DASHBOARDS`)
+over The One's own payment requests; the `payments` card source gained
+dispatcher, company, FM, trade, state, purpose, work order and vendor fields.
+No Teams payment history is imported.
+**Not built yet (VR - CRM parity still to come):** document uploads (COI / W-9
+/ MSA) and the COI review loop, the task types, Alerts, Data Quality, the CSV
+import wizard, saved lists / advanced filters / bulk edit, the call log on a
+vendor, daily targets, notifications, and the data import from the two apps
+(`vendor.ext_source` / `ext_id` are the hooks). No emails are sent.
+
+**The vendor relations workflow** (migration 0058, the second half of the VR
+CRM's features; nothing here sends an email — that is held on purpose).
+Shared rules live in `packages/shared/src/vendorWorkflow.ts`; the API is
+`services/vendorTasks.ts` (opening / auto-closing tasks, the missing-field
+check), `services/vendorWork.ts` (everything else), `services/vendorImport.ts`
+and `routes/vendorWork.ts`. On the Vendors page the views are `?view=` list ·
+tasks · alerts · quality · map.
+- **List tools**: tick rows (or "Select all N that match", `GET /vendors/ids`)
+  → `BulkBar` edits ONE field across them (`POST /vendors/bulk`, which calls
+  `updateVendor` per record so each change is logged as if by hand) or removes
+  them; Export CSV (`vendors/export`, logged `vendors_exported`); "Look up a
+  list" (paste names / phones / emails → on file or not → `ids=` filter);
+  saved lists (`vendor_saved_view`, private or everyone, `vendors/lists`).
+- **Required fields** (`VENDOR_REQUIRABLE_FIELDS`, overridable per field in
+  Admin › Vendors & map, table `vendor_required_field`): creating a VR vendor
+  without one is a **409 `VENDOR_MISSING_FIELDS`**; `override_missing: true`
+  saves it with `vendor.flagged_missing` and opens a `MISSING_INFO_REVIEW`
+  task that closes itself once the fields are filled. Technicians are exempt.
+- **Tasks** (`vendor_task`): review types (`DUPLICATE_REVIEW`,
+  `MISSING_INFO_REVIEW`, `COMPLIANCE_REVIEW`) have no assignee — they are one
+  review queue decided by `vendors/review` approve; `COMPLIANCE_FIX` and
+  `MANUAL` belong to a person. Daily targets (`vendor_daily_target`) count the
+  nationwide / statewide vendors a rep added today.
+- **Documents** (`vendor_document`, W-9 / MSA / COI / other): base64 in JSON
+  to the private Vercel Blob, streamed back through the API; with no
+  `BLOB_READ_WRITE_TOKEN` uploads are off and the page says so. A COI names
+  one company: uploading one opens a `COMPLIANCE_REVIEW`; approve / send back
+  writes `vendor_coi_requirement` (six checklist ticks + verdict per company)
+  and `rollUpCoiApproval` sets `vendor.coi_approved`; a send-back opens a
+  `COMPLIANCE_FIX` for the owner, and "fixed" re-opens the review.
+- **Calls and emails** (`vendor_call`, `vendor_email`) are a log on the
+  record; a call's outcome may set the vendor's status.
+- **Alerts** list every insurance date that counts (latest per insurance and
+  company), banded by `expiryBand`. **Data quality** lists duplicates by name
+  or phone, records missing required fields, and records not on the map.
+- **Import** (`/vendors/import`, `vendors/import` create): CSV parsed in the
+  browser, columns matched by `autoMapImportColumns`, `POST
+  /vendors/imports/analyze` writes nothing, then rows go up in chunks (API cap
+  250) to `/vendors/imports/:id/rows`; duplicates follow the picked strategy
+  (skip · skip + report · add flagged · fill in the record on file). An
+  unreadable cell is reported and left empty, never guessed.
+Built since (0059, next paragraph): notifications, advanced filters, the
+board, the column picker and vendor cards on dashboards. Still open: the data
+transfer from VR - CRM / Tech Locator (`vendor.ext_source` / `ext_id`).
+Tests: `tests/vendor-workflow.test.ts`.
+
+**Vendors list extras and in-app notices** (migration 0059). The vocabulary
+is `packages/shared/src/vendorFilters.ts`.
+- **Advanced filters**: rules joined by AND or OR travel as JSON in the
+  `filter` query parameter (`parseVendorFilter` / `cleanVendorFilter` drop
+  anything that is not a known field + operator with a usable value).
+  `compileVendorFilter` in `services/vendors.ts` turns them into one
+  predicate inside `vendorListWhere`, so the list, the board, export, "select
+  all that match" and saved lists (`filter` is a `SAVED_VIEW_KEYS` entry) all
+  mean the same rows. Field names come from the `FILTER_SQL` map only; values
+  are always bound. A phone rule compares digits.
+- **Column picker**: `VENDOR_COLUMNS` is every column the list can draw; the
+  person's choice is the per-account pref `vendors.columns` (routes/prefs.ts).
+  `VendorRow` carries the extra fields (zip, contact, rate, trip charge, COI
+  approved, last contact, last changed) and `SORTS` the extra sort keys.
+- **Board** (`?view=board`, `GET /vendors/board`): the list's rows stacked by
+  status, each column with its true count and its 40 most recently changed
+  cards. Dragging a card or its "Move to…" menu is an ordinary
+  `PATCH /vendors/:id {status}`, so it is logged and gated like any edit.
+- **Vendors as a dashboard source**: `WIDGET_SOURCES` gained `vendors`
+  (`SOURCE_FIELDS.vendors`, model in `woMetrics.ts` with `standalone` — it is
+  not hung on a work order, so a card follows the viewer's VENDOR scope
+  (`vendorScopeSql`) rather than the work-order one). The prebuilt **Vendors**
+  board is upserted like the others.
+- **Notices** — NOT the Pulse's `notification` table / `/notifications`
+  routes (0004), which are untouched. `app_notice` + `/notices`
+  (`services/notices.ts`): one row per person per thing that happened to
+  them. `notify()` runs after the act committed, never throws, and skips the
+  person who did it. Raised by: a task given to you, a review opened (to
+  everyone whose ROLE grants `vendors/review` approve, plus super admins —
+  per-person overrides are not read), a decision on a task you raised, a
+  vendor handed to you, your vendor blacklisted, and an insurance date on a
+  vendor you own coming within 30 days, within 14, and expiring
+  (`raiseExpiryNotifications`: lazy, on the bell's read, deduped by
+  `dedupe_key`). The top-bar bell (`PulseBell`) shows them as a "For you"
+  block above the Pulse rows and adds them to its badge. No email is sent.
+Tests: `tests/vendor-filters.test.ts`. Still open for CRM parity: the data
+transfer from VR - CRM / Tech Locator, and email (held).
+
 **Client Updates** (migration 0055, `services/clientUpdates.ts`,
 `pages/ClientUpdatesPage.tsx`, sidebar "Client Updates"). Replaces the
 per-client tracking spreadsheets (e.g. "SUN Holdings Tracking"). A

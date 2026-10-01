@@ -1633,6 +1633,9 @@ export interface VisitInput {
   method_detail?: string | null;
   checked_in_at?: string | null;
   checked_out_at?: string | null;
+  /** 0057 · the vendor record the technician was picked from (null = typed by
+      hand). The name and phone still travel as text. */
+  vendor_id?: string | null;
 }
 
 /** GET /api/work-orders/:id/visits — oldest first. `default_method` and its
@@ -1698,5 +1701,11 @@ export * from './approvalTiers';
 export * from './billing';
 // 0054: calls placed from a work order through Quo, and AI quote drafts.
 export * from './calls';
+// 0057: vendors and technicians, the technician map, hiring onto a work order.
+export * from './vendors';
+// 0058: the vendor relations workflow — documents, tasks, import, lists.
+export * from './vendorWorkflow';
+// 0059: advanced filters, the column picker and the board of the Vendors list.
+export * from './vendorFilters';
 // 0055: client updates — per-client trackers, shared by link or email.
 export * from './clientUpdates';

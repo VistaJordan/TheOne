@@ -25,6 +25,7 @@ export type NavKey =
   | 'Dashboard'
   | 'Pulse'
   | 'Work Orders'
+  | 'Vendors'
   | 'Quotes'
   | 'Payments'
   | 'Receivables'
@@ -62,7 +63,10 @@ const NAV: NavItem[] = [
   // comes before the list of everything.
   { label: 'Pulse', icon: 'zap', to: '/pulse' },
   { label: 'Work Orders', icon: 'clipboard', to: '/', badge: 'total' },
-  { label: 'Vendors', icon: 'truck' },
+  // 0057 — vendors and technicians: the records, and the coverage map.
+  // Hidden without the `vendors` grant (dispatchers meet vendors on the map
+  // of a work order instead).
+  { label: 'Vendors', icon: 'truck', to: '/vendors' },
   { label: 'Quotes', icon: 'file', to: '/quotes' },
   // Payables: the queue where technician payment requests are approved and
   // handed to Yoda. Receivables (AR) sits beside it.

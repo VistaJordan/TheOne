@@ -52,6 +52,7 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { Icon } from '../Icon';
 import { InlineField, useWoCatalogue } from './fieldEdit';
 import { FieldHistory, HistoryToggle, useCanViewHistory } from './FieldHistory';
+import { TechPicker } from './tech/TechPicker';
 
 const CICO_PERM_KEY = fieldSectionPermKey(CICO_SECTION_SLUG);
 const HIDDEN = new Set(VISIT_HIDDEN_KEYS.map((k) => `fields.${k}`));
@@ -445,6 +446,7 @@ function VisitLog({
       {canEdit && (
         composing ? (
           <VisitComposer
+            woId={wo.id}
             visitTypes={visitTypes}
             fm={fm}
             defaultMethod={defaultMethod}
@@ -651,6 +653,9 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
   const [type, setType] = useState(v.visit_type);
   const [tech, setTech] = useState(v.tech_name ?? '');
   const [phone, setPhone] = useState(v.tech_phone ?? '');
+  // 0057 · undefined = the technician box was not touched; a uuid = picked
+  // from the records; null = typed by hand.
+  const [vendorId, setVendorId] = useState<string | null | undefined>(undefined);
   const [method, setMethod] = useState(v.method ?? '');
   const [detail, setDetail] = useState(v.method_detail ?? '');
   const [inAt, setInAt] = useState(toLocalInput(v.checked_in_at));
@@ -668,6 +673,7 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
     if (type !== v.visit_type) input.visit_type = type;
     if (tech.trim() !== (v.tech_name ?? '')) input.tech_name = tech.trim() || null;
     if (phone.trim() !== (v.tech_phone ?? '')) input.tech_phone = phone.trim() || null;
+    if (vendorId !== undefined) input.vendor_id = vendorId;
     if (method !== (v.method ?? '')) input.method = method || null;
     if (detail.trim() !== (v.method_detail ?? '')) input.method_detail = detail.trim() || null;
     if (inAt !== toLocalInput(v.checked_in_at)) input.checked_in_at = fromLocalInput(inAt);
@@ -691,7 +697,13 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
         </label>
         <label className="field">
           <span className="lbl">Technician</span>
-          <input className="fld" value={tech} onChange={(e) => setTech(e.target.value)} placeholder="Name" disabled={busy} />
+          <TechPicker
+            woId={v.task_id}
+            value={tech}
+            disabled={busy}
+            onChange={(name) => { setTech(name); setVendorId(null); }}
+            onPick={(h) => { setTech(h.name); if (h.phone) setPhone(h.phone); setVendorId(h.id); }}
+          />
         </label>
         <label className="field">
           <span className="lbl">Phone</span>
@@ -733,7 +745,8 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
 
 // ── Logging a new visit ──────────────────────────────────────────────────────
 
-function VisitComposer({ visitTypes, fm, defaultMethod, defaultDetail, busy, onCancel, onSubmit }: {
+function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, busy, onCancel, onSubmit }: {
+  woId: string;
   visitTypes: string[];
   fm: string | null;
   defaultMethod: string | null;
@@ -745,6 +758,8 @@ function VisitComposer({ visitTypes, fm, defaultMethod, defaultDetail, busy, onC
   const [type, setType] = useState<string>('');
   const [tech, setTech] = useState('');
   const [phone, setPhone] = useState('');
+  /** 0057 · the record the technician was picked from; null = typed by hand. */
+  const [vendorId, setVendorId] = useState<string | null>(null);
   const [method, setMethod] = useState(defaultMethod ?? '');
   const [detail, setDetail] = useState(defaultDetail ?? '');
   const [touched, setTouched] = useState(false);
@@ -763,6 +778,7 @@ function VisitComposer({ visitTypes, fm, defaultMethod, defaultDetail, busy, onC
       visit_type: type,
       tech_name: tech.trim() || null,
       tech_phone: phone.trim() || null,
+      ...(vendorId && tech.trim() ? { vendor_id: vendorId } : {}),
       method: method || null,
       method_detail: detail.trim() || null,
     });
@@ -794,7 +810,14 @@ function VisitComposer({ visitTypes, fm, defaultMethod, defaultDetail, busy, onC
         </div>
         <label className="field">
           <span className="lbl">Technician</span>
-          <input className="fld" value={tech} onChange={(e) => setTech(e.target.value)} placeholder="Name" disabled={busy} autoFocus />
+          <TechPicker
+            woId={woId}
+            value={tech}
+            disabled={busy}
+            autoFocus
+            onChange={(name) => { setTech(name); setVendorId(null); }}
+            onPick={(h) => { setTech(h.name); if (h.phone) setPhone(h.phone); setVendorId(h.id); }}
+          />
         </label>
         <label className="field">
           <span className="lbl">Phone</span>

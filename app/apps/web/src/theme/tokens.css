@@ -119,3 +119,29 @@
    Both clear the §7 WCAG AA >=4.5:1 gate for the 11.5px/600 error text. */
 :root[data-theme="night"]{ --danger-bg:rgba(255,107,106,.12); }
 :root[data-theme="day"]  { --danger-bg:#fdecec; }
+
+/* ══ 0057 — the map palette (technician map, coverage map) ═════════════════
+   Marker fills by trade, read off :root by components/map/VendorMap.tsx and
+   handed to the map canvas (which cannot resolve var()). Sixteen slots, given
+   to the trades in list order; a seventeenth trade wears --map-other. Day
+   sits on the light Positron basemap, night on the dark one, so each skin
+   has its own step of the same hue order. Marks only — text never wears them.
+   --map-center is the work order's own pin; --map-ring its search radius.   */
+:root[data-theme="day"] {
+  --map-1:#2563eb;  --map-2:#d97706;  --map-3:#0d9488;  --map-4:#dc2626;
+  --map-5:#7c3aed;  --map-6:#16a34a;  --map-7:#c2266f;  --map-8:#92400e;
+  --map-9:#0891b2;  --map-10:#ca8a04; --map-11:#4f46e5; --map-12:#334155;
+  --map-13:#65a30d; --map-14:#9333ea; --map-15:#0f766e; --map-16:#b45309;
+  --map-other:#6b7280;
+  --map-center:#111827;  --map-ring:#1a9fd4;  --map-halo:#ffffff;
+  --map-blacklist:#9ca3af;
+}
+:root[data-theme="night"] {
+  --map-1:#60a5fa;  --map-2:#f59e0b;  --map-3:#2dd4bf;  --map-4:#f87171;
+  --map-5:#a78bfa;  --map-6:#4ade80;  --map-7:#f472b6;  --map-8:#d6914a;
+  --map-9:#22d3ee;  --map-10:#facc15; --map-11:#818cf8; --map-12:#cbd5e1;
+  --map-13:#a3e635; --map-14:#c084fc; --map-15:#5eead4; --map-16:#fb923c;
+  --map-other:#9ca3af;
+  --map-center:#f2f3f5;  --map-ring:#35b8f3;  --map-halo:#0c0d0e;
+  --map-blacklist:#6b7280;
+}

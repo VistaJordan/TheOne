@@ -1040,6 +1040,38 @@ async function main() {
     if (v.name !== QUO_VENDOR_NAME) vendorIds.push(id);
   }
 
+  // 0057 · the same three statements the migration runs over the vendors that
+  // existed before it — keep the two in step. The sample vendors are
+  // companies we work with (Active, first trade = primary), their phone is on
+  // file as digits, and their city is their point on the map.
+  await exec(`
+    UPDATE vendor SET status = 'ACTIVE', primary_trade = trades[1] WHERE primary_trade IS NULL;
+
+    INSERT INTO vendor_phone (vendor_id, digits, display)
+    SELECT id,
+           CASE WHEN length(regexp_replace(phone, '\\D', '', 'g')) = 10
+                THEN '1' || regexp_replace(phone, '\\D', '', 'g')
+                ELSE regexp_replace(phone, '\\D', '', 'g') END,
+           phone
+      FROM vendor
+     WHERE phone IS NOT NULL AND length(regexp_replace(phone, '\\D', '', 'g')) >= 7
+    ON CONFLICT DO NOTHING;
+
+    INSERT INTO vendor_location (vendor_id, city, state, lat, lng, is_primary)
+    SELECT v.id, v.city, upper(v.state), g.lat, g.lng, true
+      FROM vendor v
+      LEFT JOIN geo_city g
+        ON g.state = upper(v.state)
+       AND g.name_key = regexp_replace(
+             regexp_replace(
+               regexp_replace(btrim(regexp_replace(regexp_replace(lower(v.city), '[.''’]', '', 'g'), '[^a-z0-9]+', ' ', 'g')),
+                              '\\msaint\\M', 'st', 'g'),
+               '\\mmount\\M', 'mt', 'g'),
+             '\\mfort\\M', 'ft', 'g')
+     WHERE v.city IS NOT NULL AND btrim(v.city) <> ''
+    ON CONFLICT DO NOTHING;
+  `);
+
   // ── 7. Payables (§4.8) — a handful for Done / Incurred|Invoiced with cost>0 ──
   let payableCount = 0;
   let vi = 0;

@@ -47,6 +47,7 @@ import {
   type ResolvedField,
 } from './woFields.js';
 import type { ActingPrincipal } from './activity.js';
+import { vendorScopeSql } from './vendors.js';
 import { woScopeSql } from './woScope.js';
 
 // The same FROM the list query uses, so compiled filters (which reference the
@@ -121,6 +122,9 @@ interface SourceModel {
   periodField: string;
   /** The predicate for "past due and unpaid", when the source has one. */
   overdue?: string;
+  /** 0059 · a source that is not hung on a work order: its own "not removed"
+      predicate, and the VENDOR scope (0057) in place of the work-order one. */
+  standalone?: { live: string };
 }
 
 const SOURCE_MODELS: Record<Exclude<WidgetSource, 'work_orders'>, SourceModel> = {
@@ -142,13 +146,26 @@ const SOURCE_MODELS: Record<Exclude<WidgetSource, 'work_orders'>, SourceModel> =
     overdue: `x.status = 'sent' AND x.due_at IS NOT NULL AND x.due_at < CURRENT_DATE`,
   },
   payments: {
-    from: `FROM payment_request x JOIN task t ON t.id = x.task_id LEFT JOIN vendor v ON v.id = x.vendor_id`,
+    // 0057 · the two principal joins are on primary keys, so no row is
+    // ever counted twice; they only add names a card may group by.
+    from: `FROM payment_request x JOIN task t ON t.id = x.task_id LEFT JOIN vendor v ON v.id = x.vendor_id
+           LEFT JOIN principal rq ON rq.id = x.requested_by LEFT JOIN principal vo ON vo.id = v.owner_id`,
     fields: {
       amount: 'x.amount',
       status: 'x.status',
       method: 'x.method',
       payee: 'COALESCE(v.name, x.payee_name)',
       client: 't.client',
+      requested_by: 'rq.display_name',
+      billing_entity: 't.billing_entity',
+      fm: `t.fields->>'22. FM'`,
+      trade: 't.trade',
+      state: 't.state',
+      purpose: 'x.purpose',
+      wo_number: 't.wo_number',
+      vendor_owner: 'vo.display_name',
+      vendor_trade: 'v.primary_trade',
+      vendor_state: 'v.state',
       created_at: 'x.created_at',
       approved_at: 'x.approved_at',
       paid_at: 'x.paid_at',
@@ -168,6 +185,41 @@ const SOURCE_MODELS: Record<Exclude<WidgetSource, 'work_orders'>, SourceModel> =
     },
     periodField: 'x.received_on',
     overdue: `x.status IN ('received', 'approved', 'disputed') AND x.due_on IS NOT NULL AND x.due_on < CURRENT_DATE`,
+  },
+  vendors: {
+    // Both joins are on primary keys: one row per vendor, always.
+    from: `FROM vendor x LEFT JOIN principal ow ON ow.id = x.owner_id LEFT JOIN principal cb ON cb.id = x.created_by
+           LEFT JOIN vendor_status vs ON vs.key = x.status LEFT JOIN vendor_brand_source bs ON bs.key = x.brand_source`,
+    fields: {
+      status: 'COALESCE(vs.label, x.status)',
+      kind: `CASE x.kind WHEN 'tech' THEN 'Technician' ELSE 'VR vendor' END`,
+      primary_trade: 'x.primary_trade',
+      state: 'upper(x.state)',
+      city: 'x.city',
+      owner: 'ow.display_name',
+      added_by: 'cb.display_name',
+      brand_source: 'COALESCE(bs.label, x.brand_source)',
+      priority: 'initcap(x.priority)',
+      paperwork: `initcap(replace(x.compliance_status, '_', ' '))`,
+      coverage: `CASE WHEN x.nationwide THEN 'Nationwide' WHEN x.statewide THEN 'Statewide' ELSE 'Local' END`,
+      w9_received: 'initcap(x.w9_received)',
+      msa_signed: 'initcap(x.msa_signed)',
+      coi_received: 'initcap(x.coi_received)',
+      coi_approved: 'initcap(x.coi_approved)',
+      blacklisted: `CASE WHEN x.blacklisted THEN 'Blacklisted' ELSE 'In good standing' END`,
+      on_file_flags: `CASE WHEN x.flagged_duplicate AND x.flagged_missing THEN 'Duplicate + missing information'
+                           WHEN x.flagged_duplicate THEN 'Possible duplicate'
+                           WHEN x.flagged_missing THEN 'Missing information' ELSE 'No flag' END`,
+      work_orders_count: 'x.work_orders_count',
+      regular_hourly_rate: 'x.regular_hourly_rate',
+      after_hours_rate: 'x.after_hours_rate',
+      trip_charge: 'x.trip_charge',
+      diagnostic_fee: 'x.diagnostic_fee',
+      created_at: 'x.created_at',
+      updated_at: 'x.updated_at',
+    },
+    periodField: 'x.created_at',
+    standalone: { live: 'x.deleted_at IS NULL' },
   },
 };
 
@@ -192,8 +244,8 @@ async function metricSourceWidget(
   );
 
   const whereFor = (p: Params) => {
-    const where = ['t.deleted_at IS NULL'];
-    const scope = viewer ? woScopeSql(viewer, p) : null;
+    const where = [model.standalone ? model.standalone.live : 't.deleted_at IS NULL'];
+    const scope = !viewer ? null : model.standalone ? vendorScopeSql(viewer, (v) => p.add(v), 'x') : woScopeSql(viewer, p);
     if (scope) where.push(scope);
     if (config.source_status && config.source_status.length > 0) {
       where.push(`x.status IN (${config.source_status.map((s) => p.add(s)).join(', ')})`);

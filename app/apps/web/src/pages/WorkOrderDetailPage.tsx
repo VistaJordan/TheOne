@@ -25,6 +25,7 @@ import { InvoiceCard } from '../components/wo/InvoiceCard';
 import { VendorBillsCard } from '../components/wo/VendorBillsCard';
 import { PayablesFieldsCard, PaymentHistoryCard } from '../components/wo/PayablesCard';
 import { PeopleCard } from '../components/wo/PeopleCard';
+import { TechniciansCard } from '../components/wo/tech/TechniciansCard';
 import { SiteCard } from '../components/wo/SiteCard';
 import { DatesCard } from '../components/wo/DatesCard';
 import { CicoCard } from '../components/wo/CicoCard';
@@ -399,7 +400,11 @@ export function WorkOrderDetailPage() {
           )}
 
           {tab === 'people' && (
-            <div role="tabpanel" aria-label="People"><PeopleCard wo={wo} /></div>
+            <div role="tabpanel" aria-label="People">
+              <PeopleCard wo={wo} />
+              {/* 0057 · who has been hired onto the work order, and the map. */}
+              <TechniciansCard wo={wo} />
+            </div>
           )}
 
           {tab === 'site' && (

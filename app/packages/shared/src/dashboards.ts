@@ -69,7 +69,7 @@ export const LIVE_MIN_SECONDS = 5;
 // by, or run along; anything else is refused on the way in so a card cannot
 // name a column that is not there.
 
-export const WIDGET_SOURCES = ['work_orders', 'invoices', 'payments', 'vendor_bills'] as const;
+export const WIDGET_SOURCES = ['work_orders', 'invoices', 'payments', 'vendor_bills', 'vendors'] as const;
 export type WidgetSource = (typeof WIDGET_SOURCES)[number];
 
 export const WIDGET_SOURCE_LABELS: Record<WidgetSource, string> = {
@@ -77,6 +77,7 @@ export const WIDGET_SOURCE_LABELS: Record<WidgetSource, string> = {
   invoices: 'Client invoices',
   payments: 'Payment requests',
   vendor_bills: 'Vendor bills',
+  vendors: 'Vendors and technicians',
 };
 
 /** What a count of this source is called. */
@@ -85,6 +86,7 @@ export const WIDGET_SOURCE_NOUNS: Record<WidgetSource, string> = {
   invoices: 'Invoices',
   payments: 'Payment requests',
   vendor_bills: 'Vendor bills',
+  vendors: 'Vendors',
 };
 
 export interface SourceField {
@@ -114,6 +116,18 @@ export const SOURCE_FIELDS: Record<Exclude<WidgetSource, 'work_orders'>, SourceF
     { key: 'method', label: 'Method', type: 'text' },
     { key: 'payee', label: 'Payee', type: 'text' },
     { key: 'client', label: 'Client', type: 'text' },
+    // 0057 · everything a payment can be cut by: who asked, for which
+    // company, trade, state and FM, for what, and the vendor behind the payee.
+    { key: 'requested_by', label: 'Dispatcher (requested by)', type: 'text' },
+    { key: 'billing_entity', label: 'Company (billing entity)', type: 'text' },
+    { key: 'fm', label: 'FM', type: 'text' },
+    { key: 'trade', label: 'Trade', type: 'text' },
+    { key: 'state', label: 'State', type: 'text' },
+    { key: 'purpose', label: 'Purpose', type: 'text' },
+    { key: 'wo_number', label: 'Work order', type: 'text' },
+    { key: 'vendor_owner', label: 'Vendor owner', type: 'text' },
+    { key: 'vendor_trade', label: 'Vendor trade', type: 'text' },
+    { key: 'vendor_state', label: 'Vendor state', type: 'text' },
     { key: 'created_at', label: 'Requested on', type: 'date' },
     { key: 'approved_at', label: 'Approved on', type: 'date' },
     { key: 'paid_at', label: 'Paid on', type: 'date' },
@@ -127,6 +141,35 @@ export const SOURCE_FIELDS: Record<Exclude<WidgetSource, 'work_orders'>, SourceF
     { key: 'due_on', label: 'Due on', type: 'date' },
     { key: 'paid_at', label: 'Paid on', type: 'date' },
   ],
+  // 0059 · the Vendors section's own records (0057): what the VR team has
+  // recruited and the technicians dispatchers work with. Not joined to a
+  // work order — a card over it follows the viewer's VENDOR scope instead.
+  vendors: [
+    { key: 'status', label: 'Status', type: 'text' },
+    { key: 'kind', label: 'Kind (VR vendor / technician)', type: 'text' },
+    { key: 'primary_trade', label: 'Primary trade', type: 'text' },
+    { key: 'state', label: 'State', type: 'text' },
+    { key: 'city', label: 'City', type: 'text' },
+    { key: 'owner', label: 'Owner', type: 'text' },
+    { key: 'added_by', label: 'Added by', type: 'text' },
+    { key: 'brand_source', label: 'Brand source', type: 'text' },
+    { key: 'priority', label: 'Priority', type: 'text' },
+    { key: 'paperwork', label: 'Paperwork', type: 'text' },
+    { key: 'coverage', label: 'Coverage (nationwide / statewide / local)', type: 'text' },
+    { key: 'w9_received', label: 'W-9 received', type: 'text' },
+    { key: 'msa_signed', label: 'MSA signed', type: 'text' },
+    { key: 'coi_received', label: 'COI received', type: 'text' },
+    { key: 'coi_approved', label: 'COI approved', type: 'text' },
+    { key: 'blacklisted', label: 'Blacklisted', type: 'text' },
+    { key: 'on_file_flags', label: 'Flag (duplicate / missing information)', type: 'text' },
+    { key: 'work_orders_count', label: 'Jobs', type: 'number' },
+    { key: 'regular_hourly_rate', label: 'Regular hourly rate', type: 'number' },
+    { key: 'after_hours_rate', label: 'After-hours rate', type: 'number' },
+    { key: 'trip_charge', label: 'Trip charge', type: 'number' },
+    { key: 'diagnostic_fee', label: 'Diagnostic fee', type: 'number' },
+    { key: 'created_at', label: 'Added on', type: 'date' },
+    { key: 'updated_at', label: 'Last changed on', type: 'date' },
+  ],
 };
 
 /** The statuses each source may be narrowed to. */
@@ -134,6 +177,9 @@ export const SOURCE_STATUSES: Record<Exclude<WidgetSource, 'work_orders'>, strin
   invoices: ['draft', 'sent', 'paid', 'void'],
   payments: ['requested', 'approved', 'sent_to_yoda', 'paid', 'rejected'],
   vendor_bills: ['received', 'approved', 'paid', 'disputed', 'void'],
+  // The six statuses 0057 ships. One added in Admin › Vendors & map still
+  // shows as a slice of any "by status" card; it just cannot be ticked here.
+  vendors: ['NEW', 'INTERESTED', 'READY', 'ACTIVE', 'DISQUALIFIED', 'INACTIVE'],
 };
 
 /** Where a card over this source drills through to. */
@@ -142,6 +188,7 @@ export const SOURCE_DRILL_PATH: Record<WidgetSource, string> = {
   invoices: '/receivables/invoicing',
   payments: '/payments',
   vendor_bills: '/payments?lane=bills',
+  vendors: '/vendors',
 };
 
 // ── Page filters (0049) ──────────────────────────────────────────────────────
@@ -303,7 +350,10 @@ export interface WidgetResult {
 /** How a widget's numbers are worded, for the drill-through link's title. */
 export function widgetSubtitle(config: WidgetConfig, fieldLabel?: string): string {
   if (config.metric === 'count') return WIDGET_SOURCE_NOUNS[config.source ?? 'work_orders'];
-  const what = fieldLabel ?? config.value_field ?? 'value';
+  // A card over another source names its field by the source's own label.
+  const src = config.source && config.source !== 'work_orders' ? SOURCE_FIELDS[config.source] : undefined;
+  const own = src?.find((f) => f.key === config.value_field)?.label.toLowerCase();
+  const what = fieldLabel ?? own ?? config.value_field ?? 'value';
   return config.metric === 'sum' ? `Total ${what}` : `Average ${what}`;
 }
 
@@ -652,6 +702,147 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
             'Outstanding is every invoice that has been sent and not yet paid; Overdue is the part of it past its due date. Payments awaiting approval is money technicians have asked for and a manager has not yet decided on. Each card opens the queue behind it.',
         },
       },
+    ],
+  },
+  {
+    // 0057 · the Payments dashboard: every technician / vendor payment
+    // request raised in The One, cut the ways the old payments dashboard cut
+    // the Teams chat — by vendor, company, client, dispatcher — plus trade,
+    // state, method and status. It starts empty and fills as payments are
+    // requested here; every card can be edited and more can be added.
+    key: 'payments',
+    name: 'Payments',
+    description: 'Technician and vendor payments: what was asked for, approved and paid, and to whom.',
+    folder: 'Finance',
+    shared_all: false,
+    shared_roles: ['admin', 'ap', 'tl', 'am'],
+    widgets: [
+      {
+        kind: 'number',
+        label: 'Paid',
+        width: 'quarter',
+        config: { metric: 'sum', value_field: 'amount', source: 'payments', source_status: ['paid'] },
+      },
+      {
+        kind: 'number',
+        label: 'Approved, not yet paid',
+        width: 'quarter',
+        config: { metric: 'sum', value_field: 'amount', source: 'payments', source_status: ['approved', 'sent_to_yoda'] },
+      },
+      {
+        kind: 'number',
+        label: 'Awaiting approval',
+        width: 'quarter',
+        config: { metric: 'sum', value_field: 'amount', source: 'payments', source_status: ['requested'] },
+      },
+      {
+        kind: 'number',
+        label: 'Average payment',
+        width: 'quarter',
+        config: { metric: 'avg', value_field: 'amount', source: 'payments', source_status: ['approved', 'sent_to_yoda', 'paid'] },
+      },
+      {
+        kind: 'line',
+        label: 'Requested per month',
+        width: 'half',
+        config: { metric: 'sum', value_field: 'amount', source: 'payments', time_field: 'created_at', bucket: 'month', limit: 12 },
+      },
+      {
+        kind: 'donut',
+        label: 'Requests by status',
+        width: 'half',
+        config: { metric: 'count', group_field: 'status', source: 'payments' },
+      },
+      {
+        kind: 'bar',
+        label: 'Top vendors by amount',
+        width: 'half',
+        config: { metric: 'sum', value_field: 'amount', group_field: 'payee', source: 'payments', source_status: ['approved', 'sent_to_yoda', 'paid'], limit: 10 },
+      },
+      {
+        kind: 'bar',
+        label: 'Top vendors by number of payments',
+        width: 'half',
+        config: { metric: 'count', group_field: 'payee', source: 'payments', source_status: ['approved', 'sent_to_yoda', 'paid'], limit: 10 },
+      },
+      {
+        kind: 'bar',
+        label: 'By dispatcher',
+        width: 'half',
+        config: { metric: 'sum', value_field: 'amount', group_field: 'requested_by', source: 'payments', limit: 12 },
+      },
+      {
+        kind: 'bar',
+        label: 'By client',
+        width: 'half',
+        config: { metric: 'sum', value_field: 'amount', group_field: 'client', source: 'payments', limit: 12 },
+      },
+      {
+        kind: 'donut',
+        label: 'By company',
+        width: 'half',
+        config: { metric: 'sum', value_field: 'amount', group_field: 'billing_entity', source: 'payments' },
+      },
+      {
+        kind: 'donut',
+        label: 'By method',
+        width: 'half',
+        config: { metric: 'sum', value_field: 'amount', group_field: 'method', source: 'payments' },
+      },
+      {
+        kind: 'donut',
+        label: 'By trade',
+        width: 'half',
+        config: { metric: 'sum', value_field: 'amount', group_field: 'trade', source: 'payments' },
+      },
+      {
+        kind: 'bar',
+        label: 'By state',
+        width: 'half',
+        config: { metric: 'sum', value_field: 'amount', group_field: 'state', source: 'payments', limit: 15 },
+      },
+      {
+        kind: 'table',
+        label: 'Average paid per vendor',
+        width: 'half',
+        config: { metric: 'avg', value_field: 'amount', group_field: 'payee', source: 'payments', source_status: ['approved', 'sent_to_yoda', 'paid'], limit: 15 },
+      },
+      {
+        kind: 'narrative',
+        label: 'How to read this board',
+        width: 'full',
+        config: {
+          metric: 'count',
+          text:
+            'Every payment request raised on a work order in The One. Paid is money that has gone out; Approved, not yet paid is decided and waiting on the payment run; Awaiting approval is what a manager still has to decide. Add a card to cut payments any other way — by FM, purpose, vendor owner, vendor state — from the card editor.',
+        },
+      },
+    ],
+  },
+  {
+    // 0059 · the vendor network, over the Vendors section's own records.
+    key: 'vendors',
+    name: 'Vendors',
+    description: 'The vendor network: how many, where, which trades, who owns them and where the paperwork stands.',
+    folder: 'Operations',
+    shared_all: false,
+    shared_roles: ['admin', 'vr_officer', 'tl', 'atl', 'am'],
+    widgets: [
+      { kind: 'number', label: 'Vendors and technicians', width: 'quarter', config: { metric: 'count', source: 'vendors' } },
+      { kind: 'number', label: 'Active', width: 'quarter', config: { metric: 'count', source: 'vendors', source_status: ['ACTIVE'] } },
+      { kind: 'number', label: 'In the pipeline', width: 'quarter', config: { metric: 'count', source: 'vendors', source_status: ['NEW', 'INTERESTED', 'READY'] } },
+      { kind: 'number', label: 'Average hourly rate', width: 'quarter', config: { metric: 'avg', value_field: 'regular_hourly_rate', source: 'vendors' } },
+      { kind: 'donut', label: 'By status', width: 'half', config: { metric: 'count', group_field: 'status', source: 'vendors' } },
+      { kind: 'donut', label: 'Paperwork', width: 'half', config: { metric: 'count', group_field: 'paperwork', source: 'vendors' } },
+      { kind: 'bar', label: 'By trade', width: 'half', config: { metric: 'count', group_field: 'primary_trade', source: 'vendors', limit: 15 } },
+      { kind: 'bar', label: 'By state', width: 'half', config: { metric: 'count', group_field: 'state', source: 'vendors', limit: 20 } },
+      { kind: 'line', label: 'Added per month', width: 'full', config: { metric: 'count', source: 'vendors', time_field: 'created_at', bucket: 'month', limit: 12 } },
+      { kind: 'bar', label: 'By owner', width: 'half', config: { metric: 'count', group_field: 'owner', source: 'vendors', limit: 12 } },
+      { kind: 'bar', label: 'Added by', width: 'half', config: { metric: 'count', group_field: 'added_by', source: 'vendors', limit: 12 } },
+      { kind: 'donut', label: 'Coverage', width: 'half', config: { metric: 'count', group_field: 'coverage', source: 'vendors' } },
+      { kind: 'donut', label: 'VR vendors and technicians', width: 'half', config: { metric: 'count', group_field: 'kind', source: 'vendors' } },
+      { kind: 'table', label: 'Jobs by trade', width: 'half', config: { metric: 'sum', value_field: 'work_orders_count', group_field: 'primary_trade', source: 'vendors', limit: 15 } },
+      { kind: 'table', label: 'Average hourly rate by trade', width: 'half', config: { metric: 'avg', value_field: 'regular_hourly_rate', group_field: 'primary_trade', source: 'vendors', limit: 15 } },
     ],
   },
   {

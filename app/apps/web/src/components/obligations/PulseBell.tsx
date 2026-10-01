@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PulseNotification } from '../../api/client';
-import { markAllNotificationsRead, markNotificationRead } from '../../api/client';
+import { getNoticeCount, getNotices, markAllNoticesRead, markAllNotificationsRead, markNoticeRead, markNotificationRead } from '../../api/client';
 import { NOTIFICATIONS_KEY, useNotifications } from '../../hooks/useObligations';
 import { useNow } from '../../hooks/useNow';
 import { TIER_LABEL, tierClass, tierOf } from '../../lib/obligations';
@@ -10,6 +10,9 @@ import { Icon } from '../Icon';
 
 /** How many entries the dropdown shows before deferring to the Pulse page. */
 const MAX_ROWS = 12;
+
+const NOTICES_KEY = ['notices'];
+const NOTICE_COUNT_KEY = ['notices', 'count'];
 
 /**
  * The topbar bell, now live: the unread count is the number of tier transitions
@@ -36,6 +39,24 @@ export function PulseBell() {
   const readAll = useMutation({
     mutationFn: () => markAllNotificationsRead(),
     onSettled: () => qc.invalidateQueries({ queryKey: NOTIFICATIONS_KEY }),
+  });
+
+  // 0059 · the other half of the bell — "For you": a task given to you, a
+  // review to decide, a vendor handed to you, an insurance date running out.
+  // Its own table and routes (/notices); the Pulse rows below are untouched.
+  // The count polls; the list loads when the bell opens.
+  const noticeCount = useQuery({ queryKey: NOTICE_COUNT_KEY, queryFn: getNoticeCount, refetchInterval: 60_000, retry: 0 });
+  const notices = useQuery({ queryKey: NOTICES_KEY, queryFn: getNotices, enabled: open, retry: 0 });
+  const forYou = (notices.data?.items ?? []).slice(0, MAX_ROWS);
+  const noticeUnread = notices.data?.unread ?? noticeCount.data?.unread ?? 0;
+  const badge = unread + noticeUnread;
+  const readNotice = useMutation({
+    mutationFn: (id: string) => markNoticeRead(id),
+    onSettled: () => qc.invalidateQueries({ queryKey: NOTICES_KEY }),
+  });
+  const readAllNotices = useMutation({
+    mutationFn: () => markAllNoticesRead(),
+    onSettled: () => qc.invalidateQueries({ queryKey: NOTICES_KEY }),
   });
 
   useEffect(() => {
@@ -66,21 +87,59 @@ export function PulseBell() {
       <button
         type="button"
         className="topbar-bell"
-        aria-label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
+        aria-label={badge > 0 ? `Notifications (${badge} unread)` : 'Notifications'}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name="bell" />
-        {unread > 0 && (
+        {badge > 0 && (
           <span className="pulse-badge" aria-hidden="true">
-            {unread > 9 ? '9+' : unread}
+            {badge > 9 ? '9+' : badge}
           </span>
         )}
       </button>
 
       {open && (
         <div className="pulse-pop" role="menu" aria-label="Notifications">
+          {forYou.length > 0 && (
+            <>
+              <div className="pulse-pop-head">
+                <span className="overline">For you</span>
+                <button
+                  type="button"
+                  className="pulse-linkbtn"
+                  disabled={noticeUnread === 0 || readAllNotices.isPending}
+                  onClick={() => readAllNotices.mutate()}
+                >
+                  Mark all read
+                </button>
+              </div>
+              {forYou.map((n) => (
+                <button
+                  type="button"
+                  role="menuitem"
+                  key={n.id}
+                  className={`pulse-row is-notice${n.read ? '' : ' is-unread'}`}
+                  onClick={() => {
+                    if (!n.read) readNotice.mutate(n.id);
+                    setOpen(false);
+                    if (n.link && n.link.startsWith('/')) navigate(n.link);
+                  }}
+                >
+                  <span className="pulse-row-stripe" aria-hidden="true" />
+                  <span className="pulse-row-body">
+                    <span className="pulse-row-title">{n.title}</span>
+                    {n.body && <span className="pulse-row-note">{n.body}</span>}
+                    <span className="pulse-row-meta">
+                      <span className="pulse-row-ago">{timeAgo(n.created_at, now)}</span>
+                    </span>
+                  </span>
+                  {!n.read && <span className="pulse-row-dot" aria-hidden="true" />}
+                </button>
+              ))}
+            </>
+          )}
           <div className="pulse-pop-head">
             <span className="overline">The Pulse</span>
             <button

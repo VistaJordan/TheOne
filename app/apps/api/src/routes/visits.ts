@@ -21,10 +21,12 @@ import {
   deleteVisit,
   getVisitHistory,
   listVisits,
+  requireVisitEdit,
   requireVisitView,
   taskIdOfVisit,
   updateVisit,
 } from '../services/visits.js';
+import { linkVisitVendor } from '../services/vendorMap.js';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
 const uuidParamsSchema = z.object({ id: z.string().uuid() });
@@ -39,6 +41,9 @@ const visitBodySchema = z.object({
   method_detail: z.string().max(300).nullable().optional(),
   checked_in_at: z.string().max(40).nullable().optional(),
   checked_out_at: z.string().max(40).nullable().optional(),
+  /** 0057 · the vendor record the technician was picked from; null = typed by
+      hand. Not a visit column the service writes — see linkVisitVendor. */
+  vendor_id: z.string().uuid().nullable().optional(),
 });
 
 async function taskIdOf(req: FastifyRequest): Promise<string> {
@@ -57,8 +62,11 @@ export default async function visitRoutes(app: FastifyInstance): Promise<void> {
   app.post('/work-orders/:id/visits', async (req, reply) => {
     const actor = actingPrincipalFromRequest(req);
     const taskId = await taskIdOf(req);
-    const body = parse(visitBodySchema, req.body ?? {});
+    const { vendor_id, ...body } = parse(visitBodySchema, req.body ?? {});
     const res = await createVisit(taskId, body, actor);
+    // 0057 · a picked technician is remembered on the visit and becomes one of
+    // this person's own on the map. After the visit is saved, never part of it.
+    if (vendor_id) await linkVisitVendor(res.item.id, vendor_id, actor);
     return reply.code(201).send(res);
   });
 
@@ -66,8 +74,18 @@ export default async function visitRoutes(app: FastifyInstance): Promise<void> {
     const actor = actingPrincipalFromRequest(req);
     const { id } = parse(uuidParamsSchema, req.params);
     if (!(await taskIdOfVisit(id))) throw notFound('Visit not found');
-    const body = parse(visitBodySchema, req.body ?? {});
-    return updateVisit(id, body, actor);
+    const { vendor_id, ...body } = parse(visitBodySchema, req.body ?? {});
+    // Only the record behind the same name changed: nothing for the visit
+    // service to write, just the link.
+    if (Object.keys(body).length === 0 && vendor_id !== undefined) {
+      requireVisitEdit(actor);
+      await linkVisitVendor(id, vendor_id, actor);
+      const all = await listVisits((await taskIdOfVisit(id))!);
+      return { item: all.items.find((v) => v.id === id)!, items: all.items };
+    }
+    const res = await updateVisit(id, body, actor);
+    if (vendor_id !== undefined) await linkVisitVendor(id, vendor_id, actor);
+    return res;
   });
 
   app.delete('/visits/:id', async (req) => {

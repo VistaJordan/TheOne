@@ -22,6 +22,10 @@ import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage';
 import { QuoteBuilderPage } from './pages/QuoteBuilderPage';
 import { QuotePrintPage } from './pages/QuotePrintPage';
 import { AiQuoteReviewPage } from './pages/AiQuoteReviewPage';
+import { VendorsPage } from './pages/VendorsPage';
+import { VendorDetailPage } from './pages/VendorDetailPage';
+import { VendorImportPage } from './pages/VendorImportPage';
+import { AdminVendorsPage } from './pages/admin/AdminVendorsPage';
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
@@ -167,6 +171,20 @@ export function App() {
                 path="/work-orders/:woNumber/request-payment"
                 element={<RequireAuth><RequireCan perm="payments" nav="Work Orders"><RequestPaymentPage /></RequireCan></RequireAuth>}
               />
+              {/* 0057 — vendors and technicians: the list (and its coverage
+                  map), and one record. /vendors/new is the same page, empty. */}
+              <Route
+                path="/vendors"
+                element={<RequireAuth><RequireCan perm="vendors" nav="Vendors"><VendorsPage /></RequireCan></RequireAuth>}
+              />
+              <Route
+                path="/vendors/import"
+                element={<RequireAuth><RequireCan perm="vendors" nav="Vendors"><VendorImportPage /></RequireCan></RequireAuth>}
+              />
+              <Route
+                path="/vendors/:id"
+                element={<RequireAuth><RequireCan perm="vendors" nav="Vendors"><VendorDetailPage /></RequireCan></RequireAuth>}
+              />
               <Route
                 path="/quotes"
                 element={<RequireAuth><RequireCan perm="quotes" nav="Quotes"><QuotesPage /></RequireCan></RequireAuth>}
@@ -231,6 +249,7 @@ export function App() {
               <Route path="/admin/themes" element={<RequireAuth><AdminThemesPage /></RequireAuth>} />
               <Route path="/admin/audit" element={<RequireAuth><AdminAuditPage /></RequireAuth>} />
               <Route path="/admin/trash" element={<RequireAuth><AdminTrashPage /></RequireAuth>} />
+              <Route path="/admin/vendors" element={<RequireAuth><AdminVendorsPage /></RequireAuth>} />
             </Routes>
           </AuthProvider>
         </BrowserRouter>

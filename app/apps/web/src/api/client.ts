@@ -2312,3 +2312,437 @@ export async function getPublicClientUpdate(token: string): Promise<ClientUpdate
 export function publicClientUpdateCsvUrl(token: string): string {
   return `/api/public/client-updates/${encodeURIComponent(token)}/csv`;
 }
+
+// ── 0057 — vendors and technicians, the technician map, hiring ───────────────
+
+import type {
+  AdminVendorsResponse,
+  AvailabilityKey,
+  MapVendor,
+  NewTechInput,
+  PreferredVendorInput,
+  PreferredVendorRule,
+  TechSearchHit,
+  VendorDetail,
+  VendorInput,
+  VendorKind,
+  VendorNote,
+  VendorSettings,
+  VendorsListResponse,
+  VendorsMetaResponse,
+  WoMapResponse,
+  WoTechniciansResponse,
+} from '@theone/shared';
+
+export type VendorListParams = Partial<Record<
+  'search' | 'kind' | 'status' | 'trade' | 'state' | 'owner' | 'brand_source' | 'compliance' | 'flag' | 'filter' | 'sort' | 'dir' | 'ids',
+  string
+>> & { page?: number; page_size?: number };
+
+function vendorQuery(params: Record<string, string | number | undefined>): string {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') sp.set(k, String(v));
+  }
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+}
+
+export function listVendors(params: VendorListParams): Promise<VendorsListResponse> {
+  return request<VendorsListResponse>(`/vendors${vendorQuery(params)}`);
+}
+
+export function getVendorsMeta(): Promise<VendorsMetaResponse> {
+  return request<VendorsMetaResponse>('/vendors/meta');
+}
+
+export function getVendor(id: string): Promise<{ vendor: VendorDetail }> {
+  return request(`/vendors/${encodeURIComponent(id)}`);
+}
+
+/** 409 with details.code = 'VENDOR_DUPLICATE' (and the matches) until the
+    input carries override_duplicate. */
+export function createVendor(input: VendorInput): Promise<{ vendor: VendorDetail }> {
+  return request('/vendors', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateVendor(id: string, input: VendorInput): Promise<{ vendor: VendorDetail }> {
+  return request(`/vendors/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteVendor(id: string): Promise<{ ok: true }> {
+  return request(`/vendors/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export interface VendorHistoryEntry {
+  id: string;
+  action: string;
+  actor: { id: string; name: string; kind: 'human' | 'service' } | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export function getVendorHistory(id: string): Promise<{ items: VendorHistoryEntry[] }> {
+  return request(`/vendors/${encodeURIComponent(id)}/history`);
+}
+
+export function getVendorNotes(id: string): Promise<{ notes: VendorNote[] }> {
+  return request(`/vendors/${encodeURIComponent(id)}/notes`);
+}
+
+export function addVendorNote(id: string, body: string, workOrder?: string): Promise<{ notes: VendorNote[] }> {
+  return request(`/vendors/${encodeURIComponent(id)}/notes`, {
+    method: 'POST',
+    body: JSON.stringify({ body, work_order: workOrder }),
+  });
+}
+
+export function blacklistVendor(id: string, reason: string, workOrder?: string): Promise<{ notes: VendorNote[] }> {
+  return request(`/vendors/${encodeURIComponent(id)}/blacklist`, {
+    method: 'POST',
+    body: JSON.stringify({ reason, work_order: workOrder }),
+  });
+}
+
+export function clearVendorBlacklist(id: string, note?: string): Promise<{ notes: VendorNote[] }> {
+  return request(`/vendors/${encodeURIComponent(id)}/blacklist${vendorQuery({ note })}`, { method: 'DELETE' });
+}
+
+export function addVendorExpiry(
+  id: string,
+  input: { entity: string | null; insurance_type: string; expires_on: string },
+): Promise<{ vendor: VendorDetail }> {
+  return request(`/vendors/${encodeURIComponent(id)}/expiries`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function removeVendorExpiry(id: string, expiryId: string): Promise<{ vendor: VendorDetail }> {
+  return request(`/vendors/${encodeURIComponent(id)}/expiries/${encodeURIComponent(expiryId)}`, { method: 'DELETE' });
+}
+
+export function suggestCities(q: string, state?: string): Promise<{ cities: { city: string; state: string }[] }> {
+  return request(`/vendors/city-suggest${vendorQuery({ q, state })}`);
+}
+
+export interface CoveragePoint {
+  id: string;
+  kind: VendorKind;
+  name: string;
+  status: string;
+  primary_trade: string | null;
+  city: string | null;
+  state: string | null;
+  lat: number;
+  lng: number;
+  nationwide: boolean;
+  statewide: boolean;
+  blacklisted: boolean;
+  compliance_status: string;
+}
+
+export function getVendorCoverage(params: { trade?: string; state?: string; kind?: string; status?: string }): Promise<{ points: CoveragePoint[] }> {
+  return request(`/vendors/coverage${vendorQuery(params)}`);
+}
+
+// On a work order ─────────────────────────────────────────────────────────────
+
+const woVendorPath = (idOrNumber: string, suffix: string) => `/work-orders/${encodeURIComponent(idOrNumber)}${suffix}`;
+
+/** `trades` undefined = every trade; `opened` marks the first load of a map
+    session (the one the map log in Admin counts). */
+export function getWoTechMap(
+  idOrNumber: string,
+  params: { trades?: string[]; availability?: AvailabilityKey[]; opened?: boolean },
+): Promise<WoMapResponse> {
+  return request<WoMapResponse>(
+    woVendorPath(
+      idOrNumber,
+      `/tech-map${vendorQuery({
+        trades: params.trades === undefined ? undefined : params.trades.join('|'),
+        availability: params.availability?.join(','),
+        opened: params.opened ? '1' : undefined,
+      })}`,
+    ),
+  );
+}
+
+export function getWoTechnicians(idOrNumber: string): Promise<WoTechniciansResponse> {
+  return request<WoTechniciansResponse>(woVendorPath(idOrNumber, '/technicians'));
+}
+
+export function hireWoTechnician(
+  idOrNumber: string,
+  vendorId: string,
+  note?: string,
+): Promise<WoTechniciansResponse & { warning: string | null }> {
+  return request(woVendorPath(idOrNumber, '/technicians'), { method: 'POST', body: JSON.stringify({ vendor_id: vendorId, note }) });
+}
+
+export function releaseWoTechnician(idOrNumber: string, vendorId: string): Promise<WoTechniciansResponse> {
+  return request(woVendorPath(idOrNumber, `/technicians/${encodeURIComponent(vendorId)}`), { method: 'DELETE' });
+}
+
+export function addWoTechnician(
+  idOrNumber: string,
+  input: NewTechInput,
+): Promise<WoTechniciansResponse & { outcome: 'created' | 'linked'; vendor_id: string; on_map: boolean; warning: string | null }> {
+  return request(woVendorPath(idOrNumber, '/technicians/new'), { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function searchWoTechs(idOrNumber: string, q: string): Promise<{ hits: TechSearchHit[] }> {
+  return request(woVendorPath(idOrNumber, `/tech-search${vendorQuery({ q })}`));
+}
+
+// Admin › Vendors & map ───────────────────────────────────────────────────────
+
+export function getAdminVendors(): Promise<AdminVendorsResponse> {
+  return request<AdminVendorsResponse>('/admin/vendors');
+}
+
+export function saveVendorSettings(input: Partial<VendorSettings>): Promise<{ settings: VendorSettings }> {
+  return request('/admin/vendors/settings', { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export interface VendorPickHit {
+  id: string;
+  name: string;
+  phone: string | null;
+  kind: VendorKind;
+  primary_trade: string | null;
+  city: string | null;
+  state: string | null;
+}
+
+export function searchVendorsForRule(q: string): Promise<{ hits: VendorPickHit[] }> {
+  return request(`/admin/vendors/vendor-search${vendorQuery({ q })}`);
+}
+
+export function createPreferredVendor(input: PreferredVendorInput): Promise<{ preferred: PreferredVendorRule[] }> {
+  return request('/admin/vendors/preferred', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updatePreferredVendor(id: string, input: PreferredVendorInput): Promise<{ preferred: PreferredVendorRule[] }> {
+  return request(`/admin/vendors/preferred/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deletePreferredVendor(id: string): Promise<{ preferred: PreferredVendorRule[] }> {
+  return request(`/admin/vendors/preferred/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export type VendorListName = 'statuses' | 'brand-sources' | 'trades';
+
+export function addVendorListValue(list: VendorListName, input: { label: string; color?: string }): Promise<AdminVendorsResponse> {
+  return request(`/admin/vendors/lists/${list}`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateVendorListValue(
+  list: VendorListName,
+  key: string,
+  input: { label?: string; color?: string; is_active?: boolean },
+): Promise<AdminVendorsResponse> {
+  return request(`/admin/vendors/lists/${list}/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export type { MapVendor };
+
+// ── 0058 — the vendor relations workflow ─────────────────────────────────────
+
+import type {
+  CoiChecklistKey,
+  DailyTarget,
+  DataQualityResponse,
+  DuplicateBy,
+  ImportAnalysis,
+  ImportDuplicateStrategy,
+  ImportMissingStrategy,
+  ImportSummary,
+  SavedViewVisibility,
+  VendorAlert,
+  VendorBulkPatch,
+  VendorCallInput,
+  VendorDocumentUpload,
+  VendorImportRecord,
+  VendorSavedView,
+  VendorTask,
+  VendorTaskAction,
+  VendorTasksResponse,
+  VendorWorkResponse,
+} from '@theone/shared';
+
+export function getVendorIds(params: VendorListParams): Promise<{ ids: string[] }> {
+  return request(`/vendors/ids${vendorQuery(params)}`);
+}
+
+export function bulkUpdateVendors(ids: string[], patch: VendorBulkPatch): Promise<{ updated: number; skipped: number }> {
+  return request('/vendors/bulk', { method: 'POST', body: JSON.stringify({ ids, patch }) });
+}
+
+export function bulkDeleteVendors(ids: string[]): Promise<{ removed: number; skipped: number }> {
+  return request('/vendors/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) });
+}
+
+/** The CSV is a download, not JSON: the browser follows this link. */
+export function vendorExportUrl(params: VendorListParams): string {
+  const { page: _p, page_size: _s, ...rest } = params;
+  return `/api/vendors/export${vendorQuery(rest)}`;
+}
+
+export interface BulkSearchResult {
+  term: string;
+  matches: { id: string; name: string; phone: string | null; email: string | null }[];
+}
+
+export function bulkSearchVendors(field: 'name' | 'phone' | 'email', terms: string[]): Promise<{ results: BulkSearchResult[] }> {
+  return request('/vendors/bulk-search', { method: 'POST', body: JSON.stringify({ field, terms }) });
+}
+
+export function getVendorViews(): Promise<{ views: VendorSavedView[] }> {
+  return request('/vendors/views');
+}
+
+export function saveVendorView(input: { name: string; params: Record<string, string>; visibility: SavedViewVisibility }): Promise<{ views: VendorSavedView[] }> {
+  return request('/vendors/views', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function deleteVendorView(id: string): Promise<{ views: VendorSavedView[] }> {
+  return request(`/vendors/views/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function getVendorTasks(): Promise<VendorTasksResponse> {
+  return request<VendorTasksResponse>('/vendors/tasks');
+}
+
+export function createVendorTask(input: { title: string; vendor_id?: string | null; assigned_to?: string | null }): Promise<{ task: VendorTask }> {
+  return request('/vendors/tasks', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function resolveVendorTask(id: string, action: VendorTaskAction, note?: string): Promise<{ task: VendorTask }> {
+  return request(`/vendors/tasks/${encodeURIComponent(id)}/resolve`, { method: 'POST', body: JSON.stringify({ action, note }) });
+}
+
+export function setVendorTarget(input: { principal_id: string; nationwide_target: number; statewide_target: number }): Promise<{ targets: DailyTarget[] }> {
+  return request('/vendors/targets', { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function getVendorAlerts(): Promise<{ alerts: VendorAlert[] }> {
+  return request('/vendors/alerts');
+}
+
+export function getVendorDataQuality(by: DuplicateBy): Promise<DataQualityResponse> {
+  return request<DataQualityResponse>(`/vendors/data-quality?by=${by}`);
+}
+
+// Import ──────────────────────────────────────────────────────────────────────
+
+export type ImportCsvRow = Record<string, string>;
+
+export function analyzeVendorImport(input: { rows: ImportCsvRow[]; mapping: Record<string, string>; kind: VendorKind }): Promise<{ analysis: ImportAnalysis }> {
+  return request('/vendors/imports/analyze', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function startVendorImport(input: {
+  file_name: string;
+  kind: VendorKind;
+  total_rows: number;
+  mapping: Record<string, string>;
+  duplicate_strategy: ImportDuplicateStrategy;
+  missing_strategy: ImportMissingStrategy;
+}): Promise<{ id: string }> {
+  return request('/vendors/imports', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function sendVendorImportRows(importId: string, input: { offset: number; rows: ImportCsvRow[]; brand_source?: string | null }): Promise<{ summary: ImportSummary }> {
+  return request(`/vendors/imports/${encodeURIComponent(importId)}/rows`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function getVendorImports(): Promise<{ imports: VendorImportRecord[] }> {
+  return request('/vendors/imports');
+}
+
+// One record ──────────────────────────────────────────────────────────────────
+
+const vendorPath = (id: string, suffix: string) => `/vendors/${encodeURIComponent(id)}${suffix}`;
+
+export function getVendorWork(id: string): Promise<VendorWorkResponse> {
+  return request<VendorWorkResponse>(vendorPath(id, '/work'));
+}
+
+export function uploadVendorDocument(id: string, input: VendorDocumentUpload): Promise<VendorWorkResponse> {
+  return request<VendorWorkResponse>(vendorPath(id, '/documents'), { method: 'POST', body: JSON.stringify(input) });
+}
+
+/** The file itself, for a link or an <iframe> — streamed by the API. */
+export function vendorDocumentUrl(id: string, docId: string): string {
+  return `/api${vendorPath(id, `/documents/${encodeURIComponent(docId)}`)}`;
+}
+
+export function renameVendorDocument(id: string, docId: string, fileName: string): Promise<VendorWorkResponse> {
+  return request<VendorWorkResponse>(vendorPath(id, `/documents/${encodeURIComponent(docId)}`), { method: 'PATCH', body: JSON.stringify({ file_name: fileName }) });
+}
+
+export function deleteVendorDocument(id: string, docId: string): Promise<VendorWorkResponse> {
+  return request<VendorWorkResponse>(vendorPath(id, `/documents/${encodeURIComponent(docId)}`), { method: 'DELETE' });
+}
+
+export function saveVendorCoiChecklist(id: string, entity: string, checks: Partial<Record<CoiChecklistKey, boolean>>): Promise<VendorWorkResponse> {
+  return request<VendorWorkResponse>(vendorPath(id, `/coi/${encodeURIComponent(entity)}`), { method: 'PUT', body: JSON.stringify(checks) });
+}
+
+export function logVendorCall(id: string, input: VendorCallInput): Promise<VendorWorkResponse> {
+  return request<VendorWorkResponse>(vendorPath(id, '/calls'), { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function editVendorCall(id: string, callId: string, input: VendorCallInput): Promise<VendorWorkResponse> {
+  return request<VendorWorkResponse>(vendorPath(id, `/calls/${encodeURIComponent(callId)}`), { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteVendorCall(id: string, callId: string): Promise<VendorWorkResponse> {
+  return request<VendorWorkResponse>(vendorPath(id, `/calls/${encodeURIComponent(callId)}`), { method: 'DELETE' });
+}
+
+export function logVendorEmail(id: string, input: { sent_at?: string | null; subject?: string | null; notes?: string | null }): Promise<VendorWorkResponse> {
+  return request<VendorWorkResponse>(vendorPath(id, '/emails'), { method: 'POST', body: JSON.stringify(input) });
+}
+
+// Admin › required fields ─────────────────────────────────────────────────────
+
+export interface RequiredFieldSetting {
+  key: string;
+  label: string;
+  required: boolean;
+  default_required: boolean;
+}
+
+export function getVendorRequiredFields(): Promise<{ fields: RequiredFieldSetting[]; storage_ready: boolean }> {
+  return request('/admin/vendors/required-fields');
+}
+
+export function setVendorRequiredField(key: string, required: boolean): Promise<{ fields: RequiredFieldSetting[]; storage_ready: boolean }> {
+  return request(`/admin/vendors/required-fields/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ required }) });
+}
+
+// ── 0059 — the board, and in-app notices (the "For you" half of the bell) ────
+
+import type { AppNotificationsResponse, VendorBoardResponse } from '@theone/shared';
+
+/** The list's rows stacked by status. Takes the list's filters, not its paging. */
+export function getVendorBoard(params: VendorListParams): Promise<VendorBoardResponse> {
+  const { page: _p, page_size: _s, sort: _so, dir: _d, ...rest } = params;
+  return request<VendorBoardResponse>(`/vendors/board${vendorQuery(rest)}`);
+}
+
+export function getNotices(): Promise<AppNotificationsResponse> {
+  return request<AppNotificationsResponse>('/notices');
+}
+
+export function getNoticeCount(): Promise<{ unread: number }> {
+  return request('/notices/count');
+}
+
+export function markNoticeRead(id: string): Promise<{ unread: number }> {
+  return request(`/notices/${encodeURIComponent(id)}/read`, { method: 'POST' });
+}
+
+export function markAllNoticesRead(): Promise<{ unread: number }> {
+  return request('/notices/read-all', { method: 'POST' });
+}

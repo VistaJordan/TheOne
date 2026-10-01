@@ -50,7 +50,13 @@ export function CallButton({ wo }: { wo: WorkOrderDetailV2 }) {
   );
 }
 
-function CallDialog({ wo, onClose }: { wo: WorkOrderDetailV2; onClose: () => void }) {
+/** `preset` (0057): the technician map opens the dialog on the person whose
+    Call button was pressed; the work order's own contacts stay as alternatives. */
+export function CallDialog({ wo, onClose, preset }: {
+  wo: WorkOrderDetailV2;
+  onClose: () => void;
+  preset?: { name: string; phone: string; role: WoCallContactRole };
+}) {
   const { can } = useAuth();
   const qc = useQueryClient();
   const canQuote = can('quotes', 'edit');
@@ -66,19 +72,23 @@ function CallDialog({ wo, onClose }: { wo: WorkOrderDetailV2; onClose: () => voi
 
   const contacts = useMemo<Contact[]>(() => {
     const out: Contact[] = [];
+    const presetPhone = preset ? normalizePhone(preset.phone) : null;
+    if (preset && presetPhone) {
+      out.push({ key: 'preset', name: preset.name, phone: presetPhone, role: preset.role, source: 'From the map' });
+    }
     const fields = wo.fields ?? {};
     const techName = str(fields[VISIT_MIRROR_KEYS.techName]);
     const techPhone = normalizePhone(str(fields[VISIT_MIRROR_KEYS.techPhone]));
-    if (techPhone) {
+    if (techPhone && techPhone !== presetPhone) {
       out.push({ key: 'tech', name: techName ?? 'Technician', phone: techPhone, role: 'tech', source: 'Latest visit' });
     }
     const vendor = messages.data?.quo.conversation?.vendor;
     const vendorPhone = normalizePhone(vendor?.phone);
-    if (vendor && vendorPhone && vendorPhone !== techPhone) {
+    if (vendor && vendorPhone && vendorPhone !== techPhone && vendorPhone !== presetPhone) {
       out.push({ key: 'vendor', name: vendor.name, phone: vendorPhone, role: 'vendor', source: 'Quo line' });
     }
     return out;
-  }, [wo.fields, messages.data]);
+  }, [wo.fields, messages.data, preset]);
 
   const [pick, setPick] = useState<string>('');
   const chosen = contacts.find((c) => c.key === pick) ?? null;

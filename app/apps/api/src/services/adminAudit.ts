@@ -46,7 +46,12 @@ export type AdminEntity =
   // A planned-maintenance schedule (0051).
   | 'pm_schedule'
   // A client-update tracker (0055): its settings, its link, its sends.
-  | 'client_update';
+  | 'client_update'
+  // A vendor or technician record (0057): edits, notes, the blacklist.
+  | 'vendor'
+  // Admin › Vendors & map (0057): settings, lists, preferred vendors.
+  | 'vendor_setting'
+  | 'preferred_vendor';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

@@ -18,4 +18,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/admin/themes', label: 'Themes', icon: 'sun' },
   { to: '/admin/audit', label: 'Audit log', icon: 'history' },
   { to: '/admin/trash', label: 'Trash', icon: 'trash' },
+  // 0057 — map settings, preferred vendors, the vendor lists, map use.
+  { to: '/admin/vendors', label: 'Vendors & map', icon: 'truck' },
 ];

@@ -19,6 +19,9 @@
 //
 // Super admins skip all of it: every check answers yes.
 
+import { vendorPermNodes } from './vendors';
+import { vendorWorkflowPermNodes } from './vendorWorkflow';
+
 export type PermAction = 'view' | 'create' | 'edit' | 'delete' | 'approve';
 
 export const PERM_ACTIONS: readonly PermAction[] = ['view', 'create', 'edit', 'delete', 'approve'];
@@ -318,6 +321,8 @@ export const ADMIN_PERM_SECTIONS: { slug: string; label: string; actions: PermAc
   { slug: 'themes', label: 'Themes', actions: ['view'] },
   { slug: 'audit', label: 'Audit log', actions: ['view'] },
   { slug: 'trash', label: 'Trash', actions: ['view', 'edit'] },
+  // 0057 · map settings, preferred vendors, vendor statuses, the map alerts.
+  { slug: 'vendors', label: 'Vendors & map', actions: ['view', 'edit'] },
 ];
 
 export function adminPermKey(slug: string): string {
@@ -693,7 +698,12 @@ export function buildPermissionTree(
       actions: ['view', 'create', 'edit'],
       note: 'The OP Admin staging area (section 14): view = the drafts list; create = start a draft; edit = fill, submit or discard one. Operations Admin and Admin by default.',
     },
-    { key: 'vendors', label: 'Vendors', actions: ['view', 'create', 'edit', 'delete'], note: 'Module not live yet.' },
+    // 0057 · the Vendors section and the technician map on a work order.
+    // 0058 · the workflow rows (review queue, documents, import, export,
+    // saved lists) sit under Vendors.
+    ...vendorPermNodes().map((n) =>
+      n.key === 'vendors' ? { ...n, children: [...(n.children ?? []), ...vendorWorkflowPermNodes()] } : n,
+    ),
     {
       // 0045 · live. Approve is the act of SENDING a bill to the client, not
       // a separate sign-off step: once it has gone out it is what they hold.
