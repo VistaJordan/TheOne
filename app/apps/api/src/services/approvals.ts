@@ -1076,12 +1076,18 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
   }
   // The inbox's "For me" lane also holds the quotes and technician payments
   // waiting on this person; the badge counts what that lane shows.
-  const only = scope ? `AND ${scope}` : '';
+  // These two statements get their OWN parameters: the list above binds the
+  // viewer's id as $1, which neither of these uses, and Postgres refuses a
+  // bound parameter the statement never mentions (it cannot type it) — that
+  // was a 500 on the badge for everyone who approves quotes or payments.
+  const qp = new Params();
+  const moneyScope = woScopeSql(viewer, qp);
+  const only = moneyScope ? `AND ${moneyScope}` : '';
   if (allow('quotes', 'approve') && allow(approvalSectionPermKey('quotes'), 'view')) {
     const q = await query<{ n: number | string }>(
       `SELECT count(*)::int AS n FROM quote q JOIN task t ON t.id = q.task_id
         WHERE q.status = 'pending_approval' AND t.deleted_at IS NULL ${only}`,
-      p.values,
+      qp.values,
     );
     to_decide += Number(q.rows[0]?.n ?? 0);
   }
@@ -1089,7 +1095,7 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
     const pr = await query<{ n: number | string }>(
       `SELECT count(*)::int AS n FROM payment_request pr JOIN task t ON t.id = pr.task_id
         WHERE pr.status = 'requested' AND t.deleted_at IS NULL ${only}`,
-      p.values,
+      qp.values,
     );
     to_decide += Number(pr.rows[0]?.n ?? 0);
   }
