@@ -62,7 +62,10 @@ export type AdminEntity =
   | 'portfolio_list'
   // 0063: a saved create-form template, a sub-category of a trade.
   | 'wo_template'
-  | 'wo_subcategory';
+  | 'wo_subcategory'
+  // 0064: a fault / action code, a create-form layout.
+  | 'wo_code'
+  | 'wo_form_layout';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

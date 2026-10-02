@@ -29,6 +29,7 @@ import {
   WorkOrderList,
   errText,
 } from '../components/portfolio/PortfolioParts';
+import { SiteEventsCard, SpaceViewer } from '../components/portfolio/SiteExtras';
 import { useTheme } from '../theme/ThemeProvider';
 
 const VendorMap = lazy(() => import('../components/map/VendorMap'));
@@ -145,6 +146,14 @@ export function SiteDetailPage() {
 
           <LocationsCard site={s} siteKey={key} spaceTypes={[...new Set([...SPACE_TYPE_SUGGESTIONS, ...(meta.data?.space_types ?? [])])]} />
 
+          {/* 0064 · pick a place, see what stands in it and what is open against it. */}
+          {(s.locations.length > 0 || s.assets > 0) && (
+            <section className="card">
+              <div className="card-head"><h2 className="card-title">Space viewer</h2></div>
+              <SpaceViewer siteId={s.id} />
+            </section>
+          )}
+
           <section className="card">
             <div className="card-head">
               <h2 className="card-title grow">Assets</h2>
@@ -217,6 +226,8 @@ export function SiteDetailPage() {
               <div className="empty-flat">Not on the map — the ZIP and city could not be placed. Correct the address, or give coordinates.</div>
             )}
           </section>
+          {/* 0064 · what is happening at the site that the people working it should know. */}
+          <SiteEventsCard siteId={s.id} canEdit={s.can.edit} />
           <HistoryCard queryKey={['site-history', id, s.updated_at, s.locations.length]} load={() => getSiteHistory(id)} />
         </aside>
       </div>

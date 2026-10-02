@@ -2978,3 +2978,66 @@ export function addWoSubcategory(input: { trade: string; name: string }): Promis
 export function updateWoSubcategory(id: string, patch: { name?: string; is_active?: boolean }): Promise<{ items: WoSubcategoryRow[]; trades: string[] }> {
   return request(`/admin/wo-subcategories/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
 }
+
+// ── 0064 — the work-order record, site events, the space viewer ──────────────
+
+import type {
+  SiteEvent,
+  SiteEventInput,
+  SpaceViewerResponse,
+  WoCode,
+  WoCompleteInput,
+  WoFormLayout,
+  WoFormLayoutInput,
+  WoRecord,
+} from '@theone/shared';
+
+const recordPath = (woRef: string, suffix = '') => `/work-orders/${encodeURIComponent(woRef)}${suffix}`;
+const post = <T>(path: string, body?: unknown, method = 'POST'): Promise<T> =>
+  request<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+
+export function getWoRecord(woRef: string): Promise<WoRecord> {
+  return request<WoRecord>(recordPath(woRef, '/record'));
+}
+export const setWoVendor = (woRef: string, vendorId: string | null) => post<WoRecord>(recordPath(woRef, '/vendor'), { vendor_id: vendorId }, 'PUT');
+export const pauseWo = (woRef: string, reason: string) => post<WoRecord>(recordPath(woRef, '/pause'), { reason });
+export const resumeWo = (woRef: string) => post<WoRecord>(recordPath(woRef, '/resume'));
+export const setWoEta = (woRef: string, etaAt: string | null, note?: string | null) => post<WoRecord>(recordPath(woRef, '/eta'), { eta_at: etaAt, note: note ?? null }, 'PUT');
+export const cancelWo = (woRef: string, reason: string) => post<WoRecord>(recordPath(woRef, '/cancel'), { reason });
+export const reopenWo = (woRef: string) => post<WoRecord>(recordPath(woRef, '/reopen'));
+export const completeWoService = (woRef: string, input: WoCompleteInput) => post<WoRecord>(recordPath(woRef, '/complete-service'), input);
+export const clearWoCompletion = (woRef: string) => post<WoRecord>(recordPath(woRef, '/complete-service'), undefined, 'DELETE');
+export const addWoChecklist = (woRef: string, titles: string[]) => post<WoRecord>(recordPath(woRef, '/checklist'), { titles });
+export const updateWoChecklist = (woRef: string, itemId: string, patch: { done?: boolean; title?: string; note?: string | null }) =>
+  post<WoRecord>(recordPath(woRef, `/checklist/${encodeURIComponent(itemId)}`), patch, 'PATCH');
+export const removeWoChecklist = (woRef: string, itemId: string) => post<WoRecord>(recordPath(woRef, `/checklist/${encodeURIComponent(itemId)}`), undefined, 'DELETE');
+export const addWoTag = (woRef: string, tag: string, reason?: string | null) => post<WoRecord>(recordPath(woRef, '/tags'), { tag, reason: reason ?? null });
+export const removeWoTag = (woRef: string, tagId: string) => post<WoRecord>(recordPath(woRef, `/tags/${encodeURIComponent(tagId)}`), undefined, 'DELETE');
+export const requestNteIncrease = (woRef: string, requestedNte: number, reason: string) => post<WoRecord>(recordPath(woRef, '/nte-requests'), { requested_nte: requestedNte, reason });
+export const decideNteIncrease = (woRef: string, requestId: string, decision: 'approve' | 'reject' | 'withdraw', note?: string | null) =>
+  post<WoRecord>(recordPath(woRef, `/nte-requests/${encodeURIComponent(requestId)}`), { decision, note: note ?? null });
+export const locateVisit = (woRef: string, visitId: string, at: { lat: number; lng: number } | null) =>
+  post<WoRecord>(recordPath(woRef, `/visits/${encodeURIComponent(visitId)}/location`), at ?? { clear: true }, 'PUT');
+
+export function getSiteEvents(siteId?: string): Promise<{ events: SiteEvent[] }> {
+  return request(siteId ? `/sites/${encodeURIComponent(siteId)}/events` : '/site-events');
+}
+export const addSiteEvent = (siteId: string, input: SiteEventInput) => post<{ events: SiteEvent[] }>(`/sites/${encodeURIComponent(siteId)}/events`, input);
+export const updateSiteEvent = (siteId: string, eventId: string, input: SiteEventInput) =>
+  post<{ events: SiteEvent[] }>(`/sites/${encodeURIComponent(siteId)}/events/${encodeURIComponent(eventId)}`, input, 'PATCH');
+export const removeSiteEvent = (siteId: string, eventId: string) =>
+  post<{ events: SiteEvent[] }>(`/sites/${encodeURIComponent(siteId)}/events/${encodeURIComponent(eventId)}`, undefined, 'DELETE');
+export function getSiteSpaces(siteId: string): Promise<SpaceViewerResponse> {
+  return request<SpaceViewerResponse>(`/sites/${encodeURIComponent(siteId)}/spaces`);
+}
+
+export type WoCodesResponse = { fault: WoCode[]; action: WoCode[] };
+export const getWoCodes = () => request<WoCodesResponse>('/admin/wo-codes');
+export const addWoCode = (input: { kind: 'fault' | 'action'; code: string; label: string }) => post<WoCodesResponse>('/admin/wo-codes', input);
+export const updateWoCode = (id: string, patch: { label?: string; is_active?: boolean }) => post<WoCodesResponse>(`/admin/wo-codes/${encodeURIComponent(id)}`, patch, 'PATCH');
+
+export type WoFormLayoutsResponse = { layouts: WoFormLayout[]; form: WoCreateForm; clients: string[] };
+export const getWoFormLayouts = () => request<WoFormLayoutsResponse>('/admin/wo-form-layouts');
+export const saveWoFormLayout = (id: string | null, input: WoFormLayoutInput) =>
+  post<WoFormLayoutsResponse>(id ? `/admin/wo-form-layouts/${encodeURIComponent(id)}` : '/admin/wo-form-layouts', input, id ? 'PATCH' : 'POST');
+export const deleteWoFormLayout = (id: string) => post<WoFormLayoutsResponse>(`/admin/wo-form-layouts/${encodeURIComponent(id)}`, undefined, 'DELETE');

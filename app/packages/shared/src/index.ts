@@ -1709,5 +1709,8 @@ export * from './vendorWorkflow';
 export * from './vendorFilters';
 // 0060: sites, their buildings / floors / spaces, and assets.
 export * from './portfolio';
+// 0064: the work-order record (rail, checklist, timelog, costs), form
+// layouts, the geofence check, site events, the space viewer.
+export * from './woRecord';
 // 0055: client updates — per-client trackers, shared by link or email.
 export * from './clientUpdates';

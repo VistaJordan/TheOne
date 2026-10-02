@@ -312,6 +312,11 @@ export const WO_TABS: { id: string; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'messages', label: 'Messages' },
   { id: 'audit', label: 'Audit trail' },
+  // 0064 · the record's own tabs.
+  { id: 'tasks', label: 'Checklist' },
+  { id: 'costs', label: 'Cost breakdown' },
+  { id: 'timelog', label: 'Timelog & metrics' },
+  { id: 'related', label: 'Related' },
 ];
 
 export function tabPermKey(tabId: string): string {

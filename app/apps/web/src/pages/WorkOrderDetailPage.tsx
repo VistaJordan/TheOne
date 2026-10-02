@@ -35,6 +35,8 @@ import { AllFieldsPanel } from '../components/wo/AllFieldsPanel';
 import { AuditTrail } from '../components/wo/AuditTrail';
 import { MessagesPanel } from '../components/wo/messages/MessagesPanel';
 import { CallsCard } from '../components/wo/calls/CallsCard';
+import { RecordBar, RecordRail, useWoRecord } from '../components/wo/record/RecordParts';
+import { ChecklistTab, CostBreakdownTab, RelatedTab, TimelogTab } from '../components/wo/record/RecordTabs';
 import { MessagesRail } from '../components/wo/messages/MessagesRail';
 import { ObligationsCard, OBLIGATIONS_CARD_ID } from '../components/obligations/ObligationsCard';
 import { useWoObligations } from '../hooks/useObligations';
@@ -49,7 +51,14 @@ import { quoteSectionsHaveData, tabPermKey } from '@theone/shared';
 const TAB_IDS = [
   'fields', 'money', 'payables', 'people', 'site', 'dates', 'cico', 'parts',
   'flags', 'overview', 'messages', 'audit',
+  // 0064 · the record's own tabs.
+  'tasks', 'costs', 'timelog', 'related',
 ] as const;
+
+/** 0064 · the tabs that carry the right rail (Responsibility · Location ·
+    Time · Cost). The wide ones — All fields, the audit trail — and the tabs
+    that are one card of their own keep the full width they had. */
+const RAIL_TABS: readonly string[] = ['overview', 'tasks', 'costs', 'timelog', 'related'];
 
 type Tab = (typeof TAB_IDS)[number];
 
@@ -129,6 +138,11 @@ export function WorkOrderDetailPage() {
   // uuid or a number), decoration-grade like the S4 cards: a failure degrades to
   // "no clocks", never to a broken page.
   const obligationsQuery = useWoObligations(wo ? (wo.id ?? woNumber) : undefined);
+
+  // 0064 · the record: state, rail, checklist, timelog, costs, related. One
+  // read; decoration-grade like the cards above (a failure hides the bar and
+  // the rail, never the page).
+  const recordQuery = useWoRecord(wo?.id);
 
   // Sidebar badge parity with the list page (cached under the same key family).
   const totalQuery = useQuery({
@@ -267,6 +281,9 @@ export function WorkOrderDetailPage() {
           quoteFilled={quoteQuery.data ? quoteSectionsHaveData(quoteQuery.data.quote?.sections) : null}
         />
 
+        {/* 0064 · what state the job is in, and what can be done to it. */}
+        <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
           {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
           {show('money') && <TabButton id="money" tab={tab} onSelect={setTab}>Finances</TabButton>}
@@ -278,6 +295,17 @@ export function WorkOrderDetailPage() {
           {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
           {show('flags') && <TabButton id="flags" tab={tab} onSelect={setTab}>Flags</TabButton>}
           {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
+          {show('tasks') && (
+            <TabButton id="tasks" tab={tab} onSelect={setTab}>
+              Checklist
+              {recordQuery.data && recordQuery.data.checklist.length > 0 && (
+                <span className="seg-count">{recordQuery.data.checklist.filter((i) => i.done).length}/{recordQuery.data.checklist.length}</span>
+              )}
+            </TabButton>
+          )}
+          {show('costs') && <TabButton id="costs" tab={tab} onSelect={setTab}>Cost breakdown</TabButton>}
+          {show('timelog') && <TabButton id="timelog" tab={tab} onSelect={setTab}>Timelog</TabButton>}
+          {show('related') && <TabButton id="related" tab={tab} onSelect={setTab}>Related</TabButton>}
           {show('messages') && (
             <TabButton id="messages" tab={tab} onSelect={setTab}>
               <Icon name="msg" size={12} />
@@ -291,7 +319,7 @@ export function WorkOrderDetailPage() {
 
       <div
         className={`wo-grid${tab === 'messages' ? ' is-messages' : ''}${
-          tab === 'messages' && conversation ? '' : ' no-rail'
+          tab === 'messages' && conversation ? '' : RAIL_TABS.includes(tab) ? ' has-record-rail' : ' no-rail'
         }`}
       >
         <div className="col-main">
@@ -426,7 +454,26 @@ export function WorkOrderDetailPage() {
           {tab === 'flags' && (
             <div role="tabpanel" aria-label="Flags"><FlagsRow wo={wo} /></div>
           )}
+
+          {/* 0064 · the four tabs that read the record. */}
+          {(tab === 'tasks' || tab === 'costs' || tab === 'timelog' || tab === 'related') && (
+            <div role="tabpanel" aria-label={tab === 'tasks' ? 'Checklist' : tab === 'costs' ? 'Cost breakdown' : tab === 'timelog' ? 'Timelog and metrics' : 'Related'}>
+              {!recordQuery.data ? (
+                <section className="card"><div className="empty-flat">{recordQuery.isLoading ? 'Loading…' : 'Could not load this part of the work order.'}</div></section>
+              ) : tab === 'tasks' ? (
+                <ChecklistTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+              ) : tab === 'costs' ? (
+                <CostBreakdownTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+              ) : tab === 'timelog' ? (
+                <TimelogTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+              ) : (
+                <RelatedTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+              )}
+            </div>
+          )}
         </div>
+
+        {RAIL_TABS.includes(tab) && <RecordRail woId={wo.id} record={recordQuery.data} loading={recordQuery.isLoading} />}
 
         {tab === 'messages' && conversation && (
           <aside className="rail">

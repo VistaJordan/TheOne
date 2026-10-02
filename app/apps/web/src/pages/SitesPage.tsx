@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import type { MapPoint } from '../components/map/VendorMap';
 import { SiteFormDialog, errText } from '../components/portfolio/PortfolioParts';
+import { SiteEventsList } from '../components/portfolio/SiteExtras';
 import { useTheme } from '../theme/ThemeProvider';
 
 const VendorMap = lazy(() => import('../components/map/VendorMap'));
@@ -27,7 +28,8 @@ export function SitesPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [sp, setSp] = useSearchParams();
-  const view = sp.get('view') === 'map' ? 'map' : 'list';
+  // 0064 · ?view=events lists what is happening across the sites.
+  const view = sp.get('view') === 'map' ? 'map' : sp.get('view') === 'events' ? 'events' : 'list';
   const page = Math.max(1, Number(sp.get('page') ?? 1) || 1);
 
   const filters = useMemo(() => {
@@ -97,6 +99,9 @@ export function SitesPage() {
             <button type="button" className={`seg-btn${view === 'map' ? ' is-on' : ''}`} aria-pressed={view === 'map'} onClick={() => set({ view: 'map' })}>
               <Icon name="pin" size={12} /> Map
             </button>
+            <button type="button" className={`seg-btn${view === 'events' ? ' is-on' : ''}`} aria-pressed={view === 'events'} onClick={() => setSp({ view: 'events' }, { replace: true })}>
+              <Icon name="alert" size={12} /> Events
+            </button>
           </div>
           {m?.can.sites.create && (
             <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
@@ -138,6 +143,8 @@ export function SitesPage() {
           </div>
         )}
 
+        {view === 'events' && <section className="card"><SiteEventsList /></section>}
+        {view !== 'events' && (
         <section className="card">
           <form className="vend-filters" onSubmit={(e) => { e.preventDefault(); set({ search: searchText.trim() || null }); }}>
             <input
@@ -229,6 +236,7 @@ export function SitesPage() {
             </>
           )}
         </section>
+        )}
       </div>
 
       {adding && <SiteFormDialog site={null} meta={m} onClose={() => setAdding(false)} onSaved={(s) => navigate(`/sites/${s.id}`)} />}

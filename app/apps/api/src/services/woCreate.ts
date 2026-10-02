@@ -35,8 +35,13 @@ import {
   woCreateMissing,
   type WoCreateField,
   type WoCreateForm,
+  applyFormLayout,
   permAllows,
+  pickFormLayout,
   type WoCreateInput,
+  type WoCreateMode,
+  type WoFormLayout,
+  type WoFormLayoutInput,
   type WoCreateTemplate,
   type WoCreateTemplateInput,
   type WoDuplicateHit,
@@ -46,6 +51,7 @@ import {
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict } from '../errors.js';
 import { requirePerm } from './permissions.js';
+import { storageReady } from './attachments.js';
 import { logAdminEvent } from './adminAudit.js';
 import type { ActingPrincipal } from './activity.js';
 import { applyProfitFormula } from './money.js';
@@ -107,7 +113,71 @@ export async function getCreateForm(): Promise<WoCreateForm> {
   const subcategories: Record<string, string[]> = {};
   for (const r of subs.rows) (subcategories[r.trade.trim().toLowerCase()] ??= []).push(r.name);
 
-  return { fields, subcategories };
+  // 0064 · the layouts the browser lays over the form once the client and
+  // the trade are known; createWorkOrder picks the same one again.
+  return { fields, subcategories, layouts: await loadFormLayouts(true), storage_ready: storageReady() };
+}
+
+// ── Form layouts (0064) ──────────────────────────────────────────────────────
+
+async function loadFormLayouts(activeOnly: boolean): Promise<WoFormLayout[]> {
+  const res = await query<{ id: string; name: string; client: string | null; trade: string | null; fields: Record<string, unknown> | null; is_active: boolean }>(
+    `SELECT id::text AS id, name, client, trade, fields, is_active FROM wo_form_layout
+      ${activeOnly ? 'WHERE is_active' : ''} ORDER BY lower(name)`,
+  );
+  return res.rows.map((r) => {
+    const fields: Record<string, WoCreateMode> = {};
+    for (const [k, v] of Object.entries(r.fields ?? {})) if (isWoCreateMode(v)) fields[k] = v;
+    return { id: r.id, name: r.name, client: r.client, trade: r.trade, fields, is_active: r.is_active };
+  });
+}
+
+const LAYOUT_KEY = 'admin/settings';
+
+export async function listFormLayoutsAdmin(actor: ActingPrincipal): Promise<{ layouts: WoFormLayout[]; form: WoCreateForm; clients: string[] }> {
+  requirePerm(actor, LAYOUT_KEY, 'view', 'You cannot open Admin › Settings');
+  const [layouts, form, clients] = await Promise.all([
+    loadFormLayouts(false),
+    getCreateForm(),
+    query<{ v: string }>(`SELECT DISTINCT btrim(client) AS v FROM task WHERE deleted_at IS NULL AND btrim(COALESCE(client, '')) <> '' ORDER BY 1`),
+  ]);
+  return { layouts, form: { fields: form.fields }, clients: clients.rows.map((r) => r.v) };
+}
+
+export async function saveFormLayout(id: string | null, input: WoFormLayoutInput, actor: ActingPrincipal): Promise<{ layouts: WoFormLayout[]; form: WoCreateForm; clients: string[] }> {
+  requirePerm(actor, LAYOUT_KEY, 'edit', 'You cannot edit Admin › Settings');
+  const name = String(input.name ?? '').trim();
+  if (name === '') throw badRequest('The layout needs a name', { field: 'name' });
+  const client = str(input.client);
+  const trade = str(input.trade);
+  if (!client && !trade) throw badRequest('A layout applies to a client, a trade, or both — pick at least one');
+  const fields: Record<string, WoCreateMode> = {};
+  for (const [k, v] of Object.entries(input.fields ?? {})) if (isWoCreateMode(v)) fields[k] = v;
+  if (id) {
+    if (!UUID_RE.test(id)) throw badRequest('That layout does not exist');
+    const res = await query<{ id: string }>(
+      `UPDATE wo_form_layout SET name = $2, client = $3, trade = $4, fields = $5::jsonb, is_active = COALESCE($6, is_active) WHERE id = $1 RETURNING id`,
+      [id, name.slice(0, 120), client, trade, JSON.stringify(fields), input.is_active ?? null],
+    );
+    if (!res.rows[0]) throw badRequest('That layout does not exist');
+    await logAdminEvent({ actorId: actor.id, entity: 'wo_form_layout', entityId: id, action: 'wo_form_layout_updated', after: { name, client, trade, fields } });
+  } else {
+    const ins = await query<{ id: string }>(
+      `INSERT INTO wo_form_layout (name, client, trade, fields, created_by) VALUES ($1, $2, $3, $4::jsonb, $5) RETURNING id::text AS id`,
+      [name.slice(0, 120), client, trade, JSON.stringify(fields), actor.id],
+    );
+    await logAdminEvent({ actorId: actor.id, entity: 'wo_form_layout', entityId: ins.rows[0].id, action: 'wo_form_layout_added', after: { name, client, trade, fields } });
+  }
+  return listFormLayoutsAdmin(actor);
+}
+
+export async function deleteFormLayout(id: string, actor: ActingPrincipal): Promise<{ layouts: WoFormLayout[]; form: WoCreateForm; clients: string[] }> {
+  requirePerm(actor, LAYOUT_KEY, 'edit', 'You cannot edit Admin › Settings');
+  if (!UUID_RE.test(id)) throw badRequest('That layout does not exist');
+  const res = await query<{ name: string }>(`DELETE FROM wo_form_layout WHERE id = $1 RETURNING name`, [id]);
+  if (!res.rows[0]) throw badRequest('That layout does not exist');
+  await logAdminEvent({ actorId: actor.id, entity: 'wo_form_layout', entityId: id, action: 'wo_form_layout_deleted', before: { name: res.rows[0].name } });
+  return listFormLayoutsAdmin(actor);
 }
 
 // ── The duplicate check ──────────────────────────────────────────────────────
@@ -277,7 +347,13 @@ export async function createWorkOrder(
 
   // Only keys the form offers are accepted: a field an admin switched off is
   // not quietly written by a stale browser tab.
-  const form = await getCreateForm();
+  const configured = await getCreateForm();
+  // 0064 · the layout for this client and trade is laid over the form, the
+  // same way the browser did it, so "required" and "off" mean one thing.
+  const form = applyFormLayout(
+    configured,
+    pickFormLayout(configured.layouts ?? [], str(input.fields?.['Client']), str(input.fields?.['Trade'])),
+  );
   const offered = new Map(form.fields.map((f) => [f.key, f]));
   const bag: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input.fields ?? {})) {

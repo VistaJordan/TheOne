@@ -50,6 +50,7 @@ import { QUOTE_DUE_HINT, quoteDueBreached } from '../../lib/quoteDue';
 import { FIELD_SECTIONS } from '../../lib/woFieldSections';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Icon } from '../Icon';
+import { VisitLocation } from './record/RecordParts';
 import { InlineField, useWoCatalogue } from './fieldEdit';
 import { FieldHistory, HistoryToggle, useCanViewHistory } from './FieldHistory';
 import { TechPicker } from './tech/TechPicker';
@@ -487,6 +488,9 @@ interface VisitRowProps {
 }
 
 function VisitRow({ v, now, canEdit, busy, visitTypes, onPatch, onDelete }: VisitRowProps) {
+  // 0064 · where the check-in happened, against the site's boundary — drawn
+  // once the visit has a check-in to place.
+  const locatable = v.status !== 'planned';
   const [editing, setEditing] = useState(false);
   const [history, setHistory] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -625,6 +629,7 @@ function VisitRow({ v, now, canEdit, busy, visitTypes, onPatch, onDelete }: Visi
           onCancel={() => setConfirming(false)}
         />
       )}
+      {locatable && <VisitLocation woId={v.task_id} visitId={v.id} canEdit={canEdit} />}
     </li>
   );
 }

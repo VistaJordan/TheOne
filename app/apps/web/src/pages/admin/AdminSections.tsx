@@ -4,6 +4,7 @@
    not take effect. */
 
 import { SubcategoriesCard } from './SubcategoriesCard';
+import { CodesCard, FormLayoutsCard } from './WoRecordSettings';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -147,6 +148,9 @@ export function AdminSettingsPage() {
       <HolidaysCard />
       {/* 0063 · what each trade can be narrowed to on "Add work order". */}
       <SubcategoriesCard />
+      {/* 0064 · layouts for the create form; fault and action codes. */}
+      <FormLayoutsCard />
+      <CodesCard />
       <ApprovalTiersCard />
     </AdminShell>
   );

@@ -136,6 +136,11 @@ export interface WoCreateForm {
   /** 0063 · the sub-categories each trade offers, keyed by the trade in
       lower case. Absent on an older API. */
   subcategories?: Record<string, string[]>;
+  /** 0064 · the layouts that change the form for a client and / or a trade
+      (`pickFormLayout` / `applyFormLayout` in woRecord.ts). */
+  layouts?: import('./woRecord').WoFormLayout[];
+  /** 0064 · false = no file store is connected, so the form offers no files. */
+  storage_ready?: boolean;
 }
 
 /** 0063 · bag keys the form treats specially. */

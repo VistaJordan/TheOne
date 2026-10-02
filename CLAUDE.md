@@ -1063,6 +1063,45 @@ batch 3). The form has existed since 0041 (`services/woCreate.ts`,
   saved.
 Tests: `tests/wo-create-extras.test.ts`.
 
+**The work-order record** (migration 0064, Facilio parity; `shared/woRecord.ts`,
+`services/woRecord.ts`, `routes/woRecord.ts`, `components/wo/record/`). One
+read, `GET /work-orders/:id/record`, feeds everything new on the page: the
+action bar under the header (`RecordBar` — kept out of `WoHeader.tsx` on
+purpose, another session edits that file), the right rail (`RecordRail`:
+Responsibility, Location, Time with a live timer, Cost; drawn only on
+Overview and the four new tabs, `RAIL_TABS`) and the tabs Checklist (`tasks`),
+Cost breakdown (`costs`), Timelog & metrics (`timelog`) and Related. The new
+state is plain columns on `task`: `vendor_id` (ONE responsible vendor;
+assigning a blacklisted one is refused), `paused_*` with a `wo_pause` history
+(a pause is a **marker only** — rule 2.4.4 stands, no timer stops), `eta_*`,
+`cancelled_*` (cancel needs a reason and moves the work order to a status
+named Cancel… when one exists; reopen undoes it), and the Complete Service
+set (`completion_note`, `fault_code`, `action_code`, `temporary_fix`,
+`service_completed_*` — it records the completion and does **not** move the
+status). Tables: `wo_checklist_item`, `wo_tag` (a tag carries a reason),
+`wo_nte_request` (the manual "Increase NTE": its own table, **not** an
+`approval_task`; deciders hold `approvals/nte` approve, an approval writes the
+NTE through `updateWorkOrderFields`, both sides get a notice), `wo_code`
+(fault and action codes, Admin › Settings; a code's letters never change).
+Every write is gated on `work_orders` edit, logged with `logTaskChanges`, and
+resolves through `resolveTaskId(id, actor)` so the scope 403 applies.
+**Form layouts** (`wo_form_layout`, Admin › Settings): per client and / or
+trade, a layout turns create-form fields off or required; `pickFormLayout`
+(client+trade, then client, then trade) and `applyFormLayout` run in the
+dialog and again in `createWorkOrder`, and can never hide Client or Trade.
+Files chosen on the create form upload after the work order exists
+(`prepareFile` + `uploadAttachment`); the section shows only when
+`storage_ready` is true. **Geofence**: technicians have no app, so a visit's
+location is recorded by hand on the CICO row (`VisitLocation`: this device's
+location or typed coordinates, `POST …/visits/:visitId/location`, gate
+`work_orders/fields/cico` edit) and `geofenceCheck` compares it with the
+site's pin and `boundary_radius_ft`; the result is stored on `wo_visit`.
+**Site events** (`site_event`: closure, restricted access, remodel, …, dated,
+`siteEventPhase`) are added on the site page, listed at `/sites?view=events`
+and shown as a chip on that site's work orders while running. **Space
+viewer** (site page) is the place tree with the assets and open work orders
+of the picked place — no floor plans. Tests: `tests/wo-record.test.ts`.
+
 **Client Updates** (migration 0055, `services/clientUpdates.ts`,
 `pages/ClientUpdatesPage.tsx`, sidebar "Client Updates"). Replaces the
 per-client tracking spreadsheets (e.g. "SUN Holdings Tracking"). A

@@ -1,0 +1,149 @@
+/* 0064 · The work-order record: the bar under the header, the right rail, the
+   checklist / cost breakdown / timelog / related tabs, and the geofence line
+   on a visit. Every colour is a token. */
+
+/* ── The bar under the header ─────────────────────────────────────────────── */
+.rec-bar { display: grid; gap: 8px; padding: 8px 2px 10px; }
+.rec-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.rec-chips:empty { display: none; }
+.rec-chips .chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; }
+.rec-chips a.chip { text-decoration: none; }
+.rec-chips a.chip:hover { color: var(--accent-text); }
+.rec-tag button { all: unset; cursor: pointer; display: inline-flex; margin-left: 2px; opacity: 0.6; }
+.rec-tag button:hover, .rec-tag button:focus-visible { opacity: 1; }
+.rec-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.rec-err { margin: 0 14px 8px; }
+.rec-bar .rec-err { margin: 0; }
+.rec-suggest { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.rec-suggest button.chip { cursor: pointer; border: 0; font: inherit; }
+.rec-suggest button.chip:hover { color: var(--accent-text); }
+.rec-current { margin: 0 0 8px; display: flex; gap: 10px; align-items: baseline; font-size: 13px; color: var(--ink-2); }
+.rec-current b { color: var(--ink); }
+
+/* ── The right rail ───────────────────────────────────────────────────────── */
+.wo-grid.has-record-rail { grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); }
+.rec-rail { display: grid; gap: 14px; align-content: start; }
+.rec-rail > .card + .card { margin-top: 0; }
+.rec-rows { display: grid; gap: 9px; padding: 10px 14px 14px; }
+.rec-row { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 10px; align-items: baseline; font-size: 13px; }
+.rec-row .lbl { margin: 0; }
+.rec-val { color: var(--ink); overflow-wrap: anywhere; display: grid; gap: 1px; }
+.rec-val small { color: var(--ink-3); font-size: 11.5px; }
+.rec-val a { color: var(--accent-text); text-decoration: none; }
+.rec-val a:hover { text-decoration: underline; }
+.rec-val b { font-weight: 600; }
+.rec-neg { color: var(--danger); }
+@media (max-width: 1080px) {
+  .wo-grid.has-record-rail { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Checklist ────────────────────────────────────────────────────────────── */
+.rec-progress { height: 4px; margin: 0 14px 4px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.rec-progress span { display: block; height: 100%; background: var(--ok-solid); }
+.rec-check { list-style: none; margin: 0; padding: 4px 0 6px; }
+.rec-check li { display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-top: 1px solid var(--row-border); font-size: 13.5px; color: var(--ink); }
+.rec-check li:first-child { border-top: 0; }
+.rec-check label { flex: 1; display: flex; gap: 10px; align-items: flex-start; cursor: pointer; min-width: 0; }
+.rec-check input { width: 16px; height: 16px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+.rec-check li.is-done label span { color: var(--ink-3); text-decoration: line-through; }
+.rec-check small { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; }
+.rec-add { display: flex; gap: 8px; align-items: flex-start; padding: 10px 14px 14px; border-top: 1px solid var(--border); }
+.rec-add .fld { flex: 1; width: auto; resize: vertical; min-height: 34px; }
+
+/* ── Sums, cost breakdown ─────────────────────────────────────────────────── */
+.rec-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 12px 14px 14px; }
+.rec-sum > div { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); align-content: start; }
+.rec-sum span { font-size: 12px; color: var(--ink-2); }
+.rec-sum b { font-size: 20px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.rec-sum small { font-size: 11.5px; color: var(--ink-3); line-height: 1.35; }
+.rec-sum .is-neg b { color: var(--danger); }
+.rec-cost-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; padding: 0 14px 14px; }
+.rec-cost-col { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.rec-cost-col > .overline { margin: 0; }
+.rec-cost-block h3 { margin: 0 0 4px; display: flex; justify-content: space-between; gap: 10px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.rec-cost-block h3 span { font-variant-numeric: tabular-nums; }
+.rec-cost-block p { margin: 0; }
+.rec-cost-block ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.rec-cost-block li { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; border-top: 1px solid var(--row-border); font-size: 12.5px; color: var(--ink-2); }
+.rec-cost-block li > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rec-cost-block li small { color: var(--ink-3); }
+.rec-cost-block li b { color: var(--ink); font-weight: 600; }
+.rec-cost-block li.is-off { color: var(--ink-3); }
+.rec-cost-block li.is-off b { text-decoration: line-through; color: var(--ink-3); }
+.rec-cost-block li.rec-note { justify-content: space-between; }
+.rec-cost-block a { color: var(--accent-text); }
+.rec-nte { padding: 0 14px 14px; }
+@media (max-width: 760px) {
+  .rec-cost-grid { grid-template-columns: 1fr; gap: 12px; }
+}
+
+/* ── Timelog ──────────────────────────────────────────────────────────────── */
+.rec-spans { list-style: none; margin: 0; padding: 4px 14px 14px; display: grid; gap: 8px; }
+.rec-spans li { display: grid; grid-template-columns: minmax(120px, 0.9fr) minmax(60px, 1.4fr) 76px; gap: 4px 12px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.rec-spans li > small { grid-column: 1 / -1; font-size: 11.5px; color: var(--ink-3); margin-top: -2px; }
+.rec-span-name { color: var(--ink); overflow-wrap: anywhere; }
+.rec-span-name small { color: var(--accent-text); font-size: 11.5px; }
+.rec-span-bar { height: 8px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.rec-span-bar i { display: block; height: 100%; background: var(--accent); opacity: 0.55; border-radius: 999px; }
+.rec-spans li.is-now .rec-span-bar i { opacity: 1; }
+.rec-spans b { text-align: right; color: var(--ink); font-weight: 600; }
+
+/* ── Related ──────────────────────────────────────────────────────────────── */
+.rec-links { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 14px 12px; }
+.rec-links a.chip { text-decoration: none; }
+.rec-links a.chip:hover { color: var(--accent-text); }
+
+/* ── A visit's location ───────────────────────────────────────────────────── */
+.cv-visit > .rec-geo { grid-column: 2 / -1; }
+.rec-geo { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 12px; color: var(--ink-3); }
+.rec-geo .link-btn { font-size: 12px; }
+.rec-geo-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.rec-geo-form .fld { width: 130px; height: 28px; }
+.rec-geo-err { flex-basis: 100%; color: var(--danger); }
+
+/* ── Sites: events and the space viewer ───────────────────────────────────── */
+.sev-list { list-style: none; margin: 0; padding: 0 14px 12px; display: grid; gap: 8px; }
+.sev { display: grid; gap: 3px; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12.5px; color: var(--ink-2); }
+.sev.is-running { border-color: var(--warn-border); background: var(--warn-bg); }
+.sev.is-ended { opacity: 0.7; }
+.sev-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--ink); }
+.sev-head b { font-weight: 600; }
+.sev-head .push { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
+.sev-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 14px 12px; }
+.sev-form .is-wide { grid-column: 1 / -1; }
+.sev-form .fld { width: 100%; height: 32px; }
+.sev-form textarea.fld { height: auto; }
+.sev-form .lbl { margin: 0 0 3px; display: block; }
+
+.spv { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 0; }
+.spv-tree { list-style: none; margin: 0; padding: 6px 0; border-right: 1px solid var(--border); max-height: 560px; overflow: auto; }
+.spv-tree button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 8px; align-items: center; padding: 7px 12px; cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.spv-tree button:hover, .spv-tree button:focus-visible { background: var(--chip); }
+.spv-tree button.is-on { background: var(--tab-on-bg); color: var(--ink); }
+.spv-tree .spv-n { margin-left: auto; display: inline-flex; gap: 6px; font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.spv-tree .spv-open { color: var(--warn); font-weight: 600; }
+.spv-main { padding: 12px 14px 14px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.spv-main h3 { margin: 0; font-size: 15px; color: var(--ink); }
+.spv-main h4 { margin: 0 0 4px; font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.spv-main ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.spv-main li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spv-main a { color: var(--accent-text); text-decoration: none; }
+.spv-main a:hover { text-decoration: underline; }
+@media (max-width: 760px) {
+  .spv { grid-template-columns: 1fr; }
+  .spv-tree { border-right: 0; border-bottom: 1px solid var(--border); max-height: 240px; }
+}
+
+/* ── Admin › Settings: codes and form layouts ─────────────────────────────── */
+.lay-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 14px; padding: 4px 14px 12px; }
+.lay-grid label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--ink); }
+.lay-grid .fld { width: 124px; height: 28px; flex: none; }
+.lay-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; padding: 0 14px 10px; }
+.lay-head label { display: grid; gap: 3px; font-size: 12px; color: var(--ink-2); flex: 1 1 160px; }
+.lay-head .fld { width: 100%; height: 32px; }
+
+/* ── "Add work order": files, and the layout note ─────────────────────────── */
+.wo-new-files { display: grid; gap: 6px; }
+.wo-new-files ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; color: var(--ink-2); }
+.wo-new-files li { display: flex; gap: 8px; align-items: center; }
+.wo-new-layout { margin: 0 0 12px; font-size: 12.5px; color: var(--ink-2); }

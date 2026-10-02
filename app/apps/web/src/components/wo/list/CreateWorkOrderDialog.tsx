@@ -39,7 +39,10 @@ import {
   WO_SITE_AUTOFILL,
   WO_SUBCATEGORY_KEY,
   WO_TRADE_KEY,
+  applyFormLayout,
   describeMissing,
+  formatBytes,
+  pickFormLayout,
   subcategoriesFor,
   woCreateMissing,
   type SiteDetail,
@@ -57,9 +60,11 @@ import {
   getWoCreateForm,
   getWoCreateTemplates,
   saveWoCreateTemplate,
+  uploadAttachment,
   type WoFieldDescriptor,
 } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthProvider';
+import { prepareFile } from '../../../lib/upload';
 import { Icon } from '../../Icon';
 import { AssetStatusChip, ConditionChip, SitePicker, WarrantyChip } from '../../portfolio/PortfolioParts';
 import { useWoCatalogue } from '../fieldEdit';
@@ -115,7 +120,18 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     numberRef.current?.focus();
   }, []);
 
-  const form = useMemo(() => formQuery.data ?? { fields: [] as WoCreateField[] }, [formQuery.data]);
+  // 0064 · the layout for this client and trade is laid over the configured
+  // form (a field it turns off is gone, one it requires is required); the API
+  // picks the same layout again when it checks the work order.
+  const configured = useMemo(() => formQuery.data ?? { fields: [] as WoCreateField[] }, [formQuery.data]);
+  const layout = useMemo(
+    () => pickFormLayout(configured.layouts ?? [], values['Client'], values[WO_TRADE_KEY]),
+    [configured.layouts, values],
+  );
+  const form = useMemo(() => applyFormLayout(configured, layout), [configured, layout]);
+  // 0064 · photos and files chosen here go up as soon as the work order exists.
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState<string | null>(null);
   const onForm = useMemo(() => new Set(form.fields.map((f) => f.key)), [form.fields]);
 
   const set = (key: string, v: string) => {
@@ -200,10 +216,30 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
 
   const create = useMutation({
     mutationFn: () => createWorkOrder({ wo_number: woNumber.trim(), fields: bag, site_id: site?.id ?? null, asset_id: assetId || null }),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       void qc.invalidateQueries({ queryKey: ['work-orders'] });
       void qc.invalidateQueries({ queryKey: ['sites-meta'] });
-      navigate(`/work-orders/${encodeURIComponent(res.wo_number)}`);
+      // The work order exists now, whatever happens to its files: each one
+      // goes up in turn, and one that fails is named on the way out rather
+      // than holding the others back.
+      const failed: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        setUploading(`Uploading ${i + 1} of ${files.length}…`);
+        try {
+          const prepared = await prepareFile(files[i]);
+          await uploadAttachment(res.task_id, { file_name: prepared.file_name, content_type: prepared.content_type, data: prepared.data });
+        } catch {
+          failed.push(files[i].name);
+        }
+      }
+      setUploading(null);
+      const to = `/work-orders/${encodeURIComponent(res.wo_number)}`;
+      if (failed.length > 0) {
+        window.alert(`${res.wo_number} was created, but ${failed.length === 1 ? 'one file' : `${failed.length} files`} could not be uploaded: ${failed.join(', ')}. Add ${failed.length === 1 ? 'it' : 'them'} from the Overview tab.`);
+        navigate(`${to}?tab=overview`);
+      } else {
+        navigate(files.length > 0 ? `${to}?tab=overview` : to);
+      }
     },
     onError: (err: unknown) => {
       if (err instanceof ApiRequestError) {
@@ -250,7 +286,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   });
   const templateList = templates.data?.templates ?? [];
 
-  const busy = create.isPending;
+  const busy = create.isPending || uploading !== null;
   const blocked = taken || missing.length > 0 || busy;
 
   // ── Drawing one field ──────────────────────────────────────────────────────
@@ -466,6 +502,11 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
           )}
 
           {!taken && near.length > 0 && <NearNotice hits={near} />}
+          {layout && (
+            <p className="wo-new-layout">
+              <Icon name="layers" size={12} /> Using the <b>{layout.name}</b> layout for {[layout.client, layout.trade].filter(Boolean).join(' · ')}: some fields are hidden or required.
+            </p>
+          )}
 
           {/* Everything else, in the order the admin arranged it. */}
           {sections
@@ -496,6 +537,43 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
                 </div>
               </section>
             ))}
+
+          {/* 0064 · photos and files, uploaded right after the work order is made. */}
+          {formQuery.isSuccess && configured.storage_ready === true && can('work_orders/tabs/overview', 'view') && (
+            <section className="import-step">
+              <h3>
+                <span className="step-n">{sections.filter((s) => s.fields.length > 0).length + stepOffset}</span> Photos and files
+              </h3>
+              <p className="hint">Optional. They are uploaded as soon as the work order is created, and wait for review like any other upload.</p>
+              <div className="wo-new-files">
+                <label className="btn-sm is-ghost" style={{ width: 'fit-content', cursor: 'pointer' }}>
+                  <Icon name="upload" size={12} /> Choose files
+                  <input
+                    type="file"
+                    multiple
+                    hidden
+                    disabled={busy}
+                    onChange={(e) => {
+                      const picked = Array.from(e.target.files ?? []);
+                      e.target.value = '';
+                      setFiles((cur) => [...cur, ...picked].slice(0, 10));
+                    }}
+                  />
+                </label>
+                {files.length > 0 && (
+                  <ul>
+                    {files.map((f, i) => (
+                      <li key={`${f.name}-${i}`}>
+                        <Icon name={f.type.startsWith('image/') ? 'image' : 'file'} size={12} />
+                        {f.name} <span className="hint">{formatBytes(f.size)}</span>
+                        <button type="button" className="link-btn" disabled={busy} onClick={() => setFiles((cur) => cur.filter((_, j) => j !== i))}>Remove</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          )}
 
           {formQuery.isLoading && <p className="hint">Loading the form…</p>}
           {formQuery.isSuccess && form.fields.length === 0 && (
@@ -545,7 +623,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
             disabled={blocked}
             title={taken ? 'Change the WO # first' : undefined}
           >
-            {busy ? 'Creating…' : 'Create work order'}
+            {uploading ?? (busy ? 'Creating…' : files.length > 0 ? `Create and upload ${files.length} ${files.length === 1 ? 'file' : 'files'}` : 'Create work order')}
           </button>
         </div>
       </div>
