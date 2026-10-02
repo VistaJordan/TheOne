@@ -57,7 +57,7 @@ export interface ActingPrincipal {
   role: string | null;
   roleLabel: string | null;
   isSuperAdmin: boolean;
-  /** 0061 · restricted to the sites listed for them in `principal_site`.
+  /** 0062 · restricted to the sites listed for them in `principal_site`.
       Optional: a principal built outside a request (the engine, a test) is
       not restricted. */
   siteRestricted?: boolean;

@@ -36,7 +36,7 @@ export function AssetDetailPage() {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [requesting, setRequesting] = useState(false);
-  // 0061 — the requests raised about this asset (or that created it).
+  // 0062 — the requests raised about this asset (or that created it).
   const requests = useQuery({ queryKey: ['asset-requests', 'all', id], queryFn: () => listAssetRequests({ status: 'all', asset: id }) });
   const [problem, setProblem] = useState<string | null>(null);
   const [reading, setReading] = useState<{ condition: AssetCondition; note: string; wo: string } | null>(null);

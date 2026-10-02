@@ -188,7 +188,7 @@ export function App() {
               <Route path="/sites/:id" element={<RequireAuth><RequireCan perm="sites" nav="Sites"><SiteDetailPage /></RequireCan></RequireAuth>} />
               <Route path="/assets" element={<RequireAuth><RequireCan perm="assets" nav="Assets"><AssetsPage /></RequireCan></RequireAuth>} />
               <Route path="/assets/:id" element={<RequireAuth><RequireCan perm="assets" nav="Assets"><AssetDetailPage /></RequireCan></RequireAuth>} />
-              {/* 0061 — clients as records. */}
+              {/* 0062 — clients as records. */}
               <Route path="/clients" element={<RequireAuth><RequireCan perm="clients" nav="Clients"><ClientsPage /></RequireCan></RequireAuth>} />
               <Route path="/clients/:id" element={<RequireAuth><RequireCan perm="clients" nav="Clients"><ClientDetailPage /></RequireCan></RequireAuth>} />
               <Route

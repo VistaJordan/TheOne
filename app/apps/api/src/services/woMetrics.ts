@@ -222,7 +222,7 @@ const SOURCE_MODELS: Record<Exclude<WidgetSource, 'work_orders'>, SourceModel> =
     periodField: 'x.created_at',
     standalone: { live: 'x.deleted_at IS NULL', scope: 'vendor' },
   },
-  // 0061 · the portfolio. Counts of work orders here are of ALL work orders
+  // 0062 · the portfolio. Counts of work orders here are of ALL work orders
   // at the site / on the asset — a board is a manager's picture, and the
   // viewer's site list (not their work-order scope) is what narrows it.
   sites: {

@@ -127,7 +127,7 @@
 .pf-place-sugg li > span { display: grid; gap: 1px; min-width: 0; }
 .pf-place-sugg b { color: var(--ink); font-weight: 600; }
 
-/* ── 0061 · Admin › Sites & assets: site access ───────────────────────────── */
+/* ── 0062 · Admin › Sites & assets: site access ───────────────────────────── */
 .pfa-list { list-style: none; margin: 0; padding: 0 14px; display: grid; gap: 10px; }
 .pfa-person { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .pfa-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--ink); }

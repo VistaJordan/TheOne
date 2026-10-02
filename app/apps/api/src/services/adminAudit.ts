@@ -55,7 +55,7 @@ export type AdminEntity =
   // A site (with its buildings, floors and spaces) or an asset (0060).
   | 'site'
   | 'asset'
-  // 0061: a client record, an asset management request, a value on the
+  // 0062: a client record, an asset management request, a value on the
   // site-type / asset-category lists.
   | 'client'
   | 'asset_request'

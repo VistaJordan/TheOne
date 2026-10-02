@@ -313,7 +313,7 @@ export const ACTION_LABELS: Record<string, string> = {
   asset_updated: 'Asset edited',
   asset_deleted: 'Asset removed',
   asset_condition_recorded: 'Asset condition recorded',
-  // 0061 · clients, asset requests, the portfolio lists, site access.
+  // 0062 · clients, asset requests, the portfolio lists, site access.
   client_created: 'Client added',
   client_updated: 'Client edited',
   client_deleted: 'Client removed',

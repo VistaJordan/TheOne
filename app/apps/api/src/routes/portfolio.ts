@@ -19,13 +19,13 @@
 // On a work order
 //   GET    /work-orders/:id/place          its site and asset, or suggestions
 //   PUT    /work-orders/:id/place          link / unlink { site_id, asset_id }
-// Clients (0061)
+// Clients (0062)
 //   GET    /clients · POST · GET /clients/:id · PATCH · DELETE · GET …/history
-// Asset management requests (0061)
+// Asset management requests (0062)
 //   GET    /asset-requests · POST
 //   POST   /asset-requests/:id/decide      { decision: approve | reject, note }
 //   POST   /asset-requests/:id/withdraw
-// Admin › Sites & assets (0061)
+// Admin › Sites & assets (0062)
 //   GET    /admin/portfolio
 //   POST   /admin/portfolio/lists/:list    add a value · PATCH rename / switch off
 //   PUT    /admin/portfolio/site-access/:id   the sites one person is restricted to
@@ -263,7 +263,7 @@ export default async function portfolioRoutes(app: FastifyInstance): Promise<voi
     const body = parse(z.object({ site_id: uuid.nullable().optional(), asset_id: uuid.nullable().optional() }).strict(), req.body);
     return setWoPlace(taskId, body, actor);
   });
-  // ── Clients (0061) ─────────────────────────────────────────────────────────
+  // ── Clients (0062) ─────────────────────────────────────────────────────────
   const clientBody = z
     .object({
       name: z.string().max(200).optional(),
@@ -311,7 +311,7 @@ export default async function portfolioRoutes(app: FastifyInstance): Promise<voi
     return { history: await clientHistory(id, actingPrincipalFromRequest(req)) };
   });
 
-  // ── Asset management requests (0061) ───────────────────────────────────────
+  // ── Asset management requests (0062) ───────────────────────────────────────
   app.get('/asset-requests', async (req) => {
     const q = parse(z.object({ status: z.enum(['open', 'approved', 'rejected', 'withdrawn', 'all']).optional(), asset: z.string().max(40).optional() }), req.query);
     return listAssetRequests(q, actingPrincipalFromRequest(req));
@@ -346,7 +346,7 @@ export default async function portfolioRoutes(app: FastifyInstance): Promise<voi
     return { request: await withdrawAssetRequest(id, actingPrincipalFromRequest(req)) };
   });
 
-  // ── Admin › Sites & assets (0061) ──────────────────────────────────────────
+  // ── Admin › Sites & assets (0062) ──────────────────────────────────────────
   const listName = z.enum(['site-types', 'asset-categories']);
   app.get('/admin/portfolio', async (req) => adminPortfolio(actingPrincipalFromRequest(req)));
   app.post('/admin/portfolio/lists/:list', async (req) => {

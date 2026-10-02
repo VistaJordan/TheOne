@@ -2877,7 +2877,7 @@ export function setWoPlace(woRef: string, input: { site_id?: string | null; asse
   return request<WoPlaceResponse>(`/work-orders/${encodeURIComponent(woRef)}/place`, { method: 'PUT', body: JSON.stringify(input) });
 }
 
-// ── 0061 — clients, asset management requests, Admin › Sites & assets ────────
+// ── 0062 — clients, asset management requests, Admin › Sites & assets ────────
 
 import type {
   AdminPortfolioResponse,

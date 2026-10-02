@@ -174,7 +174,7 @@ export const SOURCE_FIELDS: Record<Exclude<WidgetSource, 'work_orders'>, SourceF
     { key: 'created_at', label: 'Added on', type: 'date' },
     { key: 'updated_at', label: 'Last changed on', type: 'date' },
   ],
-  // 0061 · the portfolio (0060). Neither hangs on one work order; a card
+  // 0062 · the portfolio (0060). Neither hangs on one work order; a card
   // over them follows the viewer's site list, when they have one.
   sites: [
     { key: 'client', label: 'Client', type: 'text' },
@@ -865,7 +865,7 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
     ],
   },
   {
-    // 0061 · the portfolio: sites and the assets standing in them (0060).
+    // 0062 · the portfolio: sites and the assets standing in them (0060).
     key: 'portfolio',
     name: 'Sites & assets',
     description: 'The portfolio: how many sites and where, and the equipment in them — its condition and its warranties.',

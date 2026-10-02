@@ -84,7 +84,7 @@ function woScopeClause(a: ActingPrincipal, p: Params): string {
   return s ? `AND ${s}` : '';
 }
 
-// ── Site access (0061) ───────────────────────────────────────────────────────
+// ── Site access (0062) ───────────────────────────────────────────────────────
 // A person with rows in `principal_site` sees only those sites and what is in
 // them. `col` is the site id column of the query at hand. Null = unrestricted,
 // and the query stays exactly what it was.

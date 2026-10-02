@@ -1,4 +1,4 @@
-/* 0061 · Asset management requests: somebody asks for the asset register to
+/* 0062 · Asset management requests: somebody asks for the asset register to
  * change — add one, replace one, retire one, move one — and a manager says
  * yes or no. Approving makes the change.
  *

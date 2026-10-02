@@ -74,7 +74,7 @@ const NAV: NavItem[] = [
   // floors and spaces) and the assets standing in them.
   { label: 'Sites', icon: 'store', to: '/sites' },
   { label: 'Assets', icon: 'package', to: '/assets' },
-  // 0061 — the client records: contacts, billing, who looks after the account.
+  // 0062 — the client records: contacts, billing, who looks after the account.
   { label: 'Clients', icon: 'user-cog', to: '/clients' },
   { label: 'Quotes', icon: 'file', to: '/quotes' },
   // Payables: the queue where technician payment requests are approved and

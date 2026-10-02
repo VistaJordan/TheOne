@@ -30,7 +30,7 @@ export function woScopeOf(actor: ActingPrincipal): WoScope {
  */
 export function woScopeSql(actor: ActingPrincipal, p: Params, alias = 't'): string | null {
   const scope = woScopeOf(actor);
-  // 0061 · a person restricted to a list of sites sees only the work orders
+  // 0062 · a person restricted to a list of sites sees only the work orders
   // AT those sites — on top of (AND) whatever the role scope says. A work
   // order with no site is at none of them.
   const sites =

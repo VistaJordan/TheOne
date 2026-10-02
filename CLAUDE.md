@@ -993,13 +993,13 @@ Site card of a work order (`components/portfolio/WoPlaceBlock.tsx`).
 - Permissions `sites` and `assets` (view / create / edit / delete): 0060
   gives everyone view; OM tiers, Ops Coordinator and OP Admin create / edit;
   admin, TL, ATL, AM also delete. Audit entities `site`, `asset`.
-Built next, in 0061 (below): clients, site access, dashboard sources, asset
+Built next, in 0062 (below): clients, site access, dashboard sources, asset
 requests and the admin screen for the two lists (the tables `site_type`,
 `asset_category` feed the suggestions).
 Tests: `tests/portfolio.test.ts`.
 
 **Clients, site access, asset requests, Admin › Sites & assets** (migration
-0061, the rest of Facilio batch 2; `services/portfolioExtras.ts`, routes in
+0062, the rest of Facilio batch 2; `services/portfolioExtras.ts`, routes in
 `routes/portfolio.ts`, shared types at the foot of `shared/portfolio.ts`).
 - **Clients are records, not owners.** `client` describes a name (contact,
   billing, account manager, portal). Which client a work order belongs to is

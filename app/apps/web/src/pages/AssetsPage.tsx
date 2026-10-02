@@ -22,7 +22,7 @@ export function AssetsPage() {
   const navigate = useNavigate();
   const [sp, setSp] = useSearchParams();
   const page = Math.max(1, Number(sp.get('page') ?? 1) || 1);
-  // 0061 — ?view=requests is the asset management request queue.
+  // 0062 — ?view=requests is the asset management request queue.
   const view = sp.get('view') === 'requests' ? 'requests' : 'list';
   const waiting = useQuery({ queryKey: ['asset-requests', 'open', ''], queryFn: () => listAssetRequests({ status: 'open' }) });
   const filters = useMemo(() => {

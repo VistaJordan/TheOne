@@ -327,7 +327,7 @@ export const ADMIN_PERM_SECTIONS: { slug: string; label: string; actions: PermAc
   { slug: 'trash', label: 'Trash', actions: ['view', 'edit'] },
   // 0057 · map settings, preferred vendors, vendor statuses, the map alerts.
   { slug: 'vendors', label: 'Vendors & map', actions: ['view', 'edit'] },
-  // 0061 · the site-type and asset-category lists; who is restricted to which sites.
+  // 0062 · the site-type and asset-category lists; who is restricted to which sites.
   { slug: 'portfolio', label: 'Sites & assets', actions: ['view', 'edit'] },
 ];
 
