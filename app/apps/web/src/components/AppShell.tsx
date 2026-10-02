@@ -36,6 +36,8 @@ export type NavKey =
   | 'Approvals'
   | 'Contracts'
   | 'Planned Maintenance'
+  | 'Maintenance'
+  | 'Purchasing'
   | 'Client Updates'
   | 'Admin';
 
@@ -92,6 +94,9 @@ const NAV: NavItem[] = [
   // 0051 — the recurring jobs, raised as work orders by the calendar. Hidden
   // without the `planned_maintenance` grant.
   { label: 'Planned Maintenance', icon: 'refresh', to: '/planned-maintenance' },
+  // 0065 — assignment, job plans, the services catalogue, technician time
+  // and work permits, one tab each. Hidden without the `maintenance` grant.
+  { label: 'Maintenance', icon: 'wrench', to: '/maintenance' },
   // The manager's inbox (0026): approval tasks the rules engine raises —
   // the NTE override of rule 1.5.2 first.
   { label: 'Approvals', icon: 'inbox', to: '/approvals', badge: 'approvals' },
@@ -101,6 +106,9 @@ const NAV: NavItem[] = [
   // 0046 — the rate cards quotes and invoices price against (Facilio's
   // Contracts › Contract + Labor Rates). Hidden without the `contracts` grant.
   { label: 'Contracts', icon: 'briefcase', to: '/contracts' },
+  // 0067 — purchase requests, requests for quotation, purchase orders and
+  // budgets, one tab each. Hidden without the `purchasing` grant.
+  { label: 'Purchasing', icon: 'tag', to: '/purchasing' },
   // 0055 — one live tracker per client, shared by link or email. Hidden
   // without the `client_updates` grant.
   { label: 'Client Updates', icon: 'send', to: '/client-updates' },
@@ -129,6 +137,8 @@ const NAV_PERM: Record<string, string | string[]> = {
   Invoicing: 'invoicing',
   Contracts: 'contracts',
   'Planned Maintenance': 'planned_maintenance',
+  Maintenance: 'maintenance',
+  Purchasing: 'purchasing',
   'Client Updates': 'client_updates',
 };
 

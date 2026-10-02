@@ -57,16 +57,20 @@ import { useAuth } from '../auth/AuthProvider';
 import { tradeSlot } from '../lib/mapPoints';
 import { useTheme } from '../theme/ThemeProvider';
 
+import { VendorPerformanceTab } from '../components/vendors/VendorExtras';
+
 const VendorMap = lazy(() => import('../components/map/VendorMap'));
 
 const FILTER_KEYS = ['search', 'kind', 'status', 'trade', 'state', 'owner', 'compliance', 'flag', 'filter', 'ids', 'sort', 'dir'] as const;
-type View = 'list' | 'board' | 'tasks' | 'alerts' | 'quality' | 'map';
+type View = 'list' | 'board' | 'tasks' | 'alerts' | 'quality' | 'performance' | 'map';
 const VIEWS: { id: View; label: string; icon: IconName }[] = [
   { id: 'list', label: 'List', icon: 'list' },
   { id: 'board', label: 'Board', icon: 'layers' },
   { id: 'tasks', label: 'Tasks', icon: 'check-circle' },
   { id: 'alerts', label: 'Alerts', icon: 'bell' },
   { id: 'quality', label: 'Data quality', icon: 'alert' },
+  // 0066 · jobs, SLA met and missed, recalls, per vendor.
+  { id: 'performance', label: 'Performance', icon: 'zap' },
   { id: 'map', label: 'Coverage map', icon: 'pin' },
 ];
 const COLUMNS_KEY = ['pref', VENDOR_COLUMNS_PREF];
@@ -265,6 +269,7 @@ export function VendorsPage() {
         {view === 'tasks' && <section className="card"><VendorTasksTab brands={m?.brand_sources ?? []} /></section>}
         {view === 'alerts' && <section className="card"><VendorAlertsTab brands={m?.brand_sources ?? []} statuses={statuses} /></section>}
         {view === 'quality' && <section className="card"><VendorDataQualityTab canDelete={Boolean(m?.can.delete)} /></section>}
+        {view === 'performance' && <section className="card"><VendorPerformanceTab /></section>}
 
         {(rowsView || view === 'map') && (
           <section className="card">

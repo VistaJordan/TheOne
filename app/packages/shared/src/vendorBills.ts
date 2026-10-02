@@ -79,6 +79,13 @@ export interface VendorBill {
   /** Rule 6.2.3: the band this bill's total falls in, and whether the
       viewer's role may approve inside it. */
   tier: { label: string; allowed: boolean } | null;
+  /** 0066 · what the invoicing rules say about it (warnings only — nothing
+      here blocks), its credit notes, and the total net of the approved ones.
+      Absent on an older API. */
+  warnings?: import('./vendorExtras').BillWarning[];
+  credit_notes?: import('./vendorExtras').VendorCreditNote[];
+  credited?: number;
+  net_total?: number;
 }
 
 export interface VendorBillsResponse {

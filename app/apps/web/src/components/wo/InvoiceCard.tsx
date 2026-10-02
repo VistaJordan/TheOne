@@ -245,6 +245,10 @@ function InvoiceBody({
           <Link className="btn-sm is-ghost" to="/receivables/invoicing">
             Open in Receivables
           </Link>
+          {/* 0067 · the invoice as a document, dressed by the invoice template. */}
+          <Link className="btn-sm is-ghost" to={`/invoices/${invoice.id}/print`} target="_blank">
+            Print / PDF
+          </Link>
           {invoice.status === 'draft' && canSend && (
             <button type="button" className="btn-sm is-primary" disabled={busy} onClick={onSend}>
               <Icon name="send" size={14} />

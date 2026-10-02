@@ -53,6 +53,7 @@ const scheduleSchema = z
     ends_on: day.nullable().optional(),
     lead_days: z.number().int().min(0).max(365).optional(),
     active: z.boolean().optional(),
+    job_plan_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 

@@ -1102,6 +1102,89 @@ and shown as a chip on that site's work orders while running. **Space
 viewer** (site page) is the place tree with the assets and open work orders
 of the picked place — no floor plans. Tests: `tests/wo-record.test.ts`.
 
+**Maintenance modules** (migration 0065, Facilio parity; `shared/maintenance.ts`,
+`services/maintenance.ts`, `routes/maintenance.ts`, `/maintenance` in the
+sidebar, one tab each). **Services** (`service_item`: unit, price, cost) and
+**job plans** (`job_plan` + steps + services) are configuration with no FK to
+principal / task / vendor. Applying a plan (`applyPlanToTask`, once per work
+order, `wo_job_plan`) adds its steps to the 0064 checklist and its services to
+`wo_service`; a planned-maintenance schedule may name one
+(`pm_schedule.job_plan_id`, set by `setJobPlan` outside the positional VALUES
+list) and it is applied to every work order the schedule raises. **Technician
+time** (`wo_time_entry`; no end = a running timer, one per technician) shows
+on the Timelog tab and across work orders in the Time tracker. **Work
+permits** (`work_permit`, PTW-n): draft → requested → approved → closed, or
+rejected; "active" / "expired" are read from the dates (`permitState`), never
+stored; once requested only the precaution ticks move. The **Assignment
+Manager** has no table: it reads the Assignee field the scope rule keys on and
+assigns through `updateWorkOrderFields`, so the audit trail, gates and
+automations all see it. Services and time entries do NOT feed `34. Cost`.
+Permission paths `maintenance/job_plans|services|time|permits|assignment`
+(unset inherits `maintenance`); dispatchers have no Assignment Manager and do
+not approve permits. `components/ui/Sheet.tsx` (`Sheet`, `F`, `PageTabs`) is
+the dialog / tab kit every module from 0065 on uses; their styles are in
+`styles/maintenance.css`. Tests: `tests/maintenance.test.ts`.
+
+**Vendors, the rest** (migration 0066; `shared/vendorExtras.ts`,
+`services/vendorExtras.ts`, `services/vendorPortal.ts`,
+`routes/vendorExtras.ts`). Three things are soft on purpose. (1) **Invoicing
+rules** only WARN: `billExtrasFor` decorates a vendor bill as it is read
+(`warnings`, `credit_notes`, `credited`, `net_total`), inside a try/catch in
+`vendorBills.hydrate` so a failure never takes the bills down; approving and
+paying are untouched. The rules are the `bill_rules` row of `vendor_setting`.
+(2) **Credit notes** (`vendor_credit_note`, CN-n) change no stored total; at or
+under `credit_approval_over` they are approved as written, above it they wait
+for `payments` approve. (3) The **dispatch cascade** is OFF by default
+(`dispatch_cascade` in `vendor_setting`: enabled, auto_start, hours). On, it
+offers a work order to the PREFERRED vendors of its client / trade / state in
+turn (`wo_dispatch_offer`, one live offer per work order); a decline or a
+lapsed clock moves it on (`advance` on every read, and the hourly cron);
+accepting sets `task.vendor_id`. A client or trade with no preferred vendors
+is never touched. `maybeAutoStartDispatch` is called from `createWorkOrder`
+and is a no-op unless both switches are on. Also: skills, inductions
+(`inductionState`), consumables (catalogue + `wo_consumable`), and
+`/vendors?view=performance` (jobs, SLA met / missed, recalls = the Recall tag,
+offers taken, billed, bill checks). **Vendor portal**: a link per vendor with
+no account behind it — read the SECURITY block at the top of
+`services/vendorPortal.ts` before touching it. The token is 32 url-safe
+characters shown once and stored only as a SHA-256; `/api/public/vendor-portal/…`
+is on the auth guard's pattern allowlist; every read and write is pinned to the
+link's vendor; a job is the fixed `PortalJob` shape (no money, no internal
+notes); an onboarding form waits in `vendor_onboarding` until one of us accepts
+it and only the keys of `OnboardingPayload` are read. No email is sent: a
+person copies the link. `scripts/export-vr-crm.mjs` exports VR - CRM vendors
+and Tech Locator technicians to CSV for the existing import wizard, in READ
+ONLY sessions (it cannot write to either database). Paths `vendors/portal`,
+`vendors/dispatch`. Tests: `tests/vendor-extras.test.ts`.
+
+**Purchasing, tax rates, templates, budgets** (migration 0067;
+`shared/purchasing.ts`, `services/purchasing.ts`, `routes/purchasing.ts`,
+`/purchasing`). Purchase request (PR-n: draft → submitted → approved →
+ordered) → request for quotation (RFQ-n; "sent" is a status somebody sets,
+nothing is emailed; vendor quotes are recorded by staff and compared with
+`compareQuotes`; Award drafts a purchase order from the winning quote) →
+purchase order (PO-n: draft → issued → partly / fully received → closed).
+A document tied to a work order follows that work order's scope (`scopeOr`).
+**A purchase order never writes `34. Cost`.** Budgets and AFEs count a work
+order's Cost plus the purchase orders NOT tied to a work order, so nothing is
+counted twice; going over one is a warning on the order, never a block.
+`tax_rate` is a list to pick from: nothing on file is recomputed (a purchase
+order snapshots the name and percent; the quote builder's `TaxRatePicker`
+writes an amount into the hand-typed Sales Tax field). `doc_template` (one
+default per kind) adds a letterhead, terms and a footer to the PRINTED quote,
+invoice (`/invoices/:id/print`, new) and purchase order; with none, the quote
+prints exactly as before. Tax rates and templates are edited in Admin ›
+Settings (`admin/settings`). Paths `purchasing/requests|rfqs|orders|budgets`.
+Tests: `tests/purchasing.test.ts`.
+
+**Dashboard tabs, groups and five more boards** (no migration). A card's tab
+and group are two names inside its `config` (`tab`, `section`);
+`dashboardTabs` / `widgetsByGroup` in `shared/dashboards.ts` lay them out. A
+dashboard whose cards name no tab has no tab strip, so every board that
+existed is unchanged. Shipped through `ensureSystemDashboards` as usual:
+Maintenance Supervisor, Vendor Performance, Technician, Store Manager,
+Unified Ops. Tests: `tests/dashboard-tabs.test.ts`.
+
 **Client Updates** (migration 0055, `services/clientUpdates.ts`,
 `pages/ClientUpdatesPage.tsx`, sidebar "Client Updates"). Replaces the
 per-client tracking spreadsheets (e.g. "SUN Holdings Tracking"). A

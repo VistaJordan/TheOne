@@ -77,6 +77,8 @@ interface Row {
   ends_on: string | null;
   lead_days: number;
   active: boolean;
+  job_plan_id: string | null;
+  job_plan_name: string | null;
   created_by_id: string | null;
   created_by_name: string | null;
   created_at: string;
@@ -97,6 +99,7 @@ const SELECT = `
          to_char(s.starts_on, 'YYYY-MM-DD') AS starts_on,
          to_char(s.ends_on, 'YYYY-MM-DD') AS ends_on,
          s.lead_days, s.active,
+         s.job_plan_id::text AS job_plan_id, (SELECT jp.name FROM job_plan jp WHERE jp.id = s.job_plan_id) AS job_plan_name,
          s.created_by::text AS created_by_id, p.display_name AS created_by_name,
          ${ISO('s.created_at')} AS created_at,
          ${ISO('s.updated_at')} AS updated_at,
@@ -136,6 +139,7 @@ function mapRow(r: Row): PmSchedule {
     ends_on: r.ends_on,
     lead_days: r.lead_days,
     active: r.active,
+    job_plan: r.job_plan_id && r.job_plan_name ? { id: r.job_plan_id, name: r.job_plan_name } : null,
     created_by: r.created_by_id ? { id: r.created_by_id, display_name: r.created_by_name ?? '—' } : null,
     created_at: r.created_at,
     updated_at: r.updated_at,
@@ -259,6 +263,13 @@ const VALUES = (s: PmScheduleInput, actorId: string | null) => [
   actorId,
 ];
 
+/** 0065 · the job plan a schedule's work orders start with. Kept out of the
+ *  positional VALUES list above so that list stays exactly what it was. */
+async function setJobPlan(id: string, input: PmScheduleInput): Promise<void> {
+  if (input.job_plan_id === undefined) return;
+  await query(`UPDATE pm_schedule SET job_plan_id = (SELECT jp.id FROM job_plan jp WHERE jp.id = $2::uuid) WHERE id = $1`, [id, input.job_plan_id]);
+}
+
 export async function createSchedule(input: PmScheduleInput, actor: ActingPrincipal): Promise<PmSchedule> {
   requirePmEdit(actor, 'create');
   validate(input);
@@ -271,6 +282,7 @@ export async function createSchedule(input: PmScheduleInput, actor: ActingPrinci
      RETURNING id::text AS id`,
     VALUES(input, actor.id),
   );
+  await setJobPlan(res.rows[0].id, input);
   const created = mapRow(await rowById(res.rows[0].id));
   await logAdminEvent({
     actorId: actor.id,
@@ -299,6 +311,7 @@ export async function updateSchedule(id: string, input: PmScheduleInput, actor: 
       WHERE id = $1`,
     [id, ...VALUES(input, null).slice(0, 18)],
   );
+  await setJobPlan(id, input);
   const after = mapRow(await rowById(id));
   await logAdminEvent({
     actorId: actor.id,
@@ -434,6 +447,11 @@ async function raiseOne(s: PmSchedule, dueOn: string, actorId: string): Promise<
   // first, then the assignment as an ordinary field edit so it is audited
   // and the 0032 scope sees it.
   await dispatchAutomations({ taskId, kind: 'created' });
+  // 0065 · the schedule's job plan: its steps become the checklist.
+  if (s.job_plan) {
+    const { applyPlanToTask } = await import('./maintenance.js');
+    await applyPlanToTask(taskId, s.job_plan.id, actorId);
+  }
   if (s.assignee) {
     const { updateWorkOrderFields } = await import('./woFieldValues.js');
     await updateWorkOrderFields(taskId, { 'fields.Assignee': s.assignee }, actorId);

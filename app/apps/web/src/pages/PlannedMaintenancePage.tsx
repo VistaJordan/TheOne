@@ -31,6 +31,7 @@ import {
   skipPmNext,
   updatePmSchedule,
 } from '../api/client';
+import { getJobPlans } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
@@ -299,6 +300,10 @@ function ScheduleDialog({
   const [description, setDescription] = useState(schedule?.description ?? '');
   const [nte, setNte] = useState(schedule?.nte === null || schedule?.nte === undefined ? '' : String(schedule.nte));
   const [assignee, setAssignee] = useState(schedule?.assignee ?? '');
+  // 0065 · the job plan every work order of this schedule starts with. The
+  // list is empty for a role without job plans, and the picker hides.
+  const [jobPlan, setJobPlan] = useState(schedule?.job_plan?.id ?? '');
+  const plans = useQuery({ queryKey: ['maintenance', 'plans'], queryFn: getJobPlans, retry: false });
   const [every, setEvery] = useState(String(schedule?.every ?? 1));
   const [unit, setUnit] = useState<PmUnit>(schedule?.unit ?? 'month');
   const [startsOn, setStartsOn] = useState(schedule?.starts_on ?? today());
@@ -326,6 +331,7 @@ function ScheduleDialog({
     ends_on: endsOn || null,
     lead_days: Number(lead),
     active,
+    job_plan_id: jobPlan || null,
   });
 
   const save = useMutation({
@@ -410,6 +416,15 @@ function ScheduleDialog({
               <label className="lbl" htmlFor="pm-assignee">Dispatcher (display name, blank = unassigned)</label>
               <input id="pm-assignee" className="fld" value={assignee} onChange={(e) => setAssignee(e.target.value)} />
             </div>
+            {(plans.data?.plans.length ?? 0) > 0 && (
+              <div className="field">
+                <label className="lbl" htmlFor="pm-plan">Job plan (its steps become the checklist)</label>
+                <select id="pm-plan" className="fld" value={jobPlan} onChange={(e) => setJobPlan(e.target.value)}>
+                  <option value="">None</option>
+                  {(plans.data?.plans ?? []).filter((p) => p.is_active || p.id === jobPlan).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            )}
             <div className="field">
               <label className="lbl" htmlFor="pm-every">How often</label>
               <div className="row" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

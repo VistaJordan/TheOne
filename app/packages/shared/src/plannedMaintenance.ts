@@ -71,6 +71,8 @@ export interface PmSchedule {
   raised_count: number;
   /** The most recent raise, for the list. */
   last_wo: { task_id: string; wo_number: string; due_on: string } | null;
+  /** 0065 · the job plan its work orders start with. */
+  job_plan?: { id: string; name: string } | null;
 }
 
 export interface PmOccurrence {
@@ -105,6 +107,8 @@ export interface PmScheduleInput {
   ends_on?: string | null;
   lead_days?: number;
   active?: boolean;
+  /** 0065 · the job plan laid over every work order this schedule raises. */
+  job_plan_id?: string | null;
 }
 
 export interface PmSchedulesResponse {

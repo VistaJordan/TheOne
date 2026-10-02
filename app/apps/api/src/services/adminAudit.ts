@@ -65,7 +65,15 @@ export type AdminEntity =
   | 'wo_subcategory'
   // 0064: a fault / action code, a create-form layout.
   | 'wo_code'
-  | 'wo_form_layout';
+  | 'wo_form_layout'
+  // 0065: a service in the catalogue, a job plan.
+  | 'service_item'
+  | 'job_plan'
+  // 0067: tax rates, document templates, cost centers (and their budgets), AFEs.
+  | 'tax_rate'
+  | 'doc_template'
+  | 'cost_center'
+  | 'afe';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

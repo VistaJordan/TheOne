@@ -191,9 +191,19 @@ async function linesFor(ids: string[]): Promise<Map<string, VendorBillLine[]>> {
 async function hydrate(rows: Row[], actor: ActingPrincipal): Promise<VendorBill[]> {
   const lines = await linesFor(rows.map((r) => r.id));
   const tiers = await listApprovalTiers();
-  return rows.map((r) =>
+  const bills = rows.map((r) =>
     mapRow(r, lines.get(r.id) ?? [], tierSummary(tiers, 'vendor_bill', n(r.total), actor)),
   );
+  // 0066 · the invoicing-rule warnings and the credit notes. Read-only
+  // decoration: if it fails, the bills still come back as they always did.
+  try {
+    const { billExtrasFor } = await import('./vendorExtras.js');
+    const extras = await billExtrasFor(bills.map((b) => ({ id: b.id, total: b.total, status: b.status })));
+    for (const b of bills) Object.assign(b, extras.get(b.id) ?? {});
+  } catch (err) {
+    console.error('[vendor bills] could not read the rule warnings', err);
+  }
+  return bills;
 }
 
 export async function listVendorBills(actor: ActingPrincipal): Promise<VendorBillsResponse> {

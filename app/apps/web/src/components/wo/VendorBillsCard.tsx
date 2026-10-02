@@ -17,6 +17,7 @@ import { Icon } from '../Icon';
 import { usd } from '../../lib/quoteTotals';
 import { RecordBillDialog, VendorBillActions, useVendorBillActions } from '../payments/VendorBillsLane';
 import { BillingProposalBlock } from './BillingProposalBlock';
+import { BillCredits, BillWarnings } from '../payments/BillExtras';
 
 export function VendorBillsCard({ wo }: { wo: WorkOrderDetailV2 }) {
   const { can } = useAuth();
@@ -89,11 +90,13 @@ export function VendorBillsCard({ wo }: { wo: WorkOrderDetailV2 }) {
                     {b.overdue_days ? ` · ${b.overdue_days}d overdue` : ''}
                     {b.tier ? ` · ${b.tier.label}` : ''}
                   </small>
+                  <BillCredits bill={b} />
                 </td>
                 <td>
                   <span className="chip chip-sm" title={VENDOR_BILL_STATUS_HINTS[b.status]}>
                     {VENDOR_BILL_STATUS_LABELS[b.status]}
                   </span>
+                  <BillWarnings bill={b} />
                 </td>
                 <td className="num">{usd(b.total)}</td>
                 <td className="rcv-action-td">

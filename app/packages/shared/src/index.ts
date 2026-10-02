@@ -1714,3 +1714,11 @@ export * from './portfolio';
 export * from './woRecord';
 // 0055: client updates — per-client trackers, shared by link or email.
 export * from './clientUpdates';
+// 0065: job plans, services, technician time, work permits, assignment.
+export * from './maintenance';
+// 0066: invoicing rules, credit notes, dispatch offers, skills, inductions,
+// consumables, vendor performance and the vendor portal.
+export * from './vendorExtras';
+// 0067: purchase requests, RFQs and vendor quotes, purchase orders, tax
+// rates, document templates, cost centers, AFEs and budgets.
+export * from './purchasing';

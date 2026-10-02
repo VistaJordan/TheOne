@@ -22,6 +22,9 @@
 import { vendorPermNodes } from './vendors';
 import { vendorWorkflowPermNodes } from './vendorWorkflow';
 import { portfolioPermNodes } from './portfolio';
+import { maintenancePermNodes } from './maintenance';
+import { vendorExtraPermNodes } from './vendorExtras';
+import { purchasingPermNodes } from './purchasing';
 
 export type PermAction = 'view' | 'create' | 'edit' | 'delete' | 'approve';
 
@@ -720,11 +723,15 @@ export function buildPermissionTree(
     // 0058 · the workflow rows (review queue, documents, import, export,
     // saved lists) sit under Vendors.
     ...vendorPermNodes().map((n) =>
-      n.key === 'vendors' ? { ...n, children: [...(n.children ?? []), ...vendorWorkflowPermNodes()] } : n,
+      n.key === 'vendors' ? { ...n, children: [...(n.children ?? []), ...vendorWorkflowPermNodes(), ...vendorExtraPermNodes()] } : n,
     ),
     // 0060 · the portfolio: sites (with their buildings, floors and spaces)
     // and the assets that stand in them.
     ...portfolioPermNodes(),
+    // 0065 · job plans, services, technician time, work permits, assignment.
+    ...maintenancePermNodes(),
+    // 0067 · purchase requests, RFQs, purchase orders, budgets.
+    ...purchasingPermNodes(),
     {
       // 0045 · live. Approve is the act of SENDING a bill to the client, not
       // a separate sign-off step: once it has gone out it is what they hold.

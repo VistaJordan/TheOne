@@ -20,6 +20,7 @@ import { getWorkOrder, getWorkOrderQuote } from '../api/client';
 import { Icon } from '../components/Icon';
 import { deriveSite } from '../lib/woDerive';
 import { usd } from '../lib/quoteTotals';
+import { DocLetterhead, DocTerms, usePrintTemplate } from './DocPrintPages';
 
 export function QuotePrintPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
@@ -33,6 +34,8 @@ export function QuotePrintPage() {
     queryFn: () => getWorkOrderQuote(woNumber),
     enabled: woNumber.length > 0,
   });
+  // 0067 · the quote template, when one is set: letterhead, terms, footer.
+  const tpl = usePrintTemplate('quote');
   const quote = quoteQuery.data?.quote ?? null;
   const wo = woQuery.data;
 
@@ -81,8 +84,9 @@ export function QuotePrintPage() {
       <article className="qdoc">
         <header className="qdoc-head">
           <div>
-            <div className="qdoc-entity">{entity || 'Seamless FM'}</div>
+            <div className="qdoc-entity">{tpl?.company_name || entity || 'Seamless FM'}</div>
             <div className="qdoc-kind">{title}</div>
+            <DocLetterhead template={tpl} />
           </div>
           <table className="qdoc-meta">
             <tbody>
@@ -171,6 +175,7 @@ export function QuotePrintPage() {
           {' '}
           This {title.toLowerCase()} is valid for 30 days from the date above.
         </footer>
+        <DocTerms template={tpl} />
       </article>
     </div>
   );

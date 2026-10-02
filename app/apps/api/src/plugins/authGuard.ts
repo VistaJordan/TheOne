@@ -41,7 +41,13 @@ const PUBLIC_PATHS = new Set([
 
 // 0055: a client's read-only tracker link. Exactly a 32-character share token
 // (and its CSV) — the token IS the credential, checked in services/clientUpdates.
-const PUBLIC_PATTERNS: RegExp[] = [/^\/api\/public\/client-updates\/[A-Za-z0-9_-]{32}(\/csv)?$/];
+// 0066: a vendor's portal link. Exactly a 32-character token, then one of the
+// five things a vendor can do — the token IS the credential, checked (as a
+// hash) in services/vendorPortal, which also pins every read to that vendor.
+const PUBLIC_PATTERNS: RegExp[] = [
+  /^\/api\/public\/client-updates\/[A-Za-z0-9_-]{32}(\/csv)?$/,
+  /^\/api\/public\/vendor-portal\/[A-Za-z0-9_-]{32}(\/onboarding|\/offers\/[0-9a-fA-F-]{36}|\/jobs\/[0-9a-fA-F-]{36}\/(eta|notes))?$/,
+];
 
 function isPublic(req: FastifyRequest): boolean {
   // Compare the PATH only — a query string must never widen the allowlist.

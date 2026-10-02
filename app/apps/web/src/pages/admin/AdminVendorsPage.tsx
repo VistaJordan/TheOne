@@ -28,6 +28,7 @@ import {
 import type { VendorListName, VendorPickHit } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../../components/Icon';
+import { VendorCataloguesCards } from '../../components/vendors/VendorExtras';
 import { AdminEmpty, AdminShell } from './AdminShell';
 
 const KEY = ['admin-vendors'];
@@ -57,6 +58,8 @@ export function AdminVendorsPage() {
           <SettingsCard data={d} canEdit={canEdit} />
           <PreferredCard data={d} canEdit={canEdit} />
           <RequiredFieldsCard canEdit={canEdit} />
+          {/* 0066 · dispatch offers, invoicing rules, skills, consumables. */}
+          <VendorCataloguesCards canEdit={canEdit} />
           <div className="vadm-lists">
             <ListCard list="statuses" title="Vendor statuses" note="The steps a vendor moves through. Turning one off hides it from the dropdowns; records that hold it keep it." items={d.statuses.map((s) => ({ key: s.key, label: s.label, active: s.is_active, color: s.color, locked: s.is_system }))} canEdit={canEdit} withColor />
             <ListCard list="brand-sources" title="Brand sources" note="Which company the vendor was recruited for." items={d.brand_sources.map((s) => ({ key: s.key, label: s.label, active: s.is_active }))} canEdit={canEdit} />

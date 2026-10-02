@@ -28,7 +28,10 @@ import {
   SOURCE_STATUSES,
   TIME_BUCKETS,
   TIME_BUCKET_LABELS,
+  DASH_DEFAULT_TAB,
   WIDGET_KINDS,
+  dashboardTabs,
+  widgetsByGroup,
   WIDGET_KIND_LABELS,
   WIDGET_METRICS,
   WIDGET_METRIC_LABELS,
@@ -87,6 +90,10 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
   // covered a different stretch of time could not be read as a whole.
   const [period, setPeriod] = useState<DashboardPeriod>(DEFAULT_PERIOD);
   const window = useMemo(() => resolvePeriod(period), [period]);
+  // 0068 · tabs inside the dashboard, when its cards name any.
+  const tabs = useMemo(() => dashboardTabs(dashboard.widgets), [dashboard.widgets]);
+  const [tab, setTab] = useState<string | null>(null);
+  const activeTab = tabs.length === 0 ? null : (tabs.find((t) => t === tab) ?? tabs[0]);
   // 0049 · one filter bar for the whole board, for the same reason.
   const [pageFilters, setPageFilters] = useState<PageFilter[]>([]);
   const filterSet = useMemo(() => pageFiltersToSet(pageFilters), [pageFilters]);
@@ -233,24 +240,43 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
           {dashboard.can_edit ? ' Add one to get started.' : ''}
         </p>
       ) : (
-        <div className="dash-grid">
-          {dashboard.widgets.map((w) => (
-            <WidgetCard
-              key={w.id}
-              widget={w}
-              result={byWidget.get(w.id)}
-              loading={dataQuery.isLoading}
-              boardMax={boardMax}
-              onEdit={dashboard.can_edit ? () => setEditing(w) : undefined}
-              onRemove={dashboard.can_edit ? () => setRemoving(w) : undefined}
-            />
+        <>
+          {/* 0068 · tabs, when the cards name any; groups inside a tab. */}
+          {tabs.length > 0 && (
+            <div className="seg dash-tabs" role="tablist" aria-label="Dashboard tabs">
+              {tabs.map((t) => (
+                <button key={t} type="button" role="tab" aria-selected={t === activeTab} className={`seg-btn${t === activeTab ? ' is-on' : ''}`} onClick={() => setTab(t)}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+          {widgetsByGroup(dashboard.widgets, activeTab).map((g) => (
+            <section key={g.section ?? '-'} className="dash-group">
+              {g.section && <h3 className="dash-group-title">{g.section}</h3>}
+              <div className="dash-grid">
+                {g.widgets.map((w) => (
+                  <WidgetCard
+                    key={w.id}
+                    widget={w}
+                    result={byWidget.get(w.id)}
+                    loading={dataQuery.isLoading}
+                    boardMax={boardMax}
+                    onEdit={dashboard.can_edit ? () => setEditing(w) : undefined}
+                    onRemove={dashboard.can_edit ? () => setRemoving(w) : undefined}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
-        </div>
+        </>
       )}
 
       {editing && (
         <WidgetDialog
           dashboardId={dashboard.id}
+          widgets={dashboard.widgets}
+          defaultTab={activeTab}
           widget={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
           onSaved={done}
@@ -332,11 +358,16 @@ function PageFilterBar({
     how to cut it, and how to draw it. */
 function WidgetDialog({
   dashboardId,
+  widgets,
+  defaultTab,
   widget,
   onClose,
   onSaved,
 }: {
   dashboardId: string;
+  /** 0068 · the dashboard's cards, for the tab and group names already in use. */
+  widgets: DashboardWidget[];
+  defaultTab: string | null;
   widget: DashboardWidget | null;
   onClose: () => void;
   onSaved: () => void;
@@ -376,6 +407,9 @@ function WidgetDialog({
   const [url, setUrl] = useState(widget?.config.url ?? '');
   const [buttonLabel, setButtonLabel] = useState(widget?.config.button_label ?? '');
   const [width, setWidth] = useState<WidgetWidth>(widget?.width ?? 'half');
+  // 0068 · where the card sits: a new card starts on the tab being looked at.
+  const [tab, setTab] = useState(widget ? (widget.config.tab ?? '') : defaultTab && defaultTab !== DASH_DEFAULT_TAB ? defaultTab : '');
+  const [section, setSection] = useState(widget?.config.section ?? '');
   const [error, setError] = useState<string | null>(null);
 
   const asks = widgetAsksQuestion(kind);
@@ -408,6 +442,8 @@ function WidgetDialog({
         ...(kind === 'link' ? { button_label: buttonLabel } : {}),
       };
 
+  const placed: WidgetConfig = { ...config, ...(tab.trim() ? { tab: tab.trim() } : {}), ...(section.trim() ? { section: section.trim() } : {}) };
+
   const missing =
     label.trim() === ''
       ? 'a name'
@@ -426,8 +462,8 @@ function WidgetDialog({
   const save = useMutation({
     mutationFn: () =>
       widget
-        ? updateDashboardWidget(widget.id, { kind, label: label.trim(), config, width })
-        : addDashboardWidget(dashboardId, { kind, label: label.trim(), config, width }),
+        ? updateDashboardWidget(widget.id, { kind, label: label.trim(), config: placed, width })
+        : addDashboardWidget(dashboardId, { kind, label: label.trim(), config: placed, width }),
     onSuccess: onSaved,
     onError: (err: unknown) =>
       setError(err instanceof ApiRequestError ? err.message : 'The card did not save'),
@@ -472,6 +508,18 @@ function WidgetDialog({
             <div className="field intake-wide">
               <label className="lbl" htmlFor="w-label">What is this card called?</label>
               <input id="w-label" className="fld" value={label} onChange={(e) => setLabel(e.target.value)} />
+            </div>
+
+            {/* 0068 · the tab and the group. Empty tab on every card = no tabs at all. */}
+            <div className="field">
+              <label className="lbl" htmlFor="w-tab">Tab (empty = none)</label>
+              <input id="w-tab" className="fld" list="w-tabs" value={tab} maxLength={40} onChange={(e) => setTab(e.target.value)} />
+              <datalist id="w-tabs">{dashboardTabs(widgets).map((t) => <option key={t} value={t} />)}</datalist>
+            </div>
+            <div className="field">
+              <label className="lbl" htmlFor="w-section">Group heading (empty = none)</label>
+              <input id="w-section" className="fld" list="w-sections" value={section} maxLength={60} onChange={(e) => setSection(e.target.value)} />
+              <datalist id="w-sections">{[...new Set(widgets.map((w) => w.config.section).filter((s): s is string => Boolean(s)))].map((s) => <option key={s} value={s} />)}</datalist>
             </div>
 
             <div className="field">

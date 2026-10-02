@@ -32,6 +32,7 @@ import {
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
 import { usd } from '../../lib/quoteTotals';
+import { BillCredits, BillWarnings } from './BillExtras';
 
 const STATUS_CHIP: Record<VendorBillStatus, string> = {
   received: 'chip-outline',
@@ -143,6 +144,8 @@ export function VendorBillsLane() {
                     <strong>{b.vendor_name}</strong>
                     <small className="mono">{b.bill_number ?? '—'}</small>
                   </div>
+                  {/* 0066 · its credit notes, and the net once one is approved. */}
+                  <BillCredits bill={b} />
                 </td>
                 <td className="rcv-trunc">{b.client ?? '—'}</td>
                 <td className="col-date">
@@ -156,6 +159,8 @@ export function VendorBillsLane() {
                     {VENDOR_BILL_STATUS_LABELS[b.status]}
                   </span>
                   {b.tier && <small className="payq-tier"> {b.tier.label}</small>}
+                  {/* 0066 · what the invoicing rules say; a warning never blocks. */}
+                  <BillWarnings bill={b} />
                 </td>
                 <td className="rcv-action-td">
                   <VendorBillActions bill={b} busy={act.isPending} onAct={(kind, text) => act.mutate({ kind, id: b.id, text })} />

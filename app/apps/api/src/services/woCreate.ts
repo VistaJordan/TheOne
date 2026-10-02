@@ -445,6 +445,13 @@ export async function createWorkOrder(
   // After the commit, exactly as the intake draft does it: the create rules
   // first, then the assignment as this person's ordinary field edit.
   await dispatchAutomations({ taskId, kind: 'created' });
+  // 0066 · the dispatch cascade, when it is switched on AND set to start by
+  // itself (both are off by default): offer the job to the first preferred
+  // vendor. A no-op otherwise.
+  {
+    const { maybeAutoStartDispatch } = await import('./vendorExtras.js');
+    await maybeAutoStartDispatch(taskId, actor.id);
+  }
   if (assignee) {
     const { updateWorkOrderFields } = await import('./woFieldValues.js');
     await updateWorkOrderFields(taskId, { [`fields.${ASSIGNEE_KEY}`]: assignee }, actor.id);

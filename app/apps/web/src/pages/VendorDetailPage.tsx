@@ -46,6 +46,7 @@ import { Icon } from '../components/Icon';
 import { NoteLog } from '../components/wo/tech/TechMapSheet';
 import { feedTime } from '../lib/fields';
 import { VendorRecordPanels } from '../components/vendors/VendorRecordPanels';
+import { VendorPortalPanel, VendorQualificationsPanel } from '../components/vendors/VendorExtras';
 import { StatusDot } from './VendorsPage';
 
 type FieldType = 'text' | 'longtext' | 'select' | 'bool' | 'nbool' | 'money' | 'number' | 'multi' | 'tri' | 'date';
@@ -608,6 +609,9 @@ export function VendorDetailPage() {
           {!isNew && v && !editing && (
             <VendorRecordPanels v={v} vendorKey={key} statuses={meta.data?.statuses ?? []} entities={meta.data?.brand_sources ?? []} />
           )}
+          {/* 0066 · skills and inductions, then the vendor's own links. */}
+          {!isNew && v && !editing && <VendorQualificationsPanel vendorId={v.id} />}
+          {!isNew && v && !editing && <VendorPortalPanel vendorId={v.id} />}
           {!isNew && v && !editing && <SidePanels v={v} vendorKey={key} entities={meta.data?.brand_sources ?? []} />}
         </aside>
       </div>

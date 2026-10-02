@@ -21,6 +21,8 @@ interface MoneyRailProps {
   rates?: QuoteRates | null;
 }
 
+import { TaxRatePicker } from '../../pages/admin/FinanceSetupCards';
+
 export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxChange, rates }: MoneyRailProps) {
   const pct = nte != null && nte > 0 ? (totals.grandTotal / nte) * 100 : null;
   const warn = pct != null && pct >= NTE_WARN_PCT;
@@ -142,6 +144,9 @@ export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxCha
             )}
           </dd>
         </div>
+
+        {/* 0067 · works the tax out at a rate from Admin › Settings; the field above stays hand-editable. */}
+        {editable && <TaxRatePicker base={totals.grandTotal} onPick={(amount) => onSalesTaxChange(amount.toFixed(2))} />}
 
         {totals.lineTax > 0 && (
           <div className="kvrow">

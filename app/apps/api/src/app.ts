@@ -33,6 +33,9 @@ import vendorWorkRoutes from './routes/vendorWork.js';
 import noticeRoutes from './routes/notices.js';
 import portfolioRoutes from './routes/portfolio.js';
 import woRecordRoutes from './routes/woRecord.js';
+import maintenanceRoutes from './routes/maintenance.js';
+import vendorExtraRoutes from './routes/vendorExtras.js';
+import purchasingRoutes from './routes/purchasing.js';
 import paymentRoutes from './routes/payments.js';
 import obligationRoutes from './routes/obligations.js';
 import integrationRoutes from './routes/integrations.js';
@@ -99,6 +102,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(noticeRoutes, { prefix: '/api' });
   await app.register(portfolioRoutes, { prefix: '/api' });
   await app.register(woRecordRoutes, { prefix: '/api' });
+  await app.register(maintenanceRoutes, { prefix: '/api' });
+  await app.register(vendorExtraRoutes, { prefix: '/api' });
+  await app.register(purchasingRoutes, { prefix: '/api' });
   await app.register(paymentRoutes, { prefix: '/api' });
   // S5 · /pulse, /obligations, /notifications. Every handler degrades to an
   // empty payload until migration 0004 has been applied, so registering it

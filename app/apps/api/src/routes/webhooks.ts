@@ -84,7 +84,11 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
       throw new ApiError('FORBIDDEN', 'The cron is not configured (CRON_SECRET is unset).');
     }
     if (outcome !== 'ok') throw new ApiError('UNAUTHORIZED', 'Cron secret missing or invalid');
-    return { ok: true, ...(await runDueClientUpdates()) };
+    // 0066 · the same hourly tick moves dispatch offers along (a no-op while
+    // the cascade is switched off).
+    const { sweepDispatchOffers } = await import('../services/vendorExtras.js');
+    const dispatch = await sweepDispatchOffers().catch(() => ({ advanced: 0 }));
+    return { ok: true, ...(await runDueClientUpdates()), dispatch_advanced: dispatch.advanced };
   };
   app.get('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));
   app.post('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));

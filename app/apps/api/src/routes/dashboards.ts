@@ -72,6 +72,9 @@ const configSchema = z
     text: z.string().max(4000).optional(),
     url: z.string().max(2000).optional(),
     button_label: z.string().max(80).optional(),
+    // 0068 · the tab and the group a card sits in.
+    tab: z.string().trim().max(40).optional(),
+    section: z.string().trim().max(60).optional(),
   })
   .strict();
 

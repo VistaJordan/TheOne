@@ -36,6 +36,10 @@ import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
 import { PlannedMaintenancePage } from './pages/PlannedMaintenancePage';
+import { MaintenancePage } from './pages/MaintenancePage';
+import { VendorPortalPage } from './pages/VendorPortalPage';
+import { PurchasingPage } from './pages/PurchasingPage';
+import { InvoicePrintPage, PurchaseOrderPrintPage } from './pages/DocPrintPages';
 import { ClientUpdatesPage } from './pages/ClientUpdatesPage';
 import { ClientSharePage } from './pages/ClientSharePage';
 import { PulsePage } from './pages/PulsePage';
@@ -140,6 +144,8 @@ export function App() {
                   link (0055) — its token is the credential, no session. */}
               <Route path="/sign-in" element={<SignInPage />} />
               <Route path="/share/client-updates/:token" element={<ClientSharePage />} />
+              {/* 0066 — a vendor's own link: no sign-in, the token is the credential. */}
+              <Route path="/vendor-portal/:token" element={<VendorPortalPage />} />
 
               <Route
                 path="/dashboard"
@@ -216,6 +222,12 @@ export function App() {
                 path="/planned-maintenance"
                 element={<RequireAuth><RequireCan perm="planned_maintenance" nav="Planned Maintenance"><PlannedMaintenancePage /></RequireCan></RequireAuth>}
               />
+              {/* 0067 — purchasing, and the printed purchase order and invoice. */}
+              <Route path="/purchasing" element={<RequireAuth><RequireCan perm="purchasing" nav="Purchasing"><PurchasingPage /></RequireCan></RequireAuth>} />
+              <Route path="/purchasing/orders/:id/print" element={<RequireAuth><PurchaseOrderPrintPage /></RequireAuth>} />
+              <Route path="/invoices/:id/print" element={<RequireAuth><InvoicePrintPage /></RequireAuth>} />
+              {/* 0065 — the maintenance modules. */}
+              <Route path="/maintenance" element={<RequireAuth><RequireCan perm="maintenance" nav="Maintenance"><MaintenancePage /></RequireCan></RequireAuth>} />
               {/* S5 — the Pulse: every open obligation, by how much clock is left. */}
               <Route path="/pulse" element={<RequireAuth><PulsePage /></RequireAuth>} />
               {/* AR — Receivables: the completion audit (Grey Flag queue) and the

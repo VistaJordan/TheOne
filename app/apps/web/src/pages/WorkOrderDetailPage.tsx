@@ -37,6 +37,9 @@ import { MessagesPanel } from '../components/wo/messages/MessagesPanel';
 import { CallsCard } from '../components/wo/calls/CallsCard';
 import { RecordBar, RecordRail, useWoRecord } from '../components/wo/record/RecordParts';
 import { ChecklistTab, CostBreakdownTab, RelatedTab, TimelogTab } from '../components/wo/record/RecordTabs';
+import { JobPlanServicesCard, PermitsCard, TimeCard } from '../components/wo/maint/WoMaintCards';
+import { ConsumablesCard, DispatchCard } from '../components/wo/maint/WoVendorCards';
+import { WoPurchasingCard } from './PurchasingPage';
 import { MessagesRail } from '../components/wo/messages/MessagesRail';
 import { ObligationsCard, OBLIGATIONS_CARD_ID } from '../components/obligations/ObligationsCard';
 import { useWoObligations } from '../hooks/useObligations';
@@ -418,6 +421,8 @@ export function WorkOrderDetailPage() {
               {/* 0047 · the vendor's own invoice — the document the payment
                   request should be settling. */}
               <VendorBillsCard wo={wo} />
+              {/* 0067 · what was requested, quoted and ordered for this job. */}
+              <WoPurchasingCard woId={wo.id} woNumber={wo.wo_number} />
               <PaymentHistoryCard
                 woNumber={wo.wo_number}
                 items={paymentsQuery.data?.items ?? []}
@@ -432,6 +437,8 @@ export function WorkOrderDetailPage() {
               <PeopleCard wo={wo} />
               {/* 0057 · who has been hired onto the work order, and the map. */}
               <TechniciansCard wo={wo} />
+              {/* 0066 · offering the job to the preferred vendors in turn (hidden while switched off). */}
+              <DispatchCard woId={wo.id} />
             </div>
           )}
 
@@ -461,13 +468,27 @@ export function WorkOrderDetailPage() {
               {!recordQuery.data ? (
                 <section className="card"><div className="empty-flat">{recordQuery.isLoading ? 'Loading…' : 'Could not load this part of the work order.'}</div></section>
               ) : tab === 'tasks' ? (
-                <ChecklistTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+                <>
+                  <ChecklistTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+                  {/* 0065 · a job plan to lay over it, and the services done. */}
+                  <JobPlanServicesCard woId={wo.id} />
+                  {/* 0066 · the stock the job used up. */}
+                  <ConsumablesCard woId={wo.id} />
+                </>
               ) : tab === 'costs' ? (
                 <CostBreakdownTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
               ) : tab === 'timelog' ? (
-                <TimelogTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+                <>
+                  {/* 0065 · who worked on it, from when to when. */}
+                  <TimeCard woId={wo.id} />
+                  <TimelogTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+                </>
               ) : (
-                <RelatedTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+                <>
+                  {/* 0065 · the work permits of this job. */}
+                  <PermitsCard woId={wo.id} />
+                  <RelatedTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+                </>
               )}
             </div>
           )}

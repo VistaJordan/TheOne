@@ -5,6 +5,7 @@
 
 import { SubcategoriesCard } from './SubcategoriesCard';
 import { CodesCard, FormLayoutsCard } from './WoRecordSettings';
+import { FinanceSetupCards } from './FinanceSetupCards';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -151,6 +152,8 @@ export function AdminSettingsPage() {
       {/* 0064 · layouts for the create form; fault and action codes. */}
       <FormLayoutsCard />
       <CodesCard />
+      {/* 0067 · tax rates and the templates of printed documents. */}
+      <FinanceSetupCards />
       <ApprovalTiersCard />
     </AdminShell>
   );

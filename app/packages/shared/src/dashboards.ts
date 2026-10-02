@@ -331,6 +331,45 @@ export interface WidgetConfig {
   url?: string;
   /** 0049 · link: what the button says. */
   button_label?: string;
+  /** 0068 · where the card sits inside its dashboard: the tab it is on and
+      the group it is drawn under. Both are plain names; a dashboard whose
+      cards name no tab has no tab strip and reads exactly as before. */
+  tab?: string;
+  section?: string;
+}
+
+/** The name the cards with no tab are filed under, once a dashboard has tabs. */
+export const DASH_DEFAULT_TAB = 'Overview';
+
+/** A dashboard's tabs, in the order its cards first name them. Empty = the
+    dashboard has no tabs (one page, as before). Cards with no tab are on
+    "Overview", which comes first when it is needed. */
+export function dashboardTabs(widgets: { config: { tab?: string } }[]): string[] {
+  const named: string[] = [];
+  let loose = false;
+  for (const w of widgets) {
+    const t = (w.config.tab ?? '').trim();
+    if (t === '') loose = true;
+    else if (!named.some((n) => n.toLowerCase() === t.toLowerCase())) named.push(t);
+  }
+  if (named.length === 0) return [];
+  const hasOverview = named.some((n) => n.toLowerCase() === DASH_DEFAULT_TAB.toLowerCase());
+  return loose && !hasOverview ? [DASH_DEFAULT_TAB, ...named] : named;
+}
+
+/** The cards of one tab, cut into groups in the order the groups first
+    appear. Cards with no group come first, under no heading. */
+export function widgetsByGroup<T extends { config: { tab?: string; section?: string } }>(widgets: T[], tab: string | null): { section: string | null; widgets: T[] }[] {
+  const on = tab === null ? widgets : widgets.filter((w) => ((w.config.tab ?? '').trim() || DASH_DEFAULT_TAB).toLowerCase() === tab.toLowerCase());
+  const out: { section: string | null; widgets: T[] }[] = [];
+  for (const w of on) {
+    const s = (w.config.section ?? '').trim() || null;
+    const slot = out.find((g) => (g.section ?? '').toLowerCase() === (s ?? '').toLowerCase());
+    if (slot) slot.widgets.push(w);
+    else if (s === null) out.unshift({ section: null, widgets: [w] });
+    else out.push({ section: s, widgets: [w] });
+  }
+  return out;
 }
 
 export interface DashboardWidget {
@@ -1030,6 +1069,135 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
         width: 'full',
         config: { metric: 'count', time_field: 'fields.SLA Due Date', bucket: 'week', filters: OPEN_WORK, limit: 16 },
       },
+    ],
+  },
+  // ── 0068 · five more boards, each laid out in tabs and groups ─────────────
+  {
+    key: 'maintenance-supervisor',
+    name: 'Maintenance Supervisor',
+    description: 'The day of a supervisor: what is open, what is late, who carries it and where it keeps breaking.',
+    folder: 'Operations',
+    shared_all: false,
+    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om', 'ops_coord'],
+    widgets: [
+      { kind: 'number', label: 'Open work orders', width: 'quarter', config: { metric: 'count', filters: OPEN_WORK, tab: 'Today', section: 'Right now' } },
+      { kind: 'number', label: 'Emergencies', width: 'quarter', config: { metric: 'count', tab: 'Today', section: 'Right now', filters: { match: 'all', rules: [{ field: 'fields.Emergency', op: 'is_true' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
+      { kind: 'number', label: 'Escalated', width: 'quarter', config: { metric: 'count', tab: 'Today', section: 'Right now', filters: { match: 'all', rules: [{ field: 'fields.Escalated', op: 'is_true' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
+      { kind: 'number', label: 'Past SLA', width: 'quarter', config: { metric: 'count', tab: 'Today', section: 'Right now', filters: { match: 'all', rules: [{ field: 'fields.SLA Due Date', op: 'lt', value: 'today' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
+      { kind: 'bar', label: 'Open work by status', width: 'half', config: { metric: 'count', group_field: 'status', filters: OPEN_WORK, limit: 15, tab: 'Today', section: 'Where it stands' } },
+      { kind: 'bar', label: 'Open work by trade', width: 'half', config: { metric: 'count', group_field: 'trade', filters: OPEN_WORK, limit: 12, tab: 'Today', section: 'Where it stands' } },
+      { kind: 'bar', label: 'Open work by dispatcher', width: 'half', config: { metric: 'count', group_field: 'fields.Assignee', filters: OPEN_WORK, limit: 20, tab: 'Team', section: 'Workload' } },
+      { kind: 'table', label: 'NTE carried by dispatcher', width: 'half', config: { metric: 'sum', value_field: 'nte', group_field: 'fields.Assignee', filters: OPEN_WORK, limit: 20, tab: 'Team', section: 'Workload' } },
+      { kind: 'bar', label: 'Past SLA by dispatcher', width: 'half', config: { metric: 'count', group_field: 'fields.Assignee', limit: 20, tab: 'Team', section: 'Falling behind', filters: { match: 'all', rules: [{ field: 'fields.SLA Due Date', op: 'lt', value: 'today' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
+      { kind: 'bar', label: 'Emergencies by dispatcher', width: 'half', config: { metric: 'count', group_field: 'fields.Assignee', limit: 20, tab: 'Team', section: 'Falling behind', filters: { match: 'all', rules: [{ field: 'fields.Emergency', op: 'is_true' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
+      { kind: 'line', label: 'Work orders received, by week', width: 'full', config: { metric: 'count', time_field: 'date_received', bucket: 'week', limit: 16, tab: 'Trends' } },
+      { kind: 'bar', label: 'By problem type', width: 'half', config: { metric: 'count', group_field: 'fields.Problem Type', limit: 12, tab: 'Trends' } },
+      { kind: 'bar', label: 'By client', width: 'half', config: { metric: 'count', group_field: 'client', limit: 12, tab: 'Trends' } },
+      { kind: 'bar', label: 'Assets by condition', width: 'half', config: { metric: 'count', group_field: 'condition', source: 'assets', tab: 'Equipment' } },
+      { kind: 'table', label: 'Work orders by asset category', width: 'half', config: { metric: 'sum', value_field: 'work_orders', group_field: 'category', source: 'assets', limit: 15, tab: 'Equipment' } },
+    ],
+  },
+  {
+    key: 'vendor-performance',
+    name: 'Vendor Performance',
+    description: 'The vendor network at work: who is ready, what they bill, and where bills are stuck. Per-vendor SLA and recalls are on Vendors › Performance.',
+    folder: 'Operations',
+    shared_all: false,
+    shared_roles: ['admin', 'vr_officer', 'tl', 'atl', 'am'],
+    widgets: [
+      { kind: 'number', label: 'Active vendors', width: 'quarter', config: { metric: 'count', source: 'vendors', source_status: ['ACTIVE'], tab: 'Network' } },
+      { kind: 'number', label: 'In the pipeline', width: 'quarter', config: { metric: 'count', source: 'vendors', source_status: ['NEW', 'INTERESTED', 'READY'], tab: 'Network' } },
+      { kind: 'number', label: 'Jobs done', width: 'quarter', config: { metric: 'sum', value_field: 'work_orders_count', source: 'vendors', tab: 'Network' } },
+      { kind: 'number', label: 'Average hourly rate', width: 'quarter', config: { metric: 'avg', value_field: 'regular_hourly_rate', source: 'vendors', tab: 'Network' } },
+      { kind: 'table', label: 'Jobs by trade', width: 'half', config: { metric: 'sum', value_field: 'work_orders_count', group_field: 'primary_trade', source: 'vendors', limit: 15, tab: 'Network', section: 'Who does the work' } },
+      { kind: 'bar', label: 'Vendors by state', width: 'half', config: { metric: 'count', group_field: 'state', source: 'vendors', limit: 20, tab: 'Network', section: 'Who does the work' } },
+      { kind: 'donut', label: 'Paperwork', width: 'half', config: { metric: 'count', group_field: 'paperwork', source: 'vendors', tab: 'Compliance' } },
+      { kind: 'donut', label: 'COI approved', width: 'half', config: { metric: 'count', group_field: 'coi_approved', source: 'vendors', tab: 'Compliance' } },
+      { kind: 'donut', label: 'Blacklisted', width: 'half', config: { metric: 'count', group_field: 'blacklisted', source: 'vendors', tab: 'Compliance' } },
+      { kind: 'bar', label: 'Compliance by owner', width: 'half', config: { metric: 'count', group_field: 'owner', source: 'vendors', limit: 12, tab: 'Compliance' } },
+      { kind: 'number', label: 'Bills waiting', width: 'quarter', config: { metric: 'sum', value_field: 'total', source: 'vendor_bills', source_status: ['received'], tab: 'Billing' } },
+      { kind: 'number', label: 'Bills disputed', width: 'quarter', config: { metric: 'count', source: 'vendor_bills', source_status: ['disputed'], tab: 'Billing' } },
+      { kind: 'number', label: 'Bills past due', width: 'quarter', config: { metric: 'sum', value_field: 'total', source: 'vendor_bills', source_overdue: true, tab: 'Billing' } },
+      { kind: 'number', label: 'Paid', width: 'quarter', config: { metric: 'sum', value_field: 'total', source: 'vendor_bills', source_status: ['paid'], tab: 'Billing' } },
+      { kind: 'table', label: 'Billed by vendor', width: 'half', config: { metric: 'sum', value_field: 'total', group_field: 'vendor_name', source: 'vendor_bills', limit: 15, tab: 'Billing' } },
+      { kind: 'line', label: 'Bills received, by month', width: 'half', config: { metric: 'sum', value_field: 'total', source: 'vendor_bills', time_field: 'received_on', bucket: 'month', limit: 12, tab: 'Billing' } },
+    ],
+  },
+  {
+    key: 'technician',
+    name: 'Technician',
+    description: 'The technicians on the jobs: who is out, how much they carry, and what they are paid.',
+    folder: 'Operations',
+    shared_all: false,
+    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om', 'ops_coord', 'vr_officer'],
+    widgets: [
+      { kind: 'bar', label: 'Open work orders by technician', width: 'half', config: { metric: 'count', group_field: 'fields.Tech Name', filters: OPEN_WORK, limit: 20, tab: 'Jobs' } },
+      { kind: 'bar', label: 'All work orders by technician', width: 'half', config: { metric: 'count', group_field: 'fields.Tech Name', limit: 20, tab: 'Jobs' } },
+      { kind: 'bar', label: 'Check-in status of open work', width: 'half', config: { metric: 'count', group_field: 'fields.18. Check-in/out Status', filters: OPEN_WORK, tab: 'Jobs' } },
+      { kind: 'donut', label: 'Visit type of open work', width: 'half', config: { metric: 'count', group_field: 'fields.Visit Type', filters: OPEN_WORK, tab: 'Jobs' } },
+      { kind: 'number', label: 'Technicians on file', width: 'quarter', config: { metric: 'count', source: 'vendors', tab: 'Roster' } },
+      { kind: 'donut', label: 'Vendors and technicians', width: 'half', config: { metric: 'count', group_field: 'kind', source: 'vendors', tab: 'Roster' } },
+      { kind: 'bar', label: 'By trade', width: 'half', config: { metric: 'count', group_field: 'primary_trade', source: 'vendors', limit: 15, tab: 'Roster' } },
+      { kind: 'bar', label: 'By state', width: 'half', config: { metric: 'count', group_field: 'state', source: 'vendors', limit: 20, tab: 'Roster' } },
+      { kind: 'table', label: 'Paid, by payee', width: 'half', config: { metric: 'sum', value_field: 'amount', group_field: 'payee', source: 'payments', source_status: ['paid'], limit: 20, tab: 'Pay' } },
+      { kind: 'table', label: 'Waiting to be paid, by payee', width: 'half', config: { metric: 'sum', value_field: 'amount', group_field: 'payee', source: 'payments', source_status: ['requested', 'approved', 'sent_to_yoda'], limit: 20, tab: 'Pay' } },
+      { kind: 'bar', label: 'Payments by method', width: 'half', config: { metric: 'sum', value_field: 'amount', group_field: 'method', source: 'payments', tab: 'Pay' } },
+    ],
+  },
+  {
+    key: 'store-manager',
+    name: 'Store Manager',
+    description: 'One store’s view: pick a client and a store in the filter bar above to narrow every card to it.',
+    folder: 'Clients',
+    shared_all: false,
+    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om', 'ops_coord'],
+    widgets: [
+      { kind: 'narrative', label: 'How to read this', width: 'full', config: { metric: 'count', text: 'Use the filter bar above to pick a client and a store: every card on this dashboard then counts that store only. Without a pick it shows every store.' } },
+      { kind: 'number', label: 'Open work orders', width: 'quarter', config: { metric: 'count', filters: OPEN_WORK, section: 'Open now' } },
+      { kind: 'number', label: 'Emergencies', width: 'quarter', config: { metric: 'count', section: 'Open now', filters: { match: 'all', rules: [{ field: 'fields.Emergency', op: 'is_true' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
+      { kind: 'number', label: 'Past SLA', width: 'quarter', config: { metric: 'count', section: 'Open now', filters: { match: 'all', rules: [{ field: 'fields.SLA Due Date', op: 'lt', value: 'today' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
+      { kind: 'number', label: 'NTE on open work', width: 'quarter', config: { metric: 'sum', value_field: 'nte', filters: OPEN_WORK, section: 'Open now' } },
+      { kind: 'bar', label: 'Open work by status', width: 'half', config: { metric: 'count', group_field: 'status', filters: OPEN_WORK, limit: 15, section: 'Open now' } },
+      { kind: 'bar', label: 'Open work by store', width: 'half', config: { metric: 'count', group_field: 'fields.Store', filters: OPEN_WORK, limit: 20, section: 'Open now' } },
+      { kind: 'bar', label: 'Work orders by trade', width: 'half', config: { metric: 'count', group_field: 'trade', limit: 12, section: 'History' } },
+      { kind: 'bar', label: 'Work orders by problem type', width: 'half', config: { metric: 'count', group_field: 'fields.Problem Type', limit: 12, section: 'History' } },
+      { kind: 'line', label: 'Work orders received, by month', width: 'full', config: { metric: 'count', time_field: 'date_received', bucket: 'month', limit: 18, section: 'History' } },
+    ],
+  },
+  {
+    key: 'unified-ops',
+    name: 'Unified Ops',
+    description: 'Everything on one board: the work, the money in, the money out, the vendors and the portfolio — one tab each.',
+    folder: 'Operations',
+    shared_all: false,
+    shared_roles: ['admin', 'tl', 'atl', 'am'],
+    widgets: [
+      { kind: 'number', label: 'Open work orders', width: 'quarter', config: { metric: 'count', filters: OPEN_WORK, tab: 'Work' } },
+      { kind: 'number', label: 'Emergencies', width: 'quarter', config: { metric: 'count', tab: 'Work', filters: { match: 'all', rules: [{ field: 'fields.Emergency', op: 'is_true' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
+      { kind: 'number', label: 'Past SLA', width: 'quarter', config: { metric: 'count', tab: 'Work', filters: { match: 'all', rules: [{ field: 'fields.SLA Due Date', op: 'lt', value: 'today' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
+      { kind: 'number', label: 'NTE on open work', width: 'quarter', config: { metric: 'sum', value_field: 'nte', filters: OPEN_WORK, tab: 'Work' } },
+      { kind: 'bar', label: 'Open work by status', width: 'half', config: { metric: 'count', group_field: 'status', filters: OPEN_WORK, limit: 15, tab: 'Work' } },
+      { kind: 'bar', label: 'Open work by client', width: 'half', config: { metric: 'count', group_field: 'client', filters: OPEN_WORK, limit: 12, tab: 'Work' } },
+      { kind: 'line', label: 'Work orders received, by week', width: 'full', config: { metric: 'count', time_field: 'date_received', bucket: 'week', limit: 16, tab: 'Work' } },
+      { kind: 'number', label: 'Invoiced, not paid', width: 'quarter', config: { metric: 'sum', value_field: 'total', source: 'invoices', source_status: ['sent'], tab: 'Money in' } },
+      { kind: 'number', label: 'Invoices past due', width: 'quarter', config: { metric: 'sum', value_field: 'total', source: 'invoices', source_overdue: true, tab: 'Money in' } },
+      { kind: 'number', label: 'Collected', width: 'quarter', config: { metric: 'sum', value_field: 'total', source: 'invoices', source_status: ['paid'], tab: 'Money in' } },
+      { kind: 'number', label: 'Drafts to send', width: 'quarter', config: { metric: 'count', source: 'invoices', source_status: ['draft'], tab: 'Money in' } },
+      { kind: 'bar', label: 'Invoiced by client', width: 'half', config: { metric: 'sum', value_field: 'total', group_field: 'client', source: 'invoices', limit: 12, tab: 'Money in' } },
+      { kind: 'line', label: 'Invoiced, by month', width: 'half', config: { metric: 'sum', value_field: 'total', source: 'invoices', time_field: 'created_at', bucket: 'month', limit: 12, tab: 'Money in' } },
+      { kind: 'number', label: 'Payments awaiting approval', width: 'quarter', config: { metric: 'sum', value_field: 'amount', source: 'payments', source_status: ['requested'], tab: 'Money out' } },
+      { kind: 'number', label: 'Approved, not yet paid', width: 'quarter', config: { metric: 'sum', value_field: 'amount', source: 'payments', source_status: ['approved', 'sent_to_yoda'], tab: 'Money out' } },
+      { kind: 'number', label: 'Vendor bills waiting', width: 'quarter', config: { metric: 'sum', value_field: 'total', source: 'vendor_bills', source_status: ['received'], tab: 'Money out' } },
+      { kind: 'number', label: 'Vendor bills past due', width: 'quarter', config: { metric: 'sum', value_field: 'total', source: 'vendor_bills', source_overdue: true, tab: 'Money out' } },
+      { kind: 'bar', label: 'Paid out by client', width: 'half', config: { metric: 'sum', value_field: 'amount', group_field: 'client', source: 'payments', source_status: ['paid'], limit: 12, tab: 'Money out' } },
+      { kind: 'line', label: 'Paid out, by month', width: 'half', config: { metric: 'sum', value_field: 'amount', source: 'payments', source_status: ['paid'], time_field: 'paid_at', bucket: 'month', limit: 12, tab: 'Money out' } },
+      { kind: 'number', label: 'Active vendors', width: 'quarter', config: { metric: 'count', source: 'vendors', source_status: ['ACTIVE'], tab: 'Vendors' } },
+      { kind: 'donut', label: 'Vendors by status', width: 'half', config: { metric: 'count', group_field: 'status', source: 'vendors', tab: 'Vendors' } },
+      { kind: 'bar', label: 'Vendors by trade', width: 'half', config: { metric: 'count', group_field: 'primary_trade', source: 'vendors', limit: 15, tab: 'Vendors' } },
+      { kind: 'number', label: 'Sites', width: 'quarter', config: { metric: 'count', source: 'sites', tab: 'Portfolio' } },
+      { kind: 'number', label: 'Assets', width: 'quarter', config: { metric: 'count', source: 'assets', tab: 'Portfolio' } },
+      { kind: 'bar', label: 'Sites by client', width: 'half', config: { metric: 'count', group_field: 'client', source: 'sites', limit: 15, tab: 'Portfolio' } },
+      { kind: 'donut', label: 'Asset condition', width: 'half', config: { metric: 'count', group_field: 'condition', source: 'assets', tab: 'Portfolio' } },
     ],
   },
 ];

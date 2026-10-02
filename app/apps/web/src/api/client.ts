@@ -3041,3 +3041,187 @@ export const getWoFormLayouts = () => request<WoFormLayoutsResponse>('/admin/wo-
 export const saveWoFormLayout = (id: string | null, input: WoFormLayoutInput) =>
   post<WoFormLayoutsResponse>(id ? `/admin/wo-form-layouts/${encodeURIComponent(id)}` : '/admin/wo-form-layouts', input, id ? 'PATCH' : 'POST');
 export const deleteWoFormLayout = (id: string) => post<WoFormLayoutsResponse>(`/admin/wo-form-layouts/${encodeURIComponent(id)}`, undefined, 'DELETE');
+
+// ── 0065 · Maintenance modules ───────────────────────────────────────────────
+import type {
+  AssignmentBoard,
+  JobPlanInput,
+  JobPlansResponse,
+  PermitAction,
+  PermitsResponse,
+  ServiceItemInput,
+  ServicesResponse,
+  TimeEntryInput,
+  TimeTrackerResponse,
+  WoMaintenance,
+  WorkPermitInput,
+} from '@theone/shared';
+
+const qs = (params: Record<string, string | undefined | null>): string => {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) sp.set(k, v);
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+};
+const enc = encodeURIComponent;
+
+export const getServices = () => request<ServicesResponse>('/maintenance/services');
+export const saveService = (id: string | null, input: ServiceItemInput) =>
+  post<ServicesResponse>(id ? `/maintenance/services/${enc(id)}` : '/maintenance/services', input, id ? 'PATCH' : 'POST');
+export const deleteService = (id: string) => post<ServicesResponse>(`/maintenance/services/${enc(id)}`, undefined, 'DELETE');
+
+export const getJobPlans = () => request<JobPlansResponse>('/maintenance/job-plans');
+export const saveJobPlan = (id: string | null, input: JobPlanInput) =>
+  post<JobPlansResponse>(id ? `/maintenance/job-plans/${enc(id)}` : '/maintenance/job-plans', input, id ? 'PATCH' : 'POST');
+export const deleteJobPlan = (id: string) => post<JobPlansResponse>(`/maintenance/job-plans/${enc(id)}`, undefined, 'DELETE');
+
+export const getTimeTracker = (params: { from?: string; to?: string; tech?: string }) => request<TimeTrackerResponse>(`/maintenance/time${qs(params)}`);
+export const getPermits = (params: { state?: string; search?: string }) => request<PermitsResponse>(`/maintenance/permits${qs(params)}`);
+export const getAssignmentBoard = (params: { who?: string; search?: string; trade?: string }) => request<AssignmentBoard>(`/maintenance/assignment${qs(params)}`);
+export const assignWorkOrders = (ids: string[], principalId: string | null) =>
+  post<{ assigned: number; failed: { wo_number: string; reason: string }[] }>('/maintenance/assignment/assign', { ids, principal_id: principalId });
+
+export const getWoMaintenance = (woRef: string) => request<WoMaintenance>(recordPath(woRef, '/maintenance'));
+export const applyJobPlan = (woRef: string, planId: string) => post<WoMaintenance>(recordPath(woRef, '/job-plans'), { plan_id: planId });
+export const addWoService = (woRef: string, input: { service_id?: string | null; name?: string; unit?: string; qty?: number; unit_price?: number | null; unit_cost?: number | null; note?: string | null }) =>
+  post<WoMaintenance>(recordPath(woRef, '/services'), input);
+export const updateWoService = (woRef: string, lineId: string, input: { qty?: number; unit_price?: number | null; unit_cost?: number | null; note?: string | null }) =>
+  post<WoMaintenance>(recordPath(woRef, `/services/${enc(lineId)}`), input, 'PATCH');
+export const removeWoService = (woRef: string, lineId: string) => post<WoMaintenance>(recordPath(woRef, `/services/${enc(lineId)}`), undefined, 'DELETE');
+export const addTimeEntry = (woRef: string, input: TimeEntryInput) => post<WoMaintenance>(recordPath(woRef, '/time'), input);
+export const updateTimeEntry = (woRef: string, entryId: string, input: TimeEntryInput & { stop?: boolean }) =>
+  post<WoMaintenance>(recordPath(woRef, `/time/${enc(entryId)}`), input, 'PATCH');
+export const deleteTimeEntry = (woRef: string, entryId: string) => post<WoMaintenance>(recordPath(woRef, `/time/${enc(entryId)}`), undefined, 'DELETE');
+export const createPermit = (woRef: string, input: WorkPermitInput) => post<WoMaintenance>(recordPath(woRef, '/permits'), input);
+export const updatePermit = (woRef: string, permitId: string, input: WorkPermitInput) => post<WoMaintenance>(recordPath(woRef, `/permits/${enc(permitId)}`), input, 'PATCH');
+export const deletePermit = (woRef: string, permitId: string) => post<WoMaintenance>(recordPath(woRef, `/permits/${enc(permitId)}`), undefined, 'DELETE');
+export const actOnPermit = (woRef: string, permitId: string, action: PermitAction, note?: string | null) =>
+  post<WoMaintenance>(recordPath(woRef, `/permits/${enc(permitId)}/act`), { action, note: note ?? null });
+
+// ── 0066 · Vendors, the rest ─────────────────────────────────────────────────
+import type {
+  BillRules,
+  DispatchSettings,
+  OnboardingPayload,
+  PortalPurpose,
+  PortalView,
+  SkillLevel,
+  VendorCatalogues,
+  VendorPerformanceResponse,
+  VendorPortalAdmin,
+  VendorQualifications,
+  WoConsumablesResponse,
+  WoDispatch,
+} from '@theone/shared';
+
+export const getVendorPerformance = (params: { from?: string; to?: string; vendor_id?: string }) => request<VendorPerformanceResponse>(`/vendors/performance${qs(params)}`);
+export const getVendorQualifications = (vendorId: string) => request<VendorQualifications>(`/vendors/${enc(vendorId)}/qualifications`);
+export const saveVendorSkill = (vendorId: string, id: string | null, input: { skill?: string; level?: SkillLevel; certified_until?: string | null; note?: string | null }) =>
+  post<VendorQualifications>(`/vendors/${enc(vendorId)}/skills${id ? `/${enc(id)}` : ''}`, input, id ? 'PATCH' : 'POST');
+export const removeVendorSkill = (vendorId: string, id: string) => post<VendorQualifications>(`/vendors/${enc(vendorId)}/skills/${enc(id)}`, undefined, 'DELETE');
+export const saveVendorInduction = (vendorId: string, id: string | null, input: { title?: string; client?: string | null; completed_on?: string | null; expires_on?: string | null; note?: string | null }) =>
+  post<VendorQualifications>(`/vendors/${enc(vendorId)}/inductions${id ? `/${enc(id)}` : ''}`, input, id ? 'PATCH' : 'POST');
+export const removeVendorInduction = (vendorId: string, id: string) => post<VendorQualifications>(`/vendors/${enc(vendorId)}/inductions/${enc(id)}`, undefined, 'DELETE');
+
+export const getVendorPortalAdmin = (vendorId: string) => request<VendorPortalAdmin>(`/vendors/${enc(vendorId)}/portal`);
+export const createVendorPortalLink = (vendorId: string, purpose: PortalPurpose, days?: number | null) =>
+  post<VendorPortalAdmin & { url: string }>(`/vendors/${enc(vendorId)}/portal/links`, { purpose, days: days ?? null, origin: window.location.origin });
+export const revokeVendorPortalLink = (vendorId: string, linkId: string) => post<VendorPortalAdmin>(`/vendors/${enc(vendorId)}/portal/links/${enc(linkId)}`, undefined, 'DELETE');
+export const decideVendorOnboarding = (vendorId: string, submissionId: string, decision: 'accept' | 'reject', note?: string | null) =>
+  post<VendorPortalAdmin>(`/vendors/${enc(vendorId)}/portal/onboarding/${enc(submissionId)}`, { decision, note: note ?? null });
+
+export const addVendorCreditNote = (billId: string, input: { amount: number; reason: string; vendor_ref?: string | null }) =>
+  post<{ ok: true; credit_number: string; status: string }>(`/vendor-bills/${enc(billId)}/credit-notes`, input);
+export const decideVendorCreditNote = (creditId: string, decision: 'approve' | 'void', note?: string | null) =>
+  post<{ ok: true }>(`/vendor-credit-notes/${enc(creditId)}`, { decision, note: note ?? null });
+
+export const getWoDispatch = (woRef: string) => request<WoDispatch>(recordPath(woRef, '/dispatch'));
+export const startWoDispatch = (woRef: string) => post<WoDispatch>(recordPath(woRef, '/dispatch/start'));
+export const stopWoDispatch = (woRef: string) => post<WoDispatch>(recordPath(woRef, '/dispatch/stop'));
+export const answerWoDispatch = (woRef: string, offerId: string, answer: 'accept' | 'decline', note?: string | null) =>
+  post<WoDispatch>(recordPath(woRef, `/dispatch/offers/${enc(offerId)}`), { answer, note: note ?? null });
+export const getWoConsumables = (woRef: string) => request<WoConsumablesResponse>(recordPath(woRef, '/consumables'));
+export const addWoConsumable = (woRef: string, input: { consumable_id?: string | null; name?: string; unit?: string; qty?: number; unit_cost?: number | null; vendor_id?: string | null; note?: string | null }) =>
+  post<WoConsumablesResponse>(recordPath(woRef, '/consumables'), input);
+export const removeWoConsumable = (woRef: string, lineId: string) => post<WoConsumablesResponse>(recordPath(woRef, `/consumables/${enc(lineId)}`), undefined, 'DELETE');
+
+export const getVendorCatalogues = () => request<VendorCatalogues>('/admin/vendor-catalogues');
+export const saveSkillDef = (id: string | null, input: { name?: string; trade?: string | null; is_active?: boolean }) =>
+  post<VendorCatalogues>(`/admin/vendor-catalogues/skills${id ? `/${enc(id)}` : ''}`, input, id ? 'PATCH' : 'POST');
+export const saveConsumableDef = (id: string | null, input: { name?: string; unit?: string; unit_cost?: number | null; is_active?: boolean }) =>
+  post<VendorCatalogues>(`/admin/vendor-catalogues/consumables${id ? `/${enc(id)}` : ''}`, input, id ? 'PATCH' : 'POST');
+export const saveBillRules = (input: Partial<BillRules>) => post<VendorCatalogues>('/admin/vendor-catalogues/bill-rules', input, 'PUT');
+export const saveDispatchSettings = (input: Partial<DispatchSettings>) => post<VendorCatalogues>('/admin/vendor-catalogues/dispatch', input, 'PUT');
+
+// The vendor's own link: no session, the token is the credential.
+const portalBase = (token: string) => `/public/vendor-portal/${enc(token)}`;
+export const getVendorPortal = (token: string) => request<PortalView>(portalBase(token));
+export const submitVendorOnboarding = (token: string, payload: OnboardingPayload) => post<PortalView>(`${portalBase(token)}/onboarding`, payload);
+export const answerPortalOffer = (token: string, offerId: string, answer: 'accept' | 'decline', note?: string | null) =>
+  post<PortalView>(`${portalBase(token)}/offers/${enc(offerId)}`, { answer, note: note ?? null });
+export const setPortalEta = (token: string, ref: string, etaAt: string) => post<PortalView>(`${portalBase(token)}/jobs/${enc(ref)}/eta`, { eta_at: etaAt });
+export const addPortalNote = (token: string, ref: string, body: string) => post<PortalView>(`${portalBase(token)}/jobs/${enc(ref)}/notes`, { body });
+
+// ── 0067 · Purchasing, tax rates, templates, budgets ─────────────────────────
+import type {
+  BudgetsResponse,
+  DocTemplateInput,
+  DocTemplateKind,
+  FinanceSetup,
+  PoAction,
+  PrAction,
+  PrintTemplate,
+  PurchaseOrder,
+  PurchaseOrderInput,
+  PurchaseRequest,
+  PurchaseRequestInput,
+  PurchasingList,
+  PurchasingMeta,
+  Rfq,
+  RfqAction,
+  RfqInput,
+  TaxRate,
+  VendorQuoteInput,
+  WoPurchasing,
+} from '@theone/shared';
+
+export const getPurchasingMeta = () => request<PurchasingMeta>('/purchasing/meta');
+export const getTaxRates = () => request<{ tax_rates: TaxRate[] }>('/tax-rates');
+export const getPrintTemplate = (kind: DocTemplateKind) => request<{ template: PrintTemplate | null }>(`/print-templates/${kind}`);
+
+export const listPurchaseRequests = (params: { status?: string; search?: string }) => request<PurchasingList<PurchaseRequest>>(`/purchasing/requests${qs(params)}`);
+export const savePurchaseRequest = (id: string | null, input: PurchaseRequestInput) =>
+  post<{ request: PurchaseRequest }>(id ? `/purchasing/requests/${enc(id)}` : '/purchasing/requests', input, id ? 'PATCH' : 'POST');
+export const actOnPurchaseRequest = (id: string, action: PrAction, note?: string | null) => post<{ request: PurchaseRequest }>(`/purchasing/requests/${enc(id)}/act`, { action, note: note ?? null });
+
+export const listRfqs = (params: { status?: string; search?: string }) => request<PurchasingList<Rfq>>(`/purchasing/rfqs${qs(params)}`);
+export const saveRfq = (id: string | null, input: RfqInput) => post<{ rfq: Rfq }>(id ? `/purchasing/rfqs/${enc(id)}` : '/purchasing/rfqs', input, id ? 'PATCH' : 'POST');
+export const actOnRfq = (id: string, action: RfqAction) => post<{ rfq: Rfq }>(`/purchasing/rfqs/${enc(id)}/act`, { action });
+export const saveVendorQuote = (rfqId: string, input: VendorQuoteInput) => post<{ rfq: Rfq }>(`/purchasing/rfqs/${enc(rfqId)}/quotes`, input);
+export const deleteVendorQuote = (rfqId: string, quoteId: string) => post<{ rfq: Rfq }>(`/purchasing/rfqs/${enc(rfqId)}/quotes/${enc(quoteId)}`, undefined, 'DELETE');
+export const awardVendorQuote = (rfqId: string, quoteId: string) => post<{ rfq: Rfq; order: PurchaseOrder }>(`/purchasing/rfqs/${enc(rfqId)}/award`, { quote_id: quoteId });
+
+export const listPurchaseOrders = (params: { status?: string; search?: string }) => request<PurchasingList<PurchaseOrder>>(`/purchasing/orders${qs(params)}`);
+export const getPurchaseOrder = (id: string) => request<{ order: PurchaseOrder }>(`/purchasing/orders/${enc(id)}`);
+export const savePurchaseOrder = (id: string | null, input: PurchaseOrderInput) =>
+  post<{ order: PurchaseOrder }>(id ? `/purchasing/orders/${enc(id)}` : '/purchasing/orders', input, id ? 'PATCH' : 'POST');
+export const actOnPurchaseOrder = (id: string, action: PoAction) => post<{ order: PurchaseOrder }>(`/purchasing/orders/${enc(id)}/act`, { action });
+export const receivePurchaseOrder = (id: string, lines: { line_id: string; received_qty: number }[]) => post<{ order: PurchaseOrder }>(`/purchasing/orders/${enc(id)}/receive`, { lines });
+
+export const getBudgets = (year?: number) => request<BudgetsResponse>(`/purchasing/budgets${year ? `?year=${year}` : ''}`);
+export const saveCostCenter = (id: string | null, input: { code?: string; name?: string; client?: string | null; description?: string | null; is_active?: boolean }) =>
+  post<BudgetsResponse>(id ? `/purchasing/cost-centers/${enc(id)}` : '/purchasing/cost-centers', input, id ? 'PATCH' : 'POST');
+export const saveBudget = (costCenterId: string, year: number, amount: number | null) => post<BudgetsResponse>(`/purchasing/cost-centers/${enc(costCenterId)}/budget`, { year, amount }, 'PUT');
+export const saveAfe = (id: string | null, input: { afe_number?: string; title?: string; cost_center_id?: string | null; amount?: number; status?: 'open' | 'closed'; valid_from?: string | null; valid_to?: string | null; note?: string | null }) =>
+  post<BudgetsResponse>(id ? `/purchasing/afes/${enc(id)}` : '/purchasing/afes', input, id ? 'PATCH' : 'POST');
+
+export const getWoPurchasing = (woRef: string) => request<WoPurchasing>(recordPath(woRef, '/purchasing'));
+export const setWoFiling = (woRef: string, input: { cost_center_id?: string | null; afe_id?: string | null }) => post<WoPurchasing>(recordPath(woRef, '/filing'), input, 'PUT');
+
+export const getFinanceSetup = () => request<FinanceSetup>('/admin/finance-setup');
+export const saveTaxRate = (id: string | null, input: { name?: string; rate?: number; state?: string | null; is_default?: boolean; is_active?: boolean }) =>
+  post<FinanceSetup>(id ? `/admin/finance-setup/tax-rates/${enc(id)}` : '/admin/finance-setup/tax-rates', input, id ? 'PATCH' : 'POST');
+export const saveDocTemplate = (id: string | null, input: DocTemplateInput) =>
+  post<FinanceSetup>(id ? `/admin/finance-setup/templates/${enc(id)}` : '/admin/finance-setup/templates', input, id ? 'PATCH' : 'POST');
+export const deleteDocTemplate = (id: string) => post<FinanceSetup>(`/admin/finance-setup/templates/${enc(id)}`, undefined, 'DELETE');
+export const searchPurchasingVendors = (q: string) => request<{ hits: { id: string; name: string; primary_trade: string | null; city: string | null; state: string | null }[] }>(`/purchasing/vendor-search${qs({ q })}`);
