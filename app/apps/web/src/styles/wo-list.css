@@ -425,10 +425,10 @@
   flex: none;
 }
 
+/* Fixed, and placed by Popover.tsx from the trigger's box (top / bottom / left
+   / max-height are inline), so no scrolling ancestor can clip it. */
 .pop-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  position: fixed;
   z-index: 40;
   min-width: 240px;
   max-height: 70vh;
@@ -438,11 +438,6 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
-}
-
-.pop-panel.is-right {
-  left: auto;
-  right: 0;
 }
 
 .pop-filters { width: min(680px, 88vw); }

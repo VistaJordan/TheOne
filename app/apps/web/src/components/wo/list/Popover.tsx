@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 interface PopoverProps {
@@ -23,6 +23,48 @@ interface PopoverProps {
 export function Popover({ trigger, children, align = 'left', className, panelClassName }: PopoverProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // The panel is `position: fixed` and placed from the trigger's box, so it is
+  // never clipped by a scrolling ancestor — a dialog body, or another popover
+  // (the field picker opens from inside the filter builder). It opens downward
+  // unless there is more room above, and is capped to the room it has.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const GAP = 6;
+    const EDGE = 8;
+    const place = () => {
+      const root = rootRef.current;
+      const panel = panelRef.current;
+      if (!root || !panel) return;
+      const r = root.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const natural = panel.scrollHeight + (panel.offsetHeight - panel.clientHeight);
+      const below = vh - r.bottom - GAP - EDGE;
+      const above = r.top - GAP - EDGE;
+      const up = natural > below && above > below;
+      panel.style.maxHeight = `min(70vh, ${Math.max(120, up ? above : below)}px)`;
+      panel.style.top = up ? 'auto' : `${r.bottom + GAP}px`;
+      panel.style.bottom = up ? `${vh - r.top + GAP}px` : 'auto';
+      const w = panel.offsetWidth;
+      const left = align === 'right' ? r.right - w : r.left;
+      panel.style.left = `${Math.max(EDGE, Math.min(left, vw - w - EDGE))}px`;
+    };
+    place();
+    // Follow the trigger when something behind the panel scrolls; the panel's
+    // own scrolling (and a nested panel's) moves nothing.
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && panelRef.current?.contains(e.target)) return;
+      place();
+    };
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [open, align]);
 
   useEffect(() => {
     if (!open) return;
@@ -49,9 +91,8 @@ export function Popover({ trigger, children, align = 'left', className, panelCla
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
       {open && (
         <div
-          className={['pop-panel', align === 'right' ? 'is-right' : '', panelClassName]
-            .filter(Boolean)
-            .join(' ')}
+          ref={panelRef}
+          className={['pop-panel', panelClassName].filter(Boolean).join(' ')}
         >
           {children({ close: () => setOpen(false) })}
         </div>
