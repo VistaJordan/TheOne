@@ -41,6 +41,7 @@ import type {
   WidgetWidth,
   // 0043 · the photos and files a work order carries.
   Attachment,
+  AttachmentReview,
   AttachmentUpload,
   AttachmentsResponse,
   // 0045 · the bill to the client.
@@ -1959,6 +1960,18 @@ export function uploadAttachment(
   input: AttachmentUpload,
 ): Promise<{ item: Attachment }> {
   return request(`/work-orders/${woId}/attachments`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** 0061 · approve or decline one upload (rules 1.3.3 / 1.3.4). */
+export function reviewAttachment(
+  woId: string,
+  attachmentId: string,
+  input: AttachmentReview,
+): Promise<{ item: Attachment }> {
+  return request(`/work-orders/${woId}/attachments/${attachmentId}/review`, {
     method: 'POST',
     body: JSON.stringify(input),
   });

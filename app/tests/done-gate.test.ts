@@ -14,6 +14,7 @@ import {
   statusGateFor,
   statusGateTag,
 } from '../packages/shared/src/statusGates';
+import { completionProofMissing } from '../packages/shared/src/attachments';
 
 describe('statusGateFor — Done / Incurred opens the Done gate', () => {
   it('matches the status by name, case-insensitively', () => {
@@ -67,7 +68,42 @@ describe('doneGateMissing — which of the three checks fail', () => {
     expect(doneGateMissing({ visitComplete: true, costValue: '', quoteFilled: true })).toEqual(['cost']);
     expect(doneGateMissing({ visitComplete: false, costValue: 12, quoteFilled: true })).toEqual(['visit']);
     expect(doneGateMissing({ visitComplete: true, costValue: 12, quoteFilled: false })).toEqual(['quote']);
-    expect(DONE_GATE_CHECKS).toEqual(['visit', 'cost', 'quote']);
+    expect(DONE_GATE_CHECKS).toEqual(['visit', 'cost', 'quote', 'after_photo']);
+  });
+});
+
+describe('rule 11.3.4 — proof before Done (0061)', () => {
+  const ok = { visitComplete: true, costValue: 12, quoteFilled: true };
+
+  it('says nothing when the caller does not know the files', () => {
+    expect(doneGateMissing(ok)).toEqual([]);
+    expect(doneGateMissing({ ...ok, proof: null })).toEqual([]);
+  });
+
+  it('standard completion needs an approved after photo', () => {
+    expect(doneGateMissing({ ...ok, proof: { bfi: false, approvedKinds: [] } })).toEqual(['after_photo']);
+    expect(doneGateMissing({ ...ok, proof: { bfi: null, approvedKinds: ['before', 'signoff'] } })).toEqual([
+      'after_photo',
+    ]);
+    expect(doneGateMissing({ ...ok, proof: { bfi: false, approvedKinds: ['after'] } })).toEqual([]);
+  });
+
+  it('a BFI job needs a before photo AND a sign-off instead', () => {
+    expect(completionProofMissing(true, ['after'])).toBe('bfi_proof');
+    expect(completionProofMissing('true', ['before'])).toBe('bfi_proof');
+    expect(completionProofMissing(true, ['signoff'])).toBe('bfi_proof');
+    expect(completionProofMissing(true, ['before', 'signoff'])).toBeNull();
+    expect(doneGateMissing({ ...ok, proof: { bfi: true, approvedKinds: ['before', 'signoff'] } })).toEqual([]);
+  });
+
+  it('comes last in the list and has its own words', () => {
+    expect(
+      doneGateMissing({ visitComplete: false, costValue: null, quoteFilled: false, proof: { bfi: false, approvedKinds: [] } }),
+    ).toEqual(['visit', 'cost', 'quote', 'after_photo']);
+    expect(describeStatusGate('done', DONE_STATUS_NAME, ['after_photo'])).toContain('approved after photo');
+    expect(describeStatusGate('done', DONE_STATUS_NAME, ['bfi_proof'])).toContain('sign-off');
+    expect(statusGateTag('done', ['after_photo'])).toBe('Needs after photo');
+    expect(statusGateTag('done', ['bfi_proof'])).toBe('Needs sign-off');
   });
 });
 

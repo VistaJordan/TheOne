@@ -511,6 +511,31 @@ anything else lists underneath. Logged `attachment_added|removed` under field
 `attachment:<id>`. Permission path `work_orders/attachments` (create /
 delete); reading needs only `work_orders` view.
 
+**Photo approval and proof before Done** (migration 0061, rules 1.3.1–1.3.4
+and 11.3.4). Every upload lands `attachment.review_status = 'pending'` and is
+**quarantined**: `listAttachments` and the bytes route show a pending or
+declined file only to a reviewer (`work_orders/attachments` **approve**) and
+to the person who uploaded it — to anyone else it answers like a missing
+file. `POST /work-orders/:id/attachments/:attId/review {decision, kind?,
+file_name?}` approves or declines ONE file (1.3.4); approving needs a `kind`
+(`before | after | signoff | other`) and may rename the file (1.3.3), and a
+decision can be reversed by deciding again. Logged `attachment_approved|
+declined`. The Photos card draws a "Waiting for approval" list on top with
+the name, a "What is it?" select and Approve / Decline per row; approved
+images group by `kind` (no longer by `client_visible`). 0061 stamps the files
+that already existed as approved (internal image = before, client-visible =
+after) and grants `approve` to admin / tl / atl / am / oa / senior_om / om —
+not the probation tiers. There is no Tech Chat yet, so "uploaded in the Tech
+Chat" (1.3.1) is every upload on the work order. Rule 11.3.4 is two more
+checks in the Job is Done gate (`after_photo`, `bfi_proof` in
+`DoneGateCheck`; `completionProofMissing` in shared `attachments.ts`):
+Done / Incurred needs an approved after photo, or — when the new checkbox
+field `Bill For Incurred` (`BFI_KEY`, AR section, seed + 0061 in step) is
+ticked — an approved before photo AND an approved sign-off instead. Only
+files with a blob behind them count. The header feeds the status menu the
+approved kinds from the same `['wo-attachments', id]` cache entry, so the
+"Needs after photo" tag clears the moment a photo is approved.
+
 **Trend cards and the board's period** (migration 0044, rule-free, the
 dashboards' second half). A fifth widget kind, `line`, cuts by WHEN instead of
 by a category: `config.time_field` + `bucket` (day/week/month),

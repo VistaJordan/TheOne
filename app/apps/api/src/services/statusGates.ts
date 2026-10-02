@@ -11,6 +11,7 @@
 // because the quote or the parts may have been emptied since the request).
 
 import {
+  BFI_KEY,
   FINAL_COST_KEY,
   PARTS_REQUIRED_KEY,
   STATUS_GATE_ERROR_CODE,
@@ -43,23 +44,35 @@ export async function quoteFilledTaskIds(q: Queryable, ids: readonly string[]): 
 }
 
 /**
- * Rules 11.3.1–11.3.3 against the rows: which of the Done gate's checks
+ * Rules 11.3.1–11.3.4 against the rows: which of the Done gate's checks
  * fail for one work order. 11.3.1 reads the visit log (0021) — "both stamps
  * NOT NULL" is a visit that checked in and checked out, any visit, since a
  * planned return trip after a finished job must not undo the job; 11.3.2
  * reads the Cost bag key; 11.3.3 asks the 11.2.1 question of the quote.
  */
 export async function doneGateMissingFor(q: Queryable, taskId: string): Promise<DoneGateCheck[]> {
-  const res = await q.query<{ visit_complete: boolean; cost: unknown }>(
+  const res = await q.query<{
+    visit_complete: boolean;
+    cost: unknown;
+    bfi: unknown;
+    approved_kinds: string[] | null;
+  }>(
     `SELECT EXISTS (SELECT 1 FROM wo_visit v
                      WHERE v.task_id = t.id
                        AND v.checked_in_at IS NOT NULL
                        AND v.checked_out_at IS NOT NULL) AS visit_complete,
-            t.fields -> $2::text AS cost
+            t.fields -> $2::text AS cost,
+            t.fields -> $3::text AS bfi,
+            ARRAY(SELECT DISTINCT a.kind
+                    FROM attachment a
+                   WHERE a.task_id = t.id
+                     AND a.review_status = 'approved'
+                     AND a.kind IS NOT NULL
+                     AND a.storage_key IS NOT NULL) AS approved_kinds
        FROM task t
       WHERE t.id = $1
       LIMIT 1`,
-    [taskId, FINAL_COST_KEY],
+    [taskId, FINAL_COST_KEY, BFI_KEY],
   );
   const row = res.rows[0];
   const quoteFilled = (await quoteFilledTaskIds(q, [taskId])).has(taskId);
@@ -67,6 +80,9 @@ export async function doneGateMissingFor(q: Queryable, taskId: string): Promise<
     visitComplete: Boolean(row?.visit_complete),
     costValue: row?.cost ?? null,
     quoteFilled,
+    // 11.3.4 (0061): an approved after photo, or for a BFI job an approved
+    // before photo and sign-off. Only files that are really in storage count.
+    proof: { bfi: row?.bfi ?? null, approvedKinds: row?.approved_kinds ?? [] },
   });
 }
 

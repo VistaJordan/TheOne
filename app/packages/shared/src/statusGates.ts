@@ -8,15 +8,19 @@
 //           list, so the person is asked to type the parts before the move.
 //   11.3.x  Done / Incurred needs a visit that checked in AND out (11.3.1),
 //           the final vendor cost (11.3.2, the Cost field, hand-typed in V1)
-//           and a quote with data (11.3.3 — the same test as 11.2.1). The
-//           rule's photo / BFI check (11.3.4) and tech rating (11.3.5) wait
-//           for the drive and the technician database, which do not exist.
+//           a quote with data (11.3.3 — the same test as 11.2.1) and proof
+//           (11.3.4, 0061): an APPROVED after photo, or — when the Bill For
+//           Incurred box is ticked — an approved before photo and an approved
+//           sign-off instead. The tech rating (11.3.5) waits for the rating
+//           flow, which does not exist.
 //
 // The check itself needs the database (apps/api/src/services/statusGates.ts,
 // which every status-change path calls: the single move, the bulk move, a
 // status-change REQUEST and its approval, and an automation's status action).
 // This file is the vocabulary both sides share: which status opens which
 // gate, what "filled" means, and the sentence the person reads.
+
+import { completionProofMissing } from './attachments';
 
 /** Bag key of rule 11.2.2's Parts_Required_List — a long-text field in the
     Overview section (migration 0035 / seed.ts). */
@@ -39,8 +43,9 @@ export const FINAL_COST_KEY = '34. Cost';
 export type StatusGate = 'quote' | 'parts' | 'done';
 
 /** The Done gate's three checks, in the rule's order. */
-export type DoneGateCheck = 'visit' | 'cost' | 'quote';
-export const DONE_GATE_CHECKS: readonly DoneGateCheck[] = ['visit', 'cost', 'quote'];
+export type DoneGateCheck = 'visit' | 'cost' | 'quote' | 'after_photo' | 'bfi_proof';
+/** What a standard completion needs; a BFI job swaps the last for 'bfi_proof'. */
+export const DONE_GATE_CHECKS: readonly DoneGateCheck[] = ['visit', 'cost', 'quote', 'after_photo'];
 
 /** `details.code` on the 409 a refused move returns; `details.gate` says which. */
 export const STATUS_GATE_ERROR_CODE = 'STATUS_GATE';
@@ -69,16 +74,23 @@ export function costFilled(value: unknown): boolean {
 /** Which of the Done gate's checks fail, given what the caller knows:
     `visitComplete` = some visit has both stamps (11.3.1), `costValue` = the
     Cost bag value (11.3.2), `quoteFilled` = quoteSectionsHaveData (11.3.3).
+    `proof` = rule 11.3.4's inputs, the BFI checkbox and the kinds of the
+    APPROVED files (omitted = not known here, never reported missing).
     Empty = the move may go ahead. */
 export function doneGateMissing(state: {
   visitComplete: boolean;
   costValue: unknown;
   quoteFilled: boolean;
+  proof?: { bfi: unknown; approvedKinds: readonly string[] } | null;
 }): DoneGateCheck[] {
   const missing: DoneGateCheck[] = [];
   if (!state.visitComplete) missing.push('visit');
   if (!costFilled(state.costValue)) missing.push('cost');
   if (!state.quoteFilled) missing.push('quote');
+  if (state.proof) {
+    const absent = completionProofMissing(state.proof.bfi, state.proof.approvedKinds);
+    if (absent) missing.push(absent);
+  }
   return missing;
 }
 
@@ -110,6 +122,16 @@ const DONE_CHECK_TEXT: Record<DoneGateCheck, string> = {
   visit: 'a visit checked in and checked out (CICO tab)',
   cost: `the final vendor cost (${FINAL_COST_KEY})`,
   quote: 'a quote with at least one line or scope item (Quote tab)',
+  after_photo: 'an approved after photo (Photos card)',
+  bfi_proof: 'an approved before photo and an approved sign-off (Photos card — this job is Bill For Incurred)',
+};
+
+const DONE_CHECK_TAG: Record<DoneGateCheck, string> = {
+  visit: 'Needs check-out',
+  cost: 'Needs cost',
+  quote: 'Needs quote',
+  after_photo: 'Needs after photo',
+  bfi_proof: 'Needs sign-off',
 };
 
 function joinAnd(parts: readonly string[]): string {
@@ -138,8 +160,6 @@ export function describeStatusGate(
 export function statusGateTag(gate: StatusGate, missing?: readonly DoneGateCheck[]): string {
   if (gate === 'quote') return 'Needs quote';
   if (gate === 'parts') return 'Needs parts';
-  if (missing && missing.length === 1) {
-    return missing[0] === 'visit' ? 'Needs check-out' : missing[0] === 'cost' ? 'Needs cost' : 'Needs quote';
-  }
+  if (missing && missing.length === 1) return DONE_CHECK_TAG[missing[0]];
   return 'Not ready';
 }

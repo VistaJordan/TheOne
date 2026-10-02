@@ -16,14 +16,18 @@
 import { del, get, put } from '@vercel/blob';
 import {
   ATTACHMENT_ALLOWED_TYPES,
+  ATTACHMENT_KINDS,
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_STORAGE_MISSING,
   type Attachment,
+  type AttachmentKind,
+  type AttachmentReview,
+  type AttachmentReviewStatus,
   type AttachmentUpload,
 } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError, badRequest, notFound } from '../errors.js';
-import { requirePerm } from './permissions.js';
+import { allowFor, requirePerm } from './permissions.js';
 import type { ActingPrincipal } from './activity.js';
 
 function token(): string | undefined {
@@ -68,6 +72,23 @@ function requireRemove(p: ActingPrincipal): void {
   requirePerm(p, 'work_orders/attachments', 'delete', 'You cannot remove files from work orders');
 }
 
+// ── Review (0061, rules 1.3.1–1.3.4) ─────────────────────────────────────────
+//
+// An upload is quarantined until someone with `approve` says yes: until then
+// it exists for the reviewers and for the person who uploaded it, and for
+// nobody else — not in the list, and not as bytes. A declined file stays in
+// the same quarantine, so the reviewer can change their mind and the uploader
+// can see what happened to it.
+
+/** May this person approve / decline files? */
+export function canReviewAttachments(p: ActingPrincipal): boolean {
+  return allowFor(p)('work_orders/attachments', 'approve');
+}
+
+function visibleTo(row: Row, p: ActingPrincipal): boolean {
+  return row.review_status === 'approved' || row.uploaded_by_id === p.id || canReviewAttachments(p);
+}
+
 // ── Reading ──────────────────────────────────────────────────────────────────
 
 interface Row {
@@ -82,6 +103,11 @@ interface Row {
   uploaded_by_id: string | null;
   uploaded_by_name: string | null;
   created_at: string;
+  review_status: AttachmentReviewStatus;
+  kind: AttachmentKind | null;
+  reviewed_by_id: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
 }
 
 const SELECT = `
@@ -95,9 +121,15 @@ const SELECT = `
          a.storage_key,
          a.uploaded_by::text AS uploaded_by_id,
          p.display_name AS uploaded_by_name,
-         to_char((a.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at
+         to_char((a.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+         a.review_status,
+         a.kind,
+         a.reviewed_by::text AS reviewed_by_id,
+         rp.display_name AS reviewed_by_name,
+         to_char((a.reviewed_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS reviewed_at
     FROM attachment a
-    LEFT JOIN principal p ON p.id = a.uploaded_by`;
+    LEFT JOIN principal p ON p.id = a.uploaded_by
+    LEFT JOIN principal rp ON rp.id = a.reviewed_by`;
 
 function mapRow(r: Row): Attachment {
   return {
@@ -115,13 +147,21 @@ function mapRow(r: Row): Attachment {
     // A row from before 0043 has no file behind it: it is metadata only, and
     // the UI must not offer to open it.
     has_file: Boolean(r.storage_key),
+    review_status: r.review_status,
+    kind: r.kind,
+    reviewed_by: r.reviewed_by_id
+      ? { id: r.reviewed_by_id, display_name: r.reviewed_by_name ?? '—' }
+      : null,
+    reviewed_at: r.reviewed_at,
   };
 }
 
+/** The files this person may see: the approved ones, plus — rule 1.3.2 — the
+    quarantined ones only for a reviewer or for whoever uploaded them. */
 export async function listAttachments(taskId: string, actor: ActingPrincipal): Promise<Attachment[]> {
   requireView(actor);
   const res = await query<Row>(`${SELECT} WHERE a.task_id = $1 ORDER BY a.created_at DESC`, [taskId]);
-  return res.rows.map(mapRow);
+  return res.rows.filter((r) => visibleTo(r, actor)).map(mapRow);
 }
 
 // ── Writing ──────────────────────────────────────────────────────────────────
@@ -210,6 +250,8 @@ export async function addAttachment(
         byte_size: bytes.length,
         client_visible: input.client_visible ?? false,
         visit_id: input.visit_id ?? null,
+        // 0061 / rule 1.3.1: it waits for a reviewer.
+        review_status: 'pending',
       }),
     ],
   );
@@ -228,7 +270,8 @@ export async function readAttachment(
 
   const res = await query<Row>(`${SELECT} WHERE a.id = $1 AND a.task_id = $2`, [attachmentId, taskId]);
   const row = res.rows[0];
-  if (!row) throw notFound('No such file');
+  // A quarantined file answers exactly like a missing one (rule 1.3.2).
+  if (!row || !visibleTo(row, actor)) throw notFound('No such file');
   if (!row.storage_key) throw notFound('That row has no file behind it');
 
   const blob = await get(row.storage_key, { access: 'private', token: blobToken });
@@ -243,6 +286,58 @@ export async function readAttachment(
   };
 }
 
+/**
+ * Rules 1.3.3 / 1.3.4: approve or decline one file. Approving says what the
+ * file is (`kind` — required unless it already has one) and may rename it;
+ * from then on everyone who can open the work order sees it. Declining keeps
+ * it in quarantine. A decision can be reversed by deciding again; each
+ * decision is its own audit row.
+ */
+export async function reviewAttachment(
+  taskId: string,
+  attachmentId: string,
+  input: AttachmentReview,
+  actor: ActingPrincipal,
+): Promise<Attachment> {
+  requireView(actor);
+  requirePerm(actor,'work_orders/attachments', 'approve', 'You cannot approve or decline files');
+
+  const res = await query<Row>(`${SELECT} WHERE a.id = $1 AND a.task_id = $2`, [attachmentId, taskId]);
+  const row = res.rows[0];
+  if (!row) throw notFound('No such file');
+
+  const approving = input.decision === 'approve';
+  const kind = approving ? (input.kind ?? row.kind) : row.kind;
+  if (approving && (!kind || !ATTACHMENT_KINDS.includes(kind))) {
+    throw badRequest('Say what this file is — before photo, after photo, sign-off or other — to approve it');
+  }
+  const fileName = input.file_name?.trim() ? safeName(input.file_name) : row.file_name;
+  const status: AttachmentReviewStatus = approving ? 'approved' : 'declined';
+
+  await query(
+    `UPDATE attachment
+        SET review_status = $2, kind = $3, file_name = $4, reviewed_by = $5, reviewed_at = now()
+      WHERE id = $1`,
+    [attachmentId, status, kind, fileName, actor.id],
+  );
+
+  await query(
+    `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, before, after)
+     VALUES ($1, 'task', $2, $3, $4, $5::jsonb, $6::jsonb)`,
+    [
+      actor.id,
+      taskId,
+      approving ? 'attachment_approved' : 'attachment_declined',
+      `attachment:${attachmentId}`,
+      JSON.stringify({ file_name: row.file_name, review_status: row.review_status, kind: row.kind }),
+      JSON.stringify({ file_name: fileName, review_status: status, kind }),
+    ],
+  );
+
+  const out = await query<Row>(`${SELECT} WHERE a.id = $1`, [attachmentId]);
+  return mapRow(out.rows[0]);
+}
+
 export async function removeAttachment(
   taskId: string,
   attachmentId: string,
@@ -252,7 +347,7 @@ export async function removeAttachment(
 
   const res = await query<Row>(`${SELECT} WHERE a.id = $1 AND a.task_id = $2`, [attachmentId, taskId]);
   const row = res.rows[0];
-  if (!row) throw notFound('No such file');
+  if (!row || !visibleTo(row, actor)) throw notFound('No such file');
 
   // The row goes whatever happens to the blob: a file left in storage costs
   // pennies, but a row pointing at nothing makes the card lie.

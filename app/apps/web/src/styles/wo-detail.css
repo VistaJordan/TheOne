@@ -2578,6 +2578,86 @@ a.photo-img.is-real img {
 
 .photo-remove { margin-left: 8px; }
 
+/* 0061 — uploads waiting for a reviewer (rules 1.3.1–1.3.4): one row per
+   file, with the name, what it is, and Approve / Decline. */
+.photo-review-note { margin: 0 0 9px; }
+
+.photo-review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.photo-review {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+}
+
+.photo-review.is-declined {
+  border-color: var(--border);
+  background: var(--chip);
+}
+
+.photo-review-thumb {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--chip);
+  color: var(--ink-3);
+}
+
+.photo-review-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-review-body {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.photo-review-fields {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.photo-review-fields input.fld { flex: 1 1 140px; min-width: 0; }
+.photo-review-fields select.fld { flex: 0 0 auto; }
+
+.photo-review-name {
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.photo-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.photo-review-state { color: var(--warn); }
+.photo-review-state.is-declined { color: var(--ink-3); }
+
 /* Anything without a thumbnail worth drawing: a PDF, a spreadsheet. */
 .file-list {
   list-style: none;

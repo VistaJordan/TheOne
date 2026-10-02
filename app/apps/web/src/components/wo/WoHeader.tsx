@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
+  BFI_KEY,
   ECOTRAK_STATUS_KEY,
   FINAL_COST_KEY,
   PARTS_REQUIRED_KEY,
@@ -7,6 +9,7 @@ import {
   ecotrakStatusLabel,
 } from '@theone/shared';
 import type { ObligationSummary, Phase, WorkOrderDetailV2 } from '../../api/client';
+import { listAttachments } from '../../api/client';
 import { DASH, FIELD, dateVal, daysSince, field, isCostOverNte, isEmergency, isEscalated, money, numericDate, str } from '../../lib/fields';
 import { EmergencyBadge } from '../EmergencyBadge';
 import { EscalatedBadge } from '../EscalatedBadge';
@@ -103,6 +106,18 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
   const escalatedKey = `fields.${FIELD.escalated}`;
   const canEscalate = useCanEditField(escalatedKey);
   const escalateSave = useWoFieldSave(wo.id);
+  // Rule 11.3.4: the approved files, from the same cache entry the Photos
+  // card draws, so approving a photo untags Done / Incurred at once.
+  const attachments = useQuery({
+    queryKey: ['wo-attachments', wo.id],
+    queryFn: () => listAttachments(wo.id),
+    retry: 0,
+  });
+  const approvedKinds = attachments.data
+    ? attachments.data.items
+        .filter((a) => a.has_file && a.review_status === 'approved' && a.kind)
+        .map((a) => a.kind as string)
+    : null;
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   // "Request again" on a rejected request re-opens the status menu.
   const statusTriggerRef = useRef<HTMLButtonElement>(null);
@@ -181,6 +196,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               // the API reads every visit.
               visitComplete: Boolean(f[VISIT_MIRROR_KEYS.checkedInAt] && f[VISIT_MIRROR_KEYS.checkedOutAt]),
               costValue: f[FINAL_COST_KEY] ?? null,
+              proof: approvedKinds ? { bfi: f[BFI_KEY], approvedKinds } : null,
             }}
             renderTrigger={({ open, toggle, mode }) => (
               <button

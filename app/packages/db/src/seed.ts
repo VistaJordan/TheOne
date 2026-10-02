@@ -367,6 +367,9 @@ const CURATED_FIELDS: CuratedField[] = [
   // Rules 7.3.1–7.3.3 (0038): the Escalated flag — amber across every view,
   // pinned to the top of the inbox. KEEP IN STEP with migration 0038.
   { key: 'Escalated',                label: 'Escalated',            type: 'checkbox' },
+  // Rule 11.3.4 (0061): the BFI checkbox — Done / Incurred asks for a before
+  // photo and a sign-off instead of an after photo. KEEP IN STEP with 0061.
+  { key: 'Bill For Incurred',        label: 'Bill For Incurred',    type: 'checkbox' },
   { key: '12. Bad quote',            label: 'Bad Quote',            type: 'checkbox' },
   { key: '16. Client NTE 🔴',        label: 'Client NTE',           type: 'currency' },
   { key: '17. Address',              label: 'Address',              type: 'location' },

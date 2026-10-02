@@ -44,9 +44,11 @@ import { boardQuery } from './kpis.js';
 import { checkWoNumber, createWorkOrder, getCreateForm, requireWoCreate } from '../services/woCreate.js';
 import {
   addAttachment,
+  canReviewAttachments,
   listAttachments,
   readAttachment,
   removeAttachment,
+  reviewAttachment,
   storageReady,
 } from '../services/attachments.js';
 import { query } from '../db.js';
@@ -177,6 +179,14 @@ const attachmentSchema = z
     data: z.string().min(1),
     client_visible: z.boolean().optional(),
     visit_id: z.string().uuid().nullable().optional(),
+  })
+  .strict();
+
+const attachmentReviewSchema = z
+  .object({
+    decision: z.enum(['approve', 'decline']),
+    kind: z.enum(['before', 'after', 'signoff', 'other']).optional(),
+    file_name: z.string().trim().min(1).max(200).optional(),
   })
   .strict();
 
@@ -416,7 +426,21 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { id } = parse(idParamsSchema, req.params);
     const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
-    return { items: await listAttachments(taskId, p), storage_ready: storageReady() };
+    return {
+      items: await listAttachments(taskId, p),
+      storage_ready: storageReady(),
+      can_review: canReviewAttachments(p),
+    };
+  });
+
+  // 0061 · rules 1.3.3 / 1.3.4: approve or decline one upload.
+  app.post('/work-orders/:id/attachments/:attachmentId/review', async (req) => {
+    const { p } = acting(req);
+    const { id, attachmentId } = parse(attachmentParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    const body = parse(attachmentReviewSchema, req.body);
+    return { item: await reviewAttachment(taskId, attachmentId, body, p) };
   });
 
   app.post('/work-orders/:id/attachments', async (req, reply) => {

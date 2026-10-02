@@ -47,6 +47,57 @@ export function isImageType(contentType: string | null | undefined): boolean {
   return (contentType ?? '').startsWith('image/');
 }
 
+// ── Review (0061, rules 1.3.1–1.3.4) ─────────────────────────────────────────
+//
+// Every upload lands `pending` and is quarantined: only the people who may
+// review files (`work_orders/attachments` approve) and the person who
+// uploaded it see it. A reviewer approves or declines each one; approving is
+// also where the file is named and told apart — before photo, after photo,
+// sign-off — because that tag is what the Job is Done gate reads (11.3.4).
+
+export type AttachmentReviewStatus = 'pending' | 'approved' | 'declined';
+
+export type AttachmentKind = 'before' | 'after' | 'signoff' | 'other';
+
+export const ATTACHMENT_KINDS: readonly AttachmentKind[] = ['before', 'after', 'signoff', 'other'];
+
+export const ATTACHMENT_KIND_LABEL: Record<AttachmentKind, string> = {
+  before: 'Before photo',
+  after: 'After photo',
+  signoff: 'Sign-off',
+  other: 'Other',
+};
+
+/** POST …/attachments/:id/review. Approving needs a `kind` unless the file
+    already has one; `file_name` renames it on the way through (1.3.3). */
+export interface AttachmentReview {
+  decision: 'approve' | 'decline';
+  kind?: AttachmentKind;
+  file_name?: string;
+}
+
+/** Bag key of rule 11.3.4's BFI_Checkbox (0061 / seed.ts): the job is billed
+    for what was incurred, so there is no finished work to photograph. */
+export const BFI_KEY = 'Bill For Incurred';
+
+/** A checkbox bag value, read the way the browser's `bool` reads one. */
+export function checkboxOn(value: unknown): boolean {
+  return value === true || value === 'true' || value === 1;
+}
+
+/** Rule 11.3.4, which proof is absent. `approvedKinds` = the kinds of the
+    work order's APPROVED files. Standard completion needs an after photo; a
+    BFI job needs a before photo and a sign-off instead. */
+export function completionProofMissing(
+  bfi: unknown,
+  approvedKinds: readonly string[],
+): 'after_photo' | 'bfi_proof' | null {
+  if (checkboxOn(bfi)) {
+    return approvedKinds.includes('before') && approvedKinds.includes('signoff') ? null : 'bfi_proof';
+  }
+  return approvedKinds.includes('after') ? null : 'after_photo';
+}
+
 /** One file on a work order. */
 export interface Attachment {
   id: string;
@@ -62,6 +113,12 @@ export interface Attachment {
   created_at: string;
   /** False for a pre-0043 row: metadata with no file behind it. */
   has_file: boolean;
+  /** 0061 · pending until a reviewer approves or declines it. */
+  review_status: AttachmentReviewStatus;
+  /** What the file is, set at approval. Null while nobody has said. */
+  kind: AttachmentKind | null;
+  reviewed_by: { id: string; display_name: string } | null;
+  reviewed_at: string | null;
 }
 
 export interface AttachmentsResponse {
@@ -69,6 +126,8 @@ export interface AttachmentsResponse {
   /** False when the server has no file storage configured — the UI says so
       instead of offering a button that cannot work. */
   storage_ready: boolean;
+  /** Whether the viewer may approve / decline files here (0061). */
+  can_review: boolean;
 }
 
 /** POST body. `data` is base64 (no data: prefix). */

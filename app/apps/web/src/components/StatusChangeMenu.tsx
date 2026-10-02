@@ -67,6 +67,9 @@ export interface GateHints {
   partsValue?: unknown;
   visitComplete?: boolean | null;
   costValue?: unknown;
+  /** Rule 11.3.4: the BFI checkbox and the kinds of the approved files
+      (null = not loaded yet, no tag). */
+  proof?: { bfi: unknown; approvedKinds: readonly string[] } | null;
 }
 
 /** What the hints say the gate would find missing, or null when the pick
@@ -78,6 +81,7 @@ function hintedBlock(gate: StatusGate, h: GateHints): { missing: DoneGateCheck[]
     visitComplete: h.visitComplete ?? true,
     costValue: 'costValue' in h ? h.costValue : 0,
     quoteFilled: h.quoteFilled !== false,
+    proof: h.proof ?? null,
   });
   return missing.length > 0 ? { missing } : null;
 }

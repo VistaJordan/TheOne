@@ -235,6 +235,9 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       'fields.Quote Check',
       'fields.Audited',
       'fields.GTG',
+      // Rule 11.3.4's BFI_Checkbox (0061): ticked, Done / Incurred asks for a
+      // before photo and a sign-off instead of an after photo.
+      'fields.Bill For Incurred',
     ],
   },
   {
@@ -637,10 +640,12 @@ export function buildPermissionTree(
         {
           // 0043 · seeing a file is seeing the work order (the read is scoped
           // like any other), so only adding and removing are granted here.
+          // 0061 · approve = review uploads (rules 1.3.3 / 1.3.4); without
+          // it a person sees approved files and their own uploads only.
           key: 'work_orders/attachments',
           label: 'Photos and files',
-          actions: ['create', 'delete'],
-          note: 'Create = upload a photo or file; delete = remove one.',
+          actions: ['create', 'delete', 'approve'],
+          note: 'Create = upload a photo or file; delete = remove one; approve = approve or decline uploads, which are hidden from everyone else until approved.',
         },
         { key: 'work_orders/export', label: 'Export to CSV', actions: ['view'] },
         { key: 'work_orders/history', label: 'Field history', actions: ['view'] },
