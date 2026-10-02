@@ -59,7 +59,10 @@ export type AdminEntity =
   // site-type / asset-category lists.
   | 'client'
   | 'asset_request'
-  | 'portfolio_list';
+  | 'portfolio_list'
+  // 0063: a saved create-form template, a sub-category of a trade.
+  | 'wo_template'
+  | 'wo_subcategory';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

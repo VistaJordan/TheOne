@@ -50,8 +50,11 @@ export const WO_CREATE_DEFAULT_KEYS: readonly string[] = [
   'State',
   'Zip Code',
   'Trade',
+  'Sub Category',
   'Problem Type',
   '35. WO Description',
+  'Supplier Type',
+  'Work Permit Needed',
   'Date-Time Received',
   'Due Date',
   'SLA Due Date',
@@ -92,7 +95,7 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
     id: 'what',
     title: 'What is wrong',
     hint: 'The trade decides who can take it; the description is what the store told us.',
-    keys: ['Trade', 'Problem Type', '35. WO Description'],
+    keys: ['Trade', 'Sub Category', 'Problem Type', '35. WO Description', 'Supplier Type', 'Work Permit Needed'],
   },
   {
     id: 'when',
@@ -130,6 +133,70 @@ export interface WoCreateField {
 
 export interface WoCreateForm {
   fields: WoCreateField[];
+  /** 0063 · the sub-categories each trade offers, keyed by the trade in
+      lower case. Absent on an older API. */
+  subcategories?: Record<string, string[]>;
+}
+
+/** 0063 · bag keys the form treats specially. */
+export const WO_SUBCATEGORY_KEY = 'Sub Category';
+export const WO_TRADE_KEY = 'Trade';
+
+/** The fields a picked site fills in, form key → which part of the site. */
+export const WO_SITE_AUTOFILL: readonly { key: string; from: 'client' | 'store_number' | 'address1' | 'city' | 'state' | 'zip' }[] = [
+  { key: 'Client', from: 'client' },
+  { key: 'Store', from: 'store_number' },
+  { key: '17. Address', from: 'address1' },
+  { key: 'City', from: 'city' },
+  { key: 'State', from: 'state' },
+  { key: 'Zip Code', from: 'zip' },
+];
+
+/** The sub-categories on offer for a trade; every one of them when no trade
+ *  is picked yet. Order kept, duplicates dropped. */
+export function subcategoriesFor(map: Record<string, string[]> | undefined, trade: string | null | undefined): string[] {
+  if (!map) return [];
+  const t = (trade ?? '').trim().toLowerCase();
+  if (t !== '') return map[t] ?? [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const list of Object.values(map)) {
+    for (const s of list) {
+      if (seen.has(s.toLowerCase())) continue;
+      seen.add(s.toLowerCase());
+      out.push(s);
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+/** A saved set of values that pre-fills the form (0063). */
+export interface WoCreateTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  fields: Record<string, unknown>;
+  site: { id: string; name: string } | null;
+  shared: boolean;
+  /** The viewer made it (and may delete it). */
+  mine: boolean;
+  owner: string | null;
+}
+
+export interface WoCreateTemplateInput {
+  name: string;
+  description?: string | null;
+  fields: Record<string, unknown>;
+  site_id?: string | null;
+  shared?: boolean;
+}
+
+export interface WoSubcategoryRow {
+  id: string;
+  trade: string;
+  name: string;
+  position: number;
+  is_active: boolean;
 }
 
 /** POST /api/work-orders. */
@@ -137,6 +204,9 @@ export interface WoCreateInput {
   wo_number: string;
   /** Keyed like `task.fields`; only keys that are on the form are accepted. */
   fields: Record<string, unknown>;
+  /** 0063 · the site record and, optionally, one of its assets. */
+  site_id?: string | null;
+  asset_id?: string | null;
 }
 
 /** `details.code` on the 409 a repeated WO # returns. */
@@ -158,6 +228,9 @@ export interface WoDuplicateHit {
   /** Set when the row is in the trash: the number is still taken. */
   deleted: boolean;
   created_at: string;
+  /** 0063 · why a near-match was offered: the same store and trade (the
+      original rule), the same site record, or the very same asset. */
+  why?: 'store_trade' | 'site' | 'asset';
 }
 
 /** GET /api/work-orders/check. */

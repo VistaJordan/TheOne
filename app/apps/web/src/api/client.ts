@@ -1644,10 +1644,15 @@ export function checkWoNumber(input: {
   wo_number: string;
   store?: string | null;
   trade?: string | null;
+  /** 0063 · open work at the same site / on the same asset is a near match too. */
+  site_id?: string | null;
+  asset_id?: string | null;
 }): Promise<WoNumberCheck> {
   const q = new URLSearchParams({ wo_number: input.wo_number });
   if (input.store) q.set('store', input.store);
   if (input.trade) q.set('trade', input.trade);
+  if (input.site_id) q.set('site_id', input.site_id);
+  if (input.asset_id) q.set('asset_id', input.asset_id);
   return request(`/work-orders/new/check?${q.toString()}`);
 }
 
@@ -2944,4 +2949,32 @@ export function updatePortfolioListValue(list: PortfolioListName, value: string,
 
 export function setSiteAccess(principalId: string, siteIds: string[]): Promise<AdminPortfolioResponse> {
   return request(`/admin/portfolio/site-access/${encodeURIComponent(principalId)}`, { method: 'PUT', body: JSON.stringify({ site_ids: siteIds }) });
+}
+
+// ── 0063 — the create form's templates and sub-categories ────────────────────
+
+import type { WoCreateTemplate, WoCreateTemplateInput, WoSubcategoryRow } from '@theone/shared';
+
+export function getWoCreateTemplates(): Promise<{ templates: WoCreateTemplate[] }> {
+  return request('/work-orders/new/templates');
+}
+
+export function saveWoCreateTemplate(input: WoCreateTemplateInput): Promise<{ templates: WoCreateTemplate[] }> {
+  return request('/work-orders/new/templates', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function deleteWoCreateTemplate(id: string): Promise<{ templates: WoCreateTemplate[] }> {
+  return request(`/work-orders/new/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function getWoSubcategories(): Promise<{ items: WoSubcategoryRow[]; trades: string[] }> {
+  return request('/admin/wo-subcategories');
+}
+
+export function addWoSubcategory(input: { trade: string; name: string }): Promise<{ items: WoSubcategoryRow[]; trades: string[] }> {
+  return request('/admin/wo-subcategories', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateWoSubcategory(id: string, patch: { name?: string; is_active?: boolean }): Promise<{ items: WoSubcategoryRow[]; trades: string[] }> {
+  return request(`/admin/wo-subcategories/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
 }

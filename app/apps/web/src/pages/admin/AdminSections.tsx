@@ -3,6 +3,7 @@
    read-only it says so and says why, rather than showing controls that would
    not take effect. */
 
+import { SubcategoriesCard } from './SubcategoriesCard';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -144,6 +145,8 @@ export function AdminSettingsPage() {
       )}
 
       <HolidaysCard />
+      {/* 0063 · what each trade can be narrowed to on "Add work order". */}
+      <SubcategoriesCard />
       <ApprovalTiersCard />
     </AdminShell>
   );

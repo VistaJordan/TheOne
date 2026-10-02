@@ -137,6 +137,11 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       'fields.28. Sharepoint Link',
       'fields.37. PDF',
       'fields.Trade',
+      // 0063 · what the create form asks beside the trade.
+      'fields.Sub Category',
+      'fields.Problem Type',
+      'fields.Supplier Type',
+      'fields.Work Permit Needed',
     ],
   },
   {

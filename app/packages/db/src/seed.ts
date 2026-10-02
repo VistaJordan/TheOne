@@ -415,6 +415,12 @@ const CURATED_FIELDS: CuratedField[] = [
   // an already-seeded database; keep in step). One part per line; a move to
   // Waiting for Parts / Please Order Parts is refused while it is empty.
   { key: 'Parts Required',           label: 'Parts Required',       type: 'long_text' },
+  // 0063 · the rest of the create form (migration 0063 carries the SAME four
+  // rows for an already-seeded database; keep in step).
+  { key: 'Problem Type',             label: 'Problem Type',         type: 'dropdown', options: ['Not working', 'Damaged', 'Leaking water', 'Leak inspection', 'Power loss', 'Electrical', 'Gas', 'Temperature', 'High temperature', 'Physical damage', 'Noise', 'Safety hazard', 'Other'] },
+  { key: 'Sub Category',             label: 'Sub Category',         type: 'short_text' },
+  { key: 'Supplier Type',            label: 'Supplier Type',        type: 'dropdown', options: ['External supplier', 'Internal'] },
+  { key: 'Work Permit Needed',       label: 'Work Permit Needed',   type: 'checkbox' },
   { key: '37. PDF',                  label: 'PDF',                  type: 'attachment' },
   { key: 'AM',                       label: 'AM',                   type: 'users' },
   { key: 'Audited',                  label: 'Audited',              type: 'checkbox' },

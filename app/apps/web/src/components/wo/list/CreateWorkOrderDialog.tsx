@@ -1,4 +1,4 @@
-/* "Add work order" — raising one by hand (0041).
+/* "Add work order" — raising one by hand (0041, extended in 0063).
  *
  * The form is not written here. It is read from the API, which reads it from
  * field_def.create_mode, which an admin sets in Admin › Custom fields — so a
@@ -11,8 +11,18 @@
  *                 included, with a link to the one holding it. Matching
  *                 ignores case and punctuation, so "wo 12345" and "WO-12345"
  *                 are one number.
- *   a near match  same store, same trade, still open, inside 30 days. A
- *                 warning with links, never a block — a store can break twice.
+ *   a near match  something already open that looks like this job: the same
+ *                 asset, the same site, or the same store and trade inside 30
+ *                 days. A warning with links, never a block — a store can
+ *                 break twice.
+ *
+ * 0063 adds three things on top of the configured fields:
+ *   the site and the asset   picked from the portfolio. The site fills in
+ *                 client, store, address, city, state and ZIP (each only
+ *                 while it is empty or still holds what the last site put
+ *                 there) and the new work order is linked to both records.
+ *   sub-category  narrows the trade; its suggestions follow the trade picked.
+ *   templates     a saved set of values that pre-fills the form.
  *
  * Creation stays lighter than assignment: rule 11.1.1's 13 fields are still
  * demanded before this work order can be assigned or accepted, so raising one
@@ -26,20 +36,32 @@ import {
   WO_CREATE_MORE_SECTION,
   WO_CREATE_SECTIONS,
   WO_NEAR_DUPLICATE_DAYS,
+  WO_SITE_AUTOFILL,
+  WO_SUBCATEGORY_KEY,
+  WO_TRADE_KEY,
   describeMissing,
+  subcategoriesFor,
   woCreateMissing,
+  type SiteDetail,
   type WoCreateField,
+  type WoCreateTemplate,
   type WoDuplicateHit,
 } from '@theone/shared';
 import {
   ApiRequestError,
   checkWoNumber,
   createWorkOrder,
+  deleteWoCreateTemplate,
   getPrincipals,
+  getSite,
   getWoCreateForm,
+  getWoCreateTemplates,
+  saveWoCreateTemplate,
   type WoFieldDescriptor,
 } from '../../../api/client';
+import { useAuth } from '../../../auth/AuthProvider';
 import { Icon } from '../../Icon';
+import { AssetStatusChip, ConditionChip, SitePicker, WarrantyChip } from '../../portfolio/PortfolioParts';
 import { useWoCatalogue } from '../fieldEdit';
 
 interface CreateWorkOrderDialogProps {
@@ -53,9 +75,10 @@ const ASSIGNEE_KEY = 'Assignee';
 
 /** A datetime-local input wants 'YYYY-MM-DDTHH:mm'; a date input wants ten
     characters. Anything else goes through as typed. */
-function valueForApi(raw: string, d: WoFieldDescriptor | undefined): unknown {
+function valueForApi(raw: string, d: WoFieldDescriptor | undefined, type?: string): unknown {
   const s = raw.trim();
   if (s === '') return undefined;
+  if (type === 'checkbox') return s === 'true' ? true : undefined;
   if (d?.type === 'money' || d?.type === 'number') {
     const n = Number(s.replace(/[^0-9.-]/g, ''));
     return Number.isFinite(n) ? n : s;
@@ -67,22 +90,33 @@ function valueForApi(raw: string, d: WoFieldDescriptor | undefined): unknown {
 export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { can } = useAuth();
   const catalogue = useWoCatalogue();
   const numberRef = useRef<HTMLInputElement>(null);
+  const seesSites = can('sites', 'view');
+  const seesAssets = can('assets', 'view');
 
   const formQuery = useQuery({ queryKey: ['wo-create-form'], queryFn: getWoCreateForm, staleTime: 60_000 });
   const people = useQuery({ queryKey: ['principals'], queryFn: getPrincipals, staleTime: 5 * 60 * 1000 });
+  const templates = useQuery({ queryKey: ['wo-create-templates'], queryFn: getWoCreateTemplates, staleTime: 60_000 });
 
   const [woNumber, setWoNumber] = useState('');
   const [values, setValues] = useState<Values>({});
   const [error, setError] = useState<string | null>(null);
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
+  // 0063 · the site and the asset, and what the site last filled in.
+  const [site, setSite] = useState<{ id: string; name: string } | null>(null);
+  const [assetId, setAssetId] = useState('');
+  const filled = useRef<Values>({});
+  const [saving, setSaving] = useState<{ name: string; shared: boolean } | null>(null);
+  const [templateNote, setTemplateNote] = useState<string | null>(null);
 
   useEffect(() => {
     numberRef.current?.focus();
   }, []);
 
   const form = useMemo(() => formQuery.data ?? { fields: [] as WoCreateField[] }, [formQuery.data]);
+  const onForm = useMemo(() => new Set(form.fields.map((f) => f.key)), [form.fields]);
 
   const set = (key: string, v: string) => {
     setValues((cur) => ({ ...cur, [key]: v }));
@@ -94,21 +128,59 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     });
   };
 
-  // ── The duplicate check ────────────────────────────────────────────────────
-  // Debounced, and it carries the store and trade so the near-match warning
-  // appears as soon as both are in.
-  const [debounced, setDebounced] = useState({ wo_number: '', store: '', trade: '' });
-  const store = values['Store'] ?? '';
-  const trade = values['Trade'] ?? '';
+  // ── The site and the asset ─────────────────────────────────────────────────
+  const siteQuery = useQuery({ queryKey: ['site', site?.id], queryFn: () => getSite(site!.id), enabled: Boolean(site) });
+  const siteDetail: SiteDetail | null = site ? (siteQuery.data?.site ?? null) : null;
+  // When a site's details arrive, it fills in what it knows — but never over
+  // something a person typed: a field is touched only while it is empty or
+  // still holds what the previous site put there.
   useEffect(() => {
-    const t = setTimeout(() => setDebounced({ wo_number: woNumber.trim(), store, trade }), 300);
+    if (!siteDetail) return;
+    setValues((cur) => {
+      const next = { ...cur };
+      for (const { key, from } of WO_SITE_AUTOFILL) {
+        if (!onForm.has(key)) continue;
+        const incoming = (siteDetail[from] ?? '').toString().trim();
+        const current = (cur[key] ?? '').trim();
+        if (incoming === '' || (current !== '' && current !== (filled.current[key] ?? ''))) continue;
+        next[key] = incoming;
+        filled.current[key] = incoming;
+      }
+      return next;
+    });
+  }, [siteDetail, onForm]);
+  const pickSite = (s: { id: string; name: string } | null) => {
+    setSite(s);
+    setAssetId('');
+    if (!s) {
+      // Unpicking takes back only what the site itself had filled in.
+      setValues((cur) => {
+        const next = { ...cur };
+        for (const [k, v] of Object.entries(filled.current)) if ((cur[k] ?? '').trim() === v) next[k] = '';
+        return next;
+      });
+      filled.current = {};
+    }
+  };
+  const assets = siteDetail?.asset_list.filter((a) => a.status !== 'retired') ?? [];
+  const asset = assets.find((a) => a.id === assetId) ?? null;
+
+  // ── The duplicate check ────────────────────────────────────────────────────
+  // Debounced, and it carries the store, trade, site and asset so the
+  // near-match warning appears as soon as there is something to match on.
+  const [debounced, setDebounced] = useState({ wo_number: '', store: '', trade: '', site_id: '', asset_id: '' });
+  const store = values['Store'] ?? '';
+  const trade = values[WO_TRADE_KEY] ?? '';
+  const siteId = site?.id ?? '';
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced({ wo_number: woNumber.trim(), store, trade, site_id: siteId, asset_id: assetId }), 300);
     return () => clearTimeout(t);
-  }, [woNumber, store, trade]);
+  }, [woNumber, store, trade, siteId, assetId]);
 
   const check = useQuery({
     queryKey: ['wo-number-check', debounced],
     queryFn: () => checkWoNumber(debounced),
-    enabled: debounced.wo_number.length > 0 || (debounced.store !== '' && debounced.trade !== ''),
+    enabled: debounced.wo_number.length > 0 || (debounced.store !== '' && debounced.trade !== '') || debounced.site_id !== '' || debounced.asset_id !== '',
   });
 
   const taken = check.data?.taken === true && debounced.wo_number === woNumber.trim();
@@ -118,7 +190,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   const bag = useMemo(() => {
     const out: Record<string, unknown> = {};
     for (const f of form.fields) {
-      const v = valueForApi(values[f.key] ?? '', catalogue.get(`fields.${f.key}`));
+      const v = valueForApi(values[f.key] ?? '', catalogue.get(`fields.${f.key}`), f.type);
       if (v !== undefined) out[f.key] = v;
     }
     return out;
@@ -127,9 +199,10 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   const missing = useMemo(() => woCreateMissing(form, bag, woNumber), [form, bag, woNumber]);
 
   const create = useMutation({
-    mutationFn: () => createWorkOrder({ wo_number: woNumber.trim(), fields: bag }),
+    mutationFn: () => createWorkOrder({ wo_number: woNumber.trim(), fields: bag, site_id: site?.id ?? null, asset_id: assetId || null }),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['work-orders'] });
+      void qc.invalidateQueries({ queryKey: ['sites-meta'] });
       navigate(`/work-orders/${encodeURIComponent(res.wo_number)}`);
     },
     onError: (err: unknown) => {
@@ -145,6 +218,37 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       }
     },
   });
+
+  // ── Templates ──────────────────────────────────────────────────────────────
+  const applyTemplate = (t: WoCreateTemplate) => {
+    const next: Values = {};
+    for (const [k, v] of Object.entries(t.fields)) {
+      if (!onForm.has(k) || v === null || v === undefined) continue;
+      next[k] = typeof v === 'boolean' ? (v ? 'true' : '') : String(v);
+    }
+    // A template lays its values over the form; what it does not name stays.
+    setValues((cur) => ({ ...cur, ...next }));
+    if (t.site && seesSites) {
+      setSite(t.site);
+      setAssetId('');
+    }
+    setTemplateNote(`Filled in from “${t.name}”. The WO # is still yours to type.`);
+  };
+  const saveTemplate = useMutation({
+    mutationFn: () => saveWoCreateTemplate({ name: saving!.name.trim(), fields: bag, site_id: site?.id ?? null, shared: saving!.shared }),
+    onSuccess: (res) => {
+      qc.setQueryData(['wo-create-templates'], res);
+      setTemplateNote(`Saved as “${saving!.name.trim()}”.`);
+      setSaving(null);
+      setError(null);
+    },
+    onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Could not save the template'),
+  });
+  const dropTemplate = useMutation({
+    mutationFn: (id: string) => deleteWoCreateTemplate(id),
+    onSuccess: (res) => qc.setQueryData(['wo-create-templates'], res),
+  });
+  const templateList = templates.data?.templates ?? [];
 
   const busy = create.isPending;
   const blocked = taken || missing.length > 0 || busy;
@@ -164,6 +268,28 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
             <option key={p.id} value={p.name}>{p.name}</option>
           ))}
         </select>
+      );
+    }
+
+    // 0063 · a tick. Unticked sends nothing, so "required" means "must be ticked".
+    if (f.type === 'checkbox') {
+      return (
+        <label className="tmap-check">
+          <input id={domId} type="checkbox" checked={val === 'true'} onChange={(e) => set(f.key, e.target.checked ? 'true' : '')} disabled={busy} />
+          <span>Yes</span>
+        </label>
+      );
+    }
+
+    // 0063 · the sub-category suggests what the picked trade offers, and still
+    // takes anything typed — a list can never foresee every job.
+    if (f.key === WO_SUBCATEGORY_KEY) {
+      const subs = subcategoriesFor(form.subcategories, trade);
+      return (
+        <>
+          <input id={domId} className="fld" list={`${domId}-list`} value={val} placeholder={trade ? `Within ${trade}` : 'Pick the trade first for suggestions'} onChange={(e) => set(f.key, e.target.value)} disabled={busy} />
+          <datalist id={`${domId}-list`}>{subs.map((s) => <option key={s} value={s} />)}</datalist>
+        </>
       );
     }
 
@@ -217,6 +343,8 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     ...s,
     fields: form.fields.filter((f) => f.section === s.id),
   }));
+  // The site step sits between the number and the configured sections.
+  const stepOffset = seesSites ? 3 : 2;
 
   return (
     <div className="modal-scrim" onClick={onClose} role="presentation">
@@ -235,6 +363,45 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
         </div>
 
         <div className="modal-body">
+          {/* 0063 · start from a saved set of values. */}
+          {(templateList.length > 0 || templateNote) && (
+            <div className="wo-new-templates">
+              {templateList.length > 0 && (
+                <select
+                  className="fld"
+                  value=""
+                  onChange={(e) => {
+                    const t = templateList.find((x) => x.id === e.target.value);
+                    if (t) applyTemplate(t);
+                  }}
+                  disabled={busy}
+                  aria-label="Start from a template"
+                >
+                  <option value="">Start from a template…</option>
+                  {templateList.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}{t.shared ? ' · shared' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {templateNote && <span className="hint">{templateNote}</span>}
+              {templateList.some((t) => t.mine) && (
+                <details className="wo-new-mine">
+                  <summary>My templates</summary>
+                  <ul>
+                    {templateList.filter((t) => t.mine).map((t) => (
+                      <li key={t.id}>
+                        {t.name}
+                        <button type="button" className="link-btn" disabled={dropTemplate.isPending} onClick={() => dropTemplate.mutate(t.id)}>Delete</button>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
           {/* WO # leads, always required, and checked as it is typed. */}
           <section className="import-step">
             <h3>
@@ -260,8 +427,45 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
             </div>
 
             {taken && check.data?.existing && <TakenNotice hit={check.data.existing} />}
-            {!taken && near.length > 0 && <NearNotice hits={near} />}
           </section>
+
+          {/* 0063 · the site and the asset, from the portfolio. */}
+          {seesSites && (
+            <section className="import-step">
+              <h3>
+                <span className="step-n">2</span> Site and asset
+              </h3>
+              <p className="hint">Pick the site to fill in its client, store and address. Leave it empty for a site that is not on file yet.</p>
+              <div className="intake-grid">
+                <div className="field intake-wide">
+                  <span className="lbl">Site</span>
+                  <SitePicker value={site} onPick={pickSite} />
+                </div>
+                {site && seesAssets && (
+                  <div className="field intake-wide">
+                    <label className="lbl" htmlFor="new-wo-asset">Asset</label>
+                    <select id="new-wo-asset" className="fld" value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={busy || siteQuery.isLoading}>
+                      <option value="">{siteQuery.isLoading ? 'Loading the assets…' : assets.length === 0 ? 'No assets on file at this site' : 'Not about one asset'}</option>
+                      {assets.map((a) => (
+                        <option key={a.id} value={a.id}>{[a.name, a.location].filter(Boolean).join(' — ')}</option>
+                      ))}
+                    </select>
+                    {asset && (
+                      <span className="wo-new-asset">
+                        <span className="hint">{[asset.category, asset.asset_type, [asset.manufacturer, asset.model_number].filter(Boolean).join(' '), asset.serial_number ? `serial ${asset.serial_number}` : null].filter(Boolean).join(' · ')}</span>
+                        <AssetStatusChip status={asset.status} />
+                        <ConditionChip condition={asset.condition} />
+                        <WarrantyChip state={asset.warranty} expiresOn={asset.warranty_expires_on} />
+                        {asset.warranty === 'active' || asset.warranty === 'expiring' ? <span className="hint">Under warranty — check before quoting.</span> : null}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {!taken && near.length > 0 && <NearNotice hits={near} />}
 
           {/* Everything else, in the order the admin arranged it. */}
           {sections
@@ -269,7 +473,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
             .map((s, i) => (
               <section className="import-step" key={s.id}>
                 <h3>
-                  <span className="step-n">{i + 2}</span> {s.title}
+                  <span className="step-n">{i + stepOffset}</span> {s.title}
                 </h3>
                 <p className="hint">{s.hint}</p>
                 <div className="intake-grid">
@@ -299,6 +503,24 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
               No fields are on the create form yet. An admin adds them in Admin › Custom fields.
             </p>
           )}
+
+          {saving && (
+            <div className="wo-new-save">
+              <label className="lbl" htmlFor="new-wo-template-name">Save what is filled in as a template</label>
+              <input id="new-wo-template-name" className="fld" autoFocus value={saving.name} placeholder="e.g. 7-Eleven refrigeration call" maxLength={120} onChange={(e) => setSaving({ ...saving, name: e.target.value })} />
+              {can('admin/fields', 'edit') && (
+                <label className="tmap-check">
+                  <input type="checkbox" checked={saving.shared} onChange={(e) => setSaving({ ...saving, shared: e.target.checked })} />
+                  <span>Share it with everyone</span>
+                </label>
+              )}
+              <span className="hint">The WO # and the asset are not saved — they belong to one job.</span>
+              <span style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn-sm" disabled={saving.name.trim() === '' || saveTemplate.isPending} onClick={() => saveTemplate.mutate()}>Save template</button>
+                <button type="button" className="btn-sm is-ghost" onClick={() => setSaving(null)}>Cancel</button>
+              </span>
+            </div>
+          )}
           {error && <p className="modal-error">{error}</p>}
         </div>
 
@@ -308,6 +530,11 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
             : missing.length > 0 ? `Still needs ${describeMissing(missing)}`
             : 'Ready'}
           </span>
+          {!saving && (Object.keys(bag).length > 0 || site) && (
+            <button type="button" className="btn-sm is-ghost" onClick={() => setSaving({ name: '', shared: false })} disabled={busy}>
+              Save as template
+            </button>
+          )}
           <button type="button" className="btn-sm is-ghost" onClick={onClose} disabled={busy}>
             Cancel
           </button>
@@ -344,16 +571,24 @@ function TakenNotice({ hit }: { hit: WoDuplicateHit }) {
   );
 }
 
-/** Not a block: the same store and trade already has something open. */
+const WHY: Record<NonNullable<WoDuplicateHit['why']>, string> = {
+  asset: 'same asset',
+  site: 'same site',
+  store_trade: 'same store and trade',
+};
+
+/** Not a block: something already open looks like this job. */
 function NearNotice({ hits }: { hits: WoDuplicateHit[] }) {
   return (
-    <div className="hint">
-      <Icon name="alert" size={14} /> This store already has {hits.length === 1 ? 'an open work order' : `${hits.length} open work orders`}{' '}
-      on this trade in the last {WO_NEAR_DUPLICATE_DAYS} days:
+    <div className="hint near-box">
+      <Icon name="alert" size={14} /> <b>Possible duplicates.</b>{' '}
+      {hits.length === 1 ? 'One open work order looks' : `${hits.length} open work orders look`} like this job
+      (the same asset, the same site, or the same store and trade in the last {WO_NEAR_DUPLICATE_DAYS} days):
       <ul className="near-dupes">
         {hits.map((h) => (
           <li key={h.wo_number}>
-            <a href={`/work-orders/${encodeURIComponent(h.wo_number)}`}>{h.wo_number}</a> · {h.status} · {h.title}
+            <a href={`/work-orders/${encodeURIComponent(h.wo_number)}`} target="_blank" rel="noreferrer">{h.wo_number}</a>
+            {h.why && <span className="chip chip-sm">{WHY[h.why]}</span>} · {h.status}{h.trade ? ` · ${h.trade}` : ''} · {h.title}
           </li>
         ))}
       </ul>

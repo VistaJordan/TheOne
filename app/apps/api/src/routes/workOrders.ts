@@ -41,7 +41,18 @@ import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from 
 import { assertIdsInScope } from '../services/woScope.js';
 import { boardViewer, requireBoardView } from '../services/dashboards.js';
 import { boardQuery } from './kpis.js';
-import { checkWoNumber, createWorkOrder, getCreateForm, requireWoCreate } from '../services/woCreate.js';
+import {
+  addSubcategory,
+  checkWoNumber,
+  createWorkOrder,
+  deleteCreateTemplate,
+  getCreateForm,
+  listCreateTemplates,
+  listSubcategories,
+  requireWoCreate,
+  saveCreateTemplate,
+  updateSubcategory,
+} from '../services/woCreate.js';
 import {
   addAttachment,
   canReviewAttachments,
@@ -161,6 +172,9 @@ const createBodySchema = z
   .object({
     wo_number: z.string().trim().min(1).max(60),
     fields: z.record(z.string(), z.unknown()).default({}),
+    // 0063 · the site record and one of its assets.
+    site_id: z.string().uuid().nullable().optional(),
+    asset_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -168,7 +182,19 @@ const checkQuerySchema = z.object({
   wo_number: z.string().max(60).default(''),
   store: z.string().max(200).optional(),
   trade: z.string().max(200).optional(),
+  site_id: z.string().max(40).optional(),
+  asset_id: z.string().max(40).optional(),
 });
+
+const templateBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    description: z.string().max(400).nullable().optional(),
+    fields: z.record(z.string(), z.unknown()).default({}),
+    site_id: z.string().uuid().nullable().optional(),
+    shared: z.boolean().optional(),
+  })
+  .strict();
 
 // 0043 · an upload arrives as base64 in JSON: one hop, no multipart parser,
 // and the browser has already shrunk any photograph.
@@ -398,7 +424,35 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { p } = acting(req);
     requireWoCreate(p);
     const q = parse(checkQuerySchema, req.query);
-    return checkWoNumber(q.wo_number, { store: q.store ?? null, trade: q.trade ?? null });
+    return checkWoNumber(q.wo_number, { store: q.store ?? null, trade: q.trade ?? null, site_id: q.site_id ?? null, asset_id: q.asset_id ?? null });
+  });
+
+  // 0063 · saved sets of values that pre-fill the form.
+  app.get('/work-orders/new/templates', async (req) => {
+    const { p } = acting(req);
+    return { templates: await listCreateTemplates(p) };
+  });
+  app.post('/work-orders/new/templates', async (req, reply) => {
+    const { p } = acting(req);
+    const templates = await saveCreateTemplate(parse(templateBodySchema, req.body), p);
+    return reply.status(201).send({ templates });
+  });
+  app.delete('/work-orders/new/templates/:templateId', async (req) => {
+    const { p } = acting(req);
+    const { templateId } = parse(z.object({ templateId: z.string().min(1).max(64) }), req.params);
+    return { templates: await deleteCreateTemplate(templateId, p) };
+  });
+
+  // 0063 · the sub-categories each trade offers (Admin › Settings).
+  app.get('/admin/wo-subcategories', async (req) => listSubcategories(acting(req).p));
+  app.post('/admin/wo-subcategories', async (req) => {
+    const body = parse(z.object({ trade: z.string().max(80), name: z.string().max(80) }).strict(), req.body);
+    return addSubcategory(body, acting(req).p);
+  });
+  app.patch('/admin/wo-subcategories/:subId', async (req) => {
+    const { subId } = parse(z.object({ subId: z.string().min(1).max(64) }), req.params);
+    const body = parse(z.object({ name: z.string().max(80).optional(), is_active: z.boolean().optional() }).strict(), req.body);
+    return updateSubcategory(subId, body, acting(req).p);
   });
 
   app.post('/work-orders', async (req, reply) => {

@@ -324,6 +324,11 @@ export const ACTION_LABELS: Record<string, string> = {
   portfolio_list_value_added: 'Site / asset list value added',
   portfolio_list_value_updated: 'Site / asset list value changed',
   user_site_access_changed: 'Site access changed',
+  // 0063 · the create form's templates and sub-categories.
+  wo_template_saved: 'Create-form template saved',
+  wo_template_deleted: 'Create-form template deleted',
+  wo_subcategory_added: 'Sub-category added',
+  wo_subcategory_updated: 'Sub-category changed',
   preferred_vendor_created: 'Preferred vendor added',
   preferred_vendor_updated: 'Preferred vendor changed',
   preferred_vendor_deleted: 'Preferred vendor removed',

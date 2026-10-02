@@ -35,13 +35,18 @@ import {
   woCreateMissing,
   type WoCreateField,
   type WoCreateForm,
+  permAllows,
   type WoCreateInput,
+  type WoCreateTemplate,
+  type WoCreateTemplateInput,
   type WoDuplicateHit,
   type WoNumberCheck,
+  type WoSubcategoryRow,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict } from '../errors.js';
 import { requirePerm } from './permissions.js';
+import { logAdminEvent } from './adminAudit.js';
 import type { ActingPrincipal } from './activity.js';
 import { applyProfitFormula } from './money.js';
 import { INTAKE_START_STATUS_NAME } from './intake.js';
@@ -95,7 +100,14 @@ export async function getCreateForm(): Promise<WoCreateForm> {
     section: SECTION_BY_KEY.get(r.key) ?? 'more',
   }));
 
-  return { fields };
+  // 0063 · the sub-categories each trade offers (Admin › Settings).
+  const subs = await query<{ trade: string; name: string }>(
+    `SELECT trade, name FROM wo_subcategory WHERE is_active ORDER BY lower(trade), position, lower(name)`,
+  );
+  const subcategories: Record<string, string[]> = {};
+  for (const r of subs.rows) (subcategories[r.trade.trim().toLowerCase()] ??= []).push(r.name);
+
+  return { fields, subcategories };
 }
 
 // ── The duplicate check ──────────────────────────────────────────────────────
@@ -126,7 +138,7 @@ interface HitRow extends Omit<WoDuplicateHit, 'deleted'> {
  */
 export async function checkWoNumber(
   raw: string,
-  context: { store?: string | null; trade?: string | null } = {},
+  context: { store?: string | null; trade?: string | null; site_id?: string | null; asset_id?: string | null } = {},
 ): Promise<WoNumberCheck> {
   const woNumber = raw.trim();
   const normalized = normalizeWoNumber(woNumber);
@@ -157,8 +169,49 @@ export async function checkWoNumber(
         LIMIT 5`,
       [store, trade, String(WO_NEAR_DUPLICATE_DAYS), normalized],
     );
-    near = res.rows;
+    near = res.rows.map((r) => ({ ...r, why: 'store_trade' as const }));
   }
+
+  // 0063 · the same asset, or the same site record: open work already there.
+  // On the asset, any trade and any age — one machine, one fault at a time.
+  // At the site, the same trade inside the window (every trade when none is
+  // picked yet). Warnings, like the rule above; the asset's come first.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const seen = new Set(near.map((n) => n.wo_number));
+  const add = (rows: HitRow[], why: 'site' | 'asset', first: boolean) => {
+    const fresh = rows.filter((r) => !seen.has(r.wo_number)).map((r) => ({ ...r, why }));
+    for (const r of fresh) seen.add(r.wo_number);
+    near = first ? [...fresh, ...near] : [...near, ...fresh];
+  };
+  if (context.site_id && UUID.test(context.site_id)) {
+    const res = await query<HitRow>(
+      `${HIT_SQL}
+        WHERE t.deleted_at IS NULL
+          AND t.status_group::text NOT IN ('done', 'closed')
+          AND t.site_id = $1
+          AND ($2 = '' OR lower(t.trade) = lower($2))
+          AND t.created_at >= now() - ($3 || ' days')::interval
+          AND ($4 = '' OR ${NORMALIZED_WO} <> $4)
+        ORDER BY t.created_at DESC
+        LIMIT 5`,
+      [context.site_id, trade, String(WO_NEAR_DUPLICATE_DAYS), normalized],
+    );
+    add(res.rows, 'site', false);
+  }
+  if (context.asset_id && UUID.test(context.asset_id)) {
+    const res = await query<HitRow>(
+      `${HIT_SQL}
+        WHERE t.deleted_at IS NULL
+          AND t.status_group::text NOT IN ('done', 'closed')
+          AND t.asset_id = $1
+          AND ($2 = '' OR ${NORMALIZED_WO} <> $2)
+        ORDER BY t.created_at DESC
+        LIMIT 5`,
+      [context.asset_id, normalized],
+    );
+    add(res.rows, 'asset', true);
+  }
+  near = near.slice(0, 8);
 
   return { wo_number: woNumber, taken: existing !== null, existing, near };
 }
@@ -253,6 +306,9 @@ export async function createWorkOrder(
     });
   }
 
+  // 0063 · the site record and one of its assets, when the form named them.
+  const place = await resolveCreatePlace(input, actor);
+
   const start = await query<{ id: string; status_group: string }>(
     `SELECT id::text AS id, status_group::text AS status_group FROM status WHERE lower(name) = lower($1) LIMIT 1`,
     [INTAKE_START_STATUS_NAME],
@@ -299,11 +355,14 @@ export async function createWorkOrder(
       ],
     );
     taskId = ins.rows[0].id;
+    if (place.siteId) {
+      await tx.query(`UPDATE task SET site_id = $2, asset_id = $3 WHERE id = $1`, [taskId, place.siteId, place.assetId]);
+    }
     await tx.query(
       `INSERT INTO activity_log
          (actor_principal_id, entity_type, entity_id, action, field, before, after)
        VALUES ($1, 'task', $2, 'created', NULL, NULL, $3::jsonb)`,
-      [actor.id, taskId, JSON.stringify({ wo_number: woNumber, source: 'manual' })],
+      [actor.id, taskId, JSON.stringify({ wo_number: woNumber, source: 'manual', ...(place.siteName ? { site: place.siteName } : {}), ...(place.assetName ? { asset: place.assetName } : {}) })],
     );
   });
 
@@ -316,6 +375,187 @@ export async function createWorkOrder(
   }
 
   return { task_id: taskId, wo_number: woNumber };
+}
+
+// ── The site and the asset (0063) ────────────────────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Checks what the form named: the site exists and is one the person may
+ *  see; the asset exists and stands at that site. An asset alone names its
+ *  own site. Nothing named = nothing linked, exactly as before 0063. */
+async function resolveCreatePlace(
+  input: WoCreateInput,
+  actor: ActingPrincipal,
+): Promise<{ siteId: string | null; assetId: string | null; siteName: string | null; assetName: string | null }> {
+  let siteId = input.site_id ?? null;
+  const assetId = input.asset_id ?? null;
+  let assetName: string | null = null;
+  if (assetId) {
+    if (!UUID_RE.test(assetId)) throw badRequest('That asset does not exist', { field: 'asset_id' });
+    const a = await query<{ name: string; site_id: string | null }>(
+      `SELECT name, site_id::text AS site_id FROM asset WHERE id = $1 AND deleted_at IS NULL`,
+      [assetId],
+    );
+    if (!a.rows[0]) throw badRequest('That asset does not exist', { field: 'asset_id' });
+    if (!siteId) siteId = a.rows[0].site_id;
+    if (a.rows[0].site_id !== siteId) throw badRequest('That asset is at a different site', { field: 'asset_id' });
+    assetName = a.rows[0].name;
+  }
+  if (!siteId) return { siteId: null, assetId: null, siteName: null, assetName: null };
+  if (!UUID_RE.test(siteId)) throw badRequest('That site does not exist', { field: 'site_id' });
+  const s = await query<{ name: string | null }>(`SELECT COALESCE(name, client) AS name FROM site WHERE id = $1 AND deleted_at IS NULL`, [siteId]);
+  if (!s.rows[0]) throw badRequest('That site does not exist', { field: 'site_id' });
+  const { assertSiteAccess } = await import('./portfolio.js');
+  await assertSiteAccess(actor, siteId);
+  return { siteId, assetId, siteName: s.rows[0].name, assetName };
+}
+
+// ── Form templates (0063) ────────────────────────────────────────────────────
+
+type TemplateRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  fields: Record<string, unknown> | null;
+  s_id: string | null;
+  s_name: string | null;
+  shared: boolean;
+  created_by: string | null;
+  owner: string | null;
+};
+
+/** The viewer's own templates and every shared one. */
+export async function listCreateTemplates(actor: ActingPrincipal): Promise<WoCreateTemplate[]> {
+  requireWoCreate(actor);
+  const res = await query<TemplateRow>(
+    `SELECT t.id::text AS id, t.name, t.description, t.fields, s.id::text AS s_id, COALESCE(s.name, s.client) AS s_name,
+            t.shared, t.created_by::text AS created_by, p.display_name AS owner
+       FROM wo_create_template t
+       LEFT JOIN site s ON s.id = t.site_id AND s.deleted_at IS NULL
+       LEFT JOIN principal p ON p.id = t.created_by
+      WHERE t.shared OR t.created_by = $1
+      ORDER BY t.shared DESC, lower(t.name)`,
+    [actor.id],
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    fields: r.fields ?? {},
+    site: r.s_id ? { id: r.s_id, name: r.s_name ?? 'Site' } : null,
+    shared: r.shared,
+    mine: r.created_by === actor.id,
+    owner: r.owner,
+  }));
+}
+
+/** Sharing a template with everyone is for whoever may arrange the form
+ *  itself (Admin › Custom fields). */
+const canShareTemplates = (a: ActingPrincipal): boolean => a.isSuperAdmin || permAllows(a.perms, 'admin/fields', 'edit', a.isSuperAdmin);
+
+export async function saveCreateTemplate(input: WoCreateTemplateInput, actor: ActingPrincipal): Promise<WoCreateTemplate[]> {
+  requireWoCreate(actor);
+  const name = String(input.name ?? '').trim();
+  if (name === '') throw badRequest('The template needs a name', { field: 'name' });
+  if (input.shared && !canShareTemplates(actor)) throw badRequest('Only an admin can share a template with everyone');
+  // Only what the form offers today, and never the identity of one job.
+  const form = await getCreateForm();
+  const offered = new Set(form.fields.map((f) => f.key));
+  const fields: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input.fields ?? {})) {
+    if (!offered.has(k) || v === null || v === undefined) continue;
+    if (typeof v === 'string' && v.trim() === '') continue;
+    fields[k] = typeof v === 'string' ? v.trim().slice(0, 4000) : v;
+  }
+  let siteId: string | null = null;
+  if (input.site_id) {
+    if (!UUID_RE.test(input.site_id)) throw badRequest('That site does not exist', { field: 'site_id' });
+    const s = await query<{ id: string }>(`SELECT id FROM site WHERE id = $1 AND deleted_at IS NULL`, [input.site_id]);
+    if (!s.rows[0]) throw badRequest('That site does not exist', { field: 'site_id' });
+    siteId = input.site_id;
+  }
+  if (Object.keys(fields).length === 0 && !siteId) throw badRequest('Fill in at least one field before saving a template');
+  const ins = await query<{ id: string }>(
+    `INSERT INTO wo_create_template (name, description, fields, site_id, shared, created_by)
+     VALUES ($1, $2, $3::jsonb, $4, $5, $6) RETURNING id::text AS id`,
+    [name.slice(0, 120), str(input.description), JSON.stringify(fields), siteId, Boolean(input.shared), actor.id],
+  );
+  await logAdminEvent({ actorId: actor.id, entity: 'wo_template', entityId: ins.rows[0].id, action: 'wo_template_saved', after: { name, shared: Boolean(input.shared), fields: Object.keys(fields) } });
+  return listCreateTemplates(actor);
+}
+
+export async function deleteCreateTemplate(id: string, actor: ActingPrincipal): Promise<WoCreateTemplate[]> {
+  requireWoCreate(actor);
+  if (!UUID_RE.test(id)) throw badRequest('That template does not exist');
+  const cur = await query<{ name: string; created_by: string | null; shared: boolean }>(
+    `SELECT name, created_by::text AS created_by, shared FROM wo_create_template WHERE id = $1`,
+    [id],
+  );
+  if (!cur.rows[0]) throw badRequest('That template does not exist');
+  // Your own, or a shared one if you may share.
+  if (cur.rows[0].created_by !== actor.id && !(cur.rows[0].shared && canShareTemplates(actor))) {
+    throw badRequest('That template belongs to someone else');
+  }
+  await query(`DELETE FROM wo_create_template WHERE id = $1`, [id]);
+  await logAdminEvent({ actorId: actor.id, entity: 'wo_template', entityId: id, action: 'wo_template_deleted', before: { name: cur.rows[0].name } });
+  return listCreateTemplates(actor);
+}
+
+// ── Sub-categories (0063, Admin › Settings) ──────────────────────────────────
+
+const SETTINGS_KEY = 'admin/settings';
+
+export async function listSubcategories(actor: ActingPrincipal): Promise<{ items: WoSubcategoryRow[]; trades: string[] }> {
+  requirePerm(actor, SETTINGS_KEY, 'view', 'You cannot open Admin › Settings');
+  const [rows, trades] = await Promise.all([
+    query<WoSubcategoryRow>(`SELECT id::text AS id, trade, name, position, is_active FROM wo_subcategory ORDER BY lower(trade), position, lower(name)`),
+    query<{ options: unknown }>(`SELECT type_config->'options' AS options FROM field_def WHERE key = 'Trade' LIMIT 1`),
+  ]);
+  const opts = Array.isArray(trades.rows[0]?.options) ? (trades.rows[0]!.options as unknown[]) : [];
+  return {
+    items: rows.rows,
+    trades: opts.map((o) => (typeof o === 'string' ? o : String((o as Record<string, unknown>)?.name ?? (o as Record<string, unknown>)?.label ?? ''))).filter(Boolean),
+  };
+}
+
+export async function addSubcategory(input: { trade: string; name: string }, actor: ActingPrincipal): Promise<{ items: WoSubcategoryRow[]; trades: string[] }> {
+  requirePerm(actor, SETTINGS_KEY, 'edit', 'You cannot edit Admin › Settings');
+  const trade = String(input.trade ?? '').trim();
+  const name = String(input.name ?? '').trim();
+  if (trade === '' || name === '') throw badRequest('Pick the trade and name the sub-category');
+  const dup = await query<{ id: string }>(`SELECT id FROM wo_subcategory WHERE lower(trade) = lower($1) AND lower(name) = lower($2)`, [trade, name]);
+  if (dup.rows[0]) throw conflict(`${name} is already a sub-category of ${trade}`);
+  await query(
+    `INSERT INTO wo_subcategory (trade, name, position)
+     VALUES ($1, $2, (SELECT COALESCE(max(position), -1) + 1 FROM wo_subcategory WHERE lower(trade) = lower($1)))`,
+    [trade.slice(0, 80), name.slice(0, 80)],
+  );
+  await logAdminEvent({ actorId: actor.id, entity: 'wo_subcategory', entityId: `${trade}:${name}`, action: 'wo_subcategory_added', after: { name, trade } });
+  return listSubcategories(actor);
+}
+
+export async function updateSubcategory(id: string, patch: { name?: string; is_active?: boolean }, actor: ActingPrincipal): Promise<{ items: WoSubcategoryRow[]; trades: string[] }> {
+  requirePerm(actor, SETTINGS_KEY, 'edit', 'You cannot edit Admin › Settings');
+  if (!UUID_RE.test(id)) throw badRequest('That sub-category does not exist');
+  const cur = await query<{ trade: string; name: string; is_active: boolean }>(`SELECT trade, name, is_active FROM wo_subcategory WHERE id = $1`, [id]);
+  if (!cur.rows[0]) throw badRequest('That sub-category does not exist');
+  const name = patch.name !== undefined ? patch.name.trim() : cur.rows[0].name;
+  if (name === '') throw badRequest('It needs a name');
+  if (name.toLowerCase() !== cur.rows[0].name.toLowerCase()) {
+    const dup = await query<{ id: string }>(`SELECT id FROM wo_subcategory WHERE lower(trade) = lower($1) AND lower(name) = lower($2)`, [cur.rows[0].trade, name]);
+    if (dup.rows[0]) throw conflict(`${name} is already a sub-category of ${cur.rows[0].trade}`);
+  }
+  await query(`UPDATE wo_subcategory SET name = $2, is_active = $3 WHERE id = $1`, [id, name.slice(0, 80), patch.is_active ?? cur.rows[0].is_active]);
+  await logAdminEvent({
+    actorId: actor.id,
+    entity: 'wo_subcategory',
+    entityId: `${cur.rows[0].trade}:${name}`,
+    action: 'wo_subcategory_updated',
+    before: { name: cur.rows[0].name, trade: cur.rows[0].trade, is_active: cur.rows[0].is_active },
+    after: { name, trade: cur.rows[0].trade, is_active: patch.is_active ?? cur.rows[0].is_active },
+  });
+  return listSubcategories(actor);
 }
 
 // ── Admin › Custom fields: the per-field setting ─────────────────────────────

@@ -1036,6 +1036,33 @@ Tests: `tests/portfolio.test.ts`.
   assets" board. Their work-order counts are of all work orders at the site /
   on the asset, narrowed by the viewer's site list, not their work-order scope.
 
+**"Add work order", the rest of the form** (migration 0063, Facilio parity
+batch 3). The form has existed since 0041 (`services/woCreate.ts`,
+`components/wo/list/CreateWorkOrderDialog.tsx`; which fields it shows is
+`field_def.create_mode`, Admin › Custom fields). 0063 adds:
+- **Site and asset** on the form (shown to anyone with `sites` view):
+  `POST /work-orders` takes `site_id` / `asset_id`, checks them
+  (`resolveCreatePlace`: the site is one the person may see, the asset stands
+  at it) and sets `task.site_id` / `task.asset_id`. In the browser a picked
+  site fills `WO_SITE_AUTOFILL` (client, store, address, city, state, ZIP) —
+  each field only while it is empty or still holds what the last site put
+  there, so typing is never overwritten.
+- **Four fields**, on the form by default, in the Overview section of the
+  record: `Problem Type` (dropdown), `Sub Category` (text), `Supplier Type`
+  (External supplier / Internal), `Work Permit Needed` (checkbox). Seed and
+  migration carry the same rows — KEEP IN STEP. A trade IS the category;
+  `wo_subcategory` (trade → names, Admin › Settings card, grant
+  `admin/settings`) feeds the Sub Category suggestions through
+  `subcategoriesFor`; the field still takes anything typed.
+- **Possible duplicates**: `checkWoNumber` also offers open work on the same
+  asset (any age) and at the same site (same trade, 30 days); each hit says
+  `why`. Still a warning, never a block.
+- **Templates** (`wo_create_template`, `/work-orders/new/templates`): a saved
+  set of values (and a site) that pre-fills the form; private unless shared,
+  and sharing needs `admin/fields` edit. The WO # and the asset are never
+  saved.
+Tests: `tests/wo-create-extras.test.ts`.
+
 **Client Updates** (migration 0055, `services/clientUpdates.ts`,
 `pages/ClientUpdatesPage.tsx`, sidebar "Client Updates"). Replaces the
 per-client tracking spreadsheets (e.g. "SUN Holdings Tracking"). A
