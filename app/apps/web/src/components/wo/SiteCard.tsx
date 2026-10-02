@@ -2,6 +2,7 @@ import type { WorkOrderDetailV2 } from '../../api/client';
 import { FIELD } from '../../lib/fields';
 import { deriveSite } from '../../lib/woDerive';
 import { Icon } from '../Icon';
+import { WoPlaceBlock } from '../portfolio/WoPlaceBlock';
 import { InlineField } from './fieldEdit';
 
 interface SiteCardProps {
@@ -49,6 +50,8 @@ export function SiteCard({ wo }: SiteCardProps) {
             {site.mapCaption && <span className="map-cap">{site.mapCaption}</span>}
           </div>
         )}
+        {/* 0060 — the site and asset records this work order points at. */}
+        <WoPlaceBlock woRef={wo.wo_number} woId={wo.id} />
       </div>
     </section>
   );

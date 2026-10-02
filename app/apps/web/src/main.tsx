@@ -16,6 +16,7 @@ import './styles/intake.css';
 import './styles/auth.css';
 import './styles/wo-list.css';
 import './styles/vendors.css';
+import './styles/portfolio.css';
 import './styles/client-updates.css';
 import { App } from './App';
 import { initOKnob } from './lib/oknob';

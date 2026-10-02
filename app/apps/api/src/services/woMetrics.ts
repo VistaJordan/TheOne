@@ -47,6 +47,7 @@ import {
   type ResolvedField,
 } from './woFields.js';
 import type { ActingPrincipal } from './activity.js';
+import { siteAccessSql } from './portfolio.js';
 import { vendorScopeSql } from './vendors.js';
 import { woScopeSql } from './woScope.js';
 
@@ -124,7 +125,7 @@ interface SourceModel {
   overdue?: string;
   /** 0059 · a source that is not hung on a work order: its own "not removed"
       predicate, and the VENDOR scope (0057) in place of the work-order one. */
-  standalone?: { live: string };
+  standalone?: { live: string; scope: 'vendor' | 'site'; siteColumn?: string };
 }
 
 const SOURCE_MODELS: Record<Exclude<WidgetSource, 'work_orders'>, SourceModel> = {
@@ -219,7 +220,57 @@ const SOURCE_MODELS: Record<Exclude<WidgetSource, 'work_orders'>, SourceModel> =
       updated_at: 'x.updated_at',
     },
     periodField: 'x.created_at',
-    standalone: { live: 'x.deleted_at IS NULL' },
+    standalone: { live: 'x.deleted_at IS NULL', scope: 'vendor' },
+  },
+  // 0061 · the portfolio. Counts of work orders here are of ALL work orders
+  // at the site / on the asset — a board is a manager's picture, and the
+  // viewer's site list (not their work-order scope) is what narrows it.
+  sites: {
+    from: `FROM site x LEFT JOIN principal mg ON mg.id = x.managed_by`,
+    fields: {
+      client: 'x.client',
+      state: 'upper(x.state)',
+      city: 'initcap(x.city)',
+      site_type: 'x.site_type',
+      ownership: 'x.ownership_status',
+      managed_by: 'mg.display_name',
+      billing_entity: 'x.billing_entity',
+      source: `CASE x.external_source WHEN 'ecotrak' THEN 'Ecotrak' WHEN 'manual' THEN 'Added by hand' WHEN 'work_orders' THEN 'From work orders' ELSE x.external_source END`,
+      active: `CASE WHEN x.is_active THEN 'Active' ELSE 'Closed' END`,
+      on_map: `CASE WHEN x.lat IS NOT NULL THEN 'On the map' ELSE 'Not placed' END`,
+      asset_count: '(SELECT count(*) FROM asset a WHERE a.site_id = x.id AND a.deleted_at IS NULL)',
+      open_work_orders: `(SELECT count(*) FROM task w WHERE w.site_id = x.id AND w.deleted_at IS NULL AND w.status_group::text NOT IN ('done', 'closed'))`,
+      work_orders: '(SELECT count(*) FROM task w WHERE w.site_id = x.id AND w.deleted_at IS NULL)',
+      created_at: 'x.created_at',
+    },
+    periodField: 'x.created_at',
+    standalone: { live: 'x.deleted_at IS NULL', scope: 'site', siteColumn: 'x.id' },
+  },
+  assets: {
+    from: `FROM asset x LEFT JOIN site st ON st.id = x.site_id`,
+    fields: {
+      status: `initcap(replace(x.status, '_', ' '))`,
+      category: 'x.category',
+      asset_type: 'x.asset_type',
+      manufacturer: 'x.manufacturer',
+      condition: `COALESCE(initcap(x.condition), 'Not recorded')`,
+      warranty: `CASE WHEN x.warranty_expires_on IS NULL THEN 'None on file'
+                      WHEN x.warranty_expires_on < CURRENT_DATE THEN 'Expired'
+                      WHEN x.warranty_expires_on <= CURRENT_DATE + 60 THEN 'Ends within 60 days'
+                      ELSE 'Under warranty' END`,
+      client: 'st.client',
+      site: 'COALESCE(st.name, st.client)',
+      state: 'upper(st.state)',
+      source: `CASE x.external_source WHEN 'ecotrak' THEN 'Ecotrak' WHEN 'manual' THEN 'Added by hand' ELSE x.external_source END`,
+      age_years: `(EXTRACT(EPOCH FROM (now() - x.install_date::timestamptz)) / 31557600.0)`,
+      open_work_orders: `(SELECT count(*) FROM task w WHERE w.asset_id = x.id AND w.deleted_at IS NULL AND w.status_group::text NOT IN ('done', 'closed'))`,
+      work_orders: '(SELECT count(*) FROM task w WHERE w.asset_id = x.id AND w.deleted_at IS NULL)',
+      install_date: 'x.install_date',
+      warranty_expires_on: 'x.warranty_expires_on',
+      created_at: 'x.created_at',
+    },
+    periodField: 'x.created_at',
+    standalone: { live: 'x.deleted_at IS NULL', scope: 'site', siteColumn: 'x.site_id' },
   },
 };
 
@@ -245,7 +296,13 @@ async function metricSourceWidget(
 
   const whereFor = (p: Params) => {
     const where = [model.standalone ? model.standalone.live : 't.deleted_at IS NULL'];
-    const scope = !viewer ? null : model.standalone ? vendorScopeSql(viewer, (v) => p.add(v), 'x') : woScopeSql(viewer, p);
+    const scope = !viewer
+      ? null
+      : !model.standalone
+        ? woScopeSql(viewer, p)
+        : model.standalone.scope === 'vendor'
+          ? vendorScopeSql(viewer, (v) => p.add(v), 'x')
+          : siteAccessSql(viewer, p, model.standalone.siteColumn ?? 'x.id');
     if (scope) where.push(scope);
     if (config.source_status && config.source_status.length > 0) {
       where.push(`x.status IN (${config.source_status.map((s) => p.add(s)).join(', ')})`);

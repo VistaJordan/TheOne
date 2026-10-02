@@ -45,6 +45,8 @@ export interface SessionPrincipal {
   kind: 'human' | 'service';
   isSuperAdmin: boolean;
   status: 'invited' | 'active' | 'disabled';
+  /** 0061 · has a list of sites they are restricted to (`principal_site`). */
+  siteRestricted: boolean;
   /** The permission tree (0015): the role's grants + this person's overrides.
       Every gate resolves against this; `can` below is derived from it. */
   perms: PermissionSet;
@@ -68,7 +70,8 @@ const PRINCIPAL_COLUMNS = `
   p.id, p.display_name, p.email, p.role, p.kind, p.is_super_admin, p.status,
   r.label AS role_label,
   COALESCE(r.permissions, '{}'::jsonb)          AS role_permissions,
-  COALESCE(p.permission_overrides, '{}'::jsonb) AS permission_overrides`;
+  COALESCE(p.permission_overrides, '{}'::jsonb) AS permission_overrides,
+  EXISTS (SELECT 1 FROM principal_site ps WHERE ps.principal_id = p.id) AS site_restricted`;
 
 const PRINCIPAL_FROM = `FROM principal p LEFT JOIN role r ON r.code = p.role`;
 
@@ -83,6 +86,7 @@ interface PrincipalRow {
   status: 'invited' | 'active' | 'disabled';
   role_permissions: unknown;
   permission_overrides: unknown;
+  site_restricted: boolean;
 }
 
 function toPrincipal(r: PrincipalRow): SessionPrincipal {
@@ -105,6 +109,8 @@ function toPrincipal(r: PrincipalRow): SessionPrincipal {
     roleLabel: r.role_label,
     isSuperAdmin: r.is_super_admin,
     status: r.status,
+    // 0061 · a super admin is never restricted, whatever the table says.
+    siteRestricted: Boolean(r.site_restricted) && !r.is_super_admin,
     perms,
     can: {
       quoteEdit: allow('quotes', 'edit'),

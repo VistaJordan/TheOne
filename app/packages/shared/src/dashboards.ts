@@ -69,7 +69,7 @@ export const LIVE_MIN_SECONDS = 5;
 // by, or run along; anything else is refused on the way in so a card cannot
 // name a column that is not there.
 
-export const WIDGET_SOURCES = ['work_orders', 'invoices', 'payments', 'vendor_bills', 'vendors'] as const;
+export const WIDGET_SOURCES = ['work_orders', 'invoices', 'payments', 'vendor_bills', 'vendors', 'sites', 'assets'] as const;
 export type WidgetSource = (typeof WIDGET_SOURCES)[number];
 
 export const WIDGET_SOURCE_LABELS: Record<WidgetSource, string> = {
@@ -78,6 +78,8 @@ export const WIDGET_SOURCE_LABELS: Record<WidgetSource, string> = {
   payments: 'Payment requests',
   vendor_bills: 'Vendor bills',
   vendors: 'Vendors and technicians',
+  sites: 'Sites',
+  assets: 'Assets',
 };
 
 /** What a count of this source is called. */
@@ -87,6 +89,8 @@ export const WIDGET_SOURCE_NOUNS: Record<WidgetSource, string> = {
   payments: 'Payment requests',
   vendor_bills: 'Vendor bills',
   vendors: 'Vendors',
+  sites: 'Sites',
+  assets: 'Assets',
 };
 
 export interface SourceField {
@@ -170,6 +174,42 @@ export const SOURCE_FIELDS: Record<Exclude<WidgetSource, 'work_orders'>, SourceF
     { key: 'created_at', label: 'Added on', type: 'date' },
     { key: 'updated_at', label: 'Last changed on', type: 'date' },
   ],
+  // 0061 · the portfolio (0060). Neither hangs on one work order; a card
+  // over them follows the viewer's site list, when they have one.
+  sites: [
+    { key: 'client', label: 'Client', type: 'text' },
+    { key: 'state', label: 'State', type: 'text' },
+    { key: 'city', label: 'City', type: 'text' },
+    { key: 'site_type', label: 'Site type', type: 'text' },
+    { key: 'ownership', label: 'Ownership', type: 'text' },
+    { key: 'managed_by', label: 'Managed by', type: 'text' },
+    { key: 'billing_entity', label: 'Billing entity', type: 'text' },
+    { key: 'source', label: 'Where the record came from', type: 'text' },
+    { key: 'active', label: 'Active or closed', type: 'text' },
+    { key: 'on_map', label: 'On the map', type: 'text' },
+    { key: 'asset_count', label: 'Assets', type: 'number' },
+    { key: 'open_work_orders', label: 'Open work orders', type: 'number' },
+    { key: 'work_orders', label: 'Work orders', type: 'number' },
+    { key: 'created_at', label: 'Added on', type: 'date' },
+  ],
+  assets: [
+    { key: 'status', label: 'Status', type: 'text' },
+    { key: 'category', label: 'Category', type: 'text' },
+    { key: 'asset_type', label: 'Type', type: 'text' },
+    { key: 'manufacturer', label: 'Manufacturer', type: 'text' },
+    { key: 'condition', label: 'Condition', type: 'text' },
+    { key: 'warranty', label: 'Warranty', type: 'text' },
+    { key: 'client', label: 'Client', type: 'text' },
+    { key: 'site', label: 'Site', type: 'text' },
+    { key: 'state', label: 'State', type: 'text' },
+    { key: 'source', label: 'Where the record came from', type: 'text' },
+    { key: 'age_years', label: 'Age (years)', type: 'number' },
+    { key: 'open_work_orders', label: 'Open work orders', type: 'number' },
+    { key: 'work_orders', label: 'Work orders', type: 'number' },
+    { key: 'install_date', label: 'Installed on', type: 'date' },
+    { key: 'warranty_expires_on', label: 'Warranty ends on', type: 'date' },
+    { key: 'created_at', label: 'Added on', type: 'date' },
+  ],
 };
 
 /** The statuses each source may be narrowed to. */
@@ -180,6 +220,9 @@ export const SOURCE_STATUSES: Record<Exclude<WidgetSource, 'work_orders'>, strin
   // The six statuses 0057 ships. One added in Admin › Vendors & map still
   // shows as a slice of any "by status" card; it just cannot be ticked here.
   vendors: ['NEW', 'INTERESTED', 'READY', 'ACTIVE', 'DISQUALIFIED', 'INACTIVE'],
+  // A site has no status of its own (active / closed is a field to cut by).
+  sites: [],
+  assets: ['in_service', 'out_of_service', 'retired'],
 };
 
 /** Where a card over this source drills through to. */
@@ -189,6 +232,8 @@ export const SOURCE_DRILL_PATH: Record<WidgetSource, string> = {
   payments: '/payments',
   vendor_bills: '/payments?lane=bills',
   vendors: '/vendors',
+  sites: '/sites',
+  assets: '/assets',
 };
 
 // ── Page filters (0049) ──────────────────────────────────────────────────────
@@ -817,6 +862,32 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
             'Every payment request raised on a work order in The One. Paid is money that has gone out; Approved, not yet paid is decided and waiting on the payment run; Awaiting approval is what a manager still has to decide. Add a card to cut payments any other way — by FM, purpose, vendor owner, vendor state — from the card editor.',
         },
       },
+    ],
+  },
+  {
+    // 0061 · the portfolio: sites and the assets standing in them (0060).
+    key: 'portfolio',
+    name: 'Sites & assets',
+    description: 'The portfolio: how many sites and where, and the equipment in them — its condition and its warranties.',
+    folder: 'Operations',
+    shared_all: false,
+    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om', 'ops_coord'],
+    widgets: [
+      { kind: 'number', label: 'Sites', width: 'quarter', config: { metric: 'count', source: 'sites' } },
+      { kind: 'number', label: 'Assets', width: 'quarter', config: { metric: 'count', source: 'assets' } },
+      { kind: 'number', label: 'Assets out of service', width: 'quarter', config: { metric: 'count', source: 'assets', source_status: ['out_of_service'] } },
+      { kind: 'number', label: 'Open work orders at sites', width: 'quarter', config: { metric: 'sum', value_field: 'open_work_orders', source: 'sites' } },
+      { kind: 'bar', label: 'Sites by client', width: 'half', config: { metric: 'count', group_field: 'client', source: 'sites', limit: 15 } },
+      { kind: 'bar', label: 'Sites by state', width: 'half', config: { metric: 'count', group_field: 'state', source: 'sites', limit: 20 } },
+      { kind: 'donut', label: 'Sites by type', width: 'half', config: { metric: 'count', group_field: 'site_type', source: 'sites' } },
+      { kind: 'table', label: 'Open work orders by client', width: 'half', config: { metric: 'sum', value_field: 'open_work_orders', group_field: 'client', source: 'sites', limit: 15 } },
+      { kind: 'donut', label: 'Asset condition', width: 'half', config: { metric: 'count', group_field: 'condition', source: 'assets' } },
+      { kind: 'donut', label: 'Warranty', width: 'half', config: { metric: 'count', group_field: 'warranty', source: 'assets' } },
+      { kind: 'bar', label: 'Assets by category', width: 'half', config: { metric: 'count', group_field: 'category', source: 'assets', limit: 15 } },
+      { kind: 'bar', label: 'Assets by client', width: 'half', config: { metric: 'count', group_field: 'client', source: 'assets', limit: 15 } },
+      { kind: 'table', label: 'Work orders by asset category', width: 'half', config: { metric: 'sum', value_field: 'work_orders', group_field: 'category', source: 'assets', limit: 15 } },
+      { kind: 'table', label: 'Average age by category (years)', width: 'half', config: { metric: 'avg', value_field: 'age_years', group_field: 'category', source: 'assets', limit: 15 } },
+      { kind: 'line', label: 'Warranties ending, by month', width: 'full', config: { metric: 'count', source: 'assets', time_field: 'warranty_expires_on', bucket: 'month', limit: 18 } },
     ],
   },
   {

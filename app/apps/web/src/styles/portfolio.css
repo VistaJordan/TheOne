@@ -1,0 +1,138 @@
+/* 0060 · Portfolio: Sites, Assets, and the site record on a work order. The
+   lists and record pages reuse the Vendors section's table and record styles
+   (vendors.css); this file holds only what is new. Every colour is a token. */
+
+.pf-muted { color: var(--ink-3); font-size: 12px; }
+
+/* ── The counts strip ─────────────────────────────────────────────────────── */
+.pf-counts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.pf-counts > * {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12px;
+  text-decoration: none;
+}
+.pf-counts b { font-size: 22px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.pf-counts a:hover { border-color: var(--accent); }
+.pf-counts a:hover span { color: var(--accent-text); }
+@media (max-width: 760px) {
+  .pf-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.pf-callout { margin: 0 0 12px; align-items: center; }
+.pf-callout > span { flex: 1; }
+.pf-callout .btn { flex: none; }
+.pf-notice { margin-bottom: 12px; border: 1px solid var(--ok-border); border-radius: var(--radius-sm); }
+
+.pf-wo-title { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--ink-3); }
+
+/* ── Condition ────────────────────────────────────────────────────────────── */
+.pf-cond { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.pf-cond::before { content: ''; width: 8px; height: 8px; border-radius: 999px; background: var(--ink-3); }
+.pf-cond.is-good::before { background: var(--ok-solid); }
+.pf-cond.is-fair::before { background: var(--accent); }
+.pf-cond.is-poor::before { background: var(--warn-solid); }
+.pf-cond.is-critical::before { background: var(--danger); }
+.pf-cond.is-critical { color: var(--danger); }
+
+/* ── The record forms ─────────────────────────────────────────────────────── */
+.pf-sheet { width: min(720px, 100%); }
+.pf-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin: 6px 0 4px; }
+.pf-field { display: grid; gap: 4px; min-width: 0; align-content: start; }
+.pf-field.is-wide { grid-column: 1 / -1; }
+.pf-field .lbl { margin: 0; }
+.pf-field .fld { width: 100%; }
+.pf-field.tmap-check { display: flex; grid-column: 1 / -1; }
+@media (max-width: 620px) {
+  .pf-form { grid-template-columns: 1fr; }
+}
+
+/* ── Finding a site ───────────────────────────────────────────────────────── */
+.pf-pick { display: grid; gap: 4px; position: relative; }
+.pf-pick-list { display: grid; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px; background: var(--surface); max-height: 220px; overflow: auto; }
+.pf-pick-list > .pf-muted { padding: 6px 8px; }
+.pf-pick-list button {
+  all: unset;
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.pf-pick-list button:hover,
+.pf-pick-list button:focus-visible { background: var(--chip); }
+.pf-pick-list button b { color: var(--ink); font-weight: 600; }
+.pf-picked {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--ink);
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* ── Buildings, floors, spaces ────────────────────────────────────────────── */
+.pf-tree { list-style: none; margin: 0; padding: 0 0 8px; }
+.pf-tree li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 34px;
+  padding: 4px 14px;
+  border-top: 1px solid var(--row-border);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.pf-tree li:hover { background: var(--chip); }
+.pf-tree li.is-building .pf-tree-name { font-weight: 600; }
+.pf-tree-name { color: var(--ink); }
+.pf-tree-acts { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.pf-tree-acts .link-btn { font-size: 12px; }
+.pf-loc-form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 0 14px 12px; font-size: 12.5px; color: var(--ink); }
+.pf-loc-form b { flex-basis: 100%; font-weight: 600; }
+.pf-loc-form .fld { width: auto; height: 32px; flex: 1 1 150px; }
+.pf-loc-form .fld.mono { flex: 0 1 150px; }
+
+.pf-map { position: relative; height: 240px; margin: 0 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.vrec-fields.pf-one { grid-template-columns: 1fr 1fr; }
+
+/* ── The site record on a work order ──────────────────────────────────────── */
+.pf-place { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.pf-place-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pf-place-head > span:last-child { display: inline-flex; gap: 10px; }
+.pf-place-site { display: grid; gap: 2px; }
+.pf-place-site a { color: var(--accent-text); text-decoration: none; }
+.pf-place-site a:hover { text-decoration: underline; }
+.pf-place-site b { font-weight: 600; color: inherit; }
+.pf-place-site > b { color: var(--ink); }
+.pf-place-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 3px; }
+.pf-place-line { margin: 0; line-height: 1.45; }
+.pf-place-line b { color: var(--ink); font-weight: 600; }
+.pf-place-select { width: 100%; height: 32px; margin-top: 2px; }
+.pf-place-sugg { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.pf-place-sugg li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.pf-place-sugg li > span { display: grid; gap: 1px; min-width: 0; }
+.pf-place-sugg b { color: var(--ink); font-weight: 600; }
+
+/* ── 0061 · Admin › Sites & assets: site access ───────────────────────────── */
+.pfa-list { list-style: none; margin: 0; padding: 0 14px; display: grid; gap: 10px; }
+.pfa-person { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.pfa-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--ink); }
+.pfa-head .push { margin-left: auto; }
+.pfa-sites { display: flex; gap: 6px; flex-wrap: wrap; }
+.pfa-add { display: grid; gap: 6px; padding: 12px 14px 14px; max-width: 520px; }
+.pfa-add .fld { width: 100%; height: 32px; }
+.pfa-add .lbl { margin: 0; }

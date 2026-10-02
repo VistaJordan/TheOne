@@ -2759,3 +2759,189 @@ export function markNoticeRead(id: string): Promise<{ unread: number }> {
 export function markAllNoticesRead(): Promise<{ unread: number }> {
   return request('/notices/read-all', { method: 'POST' });
 }
+
+// ── 0060 — Portfolio: sites, their buildings / floors / spaces, assets ───────
+
+import type {
+  AssetCondition,
+  AssetDetail,
+  AssetInput,
+  AssetsListResponse,
+  LinkWorkOrdersResult,
+  PortfolioHistoryEntry,
+  SiteDetail,
+  SiteInput,
+  SiteLocationInput,
+  SiteMapPoint,
+  SitesListResponse,
+  SitesMetaResponse,
+  WoPlaceResponse,
+} from '@theone/shared';
+
+export type SiteListParams = Partial<Record<'search' | 'client' | 'state' | 'site_type' | 'managed_by' | 'show' | 'flag' | 'sort' | 'dir', string>> & {
+  page?: number;
+  page_size?: number;
+};
+
+export function listSites(params: SiteListParams): Promise<SitesListResponse> {
+  return request<SitesListResponse>(`/sites${vendorQuery(params)}`);
+}
+
+export function getSitesMeta(): Promise<SitesMetaResponse> {
+  return request<SitesMetaResponse>('/sites/meta');
+}
+
+export function getSitesMap(params: SiteListParams): Promise<{ points: SiteMapPoint[] }> {
+  const { page: _p, page_size: _s, sort: _so, dir: _d, ...rest } = params;
+  return request(`/sites/map${vendorQuery(rest)}`);
+}
+
+export function previewSitesFromWorkOrders(): Promise<LinkWorkOrdersResult> {
+  return request<LinkWorkOrdersResult>('/sites/from-work-orders');
+}
+
+export function createSitesFromWorkOrders(): Promise<LinkWorkOrdersResult> {
+  return request<LinkWorkOrdersResult>('/sites/from-work-orders', { method: 'POST' });
+}
+
+export function getSite(id: string): Promise<{ site: SiteDetail }> {
+  return request(`/sites/${encodeURIComponent(id)}`);
+}
+
+export function createSite(input: SiteInput): Promise<{ site: SiteDetail }> {
+  return request('/sites', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateSite(id: string, input: SiteInput): Promise<{ site: SiteDetail }> {
+  return request(`/sites/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteSite(id: string): Promise<{ ok: true }> {
+  return request(`/sites/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function getSiteHistory(id: string): Promise<{ history: PortfolioHistoryEntry[] }> {
+  return request(`/sites/${encodeURIComponent(id)}/history`);
+}
+
+export function addSiteLocation(siteId: string, input: SiteLocationInput): Promise<{ site: SiteDetail }> {
+  return request(`/sites/${encodeURIComponent(siteId)}/locations`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateSiteLocation(siteId: string, locId: string, input: SiteLocationInput): Promise<{ site: SiteDetail }> {
+  return request(`/sites/${encodeURIComponent(siteId)}/locations/${encodeURIComponent(locId)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function removeSiteLocation(siteId: string, locId: string): Promise<{ site: SiteDetail }> {
+  return request(`/sites/${encodeURIComponent(siteId)}/locations/${encodeURIComponent(locId)}`, { method: 'DELETE' });
+}
+
+export type AssetListParams = Partial<Record<'search' | 'site' | 'client' | 'category' | 'asset_type' | 'status' | 'condition' | 'warranty' | 'sort' | 'dir', string>> & {
+  page?: number;
+  page_size?: number;
+};
+
+export function listAssets(params: AssetListParams): Promise<AssetsListResponse> {
+  return request<AssetsListResponse>(`/assets${vendorQuery(params)}`);
+}
+
+export function getAsset(id: string): Promise<{ asset: AssetDetail }> {
+  return request(`/assets/${encodeURIComponent(id)}`);
+}
+
+export function createAsset(input: AssetInput): Promise<{ asset: AssetDetail }> {
+  return request('/assets', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateAsset(id: string, input: AssetInput): Promise<{ asset: AssetDetail }> {
+  return request(`/assets/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteAsset(id: string): Promise<{ ok: true }> {
+  return request(`/assets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function getAssetHistory(id: string): Promise<{ history: PortfolioHistoryEntry[] }> {
+  return request(`/assets/${encodeURIComponent(id)}/history`);
+}
+
+export function recordAssetCondition(id: string, input: { condition: AssetCondition; note?: string | null; wo_number?: string | null }): Promise<{ asset: AssetDetail }> {
+  return request(`/assets/${encodeURIComponent(id)}/condition`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function getWoPlace(woRef: string): Promise<WoPlaceResponse> {
+  return request<WoPlaceResponse>(`/work-orders/${encodeURIComponent(woRef)}/place`);
+}
+
+export function setWoPlace(woRef: string, input: { site_id?: string | null; asset_id?: string | null }): Promise<WoPlaceResponse> {
+  return request<WoPlaceResponse>(`/work-orders/${encodeURIComponent(woRef)}/place`, { method: 'PUT', body: JSON.stringify(input) });
+}
+
+// ── 0061 — clients, asset management requests, Admin › Sites & assets ────────
+
+import type {
+  AdminPortfolioResponse,
+  AssetRequest,
+  AssetRequestInput,
+  AssetRequestsResponse,
+  ClientDetail,
+  ClientInput,
+  ClientsListResponse,
+  PortfolioListName,
+} from '@theone/shared';
+
+export function listClients(params: Partial<Record<'search' | 'show' | 'sort' | 'dir', string>>): Promise<ClientsListResponse> {
+  return request<ClientsListResponse>(`/clients${vendorQuery(params)}`);
+}
+
+export function getClient(id: string): Promise<{ client: ClientDetail }> {
+  return request(`/clients/${encodeURIComponent(id)}`);
+}
+
+export function createClient(input: ClientInput): Promise<{ client: ClientDetail }> {
+  return request('/clients', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function updateClient(id: string, input: ClientInput): Promise<{ client: ClientDetail }> {
+  return request(`/clients/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+export function deleteClient(id: string): Promise<{ ok: true }> {
+  return request(`/clients/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function getClientHistory(id: string): Promise<{ history: PortfolioHistoryEntry[] }> {
+  return request(`/clients/${encodeURIComponent(id)}/history`);
+}
+
+export function listAssetRequests(params: { status?: string; asset?: string }): Promise<AssetRequestsResponse> {
+  return request<AssetRequestsResponse>(`/asset-requests${vendorQuery(params)}`);
+}
+
+export function createAssetRequest(input: AssetRequestInput): Promise<{ request: AssetRequest }> {
+  return request('/asset-requests', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function decideAssetRequest(id: string, decision: 'approve' | 'reject', note?: string | null): Promise<{ request: AssetRequest }> {
+  return request(`/asset-requests/${encodeURIComponent(id)}/decide`, { method: 'POST', body: JSON.stringify({ decision, note: note ?? null }) });
+}
+
+export function withdrawAssetRequest(id: string): Promise<{ request: AssetRequest }> {
+  return request(`/asset-requests/${encodeURIComponent(id)}/withdraw`, { method: 'POST' });
+}
+
+export function getAdminPortfolio(): Promise<AdminPortfolioResponse> {
+  return request<AdminPortfolioResponse>('/admin/portfolio');
+}
+
+export function addPortfolioListValue(list: PortfolioListName, name: string): Promise<AdminPortfolioResponse> {
+  return request(`/admin/portfolio/lists/${list}`, { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+export function updatePortfolioListValue(list: PortfolioListName, value: string, patch: { name?: string; is_active?: boolean }): Promise<AdminPortfolioResponse> {
+  return request(`/admin/portfolio/lists/${list}`, { method: 'PATCH', body: JSON.stringify({ value, ...patch }) });
+}
+
+export function setSiteAccess(principalId: string, siteIds: string[]): Promise<AdminPortfolioResponse> {
+  return request(`/admin/portfolio/site-access/${encodeURIComponent(principalId)}`, { method: 'PUT', body: JSON.stringify({ site_ids: siteIds }) });
+}

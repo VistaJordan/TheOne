@@ -1707,5 +1707,7 @@ export * from './vendors';
 export * from './vendorWorkflow';
 // 0059: advanced filters, the column picker and the board of the Vendors list.
 export * from './vendorFilters';
+// 0060: sites, their buildings / floors / spaces, and assets.
+export * from './portfolio';
 // 0055: client updates — per-client trackers, shared by link or email.
 export * from './clientUpdates';

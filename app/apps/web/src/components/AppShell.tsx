@@ -26,6 +26,9 @@ export type NavKey =
   | 'Pulse'
   | 'Work Orders'
   | 'Vendors'
+  | 'Sites'
+  | 'Assets'
+  | 'Clients'
   | 'Quotes'
   | 'Payments'
   | 'Receivables'
@@ -67,6 +70,12 @@ const NAV: NavItem[] = [
   // Hidden without the `vendors` grant (dispatchers meet vendors on the map
   // of a work order instead).
   { label: 'Vendors', icon: 'truck', to: '/vendors' },
+  // 0060 — the portfolio: the sites work is done at (with their buildings,
+  // floors and spaces) and the assets standing in them.
+  { label: 'Sites', icon: 'store', to: '/sites' },
+  { label: 'Assets', icon: 'package', to: '/assets' },
+  // 0061 — the client records: contacts, billing, who looks after the account.
+  { label: 'Clients', icon: 'user-cog', to: '/clients' },
   { label: 'Quotes', icon: 'file', to: '/quotes' },
   // Payables: the queue where technician payment requests are approved and
   // handed to Yoda. Receivables (AR) sits beside it.
@@ -110,6 +119,9 @@ const NAV_PERM: Record<string, string | string[]> = {
   Dashboard: 'dashboard',
   'Work Orders': 'work_orders',
   Vendors: 'vendors',
+  Sites: 'sites',
+  Assets: 'assets',
+  Clients: 'clients',
   Quotes: 'quotes',
   Payments: 'payments',
   'Incoming Work Orders': ['approvals/intake', INTAKE_PERM_KEY],

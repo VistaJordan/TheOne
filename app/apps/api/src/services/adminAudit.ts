@@ -51,7 +51,15 @@ export type AdminEntity =
   | 'vendor'
   // Admin › Vendors & map (0057): settings, lists, preferred vendors.
   | 'vendor_setting'
-  | 'preferred_vendor';
+  | 'preferred_vendor'
+  // A site (with its buildings, floors and spaces) or an asset (0060).
+  | 'site'
+  | 'asset'
+  // 0061: a client record, an asset management request, a value on the
+  // site-type / asset-category lists.
+  | 'client'
+  | 'asset_request'
+  | 'portfolio_list';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

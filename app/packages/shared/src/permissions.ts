@@ -21,6 +21,7 @@
 
 import { vendorPermNodes } from './vendors';
 import { vendorWorkflowPermNodes } from './vendorWorkflow';
+import { portfolioPermNodes } from './portfolio';
 
 export type PermAction = 'view' | 'create' | 'edit' | 'delete' | 'approve';
 
@@ -326,6 +327,8 @@ export const ADMIN_PERM_SECTIONS: { slug: string; label: string; actions: PermAc
   { slug: 'trash', label: 'Trash', actions: ['view', 'edit'] },
   // 0057 · map settings, preferred vendors, vendor statuses, the map alerts.
   { slug: 'vendors', label: 'Vendors & map', actions: ['view', 'edit'] },
+  // 0061 · the site-type and asset-category lists; who is restricted to which sites.
+  { slug: 'portfolio', label: 'Sites & assets', actions: ['view', 'edit'] },
 ];
 
 export function adminPermKey(slug: string): string {
@@ -709,6 +712,9 @@ export function buildPermissionTree(
     ...vendorPermNodes().map((n) =>
       n.key === 'vendors' ? { ...n, children: [...(n.children ?? []), ...vendorWorkflowPermNodes()] } : n,
     ),
+    // 0060 · the portfolio: sites (with their buildings, floors and spaces)
+    // and the assets that stand in them.
+    ...portfolioPermNodes(),
     {
       // 0045 · live. Approve is the act of SENDING a bill to the client, not
       // a separate sign-off step: once it has gone out it is what they hold.

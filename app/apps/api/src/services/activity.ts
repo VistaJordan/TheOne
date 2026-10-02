@@ -57,6 +57,10 @@ export interface ActingPrincipal {
   role: string | null;
   roleLabel: string | null;
   isSuperAdmin: boolean;
+  /** 0061 · restricted to the sites listed for them in `principal_site`.
+      Optional: a principal built outside a request (the engine, a test) is
+      not restricted. */
+  siteRestricted?: boolean;
   /** The permission tree (0015) — what every gate resolves against. */
   perms: PermissionSet;
   /** Resolved from the `role` table, not from a hardcoded list (0005). */
@@ -73,6 +77,7 @@ export function actingPrincipalFromRequest(req: FastifyRequest): ActingPrincipal
     role: p.role,
     roleLabel: p.roleLabel,
     isSuperAdmin: p.isSuperAdmin,
+    siteRestricted: p.siteRestricted,
     perms: p.perms,
     can: p.can,
   };

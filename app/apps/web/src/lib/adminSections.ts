@@ -20,4 +20,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/admin/trash', label: 'Trash', icon: 'trash' },
   // 0057 — map settings, preferred vendors, the vendor lists, map use.
   { to: '/admin/vendors', label: 'Vendors & map', icon: 'truck' },
+  // 0061 — the site-type and asset-category lists; who is restricted to which sites.
+  { to: '/admin/portfolio', label: 'Sites & assets', icon: 'store' },
 ];

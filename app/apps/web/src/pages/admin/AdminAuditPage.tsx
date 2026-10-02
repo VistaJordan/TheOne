@@ -287,6 +287,17 @@ function adminHref(e: AuditLogEntry): string | null {
       return '/planned-maintenance';
     case 'vendor':
       return `/vendors/${encodeURIComponent(e.entity_id)}`;
+    case 'site':
+      // The bulk "sites from work orders" row is filed under the person who ran it.
+      return e.action === 'sites_created_from_work_orders' ? '/sites' : `/sites/${encodeURIComponent(e.entity_id)}`;
+    case 'asset':
+      return `/assets/${encodeURIComponent(e.entity_id)}`;
+    case 'client':
+      return `/clients/${encodeURIComponent(e.entity_id)}`;
+    case 'asset_request':
+      return '/assets?view=requests';
+    case 'portfolio_list':
+      return '/admin/portfolio';
     case 'vendor_setting':
     case 'preferred_vendor':
       return '/admin/vendors';

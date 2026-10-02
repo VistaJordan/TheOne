@@ -950,6 +950,92 @@ is `packages/shared/src/vendorFilters.ts`.
 Tests: `tests/vendor-filters.test.ts`. Still open for CRM parity: the data
 transfer from VR - CRM / Tech Locator, and email (held).
 
+**Portfolio: sites, buildings / floors / spaces, assets** (migration 0060,
+Facilio parity batch 2; `packages/shared/src/portfolio.ts`,
+`services/portfolio.ts`, `routes/portfolio.ts`). `site` and `asset` have
+existed since 0008 but only the Ecotrak sync wrote them and nothing showed
+them. Now they are records: `/sites` (list + map, counts strip),
+`/sites/:id`, `/assets`, `/assets/:id`, and a "Site record" block under the
+Site card of a work order (`components/portfolio/WoPlaceBlock.tsx`).
+- **Three sources** (`external_source`): `ecotrak` (the sync), `manual`
+  (made here; its own id is the `external_id`), `work_orders` (made from work
+  orders that only carry their site as text). The sync file is not imported
+  or edited. It rewrites client / name / store number / address on every
+  sighting of ITS sites, so `updateSite` refuses those columns
+  (`SITE_SYNCED_FIELDS`, 409) on an `ecotrak` site; every 0060 column is ours.
+- **No FK to `principal` or `task` from the new columns and tables**
+  (`managed_by`, `created_by`, `asset_condition_log.task_id` are plain uuids):
+  the seed TRUNCATEs both … CASCADE and sites / assets must survive a re-seed.
+- **Site**: type, ownership, managed by, billing entity, contact, hours,
+  access notes, geofence (`boundary_radius_ft`), and a pin — placed from the
+  ZIP, else the city (`geoLookup`, 0056), or typed by hand (`geo_source =
+  'manual'`, which an address change does not move). Delete is soft.
+- **Locations** are one table, `site_location`, three kinds nested by
+  parent; `canNestUnder` is the rule (building on the site, floor in a
+  building, space on a floor / in a building / on the site). Removing one
+  cascades to what is inside; assets there stay at the site, unplaced.
+- **Asset**: category, manufacturer, serial, tag, install date, warranty
+  (`warrantyState`: none / expired / expiring within 60 days / active, on a
+  Chicago day), status, parent asset (loops refused), the place it stands
+  (must be at its own site), and `asset_condition_log` — every reading, with
+  the work order it was taken on; `asset.condition` is the latest.
+- **On a work order**: `GET/PUT /work-orders/:id/place` reads and sets
+  `task.site_id` / `task.asset_id` (needs `work_orders` edit + `sites` edit;
+  logged through `logTaskChanges` as fields "Site" and "Asset"). The Site
+  card's address is still the work order's own `17. Address` text.
+- **Sites from work orders** (`/sites/from-work-orders`, preview + run): a
+  place is client + the first of store number, street, store name, city;
+  "Store" counts as a number only when it has a digit and is not the client's
+  own name. Idempotent (the place key is the `external_id`).
+- **Scope**: every work-order list and count inside a site or an asset goes
+  through `woScopeSql`, so a scoped dispatcher sees their own work orders
+  there and no others. Sites and assets themselves are not scoped.
+- Permissions `sites` and `assets` (view / create / edit / delete): 0060
+  gives everyone view; OM tiers, Ops Coordinator and OP Admin create / edit;
+  admin, TL, ATL, AM also delete. Audit entities `site`, `asset`.
+Built next, in 0061 (below): clients, site access, dashboard sources, asset
+requests and the admin screen for the two lists (the tables `site_type`,
+`asset_category` feed the suggestions).
+Tests: `tests/portfolio.test.ts`.
+
+**Clients, site access, asset requests, Admin › Sites & assets** (migration
+0061, the rest of Facilio batch 2; `services/portfolioExtras.ts`, routes in
+`routes/portfolio.ts`, shared types at the foot of `shared/portfolio.ts`).
+- **Clients are records, not owners.** `client` describes a name (contact,
+  billing, account manager, portal). Which client a work order belongs to is
+  still `task.client` / `site.client` text, joined by `lower(btrim(name))` —
+  no FK was added and the Ecotrak sync is untouched. So: a client in use
+  cannot be renamed (only re-capitalised) or removed (mark it inactive), and
+  `adoptNewClients` inserts a record for any new name each time the list is
+  read. `/clients`, `/clients/:id`; permission `clients`.
+- **A person restricted to a list of sites** (`principal_site`; nobody listed
+  = no restriction; super admins never). The session loader sets
+  `siteRestricted` (auth.ts → `ActingPrincipal`), and `woScopeSql` ANDs
+  `t.site_id IN (their sites)` onto whatever the role scope says — so the
+  list, the queues, the badge and every per-work-order route follow it, and a
+  work order with no site record is outside every list. Sites, assets, client
+  counts and the sites / assets dashboard sources go through `siteAccessSql` /
+  `assertSiteAccess` in `services/portfolio.ts`. Set from Admin › Sites &
+  assets by super admins only (`PUT /admin/portfolio/site-access/:id`, logged
+  `user_site_access_changed`). A dashboard board set to "Everything" (0050)
+  can still count past it, as it can past the work-order scope.
+- **Asset management requests** (`asset_request`: add / replace / retire /
+  move). `assets/requests` create = ask, approve = decide. Approving MAKES the
+  change through `createAsset` / `updateAsset` as the approver (so it is
+  validated and logged like any edit, and the approver needs the asset rights
+  too); a replace creates the new asset in the old one's place and marks the
+  old one retired. Rejecting needs a reason. Deciders and the requester are
+  told through notices (0059). Queue at `/assets?view=requests`; replace /
+  retire / move start from the asset's own page.
+- **Admin › Sites & assets** (`/admin/portfolio`, grant `admin/portfolio`):
+  the `site_type` and `asset_category` lists — add, rename (carries every
+  record holding the old value), switch off (no longer suggested) — and the
+  site-access card.
+- **Dashboards**: `sites` and `assets` are widget sources (models in
+  `woMetrics.ts`, `standalone.scope = 'site'`), with a prebuilt "Sites &
+  assets" board. Their work-order counts are of all work orders at the site /
+  on the asset, narrowed by the viewer's site list, not their work-order scope.
+
 **Client Updates** (migration 0055, `services/clientUpdates.ts`,
 `pages/ClientUpdatesPage.tsx`, sidebar "Client Updates"). Replaces the
 per-client tracking spreadsheets (e.g. "SUN Holdings Tracking"). A

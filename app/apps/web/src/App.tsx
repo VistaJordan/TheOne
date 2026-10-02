@@ -25,6 +25,12 @@ import { AiQuoteReviewPage } from './pages/AiQuoteReviewPage';
 import { VendorsPage } from './pages/VendorsPage';
 import { VendorDetailPage } from './pages/VendorDetailPage';
 import { VendorImportPage } from './pages/VendorImportPage';
+import { SitesPage } from './pages/SitesPage';
+import { SiteDetailPage } from './pages/SiteDetailPage';
+import { AssetsPage } from './pages/AssetsPage';
+import { AssetDetailPage } from './pages/AssetDetailPage';
+import { ClientDetailPage, ClientsPage } from './pages/ClientsPage';
+import { AdminPortfolioPage } from './pages/admin/AdminPortfolioPage';
 import { AdminVendorsPage } from './pages/admin/AdminVendorsPage';
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
@@ -177,6 +183,14 @@ export function App() {
                 path="/vendors"
                 element={<RequireAuth><RequireCan perm="vendors" nav="Vendors"><VendorsPage /></RequireCan></RequireAuth>}
               />
+              {/* 0060 — the portfolio: sites and the assets in them. */}
+              <Route path="/sites" element={<RequireAuth><RequireCan perm="sites" nav="Sites"><SitesPage /></RequireCan></RequireAuth>} />
+              <Route path="/sites/:id" element={<RequireAuth><RequireCan perm="sites" nav="Sites"><SiteDetailPage /></RequireCan></RequireAuth>} />
+              <Route path="/assets" element={<RequireAuth><RequireCan perm="assets" nav="Assets"><AssetsPage /></RequireCan></RequireAuth>} />
+              <Route path="/assets/:id" element={<RequireAuth><RequireCan perm="assets" nav="Assets"><AssetDetailPage /></RequireCan></RequireAuth>} />
+              {/* 0061 — clients as records. */}
+              <Route path="/clients" element={<RequireAuth><RequireCan perm="clients" nav="Clients"><ClientsPage /></RequireCan></RequireAuth>} />
+              <Route path="/clients/:id" element={<RequireAuth><RequireCan perm="clients" nav="Clients"><ClientDetailPage /></RequireCan></RequireAuth>} />
               <Route
                 path="/vendors/import"
                 element={<RequireAuth><RequireCan perm="vendors" nav="Vendors"><VendorImportPage /></RequireCan></RequireAuth>}
@@ -250,6 +264,7 @@ export function App() {
               <Route path="/admin/audit" element={<RequireAuth><AdminAuditPage /></RequireAuth>} />
               <Route path="/admin/trash" element={<RequireAuth><AdminTrashPage /></RequireAuth>} />
               <Route path="/admin/vendors" element={<RequireAuth><AdminVendorsPage /></RequireAuth>} />
+              <Route path="/admin/portfolio" element={<RequireAuth><AdminPortfolioPage /></RequireAuth>} />
             </Routes>
           </AuthProvider>
         </BrowserRouter>

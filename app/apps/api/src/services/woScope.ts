@@ -30,7 +30,14 @@ export function woScopeOf(actor: ActingPrincipal): WoScope {
  */
 export function woScopeSql(actor: ActingPrincipal, p: Params, alias = 't'): string | null {
   const scope = woScopeOf(actor);
-  if (scope.all) return null;
+  // 0061 · a person restricted to a list of sites sees only the work orders
+  // AT those sites — on top of (AND) whatever the role scope says. A work
+  // order with no site is at none of them.
+  const sites =
+    actor.siteRestricted && !actor.isSuperAdmin
+      ? `${alias}.site_id IN (SELECT ps.site_id FROM principal_site ps WHERE ps.principal_id = ${p.add(actor.id)})`
+      : null;
+  if (scope.all) return sites;
   const name = p.add(actor.name);
   const parts = [
     `EXISTS (
@@ -43,7 +50,8 @@ export function woScopeSql(actor: ActingPrincipal, p: Params, alias = 't'): stri
   if (scope.entities.length > 0) {
     parts.push(`${alias}.billing_entity IN (${scope.entities.map((e) => p.add(e)).join(', ')})`);
   }
-  return `(${parts.join(' OR ')})`;
+  const mine = `(${parts.join(' OR ')})`;
+  return sites ? `(${mine} AND ${sites})` : mine;
 }
 
 /** The 403 a scoped person gets for a work order that exists but is not theirs. */
