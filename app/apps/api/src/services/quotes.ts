@@ -706,6 +706,29 @@ export async function getBindableQuoteTotal(taskId: string): Promise<number | nu
   }).grand_total;
 }
 
+/**
+ * The grand total of the work order's quote, whatever state it is in — what
+ * Total Invoiced is stamped with when the status moves to Invoiced
+ * (services/moneySync.ts). Null when there is no quote.
+ */
+export async function getQuoteTotal(taskId: string): Promise<number | null> {
+  const res = await query<{ id: string; sales_tax: number | null; ot_multiplier: number | null }>(
+    `SELECT id::text AS id, sales_tax::float8 AS sales_tax, ot_multiplier::float8 AS ot_multiplier
+       FROM quote WHERE task_id = $1 LIMIT 1`,
+    [taskId],
+  );
+  if (res.rows.length === 0) return null;
+  const mult = res.rows[0].ot_multiplier ?? OT_MULTIPLIER;
+  const sections = await loadSections(res.rows[0].id, mult);
+  return computeQuoteTotals({
+    sections,
+    sales_tax: Number(res.rows[0].sales_tax ?? 0),
+    total_cost: null,
+    nte: null,
+    ot_multiplier: mult,
+  }).grand_total;
+}
+
 /** One row of the sidebar "Quotes" list page (GET /api/quotes). */
 export interface QuoteListItem {
   id: string;

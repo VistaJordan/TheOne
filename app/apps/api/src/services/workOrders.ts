@@ -23,6 +23,7 @@ import {
   ecotrakTransitionRefused,
   describeEcotrakRefusal,
   isComputedWoColumn,
+  isInvoicedStatusName,
 } from '@theone/shared';
 import { ApiError } from '../errors.js';
 import { config } from '../config.js';
@@ -31,7 +32,8 @@ import { dispatchAutomations, type AutoCtx } from './automations.js';
 import { UUID_RE, CREATED_AT_SQL, getActivityForTask, type ActingPrincipal } from './activity.js';
 import { woScopeSql } from './woScope.js';
 import { computeMoney } from './money.js';
-import { getBindableQuoteTotal } from './quotes.js';
+import { getBindableQuoteTotal, getQuoteTotal } from './quotes.js';
+import { syncInvoicedFromQuote } from './moneySync.js';
 import { assertStatusGate } from './statusGates.js';
 import { intakeMissingFor } from './intakeGate.js';
 import { obligationsReady, worstObligationsByTask, evaluateForTask } from './obligations.js';
@@ -561,7 +563,7 @@ export async function changeStatus(
   // behind the open transaction and self-deadlock.
 
   // Captured for the automations engine, which runs AFTER the commit.
-  let fired: { taskId: string; change: TaskChange; fromGroup: string | null; toGroup: string } | null = null;
+  let fired: { taskId: string; change: TaskChange; fromGroup: string | null; toGroup: string; toName: string } | null = null;
 
   await withTransaction(async (tx) => {
     // Current task + status.
@@ -628,14 +630,20 @@ export async function changeStatus(
       },
     };
     await logTaskChanges(tx, actorId, task_id, [change], auto?.by ?? source);
-    fired = { taskId: task_id, change, fromGroup: currentGroup, toGroup: newGroup };
+    fired = { taskId: task_id, change, fromGroup: currentGroup, toGroup: newGroup, toName: newStatusName };
   });
 
   // Automations react after the commit and before the detail is re-read, so the
   // caller sees the rule's effect (e.g. an auto-assign) in the response.
   if (fired !== null) {
-    const f: { taskId: string; change: TaskChange } = fired;
+    const f: { taskId: string; change: TaskChange; toName: string } = fired;
     await dispatchAutomations({ taskId: f.taskId, kind: 'changed', changes: [f.change] }, auto);
+    // Invoiced / Invoiced Not Paid: Total Invoiced takes the quote's total
+    // (shared/moneyRules.ts). No quote, no stamp.
+    if (isInvoicedStatusName(f.toName)) {
+      const stamped = await syncInvoicedFromQuote(f.taskId, actorId, await getQuoteTotal(f.taskId));
+      if (stamped.length > 0) await dispatchAutomations({ taskId: f.taskId, kind: 'changed', changes: stamped }, auto);
+    }
   }
 
   // Return the fresh detail object (same shape as GET /:id).

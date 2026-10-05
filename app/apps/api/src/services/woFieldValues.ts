@@ -16,6 +16,7 @@ import { dispatchAutomations, type AutoCtx } from './automations.js';
 import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { assertNotVisitOwned } from './visits.js';
+import { assertMoneyNotLocked } from './moneySync.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import type { ActivityEntry } from '@theone/shared';
@@ -120,6 +121,8 @@ export async function updateWorkOrderFields(
   );
   if (!row.rows[0]) throw new ApiError('NOT_FOUND', 'Work order not found');
   const task = row.rows[0];
+  // Cost and Total Invoiced are not typed over a figure the system put there.
+  await assertMoneyNotLocked([task.id], patch.map((p) => p.jsonKey));
 
   const log: TaskChange[] = [];
   const merged: Record<string, unknown> = { ...(task.fields ?? {}) };

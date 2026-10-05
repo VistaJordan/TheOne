@@ -22,7 +22,7 @@ Lanes: **Needs approval**, **To process**, **All requests**, **Vendor bills**.
 - Approve or reject (needs \`payments\` approve): Payments › **Needs approval**, **Approve** then **Approve payment**, or **Reject**, give the reason, **Reject with note**.
 - Pay it (needs \`payments/process\` edit, normally accounts payable): Payments › **To process**, **Send to Yoda** (optional **Yoda reference**), and later **Mark paid**.
 - Record a vendor's bill (needs \`payments\` create): Payments › **Vendor bills**, **Record bill**, fill the work order, **Vendor**, **Their invoice #**, dates and lines, **Record bill**. Then **Approve** (\`payments\` approve), **Mark paid** (\`payments/process\` edit), or **Dispute** with what is wrong; **Credit note** raises a credit against it.
-Rules: approving a payment and sending it to Yoda are locked while an NTE increase is open on the work order. Approval tiers by amount (set in Admin › Settings) can limit which roles may approve a payment or a bill of a given size; a role outside the band sees the button locked.
+Rules: every accepted payment request (approved, sent to Yoda or paid) counts toward the work order's Cost, which is their total; rejecting one takes it back out. If that total passes the NTE, an NTE increase request is raised in Approvals. Approving a payment and sending it to Yoda are locked while an NTE increase is open on the work order. Approval tiers by amount (set in Admin › Settings) can limit which roles may approve a payment or a bill of a given size; a role outside the band sees the button locked.
 
 ### Receivables (sidebar: Receivables)
 

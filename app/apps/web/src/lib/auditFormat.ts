@@ -31,6 +31,8 @@ export function viaLabel(after: unknown): string | null {
   // status moved by a manager's approval (0025) says so in words.
   // The email escalation receiver (rule 7.3.2) raises the Escalated flag.
   if (via === 'webhook') return 'the email escalation webhook';
+  if (via === 'payment') return 'an accepted payment request';
+  if (via === 'quote') return 'the quote, on invoicing';
   return via === 'visit' ? 'the visit log' : via === 'approval_task' ? 'an approved status change request' : via;
 }
 

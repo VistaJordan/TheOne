@@ -22,10 +22,13 @@ import { raiseAcceptanceTasks } from './approvals.js';
 import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { assertNotVisitOwned } from './visits.js';
+import { assertMoneyNotLocked, syncInvoicedFromQuote } from './moneySync.js';
+import { getQuoteTotal } from './quotes.js';
 import { doneGateMissingFor, quoteFilledTaskIds } from './statusGates.js';
 import {
   PARTS_REQUIRED_KEY,
   STATUS_GATE_ERROR_CODE,
+  isInvoicedStatusName,
   describeStatusGate,
   partsRequiredFilled,
   statusGateFor,
@@ -159,6 +162,10 @@ export async function bulkUpdate(
       WHERE t.id IN (${placeholders(ids.length)}) AND t.deleted_at IS NULL`,
     ids,
   );
+
+  // Cost / Total Invoiced the system put there are not bulk-typed over; the
+  // 400 names the work orders in the way.
+  await assertMoneyNotLocked(rows.rows.map((r) => r.id), customPatch.map((c) => c.key));
 
   const found = new Map(rows.rows.map((r) => [r.id, r]));
   const skipped: { wo_number: string; reason: string }[] = [];
@@ -299,6 +306,13 @@ export async function bulkUpdate(
   // Automations react per row, after the whole batch has committed.
   for (const r of firedRows) {
     await dispatchAutomations({ taskId: r.id, kind: 'changed', changes: r.log });
+    // A bulk move to Invoiced stamps Total Invoiced from the quote, row by
+    // row, exactly as the single move does (shared/moneyRules.ts).
+    const to = r.log.find((c) => c.field === 'status_id')?.after as { status_name?: string } | undefined;
+    if (isInvoicedStatusName(to?.status_name)) {
+      const stamped = await syncInvoicedFromQuote(r.id, actorId, await getQuoteTotal(r.id));
+      if (stamped.length > 0) await dispatchAutomations({ taskId: r.id, kind: 'changed', changes: stamped });
+    }
   }
 
   return { requested: ids.length, updated, skipped };

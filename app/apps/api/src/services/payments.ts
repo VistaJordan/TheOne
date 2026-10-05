@@ -36,6 +36,9 @@ import { woScopeSql } from './woScope.js';
 import { requirePerm } from './permissions.js';
 import { assertNoOpenNteOverride } from './approvals.js';
 import { assertTierAllows, listApprovalTiers, tierSummary } from './approvalTiers.js';
+import { dispatchAutomations } from './automations.js';
+import { syncCostFromPayments } from './moneySync.js';
+import type { TaskChange } from './woAudit.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -445,6 +448,9 @@ async function decide(
   const params: unknown[] = [d.to, id, actor.id];
   if (d.set.includes('$4')) params.push(text);
 
+  // Cost follows the accepted requests (shared/moneyRules.ts): re-derived in
+  // the same transaction as the decision, announced to the rules after it.
+  let costChanges: TaskChange[] = [];
   await withTransaction(async (tx) => {
     await tx.query(
       `UPDATE payment_request SET status = $1, ${d.set}, updated_at = now() WHERE id = $2`,
@@ -493,7 +499,13 @@ async function decide(
         ],
       );
     }
+    costChanges = await syncCostFromPayments(tx, cur.task_id, actor.id, kind === 'reject' && cur.status === 'approved');
   });
+  // A Cost that just went past the NTE raises the override (rule 1.5.2), and
+  // one that came back under it clears the task — as a typed cost does.
+  if (costChanges.length > 0) {
+    await dispatchAutomations({ taskId: cur.task_id, kind: 'changed', changes: costChanges });
+  }
 
   return getPaymentRequest(id);
 }

@@ -31,7 +31,10 @@ export interface TaskChange {
 // 'webhook': the external email tool raised the Escalated flag (rule 7.3.2,
 // services/escalations.ts) — the actor is the 'Email escalations' service
 // principal, the stamp says which door it came through.
-export type ChangeSource = 'import' | 'bulk' | 'visit' | 'webhook' | AutomationSource | ApprovalSource;
+// 'payment' / 'quote': the system kept Cost / Total Invoiced in step with the
+// money records (services/moneySync.ts) — the actor is whoever made the
+// decision that moved the figure.
+export type ChangeSource = 'import' | 'bulk' | 'visit' | 'webhook' | 'payment' | 'quote' | AutomationSource | ApprovalSource;
 
 /** The rule that made this change, when an automation did. */
 export interface AutomationSource {

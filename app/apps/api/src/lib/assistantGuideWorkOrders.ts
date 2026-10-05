@@ -44,6 +44,9 @@ Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view):
 - Edit a field: on **All fields**, click the value, change it, click the tick. **Search fields…** finds a field. Needs \`work_orders\` edit and edit on that field.
   - The visit fields (Visit Type, Check-in/out Status, Checked-in At, Checked-out At, Tech Name, Tech Phone Number, CICO Method) cannot be typed: they follow the latest visit, so edit the visit on the CICO tab.
   - Quote Due Date cannot be typed: it is computed from the assessment visit's check-out.
+  - **Cost** fills itself in: it is the total of the work order's accepted payment requests (approved, sent to Yoda or paid), updated every time one is approved or rejected. Once a payment has set it, it cannot be typed; it changes by approving or rejecting a payment request. A work order with no accepted payment request still takes a typed Cost.
+  - **Total Invoiced** fills itself in: when the status moves to Invoiced or Invoiced Not Paid it becomes the total of the work order's quote, and after that it cannot be typed. A work order with no quote is left as it is.
+  - Profit is always Total Invoiced minus Cost.
 - Change the status: **Change status** in the header, pick a status. Needs \`work_orders/status\` edit.
 - Request a status change: for people who must request, the same button reads **Request status change**. Pick a status; a manager approves or rejects it in Approvals, and the result shows on a chip in the header.
 - Statuses the app holds back until the work order is ready (the menu tags them):

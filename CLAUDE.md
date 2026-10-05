@@ -1186,6 +1186,34 @@ existed is unchanged. Shipped through `ensureSystemDashboards` as usual:
 Maintenance Supervisor, Vendor Performance, Technician, Store Manager,
 Unified Ops. Tests: `tests/dashboard-tabs.test.ts`.
 
+**Cost and Total Invoiced follow the money records** (no migration;
+`shared/moneyRules.ts`, `services/moneySync.ts`, `tests/money-rules.test.ts`).
+Two rules Elise set on 2026-10-05, encoded on purpose (not editable from
+Admin yet): **`34. Cost` = the sum of the work order's accepted payment
+requests** (approved, sent to Yoda or paid), re-derived inside the
+transaction of every payment decision (`payments.decide` →
+`syncCostFromPayments`); and **`Total Invoiced` = the total of the work
+order's quote** (whatever state the quote is in), stamped when the status
+moves to Invoiced or Invoiced Not Paid (`changeStatus` and the bulk status
+move → `syncInvoicedFromQuote`). This is the automation BRD rule 11.3.2
+promised for the final vendor cost. A system write is an ordinary
+`field_updated` row stamped `via: 'payment'` / `via: 'quote'`, re-derives
+Profit, and is dispatched to the automations after the commit — so an
+accepted payment that takes Cost past the NTE raises the `nte_override` task
+(1.5.2), which then holds Send to Yoda, and rejecting it clears the task.
+Edge cases, all in `costDecision`: no accepted request and none taken back →
+whatever is typed stays; the last accepted one rejected → Cost is cleared; no
+quote, or a quote totalling nothing → Total Invoiced is left alone. **The
+lock** (`assertMoneyNotLocked`, called by the field editor and bulk edit
+beside the visit-owned guard; a 400 that names the work orders): a hand edit
+is refused only while the field's LATEST audit row is a system write with a
+value. So a work order with no accepted payment still takes a typed Cost (or
+11.3.2 would keep it out of Done), and figures typed before these rules stay
+correctable until the system first writes them. Not covered on purpose:
+vendor bills do not feed Cost, CSV import is not guarded, nothing was
+back-filled, and Total Invoiced does not follow the invoice record yet
+("for now the total of the quote").
+
 **The assistant** (migration 0068; `shared/assistant.ts`,
 `services/assistant.ts`, `lib/assistantPrompt.ts`, `lib/assistantTools.ts`,
 `components/assistant/AssistantPanel.tsx`, the sparkle button in the top

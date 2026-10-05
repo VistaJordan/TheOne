@@ -1726,3 +1726,5 @@ export * from './vendorSuggest';
 export * from './purchasing';
 // 0068: the assistant — ask anything, answered from live look-ups.
 export * from './assistant';
+// Cost follows accepted payment requests; Total Invoiced follows the quote.
+export * from './moneyRules';
