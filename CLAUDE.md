@@ -1200,7 +1200,12 @@ work-order scope (0026), the site restriction (0062) and field redaction
 and `lookup` (a named resource from the `RESOURCES` table: quotes, payments,
 approvals, invoices, vendors, sites, assets…). The model names a resource,
 never a path; **to let it read something new, add a row to `RESOURCES` or
-`WO_PARTS`** — nothing under `/admin`, no exports, nothing that writes.
+`WO_PARTS`** — no exports, nothing that writes. The Admin console's lists
+are rows there too (`admin_users`, `admin_roles`, `audit_log`,
+`automations` and their run logs, `custom_fields`, `status_setup`, `trash`,
+`holidays`, `approval_tiers`); those routes check the SIGNED-IN person's
+`admin/<section>` grant themselves, so a non-admin's look-up comes back
+"not available" and the assistant says so.
 `shapeResult` trims what comes back (`compactForModel`, 60k characters per
 look-up, a cut result says so). The prompt is three layers, most stable
 first, for the prompt cache: `BRIEFING` (vocabulary and how to answer;

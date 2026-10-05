@@ -8,8 +8,11 @@
 // is worth the model's attention.
 //
 // The list of routes below is the whole surface. The model names a resource,
-// never a path, so it cannot reach a route that is not written here — no admin
-// console, no exports, nothing that writes.
+// never a path, so it cannot reach a route that is not written here — no
+// exports, nothing that writes. The Admin console's own lists are here too
+// (users, roles, the audit log, automations…); each of those routes checks the
+// person signed in for its `admin/<section>` grant, so anyone else is told it
+// is not available to them.
 
 import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
@@ -52,6 +55,10 @@ interface Resource {
       does the searching and paging; otherwise the whole list comes back and
       is narrowed here. */
   params?: string;
+  /** What the route calls its free-text search and its page size, when they
+      are not `search` and `page_size`. */
+  searchParam?: string;
+  limitParam?: string;
 }
 
 const RESOURCES: Record<string, Resource> = {
@@ -97,6 +104,30 @@ const RESOURCES: Record<string, Resource> = {
   kpis: { path: '/kpis', about: 'the headline counts on the dashboard' },
   pulse: { path: '/pulse', about: 'obligations with clocks running: what is close to or past its deadline' },
   saved_views: { path: '/views', about: 'saved work-order views and the filters they hold' },
+  // The Admin console. Every one of these routes checks its own admin grant.
+  admin_users: {
+    path: '/admin/users',
+    one: '/admin/users/:id/permissions',
+    about: 'everyone with an account: name, email, role, super admin, status, last sign-in (admins only). Opened by the id of a person: the permission adjustments made for that one person (super admins only)',
+  },
+  admin_roles: { path: '/admin/roles', about: 'every role and exactly what it grants, row by row (admins only). Large: use search to pick one role' },
+  audit_log: {
+    path: '/admin/audit',
+    about: 'the audit log: who changed what and when, across work orders, quotes, users, roles, fields and automations, newest first (admins only)',
+    params: 'from (YYYY-MM-DD), to (YYYY-MM-DD), actor_id (the id of a person, from admin_users), action (the exact action name; read a few rows first to see the names in use), field (a field key), q (WO number, name or value to search for), limit (max 500, default 100), offset',
+    searchParam: 'q',
+    limitParam: 'limit',
+  },
+  automations: {
+    path: '/admin/automations',
+    one: '/admin/automations/:id/runs',
+    about: 'the automation rules: trigger, conditions, actions, on or paused (admins only). Opened by id: the run log of that rule',
+  },
+  custom_fields: { path: '/admin/fields', about: 'the custom field definitions: type, dropdown values, whether on the Add work order form (admins only)' },
+  status_setup: { path: '/admin/workflow', about: 'statuses and phases as configured, with how many work orders sit in each (admins only)' },
+  trash: { path: '/admin/trash', about: 'deleted work orders waiting in the trash (admins only)' },
+  holidays: { path: '/admin/holidays', about: 'the holidays the quote clock skips (admins only)' },
+  approval_tiers: { path: '/admin/approval-tiers', about: 'who may approve payments, vendor bills and invoices of what amount (admins only)' },
 };
 
 const RESOURCE_NAMES = Object.keys(RESOURCES) as [string, ...string[]];
@@ -318,8 +349,10 @@ export function planLookup(tool: string, rawInput: unknown): LookupPlan {
     const params: Record<string, unknown> = { ...(i.params ?? {}) };
     if (r.params) {
       // The route searches and pages; hand it the model's words for both.
-      if (i.search && params.search === undefined) params.search = i.search;
-      if (i.limit && params.page_size === undefined && r.params.includes('page_size')) params.page_size = i.limit;
+      const searchParam = r.searchParam ?? 'search';
+      const limitParam = r.limitParam ?? (r.params.includes('page_size') ? 'page_size' : null);
+      if (i.search && params[searchParam] === undefined) params[searchParam] = i.search;
+      if (i.limit && limitParam && params[limitParam] === undefined) params[limitParam] = i.limit;
     }
     const bits = [i.search ? `“${i.search}”` : null, ...Object.entries({ ...(i.params ?? {}), ...(i.where ?? {}) }).map(([k, v]) => `${k} ${v}`)].filter(Boolean);
     return {

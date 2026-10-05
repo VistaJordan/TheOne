@@ -57,6 +57,21 @@ describe('a look-up only ever reads', () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({ state: 'TX', search: 'acme', page_size: '5' });
   });
 
+  it('reaches the Admin console lists by name, through the routes that check the admin grant', () => {
+    expect(planLookup('lookup', { resource: 'admin_users' }).requests[0].url).toBe('/admin/users');
+    expect(planLookup('lookup', { resource: 'admin_users', id: 'abc' }).requests[0].url).toBe('/admin/users/abc/permissions');
+    expect(planLookup('lookup', { resource: 'automations', id: 'abc' }).requests[0].url).toBe('/admin/automations/abc/runs');
+    const audit = new URL(`http://x${planLookup('lookup', { resource: 'audit_log', search: 'WO-1', limit: 20, params: { from: '2026-10-01', action: 'status_changed' } }).requests[0].url}`);
+    expect(audit.pathname).toBe('/admin/audit');
+    expect(Object.fromEntries(audit.searchParams)).toEqual({ from: '2026-10-01', action: 'status_changed', q: 'WO-1', limit: '20' });
+    // Someone without the grant gets the route's own refusal, in plain words.
+    const refused = shapeResult(planLookup('lookup', { resource: 'audit_log' }), [
+      { label: 'audit_log', status: 403, body: { error: { code: 'FORBIDDEN', message: 'Admin › audit is not available to you' } } },
+    ]);
+    expect(refused.ok).toBe(false);
+    expect(refused.text).toMatch(/Not available to this person/);
+  });
+
   it('offers no tool that is not one of the three look-ups', () => {
     expect(ASSISTANT_TOOLS.map((t) => t.name)).toEqual(['search_work_orders', 'get_work_order', 'lookup']);
   });
