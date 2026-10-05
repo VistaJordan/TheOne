@@ -1229,6 +1229,27 @@ over comments and transcripts (pgvector), a stored test set of questions,
 streaming. The live Claude call was exercised against a local stand-in, not
 the real API (no key on the build machine). Tests: `tests/assistant.test.ts`.
 
+**The assistant also explains how to use the app, and only the app** (no
+migration). `lib/assistantGuide.ts` (+ `assistantGuideWorkOrders.ts`,
+`assistantGuideModules.ts`) is a guide to every screen: the steps of each
+task with the labels as they are on screen, and the permission the API checks
+for it. **It is written by hand from the JSX — when a screen, a button label
+or a gate changes, change its entry there**, or the assistant will repeat the
+old name to people; it is told to say it is not sure about anything the guide
+does not cover. The guide rides in the cached static block
+(`STATIC_INSTRUCTIONS` = briefing + guide, about 10k tokens). Every question
+carries "What this person may do": `describeAbilities` resolves the
+permission tree (`buildPermissionTree([])`, two levels) for the asker, one row
+per line, with the `admin/*` rows read from the person SIGNED IN and the rest
+from who they act as — the same split `requireAdmin` makes. So "how do I add
+an automation" gets the steps for someone with `admin/automations` edit and
+"you are not allowed to add automations" for anyone else. Anything outside The
+One (general knowledge, other software, writing unrelated to a record) is
+declined in one sentence; that is a rule in `BRIEFING` ("What you answer"),
+not a filter in code. Replies may now carry numbered steps (`<ol>`), and on a
+screen 1200px or wider the page makes room for the open panel
+(`body.asst-open`) so the button an answer points at is not underneath it.
+
 **Client Updates** (migration 0055, `services/clientUpdates.ts`,
 `pages/ClientUpdatesPage.tsx`, sidebar "Client Updates"). Replaces the
 per-client tracking spreadsheets (e.g. "SUN Holdings Tracking"). A

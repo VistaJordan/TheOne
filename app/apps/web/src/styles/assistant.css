@@ -104,7 +104,9 @@
 
 .asst-reply p { margin: 0 0 8px; }
 .asst-reply p:last-child { margin-bottom: 0; }
-.asst-reply ul { margin: 0 0 8px; padding-left: 18px; }
+.asst-reply ul,
+.asst-reply ol { margin: 0 0 8px; padding-left: 20px; }
+.asst-reply ol li { margin: 5px 0; }
 .asst-reply li { margin: 2px 0; }
 .asst-reply a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .asst-reply a:hover { text-decoration: underline; }
@@ -283,3 +285,10 @@
 .asst-review-n { margin: 0; color: var(--ink-2); }
 .asst-review details { color: var(--ink-2); font-size: 12.5px; }
 .asst-review details .asst-reply { margin-top: 6px; color: var(--ink); }
+
+/* On a wide screen the page gives the panel its width instead of sitting
+   under it. Narrower than this the panel overlays, as a drawer does. */
+@media (min-width: 1200px) {
+  body.asst-open .shell-body { padding-right: 440px; }
+  .asst { box-shadow: none; }
+}

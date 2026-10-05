@@ -40,7 +40,7 @@ import { conflict, notFound } from '../errors.js';
 import type { SessionPrincipal } from './auth.js';
 import { logAdminEvent } from './adminAudit.js';
 import { allowFor, requirePerm } from './permissions.js';
-import { BRIEFING, buildQuestion, buildReference, chicagoToday } from '../lib/assistantPrompt.js';
+import { STATIC_INSTRUCTIONS, buildQuestion, buildReference, chicagoToday, describeAbilities } from '../lib/assistantPrompt.js';
 import type { RefField, RefNote, RefStatus } from '../lib/assistantPrompt.js';
 import { ASSISTANT_TOOLS, LookupInputError, planLookup, shapeResult } from '../lib/assistantTools.js';
 import type { FetchedPart } from '../lib/assistantTools.js';
@@ -268,7 +268,7 @@ async function answer(app: FastifyInstance, a: Asker, messages: Param[]): Promis
         fallbacks: 'default',
         output_config: { effort: config.assistant.effort },
         system: [
-          { type: 'text', text: BRIEFING, cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: STATIC_INSTRUCTIONS, cache_control: { type: 'ephemeral' } },
           { type: 'text', text: reference, cache_control: { type: 'ephemeral' } },
         ],
         tools: ASSISTANT_TOOLS,
@@ -383,6 +383,7 @@ export async function ask(app: FastifyInstance, a: Asker, input: AssistantAskInp
       askerName: a.actingAs.name,
       askerRole: a.actingAs.roleLabel ?? a.actingAs.role,
       page,
+      abilities: describeAbilities(a.user, a.actingAs),
     }),
   });
 

@@ -116,7 +116,7 @@ function replaceMessage(m: AssistantMessage): void {
 }
 
 // ── A reply, drawn ───────────────────────────────────────────────────────────
-// Replies use a small, fixed subset: paragraphs, "- " lists, **bold**, `code`
+// Replies use a small, fixed subset: paragraphs, "- " lists, "1. " steps, **bold**, `code`
 // and links into the app. Anything else is shown as the text it is — no HTML
 // from a reply is ever interpreted.
 
@@ -144,19 +144,27 @@ function Reply({ body }: { body: string }) {
   const blocks: ReactNode[] = [];
   let para: string[] = [];
   let items: string[] = [];
+  let ordered = false;
   const flush = () => {
     const k = blocks.length;
     if (para.length > 0) blocks.push(<p key={`p${k}`}>{inline(para.join(' '), `p${k}`)}</p>);
-    if (items.length > 0) blocks.push(<ul key={`u${k}`}>{items.map((it, i) => <li key={i}>{inline(it, `u${k}-${i}`)}</li>)}</ul>);
+    if (items.length > 0) {
+      const lis = items.map((it, i) => <li key={i}>{inline(it, `l${k}-${i}`)}</li>);
+      blocks.push(ordered ? <ol key={`l${k}`}>{lis}</ol> : <ul key={`l${k}`}>{lis}</ul>);
+    }
     para = [];
     items = [];
   };
   for (const raw of body.split('\n')) {
     const line = raw.trim();
-    const bullet = /^(?:[-*•]|\d+[.)])\s+(.*)$/.exec(line);
-    if (line === '') flush();
-    else if (bullet) {
-      if (para.length > 0) flush();
+    const step = /^\d+[.)]\s+(.*)$/.exec(line);
+    const bullet = step ?? /^[-*•]\s+(.*)$/.exec(line);
+    // A blank line inside a run of steps does not restart the numbering.
+    if (line === '') {
+      if (!(ordered && items.length > 0)) flush();
+    } else if (bullet) {
+      if (para.length > 0 || (items.length > 0 && ordered !== !!step)) flush();
+      ordered = !!step;
       items.push(bullet[1]);
     } else {
       if (items.length > 0) flush();
@@ -256,7 +264,7 @@ function Answer({ m }: { m: AssistantMessage }) {
 
 // ── The chat view ────────────────────────────────────────────────────────────
 
-const STARTERS = ['Which work orders are waiting on a quote?', 'What is due today?', 'How many open work orders does each client have?'];
+const STARTERS = ['Which work orders are waiting on a quote?', 'What is due today?', 'How do I save a view of the work orders list?'];
 const WO_STARTERS = ['Summarise this work order', 'What happened on this work order in the last week?', 'Is anything blocking this work order?'];
 
 function Chat({ configured, remaining }: { configured: boolean; remaining: number | null }) {
@@ -304,7 +312,7 @@ function Chat({ configured, remaining }: { configured: boolean; remaining: numbe
         {empty && configured && (
           <div className="asst-empty">
             <p>
-              Ask about any work order, quote, payment, vendor or site. Answers are looked up live and only cover what your role lets you see.
+              Ask about any work order, quote, payment, vendor or site, or how to do something in The One. Answers are looked up live and only cover what your role lets you see.
             </p>
             <div className="asst-starters">
               {starters.map((q) => (
@@ -568,7 +576,13 @@ function Panel() {
       if (e.key === 'Escape') set({ open: false });
     };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    // On a wide screen the page makes room for the panel, so the button a
+    // how-to answer points at is not hidden underneath it (assistant.css).
+    document.body.classList.add('asst-open');
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.classList.remove('asst-open');
+    };
   }, []);
 
   const tab = (view: View, label: string) => (

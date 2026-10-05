@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { assistantLinkOk, compactForModel, filterRows, lookupResultText, rowsOf } from '@theone/shared';
 import { ASSISTANT_TOOLS, LookupInputError, planLookup, shapeResult } from '../apps/api/src/lib/assistantTools';
-import { buildQuestion, buildReference } from '../apps/api/src/lib/assistantPrompt';
+import { STATIC_INSTRUCTIONS, buildQuestion, buildReference, describeAbilities } from '../apps/api/src/lib/assistantPrompt';
 
 describe('a look-up only ever reads', () => {
   it('turns a work-order search into the list route with the saved-view filter shape', () => {
@@ -161,9 +161,11 @@ describe('what a reply may link to', () => {
 
 describe('what the model is told', () => {
   it('names the work order the person is looking at', () => {
-    const q = buildQuestion('what is blocking it?', { today: '2026-10-05', weekday: 'Monday', askerName: 'Dana', askerRole: 'OM', page: '/work-orders/48213/quote' });
+    const q = buildQuestion('what is blocking it?', { today: '2026-10-05', weekday: 'Monday', askerName: 'Dana', askerRole: 'OM', page: '/work-orders/48213/quote', abilities: 'Quotes [quotes]: view' });
     expect(q).toMatch(/Today is Monday 2026-10-05/);
     expect(q).toMatch(/looking at work order 48213/);
+    expect(q).toContain('What this person may do');
+    expect(q).toContain('Quotes [quotes]: view\n</context>');
     expect(q.endsWith('what is blocking it?')).toBe(true);
   });
 
@@ -182,5 +184,65 @@ describe('what the model is told', () => {
     expect(ref).toMatch(/client — Client \(select\) · values: Acme/);
     expect(ref).toMatch(/status — Status \(select\)\n|status — Status \(select\)$/m);
     expect(ref).toMatch(/- Pending vendor: means Waiting for Vendor/);
+  });
+});
+
+describe('knowing whether the person can follow the steps', () => {
+  const om = {
+    isSuperAdmin: false,
+    roleLabel: 'OM',
+    perms: {
+      role: {
+        work_orders: { view: true, edit: true },
+        'work_orders/scope': { view: false },
+        'work_orders/scope/entity/SFM': { view: true },
+        'work_orders/status': { edit: false, create: true },
+        quotes: { view: true },
+      },
+      overrides: {},
+    },
+  };
+  const admin = { isSuperAdmin: false, roleLabel: 'Admin', perms: { role: { admin: { view: true, edit: true } }, overrides: {} } };
+  const superAdmin = { isSuperAdmin: true, roleLabel: 'Admin', perms: { role: {}, overrides: {} } };
+  const lines = (text: string) => text.split('\n');
+
+  it('lists what a role may and may not do, one row per line', () => {
+    const rows = lines(describeAbilities(om, om));
+    expect(rows).toContain('Work orders [work_orders]: view, edit');
+    expect(rows).toContain('  Which work orders they see: only the ones assigned to them, plus everything billed by SFM');
+    expect(rows).toContain('  Status changes: must request a status change, which a manager approves');
+    expect(rows).toContain('Quotes [quotes]: view');
+    expect(rows).toContain('  Automations [admin/automations]: none');
+    expect(rows).toContain('Payments [payments]: none');
+  });
+
+  it('reads the Admin console from the person signed in, not who they are viewing as', () => {
+    expect(lines(describeAbilities(admin, admin))).toContain('  Automations [admin/automations]: view, edit');
+    // A super admin viewing as an OM still holds the console; the rest is the OM's.
+    const viewingAs = lines(describeAbilities(superAdmin, om));
+    expect(viewingAs).toContain('  Automations [admin/automations]: view, edit');
+    expect(viewingAs).toContain('Payments [payments]: none');
+    // Acting as an admin does not lend an OM the console.
+    expect(lines(describeAbilities(om, admin))).toContain('  Automations [admin/automations]: none');
+  });
+
+  it('says a super admin may do everything', () => {
+    expect(describeAbilities(superAdmin, superAdmin).startsWith('Super admin: may do everything')).toBe(true);
+  });
+});
+
+describe('the standing instructions', () => {
+  it('carry the guide, the permission rule and the limit to this app', () => {
+    expect(STATIC_INSTRUCTIONS).toContain('Anything outside The One is not yours to answer');
+    expect(STATIC_INSTRUCTIONS).toContain('You are not allowed to add automations');
+    expect(STATIC_INSTRUCTIONS).toContain('click **New automation**');
+    expect(STATIC_INSTRUCTIONS).toContain('`admin/automations` edit');
+    for (const section of ['Work Orders list', 'Quotes', 'Payments', 'Approvals', 'Vendors', 'Admin console']) {
+      expect(STATIC_INSTRUCTIONS).toContain(`### ${section}`);
+    }
+  });
+
+  it('never change between requests', () => {
+    expect(STATIC_INSTRUCTIONS).not.toMatch(/\b20\d\d-\d\d-\d\d\b/);
   });
 });
