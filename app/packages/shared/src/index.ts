@@ -1722,3 +1722,5 @@ export * from './vendorExtras';
 // 0067: purchase requests, RFQs and vendor quotes, purchase orders, tax
 // rates, document templates, cost centers, AFEs and budgets.
 export * from './purchasing';
+// 0068: the assistant — ask anything, answered from live look-ups.
+export * from './assistant';

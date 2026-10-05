@@ -355,6 +355,10 @@ export const ACTION_LABELS: Record<string, string> = {
   cost_center_added: 'Cost center added',
   cost_center_updated: 'Cost center changed',
   budget_set: 'Budget set',
+  assistant_asked: 'Asked the assistant',
+  assistant_note_created: 'Assistant taught a note',
+  assistant_note_updated: 'Assistant note changed',
+  assistant_note_deleted: 'Assistant note removed',
   afe_added: 'AFE added',
   afe_updated: 'AFE changed',
   // 0065 · the services catalogue and job plans.

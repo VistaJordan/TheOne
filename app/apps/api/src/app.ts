@@ -53,6 +53,7 @@ import vendorBillRoutes from './routes/vendorBills.js';
 import plannedMaintenanceRoutes from './routes/plannedMaintenance.js';
 import billingProposalRoutes from './routes/billingProposals.js';
 import clientUpdateRoutes from './routes/clientUpdates.js';
+import assistantRoutes from './routes/assistant.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
@@ -135,6 +136,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(billingProposalRoutes, { prefix: '/api' });
   // 0055 — per-client trackers, shared by link or email.
   await app.register(clientUpdateRoutes, { prefix: '/api' });
+  // 0068 — the assistant: questions answered from live look-ups, as the asker.
+  await app.register(assistantRoutes, { prefix: '/api' });
 
   return app;
 }

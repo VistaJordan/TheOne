@@ -2,6 +2,17 @@
 // TYPE-ONLY imports from @theone/shared — no runtime value ever crosses this
 // boundary (SPRINT1-SPEC §8 Card C). Web never imports @theone/db.
 import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
+import type {
+  AssistantAskInput,
+  AssistantAskResponse,
+  AssistantConversation,
+  AssistantConversationSummary,
+  AssistantFeedbackResponse,
+  AssistantMessage,
+  AssistantNote,
+  AssistantNoteInput,
+  AssistantStatus,
+} from '@theone/shared';
 import type { PmOccurrence, PmSchedule, PmScheduleInput, PmSchedulesResponse } from '@theone/shared';
 import type { BillingProposal, BillingProposalsResponse } from '@theone/shared';
 import type {
@@ -3225,3 +3236,18 @@ export const saveDocTemplate = (id: string | null, input: DocTemplateInput) =>
   post<FinanceSetup>(id ? `/admin/finance-setup/templates/${enc(id)}` : '/admin/finance-setup/templates', input, id ? 'PATCH' : 'POST');
 export const deleteDocTemplate = (id: string) => post<FinanceSetup>(`/admin/finance-setup/templates/${enc(id)}`, undefined, 'DELETE');
 export const searchPurchasingVendors = (q: string) => request<{ hits: { id: string; name: string; primary_trade: string | null; city: string | null; state: string | null }[] }>(`/purchasing/vendor-search${qs({ q })}`);
+
+// ── 0068 · the assistant ─────────────────────────────────────────────────────
+export const getAssistantStatus = () => request<AssistantStatus>('/assistant/status');
+export const listAssistantConversations = () => request<{ items: AssistantConversationSummary[] }>('/assistant/conversations');
+export const getAssistantConversation = (id: string) => request<AssistantConversation>(`/assistant/conversations/${enc(id)}`);
+export const deleteAssistantConversation = (id: string) => post<void>(`/assistant/conversations/${enc(id)}`, undefined, 'DELETE');
+export const askAssistant = (input: AssistantAskInput) => post<AssistantAskResponse>('/assistant/ask', input);
+export const rateAssistantAnswer = (messageId: string, rating: 1 | -1 | 0, note?: string | null) =>
+  post<{ message: AssistantMessage }>(`/assistant/messages/${enc(messageId)}/feedback`, { rating, note: note ?? null });
+export const listAssistantNotes = () => request<{ items: AssistantNote[] }>('/assistant/notes');
+export const saveAssistantNote = (id: string | null, input: AssistantNoteInput) =>
+  post<{ note: AssistantNote }>(id ? `/assistant/notes/${enc(id)}` : '/assistant/notes', input, id ? 'PATCH' : 'POST');
+export const deleteAssistantNote = (id: string) => post<void>(`/assistant/notes/${enc(id)}`, undefined, 'DELETE');
+export const getAssistantFeedback = () => request<AssistantFeedbackResponse>('/assistant/feedback');
+export const markAssistantReviewed = (messageId: string, reviewed: boolean) => post<void>(`/assistant/feedback/${enc(messageId)}/reviewed`, { reviewed });

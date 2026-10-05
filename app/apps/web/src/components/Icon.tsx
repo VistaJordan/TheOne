@@ -25,7 +25,9 @@ export type IconName =
   // Trade glyphs for the work-orders list (plumbing · appliance · roofing)
   | 'droplet' | 'plug' | 'home'
   // Saved-view pinning ('pin' is the map pin — this is the pushpin)
-  | 'pushpin';
+  | 'pushpin'
+  // 0068 — the assistant: its mark, and the thumb on each answer
+  | 'sparkle' | 'thumb-up' | 'thumb-down';
 
 type IconSize = 12 | 14 | 16 | 18 | 22;
 
@@ -127,6 +129,9 @@ export function IconSprite() {
         <symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z" /></symbol>
         <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></symbol>
         <symbol id="i-pushpin" viewBox="0 0 24 24"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1z" /></symbol>
+        <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M11 3l2 5.4L18.5 10.5 13 12.6 11 18l-2-5.4L3.5 10.5 9 8.4z" /><path d="M18.5 15l.9 2.3 2.1.7-2.1.8-.9 2.2-.9-2.2-2.1-.8 2.1-.7z" /></symbol>
+        <symbol id="i-thumb-up" viewBox="0 0 24 24"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" /></symbol>
+        <symbol id="i-thumb-down" viewBox="0 0 24 24"><path d="M17 14V2" /><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" /></symbol>
       </defs>
     </svg>
   );

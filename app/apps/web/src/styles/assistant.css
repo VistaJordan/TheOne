@@ -1,0 +1,285 @@
+/* 0068 · The assistant panel. Hangs on the right edge under the top bar (66px)
+   and over the page, which stays usable beside it. Every colour is a token. */
+
+.asst-btn { position: relative; }
+.asst-btn.is-on { background: var(--topbar-hover); color: var(--topbar-ink); }
+.asst-btn-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.asst {
+  position: fixed;
+  top: 66px;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  width: min(440px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--ink);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -14px 0 38px rgba(0, 0, 0, 0.22);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.asst-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 10px 8px 14px;
+}
+.asst-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-weight: 700;
+  font-size: 14px;
+}
+.asst-title .ic { color: var(--accent); }
+
+.asst-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+}
+.asst-icon:hover { background: var(--chip); color: var(--ink); }
+.asst-icon:disabled { opacity: 0.5; }
+
+.asst-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+.asst-tab {
+  padding: 7px 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: -1px;
+}
+.asst-tab:hover { color: var(--ink); }
+.asst-tab.is-on { color: var(--ink); border-bottom-color: var(--accent); }
+
+.asst-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Messages ─────────────────────────────────────────────────────────────── */
+.asst-msg { max-width: 100%; overflow-wrap: anywhere; }
+.asst-msg.is-question {
+  align-self: flex-end;
+  max-width: 88%;
+  padding: 8px 11px;
+  border-radius: var(--radius) var(--radius) 2px var(--radius);
+  background: var(--chip);
+  white-space: pre-wrap;
+}
+.asst-msg.is-answer { padding: 2px 0 6px; }
+.asst-msg.is-failed .asst-reply { color: var(--ink-2); font-style: italic; }
+
+.asst-reply p { margin: 0 0 8px; }
+.asst-reply p:last-child { margin-bottom: 0; }
+.asst-reply ul { margin: 0 0 8px; padding-left: 18px; }
+.asst-reply li { margin: 2px 0; }
+.asst-reply a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.asst-reply a:hover { text-decoration: underline; }
+.asst-reply code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--chip);
+  font-size: 12px;
+}
+
+.asst-lookups { margin-top: 8px; color: var(--ink-2); font-size: 12px; }
+.asst-lookups summary,
+.asst-review summary { cursor: pointer; width: fit-content; }
+.asst-lookups ul,
+.asst-review-l { margin: 4px 0 0; padding-left: 18px; }
+.asst-lookups li.is-bad,
+.asst-review-l li.is-bad { color: var(--danger); }
+
+.asst-rate { display: flex; align-items: center; gap: 2px; margin-top: 6px; }
+.asst-thumb {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-3);
+}
+.asst-thumb:hover { background: var(--chip); color: var(--ink); }
+.asst-thumb.is-on { color: var(--ok); }
+.asst-thumb.is-on.is-down { color: var(--danger); }
+.asst-rate-note { margin-left: 6px; color: var(--ink-2); font-size: 12px; }
+
+.asst-wrong { display: flex; gap: 6px; margin-top: 6px; }
+.asst-wrong input { flex: 1; min-width: 0; }
+
+.asst input,
+.asst textarea {
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+.asst input:focus-visible,
+.asst textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.asst input[type='checkbox'] { padding: 0; }
+
+.asst-wait { display: flex; align-items: center; gap: 8px; color: var(--ink-2); margin: 0; }
+.asst-dots { display: inline-flex; gap: 3px; }
+.asst-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .asst-dots i { animation: asst-dot 1.1s ease-in-out infinite; }
+  .asst-dots i:nth-child(2) { animation-delay: 0.15s; }
+  .asst-dots i:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes asst-dot {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-2px); }
+  }
+}
+
+.asst-empty,
+.asst-help,
+.asst-off { color: var(--ink-2); margin: 0; }
+.asst-empty p { margin: 0 0 12px; }
+.asst-off {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--chip);
+  color: var(--ink);
+}
+.asst-starters { display: flex; flex-direction: column; gap: 6px; }
+.asst-starters button {
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.asst-starters button:hover { background: var(--chip); border-color: var(--border-strong); }
+.asst-starters button:disabled { opacity: 0.5; }
+
+.asst-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+.asst-problem .ic { margin-top: 3px; flex: none; }
+
+/* ── Composer ─────────────────────────────────────────────────────────────── */
+.asst-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+}
+.asst-compose textarea { flex: 1; min-width: 0; resize: none; max-height: 140px; }
+.asst-compose .btn { height: 34px; padding: 0 11px; }
+.asst-foot { margin: -6px 14px 10px; color: var(--ink-2); font-size: 12px; }
+
+/* ── Lists: earlier conversations, notes, marked answers ──────────────────── */
+.asst-list,
+.asst-notes,
+.asst-reviews { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.asst-list li { display: flex; align-items: center; gap: 4px; }
+.asst-list-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.asst-list-main:hover { background: var(--chip); }
+.asst-list-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asst-list-m { color: var(--ink-2); font-size: 12px; font-weight: 400; }
+
+.asst-add { align-self: flex-start; }
+.asst-notes { gap: 8px; }
+.asst-notes li,
+.asst-review {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.asst-notes li.is-off { opacity: 0.6; }
+.asst-notes p { margin: 4px 0 8px; white-space: pre-wrap; }
+.asst-note-h { display: flex; align-items: flex-start; gap: 6px; }
+.asst-note-h strong { flex: 1; min-width: 0; }
+.asst-note-acts { display: inline-flex; flex: none; margin: -4px -6px 0 0; }
+.asst-switch { display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 12px; }
+
+.asst-noteform {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+.asst-noteform label { display: flex; flex-direction: column; gap: 4px; }
+.asst-noteform .lbl { color: var(--ink-2); font-size: 12px; font-weight: 600; }
+.asst-noteform textarea { resize: vertical; }
+.asst-noteform-f,
+.asst-review-f { display: flex; justify-content: flex-end; gap: 6px; }
+
+.asst-tally { margin: 0; color: var(--ink-2); font-size: 12px; }
+.asst-reviews { gap: 8px; }
+.asst-review { display: flex; flex-direction: column; gap: 6px; }
+.asst-review.is-done { opacity: 0.6; }
+.asst-review-h { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ok); }
+.asst-review.is-down .asst-review-h { color: var(--danger); }
+.asst-review-h span { color: var(--ink); }
+.asst-review-h .asst-list-m { margin-left: auto; color: var(--ink-2); }
+.asst-review-q { margin: 0; font-weight: 600; }
+.asst-review-n { margin: 0; color: var(--ink-2); }
+.asst-review details { color: var(--ink-2); font-size: 12.5px; }
+.asst-review details .asst-reply { margin-top: 6px; color: var(--ink); }

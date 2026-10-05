@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { INTAKE_PERM_KEY, adminPermKey } from '@theone/shared';
+import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, adminPermKey } from '@theone/shared';
 import { getApprovalCounts, listIntakeDrafts } from '../api/client';
 import { LOGO } from '../lib/brand';
 import { ThemeToggle } from '../theme/ThemeToggle';
@@ -13,6 +13,7 @@ import { ActorSwitcher } from './ActorSwitcher';
 import { PulseBell } from './obligations/PulseBell';
 import { CanvasBackdrop } from './CanvasBackdrop';
 import { GlobalSearch } from './GlobalSearch';
+import { AssistantButton } from './assistant/AssistantPanel';
 import { OKnobScrollbar } from './OKnobScrollbar';
 import { useAuth } from '../auth/AuthProvider';
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed';
@@ -322,6 +323,8 @@ export function AppShell({
         <GlobalSearch />
         <div className="topbar-actions">
           <ActorSwitcher />
+          {/* 0068 — ask anything; answers are looked up as the person asking. */}
+          {can(ASSISTANT_PERM_KEY, 'view') && <AssistantButton />}
           {/* S5 — the live Pulse bell (obligation notifications), not a prop. */}
           <PulseBell />
           <ThemeToggle />

@@ -91,6 +91,11 @@ export interface Config {
   anthropicApiKey: string | null;
   /** 0054: the Claude model that drafts quotes (QUOTE_AI_MODEL). */
   quoteAiModel: string;
+  /** 0068: the assistant. ASSISTANT_AI_MODEL is the Claude model that answers,
+      ASSISTANT_AI_EFFORT how hard it thinks (low | medium | high), and
+      ASSISTANT_DAILY_LIMIT how many questions one person may ask in a day.
+      It shares ANTHROPIC_API_KEY with the quote draft. */
+  assistant: { model: string; effort: 'low' | 'medium' | 'high'; dailyLimit: number };
   /** 0055: outbound email (Client Updates). Everything is sent FROM one
       address (MAIL_FROM, default contact@seamlessfm.com). `provider` is null
       until one is configured, and always null in the public demo. */
@@ -129,6 +134,16 @@ function buildMail(entra: EntraConfig | null, demoMode: boolean): MailConfig {
   // The public demo runs on seed data; it must never mail a real address.
   if (demoMode) provider = null;
   return { provider, from, fromName, replyTo, resendApiKey, graph };
+}
+
+function buildAssistant(): Config['assistant'] {
+  const effort = (str('ASSISTANT_AI_EFFORT') ?? 'medium').toLowerCase();
+  const limit = Number(str('ASSISTANT_DAILY_LIMIT') ?? '100');
+  return {
+    model: str('ASSISTANT_AI_MODEL') ?? 'claude-opus-5-5',
+    effort: effort === 'low' || effort === 'high' ? effort : 'medium',
+    dailyLimit: Number.isFinite(limit) && limit >= 0 ? Math.floor(limit) : 100,
+  };
 }
 
 export interface SignInPolicy {
@@ -219,6 +234,7 @@ function build(): Config {
     quoWebhookSecret: str('QUO_WEBHOOK_SECRET') ?? null,
     anthropicApiKey: str('ANTHROPIC_API_KEY') ?? null,
     quoteAiModel: str('QUOTE_AI_MODEL') ?? 'claude-opus-5',
+    assistant: buildAssistant(),
     mail: buildMail(entra, demoMode),
   };
 }

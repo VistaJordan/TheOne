@@ -25,6 +25,7 @@ import { portfolioPermNodes } from './portfolio';
 import { maintenancePermNodes } from './maintenance';
 import { vendorExtraPermNodes } from './vendorExtras';
 import { purchasingPermNodes } from './purchasing';
+import { assistantPermNodes } from './assistant';
 
 export type PermAction = 'view' | 'create' | 'edit' | 'delete' | 'approve';
 
@@ -732,6 +733,8 @@ export function buildPermissionTree(
     ...maintenancePermNodes(),
     // 0067 · purchase requests, RFQs, purchase orders, budgets.
     ...purchasingPermNodes(),
+    // 0068 · who may ask the assistant, and who teaches it.
+    ...assistantPermNodes(),
     {
       // 0045 · live. Approve is the act of SENDING a bill to the client, not
       // a separate sign-off step: once it has gone out it is what they hold.

@@ -1185,6 +1185,49 @@ existed is unchanged. Shipped through `ensureSystemDashboards` as usual:
 Maintenance Supervisor, Vendor Performance, Technician, Store Manager,
 Unified Ops. Tests: `tests/dashboard-tabs.test.ts`.
 
+**The assistant** (migration 0068; `shared/assistant.ts`,
+`services/assistant.ts`, `lib/assistantPrompt.ts`, `lib/assistantTools.ts`,
+`components/assistant/AssistantPanel.tsx`, the sparkle button in the top
+bar). Ask anything about the data; Claude answers from look-ups made at that
+moment. **It only reads, and it has no access path of its own**: every
+look-up is one of the app's existing GET routes, fetched with `app.inject`
+and the asker's own session cookie, so the route's permission checks, the
+work-order scope (0026), the site restriction (0062) and field redaction
+(0015) decide what comes back — viewing-as included. Three tools:
+`search_work_orders` (the saved-view filter set, `group_by`, `count_only`),
+`get_work_order` (named parts: details, updates, visits, quote, payments…)
+and `lookup` (a named resource from the `RESOURCES` table: quotes, payments,
+approvals, invoices, vendors, sites, assets…). The model names a resource,
+never a path; **to let it read something new, add a row to `RESOURCES` or
+`WO_PARTS`** — nothing under `/admin`, no exports, nothing that writes.
+`shapeResult` trims what comes back (`compactForModel`, 60k characters per
+look-up, a cut result says so). The prompt is three layers, most stable
+first, for the prompt cache: `BRIEFING` (vocabulary and how to answer;
+static), the reference block (statuses, the fields THIS person may see,
+taught notes), and the date / asker / current page inside the question.
+Earlier turns are replayed as text only, so a follow-up re-reads what it
+needs. One question = one request (non-streaming, up to 12 model steps,
+240 s); a refusal falls back server-side (`fallbacks: 'default'`, and
+`echoable` drops the pre-fallback thinking and tool calls as the API asks).
+Conversations (`assistant_conversation` / `assistant_message`) belong to
+the person signed in, not who they view as. **How it improves**: a thumb on
+every answer; `assistant_note` rows ("Taught" tab) that are read before
+every answer; the "Marked answers" tab where a reviewer reads the wrong ones
+(with the look-ups behind them) and teaches a note from one. Permission
+path `assistant`: view = ask (every role), edit = teach and review (Admin).
+Env: shares `ANTHROPIC_API_KEY` with the quote draft (unset = the panel says
+it is not switched on), `ASSISTANT_AI_MODEL` (default `claude-opus-5-5`),
+`ASSISTANT_AI_EFFORT` (medium), `ASSISTANT_DAILY_LIMIT` (100 questions per
+person per Chicago day; over it is a 409). Audit: `assistant_asked` (entity
+`assistant`, entity_id = the conversation; carries the look-up summaries,
+not the question or answer) and `assistant_note_created|updated|deleted`.
+Replies are drawn from a fixed subset (paragraphs, "- " lists, bold, code,
+links) and a link is only followed when `assistantLinkOk` says it is a path
+inside the app. Deferred: actions (it changes nothing), search by meaning
+over comments and transcripts (pgvector), a stored test set of questions,
+streaming. The live Claude call was exercised against a local stand-in, not
+the real API (no key on the build machine). Tests: `tests/assistant.test.ts`.
+
 **Client Updates** (migration 0055, `services/clientUpdates.ts`,
 `pages/ClientUpdatesPage.tsx`, sidebar "Client Updates"). Replaces the
 per-client tracking spreadsheets (e.g. "SUN Holdings Tracking"). A

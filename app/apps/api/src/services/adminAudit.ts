@@ -73,7 +73,11 @@ export type AdminEntity =
   | 'tax_rate'
   | 'doc_template'
   | 'cost_center'
-  | 'afe';
+  | 'afe'
+  // 0068: a question put to the assistant (keyed to its conversation), and a
+  // note the assistant has been taught.
+  | 'assistant'
+  | 'assistant_note';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 
