@@ -1719,6 +1719,8 @@ export * from './maintenance';
 // 0066: invoicing rules, credit notes, dispatch offers, skills, inductions,
 // consumables, vendor performance and the vendor portal.
 export * from './vendorExtras';
+// 0069: suggested vendors for a work order (trade, location, client).
+export * from './vendorSuggest';
 // 0067: purchase requests, RFQs and vendor quotes, purchase orders, tax
 // rates, document templates, cost centers, AFEs and budgets.
 export * from './purchasing';

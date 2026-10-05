@@ -24,6 +24,7 @@ import {
   VENDOR_KIND_LABELS,
   VENDOR_PAYMENT_METHODS,
   VENDOR_PRIORITIES,
+  preferredRuleText,
 } from '@theone/shared';
 import type { VendorDetail, VendorInput, VendorsMetaResponse } from '@theone/shared';
 import {
@@ -756,7 +757,7 @@ function SidePanels({ v, vendorKey, entities }: { v: VendorDetail; vendorKey: st
           <ul className="vrec-list">
             {v.preferred_for.map((r) => (
               <li key={r.id}>
-                <b>{[r.client ?? 'Any client', r.trade ?? 'any trade', r.state].filter(Boolean).join(' · ')}</b>
+                <b>{preferredRuleText(r)}</b>
                 <span>rank {r.rank}</span>
                 {r.note && <span>{r.note}</span>}
               </li>

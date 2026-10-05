@@ -8,7 +8,8 @@
 //   · the dispatch cascade does nothing at all while its setting is off
 //     (the default). Switched on, it only ever offers a job to the vendors
 //     Admin › Vendors & map lists as PREFERRED for that client and trade, so
-//     a client or trade with no preferred vendors is never touched.
+//     a client or trade with no preferred vendors is never touched — unless
+//     Admin allowed automatic picks too (0069, vendorSuggest.ts).
 // Nothing here sends an email or talks to Ecotrak.
 
 import {
@@ -51,6 +52,7 @@ import { notify } from './notices.js';
 import { requirePerm } from './permissions.js';
 import { serviceActorId } from './serviceActors.js';
 import { requireVendorAdmin } from './vendorMap.js';
+import { dispatchCandidates } from './vendorSuggest.js';
 import { assertVendorInScope, requireVendorsView } from './vendors.js';
 import { logTaskChanges } from './woAudit.js';
 
@@ -338,38 +340,9 @@ async function offersOf(taskId: string): Promise<DispatchOffer[]> {
   return res.rows.map(mapOffer);
 }
 
-/** The preferred vendors for the work order's client, trade and state, the
- *  most specific rule first, each vendor once. */
-async function candidatesOf(taskId: string, offered: Set<string>): Promise<DispatchCandidate[]> {
-  const res = await query<{ vendor_id: string; name: string; rank: number; client: string | null; trade: string | null; state: string | null; blacklisted: boolean; spec: number }>(
-    `SELECT pv.vendor_id::text AS vendor_id, v.name, pv.rank, pv.client, pv.trade, pv.state, v.blacklisted,
-            ((pv.client IS NOT NULL)::int * 4 + (pv.trade IS NOT NULL)::int * 2 + (pv.state IS NOT NULL)::int) AS spec
-       FROM task t
-       JOIN preferred_vendor pv
-         ON (pv.client IS NULL OR lower(pv.client) = lower(COALESCE(t.client, '')))
-        AND (pv.trade IS NULL OR lower(pv.trade) = lower(COALESCE(t.trade, '')))
-        AND (pv.state IS NULL OR lower(pv.state) = lower(COALESCE(t.state, '')))
-       JOIN vendor v ON v.id = pv.vendor_id AND v.deleted_at IS NULL
-      WHERE t.id = $1
-      ORDER BY spec DESC, pv.rank, lower(v.name)`,
-    [taskId],
-  );
-  const seen = new Set<string>();
-  const out: DispatchCandidate[] = [];
-  for (const r of res.rows) {
-    if (seen.has(r.vendor_id)) continue;
-    seen.add(r.vendor_id);
-    out.push({
-      vendor_id: r.vendor_id,
-      name: r.name,
-      rank: out.length + 1,
-      rule: [r.client ?? 'Any client', r.trade ?? 'any trade', r.state].filter(Boolean).join(' · '),
-      blacklisted: r.blacklisted,
-      offered: offered.has(r.vendor_id),
-    });
-  }
-  return out;
-}
+/** Who a run offers the job to, in order (0069: vendorSuggest.ts — the
+ *  hand-picked preferred vendors and, only if Admin allowed it, automatic picks). */
+const candidatesOf = dispatchCandidates;
 
 async function offerTo(taskId: string, c: DispatchCandidate, hours: number, startedBy: string | null): Promise<void> {
   await query(

@@ -50,6 +50,7 @@ import {
   normalizeState,
   phoneDigits,
   preferredRuleScore,
+  preferredRuleText,
   resolveVendorMapScope,
 } from '@theone/shared';
 import type {
@@ -77,6 +78,7 @@ import type { ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
 import { geoLookup, workOrderPlace } from './geo.js';
 import { requirePerm } from './permissions.js';
+import { getSuggestSettings } from './vendorSuggestSettings.js';
 import {
   insertVendor,
   listBrandSources,
@@ -167,8 +169,8 @@ const AVAILABILITY_COLS: Record<AvailabilityKey, string> = {
 const MAX_RESULTS = 600;
 
 async function workOrderHead(taskId: string) {
-  const res = await query<{ id: string; wo_number: string; client: string | null; trade: string | null; state: string | null }>(
-    `SELECT id::text AS id, wo_number, client, trade, state FROM task WHERE id = $1`,
+  const res = await query<{ id: string; wo_number: string; client: string | null; trade: string | null; state: string | null; city: string | null }>(
+    `SELECT id::text AS id, wo_number, client, trade, state, city FROM task WHERE id = $1`,
     [taskId],
   );
   if (!res.rows[0]) throw notFound('Work order not found');
@@ -186,8 +188,12 @@ export async function workOrderMap(taskId: string, filters: MapFilters, actor: A
     listVendorTrades(),
   ]);
   const trades = tradeList.filter((t) => t.is_active).map((t) => t.name);
+  const { city: woCity, ...head } = wo;
+  // What a preferred-vendor rule is matched against: a city rule (0069) reads
+  // the work order's own city, else the one its ZIP sits in.
+  const ruleTarget = { ...head, state: place.state ?? normalizeState(wo.state), city: woCity ?? place.point?.city ?? null };
   const base = {
-    work_order: { ...wo, state: place.state ?? normalizeState(wo.state) },
+    work_order: { ...head, state: ruleTarget.state },
     radius_miles: settings.map_radius_miles,
     trades,
     scope,
@@ -287,7 +293,7 @@ export async function workOrderMap(taskId: string, filters: MapFilters, actor: A
   // Best rule per vendor: the most specific that fits, then the lowest rank.
   const preferred = new Map<string, { score: number; rank: number; note: string | null }>();
   for (const rule of rules) {
-    const score = preferredRuleScore(rule, base.work_order);
+    const score = preferredRuleScore(rule, ruleTarget);
     if (score === 0) continue;
     const cur = preferred.get(rule.vendor.id);
     if (!cur || score > cur.score || (score === cur.score && rule.rank < cur.rank)) {
@@ -684,11 +690,12 @@ async function mapUsage(limit: number): Promise<MapUsageRow[]> {
 export async function adminVendors(actor: ActingPrincipal): Promise<AdminVendorsResponse> {
   requireVendorAdmin(actor, 'view');
   const settings = await getVendorSettings();
-  const [statuses, brands, trades, preferred, usage, clients, woTrades] = await Promise.all([
+  const [statuses, brands, trades, preferred, suggest, usage, clients, woTrades] = await Promise.all([
     listStatuses(),
     listBrandSources(),
     listVendorTrades(),
     listPreferred(),
+    getSuggestSettings(),
     mapUsage(settings.map_daily_alert),
     query<{ v: string }>(
       `SELECT DISTINCT client AS v FROM task WHERE deleted_at IS NULL AND client IS NOT NULL AND btrim(client) <> '' ORDER BY 1`,
@@ -703,6 +710,7 @@ export async function adminVendors(actor: ActingPrincipal): Promise<AdminVendors
     brand_sources: brands,
     trades,
     preferred,
+    suggest,
     usage,
     clients: clients.rows.map((r) => r.v),
     wo_trades: woTrades.rows.map((r) => r.v),
@@ -753,8 +761,8 @@ const cleanText = (v: string | null | undefined): string | null => {
   return s === '' ? null : s;
 };
 
-const ruleName = (r: { client: string | null; trade: string | null; state: string | null }, vendor: string): string =>
-  `${vendor} · ${[r.client ?? 'any client', r.trade ?? 'any trade', r.state].filter(Boolean).join(' · ')}`;
+const ruleName = (r: { client: string | null; trade: string | null; state: string | null; city?: string | null }, vendor: string): string =>
+  `${vendor} · ${preferredRuleText(r)}`;
 
 export async function createPreferred(input: PreferredVendorInput, actor: ActingPrincipal): Promise<PreferredVendorRule[]> {
   requireVendorAdmin(actor, 'edit');
@@ -763,27 +771,30 @@ export async function createPreferred(input: PreferredVendorInput, actor: Acting
   const state = input.state ? normalizeState(input.state) : null;
   if (!client && !trade) throw badRequest('Pick a client, a trade, or both');
   if (input.state && !state) throw badRequest('That is not a state', { field: 'state' });
+  const city = cleanText(input.city);
+  if (city && !state) throw badRequest('Pick the state the city is in', { field: 'state' });
   if (!input.vendor_id) throw badRequest('Pick the vendor', { field: 'vendor_id' });
   const v = await liveVendor(input.vendor_id);
   const dup = await query(
     `SELECT 1 FROM preferred_vendor
       WHERE vendor_id = $1 AND lower(COALESCE(client, '')) = lower(COALESCE($2, ''))
-        AND lower(COALESCE(trade, '')) = lower(COALESCE($3, '')) AND COALESCE(state, '') = COALESCE($4, '')`,
-    [v.id, client, trade, state],
+        AND lower(COALESCE(trade, '')) = lower(COALESCE($3, '')) AND COALESCE(state, '') = COALESCE($4, '')
+        AND lower(COALESCE(city, '')) = lower(COALESCE($5, ''))`,
+    [v.id, client, trade, state, city],
   );
   if (dup.rows.length > 0) throw conflict('That vendor is already preferred for this client / trade');
   const rank = Number.isFinite(input.rank) && (input.rank ?? 0) > 0 ? Math.round(input.rank!) : 1;
   const ins = await query<{ id: string }>(
-    `INSERT INTO preferred_vendor (client, trade, state, vendor_id, rank, note, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id::text AS id`,
-    [client, trade, state, v.id, rank, cleanText(input.note), actor.id],
+    `INSERT INTO preferred_vendor (client, trade, state, city, vendor_id, rank, note, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id::text AS id`,
+    [client, trade, state, city, v.id, rank, cleanText(input.note), actor.id],
   );
   await logAdminEvent({
     actorId: actor.id,
     entity: 'preferred_vendor',
     entityId: ins.rows[0].id,
     action: 'preferred_vendor_created',
-    after: { name: ruleName({ client, trade, state }, v.name), rank },
+    after: { name: ruleName({ client, trade, state, city }, v.name), rank },
   });
   return listPreferred();
 }
@@ -819,10 +830,10 @@ export async function updatePreferred(id: string, input: PreferredVendorInput, a
 export async function deletePreferred(id: string, actor: ActingPrincipal): Promise<PreferredVendorRule[]> {
   requireVendorAdmin(actor, 'edit');
   if (!UUID_RE.test(id)) throw notFound('Rule not found');
-  const res = await query<{ client: string | null; trade: string | null; state: string | null; name: string }>(
+  const res = await query<{ client: string | null; trade: string | null; state: string | null; city: string | null; name: string }>(
     `DELETE FROM preferred_vendor pv USING vendor v
       WHERE pv.id = $1 AND v.id = pv.vendor_id
-      RETURNING pv.client, pv.trade, pv.state, v.name`,
+      RETURNING pv.client, pv.trade, pv.state, pv.city, v.name`,
     [id],
   );
   if (!res.rows[0]) throw notFound('Rule not found');

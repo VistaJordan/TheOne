@@ -8,6 +8,7 @@
 
 import type { FeedActor } from './index';
 import { permAllows, type PermNode, type PermissionSet } from './permissions';
+import type { SuggestSettings } from './vendorSuggest';
 
 // ── Permission paths ─────────────────────────────────────────────────────────
 
@@ -544,6 +545,8 @@ export interface PreferredVendorRule {
   client: string | null;
   trade: string | null;
   state: string | null;
+  /** 0069: one city of `state`, or null = anywhere in it. */
+  city: string | null;
   vendor: { id: string; name: string; phone: string | null; blacklisted: boolean };
   rank: number;
   note: string | null;
@@ -553,6 +556,7 @@ export interface PreferredVendorInput {
   client?: string | null;
   trade?: string | null;
   state?: string | null;
+  city?: string | null;
   vendor_id?: string;
   rank?: number;
   note?: string | null;
@@ -560,18 +564,26 @@ export interface PreferredVendorInput {
 
 /** How well a rule fits a work order: higher = more specific; 0 = no match.
  *  client + trade beats client-only beats trade-only; a state on the rule must
- *  match and adds a point. */
+ *  match and adds a point, and a city inside it (0069) two more. */
 export function preferredRuleScore(
-  rule: { client: string | null; trade: string | null; state: string | null },
-  wo: { client: string | null; trade: string | null; state: string | null },
+  rule: { client: string | null; trade: string | null; state: string | null; city?: string | null },
+  wo: { client: string | null; trade: string | null; state: string | null; city?: string | null },
 ): number {
   const same = (a: string | null, b: string | null) =>
     a !== null && b !== null && a.trim().toLowerCase() === b.trim().toLowerCase();
   if (rule.client !== null && !same(rule.client, wo.client)) return 0;
   if (rule.trade !== null && !same(rule.trade, wo.trade)) return 0;
   if (rule.state !== null && normalizeState(rule.state) !== normalizeState(wo.state)) return 0;
+  const city = rule.city ?? null;
+  if (city !== null && (cityKey(city) === '' || cityKey(city) !== cityKey(wo.city))) return 0;
   if (rule.client === null && rule.trade === null) return 0;
-  return (rule.client !== null ? 4 : 0) + (rule.trade !== null ? 2 : 0) + (rule.state !== null ? 1 : 0);
+  return (rule.client !== null ? 8 : 0) + (rule.trade !== null ? 4 : 0) + (city !== null ? 2 : 0) + (rule.state !== null ? 1 : 0);
+}
+
+/** "7-Eleven · Refrigeration · Toledo, OH" — what a rule is for, in words. */
+export function preferredRuleText(rule: { client: string | null; trade: string | null; state: string | null; city?: string | null }): string {
+  const place = [rule.city, rule.state].filter(Boolean).join(', ');
+  return [rule.client ?? 'Any client', rule.trade ?? 'any trade', place].filter(Boolean).join(' · ');
 }
 
 // ── The map ──────────────────────────────────────────────────────────────────
@@ -718,6 +730,8 @@ export interface AdminVendorsResponse {
   brand_sources: VendorBrandSource[];
   trades: { name: string; position: number; is_active: boolean }[];
   preferred: PreferredVendorRule[];
+  /** 0069: how the suggested-vendors list is put together. */
+  suggest: SuggestSettings;
   /** Map opens per person per day, last 14 days, busiest first. */
   usage: MapUsageRow[];
   clients: string[];

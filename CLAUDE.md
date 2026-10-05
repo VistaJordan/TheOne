@@ -834,8 +834,8 @@ from the records** (`linkVisitVendor`, called by the visit routes after
 `createVisit` / `updateVisit`; `wo_visit.vendor_id`). Nothing filters on vendor
 status or paperwork; Hire **warns, never blocks** (`complianceWarning`).
 Preferred vendors (`preferred_vendor`: client and/or trade, optional state,
-ranked) are marked and sorted first (`preferredRuleScore`, most specific rule
-wins). A statewide / nationwide vendor with no placed city is pinned at the
+optional city inside it since 0069, ranked) are marked and sorted first
+(`preferredRuleScore`, most specific rule wins). A statewide / nationwide vendor with no placed city is pinned at the
 work order, as Tech Locator did. Each open is logged (`vendor_map_log`);
 over `map_daily_alert` a day shows in Admin › Vendors & map — alert only.
 Postgres cannot type a bound parameter the statement never uses, so the map
@@ -1140,7 +1140,8 @@ offers a work order to the PREFERRED vendors of its client / trade / state in
 turn (`wo_dispatch_offer`, one live offer per work order); a decline or a
 lapsed clock moves it on (`advance` on every read, and the hourly cron);
 accepting sets `task.vendor_id`. A client or trade with no preferred vendors
-is never touched. `maybeAutoStartDispatch` is called from `createWorkOrder`
+is never touched — unless Admin switched `cascade_auto` on (0069, below), when
+the automatic picks follow the hand-picked ones (`dispatchCandidates`). `maybeAutoStartDispatch` is called from `createWorkOrder`
 and is a no-op unless both switches are on. Also: skills, inductions
 (`inductionState`), consumables (catalogue + `wo_consumable`), and
 `/vendors?view=performance` (jobs, SLA met / missed, recalls = the Recall tag,
@@ -1281,6 +1282,30 @@ seed, any *data* a migration inserts (super admins in 0004, roles in 0005) is
 wiped by the seed unless the seed re-creates it. Both files carry the same
 statements on purpose — **if you change one, change the other** (0003/roles,
 0004/super admins). The seed prints `super admins : 4 (…)` so drift is visible.
+
+**Suggested vendors** (migration 0069, `services/vendorSuggest.ts`,
+`components/wo/tech/SuggestedVendorsCard.tsx` on the People tab): the top few
+vendors for a work order by its trade, location and client. Two layers, one
+list: the hand-picked `preferred_vendor` rules first (most specific rule, then
+rank; a rule may now name a **city** of its state, scored client 8 · trade 4 ·
+city 2 · state 1 so the old order holds), then an **automatic fill** of the
+places left: vendors that pass the hard filters (filed under the work order's
+trade, cover its location — map radius, statewide there, nationwide — and, on
+an Emergency work order when asked, take same-day emergencies), sorted by a
+fixed order of tie-breakers (`client_history`, `distance`, `compliance`,
+`jobs`, `rate`), never a weighted score. The ranking is the pure
+`rankSuggestions` in `packages/shared/src/vendorSuggest.ts`
+(`tests/vendor-suggest.test.ts`). Everything is one `vendor_setting` row,
+`suggest` (`SuggestSettings`: size, auto_fill, order, off, match_trade,
+in_coverage, require_compliance, emergency_availability, cascade_auto), edited
+in Admin › Vendors & map › Suggested vendors (`PUT /admin/vendors/suggest`,
+grant `admin/vendors` edit, audited as `vendor_settings_updated` on entity id
+`suggest`). Fixed in code: a blacklisted vendor is never suggested.
+`GET /work-orders/:id/suggested-vendors` needs `vendor_map` view and shows
+only the kinds of vendor the viewer's `vendor_map/*` grants allow, as the map
+does; Hire is the map's own hire. A hand-picked vendor is listed however far
+away it is. The map itself still sorts by distance. Not built: a rule per
+site, and any rating signal (there is no rating field).
 
 ## Verify
 

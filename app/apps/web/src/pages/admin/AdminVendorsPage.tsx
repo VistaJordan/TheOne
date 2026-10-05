@@ -2,7 +2,8 @@
  *
  * What the map and the Vendors section are run with: how far the map looks,
  * when a busy day raises an alert, whether hiring warns about paperwork; the
- * preferred vendors per client and trade; the lists a vendor record picks
+ * preferred vendors per client, trade and place, and how the suggested-vendors
+ * list on a work order is filled and ordered (0069); the lists a vendor record picks
  * from (statuses, brand sources, trades — every dropdown reads them); and who
  * has been opening the map. WHO SEES WHAT on the map is not here: that is a
  * role's "Technician map" rows in Admin › Roles (and per person from Adjust). */
@@ -10,8 +11,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { US_STATE_CODES, adminPermKey } from '@theone/shared';
-import type { AdminVendorsResponse, PreferredVendorRule } from '@theone/shared';
+import { SUGGEST_MAX_SIZE, SUGGEST_SIGNALS, US_STATE_CODES, adminPermKey } from '@theone/shared';
+import type { AdminVendorsResponse, PreferredVendorRule, SuggestSettings, SuggestSignal } from '@theone/shared';
 import {
   ApiRequestError,
   addVendorListValue,
@@ -19,6 +20,7 @@ import {
   deletePreferredVendor,
   getAdminVendors,
   getVendorRequiredFields,
+  saveSuggestSettings,
   saveVendorSettings,
   searchVendorsForRule,
   setVendorRequiredField,
@@ -57,6 +59,7 @@ export function AdminVendorsPage() {
         <div className="vadm">
           <SettingsCard data={d} canEdit={canEdit} />
           <PreferredCard data={d} canEdit={canEdit} />
+          <SuggestCard data={d} canEdit={canEdit} />
           <RequiredFieldsCard canEdit={canEdit} />
           {/* 0066 · dispatch offers, invoicing rules, skills, consumables. */}
           <VendorCataloguesCards canEdit={canEdit} />
@@ -172,6 +175,7 @@ function PreferredCard({ data, canEdit }: { data: AdminVendorsResponse; canEdit:
   const [client, setClient] = useState('');
   const [trade, setTrade] = useState('');
   const [state, setState] = useState('');
+  const [city, setCity] = useState('');
   const [rank, setRank] = useState('1');
   const [note, setNote] = useState('');
   const [term, setTerm] = useState('');
@@ -189,7 +193,7 @@ function PreferredCard({ data, canEdit }: { data: AdminVendorsResponse; canEdit:
     setError(null);
   };
   const add = useMutation({
-    mutationFn: () => createPreferredVendor({ client: client || null, trade: trade || null, state: state || null, vendor_id: vendor!.id, rank: Number(rank) || 1, note: note || null }),
+    mutationFn: () => createPreferredVendor({ client: client || null, trade: trade || null, state: state || null, city: (state && city.trim()) || null, vendor_id: vendor!.id, rank: Number(rank) || 1, note: note || null }),
     onSuccess: (res) => { apply(res); setVendor(null); setTerm(''); setNote(''); },
     onError: (e) => setError(errText(e, 'Could not add the rule.')),
   });
@@ -215,7 +219,8 @@ function PreferredCard({ data, canEdit }: { data: AdminVendorsResponse; canEdit:
       </div>
       <p className="hint" style={{ padding: '0 14px 8px', margin: 0 }}>
         For a client, a trade, or the pair: the vendors we would rather use, in order. On a work order’s map they are marked
-        “Preferred” and listed first. The most specific rule wins (client + trade over client alone over trade alone).
+        “Preferred” and listed first, and they head the suggested vendors on the work order. The most specific rule wins
+        (client + trade over client alone over trade alone; a city over its state over anywhere).
       </p>
       {canEdit && (
         <div className="vadm-rule-form">
@@ -235,10 +240,23 @@ function PreferredCard({ data, canEdit }: { data: AdminVendorsResponse; canEdit:
           </div>
           <div className="field" style={{ flex: '0 1 110px', minWidth: 100 }}>
             <label className="lbl" htmlFor="pv-state">State</label>
-            <select className="fld" id="pv-state" value={state} onChange={(e) => setState(e.target.value)}>
+            <select className="fld" id="pv-state" value={state} onChange={(e) => { setState(e.target.value); if (!e.target.value) setCity(''); }}>
               <option value="">Any</option>
               {US_STATE_CODES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+          </div>
+          <div className="field" style={{ flex: '1 1 130px', minWidth: 120 }}>
+            <label className="lbl" htmlFor="pv-city">City</label>
+            <input
+              className="fld"
+              id="pv-city"
+              value={city}
+              maxLength={120}
+              disabled={!state}
+              placeholder={state ? 'Any city' : 'Pick a state first'}
+              title="Only for work orders in this city. Leave empty for the whole state."
+              onChange={(e) => setCity(e.target.value)}
+            />
           </div>
           <div className="field techpick" style={{ flex: '2 1 220px' }}>
             <label className="lbl" htmlFor="pv-vendor">Vendor</label>
@@ -284,14 +302,14 @@ function PreferredCard({ data, canEdit }: { data: AdminVendorsResponse; canEdit:
         <div className="vend-wrap">
           <table className="vend-table">
             <thead>
-              <tr><th>Client</th><th>Trade</th><th>State</th><th>Vendor</th><th>Rank</th><th>Note</th><th /></tr>
+              <tr><th>Client</th><th>Trade</th><th>Place</th><th>Vendor</th><th>Rank</th><th>Note</th><th /></tr>
             </thead>
             <tbody>
               {data.preferred.map((r) => (
                 <tr key={r.id}>
                   <td>{r.client ?? <i>Any client</i>}</td>
                   <td>{r.trade ?? <i>Any trade</i>}</td>
-                  <td>{r.state ?? '—'}</td>
+                  <td>{[r.city, r.state].filter(Boolean).join(', ') || '—'}</td>
                   <td className="vend-name">
                     <Link to={`/vendors/${r.vendor.id}`}>{r.vendor.name}</Link>
                     {r.vendor.blacklisted && <span><span className="chip chip-danger chip-sm">Blacklisted</span></span>}
@@ -317,6 +335,119 @@ function PreferredCard({ data, canEdit }: { data: AdminVendorsResponse; canEdit:
           </table>
         </div>
       )}
+    </section>
+  );
+}
+
+// ── Suggested vendors (0069) ─────────────────────────────────────────────────
+
+/* How the "Suggested vendors" list on a work order is put together. Every
+   control saves by itself; the server answers with the whole setting. */
+function SuggestCard({ data, canEdit }: { data: AdminVendorsResponse; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const s = data.suggest;
+  const save = useMutation({
+    mutationFn: (patch: Partial<SuggestSettings>) => saveSuggestSettings(patch),
+    onSuccess: (res) => {
+      qc.setQueryData<AdminVendorsResponse>(KEY, (old) => (old ? { ...old, suggest: res.suggest } : old));
+      void qc.invalidateQueries({ queryKey: ['wo-suggested-vendors'] });
+    },
+  });
+  const locked = !canEdit || save.isPending;
+  const move = (key: SuggestSignal, by: -1 | 1) => {
+    const order = [...s.order];
+    const i = order.indexOf(key);
+    const j = i + by;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    save.mutate({ order });
+  };
+  const toggle = (key: SuggestSignal) => save.mutate({ off: s.off.includes(key) ? s.off.filter((k) => k !== key) : [...s.off, key] });
+  const check = (key: 'auto_fill' | 'match_trade' | 'in_coverage' | 'require_compliance' | 'emergency_availability' | 'cascade_auto', label: string, disabled = false) => (
+    <label className="tmap-check">
+      <input type="checkbox" checked={s[key]} disabled={locked || disabled} onChange={(e) => save.mutate({ [key]: e.target.checked })} />
+      <span>{label}</span>
+    </label>
+  );
+  const signals = s.order.map((k) => SUGGEST_SIGNALS.find((x) => x.key === k)).filter((x): x is (typeof SUGGEST_SIGNALS)[number] => Boolean(x));
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2 className="card-title grow">Suggested vendors</h2>
+        <span className={`chip chip-sm${s.auto_fill ? ' chip-ok' : ' chip-outline'}`}>{s.auto_fill ? 'Automatic fill on' : 'Hand-picked only'}</span>
+      </div>
+      <p className="hint" style={{ padding: '0 14px 4px', margin: 0 }}>
+        The short list on a work order’s People tab. The preferred vendors above come first, in their order. The places left
+        over are filled automatically: vendors that pass the filters, sorted by the tie-breakers from top to bottom. A
+        blacklisted vendor is never suggested.
+      </p>
+      <div className="vadm-settings">
+        <div className="field">
+          <label className="lbl" htmlFor="sg-size">Vendors on the list</label>
+          <input
+            className="fld mono"
+            id="sg-size"
+            type="number"
+            min={1}
+            max={SUGGEST_MAX_SIZE}
+            defaultValue={s.size}
+            key={s.size}
+            disabled={!canEdit}
+            onBlur={(e) => {
+              const n = Math.round(Number(e.target.value));
+              if (n >= 1 && n <= SUGGEST_MAX_SIZE && n !== s.size) save.mutate({ size: n });
+              else e.target.value = String(s.size);
+            }}
+          />
+          {check('auto_fill', 'Fill the places left over automatically')}
+          <span className="hint">Off, the list shows only the preferred vendors somebody picked.</span>
+        </div>
+        <div className="field">
+          <span className="lbl">An automatic pick must</span>
+          {check('match_trade', 'Be filed under the work order’s trade', !s.auto_fill)}
+          {check('in_coverage', 'Cover its location (in the map radius, statewide there, or nationwide)', !s.auto_fill)}
+          {check('emergency_availability', 'Take same-day emergencies, when the work order is an Emergency', !s.auto_fill)}
+        </div>
+        <div className="field">
+          <span className="lbl">Paperwork and offers</span>
+          {check('require_compliance', 'Leave out a vendor whose COI is missing or expired')}
+          <span className="hint">Off, they stay on the list with a warning. This one also applies to preferred vendors.</span>
+          {check('cascade_auto', 'Dispatch offers may go to automatic picks', !s.auto_fill)}
+          <span className="hint">Off, dispatch offers keep to the preferred vendors, as before.</span>
+        </div>
+      </div>
+      <div className="vadm-signals">
+        <span className="lbl">Tie-breakers, in order</span>
+        <ol>
+          {signals.map((sig, i) => {
+            const off = s.off.includes(sig.key);
+            return (
+              <li key={sig.key} className={off ? 'is-off' : undefined}>
+                <span className="vadm-signal-n mono">{i + 1}</span>
+                <span className="vadm-signal-text">
+                  <b>{sig.label}</b>
+                  <small>{sig.hint}</small>
+                </span>
+                {canEdit && (
+                  <span className="vadm-signal-acts">
+                    <button type="button" className="icon-btn" aria-label={`Move ${sig.label} up`} title="Move up" disabled={locked || !s.auto_fill || i === 0} onClick={() => move(sig.key, -1)}>
+                      <Icon name="chev-u" size={14} />
+                    </button>
+                    <button type="button" className="icon-btn" aria-label={`Move ${sig.label} down`} title="Move down" disabled={locked || !s.auto_fill || i === signals.length - 1} onClick={() => move(sig.key, 1)}>
+                      <Icon name="chev-d" size={14} />
+                    </button>
+                    <button type="button" className="link-btn" disabled={locked || !s.auto_fill} onClick={() => toggle(sig.key)}>
+                      {off ? 'Turn on' : 'Turn off'}
+                    </button>
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+      {save.isError && <p className="snooze-err" role="alert" style={{ margin: '0 14px 12px' }}><Icon name="alert-circle" size={12} />{errText(save.error, 'Could not save.')}</p>}
     </section>
   );
 }

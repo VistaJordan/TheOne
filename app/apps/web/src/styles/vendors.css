@@ -170,6 +170,8 @@ details.tmap-filter[open] > summary::after { content: '▴'; }
 .tech-meta { font-size: 11.5px; color: var(--ink-3); }
 .tech-warn { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--warn); }
 .tech-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.sugg-n { min-width: 16px; font-size: 12px; color: var(--ink-3); text-align: right; }
+.card-sugg .tech { grid-template-columns: auto auto minmax(0, 1fr) auto; }
 .tech-past { margin: 0; padding: 0 14px 12px; font-size: 12px; color: var(--ink-3); }
 
 /* ── The visit's technician picker ────────────────────────────────────────── */
@@ -324,6 +326,16 @@ details.tmap-filter[open] > summary::after { content: '▴'; }
 .vadm-rule-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; padding: 10px 14px; border-bottom: 1px solid var(--border); }
 .vadm-rule-form .field { min-width: 150px; flex: 1 1 150px; }
 .vadm-rule-form .fld { width: 100%; height: 32px; }
+.vadm-settings .tmap-check { align-items: flex-start; }
+.vadm-signals { padding: 0 14px 14px; }
+.vadm-signals ol { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; max-width: 640px; }
+.vadm-signals li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--row-border); }
+.vadm-signals li:last-child { border-bottom: 0; }
+.vadm-signals li.is-off .vadm-signal-text { color: var(--ink-3); text-decoration: line-through; }
+.vadm-signal-n { font-size: 12px; color: var(--ink-3); text-align: right; }
+.vadm-signal-text { display: grid; gap: 1px; font-size: 13px; }
+.vadm-signal-text small { font-size: 11.5px; color: var(--ink-3); }
+.vadm-signal-acts { display: flex; gap: 6px; align-items: center; }
 .vadm-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .vadm-list { list-style: none; margin: 0; padding: 4px 14px 10px; display: grid; gap: 4px; font-size: 13px; }
 .vadm-list li { display: flex; align-items: center; gap: 8px; min-height: 28px; }

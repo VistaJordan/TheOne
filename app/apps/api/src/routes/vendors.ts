@@ -17,6 +17,7 @@
 //
 // On a work order (:id = uuid or WO number, resolved through the work-order scope)
 //   GET    /work-orders/:id/tech-map             the map's results
+//   GET    /work-orders/:id/suggested-vendors    the top few by trade, location, client (0069)
 //   GET    /work-orders/:id/technicians          hired technicians (People tab)
 //   POST   /work-orders/:id/technicians          hire  { vendor_id, note? }
 //   DELETE /work-orders/:id/technicians/:vendorId   release
@@ -26,6 +27,7 @@
 // Admin › Vendors & map
 //   GET    /admin/vendors
 //   PUT    /admin/vendors/settings
+//   PUT    /admin/vendors/suggest                   how the suggested list is built (0069)
 //   GET    /admin/vendors/vendor-search
 //   POST   /admin/vendors/preferred · PATCH / DELETE /admin/vendors/preferred/:id
 //   POST   /admin/vendors/lists/:list · PATCH /admin/vendors/lists/:list/:key
@@ -34,7 +36,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { AVAILABILITY_FLAGS, VENDOR_PRIORITIES, TRI_STATES, parseVendorFilter, type AvailabilityKey } from '@theone/shared';
+import { AVAILABILITY_FLAGS, SUGGEST_MAX_SIZE, SUGGEST_SIGNALS, VENDOR_PRIORITIES, TRI_STATES, parseVendorFilter, type AvailabilityKey } from '@theone/shared';
 import { notFound, parse } from '../errors.js';
 import { actingPrincipalFromRequest, resolveTaskId } from '../services/activity.js';
 import { query } from '../db.js';
@@ -77,6 +79,8 @@ import {
   updatePreferred,
   workOrderMap,
 } from '../services/vendorMap.js';
+import { suggestedVendors } from '../services/vendorSuggest.js';
+import { saveSuggestSettings } from '../services/vendorSuggestSettings.js';
 
 const idParams = z.object({ id: z.string().min(1) });
 const text = (max: number) => z.string().max(max).nullable().optional();
@@ -309,6 +313,11 @@ export default async function vendorRoutes(app: FastifyInstance): Promise<void> 
     return workOrderMap(taskId, { trades, availability, opened: q.opened === '1' }, actingPrincipalFromRequest(req));
   });
 
+  app.get('/work-orders/:id/suggested-vendors', async (req) => {
+    const taskId = await taskIdOf(req);
+    return suggestedVendors(taskId, actingPrincipalFromRequest(req));
+  });
+
   app.get('/work-orders/:id/technicians', async (req) => {
     const taskId = await taskIdOf(req);
     const actor = actingPrincipalFromRequest(req);
@@ -372,6 +381,29 @@ export default async function vendorRoutes(app: FastifyInstance): Promise<void> 
     return { settings: await saveVendorSettings(body, actingPrincipalFromRequest(req)) };
   });
 
+  // 0069 · how the suggested-vendors list is put together. A partial body:
+  // whatever is sent is laid over what is stored.
+  app.put('/admin/vendors/suggest', async (req) => {
+    const signal = z.enum(SUGGEST_SIGNALS.map((s) => s.key) as [string, ...string[]]);
+    const body = parse(
+      z
+        .object({
+          size: z.number().int().min(1).max(SUGGEST_MAX_SIZE).optional(),
+          auto_fill: z.boolean().optional(),
+          order: z.array(signal).max(20).optional(),
+          off: z.array(signal).max(20).optional(),
+          match_trade: z.boolean().optional(),
+          in_coverage: z.boolean().optional(),
+          require_compliance: z.boolean().optional(),
+          emergency_availability: z.boolean().optional(),
+          cascade_auto: z.boolean().optional(),
+        })
+        .strict(),
+      req.body,
+    );
+    return { suggest: await saveSuggestSettings(body, actingPrincipalFromRequest(req)) };
+  });
+
   // The vendor picker of a preferred-vendor rule: by name, for someone who may
   // hold Admin › Vendors & map without the Vendors section.
   app.get('/admin/vendors/vendor-search', async (req) => {
@@ -392,6 +424,7 @@ export default async function vendorRoutes(app: FastifyInstance): Promise<void> 
       client: text(200),
       trade: text(80),
       state: text(40),
+      city: text(120),
       vendor_id: z.string().uuid().optional(),
       rank: z.number().int().min(1).max(99).optional(),
       note: text(1000),

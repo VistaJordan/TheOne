@@ -768,12 +768,12 @@ async function loadVendor(id: string, actor: ActingPrincipal): Promise<VendorDet
 // ── Preferred rules of one vendor (the full CRUD is in vendorMap.ts) ─────────
 
 export async function listPreferred(vendorId?: string): Promise<PreferredVendorRule[]> {
-  const res = await query<{ id: string; client: string | null; trade: string | null; state: string | null; rank: number; note: string | null; v_id: string; v_name: string; v_phone: string | null; v_bl: boolean }>(
-    `SELECT pv.id::text AS id, pv.client, pv.trade, pv.state, pv.rank, pv.note,
+  const res = await query<{ id: string; client: string | null; trade: string | null; state: string | null; city: string | null; rank: number; note: string | null; v_id: string; v_name: string; v_phone: string | null; v_bl: boolean }>(
+    `SELECT pv.id::text AS id, pv.client, pv.trade, pv.state, pv.city, pv.rank, pv.note,
             v.id::text AS v_id, v.name AS v_name, v.phone AS v_phone, v.blacklisted AS v_bl
        FROM preferred_vendor pv JOIN vendor v ON v.id = pv.vendor_id AND v.deleted_at IS NULL
       WHERE ($1::uuid IS NULL OR pv.vendor_id = $1)
-      ORDER BY lower(COALESCE(pv.client, '')), lower(COALESCE(pv.trade, '')), pv.rank, lower(v.name)`,
+      ORDER BY lower(COALESCE(pv.client, '')), lower(COALESCE(pv.trade, '')), COALESCE(pv.state, ''), lower(COALESCE(pv.city, '')), pv.rank, lower(v.name)`,
     [vendorId ?? null],
   );
   return res.rows.map((r) => ({
@@ -781,6 +781,7 @@ export async function listPreferred(vendorId?: string): Promise<PreferredVendorR
     client: r.client,
     trade: r.trade,
     state: r.state,
+    city: r.city,
     vendor: { id: r.v_id, name: r.v_name, phone: r.v_phone, blacklisted: r.v_bl },
     rank: r.rank,
     note: r.note,

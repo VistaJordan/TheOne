@@ -347,7 +347,7 @@ export function VendorCataloguesCards({ canEdit }: { canEdit: boolean }) {
           <h2 className="card-title grow">Dispatch offers</h2>
           <span className={`chip chip-sm${d.dispatch.enabled ? ' chip-ok' : ' chip-outline'}`}>{d.dispatch.enabled ? 'Switched on' : 'Switched off'}</span>
         </div>
-        <p className="hint mt-hint">When on, a dispatcher can offer a work order to the preferred vendors of its client and trade, one after another. A vendor who declines, or does not answer in time, is passed over for the next. It only ever uses the preferred vendors listed above, so a client or trade with none is never touched. Off, nothing changes: vendors are assigned by hand as before.</p>
+        <p className="hint mt-hint">When on, a dispatcher can offer a work order to the preferred vendors of its client and trade, one after another. A vendor who declines, or does not answer in time, is passed over for the next. It keeps to the preferred vendors listed above, so a client or trade with none is never touched, unless “Dispatch offers may go to automatic picks” is ticked under Suggested vendors. Off, nothing changes: vendors are assigned by hand as before.</p>
         <div className="vx-settings">
           <label className="tmap-check"><input type="checkbox" checked={d.dispatch.enabled} disabled={!edit || dispatch.isPending} onChange={(e) => dispatch.mutate({ enabled: e.target.checked })} /><span>Allow dispatch offers</span></label>
           <label className="tmap-check"><input type="checkbox" checked={d.dispatch.auto_start} disabled={!edit || !d.dispatch.enabled || dispatch.isPending} onChange={(e) => dispatch.mutate({ auto_start: e.target.checked })} /><span>Start by itself when a work order is added with no vendor</span></label>

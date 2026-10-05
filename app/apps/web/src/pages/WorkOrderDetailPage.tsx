@@ -25,6 +25,7 @@ import { InvoiceCard } from '../components/wo/InvoiceCard';
 import { VendorBillsCard } from '../components/wo/VendorBillsCard';
 import { PayablesFieldsCard, PaymentHistoryCard } from '../components/wo/PayablesCard';
 import { PeopleCard } from '../components/wo/PeopleCard';
+import { SuggestedVendorsCard } from '../components/wo/tech/SuggestedVendorsCard';
 import { TechniciansCard } from '../components/wo/tech/TechniciansCard';
 import { SiteCard } from '../components/wo/SiteCard';
 import { DatesCard } from '../components/wo/DatesCard';
@@ -437,6 +438,8 @@ export function WorkOrderDetailPage() {
               <PeopleCard wo={wo} />
               {/* 0057 · who has been hired onto the work order, and the map. */}
               <TechniciansCard wo={wo} />
+              {/* 0069 · the top few vendors for this trade, location and client. */}
+              <SuggestedVendorsCard wo={wo} />
               {/* 0066 · offering the job to the preferred vendors in turn (hidden while switched off). */}
               <DispatchCard woId={wo.id} />
             </div>

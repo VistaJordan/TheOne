@@ -2351,6 +2351,8 @@ import type {
   NewTechInput,
   PreferredVendorInput,
   PreferredVendorRule,
+  SuggestSettings,
+  SuggestedVendorsResponse,
   TechSearchHit,
   VendorDetail,
   VendorInput,
@@ -2495,6 +2497,11 @@ export function getWoTechMap(
   );
 }
 
+/** 0069 · the top few vendors for the work order: trade, location, client. */
+export function getWoSuggestedVendors(idOrNumber: string): Promise<SuggestedVendorsResponse> {
+  return request<SuggestedVendorsResponse>(woVendorPath(idOrNumber, '/suggested-vendors'));
+}
+
 export function getWoTechnicians(idOrNumber: string): Promise<WoTechniciansResponse> {
   return request<WoTechniciansResponse>(woVendorPath(idOrNumber, '/technicians'));
 }
@@ -2544,6 +2551,11 @@ export interface VendorPickHit {
 
 export function searchVendorsForRule(q: string): Promise<{ hits: VendorPickHit[] }> {
   return request(`/admin/vendors/vendor-search${vendorQuery({ q })}`);
+}
+
+/** 0069 · a partial save of how the suggested-vendors list is put together. */
+export function saveSuggestSettings(input: Partial<SuggestSettings>): Promise<{ suggest: SuggestSettings }> {
+  return request('/admin/vendors/suggest', { method: 'PUT', body: JSON.stringify(input) });
 }
 
 export function createPreferredVendor(input: PreferredVendorInput): Promise<{ preferred: PreferredVendorRule[] }> {
