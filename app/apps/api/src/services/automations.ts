@@ -85,6 +85,7 @@ export interface AutoCtx {
 // runs.
 
 import { MIRROR_BY_JSON_KEY } from './woMirrors.js';
+import { ASSIGNEE_FIELD, recordPreviousAssignees } from './assigneeHistory.js';
 import type { AutomationSource } from './woAudit.js';
 
 const CORE_BY_JSON_KEY = new Map(
@@ -687,8 +688,6 @@ async function setPriority(
  * Entry point: every write path calls this AFTER its transaction commits.
  * Never throws — a broken rule must not fail the user's request.
  */
-const ASSIGNEE_FIELD = 'fields.Assignee';
-
 async function signoffOnAssignment(event: AutomationEvent): Promise<void> {
   let assigned = false;
   if (event.kind === 'created') {
@@ -715,9 +714,17 @@ export async function dispatchAutomations(event: AutomationEvent, ctx?: AutoCtx)
     if (event.kind === 'changed') {
       await reconcileApprovalTasks(event.taskId, await automationActorId());
     }
-    // 0070: the sign-off sheet is drawn the moment the work order is assigned
-    // to a dispatcher — whichever path set `Assignee` (field edit, bulk,
-    // intake, acceptance, a rule). Lives here for the same reason.
+    // Reassignment keeps 'Previous Assignees' (services/assigneeHistory.ts)
+    // and — 0070 — draws the sign-off sheet the moment the work order is
+    // assigned to a dispatcher, whichever path set `Assignee` (field edit,
+    // bulk, intake, acceptance, a rule). Both live here for the same reason
+    // as the reconcile above: no write path can forget them.
+    if (event.kind === 'changed') {
+      const history = await recordPreviousAssignees(event.taskId, event.changes ?? [], await automationActorId());
+      if (history.length > 0 && c.depth + 1 < MAX_DEPTH) {
+        await dispatchAutomations({ taskId: event.taskId, kind: 'changed', changes: history }, { depth: c.depth + 1, fired: c.fired });
+      }
+    }
     await signoffOnAssignment(event);
 
     const rules = await query<AutomationRow>(

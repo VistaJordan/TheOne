@@ -83,3 +83,20 @@ describe('renderSignoffSheet', () => {
     expect((await PDFDocument.load(long)).getPageCount()).toBe(1);
   });
 });
+
+// ── Previous Assignees (kept by the system on reassignment) ──────────────────
+import { departedAssignees, mergePreviousAssignees } from '../apps/api/src/services/assigneeHistory';
+
+describe('Previous Assignees history', () => {
+  it('names who left the seat, case-insensitively', () => {
+    expect(departedAssignees('Elise Abdel Massih', 'Alan Tate')).toEqual(['Elise Abdel Massih']);
+    expect(departedAssignees('Elise Abdel Massih, Alan Tate', 'alan tate')).toEqual(['Elise Abdel Massih']);
+    expect(departedAssignees(null, 'Alan Tate')).toEqual([]);
+    expect(departedAssignees('Alan Tate', null)).toEqual(['Alan Tate']);
+  });
+  it('appends once, keeps order, and is a no-op when nothing is new', () => {
+    expect(mergePreviousAssignees(null, ['Elise Abdel Massih'])).toEqual({ before: null, after: 'Elise Abdel Massih' });
+    expect(mergePreviousAssignees('Elise Abdel Massih', ['Alan Tate'])).toEqual({ before: 'Elise Abdel Massih', after: 'Elise Abdel Massih, Alan Tate' });
+    expect(mergePreviousAssignees('Elise Abdel Massih', ['elise abdel massih'])).toBeNull();
+  });
+});

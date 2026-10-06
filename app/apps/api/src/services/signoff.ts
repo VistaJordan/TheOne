@@ -285,6 +285,14 @@ async function generate(taskId: string, actorId: string, via: 'button' | 'assign
     await logSignoff(tx, actorId, taskId, 'signoff_generated', ins.rows[0].id, {
       layout, entity: f.billing_entity, wo_ref, address: f.address, via, replaced: old.rows.map((r) => r.id),
     });
+    // The field shows the sheet from the start: the technician's link until
+    // the signed copy replaces it (fileSignedCopy).
+    const before = f.fields[K_LINK] ?? null;
+    const link = publicUrl(linkToken);
+    if (changed(before, link)) {
+      await tx.query(`UPDATE task SET fields = $2::jsonb, updated_at = now() WHERE id = $1`, [taskId, JSON.stringify({ ...f.fields, [K_LINK]: link })]);
+      await logTaskChanges(tx, actorId, taskId, [{ field: `fields.${K_LINK}`, before, after: link }], 'signoff');
+    }
     const res = await tx.query<SheetRow>(`${SHEET_SQL} WHERE g.id = $1`, [ins.rows[0].id]);
     // The old blank is of no use to anyone; its link dies with the row's
     // superseded_at, and the bytes go once the row is safely replaced.

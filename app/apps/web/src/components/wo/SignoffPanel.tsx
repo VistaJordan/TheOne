@@ -156,7 +156,7 @@ export function SignoffPanel({ wo }: { wo: WorkOrderDetailV2 }) {
       </div>
 
       {!data.storage_ready && (
-        <div className="so-note">File storage is not connected in this environment, so sheets cannot be generated here.</div>
+        <div className="so-error">File storage is not connected on the server (BLOB_READ_WRITE_TOKEN), so no sheet can be drawn or filed. Ask an admin.</div>
       )}
       {sent && <div className="so-note">{sent}</div>}
       {error && <div className="so-error">{error}</div>}
