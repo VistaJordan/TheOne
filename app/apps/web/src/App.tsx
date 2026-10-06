@@ -33,6 +33,7 @@ import { ClientDetailPage, ClientsPage } from './pages/ClientsPage';
 import { AdminPortfolioPage } from './pages/admin/AdminPortfolioPage';
 import { AdminVendorsPage } from './pages/admin/AdminVendorsPage';
 import { AdminIntegrationsPage } from './pages/admin/AdminIntegrationsPage';
+import { AdminDocsPage } from './pages/admin/AdminDocsPage';
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
@@ -287,6 +288,8 @@ export function App() {
               <Route path="/admin/portfolio" element={<RequireAuth><AdminPortfolioPage /></RequireAuth>} />
               {/* 0074 · every connector with its on / off switch. */}
               <Route path="/admin/integrations" element={<RequireAuth><AdminIntegrationsPage /></RequireAuth>} />
+              {/* 0075 — the living BRD, SOP and work-order lifecycle. */}
+              <Route path="/admin/docs" element={<RequireAuth><AdminDocsPage /></RequireAuth>} />
             </Routes>
           </AuthProvider>
         </BrowserRouter>

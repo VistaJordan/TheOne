@@ -1589,6 +1589,42 @@ marks are the tools' favicons fetched once at build time (Corrigo's from
 corrigopro.com, SharePoint shown as the Microsoft mark); a missing image
 falls back to a monogram tile.
 
+**Admin › Documentation** (migration 0075, `packages/shared/src/docs/`,
+`services/docsSnapshot.ts`, `routes/adminDocs.ts`, `pages/admin/AdminDocsPage.tsx`,
+`components/docs/`, `styles/docs.css`, `tests/docs.test.ts` +
+`tests/docs-render.test.tsx`). Three living documents on one page, tabs
+**BRD · SOP · Lifecycle**, each with Print / Save as PDF (the print
+stylesheet at the foot of `docs.css`, `body.docs-printing`), Download
+Markdown (`brdMarkdown` / `sopMarkdown` / `lifecycleMarkdown`, pure, in
+shared) and Download Word (the rendered HTML wrapped as a `.doc`) or
+Download SVG for the chart. **The prose is a registry in code**: `brd.ts`
+(`BRD_PARTS` → modules → features with what / value / controls (labels as
+on screen) / rules / permissions / audit / BRD rule ids / since / deferred),
+`rules.ts` (`BUSINESS_RULES`, the numbered register with where each is
+enforced and built / partial / deferred), `sop.ts` (`SOP`: the Tech Locator
+SOP format — document control, role purpose, scope, who can use it,
+definitions, SOP 1–20 as typed blocks, who-does-what matrix, success
+metric), `lifecycle.ts` (`LIFECYCLE`: stages, one node per
+`PHASE_BY_STATUS_NAME` status, edges by kind, gated statuses, side
+processes). **The live half** is `GET /admin/docs/snapshot` (gate
+`admin/docs` view on the REAL user; 0075 grants it to admin / tl / atl /
+am): statuses with counts, fields with section / options / create_mode,
+roles with their level-one grants + scope + status mode, automations,
+integrations (read with a super-admin bearer on purpose — the page is
+already gated), approval tiers, holidays, dashboards, counts and the
+`_migrations` ledger, which is the documents' revision history. **WHEN A
+SCREEN, A BUTTON LABEL OR A RULE CHANGES, CHANGE ITS ENTRY IN THE REGISTRY
+and bump `DOCS_REVIEWED_ON`** — `tests/docs.test.ts` fails when a sidebar
+item (read from `AppShell.tsx`), an admin section, a work-order tab, an
+integration or a status exists that the registry never names, when an
+edge joins a status that is not a node, or when a feature cites a rule the
+register lacks. The lifecycle chart (`LifecycleChart.tsx`) is one SVG:
+columns = `PHASE_ORDER` + Off-ramp, node colours from the live statuses,
+lock badge on gated nodes, Ecotrak push from `ECOTRAK_PUSH_BY_STATUS_NAME`,
+click a node for its card; stages and side-process cards under it. No
+local database on phase-0: `docs-render.test.tsx` renders the three
+documents to static markup with and without a snapshot instead.
+
 ## Verify
 
 ```

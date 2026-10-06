@@ -345,6 +345,8 @@ export const ADMIN_PERM_SECTIONS: { slug: string; label: string; actions: PermAc
   { slug: 'portfolio', label: 'Sites & assets', actions: ['view', 'edit'] },
   // 0074 · every connector (Quo, Ecotrak, SharePoint, Claude, …) with its on / off switch.
   { slug: 'integrations', label: 'Integrations', actions: ['view', 'edit'] },
+  // 0075 · the living BRD, SOP and work-order lifecycle (read-only: nothing to edit).
+  { slug: 'docs', label: 'Documentation', actions: ['view'] },
 ];
 
 export function adminPermKey(slug: string): string {

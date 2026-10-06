@@ -1757,3 +1757,5 @@ export * from './assigneeAvailability';
 
 // 0074: Admin › Integrations — every connector, each with one switch.
 export * from './integrations';
+// 0075 · Admin › Documentation: the living BRD, SOP and lifecycle registry.
+export * from './docs';

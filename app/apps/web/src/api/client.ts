@@ -8,6 +8,8 @@ import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@
 import type { WoPdfKind, WoPdfLayoutInput, WoPdfLayoutsResponse } from '@theone/shared';
 // 0074: Admin › Integrations.
 import type { IntegrationsResponse } from '@theone/shared';
+// 0075: Admin › Documentation.
+import type { DocsSnapshot } from '@theone/shared';
 import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
 // Who is free to take a work order (the Assignee pickers' availability view).
 import type { AssigneeAvailabilityResponse } from '@theone/shared';
@@ -2089,6 +2091,12 @@ export function getIntegrations(): Promise<IntegrationsResponse> {
 
 export function setIntegrationEnabled(key: string, enabled: boolean): Promise<IntegrationsResponse> {
   return request(`/admin/integrations/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ enabled }) });
+}
+
+// ── Admin › Documentation (0075) ─────────────────────────────────────────────
+
+export function getDocsSnapshot(): Promise<DocsSnapshot> {
+  return request('/admin/docs/snapshot');
 }
 
 // ── Sign-off sheets (0070) ───────────────────────────────────────────────────

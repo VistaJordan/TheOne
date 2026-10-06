@@ -24,4 +24,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/admin/portfolio', label: 'Sites & assets', icon: 'store' },
   // 0074 — every connector with its on / off switch.
   { to: '/admin/integrations', label: 'Integrations', icon: 'plug' },
+  // 0075 — the living BRD, SOP and work-order lifecycle.
+  { to: '/admin/docs', label: 'Documentation', icon: 'file' },
 ];

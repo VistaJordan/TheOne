@@ -14,7 +14,10 @@ import { GUIDE_MODULES } from './assistantGuideModules.js';
 
 const GUIDE_ADMIN = `### Admin console (sidebar: Admin)
 
-Sections: Users, Roles, Settings, Automations, Custom fields, Themes, Audit log, Trash, Vendors & map, Sites & assets. Each needs its own permission row, \`admin/<section>\`: view to open it, edit to change anything. Users, Roles, Automations, Custom fields (with statuses), Holidays, Approval tiers, Audit log and Trash are checked against the person actually signed in, never the person they are viewing as. Super admins pass every check.
+Sections: Users, Roles, Settings, Automations, Custom fields, Themes, Audit log, Trash, Vendors & map, Sites & assets, Integrations, Documentation. Each needs its own permission row, \`admin/<section>\`: view to open it, edit to change anything. Users, Roles, Automations, Custom fields (with statuses), Holidays, Approval tiers, Audit log and Trash are checked against the person actually signed in, never the person they are viewing as. Super admins pass every check.
+
+**Documentation** (Admin › Documentation; needs \`admin/docs\` view)
+Three tabs: **BRD** (every module and feature with its controls, rules, permissions and value, plus a live appendix of statuses, fields, roles, automations, integrations, approval tiers, holidays, dashboards and the migration ledger), **SOP** (numbered procedures, who does what, definitions, success metric, revision history, sign-off) and **Lifecycle** (the work-order flow chart: statuses by phase, moves, gates, side processes, live counts; click a status for its details). Buttons: **Print / Save as PDF** (the browser's print dialog), **Download Markdown**, **Download Word** (BRD and SOP) or **Download SVG** (Lifecycle). The documents are generated when the page opens, so they always describe the instance as it is.
 
 **Automations** (Admin › Automations; needs \`admin/automations\` edit to add, change, pause or delete; view to see them and their run logs)
 An automation watches work orders and, when its trigger and conditions are met, sets fields or raises an approval task. To create one:
