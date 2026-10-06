@@ -36,6 +36,7 @@ import {
 import type { ActingPrincipal } from './activity.js';
 import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 import { applyProfitFormula } from './money.js';
+import { stampDateCreated } from './dateCreated.js';
 import { requirePerm } from './permissions.js';
 import { dispatchAutomations } from './automations.js';
 
@@ -375,6 +376,8 @@ export async function submitIntakeDraft(id: string, actor: ActingPrincipal): Pro
   const bag: Record<string, unknown> = { ...cur.fields };
   delete bag[INTAKE_ASSIGNEE_KEY];
   applyProfitFormula(bag);
+  // The work order is born on Submit, not when the draft was started.
+  stampDateCreated(bag);
 
   const description = str(bag['35. WO Description']);
   let taskId = '';

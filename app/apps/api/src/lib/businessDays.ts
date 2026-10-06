@@ -58,6 +58,13 @@ function dayOf(wall: number): string {
   return new Date(wall).toISOString().slice(0, 10);
 }
 
+/** `instant` as a Chicago wall-clock 'YYYY-MM-DDTHH:MM' — the zoneless shape
+    the datetime field editor writes, so a server-stamped value reads the same
+    as one an operator typed. */
+export function wallStamp(instant: Date): string {
+  return new Date(toWall(instant)).toISOString().slice(0, 16);
+}
+
 /** Saturday / Sunday in wall space (getUTCDay reads the wall date). */
 function isWeekend(wall: number): boolean {
   const d = new Date(wall).getUTCDay();

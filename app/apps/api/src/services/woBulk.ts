@@ -21,6 +21,7 @@ import { dispatchAutomations } from './automations.js';
 import { raiseAcceptanceTasks } from './approvals.js';
 import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
+import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
 import { assertMoneyNotLocked, syncInvoicedFromQuote } from './moneySync.js';
 import { getQuoteTotal } from './quotes.js';
@@ -699,10 +700,7 @@ export async function importWorkOrders(
     // A new work order stamps its own creation date into the record — 'Date
     // Created' is a real field the operators read, not just task.created_at.
     // A CSV that supplies the column keeps its value (a backdated import).
-    if (!match && fields['Date Created'] === undefined) {
-      // The field is a datetime — stamp to the minute (UTC).
-      fields['Date Created'] = new Date().toISOString().slice(0, 16);
-    }
+    if (!match) stampDateCreated(fields);
 
     // Profit = Total Invoiced − Cost, kept in step whatever the file said.
     const mergedBag = match ? { ...(match.fields ?? {}), ...fields } : fields;

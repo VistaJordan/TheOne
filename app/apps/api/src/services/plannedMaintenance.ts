@@ -36,6 +36,7 @@ import { requirePerm } from './permissions.js';
 import { logAdminEvent } from './adminAudit.js';
 import type { ActingPrincipal } from './activity.js';
 import { applyProfitFormula } from './money.js';
+import { stampDateCreated } from './dateCreated.js';
 import { INTAKE_START_STATUS_NAME } from './intake.js';
 import { dispatchAutomations } from './automations.js';
 import { serviceActorId } from './serviceActors.js';
@@ -386,6 +387,7 @@ async function raiseOne(s: PmSchedule, dueOn: string, actorId: string): Promise<
   put('Scheduled Date', dueOn);
   put('Due Date', dueOn);
   applyProfitFormula(bag);
+  stampDateCreated(bag);
 
   let taskId: string | null = null;
   await withTransaction(async (tx) => {

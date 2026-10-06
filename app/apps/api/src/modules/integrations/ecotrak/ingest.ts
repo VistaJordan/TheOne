@@ -228,6 +228,10 @@ async function upsertOne(
     'Requested By': wo.requested_by ?? null,
     'PO': wo.purchase_order ?? null,
     'Subtrade': tradeRule?.sub ?? null,
+    // When the work order was raised on Ecotrak's side, to the minute when
+    // the feed says so (the bag's datetime shape, 'YYYY-MM-DDTHH:MM'). A
+    // refresh keeps whatever is already stored — see the UPDATEs below.
+    'Date Created': wo.date_created ? wo.date_created.replace(' ', 'T').slice(0, 16) : null,
   };
 
   const common = [
@@ -290,8 +294,9 @@ async function upsertOne(
   if (externalUnchanged) {
     await tx.query(
       `UPDATE task SET title=$2, description=$3, client=$4, trade=$5, city=$6,
-              state=$7, nte=$8, date_received=$9, fields=$10::jsonb, priority=$11,
-              site_id=$12, asset_id=$13
+              state=$7, nte=$8, date_received=$9,
+              fields=$10::jsonb || jsonb_build_object('Date Created', COALESCE(fields->'Date Created', $10::jsonb->'Date Created')),
+              priority=$11, site_id=$12, asset_id=$13
          WHERE id=$1`,
       [taskId, common[0], common[1], common[4], common[5], common[6],
        common[7], common[8], common[9], common[10], common[11], siteId, assetId],
@@ -301,7 +306,8 @@ async function upsertOne(
     await tx.query(
       `UPDATE task SET title=$2, description=$3, status_id=$4, status_group=$5,
               client=$6, trade=$7, city=$8, state=$9, nte=$10, date_received=$11,
-              fields=$12::jsonb, priority=$13, site_id=$14, asset_id=$15
+              fields=$12::jsonb || jsonb_build_object('Date Created', COALESCE(fields->'Date Created', $12::jsonb->'Date Created')),
+              priority=$13, site_id=$14, asset_id=$15
          WHERE id=$1`,
       [taskId, ...common, siteId, assetId],
     );

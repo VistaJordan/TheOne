@@ -55,6 +55,7 @@ import { storageReady } from './attachments.js';
 import { logAdminEvent } from './adminAudit.js';
 import type { ActingPrincipal } from './activity.js';
 import { applyProfitFormula } from './money.js';
+import { stampDateCreated } from './dateCreated.js';
 import { INTAKE_START_STATUS_NAME } from './intake.js';
 import { dispatchAutomations } from './automations.js';
 
@@ -400,6 +401,8 @@ export async function createWorkOrder(
   const assignee = str(bag[ASSIGNEE_KEY]);
   delete bag[ASSIGNEE_KEY];
   applyProfitFormula(bag);
+  // The moment of creation, so nobody types it in later.
+  stampDateCreated(bag);
 
   const description = str(bag['35. WO Description']);
   let taskId = '';
