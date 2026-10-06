@@ -1,24 +1,27 @@
-// 0070 · The sign-off sheet, at the foot of the CICO card.
+// 0070 · The sign-off sheet, as the Sign-Off Link row of the CICO card.
 //
 // What the Make + Paperform automation used to do, in the work order itself:
 //   · the blank sheet in the billing entity's branding appears as soon as the
 //     work order is assigned to a dispatcher (the Assignee field); the
 //     Generate button covers the case where Comp was set afterwards, and
 //     "New sheet" redraws it once the number or the address changed;
-//   · Download opens the blank PDF; Share texts its link to a technician
-//     through Quo — one technician on file goes straight out, several open a
-//     picker, and "another number" is always there;
+//   · the row shows the PDF itself — a document tile that opens it, a
+//     Download, and a fold-out preview — with Send to tech beside it: one
+//     technician on file goes straight out, several open a picker, and
+//     "another number" is always there;
 //   · the signed copy the technician texts back is filed as a sign-off
-//     attachment (Photos card, awaiting approval) and linked from
-//     '24. Sign-Off Link' — shown here as the "Signed" state; a copy that
-//     could belong to several work orders waits in a strip until someone
-//     claims or dismisses it.
+//     attachment (Photos card, awaiting approval) and linked from the same
+//     field — the "Signed copy received" state here; a copy that could belong
+//     to several work orders waits in a strip until someone claims or
+//     dismisses it.
 //
-// Without the Quo API configured on the server, Share opens the Quo app on
+// Without the Quo API configured on the server, Send opens the Quo app on
 // this PC with the text pre-filled (an `sms:` link) and still records the
-// share, so the reply can be matched.
+// share, so the reply can be matched. Who may see / do what is the field's
+// own permission (work_orders/fields/cico/fields.24. Sign-Off Link); the API
+// answers 403 and the row falls back to the plain link.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { normalizePhone, type SignoffReply, type SignoffTechnician, type WoSignoffResponse } from '@theone/shared';
@@ -37,20 +40,21 @@ import { Icon } from '../Icon';
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : 'Something went wrong');
 
-export function SignoffPanel({ wo }: { wo: WorkOrderDetailV2 }) {
+export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback?: ReactNode }) {
   const qc = useQueryClient();
   const key = ['wo-signoff', wo.id];
   const q = useQuery({ queryKey: key, queryFn: () => getWorkOrderSignoff(wo.id), retry: 0 });
   const data = q.data;
   const [error, setError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
 
   const settle = (next: WoSignoffResponse) => {
     qc.setQueryData(key, next);
     setError(null);
   };
-  // The field and the Photos card change with a filed copy.
+  // The field and the Photos card change with a drawn or filed sheet.
   const refreshWo = () => {
     void qc.invalidateQueries({ queryKey: ['work-orders'] });
     void qc.invalidateQueries({ queryKey: ['wo-activity'] });
@@ -60,7 +64,7 @@ export function SignoffPanel({ wo }: { wo: WorkOrderDetailV2 }) {
 
   const generate = useMutation({
     mutationFn: () => generateWorkOrderSignoff(wo.id),
-    onSuccess: settle,
+    onSuccess: (next) => { settle(next); refreshWo(); },
     onError: (e) => setError(errorText(e)),
   });
   const claim = useMutation({
@@ -74,59 +78,69 @@ export function SignoffPanel({ wo }: { wo: WorkOrderDetailV2 }) {
     onError: (e) => setError(errorText(e)),
   });
 
-  if (q.isLoading) return null;
-  if (q.isError) {
-    // 403 = the section is not theirs to see; say nothing rather than nag.
-    return null;
-  }
-  if (!data) return null;
+  if (q.isLoading) return <span className="so-loading">…</span>;
+  // 403 / network: the plain link the caller would have drawn anyway.
+  if (q.isError || !data) return <>{fallback ?? null}</>;
 
   const s = data.signoff;
   const canGenerate = data.can.generate && data.storage_ready;
   const busy = generate.isPending || claim.isPending || dismiss.isPending;
+  const fileName = s ? `Signoff-${s.wo_ref.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf` : null;
+  const fileUrl = signoffFileUrl(wo.wo_number);
 
   return (
-    <div className="so-panel">
-      <div className="so-head">
-        <span className="so-title">
-          <Icon name="file" size={14} />
-          Sign-off sheet
-        </span>
-        {s ? (
-          <span className="so-entity">{s.entity_name}</span>
-        ) : data.layout ? (
-          <span className="so-entity">Not generated yet</span>
-        ) : (
-          <span className="so-entity">Set Comp on the work order to pick the sheet's branding</span>
-        )}
-        {s?.signed_at && <span className="chip chip-ok chip-sm">Signed copy received</span>}
-        {s && !s.signed_at && s.shares.length > 0 && <span className="chip chip-warn chip-sm">Waiting for the signed copy</span>}
-        {s?.stale && <span className="chip chip-outline chip-sm" title="The work order's number or address changed after this sheet was drawn">Details changed</span>}
-      </div>
-
-      {data.replies.length > 0 && (
-        <div className="so-held" role="status">
-          <span>
-            <b>A signed sheet came back</b> from a number that holds more than one open sheet. Is it this work order's?
+    <div className="so-row">
+      {s ? (
+        <div className="so-tile">
+          <a className="so-doc" href={fileUrl} target="_blank" rel="noreferrer" title="Open the sheet (PDF)">
+            <span className="so-doc-ic" aria-hidden="true">
+              <Icon name="file" size={18} />
+              <span className="so-doc-ext">PDF</span>
+            </span>
+            <span className="so-doc-main">
+              <b>{fileName}</b>
+              <span className="so-doc-sub">
+                {s.entity_name}
+                <span className="sep-dot">·</span>
+                drawn {feedTime(s.created_at)}{s.created_by ? ` by ${s.created_by.name}` : ''}
+              </span>
+            </span>
+          </a>
+          <span className="so-chips">
+            {s.signed_at && <span className="chip chip-ok chip-sm">Signed copy received</span>}
+            {!s.signed_at && s.shares.length > 0 && <span className="chip chip-warn chip-sm">Waiting for the signed copy</span>}
+            {s.stale && <span className="chip chip-outline chip-sm" title="The work order's number or address changed after this sheet was drawn">Details changed</span>}
           </span>
-          {data.replies.map((r) => (
-            <HeldReply key={r.id} reply={r} busy={busy} canDecide={data.can.share}
-              onClaim={() => claim.mutate(r.id)} onDismiss={() => dismiss.mutate(r.id)} />
-          ))}
+        </div>
+      ) : (
+        <div className="so-empty">
+          {data.layout
+            ? 'No sheet drawn yet.'
+            : 'Set Comp on the work order to pick the sheet\'s branding.'}
         </div>
       )}
 
       <div className="so-actions">
         {s && (
-          <a className="btn btn-sm is-ghost" href={signoffFileUrl(wo.wo_number)} target="_blank" rel="noreferrer" title="Open the blank sheet (PDF)">
-            <Icon name="download" size={14} />
-            Download
-          </a>
+          <>
+            <a className="btn btn-sm is-ghost" href={fileUrl} target="_blank" rel="noreferrer">
+              <Icon name="ext" size={14} />
+              Open
+            </a>
+            <a className="btn btn-sm is-ghost" href={fileUrl} download={fileName ?? undefined}>
+              <Icon name="download" size={14} />
+              Download
+            </a>
+            <button type="button" className="btn btn-sm is-ghost" aria-expanded={preview} onClick={() => setPreview((p) => !p)}>
+              <Icon name={preview ? 'chev-u' : 'chev-d'} size={14} />
+              {preview ? 'Hide preview' : 'Preview'}
+            </button>
+          </>
         )}
         {s && data.can.share && (
           <button type="button" className="btn btn-sm" onClick={() => { setSent(null); setSharing(true); }} disabled={busy}>
             <Icon name="send" size={14} />
-            Share with tech
+            Send to tech
           </button>
         )}
         {!s && canGenerate && data.layout && (
@@ -155,22 +169,33 @@ export function SignoffPanel({ wo }: { wo: WorkOrderDetailV2 }) {
         )}
       </div>
 
+      {preview && s && (
+        <iframe className="so-preview" src={`${fileUrl}#toolbar=0&navpanes=0`} title={fileName ?? 'Sign-off sheet'} />
+      )}
+
       {!data.storage_ready && (
         <div className="so-error">File storage is not connected on the server (BLOB_READ_WRITE_TOKEN), so no sheet can be drawn or filed. Ask an admin.</div>
       )}
       {sent && <div className="so-note">{sent}</div>}
       {error && <div className="so-error">{error}</div>}
 
-      {s && (
-        <div className="so-meta">
-          <span>Number on the sheet <b>{s.wo_ref}</b></span>
-          {s.address && <span>Address <b>{s.address}</b></span>}
-          <span>Drawn {feedTime(s.created_at)}{s.created_by ? ` by ${s.created_by.name}` : ''}</span>
-          {s.signed_at && <span>Signed copy {feedTime(s.signed_at)} · awaiting approval in Photos &amp; files</span>}
+      {data.replies.length > 0 && (
+        <div className="so-held" role="status">
+          <span>
+            <b>A signed sheet came back</b> from a number that holds more than one open sheet. Is it this work order's?
+          </span>
+          {data.replies.map((r) => (
+            <HeldReply key={r.id} reply={r} busy={busy} canDecide={data.can.share}
+              onClaim={() => claim.mutate(r.id)} onDismiss={() => dismiss.mutate(r.id)} />
+          ))}
         </div>
       )}
-      {s && s.shares.length > 0 && (
+
+      {s && (s.signed_at || s.shares.length > 0) && (
         <ul className="so-shares">
+          {s.signed_at && (
+            <li><span>Signed copy received {feedTime(s.signed_at)}</span><span>awaiting approval in Photos &amp; files</span></li>
+          )}
           {s.shares.map((sh) => (
             <li key={sh.id}>
               <span>Sent to <b>{sh.tech_name ?? 'Technician'}</b> <span className="mono">{sh.phone}</span></span>
@@ -257,7 +282,7 @@ function ShareSheet({ wo, data, onClose, onSent }: {
       <div className="sheet so-sheet">
         <h2 className="sheet-t" id="soT">
           <Icon name="send" size={18} />
-          Share the sign-off sheet
+          Send the sign-off sheet
         </h2>
         <p className="sheet-b">
           The technician gets a text with a link to the blank sheet for <b>{data.signoff?.wo_ref ?? wo.wo_number}</b>, and is

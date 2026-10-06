@@ -352,7 +352,11 @@ export function AppShell({
               <Icon name={collapsed ? 'chevs-r' : 'chevs-l'} size={16} />
             </button>
           </div>
-          <nav className="side-nav" id="primary-nav" aria-label="Primary">
+          {/* data-oknob-own: no scrollbar on the sidebar (Elise, 2026-10-06).
+              The app-wide O-knob manager (lib/oknob.ts) would otherwise
+              mount a rail here whenever the nav overflows; native bars are
+              hidden app-wide, so the nav still scrolls by wheel, bar-less. */}
+          <nav className="side-nav" id="primary-nav" aria-label="Primary" data-oknob-own="">
             {visibleNav.map((item) => {
               const isActive = item.label === active;
               const count =

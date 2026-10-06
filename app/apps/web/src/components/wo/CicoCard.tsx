@@ -24,6 +24,7 @@ import {
   CICO_SECTION_SLUG,
   DEFAULT_VISIT_TYPES,
   QUOTE_DUE_KEY,
+  SIGNOFF_FIELD_KEY,
   VISIT_HIDDEN_KEYS,
   VISIT_METHODS,
   VISIT_MIRROR_KEYS,
@@ -230,7 +231,14 @@ export function CicoCard({ wo, embedded }: CicoCardProps) {
                 <div className="fieldrow has-hist">
                   <dt>{f.label}</dt>
                   <dd>
-                    <InlineField wo={wo} fieldKey={f.key} label={f.label} />
+                    {f.key === SIGNOFF_FIELD_KEY ? (
+                      // 0070: the sheet itself — PDF tile, Download, Send to
+                      // tech — in place of the bare URL; the URL stays the
+                      // fallback when the API says the viewer may not see it.
+                      <SignoffPanel wo={wo} fallback={<InlineField wo={wo} fieldKey={f.key} label={f.label} />} />
+                    ) : (
+                      <InlineField wo={wo} fieldKey={f.key} label={f.label} />
+                    )}
                     <HistoryToggle
                       field={f}
                       open={historyFor === f.key}
@@ -244,10 +252,6 @@ export function CicoCard({ wo, embedded }: CicoCardProps) {
           </dl>
         </>
       )}
-
-      {/* 0070: the sign-off sheet — generated per entity, texted to the
-          technician through Quo, the signed copy filed back here. */}
-      {canSeeLog && <SignoffPanel wo={wo} />}
 
       {!canSeeLog && accessFields.length === 0 && (
         <div className="empty-flat">Check-in / check-out is not available to your role.</div>

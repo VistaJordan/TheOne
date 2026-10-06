@@ -6,6 +6,8 @@
 // text (Quo); the signed copy comes back the same way and is filed as a
 // 'signoff' attachment (0061) — the one the Job Done gate (11.3.4) reads.
 
+import { fieldPermKey } from './permissions';
+
 /** Which drawing the sheet uses. One per billing entity ('21. Comp'), BKR
     twice because EMCOR's sheet carries a Closeout Number line. */
 export type SignoffLayout = 'sfm' | 'tpm' | 'af' | 'rf' | 'eds' | 'bkr' | 'bkr_emcor';
@@ -139,5 +141,8 @@ export function signoffMessageText(entityName: string, woRef: string, address: s
 export const SIGNOFF_TOKEN_RE = /^[A-Za-z0-9_-]{32}$/;
 export const signoffPublicPath = (token: string): string => `/api/public/signoff/${token}`;
 
-/** The permission the card and the routes share: the CICO section's edit. */
-export const SIGNOFF_PERM_KEY = 'work_orders/fields/cico';
+/** The bag key the sheet lives in, and the permission the row and the routes
+    share: the FIELD's own path (unset = inherits the CICO section's). Seeing
+    the field is seeing the sheet; editing it is drawing and sending one. */
+export const SIGNOFF_FIELD_KEY = 'fields.24. Sign-Off Link';
+export const SIGNOFF_PERM_KEY = fieldPermKey(SIGNOFF_FIELD_KEY);

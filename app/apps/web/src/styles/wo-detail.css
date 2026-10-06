@@ -1589,11 +1589,20 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
    parts them from whatever sits above — the New visit foot or the list. */
 .card-cico .cv-access { padding-top: 6px; border-top: 1px solid var(--row-border); }
 
-/* ── Sign-off sheet (0070) ────────────────────────────────────────────── */
-.so-panel { margin-top: 10px; padding: 10px 0 2px; border-top: 1px solid var(--row-border); display: grid; gap: 8px; }
-.so-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.so-head .so-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px; color: var(--ink); }
-.so-head .so-entity { font-size: 12px; color: var(--ink-3); }
+/* ── Sign-off sheet (0070): the Sign-Off Link row ─────────────────────── */
+.so-row { display: grid; gap: 8px; min-width: 0; flex: 1; }
+.so-loading { color: var(--ink-3); }
+.so-tile { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.so-doc { display: inline-flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; color: inherit; padding: 6px 10px 6px 6px; border: 1px solid var(--row-border); border-radius: 10px; background: var(--chip); }
+.so-doc:hover { border-color: var(--accent); }
+.so-doc-ic { position: relative; display: inline-grid; place-items: center; width: 36px; height: 40px; border-radius: 6px; background: var(--surface, var(--card-bg, #fff)); border: 1px solid var(--row-border); color: var(--danger); }
+.so-doc-ext { position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%); font-size: 8px; font-weight: 700; letter-spacing: 0.04em; padding: 0 3px; border-radius: 3px; background: var(--danger); color: #fff; }
+.so-doc-main { display: grid; gap: 1px; min-width: 0; }
+.so-doc-main b { font-size: 12.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.so-doc-sub { font-size: 11.5px; color: var(--ink-3); }
+.so-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.so-empty { font-size: 12.5px; color: var(--ink-3); }
+.so-preview { width: 100%; max-width: 640px; aspect-ratio: 8.5 / 11; border: 1px solid var(--row-border); border-radius: 8px; background: #fff; }
 .so-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .so-meta { font-size: 11.5px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .so-meta b { color: var(--ink-2); font-weight: 600; }
