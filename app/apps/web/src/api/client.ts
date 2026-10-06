@@ -7,6 +7,8 @@ import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@
 // 0073: a work order saved as a PDF.
 import type { WoPdfKind, WoPdfLayoutInput, WoPdfLayoutsResponse } from '@theone/shared';
 import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
+// Who is free to take a work order (the Assignee pickers' availability view).
+import type { AssigneeAvailabilityResponse } from '@theone/shared';
 import type {
   AssistantAskInput,
   AssistantAskResponse,
@@ -679,6 +681,13 @@ export function getActivity(wo: string): Promise<ActivityEntry[]> {
     answer before any actor is pinned. */
 export function getPrincipals(): Promise<SharedPrincipalsResponse> {
   return request<SharedPrincipalsResponse>(`/principals`);
+}
+
+/** GET /api/principals/availability?client= — who is free to take a work
+    order: everyone with ALL their active work orders split by status, flagged
+    when Admin › Users lists them on the named client. Needs work_orders view. */
+export function getAssigneeAvailability(client: string | null | undefined): Promise<AssigneeAvailabilityResponse> {
+  return request<AssigneeAvailabilityResponse>(`/principals/availability${toQuery({ client: client ?? '' })}`);
 }
 
 // ── S4 — quotes ──────────────────────────────────────────────────────────────

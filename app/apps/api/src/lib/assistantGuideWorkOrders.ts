@@ -86,7 +86,7 @@ Checklist (the **Checklist** tab): type a step in the add box, or paste several 
 
 Two tabs: **To accept** (needs \`approvals/intake\` view) and **Drafts** (needs \`intake\` view).
 
-- Accept a work order: on **To accept** click **Accept**, choose **Assign to**, click **Accept and assign** (needs \`approvals/intake\` approve). Accept stays locked while the row says **Fill before assigning: …**; the fields it needs are Received on, Due date, SLA, Address, City, State, Zip code, Store, Trade, WO description, FM, Comp and Client NTE.
+- Accept a work order: on **To accept** click **Accept**, choose **Assign to**, click **Accept and assign** (needs \`approvals/intake\` approve). **Who's available?** beside Assign to lists the people assigned to that client in Admin › Users, or **All dispatchers**, each with the number of active work orders they hold across every client; **Fewest first / Most first** flips the order, the chevron on a row shows their work orders per status, and clicking a name picks them. The same button sits beside the Assignee on **New work order**, on a draft, and on the Assignee seat of a work order. Accept stays locked while the row says **Fill before assigning: …**; the fields it needs are Received on, Due date, SLA, Address, City, State, Zip code, Store, Trade, WO description, FM, Comp and Client NTE.
 - Reject one: **Reject**, type the reason, **Reject with note**.
 - Draft a new work order: on **Drafts** click **New work order** (needs \`intake\` create), fill the fields and the **Assignee**, **Save draft** to keep it, and when it shows **Ready to submit** click **Submit & assign** (needs \`intake\` edit). That creates the work order already assigned.
 - **Discard**, then **Yes, discard**, removes a draft.`;

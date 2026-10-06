@@ -932,8 +932,10 @@ export async function getWoMaintenance(taskId: string, actor: ActingPrincipal): 
 // ordinary field edit, so the audit trail, the intake gate and the automations
 // all see it.
 
-const OPEN_SQL = `t.deleted_at IS NULL AND t.status_group::text NOT IN ('done', 'closed') AND t.cancelled_at IS NULL`;
-const ASSIGNEE_SQL = `COALESCE(NULLIF(t.fields->>'Assignee', ''), t.fields->>'Assignee Name TXT', '')`;
+// Exported for the Assignee pickers' availability view (services/principals.ts),
+// so "active" and "assigned to" mean one thing everywhere a load is counted.
+export const OPEN_SQL = `t.deleted_at IS NULL AND t.status_group::text NOT IN ('done', 'closed') AND t.cancelled_at IS NULL`;
+export const ASSIGNEE_SQL = `COALESCE(NULLIF(t.fields->>'Assignee', ''), t.fields->>'Assignee Name TXT', '')`;
 
 export async function assignmentBoard(actor: ActingPrincipal, opts: { who?: string; search?: string; trade?: string }): Promise<AssignmentBoard> {
   requirePerm(actor, MAINT_PERM.assignment, 'view', 'You cannot open the Assignment Manager');

@@ -19,6 +19,7 @@ import './styles/vendors.css';
 import './styles/portfolio.css';
 import './styles/wo-record.css';
 import './styles/maintenance.css';
+import './styles/assignee.css';
 import './styles/client-updates.css';
 import './styles/assistant.css';
 import { App } from './App';

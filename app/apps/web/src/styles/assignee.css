@@ -1,0 +1,286 @@
+/* ── Who's available? — the load view beside every Assignee picker ──────────
+   (components/wo/AssigneeAvailability.tsx). Two shells share it: the dialogs'
+   <select> + panel (.avl-select) and the inline combo on the work order,
+   which widens its pop (.combo-pop.is-wide) and draws the panel compact. */
+
+.avl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.avl.is-compact {
+  margin-top: 0;
+  padding: 4px 2px 2px;
+  border: 0;
+  background: transparent;
+  gap: 6px;
+}
+
+.avl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.avl-scope .seg-btn {
+  padding: 5px 10px;
+  font-size: 11.5px;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.avl-scope .seg-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.avl-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--ink-2);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.seg-btn.is-on .avl-count { color: inherit; }
+
+.avl-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.avl-sort:hover, .avl-sort:focus-visible { background: var(--chip); color: var(--ink); }
+
+.avl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  border-top: 1px solid var(--row-border);
+}
+
+.avl.is-compact .avl-list { max-height: 260px; }
+
+.avl-row { border-bottom: 1px solid var(--row-border); }
+.avl-row:last-child { border-bottom: 0; }
+
+.avl-line { display: flex; align-items: stretch; }
+
+.avl-pick {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 12.5px;
+  border-radius: var(--radius-sm);
+}
+
+.avl-pick:hover, .avl-pick:focus-visible { background: var(--chip); }
+.avl-pick:disabled { opacity: 0.6; cursor: default; }
+.avl-row.is-current .avl-pick { color: var(--accent-text); }
+.avl-row.is-current .avl-pick b { font-weight: 700; }
+
+.avl-who {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.avl-who b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.avl-who small { color: var(--ink-3); font-size: 11px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.avl-tag {
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.avl-load {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.avl-bar {
+  width: 56px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--chip);
+  overflow: hidden;
+}
+
+.avl.is-compact .avl-bar { width: 40px; }
+
+.avl-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+.avl-n {
+  min-width: 18px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.avl-check { color: var(--accent-text); flex: 0 0 auto; }
+
+.avl-more {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex: 0 0 auto;
+  color: var(--ink-3);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.avl-more:hover, .avl-more:focus-visible { background: var(--chip); color: var(--ink); }
+.avl-more:disabled { opacity: 0.35; cursor: default; }
+
+.avl-status {
+  list-style: none;
+  margin: 0 0 6px 36px;
+  padding: 4px 8px 4px 10px;
+  border-left: 2px solid var(--border);
+  display: grid;
+  gap: 3px;
+}
+
+.avl-status li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.avl-sname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.avl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  flex: 0 0 auto;
+}
+
+.avl-status .avl-n { font-size: 11.5px; }
+
+.avl-empty {
+  margin: 0;
+  padding: 10px 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.avl-empty.is-err { color: var(--danger); }
+.avl-empty b { color: var(--ink-2); }
+
+.avl-link, .avl-others {
+  all: unset;
+  cursor: pointer;
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.avl-link:hover, .avl-others:hover, .avl-link:focus-visible, .avl-others:focus-visible { text-decoration: underline; }
+
+.avl-others { align-self: flex-start; padding: 2px 8px; }
+
+.avl-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* The dialogs' shell. */
+.avl-select { display: flex; flex-direction: column; min-width: 0; }
+
+.avl-select-row { display: flex; gap: 8px; align-items: center; }
+.avl-select-row .fld { flex: 1; min-width: 0; }
+
+.avl-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.avl-toggle.is-on { background: var(--tab-on-bg); color: var(--tab-on-ink); }
+
+/* The inline combo widens for the panel; the tool row sits above the options. */
+.combo-pop.is-wide {
+  min-width: 360px;
+  max-width: 460px;
+  max-height: 400px;
+}
+
+.combo-tool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  margin-bottom: 2px;
+  border: 0;
+  border-bottom: 1px solid var(--row-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.combo-tool:hover, .combo-tool:focus-visible { background: var(--chip); }
+
+@media (max-width: 560px) {
+  .avl-select-row { flex-wrap: wrap; }
+  .combo-pop.is-wide { min-width: 0; max-width: calc(100vw - 32px); }
+}

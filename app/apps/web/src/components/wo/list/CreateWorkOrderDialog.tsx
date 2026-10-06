@@ -67,6 +67,7 @@ import { useAuth } from '../../../auth/AuthProvider';
 import { prepareFile } from '../../../lib/upload';
 import { Icon } from '../../Icon';
 import { AssetStatusChip, ConditionChip, SitePicker, WarrantyChip } from '../../portfolio/PortfolioParts';
+import { AssigneeSelect } from '../AssigneeAvailability';
 import { useWoCatalogue } from '../fieldEdit';
 
 interface CreateWorkOrderDialogProps {
@@ -297,13 +298,16 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
 
     if (f.key === ASSIGNEE_KEY) {
       const humans = (people.data?.items ?? []).filter((p) => p.kind === 'human');
+      // The name is still picked from the list; "Who's available?" beside it
+      // opens the load view — the people on this work order's client, or every
+      // dispatcher, each with ALL their active work orders.
       return (
-        <select id={domId} className="fld" value={val} onChange={(e) => set(f.key, e.target.value)} disabled={busy}>
+        <AssigneeSelect id={domId} value={val} onChange={(v) => set(f.key, v)} disabled={busy} client={values['Client'] || null}>
           <option value="">Nobody yet</option>
           {humans.map((p) => (
             <option key={p.id} value={p.name}>{p.name}</option>
           ))}
-        </select>
+        </AssigneeSelect>
       );
     }
 

@@ -45,6 +45,7 @@ import {
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
 import { IncomingTabs } from '../components/IncomingTabs';
+import { AssigneeSelect } from '../components/wo/AssigneeAvailability';
 import { useWoCatalogue } from '../components/wo/fieldEdit';
 
 const DASH = '—';
@@ -490,18 +491,21 @@ function DraftForm({ id }: { id: string }) {
               <label className="lbl" htmlFor="intake-assignee">
                 Assignee <span className="req" aria-hidden="true">*</span>
               </label>
-              <select
+              {/* "Who's available?" opens the load view beside the list: the
+                  people on this draft's client, or every dispatcher, each with
+                  all their active work orders. */}
+              <AssigneeSelect
                 id="intake-assignee"
-                className="fld"
                 value={v.assignee}
-                onChange={(e) => set('assignee', e.target.value)}
+                onChange={(name) => set('assignee', name)}
                 disabled={busy}
+                client={v['Client'] || null}
               >
                 <option value="">Pick the dispatcher it goes to</option>
                 {assigneeOptions.map((p) => (
                   <option key={p.id} value={p.name}>{p.name}</option>
                 ))}
-              </select>
+              </AssigneeSelect>
             </div>
           </div>
 

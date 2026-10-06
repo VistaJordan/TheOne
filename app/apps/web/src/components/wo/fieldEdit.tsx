@@ -14,8 +14,18 @@ import {
   type WorkOrderDetailV2,
 } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
-import { DASH, bool, fieldValueToString, money, num, shortDate, shortDateTime } from '../../lib/fields';
+import { DASH, FIELD, bool, fieldValueToString, money, num, shortDate, shortDateTime } from '../../lib/fields';
 import { Icon } from '../Icon';
+import { AvailabilityPanel } from './AssigneeAvailability';
+
+/** The seat whose picker also offers "Who's available?" (AssigneeAvailability). */
+const ASSIGNEE_FIELD_KEY = `fields.${FIELD.assignee}`;
+
+/** What an editor may need to know about the work order it edits on — today
+    only the client, for the Assignee picker's "for this client" list. */
+export interface FieldEditContext {
+  client: string | null;
+}
 
 const isUrlValue = (s: string) => /^https?:\/\//i.test(s);
 
@@ -188,6 +198,7 @@ export function InlineField({ wo, fieldKey, children, label, className }: Inline
           onPick={(v) => save.mutate({ key: fieldKey, value: v === '' ? null : v })}
           onCancel={() => { setEditing(false); save.clearError(); }}
           saving={save.isPending}
+          context={{ client: wo.client }}
         />
         {save.error && <span className="ife-err" role="alert">{save.error}</span>}
       </span>
@@ -219,6 +230,7 @@ export function FieldEditor({
   onPick,
   onCancel,
   saving,
+  context,
 }: {
   field: WoFieldDescriptor;
   draft: string;
@@ -228,6 +240,8 @@ export function FieldEditor({
   onPick: (value: string) => void;
   onCancel: () => void;
   saving: boolean;
+  /** The work order's client, so the Assignee seat can offer "Who's available?". */
+  context?: FieldEditContext;
 }) {
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && field.subtype !== 'long_text') {
@@ -246,6 +260,7 @@ export function FieldEditor({
         saving={saving}
         onPick={onPick}
         onCancel={onCancel}
+        availability={context && field.key === ASSIGNEE_FIELD_KEY ? { client: context.client } : undefined}
       />
     );
   } else if (field.subtype === 'long_text') {
@@ -301,15 +316,20 @@ export function ComboSelect({
   saving,
   onPick,
   onCancel,
+  availability,
 }: {
   options: { value: string; label: string }[];
   current: string;
   saving: boolean;
   onPick: (value: string) => void;
   onCancel: () => void;
+  /** Set on the Assignee seat: the pop offers "Who's available?", which swaps
+      the option list for the load view (AssigneeAvailability) until Back. */
+  availability?: { client: string | null };
 }) {
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
+  const [showLoad, setShowLoad] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
   const popRef = useRef<HTMLSpanElement>(null);
 
@@ -371,13 +391,22 @@ export function ComboSelect({
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={onKeyDown}
       />
-      <span className="combo-pop" role="listbox" ref={popRef}>
-        {current !== '' && needle === '' && (
+      <span className={`combo-pop${showLoad ? ' is-wide' : ''}`} role={showLoad ? undefined : 'listbox'} ref={popRef}>
+        {availability && (
+          <button type="button" className="combo-tool" disabled={saving} onClick={() => setShowLoad((v) => !v)}>
+            <Icon name={showLoad ? 'arrow-l' : 'user'} size={12} />
+            {showLoad ? 'Back to search' : 'Who’s available?'}
+          </button>
+        )}
+        {availability && showLoad && (
+          <AvailabilityPanel compact client={availability.client} current={current} disabled={saving} onPick={onPick} />
+        )}
+        {!showLoad && current !== '' && needle === '' && (
           <button type="button" className="combo-opt is-clear" disabled={saving} onClick={() => onPick('')}>
             — clear —
           </button>
         )}
-        {shown.map((o, i) => (
+        {!showLoad && shown.map((o, i) => (
           <button
             type="button"
             role="option"
@@ -392,7 +421,7 @@ export function ComboSelect({
             {o.value === current && <span className="combo-check">✓</span>}
           </button>
         ))}
-        {shown.length === 0 && <span className="combo-none">No match for “{q}”</span>}
+        {!showLoad && shown.length === 0 && <span className="combo-none">No match for “{q}”</span>}
       </span>
     </span>
   );

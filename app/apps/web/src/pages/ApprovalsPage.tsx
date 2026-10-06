@@ -52,6 +52,7 @@ import {
   describeEcotrakRefusal,
   describeIntakeGate,
   ecotrakTransitionRefused,
+  isDispatcherRole,
   type AcceptanceDetail,
   type ApprovalSectionKey,
 } from '@theone/shared';
@@ -63,6 +64,7 @@ import type {
   QuoteListItem,
   StatusChangeDetail,
 } from '../api/client';
+import { AssigneeSelect } from '../components/wo/AssigneeAvailability';
 import {
   ApiRequestError,
   acknowledgeApprovalTask,
@@ -852,6 +854,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
             facts={facts(pending.row)}
             idKey={pending.row.key}
             woNumber={pending.row.wo_number}
+            client={pending.row.client}
             busy={busy}
             onConfirm={(assignee, text) =>
               decide.mutate({ ...pending, text: text.trim() || null, assignee })
@@ -1388,19 +1391,18 @@ function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayme
   }
 }
 
-/** The dispatcher tiers (role codes) — the people rule 7.1.4 hands a new
-    work order to. Ops Coordinator dispatches too (0031 leaves it direct). */
-const DISPATCHER_ROLES = new Set(['om', 'senior_om', 'om_probation', 'ops_coord']);
-
 // ── Accept a new work order (0036, rule 7.1.3) ───────────────────────────────
 // Accepting is choosing who runs it: the assignee is picked from the people
 // on file (the value lands in the Assignee seat, which the 0032 scope matches
-// by name), the note is optional. The auto-assign suggester is a later phase.
+// by name), the note is optional. "Who's available?" beside the picker opens
+// the load view — the people on the work order's client, or every dispatcher,
+// each with all their active work orders (components/wo/AssigneeAvailability).
 
 function AcceptDialog({
   facts,
   idKey,
   woNumber,
+  client,
   busy,
   onConfirm,
   onCancel,
@@ -1408,6 +1410,8 @@ function AcceptDialog({
   facts: { k: string; v: string }[];
   idKey: string;
   woNumber: string;
+  /** The work order's client — the availability view's "for this client" list. */
+  client: string | null;
   busy: boolean;
   onConfirm: (assignee: string, note: string) => void;
   onCancel: () => void;
@@ -1416,10 +1420,11 @@ function AcceptDialog({
   const [note, setNote] = useState('');
   const people = useQuery({ queryKey: ['principals'], queryFn: getPrincipals, retry: 0 });
   // Rule 7.1.4 hands the work order to a DISPATCHER, so the dispatcher tiers
-  // come first; everyone else stays available below (a manager may keep one).
+  // (DISPATCHER_ROLE_CODES in shared) come first; everyone else stays
+  // available below (a manager may keep one).
   const humans = (people.data?.items ?? []).filter((p) => p.kind === 'human');
-  const dispatchers = humans.filter((p) => p.role !== null && DISPATCHER_ROLES.has(p.role)).map((p) => p.name);
-  const others = humans.filter((p) => p.role === null || !DISPATCHER_ROLES.has(p.role)).map((p) => p.name);
+  const dispatchers = humans.filter((p) => isDispatcherRole(p.role)).map((p) => p.name);
+  const others = humans.filter((p) => !isDispatcherRole(p.role)).map((p) => p.name);
   const ok = assignee.trim().length > 0;
   const whoId = `apq-assignee-${idKey}`;
   const noteId = `apq-text-${idKey}`;
@@ -1453,13 +1458,13 @@ function AcceptDialog({
               Assign to
               <span className="req" aria-hidden="true"> *</span>
             </label>
-            <select
-              className="fld"
+            <AssigneeSelect
               id={whoId}
               value={assignee}
               autoFocus
               disabled={people.isLoading}
-              onChange={(e) => setAssignee(e.target.value)}
+              client={client}
+              onChange={setAssignee}
             >
               <option value="">{people.isLoading ? 'Loading people…' : 'Pick a dispatcher'}</option>
               {dispatchers.length > 0 && (
@@ -1476,7 +1481,7 @@ function AcceptDialog({
                   ))}
                 </optgroup>
               )}
-            </select>
+            </AssigneeSelect>
             <span className="hint">
               {people.isError
                 ? 'The people list could not be loaded — try again.'
