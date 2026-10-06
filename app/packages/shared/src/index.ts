@@ -1728,3 +1728,5 @@ export * from './purchasing';
 export * from './assistant';
 // Cost follows accepted payment requests; Total Invoiced follows the quote.
 export * from './moneyRules';
+// 0070: sign-off sheets — branded blank per entity, shared by text, signed copy filed.
+export * from './signoff';

@@ -259,6 +259,62 @@ export async function addAttachment(
   return mapRow(res.rows[0]);
 }
 
+/**
+ * 0070 · A file a MACHINE files on a work order — the signed sign-off sheet
+ * a technician texted back through Quo. Same path, same quarantine (rule
+ * 1.3.1: pending until a reviewer approves), but no permission check — the
+ * actor is a service principal and the caller has already decided the file
+ * belongs here. `kind` is pre-filled so the reviewer only has to say yes.
+ * `storageKey` set = the bytes are already in the store under that key
+ * (a held reply being claimed); otherwise `bytes` are written now.
+ */
+export async function addSystemAttachment(
+  taskId: string,
+  woNumber: string,
+  input: { bytes?: Buffer; storageKey?: string; byteSize?: number; fileName: string; contentType: string; kind: AttachmentKind; actorId: string; via: string },
+): Promise<Attachment> {
+  const blobToken = requireStorage();
+  const contentType = input.contentType.toLowerCase().split(';')[0].trim();
+  if (!ATTACHMENT_ALLOWED_TYPES.includes(contentType)) {
+    throw badRequest(`Files of type "${contentType || 'unknown'}" cannot be filed here`);
+  }
+  const fileName = safeName(input.fileName);
+  let storageKey = input.storageKey ?? null;
+  let byteSize: number;
+  if (storageKey) {
+    byteSize = input.byteSize ?? 0;
+  } else {
+    const bytes = input.bytes ?? Buffer.alloc(0);
+    if (bytes.length === 0) throw badRequest('That file is empty');
+    if (bytes.length > ATTACHMENT_MAX_BYTES) throw badRequest('That file is too large to file');
+    const pathname = `work-orders/${safeName(woNumber)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${fileName}`;
+    const blob = await put(pathname, bytes, { access: 'private', token: blobToken, contentType, addRandomSuffix: false });
+    storageKey = blob.pathname;
+    byteSize = bytes.length;
+  }
+  const res = await query<Row>(
+    `WITH ins AS (
+       INSERT INTO attachment
+         (task_id, file_name, storage_key, content_type, byte_size, client_visible, uploaded_by, kind)
+       VALUES ($1, $2, $3, $4, $5, false, $6, $7)
+       RETURNING id
+     )
+     ${SELECT} WHERE a.id = (SELECT id FROM ins)`,
+    [taskId, fileName, storageKey, contentType, byteSize, input.actorId, input.kind],
+  );
+  await query(
+    `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, before, after)
+     VALUES ($1, 'task', $2, 'attachment_added', $3, NULL, $4::jsonb)`,
+    [
+      input.actorId,
+      taskId,
+      `attachment:${res.rows[0].id}`,
+      JSON.stringify({ file_name: fileName, content_type: contentType, byte_size: byteSize, client_visible: false, visit_id: null, review_status: 'pending', kind: input.kind, via: input.via }),
+    ],
+  );
+  return mapRow(res.rows[0]);
+}
+
 /** The bytes, for the API to stream. Throws 404 for a row with no file. */
 export async function readAttachment(
   taskId: string,

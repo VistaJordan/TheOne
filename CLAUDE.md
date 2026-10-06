@@ -790,6 +790,49 @@ principal, or the person who pasted), `quote_ai_drafted|redrafted|submitted|
 discarded`. Next: past quotes from the ClickUp import as pricing references
 (vector search) go into `buildUserMessage`.
 
+**Sign-off sheets** (migration 0070, `services/signoff.ts`,
+`lib/signoffPdf.ts`, `lib/signoffAssets.ts`, `lib/quoApi.ts`,
+`routes/signoff.ts`, `packages/shared/src/signoff.ts`,
+`components/wo/SignoffPanel.tsx` at the foot of the CICO card). What the
+Make + Paperform automation did for ClickUp: a **one-page blank sheet in the
+billing entity's branding** (`21. Comp` → layout `sfm | tpm | af | rf | eds |
+bkr | bkr_emcor`, BKR's EMCOR variant carries a Closeout Number line;
+`signoffLayoutFor`) with the client's WO number (`ext_name`, else
+`wo_number`) and `17. Address` printed, drawn by **pdf-lib** (US Letter,
+standard fonts, `safeText` folds non-Latin-1) with the header / footer /
+logo images **inlined as base64** in `signoffAssets.ts` (extracted from the
+sample PDFs; regenerate, never hand-edit). It is **generated automatically
+when a technician lands on the work order** (`ensureSignoff` from
+`hireTechnician` and `createVisit` with a tech; never throws) and by the
+Generate / New sheet button; the newest un-superseded `wo_signoff` row is
+the sheet, stored in the Blob store, and `stale` flags a number / address
+change. **Share with tech** picks a technician (hired vendors' phones + visit
+techs, deduplicated by E.164, or another number) and texts the sheet's link:
+through **Quo's API** (`POST {QUO_API_BASE}/messages`, bare `Authorization`
+key, `QUO_FROM_NUMBER`) when `QUO_API_KEY` is set, else the browser opens
+`sms:+1…?body=…` so the Quo desktop app sends it; both record a
+`wo_signoff_share`. The link is `GET /api/public/signoff/<32-char token>`
+(allowlisted by pattern in `authGuard`; the token lives in clear in
+`wo_signoff.token` because it only names a blank sheet; a superseded
+sheet's link answers 404). **The signed copy comes back as a text with a
+file**: `message.received` on the same Quo webhook → `handleQuoEvent` →
+`onInboundMessage` (both payload generations read) matches the sender's
+number to the sheets shared with it in the last 45 days; exactly one open
+sheet → `fileSignedCopy`: `addSystemAttachment` (kind `signoff`, pending
+review per 1.3.1, uploaded by the 'Quo' service principal), `24. Sign-Off
+Link` set to the attachment's API URL (`via: 'signoff'`, automations
+dispatched), `wo_signoff.signed_at`; several open sheets → the file is held
+in `wo_signoff_reply` with its candidates and each candidate's CICO card
+shows a strip with **Yes, file it here / Not this one** (`claim` /
+`dismiss`). A text with no file, or from a number with no open sheet, is
+acknowledged and dropped. Permission: `work_orders/fields/cico` view / edit
+(+ `work_orders` edit). Audit on the task: `signoff_generated`,
+`signoff_shared`, `signoff_received`, `signoff_reply_held|dismissed`, plus
+the ordinary `attachment_added` and `field_updated`. Self-check:
+`tests/signoff.test.ts` renders every layout and asserts ONE page. Needs on
+Vercel: `BLOB_READ_WRITE_TOKEN` (set), `QUO_API_KEY` + `QUO_FROM_NUMBER`
+(not yet), and `message.received` added to the Quo webhook.
+
 **Vendors, technicians and the technician map** (migrations 0056 + 0057,
 `services/vendors.ts`, `services/vendorMap.ts`, `services/geo.ts`,
 `routes/vendors.ts`, `packages/shared/src/vendors.ts`, `pages/VendorsPage.tsx`,

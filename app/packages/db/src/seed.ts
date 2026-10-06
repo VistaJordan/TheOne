@@ -746,6 +746,7 @@ async function main() {
   await exec(`
     TRUNCATE TABLE
       wo_visit, fm_cico_method,
+      wo_signoff_reply, wo_signoff_share, wo_signoff,
       quote_line, quote_section, quote, payment_request,
       quo_message, quo_call, quo_job_segment, quo_conversation,
       quote_ai_draft, wo_call,

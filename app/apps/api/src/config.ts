@@ -86,6 +86,15 @@ export interface Config {
       event's signature with it. Unset = 403; calls can still be placed and
       a transcript pasted by hand. Never logged. */
   quoWebhookSecret: string | null;
+  /** 0070: sending texts through Quo (sign-off sheets). QUO_API_KEY is an
+      API key from Quo › Settings › API (workspace owner / admin), sent as the
+      bare `Authorization` header; QUO_FROM_NUMBER the Quo line that sends
+      (E.164 or its 'PN…' id); QUO_API_BASE defaults to Quo's v1 host. Unset
+      = Share opens the Quo app with the text pre-filled instead. Never
+      logged. */
+  quoApiKey: string | null;
+  quoFromNumber: string | null;
+  quoApiBase: string;
   /** 0054: the Claude API key that drafts a quote from a call transcript.
       Unset = the draft page says AI drafting is not configured. Never logged. */
   anthropicApiKey: string | null;
@@ -232,6 +241,9 @@ function build(): Config {
     escalationWebhookSecret: str('ESCALATION_WEBHOOK_SECRET') ?? null,
     cronSecret: str('CRON_SECRET') ?? null,
     quoWebhookSecret: str('QUO_WEBHOOK_SECRET') ?? null,
+    quoApiKey: str('QUO_API_KEY') ?? null,
+    quoFromNumber: str('QUO_FROM_NUMBER') ?? null,
+    quoApiBase: (str('QUO_API_BASE') ?? 'https://api.quo.com/v1').replace(/\/+$/, ''),
     anthropicApiKey: str('ANTHROPIC_API_KEY') ?? null,
     quoteAiModel: str('QUOTE_AI_MODEL') ?? 'claude-opus-5',
     assistant: buildAssistant(),

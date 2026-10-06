@@ -2,6 +2,8 @@
 // TYPE-ONLY imports from @theone/shared — no runtime value ever crosses this
 // boundary (SPRINT1-SPEC §8 Card C). Web never imports @theone/db.
 import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
+// 0070: sign-off sheets.
+import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
 import type {
   AssistantAskInput,
   AssistantAskResponse,
@@ -2002,6 +2004,38 @@ export function deleteAttachment(woId: string, attachmentId: string): Promise<vo
     the file is never served from a storage URL. */
 export function attachmentUrl(woId: string, attachmentId: string): string {
   return `/api/work-orders/${woId}/attachments/${attachmentId}`;
+}
+
+// ── Sign-off sheets (0070) ───────────────────────────────────────────────────
+
+export function getWorkOrderSignoff(idOrNumber: string): Promise<WoSignoffResponse> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/signoff`);
+}
+
+/** Draw a (new) blank sheet in the entity's branding. */
+export function generateWorkOrderSignoff(idOrNumber: string): Promise<WoSignoffResponse> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/signoff`, { method: 'POST' });
+}
+
+/** The blank PDF, for the dispatcher to open or download. */
+export function signoffFileUrl(idOrNumber: string): string {
+  return `/api/work-orders/${encodeURIComponent(idOrNumber)}/signoff/file`;
+}
+
+/** Text the sheet's link to a technician through Quo. */
+export function shareWorkOrderSignoff(idOrNumber: string, input: SignoffShareInput): Promise<SignoffShareResult> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/signoff/share`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function claimSignoffReply(idOrNumber: string, replyId: string): Promise<WoSignoffResponse> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/signoff/replies/${replyId}/claim`, { method: 'POST' });
+}
+
+export function dismissSignoffReply(idOrNumber: string, replyId: string): Promise<WoSignoffResponse> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/signoff/replies/${replyId}/dismiss`, { method: 'POST' });
 }
 
 // ── Saved views ──────────────────────────────────────────────────────────────

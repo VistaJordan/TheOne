@@ -54,6 +54,7 @@ import { VisitLocation } from './record/RecordParts';
 import { InlineField, useWoCatalogue } from './fieldEdit';
 import { FieldHistory, HistoryToggle, useCanViewHistory } from './FieldHistory';
 import { TechPicker } from './tech/TechPicker';
+import { SignoffPanel } from './SignoffPanel';
 
 const CICO_PERM_KEY = fieldSectionPermKey(CICO_SECTION_SLUG);
 const HIDDEN = new Set(VISIT_HIDDEN_KEYS.map((k) => `fields.${k}`));
@@ -243,6 +244,10 @@ export function CicoCard({ wo, embedded }: CicoCardProps) {
           </dl>
         </>
       )}
+
+      {/* 0070: the sign-off sheet — generated per entity, texted to the
+          technician through Quo, the signed copy filed back here. */}
+      {canSeeLog && <SignoffPanel wo={wo} />}
 
       {!canSeeLog && accessFields.length === 0 && (
         <div className="empty-flat">Check-in / check-out is not available to your role.</div>

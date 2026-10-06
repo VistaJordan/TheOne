@@ -46,6 +46,10 @@ const PUBLIC_PATHS = new Set([
 // hash) in services/vendorPortal, which also pins every read to that vendor.
 const PUBLIC_PATTERNS: RegExp[] = [
   /^\/api\/public\/client-updates\/[A-Za-z0-9_-]{32}(\/csv)?$/,
+  // 0070: a technician's download of a blank sign-off sheet. Exactly a
+  // 32-character token; it names one generated PDF (a WO number and an
+  // address on a branded page) and nothing else — services/signoff.
+  /^\/api\/public\/signoff\/[A-Za-z0-9_-]{32}$/,
   /^\/api\/public\/vendor-portal\/[A-Za-z0-9_-]{32}(\/onboarding|\/offers\/[0-9a-fA-F-]{36}|\/jobs\/[0-9a-fA-F-]{36}\/(eta|notes))?$/,
 ];
 

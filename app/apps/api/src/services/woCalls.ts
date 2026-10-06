@@ -190,7 +190,9 @@ export interface QuoEvent {
 
 export type QuoEventOutcome =
   | { handled: false; reason: string }
-  | { handled: true; call_id: string; task_id: string; change: string };
+  | { handled: true; call_id: string; task_id: string; change: string }
+  // 0070: a text with a file — a signed sign-off sheet coming back.
+  | { handled: true; signoff: 'filed' | 'held'; task_ids: string[]; files: number };
 
 export async function handleQuoEvent(event: QuoEvent): Promise<QuoEventOutcome> {
   const obj = event.data?.object ?? {};
@@ -201,6 +203,11 @@ export async function handleQuoEvent(event: QuoEvent): Promise<QuoEventOutcome> 
       return onTranscript(obj);
     case 'call.summary.completed':
       return onSummary(obj);
+    case 'message.received': {
+      // 0070: the signed sign-off sheet a technician texts back.
+      const { onInboundMessage } = await import('./signoff.js');
+      return onInboundMessage(event.data as Parameters<typeof onInboundMessage>[0]);
+    }
     default:
       return { handled: false, reason: `ignored event type ${event.type ?? '(none)'}` };
   }
