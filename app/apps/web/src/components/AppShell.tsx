@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, adminPermKey } from '@theone/shared';
@@ -161,6 +161,9 @@ interface AppShellProps {
 
 /** Black-topbar + themed-sidebar chrome (SPRINT1-SPEC §6). "Work Orders" stays
     the active item on every WO route (detail, quote, payment request). */
+/** The sidebar nav's scroll offset, kept across the shells each page mounts. */
+let sideNavScrollTop = 0;
+
 export function AppShell({
   children,
   total,
@@ -175,6 +178,20 @@ export function AppShell({
   const { pathname } = useLocation();
   // The canvas scroller, handed to the O-knob overlay that replaces its bar.
   const canvasRef = useRef<HTMLElement>(null);
+  // Every page mounts its own AppShell, so a route change rebuilds the
+  // sidebar — and a freshly built nav starts scrolled to the top, which is
+  // how clicking an Admin sub-page used to fling the list upward (Elise,
+  // 2026-10-06). The nav's offset lives outside React for the session and is
+  // put back before paint, so the list stays exactly where it was.
+  const navRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    el.scrollTop = sideNavScrollTop;
+    const remember = () => { sideNavScrollTop = el.scrollTop; };
+    el.addEventListener('scroll', remember, { passive: true });
+    return () => el.removeEventListener('scroll', remember);
+  }, []);
   // A group opens itself when the route you are on lives inside it, so a deep
   // link never lands you next to a nav that looks unrelated to the page.
   const [openGroups, setOpenGroups] = useState<string[]>(() =>
@@ -356,7 +373,7 @@ export function AppShell({
               The app-wide O-knob manager (lib/oknob.ts) would otherwise
               mount a rail here whenever the nav overflows; native bars are
               hidden app-wide, so the nav still scrolls by wheel, bar-less. */}
-          <nav className="side-nav" id="primary-nav" aria-label="Primary" data-oknob-own="">
+          <nav className="side-nav" id="primary-nav" aria-label="Primary" data-oknob-own="" ref={navRef}>
             {visibleNav.map((item) => {
               const isActive = item.label === active;
               const count =
