@@ -1,8 +1,8 @@
 // 0070 · The sign-off sheet, at the foot of the CICO card.
 //
 // What the Make + Paperform automation used to do, in the work order itself:
-//   · the blank sheet in the billing entity's branding appears as soon as a
-//     technician is attached (hired from the map, or named on a visit); the
+//   · the blank sheet in the billing entity's branding appears as soon as the
+//     work order is assigned to a dispatcher (the Assignee field); the
 //     Generate button covers the case where Comp was set afterwards, and
 //     "New sheet" redraws it once the number or the address changed;
 //   · Download opens the blank PDF; Share texts its link to a technician

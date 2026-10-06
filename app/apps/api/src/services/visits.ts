@@ -62,7 +62,6 @@ import { CREATED_AT_SQL } from './activity.js';
 import { requirePerm } from './permissions.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
-import { ensureSignoff } from './signoff.js';
 import { addWorkingHours } from '../lib/businessDays.js';
 import { holidayDays } from './holidays.js';
 
@@ -563,8 +562,6 @@ export async function createVisit(
   // Rules on the mirrored fields ("when Check-in/out Status changes to …")
   // fire after the commit, exactly as a hand edit of the old field did.
   await dispatchAutomations({ taskId, kind: 'changed', changes: mirror });
-  // 0070: a visit with a technician on it means a sign-off sheet is wanted.
-  if (c.tech_phone || c.tech_name) await ensureSignoff(taskId, actor.id);
   // Rule 2.2.2: a visit logged straight as checked in is a check-in.
   const status_move = status === 'checked_in' ? await moveOnSite(taskId, c.visit_type!, actor.id) : null;
   return { item: created!, items, status_move };

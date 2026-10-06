@@ -78,7 +78,6 @@ import type { ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
 import { geoLookup, workOrderPlace } from './geo.js';
 import { requirePerm } from './permissions.js';
-import { ensureSignoff } from './signoff.js';
 import { getSuggestSettings } from './vendorSuggestSettings.js';
 import {
   insertVendor,
@@ -474,8 +473,6 @@ export async function hireTechnician(taskId: string, vendorId: string, note: str
   );
   await linkDispatcher(vendorId, actor.id, 'hire');
   await logTask(actor.id, taskId, 'tech_hired', { vendor_id: vendorId, name: v.name, phone: v.phone, kind: v.kind });
-  // 0070: a technician on the work order means a sign-off sheet is wanted.
-  await ensureSignoff(taskId, actor.id);
 
   const expiries = (await loadExpiries([vendorId])).get(vendorId) ?? [];
   const compliance = settings.hire_warn_compliance ? complianceWarning(v, expiries, today()) : null;

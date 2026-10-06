@@ -802,9 +802,11 @@ bkr | bkr_emcor`, BKR's EMCOR variant carries a Closeout Number line;
 standard fonts, `safeText` folds non-Latin-1) with the header / footer /
 logo images **inlined as base64** in `signoffAssets.ts` (extracted from the
 sample PDFs; regenerate, never hand-edit). It is **generated automatically
-when a technician lands on the work order** (`ensureSignoff` from
-`hireTechnician` and `createVisit` with a tech; never throws) and by the
-Generate / New sheet button; the newest un-superseded `wo_signoff` row is
+when the work order is assigned to a dispatcher** — `Assignee` set on any
+write path: `dispatchAutomations` (post-commit, every path reports there)
+calls `ensureSignoff` on a `created` event with an Assignee or a `changed`
+event on `fields.Assignee`; never throws — and by the Generate / New sheet
+button; the newest un-superseded `wo_signoff` row is
 the sheet, stored in the Blob store, and `stale` flags a number / address
 change. **Share with tech** picks a technician (hired vendors' phones + visit
 techs, deduplicated by E.164, or another number) and texts the sheet's link:

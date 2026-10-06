@@ -687,6 +687,22 @@ async function setPriority(
  * Entry point: every write path calls this AFTER its transaction commits.
  * Never throws — a broken rule must not fail the user's request.
  */
+const ASSIGNEE_FIELD = 'fields.Assignee';
+
+async function signoffOnAssignment(event: AutomationEvent): Promise<void> {
+  let assigned = false;
+  if (event.kind === 'created') {
+    const t = await query<{ assignee: string | null }>(`SELECT fields->>'Assignee' AS assignee FROM task WHERE id = $1`, [event.taskId]);
+    assigned = Boolean((t.rows[0]?.assignee ?? '').trim());
+  } else {
+    assigned = (event.changes ?? []).some((c) => c.field === ASSIGNEE_FIELD && String(c.after ?? '').trim() !== '');
+  }
+  if (!assigned) return;
+  // Dynamic: services/signoff imports this module for dispatchAutomations.
+  const { ensureSignoff } = await import('./signoff.js');
+  await ensureSignoff(event.taskId, await automationActorId());
+}
+
 export async function dispatchAutomations(event: AutomationEvent, ctx?: AutoCtx): Promise<void> {
   const c: AutoCtx = ctx ?? { depth: 0, fired: new Set() };
   if (c.depth >= MAX_DEPTH) return;
@@ -699,6 +715,10 @@ export async function dispatchAutomations(event: AutomationEvent, ctx?: AutoCtx)
     if (event.kind === 'changed') {
       await reconcileApprovalTasks(event.taskId, await automationActorId());
     }
+    // 0070: the sign-off sheet is drawn the moment the work order is assigned
+    // to a dispatcher — whichever path set `Assignee` (field edit, bulk,
+    // intake, acceptance, a rule). Lives here for the same reason.
+    await signoffOnAssignment(event);
 
     const rules = await query<AutomationRow>(
       `SELECT ${AUTOMATION_COLS} FROM automation

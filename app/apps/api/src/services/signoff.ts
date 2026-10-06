@@ -1,8 +1,9 @@
 // 0070 · Sign-off sheets.
 //
-// The blank sheet is generated the moment a technician is attached to the
-// work order (a hire from the map, a visit with a technician) and kept as the
-// newest `wo_signoff` row; the '21. Comp' entity picks the drawing, the
+// The blank sheet is generated the moment the work order is assigned to a
+// dispatcher (`Assignee` set, on any write path — services/automations.ts
+// calls ensureSignoff after every commit) and kept as the newest
+// `wo_signoff` row; the '21. Comp' entity picks the drawing, the
 // client's work order number and the service address are printed. Share
 // texts the technician a download link through Quo — by API when
 // QUO_API_KEY / QUO_FROM_NUMBER are set, otherwise by opening the Quo app on
@@ -257,7 +258,7 @@ async function logSignoff(q: Queryable, actorId: string, taskId: string, action:
 }
 
 /** Draw, store and record a fresh blank sheet; the previous one is superseded. */
-async function generate(taskId: string, actorId: string, via: 'button' | 'technician'): Promise<SheetRow> {
+async function generate(taskId: string, actorId: string, via: 'button' | 'assignment'): Promise<SheetRow> {
   const token = blobToken();
   const f = await facts({ query }, taskId);
   const layout = layoutOf(f);
@@ -302,10 +303,10 @@ export async function generateSignoff(taskId: string, actor: ActingPrincipal): P
 }
 
 /**
- * The hook: called when a technician lands on a work order. Makes the sheet
- * when there is none yet and the pieces are in place (Comp set, storage
- * connected); never throws — a hire must not fail because the sheet could
- * not be drawn. The actor is whoever attached the technician.
+ * The hook: called after any commit that assigned the work order to a
+ * dispatcher. Makes the sheet when there is none yet and the pieces are in
+ * place (Comp set, storage connected); never throws — an assignment must not
+ * fail because the sheet could not be drawn.
  */
 export async function ensureSignoff(taskId: string, actorId: string): Promise<void> {
   try {
@@ -313,7 +314,7 @@ export async function ensureSignoff(taskId: string, actorId: string): Promise<vo
     if (await currentSheet({ query }, taskId)) return;
     const f = await facts({ query }, taskId);
     if (!layoutOf(f)) return;
-    await generate(taskId, actorId, 'technician');
+    await generate(taskId, actorId, 'assignment');
   } catch (err) {
     console.warn(`[signoff] could not generate the sheet for ${taskId}: ${(err as Error).message}`);
   }
