@@ -339,6 +339,8 @@ export const ACTION_LABELS: Record<string, string> = {
   portfolio_list_value_added: 'Site / asset list value added',
   portfolio_list_value_updated: 'Site / asset list value changed',
   user_site_access_changed: 'Site access changed',
+  // 0072 · the clients assigned to a person (the sales team's book).
+  user_clients_changed: 'Clients assigned',
   // 0063 · the create form's templates and sub-categories.
   wo_template_saved: 'Create-form template saved',
   wo_template_deleted: 'Create-form template deleted',

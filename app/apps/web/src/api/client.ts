@@ -1176,6 +1176,9 @@ export interface SessionUser {
   /** The permission tree (0015): the role's grants + this person's overrides.
       Resolved in the browser with the same `permAllows` the server uses. */
   perms?: PermissionSet;
+  /** 0072 · the clients assigned to them in Admin › Users, by name. Their
+      work orders count as theirs when "Which work orders" is Only theirs. */
+  clients?: string[];
 }
 
 export interface MeResponse {
@@ -1226,13 +1229,21 @@ export function auditLogExportUrl(params: AuditLogFilters): string {
   return `/api/admin/audit/export${toQuery(params)}`;
 }
 
-export interface AdminUserItem extends SessionUser {
+export interface AdminUserItem extends Omit<SessionUser, 'clients'> {
   role_label: string | null;
   initials: string | null;
   last_login_at: string | null;
   has_signed_in: boolean;
   /** A super admin has adjusted this person beyond their role (0015). */
   has_overrides: boolean;
+  /** 0072 · the clients assigned to this person (`principal_client`). */
+  clients: UserClient[];
+}
+
+/** 0072 · one client on a person's list. */
+export interface UserClient {
+  id: string;
+  name: string;
 }
 
 export interface RoleRecord {
@@ -1332,6 +1343,24 @@ export function setUserPermissions(id: string, overrides: PermMap): Promise<User
   return request(`/admin/users/${id}/permissions`, {
     method: 'PUT',
     body: JSON.stringify({ overrides }),
+  });
+}
+
+/** 0072 · the clients assigned to one person. Admin › Users edit is enough:
+    it is an assignment, not a permission override. */
+export interface UserClientsResponse {
+  user: AdminUserItem;
+  clients: UserClient[];
+}
+
+export function getUserClients(id: string): Promise<UserClientsResponse> {
+  return request(`/admin/users/${id}/clients`);
+}
+
+export function setUserClients(id: string, clientIds: string[]): Promise<UserClientsResponse> {
+  return request(`/admin/users/${id}/clients`, {
+    method: 'PUT',
+    body: JSON.stringify({ client_ids: clientIds }),
   });
 }
 

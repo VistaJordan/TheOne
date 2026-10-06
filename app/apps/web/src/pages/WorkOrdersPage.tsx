@@ -160,6 +160,12 @@ export function WorkOrdersPage() {
     () => resolveWoScope(actingAs?.perms, actingAs?.is_super_admin),
     [actingAs],
   );
+  // 0072 · the entities ticked on the role plus the clients assigned to the
+  // person — both widen "theirs" and the chip names them alike.
+  const scopeExtras = useMemo(
+    () => [...scope.entities, ...(actingAs?.clients ?? [])],
+    [scope, actingAs],
+  );
   // The view whose deletion is awaiting confirmation, if any.
   const [pendingDelete, setPendingDelete] = useState<SavedView | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
@@ -454,13 +460,13 @@ export function WorkOrdersPage() {
                 <span
                   className="chip chip-outline"
                   title={
-                    scope.entities.length > 0
-                      ? `You see the work orders assigned to you and every ${scope.entities.join(', ')} work order`
+                    scopeExtras.length > 0
+                      ? `You see the work orders assigned to you and every ${scopeExtras.join(', ')} work order`
                       : 'You see the work orders assigned to you'
                   }
                 >
                   <Icon name="user" size={12} />
-                  {scope.entities.length > 0 ? `Yours + ${scope.entities.join(', ')}` : 'Yours only'}
+                  {scopeExtras.length > 0 ? `Yours + ${scopeExtras.join(', ')}` : 'Yours only'}
                 </span>
               )}
               {/* The comp's accent CTA leads the cluster (0041). Which fields

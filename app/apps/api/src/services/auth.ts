@@ -47,6 +47,9 @@ export interface SessionPrincipal {
   status: 'invited' | 'active' | 'disabled';
   /** 0062 · has a list of sites they are restricted to (`principal_site`). */
   siteRestricted: boolean;
+  /** 0072 · the clients assigned to them (`principal_client`), by name. Their
+      work orders count as theirs when "Which work orders" is Only theirs. */
+  clients: string[];
   /** The permission tree (0015): the role's grants + this person's overrides.
       Every gate resolves against this; `can` below is derived from it. */
   perms: PermissionSet;
@@ -71,7 +74,10 @@ const PRINCIPAL_COLUMNS = `
   r.label AS role_label,
   COALESCE(r.permissions, '{}'::jsonb)          AS role_permissions,
   COALESCE(p.permission_overrides, '{}'::jsonb) AS permission_overrides,
-  EXISTS (SELECT 1 FROM principal_site ps WHERE ps.principal_id = p.id) AS site_restricted`;
+  EXISTS (SELECT 1 FROM principal_site ps WHERE ps.principal_id = p.id) AS site_restricted,
+  (SELECT COALESCE(array_agg(c.name ORDER BY lower(c.name)), '{}'::text[])
+     FROM principal_client pc JOIN client c ON c.id = pc.client_id AND c.deleted_at IS NULL
+    WHERE pc.principal_id = p.id) AS client_names`;
 
 const PRINCIPAL_FROM = `FROM principal p LEFT JOIN role r ON r.code = p.role`;
 
@@ -87,6 +93,7 @@ interface PrincipalRow {
   role_permissions: unknown;
   permission_overrides: unknown;
   site_restricted: boolean;
+  client_names: string[] | null;
 }
 
 function toPrincipal(r: PrincipalRow): SessionPrincipal {
@@ -111,6 +118,8 @@ function toPrincipal(r: PrincipalRow): SessionPrincipal {
     status: r.status,
     // 0062 · a super admin is never restricted, whatever the table says.
     siteRestricted: Boolean(r.site_restricted) && !r.is_super_admin,
+    // 0072 · a super admin sees everything already; the list is noise for them.
+    clients: r.is_super_admin ? [] : (r.client_names ?? []),
     perms,
     can: {
       quoteEdit: allow('quotes', 'edit'),

@@ -70,6 +70,8 @@ export function DashboardPage() {
   const countQuery = useQuery({
     queryKey: ['work-orders', { limit: 1 }],
     queryFn: () => listWorkOrders({ limit: 1 }),
+    // 0072 · a dashboard-only role (sales) has no list to count.
+    enabled: can('work_orders', 'view'),
   });
   // Each attention card is the same list query its click opens, at limit 1 —
   // only `total` is read.

@@ -61,6 +61,10 @@ export interface ActingPrincipal {
       Optional: a principal built outside a request (the engine, a test) is
       not restricted. */
   siteRestricted?: boolean;
+  /** 0072 · has clients assigned to them in Admin › Users (`principal_client`);
+      their work orders count as theirs under "Only theirs". Optional for the
+      same reason as `siteRestricted`. */
+  hasClients?: boolean;
   /** The permission tree (0015) — what every gate resolves against. */
   perms: PermissionSet;
   /** Resolved from the `role` table, not from a hardcoded list (0005). */
@@ -78,6 +82,7 @@ export function actingPrincipalFromRequest(req: FastifyRequest): ActingPrincipal
     roleLabel: p.roleLabel,
     isSuperAdmin: p.isSuperAdmin,
     siteRestricted: p.siteRestricted,
+    hasClients: p.clients.length > 0,
     perms: p.perms,
     can: p.can,
   };

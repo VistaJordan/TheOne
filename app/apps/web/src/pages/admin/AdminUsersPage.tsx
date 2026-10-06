@@ -22,8 +22,10 @@ import {
   getUserPermissions,
   inviteUser,
   listAdminUsers,
+  listClients,
   listPermissionFields,
   listRoles,
+  setUserClients,
   setUserPermissions,
   updateRole,
   updateUser,
@@ -88,6 +90,8 @@ export function AdminUsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   // The user whose adjustments are open, if any (super admins only).
   const [adjusting, setAdjusting] = useState<string | null>(null);
+  // 0072 · the user whose client list is open, if any. One panel at a time.
+  const [clientsFor, setClientsFor] = useState<string | null>(null);
 
   const allowed = can('admin/users', 'view');
   const canEdit = can('admin/users', 'edit');
@@ -148,7 +152,16 @@ export function AdminUsersPage() {
         busy={patchUser.isPending || !canEdit}
         canAdjust={isSuperAdmin}
         adjusting={adjusting}
-        onAdjust={(id) => setAdjusting((cur) => (cur === id ? null : id))}
+        onAdjust={(id) => {
+          setClientsFor(null);
+          setAdjusting((cur) => (cur === id ? null : id));
+        }}
+        canAssignClients={canEdit}
+        clientsFor={clientsFor}
+        onClients={(id) => {
+          setAdjusting(null);
+          setClientsFor((cur) => (cur === id ? null : id));
+        }}
         tree={tree}
         onChange={(id, input) => patchUser.mutate({ id, input })}
       />
@@ -234,7 +247,8 @@ export function AdminRolesPage() {
 // ── Users table ──────────────────────────────────────────────────────────────
 
 function UsersTable({
-  items, roles, selfId, loading, error, busy, canAdjust, adjusting, onAdjust, tree, onChange,
+  items, roles, selfId, loading, error, busy, canAdjust, adjusting, onAdjust,
+  canAssignClients, clientsFor, onClients, tree, onChange,
 }: {
   items: AdminUserItem[];
   roles: RoleRecord[];
@@ -245,10 +259,14 @@ function UsersTable({
   canAdjust: boolean;
   adjusting: string | null;
   onAdjust: (id: string) => void;
+  /** 0072 · may change a person's client list (Admin › Users edit). */
+  canAssignClients: boolean;
+  clientsFor: string | null;
+  onClients: (id: string) => void;
   tree: PermNode[];
   onChange: (id: string, input: { role?: string; is_super_admin?: boolean; status?: UserStatus }) => void;
 }) {
-  const cols = canAdjust ? 7 : 6;
+  const cols = canAdjust ? 8 : 7;
   return (
     <div className="table-wrap">
       <table className="ct">
@@ -256,6 +274,7 @@ function UsersTable({
           <tr>
             <th>User</th><th>Role</th><th>Status</th><th>Super admin</th>
             <th>Last sign-in</th>
+            <th title="The clients this person looks after. Their work orders count as theirs on the Sales dashboard and wherever the role says Only theirs.">Clients</th>
             {canAdjust && <th>Permissions</th>}
             <th />
           </tr>
@@ -270,8 +289,9 @@ function UsersTable({
             const status = STATUS_COPY[u.status];
             const off = u.status === 'disabled';
             const open = adjusting === u.id;
+            const clientsOpen = clientsFor === u.id;
             return (
-              <UserRows key={u.id} open={open}>
+              <UserRows key={u.id} open={open || clientsOpen}>
                 <tr className={off ? 'is-dim' : undefined}>
                   <td>
                     <div className="site">
@@ -301,6 +321,38 @@ function UsersTable({
                     </label>
                   </td>
                   <td>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never'}</td>
+                  <td>
+                    {/* 0072 · the person's book. A super admin sees every
+                        client already, so there is nothing to assign. */}
+                    {u.is_super_admin ? (
+                      <span className="faint" title="A super admin sees every client's work orders">All clients</span>
+                    ) : (
+                      <span className="user-clients-cell">
+                        {u.clients.slice(0, 3).map((c) => (
+                          <span key={c.id} className="chip chip-sm" title={c.name}>{c.name}</span>
+                        ))}
+                        {u.clients.length > 3 && (
+                          <span className="chip chip-sm chip-outline" title={u.clients.slice(3).map((c) => c.name).join(', ')}>
+                            +{u.clients.length - 3} more
+                          </span>
+                        )}
+                        {u.clients.length === 0 && !canAssignClients && <span className="faint">None</span>}
+                        {canAssignClients && (
+                          <button
+                            type="button"
+                            className="linkbtn"
+                            disabled={off}
+                            aria-expanded={clientsOpen}
+                            title="Pick the clients whose work orders count as this person's"
+                            onClick={() => onClients(u.id)}
+                          >
+                            <Icon name="briefcase" size={12} />
+                            {clientsOpen ? 'Close' : u.clients.length === 0 ? 'Assign' : 'Edit'}
+                          </button>
+                        )}
+                      </span>
+                    )}
+                  </td>
                   {canAdjust && (
                     <td>
                       {u.is_super_admin ? (
@@ -345,6 +397,13 @@ function UsersTable({
                     </td>
                   </tr>
                 )}
+                {clientsOpen && (
+                  <tr className="user-adjust-row">
+                    <td colSpan={cols}>
+                      <UserClientsPanel user={u} onClose={() => onClients(u.id)} />
+                    </td>
+                  </tr>
+                )}
               </UserRows>
             );
           })}
@@ -357,6 +416,114 @@ function UsersTable({
 /** A row and its optional adjustment row, as one keyed unit. */
 function UserRows({ children }: { open: boolean; children: React.ReactNode }) {
   return <>{children}</>;
+}
+
+/** 0072 · the clients assigned to one person: every client record as a
+    tickable list, saved as a whole. For the sales team this IS their view —
+    the Sales dashboard counts the work orders of exactly these clients; for
+    anyone on "Only theirs" it widens the book the way an entity tick does. */
+function UserClientsPanel({ user, onClose }: { user: AdminUserItem; onClose: () => void }) {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ['clients', { show: 'all', for: 'assign' }],
+    queryFn: () => listClients({ show: 'all' }),
+    staleTime: 60 * 1000,
+    retry: 0,
+  });
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(user.clients.map((c) => c.id)));
+  const [find, setFind] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: (ids: string[]) => setUserClients(user.id, ids),
+    onSuccess: () => {
+      setError(null);
+      void qc.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (e: Error) => setError(e.message || 'Could not save.'),
+  });
+
+  const all = q.data?.items ?? [];
+  const needle = find.trim().toLowerCase();
+  const shown = needle ? all.filter((c) => c.name.toLowerCase().includes(needle) || (c.code ?? '').toLowerCase().includes(needle)) : all;
+  const saved = new Set(user.clients.map((c) => c.id));
+  const dirty = picked.size !== saved.size || [...picked].some((id) => !saved.has(id));
+  const first = user.name.split(' ')[0];
+
+  const toggle = (id: string) =>
+    setPicked((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  return (
+    <div className="user-adjust">
+      <div className="user-adjust-head">
+        <Icon name="briefcase" size={14} />
+        <span>
+          Clients for <b>{user.name}</b>. Work orders for the ticked clients count as {first}’s — on the Sales
+          dashboard, and anywhere their role shows only their own work orders.
+        </span>
+      </div>
+      {error && (
+        <div className="callout callout-lock" role="alert">
+          <Icon name="alert" size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+      <div className="user-clients-tools">
+        <input
+          className="fld sm"
+          type="search"
+          placeholder="Find a client…"
+          value={find}
+          onChange={(e) => setFind(e.target.value)}
+          aria-label="Find a client"
+        />
+        <span className="faint">{picked.size} of {all.length} ticked</span>
+        {picked.size > 0 && (
+          <button type="button" className="linkbtn" disabled={save.isPending} onClick={() => setPicked(new Set())}>
+            Untick all
+          </button>
+        )}
+      </div>
+      {q.isLoading ? (
+        <div className="adm-empty"><b>Loading clients…</b></div>
+      ) : q.isError ? (
+        <div className="adm-empty"><b>Could not load the client list.</b></div>
+      ) : all.length === 0 ? (
+        <div className="adm-empty"><b>No client records yet.</b> Clients appear here once a work order or a site names one.</div>
+      ) : (
+        <div className="user-clients-list" role="group" aria-label={`Clients for ${user.name}`}>
+          {shown.map((c) => (
+            <label key={c.id} className={c.is_active ? undefined : 'is-faint'} title={c.is_active ? c.name : `${c.name} · inactive`}>
+              <input type="checkbox" checked={picked.has(c.id)} disabled={save.isPending} onChange={() => toggle(c.id)} />
+              <span>{c.name}{c.code ? ` · ${c.code}` : ''}{c.is_active ? '' : ' (inactive)'}</span>
+            </label>
+          ))}
+          {shown.length === 0 && <span className="faint">Nothing matches “{find}”.</span>}
+        </div>
+      )}
+      <div className="role-save">
+        <span className="faint">{dirty ? 'Unsaved changes' : 'Saved'}</span>
+        <button type="button" className="btn" onClick={onClose}>Close</button>
+        <button type="button" className="btn" disabled={!dirty || save.isPending} onClick={() => setPicked(new Set(saved))}>
+          Discard
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate([...picked])}
+        >
+          <Icon name="check" size={14} />
+          {save.isPending ? 'Saving…' : 'Save clients'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /** The per-person override editor (0015). Everything unset comes from the

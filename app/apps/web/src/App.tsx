@@ -126,6 +126,16 @@ function IncomingRoute() {
   return <Locked nav="Incoming Work Orders" />;
 }
 
+/** "/" — the work-order list for anyone who may open it. A role with no work
+    orders at all (0072: the sales team, who get one dashboard) lands on their
+    dashboard instead of a locked screen that reads as a broken sign-in. */
+function HomeRoute() {
+  const { can } = useAuth();
+  if (can('work_orders', 'view')) return <WorkOrdersPage />;
+  if (can('dashboard', 'view')) return <Navigate to="/dashboard" replace />;
+  return <Locked nav="Work Orders" />;
+}
+
 /** The drafts lived at /intake before they joined Incoming Work Orders;
     bookmarks and audit links from then still land. */
 function LegacyIntakeRedirect() {
@@ -151,10 +161,7 @@ export function App() {
                 path="/dashboard"
                 element={<RequireAuth><RequireCan perm="dashboard" nav="Dashboard"><DashboardPage /></RequireCan></RequireAuth>}
               />
-              <Route
-                path="/"
-                element={<RequireAuth><RequireCan perm="work_orders" nav="Work Orders"><WorkOrdersPage /></RequireCan></RequireAuth>}
-              />
+              <Route path="/" element={<RequireAuth><HomeRoute /></RequireAuth>} />
               {/* S2 — WO detail. Addressed by wo_number; the API resolves either
                   a uuid or a WO number on /api/work-orders/:id. */}
               <Route

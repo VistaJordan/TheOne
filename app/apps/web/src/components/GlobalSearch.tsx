@@ -81,8 +81,12 @@ function matches(q: string, ...fields: (string | null | undefined)[]): boolean {
 export function GlobalSearch() {
   const navigate = useNavigate();
   // The acting principal: viewing as a dispatcher hides the admin pages here too.
-  const { actingAs } = useAuth();
+  const { actingAs, can } = useAuth();
   const isAdmin = !!actingAs?.is_super_admin;
+  // 0072 · each network-backed group is asked only of someone who may open
+  // it; a role without work orders (sales) otherwise searches into 403s.
+  const canWo = can('work_orders', 'view');
+  const canQuotes = can('quotes', 'view');
 
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -99,14 +103,14 @@ export function GlobalSearch() {
   const woQuery = useQuery({
     queryKey: ['search', 'work-orders', debounced],
     queryFn: () => listWorkOrders({ search: debounced, limit: MAX_PER_GROUP }),
-    enabled: open && remote,
+    enabled: open && remote && canWo,
   });
   // Quotes and people are small, bounded lists with no search parameter of
   // their own — fetch once, keep them warm, and match in the browser.
   const quotesQuery = useQuery({
     queryKey: ['quotes'],
     queryFn: listQuotes,
-    enabled: open && remote,
+    enabled: open && remote && canQuotes,
     retry: 0,
     staleTime: 60_000,
   });

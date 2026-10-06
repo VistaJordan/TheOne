@@ -678,6 +678,21 @@ export interface AdminUserItem extends SessionUser {
   last_login_at: string | null;
   has_signed_in: boolean;
   active_sessions: number;
+  /** 0072 · the clients assigned to this person (`principal_client`). Their
+      work orders count as theirs wherever "Which work orders" is Only theirs. */
+  clients: UserClient[];
+}
+
+/** 0072 · one client on a person's list. */
+export interface UserClient {
+  id: string;
+  name: string;
+}
+
+/** GET / PUT /admin/users/:id/clients. */
+export interface UserClientsResponse {
+  user: AdminUserItem;
+  clients: UserClient[];
 }
 
 export interface RoleInfo {

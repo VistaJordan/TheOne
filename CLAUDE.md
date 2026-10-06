@@ -1445,6 +1445,41 @@ create / `clients` edit). Audit: `sharepoint_folder_created` (entity task
 or client), `sharepoint_file_copied`. Not built: deleting or renaming
 folders, backfilling old records, per-Comp site overrides.
 
+**Sales: one dashboard, counted over their clients** (migration 0072,
+`services/woScope.ts`, `services/users.ts`, the `sales` board in
+`shared/dashboards.ts`, `tests/sales-scope.test.ts`). The sales team does
+not work the work orders; they want to know how many came in for THEIR
+clients. Nothing new in mechanism:
+- **Role `sales`** (0072, is_system): `dashboard` view, `dashboard/boards`
+  no, `dashboard/boards/sales` yes, `work_orders/scope` Only theirs — and no
+  other section, so the sidebar is the Dashboard item alone. Which sections
+  and sub-sections a salesperson sees is decided like every other role's:
+  Admin › Roles (and per person, Adjust). A role with no `work_orders` lands
+  on `/dashboard` from `/` (`HomeRoute` in `App.tsx`), the topbar search and
+  the Pulse / Receivables nav items need their sections, and a card's
+  drill-through is drawn as plain text when the list behind it is closed
+  (`Drill` in `WidgetCard.tsx`).
+- **`principal_client`** — the clients assigned to a person. Admin › Users
+  has a **Clients** column per row (chips + Assign / Edit, opening a tickable
+  list of the client records, anyone with `admin/users` edit, logged
+  `user_clients_changed`; `GET|PUT /admin/users/:id/clients`). Not held back
+  for super admins the way Adjust is: it is an assignment, not an override. A
+  super admin cannot be given a list (they see everything).
+- **The scope**: `woScopeSql` gains a third OR under "Only theirs" — the
+  work order's `client` text matches one of the person's clients by
+  `lower(btrim())`, the 0062 join — so the Sales board, and anywhere else the
+  role lets them look, count exactly those. The session carries
+  `clients: string[]` (`SessionPrincipal`, `/auth/me`) and the request actor
+  `hasClients`; the list header chip reads "Yours + Walmart" like it reads
+  "Yours + SFM" for an entity. A dispatcher given clients sees those clients'
+  work orders in full, like an entity tick — by design, it is the same widening.
+- **The Sales board** (`system_key = sales`, folder Sales, shared with sales
+  / admin / am / tl): received, open, emergencies, completed; by client, per
+  month, by status, by trade, by city. Every card is a plain work-order
+  count over the viewer's scope; the board period is date received like
+  every board. Inserted by `ensureSystemDashboards` on the first read; the
+  migration grants it to the role ahead of time.
+
 ## Verify
 
 ```

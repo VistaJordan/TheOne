@@ -6,8 +6,8 @@
 // trust boundary in one place (services/auth.ts) instead of splitting it across
 // an invite-token scheme we would then have to secure separately.
 
-import type { PermMap } from '@theone/shared';
-import { query } from '../db.js';
+import type { PermMap, UserClient } from '@theone/shared';
+import { query, withTransaction } from '../db.js';
 import { ApiError } from '../errors.js';
 import { destroySessionsFor } from './auth.js';
 import { parsePermMap } from './permissions.js';
@@ -38,6 +38,8 @@ export interface AdminUser {
   has_signed_in: boolean;
   /** True when a super admin has adjusted this person beyond their role (0015). */
   has_overrides: boolean;
+  /** 0072 · the clients assigned to this person (`principal_client`). */
+  clients: UserClient[];
 }
 
 const SELECT_USER = `
@@ -51,7 +53,11 @@ const SELECT_USER = `
          p.is_super_admin,
          p.last_login_at,
          (p.entra_oid IS NOT NULL) AS has_signed_in,
-         (p.permission_overrides <> '{}'::jsonb) AS has_overrides
+         (p.permission_overrides <> '{}'::jsonb) AS has_overrides,
+         COALESCE((SELECT jsonb_agg(jsonb_build_object('id', c.id::text, 'name', c.name) ORDER BY lower(c.name))
+                     FROM principal_client pc
+                     JOIN client c ON c.id = pc.client_id AND c.deleted_at IS NULL
+                    WHERE pc.principal_id = p.id), '[]'::jsonb) AS clients
     FROM principal p
     LEFT JOIN role r ON r.code = p.role`;
 
@@ -284,4 +290,62 @@ export async function setUserPermissions(
     });
   }
   return getUserPermissions(id);
+}
+
+// ── A person's clients (0072) ────────────────────────────────────────────────
+// "Sam looks after Walmart and Target." The list is kept per person, not per
+// role, because it IS the person's book — a role says *whether* their clients
+// count ("Which work orders" = Only theirs), this says *which*. Anyone who may
+// edit users keeps it (it is an assignment, not a permission override, so it
+// is not held back for super admins the way Adjust is).
+
+export interface UserClientsResult {
+  user: AdminUser;
+  clients: UserClient[];
+}
+
+export async function getUserClients(id: string): Promise<UserClientsResult> {
+  const user = await getUser(id);
+  return { user, clients: user.clients };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Replace one person's client list. Empty = none. A super admin sees every
+    work order already, so a list on them would mean nothing — refused rather
+    than silently ignored. */
+export async function setUserClients(
+  id: string,
+  clientIds: string[],
+  actorId: string,
+): Promise<UserClientsResult> {
+  const current = await getUser(id);
+  const ids = [...new Set(clientIds.filter((c) => UUID_RE.test(c)))];
+  if (ids.length > 0 && current.is_super_admin) {
+    throw new ApiError('BAD_REQUEST', 'A super admin sees every client already');
+  }
+  await withTransaction(async (tx) => {
+    await tx.query(`DELETE FROM principal_client WHERE principal_id = $1`, [id]);
+    if (ids.length > 0) {
+      await tx.query(
+        `INSERT INTO principal_client (principal_id, client_id, granted_by)
+         SELECT $1, c.id, $3 FROM client c WHERE c.id = ANY($2::uuid[]) AND c.deleted_at IS NULL`,
+        [id, ids, actorId],
+      );
+    }
+  });
+  const updated = await getUser(id);
+  const before: Snapshot = { name: current.name, clients: current.clients.map((c) => c.name) };
+  const after: Snapshot = { name: updated.name, clients: updated.clients.map((c) => c.name) };
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId,
+      entity: 'principal',
+      entityId: id,
+      action: 'user_clients_changed',
+      before,
+      after,
+    });
+  }
+  return { user: updated, clients: updated.clients };
 }

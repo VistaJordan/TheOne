@@ -12,6 +12,12 @@
 // display names — that is what the field stores, see woFields
 // customDistinctOptions) against the acting principal's display name, with
 // the legacy free-text `Assignee Name TXT` as the backstop the header uses.
+//
+// 0072 · "their clients" is the third OR: every work order whose Client is
+// one of the clients assigned to the person in Admin › Users
+// (principal_client), matched by name the way client records are (0062:
+// lower + btrim, no FK). It is how the sales team's dashboard knows what to
+// count, and it widens a dispatcher's book the same way an entity tick does.
 
 import { resolveWoScope, type WoScope } from '@theone/shared';
 import { query } from '../db.js';
@@ -49,6 +55,15 @@ export function woScopeSql(actor: ActingPrincipal, p: Params, alias = 't'): stri
   ];
   if (scope.entities.length > 0) {
     parts.push(`${alias}.billing_entity IN (${scope.entities.map((e) => p.add(e)).join(', ')})`);
+  }
+  if (actor.hasClients) {
+    parts.push(
+      `lower(btrim(COALESCE(${alias}.client, ''))) IN (
+         SELECT lower(btrim(c.name))
+           FROM principal_client pc
+           JOIN client c ON c.id = pc.client_id AND c.deleted_at IS NULL
+          WHERE pc.principal_id = ${p.add(actor.id)})`,
+    );
   }
   const mine = `(${parts.join(' OR ')})`;
   return sites ? `(${mine} AND ${sites})` : mine;

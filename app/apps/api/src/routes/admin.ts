@@ -22,9 +22,11 @@ import { ApiError, parse } from '../errors.js';
 import { unauthorized } from '../services/auth.js';
 import {
   disableUser,
+  getUserClients,
   getUserPermissions,
   inviteUser,
   listUsers,
+  setUserClients,
   setUserPermissions,
   updateUser,
 } from '../services/users.js';
@@ -197,6 +199,25 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     const { id } = parse(idParams, req.params);
     const { overrides } = parse(userPermissionsSchema, req.body);
     return setUserPermissions(id, overrides, actorId);
+  });
+
+  // 0072 · the clients assigned to a person — what "their clients" means on
+  // the Sales dashboard and under "Which work orders = Only theirs". An
+  // assignment, not an override, so Admin › Users edit is enough.
+  app.get('/admin/users/:id/clients', async (req) => {
+    requireAdmin(req, 'users');
+    const { id } = parse(idParams, req.params);
+    return getUserClients(id);
+  });
+
+  app.put('/admin/users/:id/clients', async (req) => {
+    const actorId = requireAdmin(req, 'users', 'edit');
+    const { id } = parse(idParams, req.params);
+    const { client_ids } = parse(
+      z.object({ client_ids: z.array(z.string().uuid()).max(2000) }).strict(),
+      req.body,
+    );
+    return setUserClients(id, client_ids, actorId);
   });
 
   // ── Roles ──────────────────────────────────────────────────────────────────

@@ -126,7 +126,11 @@ const NAV: NavItem[] = [
     list means ANY of them shows the item (Incoming has two doors). */
 const NAV_PERM: Record<string, string | string[]> = {
   Dashboard: 'dashboard',
+  // 0072 · Pulse and Receivables read work orders and invoices; a role with
+  // neither (the sales team) has no business seeing the doors.
+  Pulse: 'work_orders',
   'Work Orders': 'work_orders',
+  Receivables: 'invoicing',
   Vendors: 'vendors',
   Sites: 'sites',
   Assets: 'assets',
@@ -320,7 +324,9 @@ export function AppShell({
               they are on, plus its section when the item has children. */}
           {breadcrumb ?? <NavCrumbs active={active} pathname={pathname} />}
         </div>
-        <GlobalSearch />
+        {/* 0072 · the search looks up work orders, quotes and people; with
+            none of the three there is nothing for it to find. */}
+        {(can('work_orders', 'view') || can('quotes', 'view') || can('admin', 'view')) && <GlobalSearch />}
         <div className="topbar-actions">
           <ActorSwitcher />
           {/* 0068 — ask anything; answers are looked up as the person asking. */}

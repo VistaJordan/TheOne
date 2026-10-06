@@ -614,7 +614,7 @@ export function buildPermissionTree(
           key: WO_SCOPE_PERM_KEY,
           label: 'Which work orders',
           actions: ['view'],
-          note: 'Everything, or only the ones assigned to them (rule 8.5). Tick a billing entity below to let them see all of its work orders too.',
+          note: 'Everything, or only the ones assigned to them (rule 8.5). Tick a billing entity below to let them see all of its work orders too. The clients assigned to a person in Admin › Users count as theirs as well.',
           choices: WO_SCOPE_CHOICES,
           children: (opts.entities ?? []).map((e) => ({
             key: woScopeEntityPermKey(e),

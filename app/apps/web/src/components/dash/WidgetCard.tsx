@@ -26,7 +26,16 @@ import type { WidgetConfig, WidgetResult, DashboardWidget, WoFilterSet } from '@
 import { SOURCE_DRILL_PATH, formatBucket, widgetSubtitle } from '@theone/shared';
 import { Icon } from '../Icon';
 import { filterUrl } from '../../lib/woView';
+import { useAuth } from '../../auth/AuthProvider';
 import { CHART_OTHER, EVERYTHING_ELSE, colorFor, type ChartDatum } from './chartPalette';
+
+/** A drill-through, or the same content standing still (0072): a person who
+    may not open the list the card leads to — the sales team, who have the
+    dashboard and nothing behind it — gets the number without a dead link. */
+function Drill({ to, enabled, className, children }: { to: string; enabled: boolean; className?: string; children: React.ReactNode }) {
+  if (!enabled) return <span className={className}>{children}</span>;
+  return <Link className={className} to={to}>{children}</Link>;
+}
 
 const Charts = {
   Bars: lazy(() => import('./WidgetCharts').then((m) => ({ default: m.WidgetBars }))),
@@ -81,7 +90,12 @@ function drillUrl(config: WidgetConfig, bucket?: { raw: string | null }): string
 
 export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRemove }: WidgetCardProps) {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const fmt = useMemo(() => formatter(widget.config), [widget.config]);
+  // 0072 · a work-order card opens the list; without the list there is
+  // nowhere to go. Cards over the other records keep their own queues.
+  const drillable =
+    (widget.config.source && widget.config.source !== 'work_orders') || can('work_orders', 'view');
 
   const overTime = widget.kind === 'line';
   const figure = widget.kind === 'number' || widget.kind === 'gauge' || widget.kind === 'live';
@@ -109,6 +123,7 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
   }, [result, overTime, widget.config.bucket]);
 
   const pick = (d: ChartDatum) => {
+    if (!drillable) return;
     // "Everything else" has no single value to filter on, so it opens the
     // card's own list rather than pretending to be a bucket.
     navigate(d.name === EVERYTHING_ELSE ? drillUrl(widget.config) : drillUrl(widget.config, d));
@@ -192,7 +207,7 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
       ) : loading ? (
         <p className="hint">Working it out…</p>
       ) : figure ? (
-        <Link className="dash-figure" to={drillUrl(widget.config)}>
+        <Drill className="dash-figure" enabled={drillable} to={drillUrl(widget.config)}>
           <span className="dash-figure-n">{fmt(total)}</span>
           <span className="dash-figure-sub">
             {widgetSubtitle(widget.config)}
@@ -207,7 +222,7 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
               <span className="dash-gauge-pct">{target > 0 ? `${Math.round(share)}%` : 'no target'}</span>
             </span>
           )}
-        </Link>
+        </Drill>
       ) : data.length === 0 ? (
         <p className="hint">Nothing matches this card yet.</p>
       ) : widget.kind === 'table' ? (
@@ -217,9 +232,9 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
               <tr key={d.name}>
                 <td className="dash-table-rank">{i + 1}</td>
                 <td>
-                  <Link to={d.name === EVERYTHING_ELSE ? drillUrl(widget.config) : drillUrl(widget.config, d)}>
+                  <Drill enabled={drillable} to={d.name === EVERYTHING_ELSE ? drillUrl(widget.config) : drillUrl(widget.config, d)}>
                     {d.name}
-                  </Link>
+                  </Drill>
                 </td>
                 <td className="num">{fmt(d.value)}</td>
               </tr>
@@ -231,7 +246,7 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
           {widget.kind === 'bar' ? (
             <Charts.Bars data={data} fmt={fmt} onPick={pick} />
           ) : widget.kind === 'line' ? (
-            <Charts.Line data={data} fmt={fmt} onPick={() => navigate(drillUrl(widget.config))} />
+            <Charts.Line data={data} fmt={fmt} onPick={() => drillable && navigate(drillUrl(widget.config))} />
           ) : (
             <Charts.Donut data={data} fmt={fmt} onPick={pick} />
           )}
@@ -241,9 +256,9 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
       {/* The total under a chart is the figure the card would show as a
           number, so the two readings of the same question always agree. */}
       {!figure && !result?.error && data.length > 0 && (
-        <Link className="dash-widget-total" to={drillUrl(widget.config)}>
+        <Drill className="dash-widget-total" enabled={drillable} to={drillUrl(widget.config)}>
           {widgetSubtitle(widget.config)}: <strong>{fmt(total)}</strong>
-        </Link>
+        </Drill>
       )}
     </section>
   );

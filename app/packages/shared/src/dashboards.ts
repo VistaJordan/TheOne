@@ -1200,6 +1200,41 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
       { kind: 'donut', label: 'Asset condition', width: 'half', config: { metric: 'count', group_field: 'condition', source: 'assets', tab: 'Portfolio' } },
     ],
   },
+  {
+    // 0072 · the sales team's one page: how much work came in for their
+    // clients. Nothing on it is special — every card is a plain work-order
+    // count, and what it counts is the viewer's own scope (0032), which for
+    // a salesperson is the clients assigned to them in Admin › Users
+    // (principal_client). A manager opening the same board sees it over
+    // their own book. Period = date received, like every board.
+    key: 'sales',
+    name: 'Sales',
+    description: 'Work orders received for your clients: how many, when, where, and where they stand.',
+    folder: 'Sales',
+    shared_all: false,
+    shared_roles: ['sales', 'admin', 'am', 'tl'],
+    widgets: [
+      { kind: 'number', label: 'Work orders received', width: 'quarter', config: { metric: 'count' } },
+      { kind: 'number', label: 'Open right now', width: 'quarter', config: { metric: 'count', filters: OPEN_WORK } },
+      {
+        kind: 'number',
+        label: 'Emergencies',
+        width: 'quarter',
+        config: { metric: 'count', filters: { match: 'all', rules: [{ field: 'fields.Emergency', op: 'is_true' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } },
+      },
+      {
+        kind: 'number',
+        label: 'Completed',
+        width: 'quarter',
+        config: { metric: 'count', filters: { match: 'all', rules: [{ field: 'status_group', op: 'in', value: ['done', 'closed'] }] } },
+      },
+      { kind: 'bar', label: 'Received by client', width: 'half', config: { metric: 'count', group_field: 'client', limit: 15 } },
+      { kind: 'line', label: 'Received per month', width: 'half', config: { metric: 'count', time_field: 'date_received', bucket: 'month', limit: 18 } },
+      { kind: 'donut', label: 'Where the work stands', width: 'half', config: { metric: 'count', group_field: 'status', limit: 8 } },
+      { kind: 'bar', label: 'Received by trade', width: 'half', config: { metric: 'count', group_field: 'trade', limit: 10 } },
+      { kind: 'table', label: 'Received by city', width: 'full', config: { metric: 'count', group_field: 'city', limit: 15 } },
+    ],
+  },
 ];
 
 /** The permission path the dashboard section is gated on (0015). */

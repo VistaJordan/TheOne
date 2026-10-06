@@ -77,6 +77,9 @@ function publicPrincipal(p: SessionPrincipal) {
     // The full tree (0015). The web runs the same resolver (@theone/shared
     // permAllows) over it, so what it hides is exactly what the API refuses.
     perms: p.perms,
+    // 0072 · the clients assigned to them, so the list's scope chip can say
+    // "Yours + Walmart" the way it says "Yours + SFM" for an entity.
+    clients: p.clients,
   };
 }
 
