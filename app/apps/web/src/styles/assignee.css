@@ -83,7 +83,12 @@
   max-height: 300px;
   overflow-y: auto;
   border-top: 1px solid var(--row-border);
+  /* Scrolls with the wheel or a swipe but never draws a bar: the list sits
+     inside a popover, where a bar of its own read as a second control. */
+  scrollbar-width: none;
 }
+
+.avl-list::-webkit-scrollbar { display: none; }
 
 .avl.is-compact .avl-list { max-height: 260px; }
 
