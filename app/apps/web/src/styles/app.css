@@ -2225,8 +2225,16 @@ a.bd-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; 
 .dash-widget .card-title { font-size: 12.5px; }
 .dash-widget-tools { display: inline-flex; gap: 10px; }
 
-/* The headline figure: the card IS the link to the rows behind it. */
-a.dash-figure {
+/* The card's body keeps the same inset as every other card (.card-pad): the
+   chart, its legend, the table and the total under them never touch the
+   border. The header pulls itself back out so its rule still runs edge to
+   edge. */
+.dash-widget { padding: 0 14px 12px; }
+.dash-widget > .card-head { margin: 0 -14px 10px; }
+
+/* The headline figure: the card IS the link to the rows behind it (or, for
+   someone without the list behind it, the same figure standing still). */
+.dash-figure {
   display: block;
   padding: 6px 0 2px;
   text-decoration: none;
@@ -2254,7 +2262,7 @@ a.dash-figure:hover .dash-figure-n { color: var(--accent-text); }
 
 /* Under a chart: the same number the card would show as a figure, so the two
    readings of one question can never disagree. */
-a.dash-widget-total {
+.dash-widget-total {
   display: block;
   margin-top: 8px;
   padding-top: 8px;
@@ -2264,7 +2272,7 @@ a.dash-widget-total {
   text-decoration: none;
 }
 
-a.dash-widget-total strong { color: var(--ink); }
+.dash-widget-total strong { color: var(--ink); }
 a.dash-widget-total:hover strong { color: var(--accent-text); }
 
 .dash-widget-error {
@@ -2409,7 +2417,7 @@ a.dash-widget-total:hover strong { color: var(--accent-text); }
   font-size: 10.5px;
   color: var(--ink-3);
 }
-.dash-widget.is-gauge a.dash-figure { padding-bottom: 20px; }
+.dash-widget.is-gauge .dash-figure { padding-bottom: 20px; }
 
 .dash-live-dot {
   display: inline-block;
