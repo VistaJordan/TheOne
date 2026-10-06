@@ -26,6 +26,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
 import {
   CICO_SECTION_SLUG,
+  SIGNOFF_FIELD_KEY,
   COMPUTED_KEYS,
   VISIT_HIDDEN_KEYS,
   VISIT_OWNED_KEYS,
@@ -57,6 +58,7 @@ import { resolveMoney } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 
 import { CicoCard } from './CicoCard';
+import { SignoffPanel } from './SignoffPanel';
 import { FieldEditor, displayValue as display, draftOf } from './fieldEdit';
 import { FieldHistory } from './FieldHistory';
 
@@ -251,8 +253,9 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     // don't collide.
     const isLongText =
       f.subtype === 'long_text' && raw !== null && raw !== undefined && String(raw) !== '';
+    // The sign-off link is written by the system (0070): no pencil, like the CICO tab.
     const canEditField =
-      canEdit && can(fieldPermKey(f.key), 'edit') && !readOnly && f.type !== 'boolean';
+      canEdit && can(fieldPermKey(f.key), 'edit') && !readOnly && f.type !== 'boolean' && f.key !== SIGNOFF_FIELD_KEY;
     const editable = canEditField && !isLongText;
     // The Cost row goes red when it is above the client NTE (same rule as the
     // Finances card and the list column).
@@ -298,6 +301,11 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
                 />
                 <span>{bool(raw) ? 'Yes' : 'No'}</span>
               </label>
+            ) : f.key === SIGNOFF_FIELD_KEY && !isEditing ? (
+              // 0070: the sign-off sheet row looks the same here as on the
+              // CICO tab — PDF tile, Open / Download / Preview, Send to tech —
+              // whether the section is the CICO card or a search's row list.
+              <SignoffPanel wo={wo} fallback={<span className="afp-val">{display(f, raw)}</span>} />
             ) : isEditing ? (
               <FieldEditor
                 field={f}
