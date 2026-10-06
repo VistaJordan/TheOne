@@ -1748,3 +1748,6 @@ export * from './signoff';
 
 // 0071: SharePoint folders per client and work order, files copied in.
 export * from './sharepoint';
+
+// 0073: a work order saved as a PDF — the full layout and the request layout.
+export * from './woPdf';

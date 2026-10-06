@@ -15,23 +15,25 @@ import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb, type RGB }
 import type { SignoffLayout, SignoffSheetData } from '@theone/shared';
 import { SIGNOFF_ASSETS, type SignoffAssetName } from './signoffAssets.js';
 
-const PAGE_W = 612;
-const PAGE_H = 792;
-const MARGIN = 36;
-const CONTENT_W = PAGE_W - MARGIN * 2;
+// Shared with lib/woPdf.ts (0073), which draws the work-order PDF in the same
+// branding: page geometry, colours and the brand table are exported for it.
+export const PAGE_W = 612;
+export const PAGE_H = 792;
+export const MARGIN = 36;
+export const CONTENT_W = PAGE_W - MARGIN * 2;
 
-const hex = (h: string): RGB => {
+export const hex = (h: string): RGB => {
   const n = parseInt(h.replace('#', ''), 16);
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 };
 
-const INK = hex('#222222');
-const INK_SOFT = hex('#333333');
-const RULE = hex('#c8c8c8');
+export const INK = hex('#222222');
+export const INK_SOFT = hex('#333333');
+export const RULE = hex('#c8c8c8');
 const BOX = hex('#dcdcdc');
 
 /** The brand of each layout: its colours and the wording on its labels. */
-interface Brand {
+export interface Brand {
   title: string;
   titleSize: number;
   titleColor: RGB;
@@ -43,7 +45,7 @@ interface Brand {
   labels: { ref: string; address: string; manager: string; closeout?: string; signature: string };
 }
 
-const BRANDS: Record<SignoffLayout, Brand> = {
+export const BRANDS: Record<SignoffLayout, Brand> = {
   sfm: {
     title: 'Signoff Sheet', titleSize: 26, titleColor: hex('#003cff'),
     labelColor: hex('#003cff'), labelSize: 17, valueColor: hex('#000000'), valueSize: 12, valueBold: false,
@@ -100,7 +102,7 @@ export function safeText(s: string | null | undefined): string {
     .trim();
 }
 
-function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+export function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   const words = text.split(' ');
   const lines: string[] = [];
   let line = '';
@@ -111,6 +113,23 @@ function wrap(text: string, font: PDFFont, size: number, maxWidth: number): stri
   }
   if (line) lines.push(line);
   return lines;
+}
+
+/**
+ * One inlined image, decoded into its OWN ArrayBuffer. `Buffer.from(base64)`
+ * may hand back a slice of Node's shared pool (a non-zero byteOffset), and
+ * pdf-lib's JPEG embedder reads `bytes.buffer` from offset 0 — "SOI not found
+ * in JPEG" for an image that is perfectly fine. Whether a given decode lands
+ * in the pool depends on size and on what was allocated before it, so the
+ * copy is the only way to make every render come out the same.
+ */
+export function assetBytes(name: SignoffAssetName): Uint8Array {
+  return new Uint8Array(Buffer.from(SIGNOFF_ASSETS[name].base64, 'base64'));
+}
+
+export async function embedAsset(doc: PDFDocument, name: SignoffAssetName): Promise<PDFImage> {
+  const bytes = assetBytes(name);
+  return SIGNOFF_ASSETS[name].kind === 'png' ? doc.embedPng(bytes) : doc.embedJpg(bytes);
 }
 
 // ── Drawing ──────────────────────────────────────────────────────────────────
@@ -124,9 +143,7 @@ class Sheet {
   }
 
   async image(name: SignoffAssetName): Promise<PDFImage> {
-    const a = SIGNOFF_ASSETS[name];
-    const bytes = Buffer.from(a.base64, 'base64');
-    return a.kind === 'png' ? this.doc.embedPng(bytes) : this.doc.embedJpg(bytes);
+    return embedAsset(this.doc, name);
   }
 
   /** Full-width image at the current y; advances y. */

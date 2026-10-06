@@ -1480,6 +1480,43 @@ clients. Nothing new in mechanism:
   every board. Inserted by `ensureSystemDashboards` on the first read; the
   migration grants it to the role ahead of time.
 
+**Save as PDF** (migration 0073, `shared/woPdf.ts`, `lib/woPdf.ts`,
+`services/woPdf.ts`, `routes/woPdf.ts`, `PdfMenu` in `components/wo/record/
+RecordParts.tsx`, `pages/admin/PdfLayoutsCard.tsx`, `tests/wo-pdf.test.ts`).
+The **Save as PDF** button on the record bar (readers too: its own permission
+`work_orders/pdf` view, unset = `work_orders` view) offers two documents,
+each a plain `<a download>` of `GET /work-orders/:id/pdf?kind=full|request
+&download=1` (inline without `download`): **Work order** — the main fields —
+and **Request** — what the client sent (client, entity, store, address,
+contact, trade, NTE, SLA, description). Which fields each prints, in what
+order, its title, whether empty fields are left off and a note under the
+fields is **one row per kind in `wo_pdf_layout`**, edited in Admin › Settings
+› Work-order PDFs (`admin/settings` edit, logged `wo_pdf_layout_updated`
+with before/after snapshots; `GET /admin/pdf-layouts` also returns every
+field the list may hold, by section; the defaults the migration seeds are
+`WO_PDF_DEFAULTS` in shared — **change both together**). Items are catalogue
+keys (`wo_number`, `client`, `nte`, `status`, … from `WO_PDF_CORE_KEYS`, and
+`fields.<json key>`). The document is drawn by **pdf-lib** in the billing
+entity's branding — the sign-off sheets' header / footer / logo art and brand
+colours (`BRANDS` and `embedAsset` are exported from `signoffPdf.ts` for it;
+no Comp / unknown Comp = a neutral page), US Letter, a two-column grid that
+paginates, long text (`description`, `35. WO Description`, `Parts Required`,
+`20. Last Update`, `long_text` subtypes, anything over 90 chars) across the
+full width, a running head on page 2+, "Page n of m". Values are formatted
+on the server (`formatForPdf`: money, numbers, days kept as days whatever the
+zone, datetimes in Chicago, Yes / No, lists joined, objects by name;
+`paperLabel` drops the ClickUp numbering and emoji from labels). **The
+layout never widens what a person sees**: `workOrderPdf` reads the detail
+through `getWorkOrderDetail`, runs `redactWorkOrder` and skips every item
+`canViewField` refuses, and `resolveTaskId` applies the scope 403. Each
+download is logged on the task as `work_order_pdf_saved` (kind, file name,
+field count). Found and fixed on the way: `Buffer.from(base64)` may return a
+slice of Node's pool and pdf-lib's JPEG embedder reads `.buffer` from 0
+("SOI not found in JPEG" for Repairfected's header under Node 24), so
+`assetBytes` copies into a fresh `Uint8Array` — the sign-off renderer now
+goes through it too, and the test churns the pool before embedding every
+asset.
+
 ## Verify
 
 ```

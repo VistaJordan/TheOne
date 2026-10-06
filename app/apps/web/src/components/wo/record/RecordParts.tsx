@@ -12,18 +12,22 @@
  *
  * A pause stops no clock — it is a marker (rule 2.4.4). The bar says so. */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   GEOFENCE_RESULT_LABELS,
   SITE_EVENT_KIND_LABELS,
+  WO_PDF_KINDS,
+  WO_PDF_KIND_LABELS,
+  WO_PDF_PERM_KEY,
   formatFeet,
   formatMinutes,
   minutesBetween,
 } from '@theone/shared';
-import type { WoRecord } from '@theone/shared';
+import type { WoPdfKind, WoRecord } from '@theone/shared';
+import { useCan } from '../../../auth/AuthProvider';
 import {
   ApiRequestError,
   addWoTag,
@@ -41,6 +45,7 @@ import {
   resumeWo,
   setWoEta,
   setWoVendor,
+  workOrderPdfUrl,
 } from '../../../api/client';
 import { feedTime } from '../../../lib/fields';
 import { useEscape } from '../../../lib/useEscape';
@@ -89,6 +94,8 @@ export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: 
   const resume = useRecordWrite(woId, woNumber, () => resumeWo(woId));
   const reopen = useRecordWrite(woId, woNumber, () => reopenWo(woId));
   const dropTag = useRecordWrite(woId, woNumber, (id: string) => removeWoTag(woId, id));
+  // 0073 · Save as PDF is for readers too: its own permission, not edit.
+  const canPdf = useCan()(WO_PDF_PERM_KEY, 'view');
   if (!record) return null;
   const s = record.state;
   const edit = record.can.edit;
@@ -139,8 +146,9 @@ export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: 
           </span>
         ))}
       </div>
-      {edit && (
+      {(edit || canPdf) && (
         <div className="rec-actions">
+          {edit && (<>
           {record.can.see_vendors && (
             <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('vendor')}>
               <Icon name="briefcase" size={12} /> {record.responsibility.vendor ? 'Re-assign vendor' : 'Assign vendor'}
@@ -166,6 +174,8 @@ export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: 
           ) : (
             <button type="button" className="btn btn-sm is-danger" onClick={() => setDialog('cancel')}>Cancel work order</button>
           )}
+          </>)}
+          {canPdf && <PdfMenu woNumber={woNumber} />}
         </div>
       )}
       {error && <p className="snooze-err rec-err" role="alert"><Icon name="alert-circle" size={12} />{error}</p>}
@@ -435,6 +445,48 @@ function useMinute(): number {
     return () => window.clearInterval(t);
   }, []);
   return now;
+}
+
+/** 0073 · Save as PDF: the two documents, each a plain download link. The
+    API draws the file under the person's own field permissions, so there is
+    nothing to ask here — pick one and the browser saves it. */
+const PDF_MENU_HINTS: Record<WoPdfKind, string> = {
+  full: 'The main fields, as set in Admin › Settings',
+  request: 'Client, site and what they asked for',
+};
+
+function PdfMenu({ woNumber }: { woNumber: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEscape(() => setOpen(false));
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+  return (
+    <div className="rec-pdf" ref={ref}>
+      <button type="button" className="btn btn-sm is-ghost" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name="download" size={12} /> Save as PDF <span className="pill-caret">▾</span>
+      </button>
+      {open && (
+        <div className="rec-pdf-pop" role="menu" aria-label="Save as PDF">
+          {WO_PDF_KINDS.map((k) => (
+            <a key={k} role="menuitem" className="rec-pdf-item" href={workOrderPdfUrl(woNumber, k)} download onClick={() => setOpen(false)}>
+              <Icon name="file" size={14} />
+              <span>
+                <b>{WO_PDF_KIND_LABELS[k]}</b>
+                <small>{PDF_MENU_HINTS[k]}</small>
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function RecordRail({ woId, record, loading }: { woId: string; record: WoRecord | undefined; loading: boolean }) {

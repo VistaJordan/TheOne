@@ -665,6 +665,14 @@ export function buildPermissionTree(
           note: 'Create = upload a photo or file; delete = remove one; approve = approve or decline uploads, which are hidden from everyone else until approved.',
         },
         { key: 'work_orders/export', label: 'Export to CSV', actions: ['view'] },
+        {
+          // 0073 · the Save as PDF button on a work order. Unset, it follows
+          // work_orders view; the fields on the page follow the field permissions.
+          key: 'work_orders/pdf',
+          label: 'Save as PDF',
+          actions: ['view'],
+          note: 'Download a work order as a PDF — the full layout or the request layout set in Admin › Settings. Fields the person cannot see are left off the page.',
+        },
         { key: 'work_orders/history', label: 'Field history', actions: ['view'] },
         {
           key: 'work_orders/tabs',

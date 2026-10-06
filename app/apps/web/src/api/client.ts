@@ -4,6 +4,8 @@
 import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
 // 0070: sign-off sheets.
 import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
+// 0073: a work order saved as a PDF.
+import type { WoPdfKind, WoPdfLayoutInput, WoPdfLayoutsResponse } from '@theone/shared';
 import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
 import type {
   AssistantAskInput,
@@ -2034,6 +2036,25 @@ export function deleteAttachment(woId: string, attachmentId: string): Promise<vo
     the file is never served from a storage URL. */
 export function attachmentUrl(woId: string, attachmentId: string): string {
   return `/api/work-orders/${woId}/attachments/${attachmentId}`;
+}
+
+// ── Save as PDF (0073) ───────────────────────────────────────────────────────
+
+/** The document of one kind for one work order. Same-origin and cookie-
+    authenticated, so a plain <a download> fetches it; `download` asks for the
+    attachment disposition so the browser saves it under the WO number. */
+export function workOrderPdfUrl(idOrNumber: string, kind: WoPdfKind, download = true): string {
+  const q = new URLSearchParams({ kind });
+  if (download) q.set('download', '1');
+  return `/api/work-orders/${encodeURIComponent(idOrNumber)}/pdf?${q.toString()}`;
+}
+
+export function getPdfLayouts(): Promise<WoPdfLayoutsResponse> {
+  return request('/admin/pdf-layouts');
+}
+
+export function savePdfLayout(kind: WoPdfKind, input: WoPdfLayoutInput): Promise<WoPdfLayoutsResponse> {
+  return request(`/admin/pdf-layouts/${kind}`, { method: 'PUT', body: JSON.stringify(input) });
 }
 
 // ── Sign-off sheets (0070) ───────────────────────────────────────────────────
