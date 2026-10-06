@@ -9,15 +9,18 @@
 
 import { config } from '../config.js';
 import { ApiError } from '../errors.js';
+import { integrationOn, requireIntegration } from '../services/integrations.js';
 
+/** Credentials present AND the switch in Admin › Integrations is on. */
 export function quoApiReady(): boolean {
-  return Boolean(config.quoApiKey && config.quoFromNumber);
+  return Boolean(config.quoApiKey && config.quoFromNumber) && integrationOn('quo');
 }
 
 export interface QuoSentMessage { id: string | null }
 
 /** POST /messages — one text from the configured line to one recipient. */
 export async function sendQuoText(to: string, content: string): Promise<QuoSentMessage> {
+  requireIntegration('quo');
   if (!config.quoApiKey || !config.quoFromNumber) {
     throw new ApiError('CONFLICT', 'Sending through Quo is not configured (QUO_API_KEY / QUO_FROM_NUMBER)', {
       code: 'QUO_API_MISSING',

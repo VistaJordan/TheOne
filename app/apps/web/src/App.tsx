@@ -32,6 +32,7 @@ import { AssetDetailPage } from './pages/AssetDetailPage';
 import { ClientDetailPage, ClientsPage } from './pages/ClientsPage';
 import { AdminPortfolioPage } from './pages/admin/AdminPortfolioPage';
 import { AdminVendorsPage } from './pages/admin/AdminVendorsPage';
+import { AdminIntegrationsPage } from './pages/admin/AdminIntegrationsPage';
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
@@ -284,6 +285,8 @@ export function App() {
               <Route path="/admin/trash" element={<RequireAuth><AdminTrashPage /></RequireAuth>} />
               <Route path="/admin/vendors" element={<RequireAuth><AdminVendorsPage /></RequireAuth>} />
               <Route path="/admin/portfolio" element={<RequireAuth><AdminPortfolioPage /></RequireAuth>} />
+              {/* 0074 · every connector with its on / off switch. */}
+              <Route path="/admin/integrations" element={<RequireAuth><AdminIntegrationsPage /></RequireAuth>} />
             </Routes>
           </AuthProvider>
         </BrowserRouter>

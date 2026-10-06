@@ -6,6 +6,8 @@ import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@
 import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
 // 0073: a work order saved as a PDF.
 import type { WoPdfKind, WoPdfLayoutInput, WoPdfLayoutsResponse } from '@theone/shared';
+// 0074: Admin › Integrations.
+import type { IntegrationsResponse } from '@theone/shared';
 import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
 // Who is free to take a work order (the Assignee pickers' availability view).
 import type { AssigneeAvailabilityResponse } from '@theone/shared';
@@ -2077,6 +2079,16 @@ export function getPdfLayouts(): Promise<WoPdfLayoutsResponse> {
 
 export function savePdfLayout(kind: WoPdfKind, input: WoPdfLayoutInput): Promise<WoPdfLayoutsResponse> {
   return request(`/admin/pdf-layouts/${kind}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+
+// ── Admin › Integrations (0074) ──────────────────────────────────────────────
+
+export function getIntegrations(): Promise<IntegrationsResponse> {
+  return request('/admin/integrations');
+}
+
+export function setIntegrationEnabled(key: string, enabled: boolean): Promise<IntegrationsResponse> {
+  return request(`/admin/integrations/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ enabled }) });
 }
 
 // ── Sign-off sheets (0070) ───────────────────────────────────────────────────

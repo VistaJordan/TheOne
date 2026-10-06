@@ -39,6 +39,7 @@ import { query } from '../db.js';
 import { conflict, notFound } from '../errors.js';
 import type { SessionPrincipal } from './auth.js';
 import { logAdminEvent } from './adminAudit.js';
+import { integrationOn } from './integrations.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { STATIC_INSTRUCTIONS, buildQuestion, buildReference, chicagoToday, describeAbilities } from '../lib/assistantPrompt.js';
 import type { RefField, RefNote, RefStatus } from '../lib/assistantPrompt.js';
@@ -85,7 +86,7 @@ export async function assistantStatus(a: Asker): Promise<AssistantStatus> {
   requireAsk(a);
   const used = await askedToday(a.user.id);
   return {
-    configured: config.anthropicApiKey !== null,
+    configured: config.anthropicApiKey !== null && integrationOn('claude'),
     daily_limit: config.assistant.dailyLimit,
     remaining_today: Math.max(0, config.assistant.dailyLimit - used),
     can_teach: allowFor(a.actingAs)(ASSISTANT_PERM_KEY, 'edit'),
@@ -332,6 +333,9 @@ const titleOf = (question: string): string => {
 
 export async function ask(app: FastifyInstance, a: Asker, input: AssistantAskInput): Promise<AssistantAskResponse> {
   requireAsk(a);
+  if (!integrationOn('claude')) {
+    throw conflict('The assistant is switched off in Admin › Integrations', { code: 'ASSISTANT_OFF' });
+  }
   if (!config.anthropicApiKey) {
     throw conflict('The assistant is not switched on yet (ANTHROPIC_API_KEY is unset)', { code: 'ASSISTANT_OFF' });
   }

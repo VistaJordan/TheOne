@@ -49,6 +49,7 @@ import { ApiError, conflict } from '../errors.js';
 import { ensureFolderPath, forgetDrives, getItemByPath, graphConfigured, resolveDrive, uploadFile } from '../lib/graphDrive.js';
 import type { ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
+import { integrationOn } from './integrations.js';
 import { allowFor, requirePerm } from './permissions.js';
 
 const MAX_ATTEMPTS = 6;
@@ -300,6 +301,7 @@ async function attemptFolder(s: SharePointSettings, row: FolderRow, actorId: str
  */
 export async function fileWorkOrder(taskId: string, actorId: string | null, force = false): Promise<SharePointFolderRef | null> {
   try {
+    if (!integrationOn('sharepoint')) return null; // 0074 · Admin › Integrations
     const s = await getSharePointSettings();
     if (!force && !s.wo_folders) return null;
     const t = await loadTask(taskId);
@@ -385,6 +387,7 @@ async function readBlob(storageKey: string): Promise<Buffer> {
  */
 export async function fileAttachment(attachmentId: string, actorId: string | null, force = false): Promise<void> {
   try {
+    if (!integrationOn('sharepoint')) return; // 0074 · Admin › Integrations
     const s = await getSharePointSettings();
     if (!force && !s.copy_files) return;
     const a = (
@@ -472,7 +475,8 @@ export interface SweepResult {
 export async function sweepSharePoint(actorId: string | null = null): Promise<SweepResult> {
   const out: SweepResult = { folders_tried: 0, folders_created: 0, files_tried: 0, files_copied: 0, skipped: null };
   const s = await getSharePointSettings();
-  if (!s.client_folders && !s.wo_folders && !s.copy_files) {
+  // 0074 · the master switch in Admin › Integrations outranks the three here.
+  if (!integrationOn('sharepoint') || (!s.client_folders && !s.wo_folders && !s.copy_files)) {
     out.skipped = 'off';
     return out;
   }

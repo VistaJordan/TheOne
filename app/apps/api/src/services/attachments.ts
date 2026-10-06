@@ -29,18 +29,25 @@ import { query } from '../db.js';
 import { ApiError, badRequest, notFound } from '../errors.js';
 import { allowFor, requirePerm } from './permissions.js';
 import type { ActingPrincipal } from './activity.js';
+import { integrationOn } from './integrations.js';
 
 function token(): string | undefined {
   const t = process.env.BLOB_READ_WRITE_TOKEN;
   return t && t.trim() !== '' ? t : undefined;
 }
 
-/** False = no store connected; the UI asks for a file only when this is true. */
+/** False = no store connected, or file storage switched off in Admin ›
+    Integrations (0074); the UI asks for a file only when this is true. */
 export function storageReady(): boolean {
-  return token() !== undefined;
+  return token() !== undefined && integrationOn('blob');
 }
 
 function requireStorage(): string {
+  if (!integrationOn('blob')) {
+    throw new ApiError('CONFLICT', 'File storage is switched off in Admin › Integrations, so uploads are off', {
+      code: ATTACHMENT_STORAGE_MISSING,
+    });
+  }
   const t = token();
   if (!t) {
     throw new ApiError(
@@ -390,7 +397,7 @@ export async function reviewAttachment(
     ],
   );
 
-  // 0071 � an approved file goes into the work order's SharePoint folder,
+  // 0071 · an approved file goes into the work order's SharePoint folder,
   // when that switch is on. Bounded, never throws; retried hourly.
   if (approving) {
     const { fileAttachment } = await import('./sharepoint.js');

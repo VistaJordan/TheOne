@@ -22,4 +22,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/admin/vendors', label: 'Vendors & map', icon: 'truck' },
   // 0062 — the site-type and asset-category lists; who is restricted to which sites.
   { to: '/admin/portfolio', label: 'Sites & assets', icon: 'store' },
+  // 0074 — every connector with its on / off switch.
+  { to: '/admin/integrations', label: 'Integrations', icon: 'plug' },
 ];

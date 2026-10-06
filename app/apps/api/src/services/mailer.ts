@@ -15,6 +15,7 @@
 
 import type { MailStatus } from '@theone/shared';
 import { config } from '../config.js';
+import { integrationOn } from './integrations.js';
 
 export interface MailAttachment {
   filename: string;
@@ -38,20 +39,24 @@ export interface SentEmail {
 }
 
 export class MailNotConfiguredError extends Error {
-  constructor() {
+  constructor(reason: 'unconfigured' | 'off' = 'unconfigured') {
     super(
-      'Email is not set up yet: no mail provider is configured on the server (MAIL_PROVIDER). ' +
-        'Nothing was sent.',
+      reason === 'off'
+        ? 'Outgoing email is switched off in Admin › Integrations. Nothing was sent.'
+        : 'Email is not set up yet: no mail provider is configured on the server (MAIL_PROVIDER). ' +
+          'Nothing was sent.',
     );
   }
 }
 
+/** Provider present AND the switch in Admin › Integrations on (0074). */
 export function mailStatus(): MailStatus {
-  return { configured: config.mail.provider !== null, provider: config.mail.provider, from: config.mail.from };
+  return { configured: config.mail.provider !== null && integrationOn('email'), provider: config.mail.provider, from: config.mail.from };
 }
 
 export async function sendEmail(msg: OutboundEmail): Promise<SentEmail> {
   if (msg.to.length === 0) throw new Error('An email needs at least one recipient');
+  if (!integrationOn('email')) throw new MailNotConfiguredError('off');
   switch (config.mail.provider) {
     case 'graph':
       return sendViaGraph(msg);

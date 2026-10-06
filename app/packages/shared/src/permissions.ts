@@ -343,6 +343,8 @@ export const ADMIN_PERM_SECTIONS: { slug: string; label: string; actions: PermAc
   { slug: 'vendors', label: 'Vendors & map', actions: ['view', 'edit'] },
   // 0062 · the site-type and asset-category lists; who is restricted to which sites.
   { slug: 'portfolio', label: 'Sites & assets', actions: ['view', 'edit'] },
+  // 0074 · every connector (Quo, Ecotrak, SharePoint, Claude, …) with its on / off switch.
+  { slug: 'integrations', label: 'Integrations', actions: ['view', 'edit'] },
 ];
 
 export function adminPermKey(slug: string): string {

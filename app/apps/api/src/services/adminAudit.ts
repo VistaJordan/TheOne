@@ -81,7 +81,9 @@ export type AdminEntity =
   // 0071: the SharePoint folder settings (Admin : Settings).
   | 'sharepoint_setting'
   // 0073: the field list of a work-order PDF (Admin › Settings), keyed by kind.
-  | 'wo_pdf_layout';
+  | 'wo_pdf_layout'
+  // 0074: a connector's on / off switch (Admin › Integrations), keyed by its key.
+  | 'integration';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

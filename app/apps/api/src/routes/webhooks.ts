@@ -39,6 +39,7 @@ import { escalateFromEmail } from '../services/escalations.js';
 import { raiseDueWorkOrders } from '../services/plannedMaintenance.js';
 import { handleQuoEvent } from '../services/woCalls.js';
 import type { QuoEvent } from '../services/woCalls.js';
+import { requireIntegration } from '../services/integrations.js';
 import { runDueClientUpdates } from '../services/clientUpdates.js';
 
 const optionalText = (max: number) =>
@@ -88,7 +89,7 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
     // the cascade is switched off).
     const { sweepDispatchOffers } = await import('../services/vendorExtras.js');
     const dispatch = await sweepDispatchOffers().catch(() => ({ advanced: 0 }));
-    // 0071 � and files what SharePoint still owes: failed folders retried,
+    // 0071 · and files what SharePoint still owes: failed folders retried,
     // work orders created by any path (the Ecotrak sync included) filed.
     const { sweepSharePoint } = await import('../services/sharepoint.js');
     const sharepoint = await sweepSharePoint().catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
@@ -101,6 +102,8 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
     // The public demo runs on seed data with the dev bypass; a reachable
     // receiver there would let anyone flag demo rows from the internet.
     if (config.demoMode) throw new ApiError('FORBIDDEN', 'Webhooks are disabled in the public demo.');
+    // 0074 · the switch in Admin › Integrations.
+    requireIntegration('email_escalations');
 
     const outcome = checkWebhookSecret(presentedSecret(req.headers), config.escalationWebhookSecret);
     if (outcome === 'unconfigured') {
@@ -117,6 +120,9 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
 
   app.post('/webhooks/quo', async (req) => {
     if (config.demoMode) throw new ApiError('FORBIDDEN', 'Webhooks are disabled in the public demo.');
+    // 0074 · the switch in Admin › Integrations: refused, so Quo's retries
+    // deliver the events once it is back on.
+    requireIntegration('quo');
     const outcome = verifyQuoSignature(req.headers, req.rawBody ?? '', config.quoWebhookSecret);
     if (outcome === 'unconfigured') {
       throw new ApiError('FORBIDDEN', 'The Quo webhook is not configured (QUO_WEBHOOK_SECRET is unset).');

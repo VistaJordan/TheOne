@@ -2470,3 +2470,47 @@ a.dash-widget-total:hover strong { color: var(--accent-text); }
 .adm-tier-table tbody td { padding: 13px 16px; vertical-align: middle; }
 .adm-tier-table tbody td:first-child { white-space: nowrap; }
 .adm-tier-roles { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+
+/* ── 0074 · Admin › Integrations: one row per connector, one switch ───────── */
+.intg-err { margin: 0 0 12px; }
+.intg-group + .intg-group { margin-top: 16px; }
+.intg-list { list-style: none; margin: 0; padding: 0; }
+.intg-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 14px 16px; border-top: 1px solid var(--row-border); }
+.intg-row:first-child { border-top: 0; }
+.intg-row.is-off .intg-logo, .intg-row.is-off .intg-summary { opacity: 0.55; }
+.intg-logo { width: 56px; height: 56px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.intg-logo img { width: 44px; height: 44px; object-fit: contain; border-radius: 10px; }
+.intg-mono { font-weight: 700; font-size: 20px; color: var(--ink-2); }
+.intg-text { display: grid; gap: 4px; min-width: 0; }
+.intg-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; font-size: 14px; color: var(--ink); }
+.intg-name b { font-weight: 600; }
+.intg-name small { color: var(--ink-3); font-size: 12px; }
+.intg-state { align-self: center; }
+.intg-state.is-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.intg-state.is-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.intg-state.is-off { color: var(--ink-3); }
+.intg-state.is-muted { color: var(--ink-3); }
+.intg-summary, .intg-note, .intg-off, .intg-changed { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); max-width: 78ch; }
+.intg-note { color: var(--ink-3); }
+.intg-note.is-warn { color: var(--warn); }
+.intg-off b { font-weight: 600; color: var(--ink-2); }
+.intg-changed { font-size: 11.5px; color: var(--ink-3); }
+
+.intg-switch { all: unset; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 4px; border-radius: 10px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); align-self: center; }
+.intg-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.intg-switch:disabled { cursor: default; opacity: 0.6; }
+.intg-switch.is-on { color: var(--ink); }
+.intg-track { position: relative; width: 46px; height: 26px; border-radius: 13px; background: var(--chip); border: 1px solid var(--border-strong); flex: none; }
+.intg-switch.is-on .intg-track { background: var(--accent); border-color: var(--accent); }
+.intg-knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+.intg-switch.is-on .intg-knob { left: 23px; }
+.intg-switch-label { min-width: 62px; }
+@media (prefers-reduced-motion: no-preference) {
+  .intg-track, .intg-knob { transition: background 160ms ease, border-color 160ms ease, left 160ms ease; }
+}
+@media (max-width: 640px) {
+  .intg-row { grid-template-columns: 44px minmax(0, 1fr); }
+  .intg-logo { width: 44px; height: 44px; border-radius: 11px; }
+  .intg-logo img { width: 34px; height: 34px; }
+  .intg-switch { grid-column: 2; justify-self: start; }
+}

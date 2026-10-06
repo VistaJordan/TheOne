@@ -29,6 +29,7 @@ import type { Queryable } from '../db.js';
 import { ApiError, badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { contractForTask } from './contracts.js';
+import { integrationOn, requireIntegration } from './integrations.js';
 import {
   assertCanCreate,
   assertCanEdit,
@@ -108,7 +109,7 @@ export async function getDraftForCall(taskId: string, callId: string): Promise<A
     call,
     draft: await loadDraft(callId),
     quote: await quoteState(taskId),
-    ai_configured: config.anthropicApiKey !== null,
+    ai_configured: config.anthropicApiKey !== null && integrationOn('claude'),
   };
 }
 
@@ -182,6 +183,7 @@ async function askClaude(userMessage: string): Promise<{ out: ModelOutput; model
     typically 20–60 s — so the route runs it inside the request. */
 export async function generateDraft(taskId: string, callId: string, actor: ActingPrincipal): Promise<AiQuoteDraftResponse> {
   assertCanEdit(actor);
+  requireIntegration('claude'); // 0074 · Admin › Integrations
   if (!config.anthropicApiKey) {
     throw conflict('AI quote drafting is not configured (ANTHROPIC_API_KEY is unset)');
   }

@@ -1754,3 +1754,6 @@ export * from './woPdf';
 
 // Who is free to take a work order: the availability view behind the Assignee pickers.
 export * from './assigneeAvailability';
+
+// 0074: Admin › Integrations — every connector, each with one switch.
+export * from './integrations';

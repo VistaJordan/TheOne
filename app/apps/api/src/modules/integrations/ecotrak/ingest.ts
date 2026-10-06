@@ -15,6 +15,7 @@ import { classifyInbound } from './statusMap.js';
 import { resolveTrade } from './tradeMap.js';
 import { planFolder, stateAbbr } from './sharepointPath.js';
 import { raiseAcceptanceTasks } from '../../../services/approvals.js';
+import { requireIntegration } from '../../../services/integrations.js';
 import { ecotrakSyncActorId } from '../../../services/serviceActors.js';
 
 export const MAP_VERSION = '2026-09-01.1';
@@ -110,6 +111,8 @@ export async function getEcotrakConnection(): Promise<ConnectionRow | null> {
  * mapping bug is always replayable without re-fetching.
  */
 export async function ingestEcotrak(opts: { sinceDays?: number } = {}): Promise<IngestResult> {
+  // 0074 · the switch in Admin › Integrations (manual trigger and any poll).
+  requireIntegration('ecotrak');
   const res: IngestResult = {
     fetched: 0, created: 0, updated: 0, skippedHumanMoved: 0,
     unmappedStatus: [], unmappedTrade: [], errors: [],

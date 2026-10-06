@@ -1551,6 +1551,44 @@ payment requested → approved — from the dashboard builder.
 - Who may build: `dashboard` create (admin / TL / ATL / AM by default, Roles
   screen decides). Super admins open everything regardless.
 
+**Admin › Integrations** (migration 0074, `shared/integrations.ts`,
+`services/integrations.ts`, `routes/adminIntegrations.ts`,
+`pages/admin/AdminIntegrationsPage.tsx`, logos in `public/brand/
+integrations/`, `tests/integrations.test.ts`). Every connector on one page,
+each with the tool's mark, what it does, whether it is set up on the server
+and **one switch**: Ecotrak, ServiceChannel, Corrigo (client systems); Quo,
+outgoing email, the escalation-mailbox webhook (communications); Claude
+(AI); SharePoint, file storage / Vercel Blob (files); Microsoft sign-in
+(platform, **locked** — always on). The list is code (`INTEGRATIONS`; a
+connector is code), the switch is a row per key in `integration_setting`;
+**no row = on**, so a connector added later is on until someone turns it
+off. Its own admin section `admin/integrations` (view / edit; 0074 grants
+it to the admin role; routes read the REAL user like `routes/admin.ts`).
+`integrationOn(key)` is **synchronous** — `storageReady` and `quoApiReady`
+are called inside handlers that never awaited for it — answering from an
+in-memory copy refreshed in the background every 20 s and at once after a
+flip on that instance (other Vercel instances catch up within the window;
+the page always reads the table). `requireIntegration(key)` throws the 409
+`INTEGRATION_OFF` every gated path raises. **What off stops:** Quo —
+`quoApiReady` false, `sendQuoText` and `POST /webhooks/quo` refuse (so Quo's
+retries deliver once it is back on); Ecotrak — `ingestEcotrak` refuses
+(manual trigger and any poll; the 2.6.3 transition checks still read the
+bag); SharePoint — `fileWorkOrder` / `fileAttachment` / the sweep return
+early whatever the three Settings switches say; Claude — `assistantStatus.
+configured` false, `ask` and `generateDraft` refuse, `ai_configured` false;
+outgoing email — `mailStatus().configured` false and `sendEmail` throws
+`MailNotConfiguredError('off')`; escalation emails — the webhook answers
+409; file storage — `storageReady()` false and `requireStorage` refuses
+(files already stored still open). ServiceChannel / Corrigo have no
+connector yet (`built: false`): the switch is remembered for the outbox
+adapters when they exist. `configured` is computed from config / env / the
+settings tables directly (the service imports none of the connectors — they
+import it), with a one-line note of what is set or missing. Each flip is
+logged `integration_turned_on|off` (entity `integration`, id = key). The
+marks are the tools' favicons fetched once at build time (Corrigo's from
+corrigopro.com, SharePoint shown as the Microsoft mark); a missing image
+falls back to a monogram tile.
+
 ## Verify
 
 ```
