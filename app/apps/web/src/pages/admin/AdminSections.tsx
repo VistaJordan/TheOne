@@ -6,6 +6,7 @@
 import { SubcategoriesCard } from './SubcategoriesCard';
 import { CodesCard, FormLayoutsCard } from './WoRecordSettings';
 import { FinanceSetupCards } from './FinanceSetupCards';
+import { SharePointCard } from './SharePointCard';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -147,6 +148,8 @@ export function AdminSettingsPage() {
       )}
 
       <HolidaysCard />
+      {/* 0071 · folders in the team's SharePoint library per client and work order. */}
+      <SharePointCard />
       {/* 0063 · what each trade can be narrowed to on "Add work order". */}
       <SubcategoriesCard />
       {/* 0064 · layouts for the create form; fault and action codes. */}

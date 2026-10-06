@@ -427,6 +427,11 @@ export async function submitIntakeDraft(id: string, actor: ActingPrincipal): Pro
   // the rules on create, then the assignment through the ordinary field
   // write â€” audited as this person's edit, scope-visible to the dispatcher.
   await dispatchAutomations({ taskId, kind: 'created' });
+  // 0071 · its SharePoint folder, when that switch is on (never throws).
+  {
+    const { fileWorkOrder } = await import('./sharepoint.js');
+    await fileWorkOrder(taskId, actor.id);
+  }
   const { updateWorkOrderFields } = await import('./woFieldValues.js');
   await updateWorkOrderFields(taskId, { [`fields.${INTAKE_ASSIGNEE_KEY}`]: assignee }, actor.id);
 

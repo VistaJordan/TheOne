@@ -1406,6 +1406,45 @@ does; Hire is the map's own hire. A hand-picked vendor is listed however far
 away it is. The map itself still sorts by distance. Not built: a rule per
 site, and any rating signal (there is no rating field).
 
+**SharePoint folders** (migration 0071, `shared/sharepoint.ts` pure +
+`tests/sharepoint-folders.test.ts`, `apps/api/src/lib/graphDrive.ts` Graph
+calls, `services/sharepoint.ts` the queue, `pages/admin/SharePointCard.tsx`,
+`components/SharePointFolderChip.tsx`). The team files every work order in
+its SharePoint library as `Documents / General / Work Orders - {year} /
+{year} - {Comp} / {Client} / WO#{number}, {City}, {ST}`; the app now makes
+those folders itself. Three switches in Admin › Settings › SharePoint
+folders (`sharepoint_setting` row `config`, `PUT /admin/sharepoint`, grant
+`admin/settings` edit, audited `sharepoint_settings_updated`): a folder per
+**new client** (under its `billing_entity`; none = `skipped`), a folder per
+**new work order** (under the client, whichever path created it), and
+**approved files copied** into the work-order folder (never quarantined
+ones). Each switch stamps `*_since` when turned on and files only records
+created after it — turning one on never backfills. The site URL, library and
+the three path templates are editable in the same card; credentials are env
+(`SHAREPOINT_TENANT_ID/CLIENT_ID/CLIENT_SECRET`, falling back to
+`MAIL_GRAPH_*` then `ENTRA_*`; needs `Sites.Selected` or
+`Files.ReadWrite.All` as an application permission). One `sharepoint_folder`
+row per (kind, entity_id) with `path`, `web_url`, `status` pending / created /
+failed / skipped, `error`, `attempts`; one `sharepoint_file` row per copied
+attachment. `fileWorkOrder` / `fileClient` / `fileAttachment` run AFTER the
+creating commit (woCreate, intake, plannedMaintenance, woBulk;
+portfolioExtras.createClient; attachments.reviewAttachment on approve), are
+bounded (20 s per Graph call) and never throw; the hourly client-updates
+cron also runs `sweepSharePoint`, which retries failures (6 tries), files
+work orders created by paths that do not call us (the Ecotrak sync — that
+module is untouched) and re-plans a row that failed for want of a client on
+file. The **client must exist under Clients** (matched by name,
+case-insensitive; its spelling names the folder) so a typo never forks the
+live tree; `WO#` takes `ext_name` for `ECO-` numbers and strips a `WO-`
+prefix otherwise; the year is `date_received`'s, else `created_at`'s.
+Folders along the way are created when missing; an existing folder is
+reused; nothing is ever deleted or renamed in SharePoint. Header chip on
+the work order and on the client record (`GET/POST …/sharepoint-folder`,
+POST = make it now, whatever the switch says; `work_orders/attachments`
+create / `clients` edit). Audit: `sharepoint_folder_created` (entity task
+or client), `sharepoint_file_copied`. Not built: deleting or renaming
+folders, backfilling old records, per-Comp site overrides.
+
 ## Verify
 
 ```

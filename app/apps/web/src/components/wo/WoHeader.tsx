@@ -25,6 +25,7 @@ import { PhaseBar } from './PhaseBar';
 import { StatusChangeBanner } from './StatusChangeBanner';
 import { AcceptanceChip } from './AcceptanceChip';
 import { CallButton } from './calls/CallButton';
+import { SharePointFolderChip } from '../SharePointFolderChip';
 
 /** One labelled amount in the worth block. The currency sign is drawn
     separately, smaller and lighter, so label + amount read the way the comp
@@ -273,6 +274,8 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
             </span>
           )}
           {meta.billingEntity && <span className="chip chip-accent">{meta.billingEntity}</span>}
+          {/* 0071 · the work order's folder in SharePoint, once it exists. */}
+          <SharePointFolderChip kind="work_order" id={wo.id} />
           {ecotrakLabel && (
             <span
               className="chip chip-ecotrak"

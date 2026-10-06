@@ -109,6 +109,12 @@ export interface Config {
       address (MAIL_FROM, default contact@seamlessfm.com). `provider` is null
       until one is configured, and always null in the public demo. */
   mail: MailConfig;
+  /** 0071: the app registration that makes SharePoint folders
+      (SHAREPOINT_TENANT_ID / _CLIENT_ID / _CLIENT_SECRET, falling back to
+      the mail registration, then the sign-in one). It needs the
+      Sites.Selected (or Files.ReadWrite.All) application permission. Null =
+      no credentials; the Settings card says so. */
+  sharepoint: { tenantId: string; clientId: string; clientSecret: string } | null;
 }
 
 export interface MailConfig {
@@ -248,7 +254,16 @@ function build(): Config {
     quoteAiModel: str('QUOTE_AI_MODEL') ?? 'claude-opus-5',
     assistant: buildAssistant(),
     mail: buildMail(entra, demoMode),
+    sharepoint: buildSharePoint(entra),
   };
+}
+
+/** 0071: SHAREPOINT_* first, then the mail registration, then sign-in. */
+function buildSharePoint(entra: EntraConfig | null): Config['sharepoint'] {
+  const tenantId = str('SHAREPOINT_TENANT_ID') ?? str('MAIL_GRAPH_TENANT_ID') ?? entra?.tenantId;
+  const clientId = str('SHAREPOINT_CLIENT_ID') ?? str('MAIL_GRAPH_CLIENT_ID') ?? entra?.clientId;
+  const clientSecret = str('SHAREPOINT_CLIENT_SECRET') ?? str('MAIL_GRAPH_CLIENT_SECRET') ?? entra?.clientSecret;
+  return tenantId && clientId && clientSecret ? { tenantId, clientId, clientSecret } : null;
 }
 
 export const config: Config = build();

@@ -4,6 +4,7 @@
 import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
 // 0070: sign-off sheets.
 import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
+import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
 import type {
   AssistantAskInput,
   AssistantAskResponse,
@@ -2974,6 +2975,56 @@ export function deleteClient(id: string): Promise<{ ok: true }> {
 
 export function getClientHistory(id: string): Promise<{ history: PortfolioHistoryEntry[] }> {
   return request(`/clients/${encodeURIComponent(id)}/history`);
+}
+
+// ── 0071 · SharePoint folders ───────────────────────────────────────────────
+
+export interface SharePointFolderResponse {
+  folder: SharePointFolderRef | null;
+  /** The Settings switch for this kind of record is on. */
+  enabled: boolean;
+  /** Site + credentials are set, so a folder can be made now. */
+  ready: boolean;
+}
+
+export interface SharePointRunResult {
+  folders_tried: number;
+  folders_created: number;
+  files_tried: number;
+  files_copied: number;
+  skipped: 'off' | 'not_ready' | null;
+}
+
+export function getSharePointOverview(): Promise<SharePointOverview> {
+  return request('/admin/sharepoint');
+}
+
+export function saveSharePointSettings(patch: Partial<SharePointSettings>): Promise<{ settings: SharePointSettings }> {
+  return request('/admin/sharepoint', { method: 'PUT', body: JSON.stringify(patch) });
+}
+
+export function testSharePoint(): Promise<SharePointTestResult> {
+  return request('/admin/sharepoint/test', { method: 'POST' });
+}
+
+export function runSharePoint(): Promise<SharePointRunResult> {
+  return request('/admin/sharepoint/run', { method: 'POST' });
+}
+
+export function getWoSharePointFolder(id: string): Promise<SharePointFolderResponse> {
+  return request(`/work-orders/${encodeURIComponent(id)}/sharepoint-folder`);
+}
+
+export function createWoSharePointFolder(id: string): Promise<{ folder: SharePointFolderRef }> {
+  return request(`/work-orders/${encodeURIComponent(id)}/sharepoint-folder`, { method: 'POST' });
+}
+
+export function getClientSharePointFolder(id: string): Promise<SharePointFolderResponse> {
+  return request(`/clients/${encodeURIComponent(id)}/sharepoint-folder`);
+}
+
+export function createClientSharePointFolder(id: string): Promise<{ folder: SharePointFolderRef }> {
+  return request(`/clients/${encodeURIComponent(id)}/sharepoint-folder`, { method: 'POST' });
 }
 
 export function listAssetRequests(params: { status?: string; asset?: string }): Promise<AssetRequestsResponse> {

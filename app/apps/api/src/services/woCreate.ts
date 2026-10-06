@@ -448,6 +448,12 @@ export async function createWorkOrder(
   // After the commit, exactly as the intake draft does it: the create rules
   // first, then the assignment as this person's ordinary field edit.
   await dispatchAutomations({ taskId, kind: 'created' });
+  // 0071 · its SharePoint folder, when that switch is on. Bounded, never
+  // throws: a failure is written on the folder row and retried hourly.
+  {
+    const { fileWorkOrder } = await import('./sharepoint.js');
+    await fileWorkOrder(taskId, actor.id);
+  }
   // 0066 · the dispatch cascade, when it is switched on AND set to start by
   // itself (both are off by default): offer the job to the first preferred
   // vendor. A no-op otherwise.

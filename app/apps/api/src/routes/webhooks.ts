@@ -88,7 +88,11 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
     // the cascade is switched off).
     const { sweepDispatchOffers } = await import('../services/vendorExtras.js');
     const dispatch = await sweepDispatchOffers().catch(() => ({ advanced: 0 }));
-    return { ok: true, ...(await runDueClientUpdates()), dispatch_advanced: dispatch.advanced };
+    // 0071 · and files what SharePoint still owes: failed folders retried,
+    // work orders created by any path (the Ecotrak sync included) filed.
+    const { sweepSharePoint } = await import('../services/sharepoint.js');
+    const sharepoint = await sweepSharePoint().catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
+    return { ok: true, ...(await runDueClientUpdates()), dispatch_advanced: dispatch.advanced, sharepoint };
   };
   app.get('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));
   app.post('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));

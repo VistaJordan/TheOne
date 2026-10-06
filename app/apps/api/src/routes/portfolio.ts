@@ -73,6 +73,7 @@ import {
   updateListValue,
   withdrawAssetRequest,
 } from '../services/portfolioExtras.js';
+import { clientFolder, connectionOf, fileClientNow, getSharePointSettings } from '../services/sharepoint.js';
 
 const idParams = z.object({ id: z.string().min(1).max(64) });
 const text = (max: number) => z.string().max(max).nullable().optional();
@@ -296,6 +297,19 @@ export default async function portfolioRoutes(app: FastifyInstance): Promise<voi
   app.get('/clients/:id', async (req) => {
     const { id } = parse(idParams, req.params);
     return { client: await getClient(id, actingPrincipalFromRequest(req)) };
+  });
+  // 0071 · the client's SharePoint folder (under its billing entity).
+  app.get('/clients/:id/sharepoint-folder', async (req) => {
+    const { id } = parse(idParams, req.params);
+    await getClient(id, actingPrincipalFromRequest(req)); // scope + 404
+    const s = await getSharePointSettings();
+    return { folder: await clientFolder(id), enabled: s.client_folders, ready: connectionOf(s).ready };
+  });
+  app.post('/clients/:id/sharepoint-folder', async (req) => {
+    const { id } = parse(idParams, req.params);
+    const p = actingPrincipalFromRequest(req);
+    await getClient(id, p);
+    return { folder: await fileClientNow(id, p) };
   });
   app.patch('/clients/:id', async (req) => {
     const { id } = parse(idParams, req.params);

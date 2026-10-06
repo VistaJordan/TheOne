@@ -390,6 +390,13 @@ export async function reviewAttachment(
     ],
   );
 
+  // 0071 · an approved file goes into the work order's SharePoint folder,
+  // when that switch is on. Bounded, never throws; retried hourly.
+  if (approving) {
+    const { fileAttachment } = await import('./sharepoint.js');
+    await fileAttachment(attachmentId, actor.id);
+  }
+
   const out = await query<Row>(`${SELECT} WHERE a.id = $1`, [attachmentId]);
   return mapRow(out.rows[0]);
 }

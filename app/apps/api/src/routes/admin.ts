@@ -46,6 +46,8 @@ import {
 import { listAuditLog, exportAuditCsv } from '../services/auditLog.js';
 import { deleteCicoMethod, listCicoMethods, setCicoMethod } from '../services/visits.js';
 import { deleteHoliday, listHolidays, setHoliday } from '../services/holidays.js';
+import { actingPrincipalFromRequest } from '../services/activity.js';
+import { retrySharePoint, saveSharePointSettings, sharePointOverview, testSharePoint } from '../services/sharepoint.js';
 import {
   createApprovalTier,
   deleteApprovalTier,
@@ -535,6 +537,29 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get('/admin/settings', async (req) => {
     requireAdmin(req, 'settings');
     return getSettings();
+  });
+
+  // ── SharePoint folders (0071) ──────────────────────────────────────────────
+  // The site, the three switches, what has been filed, and the buttons:
+  // Test connection, Run now (retries what failed, files what is waiting).
+  app.get('/admin/sharepoint', async (req) => {
+    requireAdmin(req, 'settings');
+    return sharePointOverview(actingPrincipalFromRequest(req));
+  });
+
+  app.put('/admin/sharepoint', async (req) => {
+    requireAdmin(req, 'settings', 'edit');
+    return { settings: await saveSharePointSettings(req.body, actingPrincipalFromRequest(req)) };
+  });
+
+  app.post('/admin/sharepoint/test', async (req) => {
+    requireAdmin(req, 'settings');
+    return testSharePoint(actingPrincipalFromRequest(req));
+  });
+
+  app.post('/admin/sharepoint/run', async (req) => {
+    requireAdmin(req, 'settings', 'edit');
+    return retrySharePoint(actingPrincipalFromRequest(req));
   });
 
   // ── Holidays (0024) ────────────────────────────────────────────────────────

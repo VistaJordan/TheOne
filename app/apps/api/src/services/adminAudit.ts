@@ -77,7 +77,9 @@ export type AdminEntity =
   // 0068: a question put to the assistant (keyed to its conversation), and a
   // note the assistant has been taught.
   | 'assistant'
-  | 'assistant_note';
+  | 'assistant_note'
+  // 0071: the SharePoint folder settings (Admin : Settings).
+  | 'sharepoint_setting';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

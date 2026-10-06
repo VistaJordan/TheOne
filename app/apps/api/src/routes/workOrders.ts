@@ -62,6 +62,7 @@ import {
   reviewAttachment,
   storageReady,
 } from '../services/attachments.js';
+import { connectionOf, fileWorkOrderNow, getSharePointSettings, workOrderFolder } from '../services/sharepoint.js';
 import { query } from '../db.js';
 import { logExport } from '../services/adminAudit.js';
 import {
@@ -474,6 +475,25 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // Files live in a private blob store; nothing is served from a storage URL.
   // Every read comes back through here so the work order's scope is checked
   // first â€” a photo is exactly as visible as the work order it is on.
+
+  // 0071 · the work order's SharePoint folder: where it is (or why not),
+  // and a button to make it now whatever the Settings switch says.
+  app.get('/work-orders/:id/sharepoint-folder', async (req) => {
+    const { p } = acting(req);
+    const { id } = parse(idParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    const s = await getSharePointSettings();
+    return { folder: await workOrderFolder(taskId), enabled: s.wo_folders, ready: connectionOf(s).ready };
+  });
+
+  app.post('/work-orders/:id/sharepoint-folder', async (req) => {
+    const { p } = acting(req);
+    const { id } = parse(idParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    return { folder: await fileWorkOrderNow(taskId, p) };
+  });
 
   app.get('/work-orders/:id/attachments', async (req) => {
     const { p } = acting(req);

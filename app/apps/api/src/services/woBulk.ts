@@ -845,6 +845,12 @@ export async function importWorkOrders(
   // rule on create â€” waits in the manager's Pending Acceptance queue. After
   // the rules ran, so an auto-assign on create needs no acceptance.
   await raiseAcceptanceTasks(createdIds, actorId, 'import');
+  // 0071 · a SharePoint folder for each new row, when that switch is on.
+  // Each call is bounded and never throws; the hourly sweep retries.
+  if (createdIds.length > 0) {
+    const { fileWorkOrder } = await import('./sharepoint.js');
+    for (const id of createdIds) await fileWorkOrder(id, actorId);
+  }
 
   return summary;
 }

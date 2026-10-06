@@ -264,6 +264,12 @@ export async function createClient(input: ClientInput, actor: ActingPrincipal): 
     vals,
   );
   await logAdminEvent({ actorId: actor.id, entity: 'client', entityId: ins.rows[0].id, action: 'client_created', after: { name } });
+  // 0071 · its SharePoint folder under its billing entity, when that switch
+  // is on. Bounded, never throws; the hourly sweep retries a failure.
+  {
+    const { fileClient } = await import('./sharepoint.js');
+    await fileClient(ins.rows[0].id, actor.id);
+  }
   return loadClient(ins.rows[0].id, actor);
 }
 

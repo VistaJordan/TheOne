@@ -449,6 +449,11 @@ async function raiseOne(s: PmSchedule, dueOn: string, actorId: string): Promise<
   // first, then the assignment as an ordinary field edit so it is audited
   // and the 0032 scope sees it.
   await dispatchAutomations({ taskId, kind: 'created' });
+  // 0071 · its SharePoint folder, when that switch is on (never throws).
+  {
+    const { fileWorkOrder } = await import('./sharepoint.js');
+    await fileWorkOrder(taskId, actorId);
+  }
   // 0065 · the schedule's job plan: its steps become the checklist.
   if (s.job_plan) {
     const { applyPlanToTask } = await import('./maintenance.js');

@@ -119,6 +119,24 @@ textarea {
   border-color: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
+/* 0071: the SharePoint folder of a work order or client (header chip). A link
+   once the folder exists; its state, with a Make it / Retry button, before. */
+a.chip-folder { text-decoration: none; cursor: pointer; }
+a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
+.chip-folder .chip-act {
+  margin-left: 4px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.chip-folder .chip-act:disabled { opacity: 0.6; cursor: default; }
+
 /* Rules 2.6.3 / 2.7: where the work order sits on Ecotrak (header chip). */
 .chip-ecotrak {
   background: var(--warn-bg);

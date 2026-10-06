@@ -17,6 +17,7 @@ import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { HistoryCard, WorkOrderList, errText } from '../components/portfolio/PortfolioParts';
+import { SharePointFolderChip } from '../components/SharePointFolderChip';
 import { useEscape } from '../lib/useEscape';
 
 export function ClientsPage() {
@@ -294,6 +295,8 @@ export function ClientDetailPage() {
             <span className="chip chip-sm">{c.sites} {c.sites === 1 ? 'site' : 'sites'}</span>
             <span className="chip chip-sm">{c.assets} {c.assets === 1 ? 'asset' : 'assets'}</span>
             <span className="chip chip-sm">{c.open_work_orders} open · {c.work_orders} work orders</span>
+            {/* 0071 · the client's folder in SharePoint, once it exists. */}
+            <SharePointFolderChip kind="client" id={c.id} />
           </div>
         </div>
         <div className="vrec-actions">

@@ -1730,3 +1730,6 @@ export * from './assistant';
 export * from './moneyRules';
 // 0070: sign-off sheets — branded blank per entity, shared by text, signed copy filed.
 export * from './signoff';
+
+// 0071: SharePoint folders per client and work order, files copied in.
+export * from './sharepoint';
