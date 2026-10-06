@@ -2462,7 +2462,11 @@ a.dash-widget-total:hover strong { color: var(--accent-text); }
 
 .modal.modal-wide { width: min(860px, calc(100vw - 32px)); }
 
-.adm-tier-kind { margin-top: 14px; }
-.adm-tier-title { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; }
-.adm-tier-table td { vertical-align: middle; }
-.adm-tier-roles { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.adm-tier-kind { margin-top: 16px; }
+/* The kind heading and the cells share the card's 16px inset, so nothing
+   touches the card border; the band column never wraps. */
+.adm-tier-title { margin: 0 0 8px; padding: 0 16px; font-size: 12.5px; font-weight: 600; }
+.adm-tier-table thead th { padding-left: 16px; padding-right: 16px; }
+.adm-tier-table tbody td { padding: 13px 16px; vertical-align: middle; }
+.adm-tier-table tbody td:first-child { white-space: nowrap; }
+.adm-tier-roles { display: flex; flex-wrap: wrap; gap: 6px 14px; }
