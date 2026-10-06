@@ -741,6 +741,22 @@ export async function compileNumericExpr(key: string, p: Params): Promise<string
   return `(${exprFor(f, p)})::numeric`;
 }
 
+/**
+ * 0073 · the expression one end of a "time between" span reads when it is a
+ * date field's own value. Only a date can be a moment, so anything else is
+ * refused here; a custom field keeps `exprFor`'s guarded cast, so a row whose
+ * value is not a date simply has no span.
+ */
+export async function compileTimestampExpr(key: string, p: Params): Promise<string> {
+  const f = await resolveField(key);
+  if (f.type !== 'date' && f.type !== 'datetime') {
+    throw new ApiError('BAD_REQUEST', `"${f.label}" is not a date, so it cannot be one end of a span`, {
+      field: key,
+    });
+  }
+  return `(${exprFor(f, p)})::timestamptz`;
+}
+
 /** The SELECT fragment for one requested column, when it is a custom field.
     Core columns are already in the base projection. */
 export function customSelect(f: ResolvedField, alias: string, p: Params): string {

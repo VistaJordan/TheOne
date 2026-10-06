@@ -41,6 +41,7 @@ import {
   type WoFilterSet,
   type Dashboard,
   type DashboardFolder,
+  type DashboardShareOptions,
   type DashboardWidget,
   type DashboardsResponse,
   type WidgetConfig,
@@ -54,6 +55,7 @@ import { requirePerm } from './permissions.js';
 import type { ActingPrincipal } from './activity.js';
 import { metricWidget } from './woMetrics.js';
 import { updateRole } from './roles.js';
+import { setUserOverrideView } from './users.js';
 
 const PERM_KEY = 'dashboard';
 
@@ -129,50 +131,113 @@ async function rolePerms(): Promise<RolePerms[]> {
   return res.rows.map((r) => ({ ...r, permissions: r.permissions ?? {} }));
 }
 
-/** Which roles open this dashboard, read back from their grants. "Everyone"
-    = every role that can open the Dashboard section at all. */
-function sharingOf(ref: string, roles: RolePerms[]): { shared_roles: string[]; shared_all: boolean } {
+/** 0073 · the people a dashboard can be shared with one by one: active
+    humans with their own overrides. Super admins are left out — they open
+    every dashboard already, so a share to them would mean nothing. */
+interface PersonPerms {
+  id: string;
+  name: string;
+  role_label: string | null;
+  overrides: PermMap;
+}
+
+async function peoplePerms(): Promise<PersonPerms[]> {
+  const res = await query<{ id: string; name: string; role_label: string | null; overrides: PermMap | null }>(
+    `SELECT p.id::text AS id, p.display_name AS name, r.label AS role_label, p.permission_overrides AS overrides
+       FROM principal p LEFT JOIN role r ON r.code = p.role
+      WHERE p.kind = 'human' AND p.status <> 'disabled' AND NOT p.is_super_admin
+      ORDER BY lower(p.display_name)`,
+  );
+  return res.rows.map((r) => ({ ...r, overrides: r.overrides ?? {} }));
+}
+
+/** Which roles open this dashboard, read back from their grants ("everyone"
+    = every role that can open the Dashboard section at all), and which
+    people hold it as a per-person override (0073). */
+function sharingOf(
+  ref: string,
+  roles: RolePerms[],
+  people: PersonPerms[],
+): { shared_roles: string[]; shared_all: boolean; shared_people: { id: string; name: string }[] } {
   const opens = (r: RolePerms, key: string) => permAllows({ role: r.permissions, overrides: {} }, key, 'view');
   const withSection = roles.filter((r) => opens(r, 'dashboard'));
-  const shared = withSection.filter((r) => opens(r, dashboardPermKey(ref)));
+  const key = dashboardPermKey(ref);
+  const shared = withSection.filter((r) => opens(r, key));
   return {
     shared_roles: shared.map((r) => r.code),
     shared_all: withSection.length > 0 && shared.length === withSection.length,
+    shared_people: people.filter((p) => p.overrides[key]?.view === true).map((p) => ({ id: p.id, name: p.name })),
   };
 }
 
-/** The Share button (0050): write the dashboard's view grant on every role
-    whose answer changes, through updateRole so each change is a role_updated
-    row in the audit log, exactly like an edit on the Roles screen. */
+/** The Share dialog (0050 / 0073): write the dashboard's view grant on every
+    role whose answer changes, through updateRole so each change is a
+    role_updated row in the audit log, exactly like an edit on the Roles
+    screen; and (0073) on every person whose answer changes, as their own
+    override — set when they are picked, removed when they are not, so the
+    role decides again. */
 async function applySharing(
   row: DashRow,
-  input: { shared_roles?: string[]; shared_all?: boolean },
+  input: { shared_roles?: string[]; shared_all?: boolean; shared_people?: string[] },
   viewer: ActingPrincipal,
 ): Promise<void> {
-  if (input.shared_roles === undefined && input.shared_all === undefined) return;
+  const rolesAsked = input.shared_roles !== undefined || input.shared_all !== undefined;
+  if (!rolesAsked && input.shared_people === undefined) return;
   const ref = refOf(row);
   const key = dashboardPermKey(ref);
-  const wanted = new Set(input.shared_roles ?? []);
   const roles = await rolePerms();
-  const current = sharingOf(ref, roles);
-  for (const r of roles) {
-    // Only the roles that can open the section at all are offered; the rest
-    // are left exactly as they are.
-    if (!permAllows({ role: r.permissions, overrides: {} }, 'dashboard', 'view')) continue;
-    const want = input.shared_all === true || wanted.has(r.code);
-    if (want === current.shared_roles.includes(r.code)) continue;
-    await updateRole(
-      r.id,
-      { permissions: { ...r.permissions, [key]: { ...r.permissions[key], view: want } } },
-      viewer.id,
-    );
+  const people = await peoplePerms();
+  const current = sharingOf(ref, roles, people);
+
+  if (rolesAsked) {
+    const wanted = new Set(input.shared_roles ?? []);
+    for (const r of roles) {
+      // Only the roles that can open the section at all are offered; the rest
+      // are left exactly as they are.
+      if (!permAllows({ role: r.permissions, overrides: {} }, 'dashboard', 'view')) continue;
+      const want = input.shared_all === true || wanted.has(r.code);
+      if (want === current.shared_roles.includes(r.code)) continue;
+      await updateRole(
+        r.id,
+        { permissions: { ...r.permissions, [key]: { ...r.permissions[key], view: want } } },
+        viewer.id,
+      );
+    }
   }
-  const after = sharingOf(ref, await rolePerms());
+
+  if (input.shared_people !== undefined) {
+    const wanted = new Set(input.shared_people);
+    const has = new Set(current.shared_people.map((p) => p.id));
+    for (const person of people) {
+      const want = wanted.has(person.id);
+      if (want === has.has(person.id)) continue;
+      // A person opens the Dashboard section through their role; the share
+      // only lifts THIS board into view, it does not open the section.
+      await setUserOverrideView(person.id, key, want ? true : null, viewer.id);
+    }
+  }
+
+  const after = sharingOf(ref, await rolePerms(), await peoplePerms());
   await query(`UPDATE dashboard SET shared_roles = $2::text[], shared_all = $3 WHERE id = $1`, [
     row.id,
     after.shared_roles,
     after.shared_all,
   ]);
+}
+
+/** 0073 · what the Share dialog may pick from. */
+export async function shareOptions(viewer: ActingPrincipal): Promise<DashboardShareOptions> {
+  requireDashboardCreate(viewer);
+  const roles = await query<{ code: string; label: string; permissions: PermMap | null }>(
+    `SELECT code, label, permissions FROM role ORDER BY position, label`,
+  );
+  const people = await peoplePerms();
+  return {
+    roles: roles.rows
+      .filter((r) => permAllows({ role: r.permissions ?? {}, overrides: {} }, 'dashboard', 'view'))
+      .map((r) => ({ code: r.code, label: r.label })),
+    people: people.map((p) => ({ id: p.id, name: p.name, role_label: p.role_label })),
+  };
 }
 
 /** Dashboard › Which dashboards on the Roles screen: every record, in the
@@ -249,8 +314,9 @@ export async function listDashboards(viewer: ActingPrincipal): Promise<Dashboard
   );
 
   const roles = await rolePerms();
+  const people = await peoplePerms();
   const items: Dashboard[] = visible.map((r) => ({
-    ...sharingOf(refOf(r), roles),
+    ...sharingOf(refOf(r), roles, people),
     id: r.id,
     folder_id: r.folder_id,
     folder_name: r.folder_name,
@@ -358,6 +424,8 @@ export interface DashboardInput {
   folder_id?: string | null;
   shared_roles?: string[];
   shared_all?: boolean;
+  /** 0073 · principal ids. */
+  shared_people?: string[];
   position?: number;
 }
 

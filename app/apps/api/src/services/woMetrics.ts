@@ -25,10 +25,13 @@ import {
   PERIOD_FIELD,
   WIDGET_DEFAULT_LIMIT,
   WIDGET_MAX_LIMIT,
+  type DurationLeg,
+  type DurationStat,
   type MetricBreakdown,
   type MetricDuration,
   type MetricDurationSample,
   type MetricEvent,
+  type TimeBucket,
   type WidgetBucket,
   type WidgetConfig,
   type WidgetMetric,
@@ -42,6 +45,7 @@ import {
   compileFilters,
   compileGroupExpr,
   compileNumericExpr,
+  compileTimestampExpr,
   resolveField,
   type FilterSet,
   type ResolvedField,
@@ -280,12 +284,138 @@ function sourceField(model: SourceModel, key: string | undefined, what: string):
   return expr;
 }
 
+export interface WidgetAnswer {
+  total: number;
+  buckets: WidgetBucket[];
+  other: number;
+  /** 0073 · duration only: how many records had a complete span. */
+  count?: number;
+}
+
+// ── 0073 · "time between": one span per record, reduced ──────────────────────
+//
+// A span is (from_at, to_at) per record. Each end is either a date field's
+// own value or — on a work order — the FIRST moment the audit trail says a
+// field changed (to a value, or at all); a "to" event is the first such
+// change AFTER from_at, so "assigned → checked in" cannot pair a check-in from
+// an earlier visit with a later reassignment. Records with no complete span
+// drop out rather than counting as zero: an average that includes "never
+// happened" as "took no time" is a lie.
+//
+// The reduction is the average or the median of the seconds, and the same
+// scope / filters / period as every other card narrow which records are in.
+
+const requireLegs = (config: WidgetConfig): { from: DurationLeg; to: DurationLeg } => {
+  if (!config.from?.field || !config.to?.field) {
+    throw new ApiError('BAD_REQUEST', 'A "time between" card needs both ends of the span');
+  }
+  return { from: config.from, to: config.to };
+};
+
+const statSql = (stat: DurationStat | undefined, col: string) =>
+  stat === 'median'
+    ? `(percentile_cont(0.5) WITHIN GROUP (ORDER BY ${col}))::float8`
+    : `AVG(${col})::float8`;
+
+/** The audit-trail moment a leg names, as a scalar subquery over the row's
+    alias `t`: the first change (to the value), or the first one after `after`. */
+function eventLegSql(f: ResolvedField, leg: DurationLeg, p: Params, after: string | null): string {
+  const match = eventMatch('ev', f, leg.value, p);
+  return `(SELECT MIN(ev.created_at) FROM activity_log ev
+            WHERE ev.entity_id = t.id::text AND ${match}${after ? ` AND ev.created_at > ${after}` : ''})`;
+}
+
+/** Both ends of a work-order span, as SQL over alias `t`. */
+async function woSpanExprs(config: WidgetConfig, p: Params): Promise<{ from: string; to: string }> {
+  const { from, to } = requireLegs(config);
+  const fromExpr =
+    from.kind === 'event'
+      ? eventLegSql(await resolveField(from.field), from, p, null)
+      : await compileTimestampExpr(from.field, p);
+  const toExpr =
+    to.kind === 'event'
+      ? eventLegSql(await resolveField(to.field), to, p, fromExpr)
+      : await compileTimestampExpr(to.field, p);
+  return { from: fromExpr, to: toExpr };
+}
+
+/** Both ends of a span over another source: two of its date columns. */
+function sourceSpanExprs(model: SourceModel, config: WidgetConfig): { from: string; to: string } {
+  const { from, to } = requireLegs(config);
+  if (from.kind === 'event' || to.kind === 'event') {
+    throw new ApiError('BAD_REQUEST', 'Only work orders keep a change history — pick two dates of this source instead');
+  }
+  return {
+    from: `(${sourceField(model, from.field, 'date')})::timestamptz`,
+    to: `(${sourceField(model, to.field, 'date')})::timestamptz`,
+  };
+}
+
+/**
+ * Reduce the spans. One Params for every query here: the inner SELECT (which
+ * carries the compiled filters and legs) is embedded in each of them.
+ */
+async function spanAnswer(args: {
+  p: Params;
+  fromClause: string;
+  where: string;
+  span: { from: string; to: string };
+  /** A compiled `::text` expression to cut by, or null. */
+  groupExpr: string | null;
+  /** A line: cut by when the span ended, at this grain. */
+  bucket: TimeBucket | null;
+  stat: DurationStat | undefined;
+  limit: number;
+}): Promise<WidgetAnswer> {
+  const { p } = args;
+  const inner = `SELECT ${args.groupExpr ?? 'NULL::text'} AS g, (${args.span.from}) AS from_at, (${args.span.to}) AS to_at
+                   ${args.fromClause} WHERE ${args.where}`;
+  const spans = `SELECT g, to_at, EXTRACT(EPOCH FROM (to_at - from_at))::float8 AS secs
+                   FROM (${inner}) sp
+                  WHERE from_at IS NOT NULL AND to_at IS NOT NULL AND to_at >= from_at`;
+  const reduce = statSql(args.stat, 'secs');
+
+  const totalRes = await query<{ n: number | string | null; c: number | string }>(
+    `SELECT ${reduce} AS n, COUNT(*)::int AS c FROM (${spans}) x`,
+    p.values,
+  );
+  const total = Number(totalRes.rows[0]?.n ?? 0);
+  const count = Number(totalRes.rows[0]?.c ?? 0);
+
+  if (args.bucket) {
+    const unit = p.add(args.bucket);
+    const res = await query<{ v: string | null; n: number | string | null }>(
+      `SELECT to_char(date_trunc(${unit}, to_at), 'YYYY-MM-DD') AS v, ${reduce} AS n
+         FROM (${spans}) x GROUP BY 1 ORDER BY 1 DESC LIMIT ${args.limit}`,
+      p.values,
+    );
+    return { total, count, other: 0, buckets: res.rows.map((r) => ({ value: r.v, n: Number(r.n ?? 0) })).reverse() };
+  }
+
+  if (!args.groupExpr) return { total, count, buckets: [], other: 0 };
+  const res = await query<{ v: string | null; n: number | string | null }>(
+    `SELECT g AS v, ${reduce} AS n FROM (${spans}) x GROUP BY 1`,
+    p.values,
+  );
+  // Longest first; '' and NULL read as one "not set" bucket, as everywhere.
+  const byValue = new Map<string | null, number>();
+  for (const r of res.rows) {
+    const v = r.v === '' ? null : r.v;
+    byValue.set(v, Math.max(byValue.get(v) ?? 0, Number(r.n ?? 0)));
+  }
+  const all = [...byValue.entries()]
+    .map(([value, n]) => ({ value, n }))
+    .sort((a, b) => b.n - a.n || String(a.value ?? '').localeCompare(String(b.value ?? '')));
+  // "Other" has no meaning for an average of spans, so it is not reported.
+  return { total, count, buckets: all.slice(0, args.limit), other: 0 };
+}
+
 async function metricSourceWidget(
   source: Exclude<WidgetSource, 'work_orders'>,
   config: WidgetConfig,
   viewer?: ActingPrincipal,
   period?: { from?: string | null; to?: string | null },
-): Promise<{ total: number; buckets: WidgetBucket[]; other: number }> {
+): Promise<WidgetAnswer> {
   const model = SOURCE_MODELS[source];
   const metric: WidgetMetric = config.metric ?? 'count';
   const overTime = Boolean(config.time_field);
@@ -312,6 +442,21 @@ async function metricSourceWidget(
     if (period?.to) where.push(`${model.periodField} <= ${p.add(period.to)}::date`);
     return where.join(' AND ');
   };
+  // 0073 · a span between two of the source's dates.
+  if (metric === 'duration') {
+    const p = new Params();
+    return spanAnswer({
+      p,
+      fromClause: model.from,
+      where: whereFor(p),
+      span: sourceSpanExprs(model, config),
+      groupExpr: !overTime && config.group_field ? `(${sourceField(model, config.group_field, 'field')})::text` : null,
+      bucket: overTime ? (config.bucket ?? 'month') : null,
+      stat: config.stat,
+      limit,
+    });
+  }
+
   const aggFor = () => {
     if (metric === 'count') return 'COUNT(*)::float8';
     const expr = sourceField(model, config.value_field, 'number');
@@ -375,7 +520,7 @@ export async function metricWidget(
   /** 0049 · the board's filter bar (client, store, …), ANDed into every
       work-order card. Other sources ignore it: an invoice has no trade. */
   page?: WoFilterSet | null,
-): Promise<{ total: number; buckets: WidgetBucket[]; other: number }> {
+): Promise<WidgetAnswer> {
   // 0049 · a card over the money records takes its own path.
   if (config.source && config.source !== 'work_orders') {
     return metricSourceWidget(config.source, config, viewer, period);
@@ -408,6 +553,23 @@ export async function metricWidget(
     if (period?.to) where.push(`t.${PERIOD_FIELD} <= ${p.add(period.to)}::date`);
     return where.join(' AND ');
   };
+
+  // 0073 · a span between two moments on each work order.
+  if (metric === 'duration') {
+    const p = new Params();
+    const where = await whereFor(p);
+    const span = await woSpanExprs(config, p);
+    return spanAnswer({
+      p,
+      fromClause: WO_FROM,
+      where,
+      span,
+      groupExpr: !overTime && config.group_field ? await compileGroupExpr(config.group_field, p) : null,
+      bucket: overTime ? (config.bucket ?? 'month') : null,
+      stat: config.stat,
+      limit,
+    });
+  }
 
   /** COUNT(*), SUM(x) or AVG(x) — the reduction itself. */
   const aggFor = async (p: Params) => {

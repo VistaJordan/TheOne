@@ -292,6 +292,36 @@ export async function setUserPermissions(
   return getUserPermissions(id);
 }
 
+/**
+ * 0073 · set or clear ONE path's `view` in a person's overrides — the Share
+ * dialog's per-person sharing of a dashboard. Logged like any override edit,
+ * as a whole before/after of the map. `view = null` removes the entry so the
+ * role decides again.
+ */
+export async function setUserOverrideView(
+  id: string,
+  key: string,
+  view: boolean | null,
+  actorId: string,
+): Promise<void> {
+  const current = await getUserPermissions(id);
+  const overrides: PermMap = { ...current.overrides };
+  const grant = { ...(overrides[key] ?? {}) };
+  if (view === null) delete grant.view;
+  else grant.view = view;
+  if (Object.keys(grant).length > 0) overrides[key] = grant;
+  else delete overrides[key];
+  await query(`UPDATE principal SET permission_overrides = $2::jsonb WHERE id = $1`, [
+    id,
+    JSON.stringify(overrides),
+  ]);
+  const before: Snapshot = { name: current.user.name, overrides: current.overrides };
+  const after: Snapshot = { name: current.user.name, overrides };
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({ actorId, entity: 'principal', entityId: id, action: 'user_permissions_set', before, after });
+  }
+}
+
 // ── A person's clients (0072) ────────────────────────────────────────────────
 // "Sam looks after Walmart and Target." The list is kept per person, not per
 // role, because it IS the person's book — a role says *whether* their clients

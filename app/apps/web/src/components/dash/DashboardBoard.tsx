@@ -20,12 +20,15 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_PERIOD,
+  DURATION_STATS,
+  DURATION_STAT_LABELS,
   LIVE_DEFAULT_SECONDS,
   PAGE_FILTER_FIELDS,
   PERIOD_LABELS,
   PERIOD_PRESETS,
   SOURCE_FIELDS,
   SOURCE_STATUSES,
+  SPAN_END_FIELD,
   TIME_BUCKETS,
   TIME_BUCKET_LABELS,
   DASH_DEFAULT_TAB,
@@ -45,6 +48,8 @@ import {
   widgetIsFigure,
   type Dashboard,
   type DashboardWidget,
+  type DurationLeg,
+  type DurationStat,
   type WidgetConfig,
   type DashboardPeriod,
   type PageFilter,
@@ -59,8 +64,10 @@ import {
   addDashboardWidget,
   deleteDashboardWidget,
   getDashboardData,
+  getDashboardShareOptions,
   updateDashboard,
   updateDashboardWidget,
+  type WoFieldDescriptor,
 } from '../../api/client';
 import { Icon } from '../Icon';
 import { ConfirmDialog } from '../ConfirmDialog';
@@ -99,6 +106,8 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
   const filterSet = useMemo(() => pageFiltersToSet(pageFilters), [pageFilters]);
   const [editing, setEditing] = useState<DashboardWidget | 'new' | null>(null);
   const [removing, setRemoving] = useState<DashboardWidget | null>(null);
+  // 0073 · the Share dialog: everyone, roles, or people one by one.
+  const [sharing, setSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // A live card asks the board to re-read on its own cadence; the fastest one
@@ -145,11 +154,18 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
     setError(err instanceof ApiRequestError ? err.message : 'That change did not save');
 
   const remove = useMutation({ mutationFn: deleteDashboardWidget, onSuccess: done, onError: fail });
-  const share = useMutation({
-    mutationFn: (shared_all: boolean) => updateDashboard(dashboard.id, { shared_all }),
-    onSuccess: done,
-    onError: fail,
-  });
+
+  // Who can open it, in words: everyone · these roles · plus these people.
+  const sharedWith = (() => {
+    const bits: string[] = [];
+    if (dashboard.shared_all) bits.push('Everyone can see this dashboard');
+    else if (dashboard.shared_roles.length > 0) bits.push(`Shared with ${dashboard.shared_roles.join(', ')}`);
+    if (dashboard.shared_people.length > 0) {
+      const names = dashboard.shared_people.map((p) => p.name);
+      bits.push(`${bits.length > 0 ? 'and ' : 'Shared with '}${names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3}` : names.join(', ')}`);
+    }
+    return bits.length > 0 ? bits.join(' ') : 'Only you can see this dashboard';
+  })();
 
   return (
     <>
@@ -198,11 +214,7 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
 
       <div className="dash-bar">
         <span className="card-meta">
-          {dashboard.shared_all
-            ? 'Everyone can see this dashboard'
-            : dashboard.shared_roles.length > 0
-              ? `Shared with ${dashboard.shared_roles.join(', ')}`
-              : 'Only you can see this dashboard'}
+          {sharedWith}
           {dashboard.owner && ` · built by ${dashboard.owner.display_name}`}
           {' · '}
           Each card counts the work orders you can see
@@ -212,13 +224,8 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
         </span>
         {dashboard.can_edit && (
           <span className="dash-bar-tools">
-            <button
-              type="button"
-              className="btn-sm is-ghost"
-              onClick={() => share.mutate(!dashboard.shared_all)}
-              disabled={share.isPending}
-            >
-              {dashboard.shared_all ? 'Make it private' : 'Share with everyone'}
+            <button type="button" className="btn-sm is-ghost" onClick={() => setSharing(true)}>
+              <Icon name="user-plus" size={14} /> Share…
             </button>
             <button type="button" className="btn-sm is-primary" onClick={() => setEditing('new')}>
               <Icon name="plus" size={14} /> Add card
@@ -283,6 +290,17 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
         />
       )}
 
+      {sharing && (
+        <ShareDialog
+          dashboard={dashboard}
+          onClose={() => setSharing(false)}
+          onSaved={() => {
+            setSharing(false);
+            done();
+          }}
+        />
+      )}
+
       {removing && (
         <ConfirmDialog
           title={`Remove "${removing.label}"?`}
@@ -302,6 +320,182 @@ export function DashboardBoard({ dashboard }: { dashboard: Dashboard }) {
 
 /** 0049 · the filter bar. Each field is a select when the catalogue knows
     its values, a text box otherwise; an empty value means "not filtering". */
+/** 0073 · one end of a span: a moment a field changed (work orders, with an
+    optional "to this value"), or a date field's own value. */
+function LegRow({
+  leg,
+  onChange,
+  fields,
+  source,
+  dateOptions,
+}: {
+  leg: DurationLeg;
+  onChange: (l: DurationLeg) => void;
+  fields: WoFieldDescriptor[];
+  source: WidgetSource;
+  dateOptions: { key: string; label: string }[];
+}) {
+  const wo = source === 'work_orders';
+  const chosen = wo ? fields.find((f) => f.key === leg.field) : undefined;
+  const listId = `leg-values-${leg.field.replace(/[^a-z0-9]/gi, '-')}`;
+  return (
+    <div className="dash-leg-row">
+      {wo && (
+        <select
+          className="fld is-kind"
+          aria-label="Kind of moment"
+          value={leg.kind}
+          onChange={(e) => onChange({ kind: e.target.value as DurationLeg['kind'], field: '' })}
+        >
+          <option value="event">When a field changes</option>
+          <option value="date">A date field’s value</option>
+        </select>
+      )}
+      <select
+        className="fld"
+        aria-label="Field"
+        value={leg.field}
+        onChange={(e) => onChange({ ...leg, field: e.target.value, value: undefined })}
+      >
+        <option value="">Pick a field…</option>
+        {(leg.kind === 'event' && wo ? fields.map((f) => ({ key: f.key, label: f.label })) : dateOptions).map((f) => (
+          <option key={f.key} value={f.key}>{f.label}</option>
+        ))}
+      </select>
+      {wo && leg.kind === 'event' && (
+        <>
+          <span className="dash-leg-word">becomes</span>
+          <input
+            className="fld"
+            type="text"
+            aria-label="Value (empty = any change)"
+            placeholder="any change"
+            list={chosen?.options && chosen.options.length > 0 ? listId : undefined}
+            value={leg.value ?? ''}
+            onChange={(e) => onChange({ ...leg, value: e.target.value })}
+          />
+          {chosen?.options && chosen.options.length > 0 && (
+            <datalist id={listId}>
+              {chosen.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </datalist>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 0073 · who may open this dashboard. "Everyone" and the roles write role
+    grants (the same ones Admin › Roles › Which dashboards shows); a person
+    ticked here gets it as their own override on top of their role, so a
+    single OM can be shown a manager's board without changing the OM role. */
+function ShareDialog({
+  dashboard,
+  onClose,
+  onSaved,
+}: {
+  dashboard: Dashboard;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const options = useQuery({
+    queryKey: ['dashboard-share-options'],
+    queryFn: getDashboardShareOptions,
+    staleTime: 60_000,
+    retry: 0,
+  });
+  const [all, setAll] = useState(dashboard.shared_all);
+  const [roles, setRoles] = useState<Set<string>>(() => new Set(dashboard.shared_roles));
+  const [people, setPeople] = useState<Set<string>>(() => new Set(dashboard.shared_people.map((p) => p.id)));
+  const [find, setFind] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: () =>
+      updateDashboard(dashboard.id, { shared_all: all, shared_roles: [...roles], shared_people: [...people] }),
+    onSuccess: onSaved,
+    onError: (err: unknown) => setError(err instanceof ApiRequestError ? err.message : 'The sharing did not save'),
+  });
+
+  const flip = (set: Set<string>, id: string, setter: (s: Set<string>) => void) => {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setter(next);
+  };
+  const needle = find.trim().toLowerCase();
+  const shownPeople = (options.data?.people ?? []).filter((p) => !needle || p.name.toLowerCase().includes(needle));
+
+  return (
+    <div className="modal-scrim" onClick={onClose} role="presentation">
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Share this dashboard" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>Share “{dashboard.name}”</h2>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <div className="modal-body">
+          <label className="ck">
+            <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+            <span>Everyone who can open dashboards</span>
+          </label>
+
+          <div className="dash-share-section">
+            <span className="lbl">Roles</span>
+            {options.isLoading ? (
+              <p className="hint">Loading…</p>
+            ) : options.isError ? (
+              <p className="hint">Could not load the roles and people.</p>
+            ) : (
+              <div className={`dash-share-list${all ? ' is-off' : ''}`} role="group" aria-label="Roles">
+                {(options.data?.roles ?? []).map((r) => (
+                  <label key={r.code}>
+                    <input type="checkbox" checked={all || roles.has(r.code)} disabled={all} onChange={() => flip(roles, r.code, setRoles)} />
+                    <span>{r.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="dash-share-section">
+            <div className="dash-share-tools">
+              <span className="lbl">People, one by one</span>
+              <input className="fld sm" type="search" placeholder="Find a person…" value={find} onChange={(e) => setFind(e.target.value)} aria-label="Find a person" />
+              <span className="card-meta">{people.size} picked</span>
+            </div>
+            {options.data && (
+              <div className="dash-share-list" role="group" aria-label="People">
+                {shownPeople.map((p) => (
+                  <label key={p.id}>
+                    <input type="checkbox" checked={people.has(p.id)} onChange={() => flip(people, p.id, setPeople)} />
+                    <span>{p.name}</span>
+                    {p.role_label && <small>{p.role_label}</small>}
+                  </label>
+                ))}
+                {shownPeople.length === 0 && <span className="hint">Nobody matches “{find}”.</span>}
+              </div>
+            )}
+            <p className="dash-leg-note">
+              A person ticked here sees this dashboard whatever their role says. What its cards count is still
+              scoped to them — sharing spreads the question, never the rows.
+            </p>
+          </div>
+
+          {error && <p className="modal-error">{error}</p>}
+        </div>
+        <div className="modal-foot">
+          <button type="button" className="btn-sm is-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-sm is-primary" disabled={save.isPending} onClick={() => save.mutate()}>
+            {save.isPending ? 'Saving…' : 'Save sharing'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PageFilterBar({
   filters,
   onChange,
@@ -407,6 +601,10 @@ function WidgetDialog({
   const [url, setUrl] = useState(widget?.config.url ?? '');
   const [buttonLabel, setButtonLabel] = useState(widget?.config.button_label ?? '');
   const [width, setWidth] = useState<WidgetWidth>(widget?.width ?? 'half');
+  // 0073 · the two ends of a "time between" span, and how the spans reduce.
+  const [fromLeg, setFromLeg] = useState<DurationLeg>(widget?.config.from ?? { kind: 'event', field: '' });
+  const [toLeg, setToLeg] = useState<DurationLeg>(widget?.config.to ?? { kind: 'event', field: '' });
+  const [stat, setStat] = useState<DurationStat>(widget?.config.stat ?? 'avg');
   // 0068 · where the card sits: a new card starts on the tab being looked at.
   const [tab, setTab] = useState(widget ? (widget.config.tab ?? '') : defaultTab && defaultTab !== DASH_DEFAULT_TAB ? defaultTab : '');
   const [section, setSection] = useState(widget?.config.section ?? '');
@@ -417,11 +615,18 @@ function WidgetDialog({
   const otherSource = source !== 'work_orders';
   const sourceFields = otherSource ? SOURCE_FIELDS[source] : [];
 
+  const spanning = metric === 'duration';
+  const legReady = (l: DurationLeg) => l.field.trim() !== '';
+  const cleanLeg = (l: DurationLeg): DurationLeg =>
+    l.kind === 'event' && l.value && l.value.trim() !== '' ? { kind: 'event', field: l.field, value: l.value.trim() } : { kind: l.kind, field: l.field };
+
   const config: WidgetConfig = asks
     ? {
         metric,
-        ...(metric === 'count' ? {} : { value_field: valueField }),
-        ...(kind === 'line' ? { time_field: timeField, bucket } : {}),
+        ...(metric === 'sum' || metric === 'avg' ? { value_field: valueField } : {}),
+        ...(spanning ? { from: cleanLeg(fromLeg), to: cleanLeg(toLeg), stat } : {}),
+        // A span's line runs along when the span ended; there is no date to pick.
+        ...(kind === 'line' ? { time_field: spanning ? SPAN_END_FIELD : timeField, bucket } : {}),
         ...(figure || kind === 'line' ? {} : { group_field: groupField }),
         ...(otherSource
           ? {
@@ -451,9 +656,11 @@ function WidgetDialog({
         ? 'some text'
         : (kind === 'image' || kind === 'link') && url.trim() === ''
           ? 'a URL'
-          : asks && metric !== 'count' && !valueField
+          : asks && (metric === 'sum' || metric === 'avg') && !valueField
             ? 'a field to total'
-            : asks && kind === 'line' && !timeField
+            : asks && spanning && (!legReady(fromLeg) || !legReady(toLeg))
+              ? 'both ends of the span'
+            : asks && kind === 'line' && !spanning && !timeField
               ? 'a date to run along'
               : asks && !figure && kind !== 'line' && !groupField
                 ? 'a field to group by'
@@ -477,6 +684,10 @@ function WidgetDialog({
     setTimeField(next === 'work_orders' ? 'date_received' : 'created_at');
     setStatuses([]);
     setOverdue(false);
+    // Only work orders keep a change history; another source spans two dates.
+    const blank: DurationLeg = { kind: next === 'work_orders' ? 'event' : 'date', field: '' };
+    setFromLeg(blank);
+    setToLeg(blank);
   };
 
   const fieldOptions = (type: 'number' | 'text' | 'date') =>
@@ -560,7 +771,35 @@ function WidgetDialog({
               </div>
             )}
 
-            {asks && metric !== 'count' && (
+            {asks && spanning && (
+              <div className="field intake-wide">
+                <span className="lbl">Between which two moments?</span>
+                <div className="dash-leg">
+                  <span className="dash-leg-name">From</span>
+                  <LegRow leg={fromLeg} onChange={setFromLeg} fields={fields} source={source} dateOptions={fieldOptions('date')} />
+                  <span className="dash-leg-name">To</span>
+                  <LegRow leg={toLeg} onChange={setToLeg} fields={fields} source={source} dateOptions={fieldOptions('date')} />
+                </div>
+                <p className="dash-leg-note">
+                  {otherSource
+                    ? 'Each record’s two dates, the later minus the earlier.'
+                    : 'Per work order: the first time the “from” moment happens, to the first “to” moment after it. “When a field changes” reads the audit trail, so it works for status, Assignee, Tech Name, check-in and anything else the app writes; leave the value empty to mean any change. Work orders that never reached the “to” moment are left out, not counted as zero.'}
+                </p>
+              </div>
+            )}
+
+            {asks && spanning && (
+              <div className="field">
+                <label className="lbl" htmlFor="w-stat">Reduced to</label>
+                <select id="w-stat" className="fld" value={stat} onChange={(e) => setStat(e.target.value as DurationStat)}>
+                  {DURATION_STATS.map((s) => (
+                    <option key={s} value={s}>{DURATION_STAT_LABELS[s]}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {asks && (metric === 'sum' || metric === 'avg') && (
               <div className="field">
                 <label className="lbl" htmlFor="w-value">Which number?</label>
                 <select id="w-value" className="fld" value={valueField} onChange={(e) => setValueField(e.target.value)}>
@@ -574,17 +813,19 @@ function WidgetDialog({
 
             {asks && kind === 'line' && (
               <>
+                {!spanning && (
+                  <div className="field">
+                    <label className="lbl" htmlFor="w-time">Along which date?</label>
+                    <select id="w-time" className="fld" value={timeField} onChange={(e) => setTimeField(e.target.value)}>
+                      <option value="">Pick a date field</option>
+                      {fieldOptions('date').map((f) => (
+                        <option key={f.key} value={f.key}>{f.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="field">
-                  <label className="lbl" htmlFor="w-time">Along which date?</label>
-                  <select id="w-time" className="fld" value={timeField} onChange={(e) => setTimeField(e.target.value)}>
-                    <option value="">Pick a date field</option>
-                    {fieldOptions('date').map((f) => (
-                      <option key={f.key} value={f.key}>{f.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label className="lbl" htmlFor="w-bucket">Grouped</label>
+                  <label className="lbl" htmlFor="w-bucket">{spanning ? 'By when the span ended, per' : 'Grouped'}</label>
                   <select
                     id="w-bucket"
                     className="fld"

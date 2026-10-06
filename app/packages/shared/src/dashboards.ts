@@ -285,14 +285,49 @@ export const TIME_BUCKET_LABELS: Record<TimeBucket, string> = {
 export const LINE_DEFAULT_LIMIT = 24;
 
 /** How the rows are reduced to a number. */
-export const WIDGET_METRICS = ['count', 'sum', 'avg'] as const;
+export const WIDGET_METRICS = ['count', 'sum', 'avg', 'duration'] as const;
 export type WidgetMetric = (typeof WIDGET_METRICS)[number];
 
 export const WIDGET_METRIC_LABELS: Record<WidgetMetric, string> = {
   count: 'How many work orders',
   sum: 'Total of',
   avg: 'Average of',
+  duration: 'Time between two moments',
 };
+
+// ── 0073 · "time between": one span per record, reduced ──────────────────────
+// Accepted → assigned, assigned → technician found, accepted → checked in,
+// payment requested → approved: every one of these is the gap between two
+// MOMENTS on a record. A moment is either the instant a field CHANGED (read
+// from the audit trail, so it works for status, Assignee, Tech Name, the
+// check-in stamps — anything the app writes), or a date field's own value.
+// Per record we take the first "from" moment and the first "to" moment after
+// it; the card then averages (or takes the median of) those spans, and can
+// still be cut by any field or run along the month the span ended.
+
+export interface DurationLeg {
+  /** event = when the field changed (to `value`, or at all) — work orders
+      only, since only they keep a change history; date = the field's own
+      date value, on a work order or any other source. */
+  kind: 'event' | 'date';
+  /** A catalogue key (work orders) or a source field key (other sources). */
+  field: string;
+  /** event only: count only changes TO this value (case-insensitive). Absent
+      or empty = any change of the field. */
+  value?: string | null;
+}
+
+export const DURATION_STATS = ['avg', 'median'] as const;
+export type DurationStat = (typeof DURATION_STATS)[number];
+
+export const DURATION_STAT_LABELS: Record<DurationStat, string> = {
+  avg: 'Average',
+  median: 'Median (typical)',
+};
+
+/** A line over a "time between" card runs along WHEN THE SPAN ENDED, not a
+    field of the editor's choosing; this is the time_field it stores. */
+export const SPAN_END_FIELD = 'span_end';
 
 export const WIDGET_WIDTHS = ['quarter', 'half', 'full'] as const;
 export type WidgetWidth = (typeof WIDGET_WIDTHS)[number];
@@ -312,6 +347,11 @@ export interface WidgetConfig {
       a card answers one question, cut one way. */
   time_field?: string;
   bucket?: TimeBucket;
+  /** 0073 · metric = 'duration': the two ends of the span, and how the spans
+      are reduced (average by default). */
+  from?: DurationLeg;
+  to?: DurationLeg;
+  stat?: DurationStat;
   /** Which work orders are in scope for this widget at all. */
   filters?: WoFilterSet;
   limit?: number;
@@ -401,6 +441,9 @@ export interface Dashboard {
   owner: { id: string; display_name: string } | null;
   shared_roles: string[];
   shared_all: boolean;
+  /** 0073 · people it is shared with one by one (a per-person override on
+      `dashboard/boards/<ref>`), on top of whatever their role says. */
+  shared_people: { id: string; name: string }[];
   position: number;
   /** True when the viewer may edit it (owner, or a super admin). */
   can_edit: boolean;
@@ -410,6 +453,14 @@ export interface Dashboard {
 export interface DashboardsResponse {
   folders: DashboardFolder[];
   items: Dashboard[];
+}
+
+/** 0073 · what the Share dialog may pick from. */
+export interface DashboardShareOptions {
+  /** Roles that can open the Dashboard section at all. */
+  roles: { code: string; label: string }[];
+  /** Active people, super admins left out (they see every dashboard). */
+  people: { id: string; name: string; role_label: string | null }[];
 }
 
 /** One bucket of a widget's answer. `value` is null for the blank bucket. */
@@ -429,11 +480,14 @@ export interface WidgetResult {
   /** Set when the widget cannot be answered — a field that no longer exists,
       say. The card says so instead of the page failing. */
   error?: string;
+  /** 0073 · metric = 'duration': how many records had a complete span. */
+  count?: number;
 }
 
 /** How a widget's numbers are worded, for the drill-through link's title. */
 export function widgetSubtitle(config: WidgetConfig, fieldLabel?: string): string {
   if (config.metric === 'count') return WIDGET_SOURCE_NOUNS[config.source ?? 'work_orders'];
+  if (config.metric === 'duration') return config.stat === 'median' ? 'Median time between' : 'Average time between';
   // A card over another source names its field by the source's own label.
   const src = config.source && config.source !== 'work_orders' ? SOURCE_FIELDS[config.source] : undefined;
   const own = src?.find((f) => f.key === config.value_field)?.label.toLowerCase();

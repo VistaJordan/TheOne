@@ -48,8 +48,9 @@ import type {
   WoCreateInput,
   WoCreateMode,
   WoNumberCheck,
-  // 0042 · dashboards as records, shared to roles.
+  // 0042 · dashboards as records, shared to roles (0073: and to people).
   Dashboard,
+  DashboardShareOptions,
   DashboardsResponse,
   WidgetConfig,
   WidgetKind,
@@ -1761,9 +1762,21 @@ export function createDashboard(input: {
 
 export function updateDashboard(
   id: string,
-  input: { name?: string; description?: string | null; shared_roles?: string[]; shared_all?: boolean },
+  input: {
+    name?: string;
+    description?: string | null;
+    shared_roles?: string[];
+    shared_all?: boolean;
+    /** 0073 · principal ids it is shared with one by one. */
+    shared_people?: string[];
+  },
 ): Promise<{ dashboard: Dashboard }> {
   return request(`/dashboards/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+/** 0073 · the roles and people the Share dialog may pick from. */
+export function getDashboardShareOptions(): Promise<DashboardShareOptions> {
+  return request('/dashboards/share-options');
 }
 
 export function deleteDashboard(id: string): Promise<void> {

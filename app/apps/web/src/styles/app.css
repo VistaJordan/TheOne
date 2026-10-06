@@ -2440,6 +2440,26 @@ a.dash-widget-total:hover strong { color: var(--accent-text); }
 .dash-link { display: inline-flex; margin-top: 4px; }
 .dash-status-picks { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 
+/* 0073 · the two ends of a "time between" span in the card editor */
+.dash-leg { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 6px 10px; align-items: center; }
+.dash-leg-name { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
+.dash-leg-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; min-width: 0; }
+.dash-leg-row .fld { flex: 1 1 150px; min-width: 0; }
+.dash-leg-row .fld.is-kind { flex: 0 1 170px; }
+.dash-leg-word { font-size: 11.5px; color: var(--ink-3); }
+.dash-leg-note { margin: 0; font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
+
+/* 0073 · the Share dialog: roles and people as tickable lists */
+.dash-share-section { display: grid; gap: 6px; margin-top: 12px; }
+.dash-share-section .lbl { margin: 0; }
+.dash-share-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 14px; max-height: 220px; overflow: auto; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--chip); }
+.dash-share-list.is-off { opacity: 0.5; }
+.dash-share-list label { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 3px 0; cursor: pointer; min-width: 0; }
+.dash-share-list label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-share-list label small { color: var(--ink-3); flex: none; }
+.dash-share-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dash-share-tools .fld { width: 240px; max-width: 100%; }
+
 .modal.modal-wide { width: min(860px, calc(100vw - 32px)); }
 
 .adm-tier-kind { margin-top: 14px; }

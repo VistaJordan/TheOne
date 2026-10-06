@@ -23,9 +23,10 @@
 import { Suspense, lazy, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { WidgetConfig, WidgetResult, DashboardWidget, WoFilterSet } from '@theone/shared';
-import { SOURCE_DRILL_PATH, formatBucket, widgetSubtitle } from '@theone/shared';
+import { SOURCE_DRILL_PATH, WIDGET_SOURCE_NOUNS, formatBucket, widgetSubtitle } from '@theone/shared';
 import { Icon } from '../Icon';
 import { filterUrl } from '../../lib/woView';
+import { formatDuration } from '../../lib/dashCards';
 import { useAuth } from '../../auth/AuthProvider';
 import { CHART_OTHER, EVERYTHING_ELSE, colorFor, type ChartDatum } from './chartPalette';
 
@@ -58,6 +59,8 @@ interface WidgetCardProps {
 /** Money reads as money, counts read as counts, and an average keeps one
     decimal so "1.0 visits" is not rounded into "1". */
 function formatter(config: WidgetConfig): (n: number) => string {
+  // 0073 · a span reads as time: "2d 4h", "35m".
+  if (config.metric === 'duration') return (n: number) => formatDuration(n);
   const isMoney =
     config.metric !== 'count' &&
     /nte|cost|invoiced|profit|amount|price|total|subtotal|tax/i.test(config.value_field ?? '');
@@ -185,6 +188,12 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
   }
 
   const total = result?.total ?? 0;
+  // 0073 · a span's subtitle says how many records had one, so "3d 2h" is
+  // never read as a law when it rests on four work orders.
+  const spanNote =
+    widget.config.metric === 'duration' && result && !result.error && result.count !== undefined
+      ? ` · ${result.count} ${WIDGET_SOURCE_NOUNS[widget.config.source ?? 'work_orders'].toLowerCase()}`
+      : '';
   const target = widget.kind === 'gauge' ? (widget.config.target && widget.config.target > 0 ? widget.config.target : boardMax) : 0;
   const share = target > 0 ? Math.min(100, Math.max(0, (total / target) * 100)) : 0;
 
@@ -210,7 +219,7 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
         <Drill className="dash-figure" enabled={drillable} to={drillUrl(widget.config)}>
           <span className="dash-figure-n">{fmt(total)}</span>
           <span className="dash-figure-sub">
-            {widgetSubtitle(widget.config)}
+            {widgetSubtitle(widget.config)}{spanNote}
             {widget.kind === 'gauge' && target > 0 && ` · of ${fmt(target)}`}
           </span>
           {widget.kind === 'gauge' && (
@@ -257,7 +266,7 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
           number, so the two readings of the same question always agree. */}
       {!figure && !result?.error && data.length > 0 && (
         <Drill className="dash-widget-total" enabled={drillable} to={drillUrl(widget.config)}>
-          {widgetSubtitle(widget.config)}: <strong>{fmt(total)}</strong>
+          {widgetSubtitle(widget.config)}: <strong>{fmt(total)}</strong>{spanNote}
         </Drill>
       )}
     </section>

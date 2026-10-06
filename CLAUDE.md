@@ -1517,6 +1517,40 @@ slice of Node's pool and pdf-lib's JPEG embedder reads `.buffer` from 0
 goes through it too, and the test churns the pool before embedding every
 asset.
 
+**"Time between" cards and per-person sharing** (no migration; the "0073"
+tags in this code name the batch and have nothing to do with migration 0073,
+Save as PDF, which landed the same day; `tests/dashboard-duration.test.ts`).
+Management wants to measure any gap the records hold —
+accepted → assigned, assigned → technician found, accepted → checked in,
+payment requested → approved — from the dashboard builder.
+- **A fourth measure**, `metric: 'duration'` (editor: "Time between two
+  moments"), with `config.from` / `config.to` as `DurationLeg`s and
+  `config.stat` avg (default) or median. A leg is `{kind: 'event', field,
+  value?}` — the FIRST moment the audit trail says the field changed (to the
+  value, or at all; `eventMatch` in `woMetrics.ts`, so status / Assignee /
+  Tech Name / the check-in stamps all work) — or `{kind: 'date', field}`, the
+  field's own date value (`compileTimestampExpr` in `woFields.ts`). The "to"
+  event is the first one AFTER from_at. Work orders mix both kinds; another
+  source (payments, invoices, …) takes two of its date columns, event legs
+  are refused. `spanAnswer` reduces the spans: total = the statistic over
+  every complete span, `count` = how many records had one (the card prints
+  it), cut by any field like a count, or as a line along **when the span
+  ended** (`time_field = SPAN_END_FIELD`, the editor hides the date pick).
+  Records with no complete span drop out — never counted as zero. The same
+  scope / filters / period as every other card apply. The card formats
+  seconds with `formatDuration` ("3d 4h").
+- **Sharing to people** (Share… on the board, `ShareDialog`): everyone /
+  roles write role grants as before (0050); a ticked person gets
+  `dashboard/boards/<ref>` view = true as their own override
+  (`setUserOverrideView` in `services/users.ts`, logged
+  `user_permissions_set`); unticking removes the entry so the role decides
+  again. `Dashboard.shared_people`, `PATCH /dashboards/:id {shared_people}`,
+  `GET /dashboards/share-options` (roles that open the section + active
+  non-super-admin people; needs `dashboard` create). The Users page's
+  Adjust shows the same tick under Dashboard › Which dashboards.
+- Who may build: `dashboard` create (admin / TL / ATL / AM by default, Roles
+  screen decides). Super admins open everything regardless.
+
 ## Verify
 
 ```

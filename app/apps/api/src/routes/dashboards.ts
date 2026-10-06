@@ -16,7 +16,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { TIME_BUCKETS, WIDGET_KINDS, WIDGET_METRICS, WIDGET_SOURCES, WIDGET_WIDTHS } from '@theone/shared';
+import { DURATION_STATS, TIME_BUCKETS, WIDGET_KINDS, WIDGET_METRICS, WIDGET_SOURCES, WIDGET_WIDTHS } from '@theone/shared';
 import { parse } from '../errors.js';
 import { actingPrincipalFromRequest } from '../services/activity.js';
 import {
@@ -27,6 +27,7 @@ import {
   listDashboards,
   previewWidget,
   readDashboardData,
+  shareOptions,
   updateDashboard,
   updateWidget,
 } from '../services/dashboards.js';
@@ -54,6 +55,15 @@ function pageFiltersOf(raw: string | undefined) {
   }
 }
 
+// 0073 · one end of a "time between" span.
+const legSchema = z
+  .object({
+    kind: z.enum(['event', 'date']),
+    field: z.string().min(1).max(200),
+    value: z.string().max(200).nullable().optional(),
+  })
+  .strict();
+
 const configSchema = z
   .object({
     metric: z.enum(WIDGET_METRICS).default('count'),
@@ -61,6 +71,10 @@ const configSchema = z
     group_field: z.string().min(1).max(200).optional(),
     time_field: z.string().min(1).max(200).optional(),
     bucket: z.enum(TIME_BUCKETS).optional(),
+    // 0073
+    from: legSchema.optional(),
+    to: legSchema.optional(),
+    stat: z.enum(DURATION_STATS).optional(),
     filters: filterSetSchema.optional(),
     limit: z.number().int().min(1).max(50).optional(),
     // 0049
@@ -96,6 +110,8 @@ const dashboardSchema = z
     folder_id: z.string().uuid().nullable().optional(),
     shared_roles: z.array(z.string().trim().min(1).max(60)).max(50).optional(),
     shared_all: z.boolean().optional(),
+    // 0073 · people it is shared with one by one.
+    shared_people: z.array(z.string().uuid()).max(500).optional(),
     position: z.number().int().min(0).max(999).optional(),
   })
   .strict();
@@ -112,6 +128,9 @@ const widgetSchema = z
 
 export default async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   app.get('/dashboards', async (req) => listDashboards(actingPrincipalFromRequest(req)));
+
+  // 0073 · what the Share dialog may pick from: roles and people.
+  app.get('/dashboards/share-options', async (req) => shareOptions(actingPrincipalFromRequest(req)));
 
   app.get('/dashboards/:id/data', async (req) => {
     const { id } = parse(idParams, req.params);
