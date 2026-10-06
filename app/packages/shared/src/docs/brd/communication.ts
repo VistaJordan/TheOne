@@ -1,0 +1,133 @@
+// 0075 · BRD part: communication, files and documents.
+
+import type { DocPart } from '../types';
+
+export const COMMUNICATION_PART: DocPart = {
+  key: 'communication',
+  title: 'Communication, files and documents',
+  intro: 'The conversation on a work order, the calls around it, the files it collects, and what goes out to clients and into SharePoint.',
+  modules: [
+    {
+      key: 'messages',
+      title: 'Messages, texts and calls',
+      where: 'The Messages tab on every work order.',
+      purpose: 'Internal and client-visible messages on the work order, an outbox per client system, the Quo technician thread, and the call log with transcripts.',
+      value: 'The internal versus client-facing boundary is a switch on every message; a sent message cannot be rewritten; calls are on the record with what was said.',
+      features: [
+        {
+          name: 'Internal and client-visible messages',
+          what: 'The composer\'s visibility segment ("Internal — the team only, never the client" / "Visible to the client — no client system is linked to this work order yet" when none is); Post internally or Send to client; up to 4,000 characters. A client-visible message on a work order whose Client Portal Type names Ecotrak, Corrigo or ServiceChannel queues one delivery per system ("Queued for X · sends once that integration is live"; later "Sent to <system> · time" or "Could not send to <system>: …"). Bubbles say "Internal · the team only"; an edited message shows "edited"; a sent one shows a lock ("Sent to the client — it can no longer be edited").',
+          value: 'Curated updates to the client, full candour inside.',
+          rules: ['Only the author edits ("Only the person who wrote a message can edit it"), and only until any delivery is sent (409 MESSAGE_SENT); editing can flip visibility (re-queues or drops the pending delivery); a client\'s own note synced in is never editable.', 'The obligations engine counts a staff client-visible message as a chase.'],
+          permissions: ['work_orders/comments create (post) / edit (own, unsent)', 'work_orders/comments/client create (Message the client)'],
+          audit: ['comment_added (with source and delivery)', 'message_edited', 'client_message_sent', 'client_message_failed', 'client_message_received'],
+          since: '0052',
+          deferred: ['No outbox adapter is registered yet (Ecotrak waits for go-live; Corrigo and ServiceChannel are not built); email as a target is deferred.'],
+        },
+        {
+          name: 'Technician texts (Quo thread)',
+          what: 'The Quo conversation with the technician, synced from Quo and never client-visible; Send text composes from your claimed Quo line (attachments arrive in a later sprint); a right rail shows the technician and the conversation (first contact, last activity, Quo line, job segment, counts of calls, texts and photos, Call via Quo / Text via Quo).',
+          value: 'Texts with the technician live beside the job.',
+          audit: ['tech_message_sent'],
+          since: '0002',
+        },
+        {
+          name: 'Calls through Quo',
+          what: 'Call in the header ("Call from <WO#>": Who — from the map, the latest visit, the Quo line, or Another number; They are the…; After the call: Just call or Call and draft a quote; Call via Quo). The intent is recorded and the Quo desktop app dials; Quo\'s webhooks return the call, its transcript and its summary, matched to the newest dialling row for that number placed up to 30 minutes before or 5 minutes after the call; a row with nothing from Quo after 3 hours reads expired. The Calls card shows Waiting for Quo / Transcript on its way / No answer / Transcribed / Quo never reported this call, Expand / Collapse transcript, Save transcript for a pasted one (refused once Quo sent it), and Draft a quote with AI / Draft a quote again when a transcript exists.',
+          value: 'Every call about a job is attached to the job.',
+          rules: ['A call nobody placed from a work order is dropped by the webhook.'],
+          permissions: ['work_orders/calls view / create', 'quotes edit (draft a quote)'],
+          audit: ['call_placed', 'call_completed', 'call_transcribed'],
+          since: '0054',
+        },
+      ],
+    },
+    {
+      key: 'files',
+      title: 'Photos, files and approval',
+      where: 'The message composer (Add photo, Attach file); Overview › Photos.',
+      purpose: 'Uploads to private storage, read back only through the work order so a photo is exactly as visible as its work order; every upload reviewed before anyone else sees it.',
+      value: 'Before and after photos are classified and proven before the job is Done; a copied link is useless outside.',
+      features: [
+        {
+          name: 'Attachments',
+          what: 'Add photo / Attach file in the composer (disabled with "Your role cannot add photos" or "File storage is not configured on this server"); photos shrink in the browser first (2000 px, 4 MB cap; HEIC goes up as-is); allowed types jpeg, png, webp, heic, heif, gif, pdf, txt, csv, doc, docx, xls, xlsx; every read goes through the API after the work order\'s own scope check and no URL is ever handed out; Remove.',
+          value: 'Phone photos upload from the field without failing, and nothing leaks by link.',
+          rules: ['Uploads are refused when the File storage integration is off (409).'],
+          permissions: ['work_orders/attachments create / delete', 'work_orders view to read'],
+          audit: ['attachment_added', 'attachment_removed'],
+          since: '0043',
+        },
+        {
+          name: 'Approval',
+          what: 'The Photos card: "Hidden from everyone else until approved. Say what each one is, then approve or decline it."; per pending file What is it? (Before photo, After photo, Sign-off, Other), File name, Approve / Decline; Before / After badges once approved. A pending or declined file is visible only to reviewers and the uploader (anyone else gets a 404); a decision is reversible; approving triggers the SharePoint copy.',
+          value: 'Rules 1.3.1 to 1.3.4.',
+          rules: ['Approving without a kind is refused ("Say what this file is…").'],
+          permissions: ['work_orders/attachments approve'],
+          audit: ['attachment_approved', 'attachment_declined'],
+          since: '0061',
+        },
+      ],
+    },
+    {
+      key: 'pdf',
+      title: 'Save as PDF and SharePoint folders',
+      where: 'Save as PDF on the record bar; the SharePoint chip on a work order and a client; Admin › Settings › Work-order PDFs and SharePoint folders.',
+      purpose: 'A branded PDF of the work order or of the client\'s request, and the SharePoint folder tree the team files every work order in, created by the app.',
+      value: 'The document the client or the technician needs is one click, and the SharePoint filing that used to be a manual chore happens on creation.',
+      features: [
+        {
+          name: 'Work order and Request PDFs',
+          what: 'Two documents, each a download (or inline view) of GET /work-orders/:id/pdf?kind=full|request: Work order (the main fields) and Request (what the client sent: client, entity, store, address, contact, trade, NTE, SLA, description; titled "Service request", empty fields hidden by default). Drawn by pdf-lib in the billing entity\'s branding (a neutral page when Comp is unset or unknown), US Letter, a two-column grid, long text across the width, a running head on page two onwards, "Page n of m"; values formatted on the server (money, days, Chicago date-times, Yes / No, lists); the ClickUp numbering and emoji dropped from labels. Which fields, in what order, the title, hide-empty and a note are one layout per kind in Admin › Settings (up to 80 items).',
+          value: 'Printable, consistent, permission-safe.',
+          rules: ['The layout never widens what a person sees: the PDF is built from the redacted detail and skips every field the viewer may not see.'],
+          permissions: ['work_orders/pdf view (unset = work_orders view)', 'admin/settings edit for the layouts'],
+          audit: ['work_order_pdf_saved (kind, file name, field count)', 'wo_pdf_layout_updated'],
+          since: '0073',
+        },
+        {
+          name: 'SharePoint folders',
+          what: 'Admin › Settings › SharePoint folders: Site URL, Library, Year folder, Billing-entity folder and Work-order folder templates ({year}, {entity} = Comp, {number}, {city}, {state}; ECO- orders use the Ecotrak number, a WO- prefix is dropped), Save / Discard, Test connection, Run now; status "connected / site not set / credentials not set / not set up"; three switches — A folder for each new client (under its entity), A folder for each new work order, Copy approved files into the work-order folder — each stamped "on since <date>" and filing only records created after it; a "Filed so far" table (Made / Waiting / Failed / Not filed) and a "Could not be filed" table ("tried again every hour, up to six times; Run now gives every failed row its tries back"). The path is Documents / General / Work Orders - {year} / {year} - {Comp} / {Client} / WO#{number}, {City}, {ST}; the client must exist under Clients so a typo never forks the tree; existing folders are reused; nothing is ever deleted or renamed in SharePoint. The chip on a work order and a client shows the folder link, the status, or No SharePoint folder with Make it / Retry.',
+          value: 'The filing tree is kept by the system, with the client spelling from the Clients list.',
+          rules: ['Filing runs after the creating commit (Add work order, drafts, planned maintenance, import; new clients; approved files) within 20 seconds per call and never throws; the hourly sweep retries failures and files work orders made by paths that do not call it (the Ecotrak sync). Make it now answers 409 when SharePoint is not connected; the SharePoint integration switch stops everything.'],
+          permissions: ['admin/settings view (test) / edit (settings, run)', 'work_orders/attachments create (make a work-order folder now)', 'clients edit (make a client folder now)'],
+          audit: ['sharepoint_settings_updated'],
+          since: '0071',
+          deferred: ['Needs the SharePoint credentials (SHAREPOINT_*, falling back to the Graph mail or Entra app) and site URL; deleting, renaming and backfilling are not built.'],
+        },
+      ],
+    },
+    {
+      key: 'client-updates',
+      title: 'Client Updates',
+      where: 'Sidebar › Client Updates; /share/client-updates/<token> for the client.',
+      purpose: 'A tracker per client: a saved question (filter, columns, charts, sections) shown live, shared by read-only link, by email or on a schedule, with a client-note column typed straight into the row.',
+      value: 'Replaces the per-client tracking spreadsheets; the client sees only shared columns; every send is logged and counts as a chase.',
+      features: [
+        {
+          name: 'Trackers',
+          what: 'New client tracker / Tracker settings: Who it is for (Client, Tracker name — "Tracking" by default, Note for our team); How the list reads (Sections: One list or By <field>; Order; Client note column, a text field); Columns (up to 40; "N of M shared with the client"; Standard tracker columns; Add column; rename, move, Client sees it / Team only, remove; 12 shared and 4 team-only by default); Charts (up to 8; Add chart "Work orders by <field>", Bars / Donut); Delete tracker; Create tracker / Save changes. The page: tabs "<Client> · <name>" with clock and globe icons, the meta line (schedule, last sent, link on / off, Email not set up), Settings / CSV / Share; a filter menu with Save filter to tracker / Undo; search; Team view / Client view ("The email and the link carry the whole tracker; this page still follows your own access."); tiles Work orders, Open, Waiting on the client, Open over 30 days, Completed last 30 days, NTE on open work, each drilling the list; clickable charts (recounted without their own pick so every bar stays visible); drill chips; the note column (Add a note, 2,000 characters, Ctrl+Enter saves, written to the work order\'s field).',
+          value: 'The weekly client call runs from a live page.',
+          rules: ['Six computed columns joined the catalogue for every list: Location, Completed on, Age band (0–7 / 8–14 / 15–30 / 31–60 / Over 60 days), Last client message, Last client message on, Last sent to client.'],
+          permissions: ['client_updates view / create / edit / delete'],
+          audit: ['client_update_created', 'client_update_updated', 'client_update_deleted', 'client_update_exported'],
+          since: '0055',
+        },
+        {
+          name: 'Sharing',
+          what: 'Share: Email (To, Cc, Subject — "Left blank, the subject carries the day it is sent." — Message above the table, Attach the list as a spreadsheet (CSV), an "Open the live tracker" button, Preview, Save, Send a test to me ("[Test]", to yourself only), Send now with a confirm "Send this update to N people now, from <address>?"); Schedule (Send this update automatically; Every day / Every weekday / Weekly with weekday buttons / Monthly with a day 1 to 28; At (Central time); Next … CT; Save schedule); Client link (Anyone with the link can view this tracker (read only, no sign-in); Copy link / Open; Stops working after; On the page: Headline numbers / Charts marked Client sees it; Make a new link — "The current link stops working at once"); History (When, How: Scheduled / Test / Sent now by <name>, To, Work orders, Result: Sent / Failed + error; last 100). Scheduled sends run from the hourly cron, signed by the Client updates service principal, each tracker claimed so overlapping runs never double-send; up to 50 recipients and 2,000 shared rows.',
+          value: 'The client is updated without anyone remembering to.',
+          rules: ['A send with no recipients, or with email not switched on, records a failed delivery; every real send also writes client_update_sent on each work order in it (a chase for the approval follow-up).'],
+          permissions: ['client_updates/share edit'],
+          audit: ['client_update_sent', 'client_update_test_sent', 'client_update_send_failed', 'client_update_link_enabled', 'client_update_link_disabled', 'client_update_link_regenerated', 'client_update_link_updated'],
+          deferred: ['Outgoing email needs a mail provider (Graph with Mail.Send, or Resend) and the Outgoing email integration on.'],
+        },
+        {
+          name: 'What the client sees',
+          what: 'A page with no sign-in ("Read-only view shared by Seamless FM…"), "Live as of <date> CT", the work-order count, Download spreadsheet, the intro text, the shared tiles and charts (recounted in the browser), search, chips, Show everything, sortable headers, sections only when the grouping column is shared, the first 2,000 rows, refreshed every five minutes; a dead link reads "This link is not available. It may have been turned off or replaced…" without saying why. Responses are private, no-store and not indexed; tokens are 32 url-safe characters.',
+          value: 'Exactly the shared columns, the whole tracker, nothing else.',
+        },
+      ],
+    },
+  ],
+};

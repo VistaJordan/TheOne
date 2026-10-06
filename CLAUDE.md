@@ -1597,9 +1597,13 @@ falls back to a monogram tile.
 stylesheet at the foot of `docs.css`, `body.docs-printing`), Download
 Markdown (`brdMarkdown` / `sopMarkdown` / `lifecycleMarkdown`, pure, in
 shared) and Download Word (the rendered HTML wrapped as a `.doc`) or
-Download SVG for the chart. **The prose is a registry in code**: `brd.ts`
+Download SVG for the chart. **The prose is a registry in code**: `brd.ts` assembles one file per part
+under `docs/brd/` (platform, workOrders + woList, money, field, portfolio +
+maintenance, communication, insight, admin + automation)
 (`BRD_PARTS` → modules → features with what / value / controls (labels as
-on screen) / rules / permissions / audit / BRD rule ids / since / deferred),
+on screen) / rules / permissions / audit / BRD rule ids / since / deferred;
+reviewed against the code by eight area audits on 2026-10-06 — the
+registry says so where a screen is a prototype, API-only or unscoped),
 `rules.ts` (`BUSINESS_RULES`, the numbered register with where each is
 enforced and built / partial / deferred), `sop.ts` (`SOP`: the Tech Locator
 SOP format — document control, role purpose, scope, who can use it,

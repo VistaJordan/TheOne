@@ -1,15 +1,19 @@
 // 0075 · The work-order lifecycle as a picture: every seeded status, the
-// moves between them, the gates on the way in, and the processes that run
-// beside the status line (acceptance, visits, the quote clock, approvals,
+// usual moves between them, the gates on the way in, and the processes that
+// run beside the status line (acceptance, visits, the quote clock, approvals,
 // payments, invoicing). Status names are the PHASE_BY_STATUS_NAME keys —
 // tests/docs.test.ts fails when a status exists that this model forgets.
+//
+// The code imposes no order on statuses: any status may be picked unless a
+// gate or the Ecotrak block refuses it. The edges here are the path the
+// business follows, not a constraint the system enforces.
 
 import type { LifecycleModel } from './types';
 
 export const LIFECYCLE: LifecycleModel = {
   legend: {
-    main: 'The usual path: a person moves the work order (Change status, or Request status change for a dispatcher).',
-    system: 'Moved by the system: a technician check-in, an approved request, an automation, a planned-maintenance run.',
+    main: 'The usual path: a person moves the work order (Change status, or Request status change for a dispatcher). The system enforces no order — only the gates and the Ecotrak block can refuse a pick.',
+    system: 'Moved by the system: a technician check-in (from whatever status the work order was in), an approved request, an automation, a planned-maintenance run.',
     branch: 'A branch the job may take: parts needed, advice needed, approved on site.',
     exception: 'An exception or off-ramp: return trip, rejection, cancellation.',
   },
@@ -20,7 +24,7 @@ export const LIFECYCLE: LifecycleModel = {
       title: 'Birth and acceptance',
       phases: ['Intake'],
       summary:
-        'A work order arrives from a client system (Ecotrak today), a CSV import, a planned-maintenance schedule, an OP Admin draft or the Add work order form. Until a manager accepts it and names a dispatcher it sits on Incoming Work Orders; the Ready to Assign gate holds it back until the 13 intake fields are filled.',
+        'A work order arrives from a client system (Ecotrak today), a CSV import, a planned-maintenance schedule, an OP Admin draft or the Add work order form. One created by the Ecotrak sync or the import without an assignee waits on Incoming Work Orders until a manager accepts it and names a dispatcher; the Ready to Assign gate holds it back until the 13 intake fields are filled. Drafts, schedules and the form hand over already assigned.',
       who: ['Team Lead', 'Assistant TL', 'Account Manager', 'Operations Admin'],
     },
     {
@@ -44,7 +48,7 @@ export const LIFECYCLE: LifecycleModel = {
       title: 'Client decision',
       phases: ['Approval'],
       summary:
-        'The approved quote goes to the client (their CMMS once the outbound adapter is live; Ecotrak push is recorded, not sent, today). The work order waits for the client, or for advice, until it is Approved or cancelled.',
+        'The approved quote goes to the client (their CMMS once the outbound adapter is live; today the sent status is recorded, nothing is pushed). The work order waits for the client, or for advice, until it is Approved or cancelled.',
       who: ['Operations Admin', 'Team Lead', 'Account Manager'],
     },
     {
@@ -60,7 +64,7 @@ export const LIFECYCLE: LifecycleModel = {
       title: 'Soft close and audit',
       phases: ['Done'],
       summary:
-        'Done / Incurred needs a visit checked in and out, the final Cost (the sum of accepted payment requests), a quote with data and an approved after photo (or, for Bill For Incurred, a before photo and a sign-off). Completion may propose an invoice and a vendor bill automatically. AR audits the record and marks it Ready to Invoice.',
+        'Done / Incurred needs a visit checked in and out, the final Cost (the sum of accepted payment requests), a quote with data and an approved after photo (or, for Bill For Incurred, a before photo and a sign-off). Entering the Done group may propose an invoice and a vendor bill when an auto-invoice contract covers the job. AR audits the record and marks it Ready to Invoice.',
       who: ['OM (dispatcher)', 'Accounts Payable', 'Accounts Receivable'],
     },
     {
@@ -68,7 +72,7 @@ export const LIFECYCLE: LifecycleModel = {
       title: 'Invoice and collection',
       phases: ['Invoiced'],
       summary:
-        'The invoice is raised from the approved quote, numbered per entity and year, sent and marked paid. Moving to Invoiced stamps Total Invoiced from the quote; Profit follows.',
+        'The invoice is raised from the approved quote, numbered per entity and year, sent and marked paid. Moving to Invoiced or Invoiced Not Paid stamps Total Invoiced from the quote; Profit follows.',
       who: ['Accounts Receivable', 'Admin'],
     },
     {
@@ -88,15 +92,15 @@ export const LIFECYCLE: LifecycleModel = {
       enteredBy: 'Created by the Ecotrak ingest, a CSV import, Submit & assign on a draft, or Add work order. Every creation path starts here by name.',
       who: 'The system on creation; a manager on Accept and assign.',
       onEnter: [
-        'An unassigned work order gets a wo_acceptance task and appears on Incoming Work Orders (rule 7.1).',
-        'The sign-off sheet is generated the moment an Assignee is written.',
-        'A SharePoint folder is created when that switch is on.',
-        'Ecotrak push on record: ACCEPTED.',
+        'An Ecotrak or imported work order with no assignee gets a wo_acceptance task and appears on Incoming Work Orders (rule 7.1); the form and the drafts never raise one.',
+        'The sign-off sheet is generated the moment an Assignee is written (when Comp names a layout and file storage is on).',
+        'A SharePoint folder is created when that switch is on; the dispatch cascade starts when Admin set it to start by itself.',
+        'Ecotrak would push: ACCEPTED (not sent until go-live).',
       ],
     },
     {
       status: 'Emergency',
-      meaning: 'An emergency intake; the red Emergency flag is the field that drives the colour everywhere.',
+      meaning: 'An emergency intake; the red Emergency flag is the field that drives the colour everywhere, and the Pulse\'s Ack emergency clock watches this status with high priority.',
       enteredBy: 'A person, or the paused "priority changed to urgent" automation once the client portal sets priority.',
       who: 'Managers.',
     },
@@ -109,23 +113,23 @@ export const LIFECYCLE: LifecycleModel = {
     {
       status: 'On Site (Assessment)',
       meaning: 'The technician is checked in on the assessment visit.',
-      enteredBy: 'Automatically when an Assessment visit is checked in on the CICO tab (rule 2.2.2).',
+      enteredBy: 'Automatically when an Assessment visit is checked in on the CICO tab (rule 2.2.2), whatever the status before.',
       who: 'The system, from the visit log.',
-      onEnter: ['Ecotrak push on record: ENROUTE then ARRIVED.', 'Checking out stamps Quote Due Date = check-out + 48 business hours (Chicago, weekends and holidays skipped).'],
+      onEnter: ['Ecotrak would push: ENROUTE then ARRIVED.', 'Checking out stamps Quote Due Date = check-out + 48 business hours (Chicago, weekends and holidays skipped).'],
     },
     {
       status: 'Return Trip Needed',
       meaning: 'The technician must come back; the visit was checked out as "return trip needed".',
       enteredBy: 'Change status, usually after a check-out marked return trip.',
       who: 'Dispatcher.',
-      onEnter: ['Ecotrak push on record: RETURN_VISIT_REQUIRED.'],
+      onEnter: ['Ecotrak would push: RETURN_VISIT_REQUIRED.'],
     },
     {
       status: 'Waiting for Quote',
-      meaning: 'Assessment done; the quote is owed. The Due Today view lists it under Quote on its due day and keeps it there while overdue.',
+      meaning: 'Assessment done; the quote is owed. The Due Today view lists it under Quote on its due day and keeps it there while overdue; the Pulse\'s Quote owed clock runs here.',
       enteredBy: 'Change status after the assessment check-out.',
       who: 'Dispatcher.',
-      onEnter: ['Ecotrak push on record: SUBMITTING_PROPOSAL.'],
+      onEnter: ['Ecotrak would push: SUBMITTING_PROPOSAL.'],
     },
     {
       status: 'Quote Ready',
@@ -142,14 +146,14 @@ export const LIFECYCLE: LifecycleModel = {
     },
     {
       status: 'Waiting for Approval',
-      meaning: 'The quote is with the client in their CMMS.',
+      meaning: 'The quote is with the client in their CMMS; the Pulse\'s Chase client clock runs here.',
       enteredBy: 'Change status after Approve & Send to CMMS on the quote.',
       who: 'Operations Admin or a manager.',
-      onEnter: ['Ecotrak push on record: PROPOSAL_SUBMITTED.', 'The approval follow-up obligation starts counting chases (client-visible messages and client updates).'],
+      onEnter: ['Ecotrak would push: PROPOSAL_SUBMITTED.', 'The approval follow-up obligation counts client-visible messages and client updates as chases.'],
     },
     {
       status: 'Approved',
-      meaning: 'The client approved the quote.',
+      meaning: 'The client approved the quote; the Pulse\'s ETA owed clock runs here.',
       enteredBy: 'Change status when the client approves (inbound PROPOSAL_APPROVED from Ecotrak, or by hand).',
       who: 'Operations Admin or a manager.',
     },
@@ -166,7 +170,7 @@ export const LIFECYCLE: LifecycleModel = {
       enteredBy: 'Change status; refused until Parts Required is written (rule 11.2.2).',
       who: 'Dispatcher or Accounts Payable.',
       gate: 'parts',
-      onEnter: ['Ecotrak push on record: PENDING_PARTS.'],
+      onEnter: ['Ecotrak would push: PENDING_PARTS.'],
     },
     {
       status: 'Job Sched',
@@ -183,31 +187,31 @@ export const LIFECYCLE: LifecycleModel = {
     {
       status: 'On Site (Job)',
       meaning: 'The technician is checked in on the job (or a return trip).',
-      enteredBy: 'Automatically when a Job or Return trip visit is checked in (rule 2.2.2).',
+      enteredBy: 'Automatically when a Job or Return trip visit is checked in (rule 2.2.2), whatever the status before.',
       who: 'The system, from the visit log.',
-      onEnter: ['Ecotrak push on record: ENROUTE then ARRIVED.'],
+      onEnter: ['Ecotrak would push: ENROUTE then ARRIVED.'],
     },
     {
       status: 'Done / Incurred',
       meaning: 'The work is complete and the technician cost is known.',
-      enteredBy: 'Change status; refused until a visit is checked in and out, Cost is set, the quote has data and an after photo is approved (rules 11.3.1 to 11.3.4).',
+      enteredBy: 'Change status; refused until a visit is checked in and out, Cost is set, the quote has data and an after photo is approved — or a before photo and a sign-off for Bill For Incurred (rules 11.3.1 to 11.3.4).',
       who: 'Dispatcher or a manager.',
       gate: 'done',
       onEnter: [
-        'Ecotrak push on record: SOFT_COMPLETED.',
-        'Contracts with "Bill automatically on completion" propose an invoice and a vendor bill (rule 6.4).',
+        'Ecotrak would push: SOFT_COMPLETED.',
+        'Entering the Done group from outside it proposes an invoice (from a client contract with "Bill automatically on completion", when no invoice exists) and a vendor bill (from a time-and-materials vendor contract, when none exists) — rule 6.4.',
         'Days since Done starts counting for the AR audit.',
       ],
     },
     {
       status: 'Ready to Invoice',
-      meaning: 'The AR audit is clean: Admin and Quote checks ticked, nothing flagged.',
+      meaning: 'The AR audit is clean: Admin and Quote checks ticked, nothing flagged. (Also in the Done group, so a direct move here proposes billing the same way.)',
       enteredBy: 'Change status after the Receivables › Audit checks.',
       who: 'Accounts Receivable.',
     },
     {
       status: 'Invoiced Not Paid',
-      meaning: 'The invoice has been sent; collection is running.',
+      meaning: 'The invoice has been sent; collection is running (Active group).',
       enteredBy: 'Change status when the invoice is sent.',
       who: 'Accounts Receivable.',
       onEnter: ['Total Invoiced is stamped from the quote total; Profit = Total Invoiced minus Cost.'],
@@ -224,7 +228,7 @@ export const LIFECYCLE: LifecycleModel = {
       meaning: 'Not going ahead, or parked. Off the pipeline; no phase.',
       enteredBy: 'Reject on Incoming Work Orders (reason required), Cancel work order on the record (reason required), or a client rejection.',
       who: 'Managers.',
-      onEnter: ['Ecotrak push on record: CANCELLED.', 'An open acceptance or status request on the work order is cancelled.'],
+      onEnter: ['Ecotrak would push: CANCELLED.', 'An open acceptance on the work order is cancelled (an open status request stays until it is withdrawn or decided).'],
     },
   ],
 
@@ -263,12 +267,12 @@ export const LIFECYCLE: LifecycleModel = {
       title: 'Acceptance and the Ready to Assign gate',
       statuses: ['Open'],
       brd: ['7.1.1', '7.1.4', '11.1.1', '11.1.2'],
-      summary: 'A work order created without an assignee waits on Incoming Work Orders until a manager accepts it and names a dispatcher, or rejects it.',
+      summary: 'A work order the Ecotrak sync or the CSV import created without an assignee waits on Incoming Work Orders until a manager accepts it and names a dispatcher, or rejects it.',
       steps: [
-        'The Ecotrak ingest and the CSV import raise a wo_acceptance task after their transaction commits; a row that already has an Assignee is skipped.',
-        'Accept and assign is locked while any of the 13 intake fields is empty (Fill before assigning: …).',
+        'The acceptance task is raised after the creating transaction commits; a row that already has an Assignee is skipped; the Add work order form, the drafts and planned maintenance never raise one.',
+        'Accept and assign is locked while any of the 13 intake fields is empty (Fill before assigning: …); the assignee must be an active person on file.',
         'Accept writes the Assignee as the manager\'s own edit, so it is audited, mirrored and scoped like any edit; Reject needs a reason and moves the work order to Cancelled / Postponed.',
-        'Filling the Assignee by hand, or cancelling, closes the task by itself.',
+        'Filling the Assignee by hand, or cancelling, closes the task by itself; every decision posts an internal comment.',
         'The Who\'s available? panel beside the picker shows each dispatcher\'s active load per status.',
       ],
     },
@@ -278,7 +282,7 @@ export const LIFECYCLE: LifecycleModel = {
       statuses: ['Open'],
       brd: ['14.1', '14.3.3'],
       summary: 'The OP Admin types a work order into a draft and submits it already assigned; no acceptance task is raised because the assignment is the handoff.',
-      steps: ['Submit & assign refuses until every required field and an active assignee are in, and refuses a WO # that already exists.', 'Discard keeps the draft row (never deleted).'],
+      steps: ['Submit & assign refuses until every required field and an active assignee are in, and refuses a WO # that already exists (Trash included).', 'Discard keeps the draft row; a submitted or discarded draft can no longer be edited.'],
     },
     {
       key: 'hire',
@@ -286,7 +290,7 @@ export const LIFECYCLE: LifecycleModel = {
       statuses: ['Open', 'Assessment Sched', 'Job Sched'],
       summary: 'Suggested vendors (preferred rules first, then an automatic fill by trade, coverage and history), the technician map around the site, the dispatcher\'s own book, and the optional dispatch cascade that offers the job to preferred vendors in turn.',
       steps: [
-        'Hire for <WO#> records the technician on the People tab; a blacklisted vendor is never suggested and cannot be assigned.',
+        'Hire for <WO#> records the technician on the People tab (Take off releases them); a blacklisted vendor is never suggested, cannot accept an offer and cannot be the responsible vendor (hiring from the map warns).',
         'Call via Quo records the intent and opens the Quo desktop app; the transcript comes back by webhook.',
         'A hired technician, or one picked on a visit, joins the dispatcher\'s own technician list ("theirs" on the map).',
         'Compliance (W-9, MSA, approved COI) warns on hire; it never blocks.',
@@ -299,10 +303,10 @@ export const LIFECYCLE: LifecycleModel = {
       brd: ['2.2.2', '2.3.1', '2.3.2', '2.3.3'],
       summary: 'Every visit is a row: type, technician, method, check-in and check-out stamps to the second. The seven legacy CICO fields mirror the latest visit.',
       steps: [
-        'A check-in moves the work order On Site (Assessment) for an Assessment visit, On Site (Job) for a Job or Return trip; gates and the Ecotrak check still run, and a refusal never undoes the check-in.',
+        'A check-in moves the work order On Site (Assessment) for an Assessment visit, On Site (Job) for a Job or Return trip, without asking the status permission; gates and the Ecotrak check still run, and a refusal never undoes the check-in.',
         'An Assessment check-out sets Quote Due Date; a Job check-out never does. Deleting the assessment visit clears it.',
         'The check-in method is pre-filled from the FM (Admin › Custom fields › Check-in method by FM).',
-        'A one-page sign-off sheet in the billing entity\'s branding is generated when the work order is assigned; Share with tech texts its link through Quo; the signed copy texted back is filed as a pending Sign-off attachment and sets Sign-Off Link.',
+        'A one-page sign-off sheet in the billing entity\'s branding is generated when the work order is assigned; Send to tech texts its link through Quo (or the Quo desktop app); the signed copy texted back is filed as a pending Sign-off attachment and sets Sign-Off Link.',
         'Geofence: the visit\'s location can be recorded on the CICO row and is compared with the site\'s pin and radius.',
       ],
     },
@@ -313,7 +317,7 @@ export const LIFECYCLE: LifecycleModel = {
       brd: ['2.3.1', '4.1', '4.3'],
       summary: 'Quote Due Date = assessment check-out + 48 wall-clock hours skipping Saturdays, Sundays and the holiday table, in America/Chicago. Due Today shows what is due on a chosen day.',
       steps: [
-        'Due Today segments: All · Escalations (due on or before the day, not scheduled or on site) · Scheduled · Quote (owed that day, and overdue while still before Quote Ready) · Parts arriving, each for Today, Tomorrow or any date.',
+        'Due Today segments: All · Escalations (due on or before the day, not scheduled or on site) · Scheduled · Quote (owed that day, and overdue while still before Quote Ready when the day is today) · Parts arriving, each for Today, Tomorrow or any date.',
         'The date turns red in the list, the Dates card and the CICO summary only while the quote is still owed.',
       ],
     },
@@ -324,7 +328,8 @@ export const LIFECYCLE: LifecycleModel = {
       brd: ['11.2.1', '1.5.2'],
       summary: 'One quote per work order, numbered Q-<entity>-<year>-<n>, priced from the client contract in force, submitted, approved and sent.',
       steps: [
-        'Create quote, fill Tech reported that…, lines, scope and options; it autosaves; Submit for approval; a manager clicks Approve & Send to CMMS or Reject with note.',
+        'Create quote, fill Tech reported that…, lines, scope and options; it autosaves; Submit for approval; a manager clicks Approve & Send to CMMS or Reject with note (back to draft, from pending or approved).',
+        'Grand Total counts the options marked Include in summary plus their line tax; the incurred lines are context.',
         'An AI draft from a Quo call transcript lands in the same builder; prices come only from the transcript, the vendor cost plus contract markup, or the contract rates, never invented.',
         'Approving and sending are locked while an NTE override task is open on the work order (409); rejecting never is.',
         'Print / PDF prints the quote with the default document template\'s letterhead and terms.',
@@ -335,12 +340,12 @@ export const LIFECYCLE: LifecycleModel = {
       title: 'Status change requests and the Approvals inbox',
       statuses: ['Assessment Sched', 'Waiting for Quote', 'Job Sched', 'Done / Incurred'],
       brd: ['2.4.1', '2.4.2', '2.4.3', '2.4.4', '7.2.2', '7.2.3', '8.1.3'],
-      summary: 'Roles in request mode (OM tiers) ask for a status move; a manager approves or rejects it in Approvals; the requester acknowledges the decision.',
+      summary: 'Roles in request mode (OM tiers) ask for a status move (any status; these are examples); a manager approves or rejects it in Approvals; the requester acknowledges the decision.',
       steps: [
         'Request status change raises one open request per work order (a new pick re-targets it); a move a gate would refuse is refused up front.',
-        'Approve moves the work order with via: approval_task on the audit row; Reject needs a reason.',
-        'My requests lane: Withdraw while open, Continue after an approval, Understood or Request again after a rejection.',
-        'The inbox also carries NTE increases, manager reviews, quotes pending approval and payment requests; open rows are oldest first and every decision is per row.',
+        'Approve re-runs the gate and the Ecotrak check, then moves the work order with via: approval_task on the audit row; Reject needs a reason.',
+        'The requester sees the decision on the header banner (Continue after an approval; Request again or Understood after a rejection) and in My requests (Withdraw while open, Continue / Understood after).',
+        'The inbox also carries NTE overrides, manager reviews, quotes pending approval and payment requests; open rows are oldest first and every decision is per row.',
       ],
     },
     {
@@ -350,9 +355,9 @@ export const LIFECYCLE: LifecycleModel = {
       brd: ['1.5.2', '6.2.3', '11.3.2'],
       summary: 'A payment request per vendor payment: requested → approved → sent to Yoda → paid, or rejected. Cost = the sum of accepted requests.',
       steps: [
-        'Request payment on the work order (vendor record, purpose, amount, method); Approve or Reject in Payments › Needs approval; Send to Yoda and Mark paid in To process.',
+        'Request payment on the work order (vendor record or a typed name and phone, purpose, amount, method); Approve or Reject in Payments › Needs approval; Send to Yoda and Mark paid in To process.',
         'Approval tiers by amount decide which roles may say yes inside each band; the button is locked with the reason first.',
-        'When accepted requests take Cost past the NTE, an nte_override task lands in Approvals and holds Send to Yoda; the task cancels itself once Cost is back under the NTE.',
+        'When accepted requests take Cost past the NTE, an nte_override task lands in Approvals and holds Approve and Send to Yoda; the task cancels itself once Cost is back under the NTE.',
         'Once the system has written Cost, it cannot be typed over; before that, a typed Cost stands.',
         'Vendor bills (the vendor\'s own invoice) run received → approved → paid, or disputed, beside the requests and never feed Cost.',
       ],
@@ -372,8 +377,8 @@ export const LIFECYCLE: LifecycleModel = {
       brd: ['6.4'],
       summary: 'One invoice per work order, drafted from the approved quote, numbered <entity>-<year>-<n>, draft → sent → paid or void.',
       steps: [
-        'Receivables › Audit ticks Admin and Quote; a clean record is Ready; Raise invoice drafts it; Send needs invoicing approve and passes the amount tier; Mark paid closes it.',
-        'A contract with Bill automatically on completion proposes the invoice (and the vendor bill) when the work order lands in the Done group; Confirm files it, Dismiss drops it.',
+        'Receivables › Audit (a prototype today) ticks the record clean; Raise invoice drafts it; Send needs invoicing approve and passes the amount tier; Mark paid closes it.',
+        'A contract with Bill automatically on completion proposes the invoice (and a time-and-materials vendor contract the vendor bill) when the work order enters the Done group; Confirm files it, Dismiss drops it.',
         'Moving to Invoiced or Invoiced Not Paid stamps Total Invoiced from the quote total.',
       ],
     },

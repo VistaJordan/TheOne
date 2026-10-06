@@ -397,9 +397,25 @@ export async function exportCsv(
   columns: string[],
   actor?: ActingPrincipal,
 ): Promise<{ csv: string; rows: number; columns: string[] }> {
-  const cols = columns.length > 0 ? columns : ['wo_number', 'title', 'client', 'status', 'nte'];
+  // The list may carry UI-only columns the catalogue does not know (the
+  // default arrangement's `clock` chip, lib/woView.ts): they draw nothing in
+  // a CSV, so they are dropped here instead of failing the whole export with
+  // `Unknown field "clock"`.
+  const known: string[] = [];
   const labels: string[] = [];
-  for (const key of cols) labels.push((await resolveField(key)).label);
+  for (const key of columns) {
+    try {
+      labels.push((await resolveField(key)).label);
+      known.push(key);
+    } catch {
+      /* not a field — a presentation column */
+    }
+  }
+  const cols = known.length > 0 ? known : ['wo_number', 'title', 'client', 'status', 'nte'];
+  if (known.length === 0) {
+    labels.length = 0;
+    for (const key of cols) labels.push((await resolveField(key)).label);
+  }
 
   const page = await listWorkOrders(
     {
