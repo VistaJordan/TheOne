@@ -48,11 +48,20 @@ export function parseTax(v: string | null | undefined): number {
   return parseFloat(raw);
 }
 
-/** '$2,890.00' — quote money always carries cents (cf. lib/fields money(), which
-    drops them for round WO amounts). */
+/** A sales-tax PERCENT (D2): 0–30, up to three decimals ("8.25", "8.375"). */
+export function parsePct(v: string | null | undefined): number {
+  const raw = String(v ?? '').replace(/[%\s]/g, '');
+  if (raw === '') return 0;
+  if (!/^\d{1,2}(\.\d{1,3})?$/.test(raw)) return NaN;
+  const n = parseFloat(raw);
+  return n <= 30 ? n : NaN;
+}
+
+/** '$2,890.00' — quote money always carries cents; negatives print '-$75.00'. */
 export function usd(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return '—';
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const abs = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n < 0 ? `-$${abs}` : `$${abs}`;
 }
 
 /** '$3,202' — the NTE headline + meter scale, which the comp renders whole. */
@@ -62,13 +71,14 @@ export function usd0(n: number | null | undefined): string {
 }
 
 /** A line's computed amount, or null when the line is not yet valid. Amount is
-    never an input (§3.6 read-only-distinction): qty × rate, ×1.5 when OT.
-    The Day column is NOT part of this — its value is stored verbatim. */
+    never an input (§3.6 read-only-distinction): qty × rate, ×1.5 when OT,
+    NEGATIVE for a discount line (the sign comes from the type). */
 export function lineAmount(line: DraftLine): number | null {
   const q = parseMoney(line.qty);
   const r = parseMoney(line.rate);
   if (Number.isNaN(q) || Number.isNaN(r)) return null;
-  return round2(q * r * (line.ot ? OT_MULTIPLIER : 1));
+  const sign = line.line_type === 'discount' ? -1 : 1;
+  return round2(sign * q * r * (line.ot ? OT_MULTIPLIER : 1));
 }
 
 /** Per-field errors on one line. An empty object means the line is billable. */
@@ -121,58 +131,92 @@ export function excludedNote(excluded: number[]): string | null {
 export interface OptionTotal {
   /** The DraftSection.key, so the rail can address the section it came from. */
   key: string;
+  /** Server section id (null for a not-yet-saved option). */
+  id: string | null;
   label: string;
   name: string;
+  /** The option's own lines. */
   total: number;
+  /** Tax on (incurred + option) under the Yoda rule; 0 under RULE B. */
+  tax: number;
+  /** The client price of choosing this option. */
+  grandTotal: number;
   /** 1-based line numbers left out of the total because they are invalid. */
   excluded: number[];
   include_in_summary: boolean;
+  approved: boolean;
 }
 
 export interface QuoteTotals {
+  totalRule: 'incurred_plus_option' | 'options_only';
+  /** Incurred section + options approved in earlier rounds. */
   incurredSubtotal: number;
   incurredExcluded: number[];
+  /** The CURRENT round's options. */
   options: OptionTotal[];
-  /** Sum of the option sections with include_in_summary = true. */
+  /** Sum of the option sections with include_in_summary = true (RULE B basis). */
   includedOptions: number;
+  salesTaxPct: number;
+  /** Computed $ tax inside grandTotal. */
   salesTax: number;
   grandTotal: number;
+  /** Which option grandTotal prices (key), null when none. */
+  pricedKey: string | null;
   totalCost: number | null;
   profit: number | null;
   marginPct: number | null;
 }
 
 /**
- * THE grand-total rule. One function, one place — see the RULE B note below.
+ * THE grand-total rule — one function, one place, server parity with
+ * computeQuoteTotals() in apps/api/src/services/quotes.ts.
  *
- * RULE B — flip to (a) incurred+options here if Jordan reverses.
+ * D1 — `total_rule`:
+ *   incurred_plus_option (Yoda, default): each option is priced as
+ *     (incurred + option) × (1 + tax%). grandTotal is the APPROVED option's price
+ *     when the client has chosen, else the first included option's; with no
+ *     option at all it is the incurred work alone (× tax).
+ *   options_only (RULE B): Σ included option totals, incurred is context, no tax.
  *
- * (b) grand_total = sales tax + the sum of the option sections whose
- *     `include_in_summary` is true. The INCURRED subtotal is context only: that
- *     work is already on the work order and bills with the job, so adding it to
- *     the client-facing grand total would bill it twice. To move to rule (a),
- *     add `incurredSubtotal` to the `grandTotal` expression below — that single
- *     line is the whole change; the rail caption, the summary block and the NTE
- *     meter all read this result.
+ * Options approved in an EARLIER round price as incurred (Yoda IsIncurred = 1).
  *
  * `totalCost` is our cost on the proposed work (server-held, not part of the
  * draft form), passed in so profit/margin land in the same result.
  */
 export function computeQuoteTotals(draft: DraftQuote, totalCost: number | null = null): QuoteTotals {
-  const incurredSection = draft.sections.find((s) => s.kind === 'incurred');
-  const incurred = sumLines(incurredSection ? incurredSection.lines : []);
+  const yoda = draft.total_rule !== 'options_only';
+  const parsedPct = parsePct(draft.sales_tax_pct);
+  const pct = Number.isNaN(parsedPct) ? 0 : parsedPct;
+  const taxOn = (base: number) => (yoda ? round2((base * pct) / 100) : 0);
+
+  const incurredLike = draft.sections.filter(
+    (s) => s.kind === 'incurred' || (s.kind === 'option' && s.approved && s.round < draft.current_round),
+  );
+  let incurredSubtotal = 0;
+  const incurredExcluded: number[] = [];
+  for (const s of incurredLike) {
+    const sum = sumLines(s.lines);
+    incurredSubtotal = round2(incurredSubtotal + sum.total);
+    if (s.kind === 'incurred') incurredExcluded.push(...sum.excluded);
+  }
 
   const options: OptionTotal[] = draft.sections
-    .filter((s) => s.kind === 'option')
+    .filter((s) => s.kind === 'option' && s.round === draft.current_round)
     .map((opt, i) => {
       const sum = sumLines(opt.lines);
+      const base = yoda ? round2(incurredSubtotal + sum.total) : sum.total;
+      const tax = taxOn(base);
       return {
         key: opt.key,
+        id: opt.id,
         label: `Option ${String.fromCharCode(65 + i)}`,
         name: opt.name,
         total: sum.total,
+        tax,
+        grandTotal: round2(base + tax),
         excluded: sum.excluded,
         include_in_summary: opt.include_in_summary,
+        approved: opt.approved,
       };
     });
 
@@ -180,22 +224,38 @@ export function computeQuoteTotals(draft: DraftQuote, totalCost: number | null =
     options.reduce((acc, o) => acc + (o.include_in_summary ? o.total : 0), 0),
   );
 
-  const parsedTax = parseTax(draft.sales_tax);
-  const salesTax = Number.isNaN(parsedTax) ? 0 : parsedTax;
-
-  // ── RULE B — flip to (a) incurred+options here if Jordan reverses ──────────
-  const grandTotal = round2(includedOptions + salesTax);
+  let grandTotal: number;
+  let salesTax: number;
+  let pricedKey: string | null = null;
+  if (yoda) {
+    const priced = options.find((o) => o.approved) ?? options.find((o) => o.include_in_summary) ?? null;
+    if (priced) {
+      grandTotal = priced.grandTotal;
+      salesTax = priced.tax;
+      pricedKey = priced.key;
+    } else {
+      salesTax = taxOn(incurredSubtotal);
+      grandTotal = round2(incurredSubtotal + salesTax);
+    }
+  } else {
+    // ── RULE B ────────────────────────────────────────────────────────────────────
+    grandTotal = includedOptions;
+    salesTax = 0;
+  }
 
   const profit = totalCost == null ? null : round2(grandTotal - totalCost);
   const marginPct = profit == null || grandTotal <= 0 ? null : (profit / grandTotal) * 100;
 
   return {
-    incurredSubtotal: incurred.total,
-    incurredExcluded: incurred.excluded,
+    totalRule: yoda ? 'incurred_plus_option' : 'options_only',
+    incurredSubtotal,
+    incurredExcluded,
     options,
     includedOptions,
+    salesTaxPct: pct,
     salesTax,
     grandTotal,
+    pricedKey,
     totalCost,
     profit,
     marginPct,
@@ -220,11 +280,17 @@ export function scopeFieldId(sectionKey: string, index: number): string {
   return `scope-${sectionKey}-${index}`;
 }
 
-/** Every blocking problem on the quote, in document order. */
+/** Every blocking problem on the quote, in document order. Locked sections are
+    history and never block. */
 export function quoteProblems(draft: DraftQuote): QuoteProblem[] {
   const problems: QuoteProblem[] = [];
+  let optionIndex = 0;
 
-  draft.sections.forEach((section, sectionIndex) => {
+  draft.sections.forEach((section) => {
+    if (section.locked || section.round !== draft.current_round) {
+      if (section.kind === 'option') optionIndex++;
+      return;
+    }
     if (section.kind === 'incurred') {
       if (section.narrative.trim() === '') {
         problems.push({ fieldId: 'inc-report', message: 'Tech report is required' });
@@ -236,9 +302,7 @@ export function quoteProblems(draft: DraftQuote): QuoteProblem[] {
         });
       }
     } else {
-      // sections[0] is always INCURRED (fromQuote guarantees it), so the first
-      // option sits at index 1 and is Option A.
-      const label = `Option ${String.fromCharCode(64 + sectionIndex)}`;
+      const label = `Option ${String.fromCharCode(65 + optionIndex++)}`;
       if (section.name.trim() === '') {
         problems.push({
           fieldId: `opt-${section.key}-name`,
@@ -263,8 +327,8 @@ export function quoteProblems(draft: DraftQuote): QuoteProblem[] {
     });
   });
 
-  if (Number.isNaN(parseTax(draft.sales_tax))) {
-    problems.push({ fieldId: 'sales-tax', message: 'Sales tax must be a number' });
+  if (Number.isNaN(parsePct(draft.sales_tax_pct))) {
+    problems.push({ fieldId: 'sales-tax', message: 'Sales tax must be a percentage between 0 and 30' });
   }
 
   return problems;

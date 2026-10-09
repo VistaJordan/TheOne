@@ -12,6 +12,7 @@ import './styles/payment.css';
 import './styles/approvals.css';
 import './styles/auth.css';
 import './styles/wo-list.css';
+import './styles/parity.css';
 import { App } from './App';
 import { initOKnob } from './lib/oknob';
 

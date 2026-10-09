@@ -14,6 +14,7 @@ const ROLE_LABELS: Record<string, string> = {
   tl: 'TL',
   am: 'AM',
   admin: 'Admin',
+  ap: 'AP',
   service: 'Service',
 };
 

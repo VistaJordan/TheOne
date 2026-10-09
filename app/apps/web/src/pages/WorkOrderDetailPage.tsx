@@ -340,6 +340,7 @@ export function WorkOrderDetailPage() {
                 items={paymentsQuery.data?.items ?? []}
                 totalPaid={paymentsQuery.data?.total_paid ?? null}
                 loading={paymentsQuery.isLoading}
+                requestAction={wo.actions?.['payment.request'] ?? null}
               />
             </div>
           )}

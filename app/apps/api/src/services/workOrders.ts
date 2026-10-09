@@ -19,6 +19,7 @@ import {
   checkEcotrakTransition,
   ecotrakTransitionRefused,
   describeEcotrakRefusal,
+  allowedWoActions,
 } from '@theone/shared';
 import { ApiError } from '../errors.js';
 import { config } from '../config.js';
@@ -342,6 +343,7 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
     },
     fields: fieldsOut,
     money,
+    actions: allowedWoActions(r.status_name, phaseFor(r.status_name)),
     memberships: memRes.rows.map((m) => ({
       list_id: m.list_id,
       list_name: m.list_name,

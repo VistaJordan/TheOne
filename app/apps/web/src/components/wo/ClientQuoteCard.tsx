@@ -42,15 +42,36 @@ export function ClientQuoteCard({ wo, quoteStatus }: ClientQuoteCardProps) {
 
       {showEntry && (
         <div className="card-foot">
-          <Link
-            className="btn btn-sm"
-            to={`/work-orders/${encodeURIComponent(wo.wo_number)}/quote`}
-          >
-            <Icon name="file" size={12} />
-            {quoteStatus === null ? 'Create quote' : 'Open quote'}
-          </Link>
+          {quoteStatus === null && wo.actions && !wo.actions['quote.create'].allowed ? (
+            // WO-status gate (allowedWoActions): never hidden, rendered locked
+            // with the reason — same rule as every other gated control (§3.5).
+            <span className="tipwrap">
+              <button type="button" className="btn btn-sm btn-locked" tabIndex={0} aria-disabled="true" aria-describedby="lockTipQuoteCreate">
+                <Icon name="lock" size={12} />
+                Create quote
+              </button>
+              <span className="tip tip-below" id="lockTipQuoteCreate" role="tooltip">
+                <Icon name="lock" size={12} />
+                {wo.actions['quote.create'].reason}
+              </span>
+            </span>
+          ) : (
+            <Link
+              className="btn btn-sm"
+              to={`/work-orders/${encodeURIComponent(wo.wo_number)}/quote`}
+            >
+              <Icon name="file" size={12} />
+              {quoteStatus === null ? 'Create quote' : 'Open quote'}
+            </Link>
+          )}
           {quoteStatus !== null && (
             <span className="chip chip-sm">{QUOTE_STATUS[quoteStatus]?.label ?? quoteStatus}</span>
+          )}
+          {quoteStatus !== null && wo.actions && !wo.actions['quote.edit'].allowed && (
+            <span className="chip chip-sm chip-outline" title={wo.actions['quote.edit'].reason ?? ''}>
+              <Icon name="lock" size={12} />
+              Quoting closed
+            </span>
           )}
         </div>
       )}

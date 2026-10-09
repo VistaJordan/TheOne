@@ -64,6 +64,9 @@ const CONVERSATION_SQL = `
    WHERE c.vendor_id IN (
            SELECT p.vendor_id FROM payable p
             WHERE p.task_id = $1 AND p.vendor_id IS NOT NULL
+           UNION
+           SELECT pr.vendor_id FROM payment_request pr
+            WHERE pr.task_id = $1 AND pr.vendor_id IS NOT NULL AND pr.deleted_at IS NULL
          )
    ORDER BY c.created_at ASC
    LIMIT 1

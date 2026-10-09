@@ -542,10 +542,10 @@ const SEED_PAYMENTS: {
   status: string;
   created_at: string;
 }[] = [
-  { purpose: 'Assessment trip charge', amount: 75, method: 'Zelle', status: 'paid', created_at: '2026-07-15T14:20:00Z' },
-  { purpose: 'Parts advance', amount: 400, method: 'ACH', status: 'paid', created_at: '2026-07-22T16:05:00Z' },
-  { purpose: 'Return trip charge', amount: 120, method: 'ACH', status: 'approved', created_at: '2026-09-03T15:40:00Z' },
-  { purpose: 'Fulfilment visit labor', amount: 350, method: 'Zelle', status: 'requested', created_at: '2026-09-05T18:10:00Z' },
+  { purpose: 'Assessment trip charge', amount: 75, method: 'zelle', status: 'paid', created_at: '2026-07-15T14:20:00Z' },
+  { purpose: 'Parts advance', amount: 400, method: 'ach', status: 'paid', created_at: '2026-07-22T16:05:00Z' },
+  { purpose: 'Return trip charge', amount: 120, method: 'ach', status: 'approved', created_at: '2026-09-03T15:40:00Z' },
+  { purpose: 'Fulfilment visit labor', amount: 350, method: 'zelle', status: 'requested', created_at: '2026-09-05T18:10:00Z' },
 ];
 
 async function main() {
@@ -555,6 +555,7 @@ async function main() {
   await db.exec(`
     TRUNCATE TABLE
       wo_visit, fm_cico_method,
+      outbox, quote_revision_snapshot, labor_rate, sales_tax_rate,
       quote_line, quote_section, quote, payment_request,
       quo_message, quo_call, quo_job_segment, quo_conversation,
       attachment, payable, vendor, comment, activity_log,
@@ -623,6 +624,14 @@ async function main() {
     principalIdByName.set(a.name, id);
     superAdminCount++;
   }
+  // The AP seat (Yoda PaymentUsersPolicy) — processes payment requests. Mirrors
+  // migration 0028's INSERT for a pgdata that is migrated but never re-seeded.
+  const apId = await insertId(
+    `INSERT INTO principal (kind, display_name, email, role, initials, status, is_super_admin)
+     VALUES ('human', 'Dana Reyes', 'ap@seamlessfm.example', 'ap', 'DR', 'invited', false) RETURNING id`,
+    [],
+  );
+  principalIdByName.set('Dana Reyes', apId);
   const seedBotId = await insertId(
     `INSERT INTO principal (kind, display_name, role, initials) VALUES ('service', $1, 'service', 'SB') RETURNING id`,
     ['Seed Bot'],
@@ -737,8 +746,13 @@ async function main() {
     if (f['Due Date'] == null && toDateTime(t.due)) f['Due Date'] = toDateTime(t.due);
     const description = str(f['35. WO Description']);
     const title = firstLine(description ?? undefined, t.name);
-    const canonicalStatus = STATUS_ALIAS[t.status] ?? t.status;
-    const statusId = resolveStatusId(t.status);
+    // The S4 demo WO carries a quote that is still pending approval and a tech
+    // payment ledger. The export has it already invoiced, which the WO-status
+    // policy (0028 / allowedWoActions) would rightly lock — so the demo opens
+    // in the Quote phase instead, where every quote and payment action is live.
+    const demoStatus = t.id === QUO_WO_NUMBER ? 'Quote Ready' : t.status;
+    const canonicalStatus = STATUS_ALIAS[demoStatus] ?? demoStatus;
+    const statusId = resolveStatusId(demoStatus);
     const statusGroup = statusGroupById.get(statusId)!;
     const homeListId = listIdByName.get(t.list) ?? null;
     const createdAt = toDate(t.created);
@@ -918,8 +932,8 @@ async function main() {
   if (!mattId) throw new Error('Matt Hammond principal not found — quote author missing');
 
   const quoteId = await insertId(
-    `INSERT INTO quote (task_id, status, rev, sales_tax, total_cost, specs, note_to_customer, created_by)
-     VALUES ($1, 'pending_approval', 3, 0, 1610, $2, $3, $4) RETURNING id`,
+    `INSERT INTO quote (task_id, status, rev, sales_tax_pct, total_rule, total_cost, specs, note_to_customer, created_by)
+     VALUES ($1, 'pending_approval', 3, 8.25, 'incurred_plus_option', 1610, $2, $3, $4) RETURNING id`,
     [quoTaskId, QUOTE_SPECS, QUOTE_NOTE_TO_CUSTOMER, mattId],
   );
 
@@ -962,14 +976,36 @@ async function main() {
   );
   activityCount++;
 
+  // Decision stamps follow the row's status (0016): approved rows carry the
+  // approver, paid rows the approver AND the payer — Dana (AP) a day later.
   for (const p of SEED_PAYMENTS) {
+    const decided = p.status === 'approved' || p.status === 'paid';
+    const paid = p.status === 'paid';
     await query(
       `INSERT INTO payment_request
-         (task_id, vendor_id, purpose, amount, method, status, requested_by, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz)`,
-      [quoTaskId, quoVendorId, p.purpose, p.amount, p.method, p.status, mattId, p.created_at],
+         (task_id, vendor_id, purpose, amount, method, status, requested_by, created_at,
+          approved_by, approved_at, paid_by, paid_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz,
+               $9, CASE WHEN $9::uuid IS NULL THEN NULL ELSE $8::timestamptz + interval '1 day' END,
+               $10, CASE WHEN $10::uuid IS NULL THEN NULL ELSE $8::timestamptz + interval '1 day' END)`,
+      [quoTaskId, quoVendorId, p.purpose, p.amount, p.method, p.status, mattId, p.created_at,
+       decided ? apId : null, paid ? apId : null],
     );
   }
+
+  // ── S4 · Yoda LaborRate for the demo WO's (Comp, FM, Trade) combo ─────────
+  // Drives the builder's rate presets and switches the derived sales tax on.
+  const demoWo = await query<{ billing_entity: string | null; client: string | null; trade: string | null }>(
+    `SELECT billing_entity, client, trade FROM task WHERE id = $1`,
+    [quoTaskId],
+  );
+  const demo = demoWo.rows[0];
+  await query(
+    `INSERT INTO labor_rate (billing_entity, fm, trade, tech_rate, helper_rate, trip_rate, afterhours_rate, holiday_rate, is_sales_tax_required)
+     VALUES ($1, $2, $3, 180, 95, 75, 270, 360, true)`,
+    [demo?.billing_entity ?? null, demo?.client ?? null, demo?.trade ?? null],
+  );
+  await query(`INSERT INTO sales_tax_rate (zip, pct, source) VALUES ('77550', 8.25, 'seed')`);
 
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log('seed: done');

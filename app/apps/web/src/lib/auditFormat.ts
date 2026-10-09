@@ -236,11 +236,22 @@ export const ACTION_LABELS: Record<string, string> = {
   quote_sent: 'Quote sent',
   quote_approved: 'Quote approved',
   quote_rejected: 'Quote rejected',
+  // Yoda parity (0028) — the client's decision and rounds.
+  quote_submission_cancelled: 'Quote withdrawn',
+  quote_client_approved: 'Client approved the quote',
+  quote_client_declined: 'Client declined the quote',
+  quote_round_opened: 'New quote round opened',
   payment_requested: 'Payment requested',
+  payment_updated: 'Payment request edited',
   payment_approved: 'Payment approved',
   payment_rejected: 'Payment rejected',
-  payment_sent_to_yoda: 'Payment sent to Yoda',
+  payment_sent_to_yoda: 'Payment sent to Yoda',   // retired verb (0016) — old rows only
   payment_paid: 'Payment paid',
+  payment_method_changed: 'Payment method changed',
+  payment_delete_requested: 'Payment delete requested',
+  payment_delete_rejected: 'Payment delete kept',
+  payment_deleted: 'Payment deleted',
+  vendor_compliance_updated: 'Technician compliance updated',
   // Approval tasks (0020) — the manager's inbox.
   approval_task_created: 'Approval task raised',
   approval_task_claimed: 'Approval task claimed',

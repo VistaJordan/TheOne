@@ -406,6 +406,8 @@ export interface WorkOrderDetail {
   /** 0025: a status change requested under rule 2.4.1 — pending, or decided
       and not yet acknowledged by whoever asked. Null when there is none. */
   status_change: StatusChangeState | null;
+  /** Which quote / payment actions this WO's status allows (allowedWoActions). */
+  actions: WoActionMap;
 }
 
 // ── Money (S2) ───────────────────────────────────────────────────────────────
@@ -577,7 +579,7 @@ export interface MessageCreatedResponse {
 // permission. Both gates below are checked server-side; the web renders a gated
 // control LOCKED WITH A TOOLTIP, never hidden (product/quotes-payments.md §3.5).
 
-export type Role = 'om' | 'senior_om' | 'atl' | 'tl' | 'am' | 'admin';
+export type Role = 'om' | 'senior_om' | 'atl' | 'tl' | 'am' | 'admin' | 'ap';
 
 /** Build / edit / submit a quote — Senior OM and above (§4 permission refinement). */
 export const QUOTE_EDIT_ROLES: readonly string[] = ['senior_om', 'atl', 'tl', 'am', 'admin'];
@@ -598,6 +600,7 @@ export const ROLE_CODES: readonly string[] = [
   'tl',
   'am',
   'admin',
+  'ap',
 ];
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -607,6 +610,7 @@ export const ROLE_LABELS: Record<string, string> = {
   tl: 'Team Lead',
   am: 'Account Manager',
   admin: 'Admin',
+  ap: 'Accounts Payable',
   service: 'Service account',
 };
 
@@ -647,6 +651,105 @@ export interface RoleInfo {
   capabilities: { quote_edit: boolean; quote_approve: boolean };
 }
 
+// ── Work-order action policy (gap analysis G-W01) ────────────────────────────
+// ONE table says which quote / payment actions a work order's STATUS allows.
+// The API enforces it (403 WO_STATUS_BLOCKED) and serves the result on the WO
+// detail as `actions`, so the web renders a blocked control LOCKED WITH THE
+// REASON (§3.5) and never re-derives the rule. WHO may do a thing is the
+// permission tree (0015); WHEN the work order lets them is this table.
+
+export type WoAction =
+  | 'quote.create'
+  | 'quote.edit'
+  | 'quote.submit'
+  | 'quote.approve'
+  | 'quote.send'
+  | 'quote.client_decide'
+  | 'quote.new_round'
+  | 'payment.request'
+  | 'payment.process';
+
+export const WO_ACTIONS: readonly WoAction[] = [
+  'quote.create',
+  'quote.edit',
+  'quote.submit',
+  'quote.approve',
+  'quote.send',
+  'quote.client_decide',
+  'quote.new_round',
+  'payment.request',
+  'payment.process',
+];
+
+export interface WoActionState {
+  allowed: boolean;
+  /** Human reason when blocked (tooltip text); null when allowed. */
+  reason: string | null;
+}
+
+export type WoActionMap = Record<WoAction, WoActionState>;
+
+const QUOTE_BUILD_ACTIONS: readonly WoAction[] = [
+  'quote.create',
+  'quote.edit',
+  'quote.submit',
+  'quote.approve',
+  'quote.send',
+];
+
+/**
+ * Which actions a WO status allows. Mirrors the lifecycle in
+ * product/wo-lifecycle.md and Yoda's "finished WO" guard:
+ *   · quoting is open through In Progress / Parts, closed from Done onward;
+ *   · the client's decision can still be recorded late (Done);
+ *   · a new round opens after client approval, while the job is still live;
+ *   · payment REQUESTS run through Done (AP pays techs at final soft close) and
+ *     stop at Invoiced / Canceled;
+ *   · AP PROCESSING of an existing request is never blocked by status.
+ */
+export function allowedWoActions(statusName: string, phase: Phase | null): WoActionMap {
+  const name = statusName.trim().toLowerCase();
+  // Both spellings: the ClickUp-era "!! canceled/postponed" and the 18-status
+  // vocabulary's "Cancelled / Postponed". A null phase is the same answer.
+  const canceled = /cancel+ed\s*\/\s*postponed/.test(name) || phase === null;
+  const invoiced = phase === 'Invoiced';
+  const done = phase === 'Done';
+  const live = !canceled && !invoiced && !done;
+  const label = statusName.trim();
+
+  const map = {} as WoActionMap;
+  const set = (a: WoAction, allowed: boolean, reason: string) => {
+    map[a] = { allowed, reason: allowed ? null : reason };
+  };
+
+  for (const a of QUOTE_BUILD_ACTIONS) {
+    set(
+      a,
+      live,
+      canceled
+        ? `Quotes are closed — the work order is ${label}`
+        : `Quotes are closed once a work order reaches ${label}`,
+    );
+  }
+  set(
+    'quote.client_decide',
+    live || done,
+    canceled
+      ? `The work order is ${label}`
+      : `The client decision cannot be recorded on an ${label} work order`,
+  );
+  set('quote.new_round', live, `Additional quotes are closed once a work order reaches ${label}`);
+  set(
+    'payment.request',
+    live || done,
+    canceled
+      ? `Payments cannot be requested — the work order is ${label}`
+      : `Payments cannot be requested on a finished work order (${label})`,
+  );
+  set('payment.process', true, '');
+  return map;
+}
+
 // ── Principals (S4.1 · "Viewing as" switcher) ────────────────────────────────
 // GET /api/principals is the pre-auth read surface behind the role switcher:
 // until S5 there is nothing to log into, so the client picks the acting
@@ -666,10 +769,26 @@ export interface PrincipalsResponse {
   items: PrincipalListItem[];
 }
 
-// ── Quotes (S4) ──────────────────────────────────────────────────────────────
-export type QuoteStatus = 'draft' | 'pending_approval' | 'approved' | 'sent';
+// ── Quotes (S4 → Yoda parity) ────────────────────────────────────────────────
+// Lifecycle:
+//   draft → pending_approval → approved → sent → client_approved | client_declined
+//   reject (atl+)            : pending_approval | approved → draft (rev++)
+//   cancel-submission (atl+) : sent → approved
+//   new round (senior_om+)   : client_approved → draft, round++ (previous rounds locked)
+export type QuoteStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'approved'
+  | 'sent'
+  | 'client_approved'
+  | 'client_declined';
 export type QuoteSectionKind = 'incurred' | 'option';
-export type QuoteLineType = 'service' | 'labor' | 'part' | 'material';
+/** Yoda LineItemType: Labor, Materials, Service, Fees, Discount (+ part). A
+    `discount` line's amount is NEGATIVE by type — the input stays positive. */
+export type QuoteLineType = 'service' | 'labor' | 'part' | 'material' | 'fee' | 'discount';
+/** D1 — Yoda prices each option as (incurred + option) × (1 + tax%); RULE B
+    (options only, no incurred, no tax) is kept behind the flag. */
+export type QuoteTotalRule = 'incurred_plus_option' | 'options_only';
 
 /**
  * One row of a section's line-item table. `amount` is COMPUTED
@@ -683,9 +802,13 @@ export interface QuoteLine {
   description: string;
   qty: number;
   rate: number;
+  /** Legacy verbatim Day text (S4). Prefer `day`. */
   day_value: string | null;
+  /** Yoda `Day` — groups lines "Day N –" on multi-day jobs. */
+  day: number | null;
   ot: boolean;
   position: number;
+  /** Signed: negative for `discount` lines. */
   amount: number;
 }
 
@@ -705,6 +828,15 @@ export interface QuoteSection {
   scope_lines: string[];
   include_in_summary: boolean;
   position: number;
+  /** Submission round (Yoda: one QuoteSection per round). 1 = the first quote. */
+  round: number;
+  /** Locked once its round was decided — the builder renders it read-only. */
+  locked: boolean;
+  /** Set on the option the client approved (Yoda IsAdminApproved). */
+  approved_at: string | null;
+  approved_by: ActivityActor | null;
+  /** Yoda RejectionMessage — why this option was declined, when it was. */
+  rejection_note: string | null;
   lines: QuoteLine[];
   subtotal: number;
 }
@@ -715,20 +847,32 @@ export interface QuoteOptionTotal {
   label: string;
   name: string | null;
   include_in_summary: boolean;
+  /** The option's own lines. */
   total: number;
+  /** Sales tax on this option's price (0 under options_only). */
+  tax: number;
+  /** The client price of choosing THIS option: rule-dependent, see QuoteTotalRule. */
+  grand_total: number;
 }
 
 /**
  * Every number on the quote screen, computed in ONE place (computeQuoteTotals).
- * `grand_total` is RULE B: the sum of the option sections flagged
- * include_in_summary. `incurred_subtotal` is context — it bills with the job and
- * is NOT added to the grand total.
+ *
+ * `grand_total` depends on `total_rule`:
+ *   incurred_plus_option (Yoda, default) — the approved option's grand total when
+ *     one is approved, else the FIRST included option's: (incurred + option) × (1 + tax%).
+ *   options_only (RULE B) — Σ included option totals, incurred is context, no tax.
  */
 export interface QuoteTotals {
+  total_rule: QuoteTotalRule;
   incurred_subtotal: number;
   option_totals: QuoteOptionTotal[];
   grand_total: number;
+  /** Computed $ amount of sales tax inside `grand_total`. */
   sales_tax: number;
+  sales_tax_pct: number;
+  /** Which option `grand_total` prices (null when there is no option). */
+  priced_section_id: string | null;
   nte: number | null;
   total_cost: number | null;
   profit: number | null;
@@ -741,10 +885,35 @@ export interface QuoteSummary {
   pinned: string | null;
 }
 
-/** What the ACTING principal may do with this quote right now. */
+/** What the ACTING principal may do with this quote right now (role only — the
+    WO-status gate rides separately on `wo_actions`). */
 export interface QuotePermissions {
   can_edit: boolean;
   can_approve: boolean;
+  /** Record the client's approve / decline on a sent quote. */
+  can_client_decide: boolean;
+}
+
+/** Yoda LaborRate for the WO's (billing entity, FM, trade) combo — null when none. */
+export interface LaborRate {
+  id: string;
+  billing_entity: string | null;
+  fm: string | null;
+  trade: string | null;
+  tech_rate: number | null;
+  helper_rate: number | null;
+  trip_rate: number | null;
+  afterhours_rate: number | null;
+  holiday_rate: number | null;
+  is_sales_tax_required: boolean;
+}
+
+/** GET …/quote/sales-tax — the derived rate (Yoda QuoteSalesTaxEngine). */
+export interface SalesTaxLookup {
+  required: boolean;
+  pct: number;
+  zip: string | null;
+  source: 'labor_rate_not_required' | 'cache' | 'provider' | 'state_fallback' | 'unavailable';
 }
 
 export interface Quote {
@@ -753,14 +922,27 @@ export interface Quote {
   wo_number: string;
   status: QuoteStatus;
   rev: number;
+  /** The round currently being built / decided. */
+  current_round: number;
+  total_rule: QuoteTotalRule;
+  sales_tax_pct: number;
+  bill_to: string | null;
+  is_cost_tbd: boolean;
   specs: string | null;
   note_to_customer: string | null;
   created_by: ActivityActor | null;
   approved_by: ActivityActor | null;
   sent_by: ActivityActor | null;
   sent_at: string | null;
+  /** The option section the client approved (null until client_approved). */
+  approved_section_id: string | null;
+  client_decided_at: string | null;
+  client_decided_by: ActivityActor | null;
+  client_decision_note: string | null;
+  client_approved_on_site: boolean;
   created_at: string;
   updated_at: string;
+  /** Live sections only (soft-deleted declined siblings are omitted). */
   sections: QuoteSection[];
   totals: QuoteTotals;
   summary: QuoteSummary;
@@ -768,6 +950,9 @@ export interface Quote {
   /** Rule 1.5.2: an NTE override is waiting on a manager for this work
       order, so approving / sending is refused (409) until it is decided. */
   nte_override_open: boolean;
+  /** The WO-status gate, same shape as WorkOrderDetail.actions. */
+  wo_actions: WoActionMap;
+  labor_rate: LaborRate | null;
 }
 
 /** GET/POST/PUT /api/work-orders/:id/quote and every lifecycle POST. */
@@ -775,51 +960,82 @@ export interface QuoteResponse {
   quote: Quote;
 }
 
-// ── Payment requests (S4) ────────────────────────────────────────────────────
+// ── Payment requests (S4 → Yoda parity) ──────────────────────────────────────
 /**
- * requested → approved → sent_to_yoda → paid, or rejected from either of the
- * first two (0016). Yoda is the payment tool the money leaves from; "sent to
- * Yoda" is the hand-off and "paid" the confirmation that it went out.
+ * Lifecycle (Yoda PaymentEngine, replacing the 0016 Yoda hand-off):
+ *   requested ─approve→ approved ─pay→ paid
+ *   requested | approved ─reject→ rejected
+ *   delete: a `requested` | `rejected` row deletes at once (owner | AP); a
+ *   processed row becomes pending_delete until an admin confirms (reject-delete
+ *   restores it); deleting a `paid` row reverses the cost roll-up.
+ * `sent_to_yoda` is RETIRED: the value stays legal in the CHECK constraint so
+ * rows that reached it before this branch keep their history, but no verb
+ * produces it any more and it reads as "approved" in the queue.
+ *
+ * Two gates, both from the permission tree (0015):
+ *   payments:approve        approve / reject            — the quote approvers (atl, tl, am, admin)
+ *   payments/process:edit   pay / change method / delete — AP and admin
+ *   payments/process:delete confirm or keep a pending delete — admin
  */
 export type PaymentRequestStatus = 'requested' | 'approved' | 'sent_to_yoda' | 'paid' | 'rejected';
 
-/** Permission path for the processing half (send to Yoda, mark paid). Its
+/** Permission path for the processing half (pay, convert, delete). Its
     `edit` action inherits from `payments` when unset. */
 export const PAYMENT_PROCESS_PERM_KEY = 'payments/process';
 
-/**
- * The methods the request screen offers. `payment_request.method` is free TEXT,
- * not an enum: the real list (and the approval routing) is imported from the
- * existing project later (§4.3), and a CHECK constraint would have to be
- * migrated the day it lands. Seeded ledger rows use the short form the comp's
- * previous-payments table prints ("ACH").
- */
-export const PAYMENT_METHODS: readonly string[] = [
-  'Zelle',
-  'ACH transfer',
-  'Check',
-  'Company card',
-  'Cash App',
-];
+/** Yoda method CODES (D7). W9 logic excludes `credit`; Teams/QB key on these. */
+export type PaymentMethod = 'zelle' | 'ach' | 'credit' | 'check' | 'cashapp';
+export const PAYMENT_METHODS: readonly PaymentMethod[] = ['zelle', 'ach', 'credit', 'check', 'cashapp'];
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  zelle: 'Zelle',
+  ach: 'ACH',
+  credit: 'Credit card',
+  check: 'Check',
+  cashapp: 'Cash App',
+};
+
+/** Method-specific payout details (Yoda PaymentAddress JSON). ACH account
+    numbers are MASKED in list responses; the full value is served only to AP
+    on the single-row read. */
+export type PaymentAddress =
+  | { method: 'zelle'; zelle_handle: string }
+  | { method: 'ach'; bank_name: string | null; routing_number: string; account_number: string; account_type: 'checking' | 'savings' | null }
+  | { method: 'cashapp'; cashtag: string }
+  | { method: 'check'; payable_to: string; mailing_address: string }
+  | { method: 'credit'; note: string | null };
 
 /** The technician: a vendor record when known, else a manual name + phone. */
 export interface PaymentRequestPayee {
   vendor_id: string | null;
   name: string | null;
   phone: string | null;
+  /** Vendor compliance, when a vendor record backs the payee. */
+  is_w9_present: boolean | null;
+  is_blacklisted: boolean | null;
+  insurance_expires_on: string | null;
 }
 
 export interface PaymentRequest {
   id: string;
   task_id: string;
+  wo_number: string;
+  billing_entity: string | null;
   payee: PaymentRequestPayee;
   purpose: string;
   amount: number;
-  method: string;
+  method: PaymentMethod;
+  payment_address: PaymentAddress | null;
   note: string | null;
   /** Alternate payee ("send payment to someone other than the technician"). */
   recipient_name: string | null;
+  recipient_phone: string | null;
+  recipient_is_store: boolean;
   status: PaymentRequestStatus;
+  /** Yoda NeedsW9: this payment pushed the tech past $599 YTD (non-credit). */
+  needs_w9: boolean;
+  pending_delete: boolean;
+  delete_reason: string | null;
+  attachment_id: string | null;
   requested_by: ActivityActor | null;
   created_at: string;
   /** Last decision on the row (0016). */
@@ -829,39 +1045,77 @@ export interface PaymentRequest {
   rejected_by: ActivityActor | null;
   rejected_at: string | null;
   rejection_note: string | null;
+  /** Retired hand-off stamps (0016) — kept for rows that carry them. */
   sent_to_yoda_by: ActivityActor | null;
   sent_to_yoda_at: string | null;
-  /** Whatever reference Yoda handed back, if the processor recorded one. */
   yoda_ref: string | null;
   paid_by: ActivityActor | null;
   paid_at: string | null;
+  /** Rule 1.5.2: an NTE override is waiting on a manager for this work
+      order, so approve / pay are refused (409) until it is decided. */
+  nte_override_open: boolean;
 }
 
 /** One row of GET /api/payments — the request plus the work order it sits on. */
 export interface PaymentListItem extends PaymentRequest {
-  wo_number: string;
   title: string | null;
   client: string | null;
-  /** Rule 1.5.2: an NTE override is waiting on a manager for this work
-      order, so approve / send to Yoda are refused (409) until it is decided. */
-  nte_override_open: boolean;
   /** The work order's own numbers as they stand NOW (the inbox columns). */
   wo_due: string | null;
   wo_nte: number | null;
   wo_cost: number | null;
 }
 
-/** GET /api/payments — every request across work orders, newest first. */
+/** GET /api/payments — every request across work orders, filtered and paged. */
 export interface PaymentListResponse {
   items: PaymentListItem[];
   total: number;
-  /** Row counts per status, for the tab's filter chips. */
+  /** Row counts per status (whole queue, before the status filter). */
   counts: Record<PaymentRequestStatus, number>;
+  page: number;
+  page_size: number;
+  /** Processed rows somebody asked to delete, waiting on an admin. */
+  pending_delete_count: number;
 }
 
-/** POST /api/payment-requests/:id/{approve,reject,send-to-yoda,mark-paid}. */
+/** POST /api/payment-requests/:id/{approve,reject,pay,convert-method,…}. */
 export interface PaymentRequestResponse {
   item: PaymentRequest;
+}
+
+/** POST /api/payment-requests/:id/delete — `deleted` false means the row was
+    flagged pending_delete instead (a processed row). */
+export interface PaymentDeleteResponse {
+  item: PaymentRequest | null;
+  deleted: boolean;
+}
+
+/** GET /api/vendors/:id/ytd — Yoda W9 threshold check. */
+export interface VendorYtd {
+  vendor_id: string;
+  year: number;
+  billing_entity: string | null;
+  total: number;
+  w9_threshold: number;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  trades: string[];
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  state: string | null;
+  is_w9_present: boolean;
+  is_blacklisted: boolean;
+  blacklist_reason: string | null;
+  insurance_expires_on: string | null;
+}
+
+export interface VendorsResponse {
+  items: Vendor[];
+  total: number;
 }
 
 /** GET /api/work-orders/:id/payment-requests — newest first. */
@@ -1152,11 +1406,14 @@ export interface WoFieldTime {
 // ── Error shape ──────────────────────────────────────────────────────────────
 // FORBIDDEN (403) is the S4 role gate: the actor exists, the route exists, but
 // principal.role is below the bar (QUOTE_EDIT_ROLES / QUOTE_APPROVE_ROLES).
+// CONFLICT (409) is a state clash: an NTE override is pending (rule 1.5.2), a
+// locked section edited, a duplicate payment purpose on the same WO, a
+// blacklisted vendor without an override.
 export type ApiErrorCode =
   | 'BAD_REQUEST'
   | 'UNAUTHORIZED'   // 401 — no valid session (S5 auth)
   | 'FORBIDDEN'
-  | 'CONFLICT'       // 409 — the state refuses the move (an NTE override is pending, rule 1.5.2)
+  | 'CONFLICT'       // 409 — the state refuses the move
   | 'NOT_FOUND'
   | 'INTERNAL';
 

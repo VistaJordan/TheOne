@@ -436,8 +436,9 @@ export function ApprovalsPage() {
     enabled: canSeeQuotes,
   });
   const paymentsQuery = useQuery({
-    queryKey: ['payments'],
-    queryFn: listPayments,
+    queryKey: ['payments', 'inbox'],
+    // The inbox wants every request still waiting on a decision, not a page.
+    queryFn: () => listPayments({ status: 'requested', page_size: 500 }),
     retry: 0,
     enabled: canSeePayments,
   });
@@ -817,7 +818,7 @@ export function ApprovalsPage() {
               {pending.row.data.item.purpose} on {pending.row.wo_number}.
             </>
           }
-          note="Approving clears it for AP to send to Yoda. Nothing is paid until AP does."
+          note="Approving clears it for AP to pay. Nothing is paid until AP does."
           noteTone="info"
           confirmLabel="Approve payment"
           busy={busy}

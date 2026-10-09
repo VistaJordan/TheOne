@@ -21,15 +21,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiRequestError,
   approveQuote,
+  cancelQuoteSubmission,
+  clientApproveQuote,
+  clientDeclineQuote,
   createWorkOrderQuote,
+  getQuoteSalesTax,
   getWorkOrder,
   getWorkOrderQuote,
   putWorkOrderQuote,
   rejectQuote,
   sendQuote,
+  startQuoteRound,
   submitQuote,
 } from '../api/client';
-import type { Quote, QuotePermissions } from '../api/client';
+import type { Quote, QuotePermissions, WoActionMap } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { CopyButton } from '../components/CopyButton';
 import { Icon } from '../components/Icon';
@@ -55,6 +60,11 @@ import { deriveSite } from '../lib/woDerive';
 /** How long the form sits still before the draft is flushed (§3.9 autosave). */
 const AUTOSAVE_MS = 900;
 
+type DecisionSheet =
+  | { kind: 'approve'; sectionKey: string | null }
+  | { kind: 'decline'; sectionKey: string | null }
+  | null;
+
 export function QuoteBuilderPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
   const navigate = useNavigate();
@@ -73,9 +83,20 @@ export function QuoteBuilderPage() {
     enabled: woNumber.length > 0,
   });
 
+  const taxQuery = useQuery({
+    queryKey: ['wo-quote-tax', woNumber],
+    queryFn: () => getQuoteSalesTax(woNumber),
+    enabled: woNumber.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
   const quote = quoteQuery.data?.quote ?? null;
   const permissions: QuotePermissions | null =
     quote?.permissions ?? quoteQuery.data?.permissions ?? null;
+  /** The WO-status gate (G-W01): the quote carries it; before a quote exists the WO detail does. */
+  const woActions: WoActionMap | null = quote?.wo_actions ?? woQuery.data?.actions ?? null;
+  const allows = (a: keyof WoActionMap) => woActions?.[a]?.allowed ?? true;
+  const blockedReason = (a: keyof WoActionMap) => woActions?.[a]?.reason ?? null;
 
   // ── Draft state ────────────────────────────────────────────────────────────
   const [draft, setDraft] = useState<DraftQuote | null>(null);
@@ -85,6 +106,9 @@ export function QuoteBuilderPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
+  const [decision, setDecision] = useState<DecisionSheet>(null);
+  const [decisionNote, setDecisionNote] = useState('');
+  const [decisionOnSite, setDecisionOnSite] = useState(false);
   const [leaveTo, setLeaveTo] = useState<string | null>(null);
 
   // Re-seed the form from the server only when the quote's IDENTITY changes —
@@ -106,18 +130,21 @@ export function QuoteBuilderPage() {
   const status = quote?.status ?? 'draft';
   const canEdit = permissions?.can_edit ?? false;
   const canApprove = permissions?.can_approve ?? false;
-  /** Rule 1.5.2: an NTE override waits on a manager, so approve / send are on
-      hold (the API refuses them with a 409) until it is decided. */
+  const canClientDecide = permissions?.can_client_decide ?? false;
+  /** Rule 1.5.2: an NTE override waits on a manager, so approve / send / the
+      client's yes are on hold (the API refuses them with a 409) until decided. */
   const nteHold = quote?.nte_override_open ?? false;
   const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
-  /** Edits stop once a quote is approved (§1) — approved/sent render read-only. */
-  const editable = canEdit && (status === 'draft' || status === 'pending_approval');
+  const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
+  /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */
+  const editable =
+    canEdit && (status === 'draft' || status === 'pending_approval') && allows('quote.edit');
 
   const totalCost = quote?.totals.total_cost ?? null;
   const nte = quote?.totals.nte ?? woQuery.data?.money?.nte ?? woQuery.data?.nte ?? null;
 
   const totals = useMemo(
-    () => (draft ? computeQuoteTotals(draft, totalCost) : null),
+    () => (draft ? computeQuoteTotals(draft, draft.is_cost_tbd ? null : totalCost) : null),
     [draft, totalCost],
   );
   const problems = useMemo(() => (draft ? quoteProblems(draft) : []), [draft]);
@@ -167,6 +194,7 @@ export function QuoteBuilderPage() {
         // A transition changes status (and reject bumps rev) → the effect above
         // re-seeds the form from the returned quote.
         void queryClient.invalidateQueries({ queryKey: ['work-orders', 'detail', woNumber] });
+        void queryClient.invalidateQueries({ queryKey: ['quotes'] });
       })
       .catch((err) => setActionError(errorText(err, 'The action failed.')));
   };
@@ -187,21 +215,48 @@ export function QuoteBuilderPage() {
 
   const submitMutation = useMutation({ mutationFn: () => flushThen(() => submitQuote(woNumber)) });
   const approveMutation = useMutation({
-    // The comp's single "Approve & Send to CMMS" CTA is two server transitions:
-    // approve fills money.quote, send stamps sent_at and posts the client-visible
-    // feed update. Approve first — if send fails the quote is still approved and
-    // the CTA becomes "Send to CMMS".
+    // The comp's single "Approve & Send" CTA is two server transitions: approve
+    // fills money.quote, send stamps sent_at and posts the client-visible feed
+    // update. Approve first — if send fails the quote is still approved and the
+    // CTA becomes "Send to client".
     mutationFn: async () => {
       await flushThen(() => approveQuote(woNumber));
       await runAction(() => sendQuote(woNumber));
     },
   });
   const sendMutation = useMutation({ mutationFn: () => runAction(() => sendQuote(woNumber)) });
+  const cancelMutation = useMutation({ mutationFn: () => runAction(() => cancelQuoteSubmission(woNumber)) });
+  const newRoundMutation = useMutation({ mutationFn: () => runAction(() => startQuoteRound(woNumber)) });
   const rejectMutation = useMutation({
     mutationFn: () => runAction(() => rejectQuote(woNumber, rejectNote.trim())),
     onSuccess: () => {
       setRejectOpen(false);
       setRejectNote('');
+    },
+  });
+  const decisionMutation = useMutation({
+    mutationFn: async () => {
+      if (!decision || !draft) return;
+      const section = draft.sections.find((s) => s.key === decision.sectionKey);
+      if (decision.kind === 'approve') {
+        if (!section?.id) throw new Error('Pick the option the client approved');
+        await runAction(() =>
+          clientApproveQuote(woNumber, {
+            section_id: section.id as string,
+            note: decisionNote.trim() || null,
+            on_site: decisionOnSite,
+          }),
+        );
+      } else {
+        await runAction(() =>
+          clientDeclineQuote(woNumber, { note: decisionNote.trim(), section_id: section?.id ?? null }),
+        );
+      }
+    },
+    onSuccess: () => {
+      setDecision(null);
+      setDecisionNote('');
+      setDecisionOnSite(false);
     },
   });
   const createMutation = useMutation({
@@ -273,6 +328,7 @@ export function QuoteBuilderPage() {
 
   // ── No quote yet ───────────────────────────────────────────────────────────
   if (!quote || !draft || !totals) {
+    const createBlocked = !allows('quote.create');
     return shell(
       <div className="wo-state">
         <Icon name="file" size={22} />
@@ -282,15 +338,28 @@ export function QuoteBuilderPage() {
           option.
         </span>
         {actionError && <span className="err"><Icon name="alert" size={12} />{actionError}</span>}
-        <button
-          type="button"
-          className="btn btn-primary btn-lg"
-          disabled={createMutation.isPending}
-          onClick={() => createMutation.mutate()}
-        >
-          <Icon name="plus" size={14} />
-          {createMutation.isPending ? 'Creating…' : 'Create quote'}
-        </button>
+        {createBlocked ? (
+          <span className="tipwrap">
+            <button type="button" className="btn btn-lg btn-locked" tabIndex={0} aria-disabled="true" aria-describedby="lockTipCreate">
+              <Icon name="lock" size={14} />
+              Create quote
+            </button>
+            <span className="tip tip-below" id="lockTipCreate" role="tooltip">
+              <Icon name="lock" size={12} />
+              {blockedReason('quote.create')}
+            </span>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary btn-lg"
+            disabled={createMutation.isPending}
+            onClick={() => createMutation.mutate()}
+          >
+            <Icon name="plus" size={14} />
+            {createMutation.isPending ? 'Creating…' : 'Create quote'}
+          </button>
+        )}
       </div>,
     );
   }
@@ -299,14 +368,31 @@ export function QuoteBuilderPage() {
   const site = wo ? deriveSite(wo) : null;
   const fields = wo?.fields ?? {};
   const incurred = draft.sections[0];
-  const options = draft.sections.slice(1);
+  const currentRound = draft.current_round;
+  const allOptions = draft.sections.map((s, i) => ({ s, i })).filter((x) => x.s.kind === 'option');
+  const options = allOptions.filter((x) => x.s.round === currentRound);
+  const priorRounds = Array.from(
+    allOptions.filter((x) => x.s.round < currentRound).reduce((m, x) => {
+      const list = m.get(x.s.round) ?? [];
+      list.push(x);
+      m.set(x.s.round, list);
+      return m;
+    }, new Map<number, typeof allOptions>()),
+  ).sort((a, b) => a[0] - b[0]);
   const incurredTotals = sumLines(incurred.lines);
   const incurredNote = excludedNote(incurredTotals.excluded);
-  const includedCount = options.filter((o) => o.include_in_summary).length;
+  const includedCount = options.filter((o) => o.s.include_in_summary).length;
+  const incurredEditable = editable && !incurred.locked;
 
   const blocked = problems.length > 0;
   const busy =
-    submitMutation.isPending || approveMutation.isPending || sendMutation.isPending || rejectMutation.isPending;
+    submitMutation.isPending ||
+    approveMutation.isPending ||
+    sendMutation.isPending ||
+    rejectMutation.isPending ||
+    cancelMutation.isPending ||
+    newRoundMutation.isPending ||
+    decisionMutation.isPending;
 
   const focusFirstProblem = () => {
     setShowErrors(true);
@@ -321,13 +407,13 @@ export function QuoteBuilderPage() {
 
   /** Every primary CTA is blocked-until-valid the same way (§3.3): aria-disabled,
       never `disabled`, so the button stays reachable and announces its reason. */
-  const primary = (label: string, icon: 'send' | 'check', run: () => void) => (
+  const primary = (label: string, icon: 'send' | 'check' | 'plus', run: () => void, needsValid = true) => (
     <button
       type="button"
       className={`btn btn-lg btn-primary${busy ? ' is-busy' : ''}`}
-      aria-disabled={blocked || busy ? true : undefined}
-      aria-describedby={blocked ? 'errChip' : undefined}
-      onClick={() => (blocked ? focusFirstProblem() : run())}
+      aria-disabled={(needsValid && blocked) || busy ? true : undefined}
+      aria-describedby={needsValid && blocked ? 'errChip' : undefined}
+      onClick={() => (needsValid && blocked ? focusFirstProblem() : run())}
     >
       <Icon name={icon} size={14} className="btn-ic" />
       <span className="spin" aria-hidden="true" />
@@ -335,11 +421,11 @@ export function QuoteBuilderPage() {
     </button>
   );
 
-  const lockedButton = (label: string, tip: string, tipId: string) => (
+  const lockedButton = (label: string, tip: string, tipId: string, size: 'lg' | 'sm' = 'lg') => (
     <span className="tipwrap">
       <button
         type="button"
-        className="btn btn-lg btn-locked"
+        className={`btn btn-${size} btn-locked`}
         tabIndex={0}
         aria-disabled="true"
         aria-describedby={tipId}
@@ -353,6 +439,50 @@ export function QuoteBuilderPage() {
       </span>
     </span>
   );
+
+  /** A permission-or-status-gated CTA: live when every gate passes, else locked
+      with the most specific reason (WO status first — it explains itself
+      better — then the NTE hold, then the missing grant). */
+  const gated = (
+    label: string,
+    icon: 'send' | 'check' | 'plus',
+    roleOk: boolean,
+    roleTip: string,
+    action: keyof WoActionMap,
+    run: () => void,
+    tipId: string,
+    needsValid = true,
+  ) =>
+    !allows(action)
+      ? lockedButton(label, blockedReason(action) ?? 'Not allowed in this work-order status', tipId)
+      : nteHold && NTE_HOLD_ACTIONS.has(action)
+        ? lockedButton(label, NTE_HOLD_TIP, tipId)
+        : roleOk
+          ? primary(label, icon, run, needsValid)
+          : lockedButton(label, roleTip, tipId);
+
+  const decisionButton = (sectionKey: string | null, compact: boolean) =>
+    !allows('quote.client_decide')
+      ? lockedButton('Client chose this', blockedReason('quote.client_decide') ?? '', `lockDecide-${sectionKey}`, 'sm')
+      : nteHold
+        ? lockedButton('Client chose this', NTE_HOLD_TIP, `lockDecide-${sectionKey}`, 'sm')
+      : canClientDecide
+        ? (
+          <button
+            type="button"
+            className={`btn ${compact ? 'btn-sm' : 'btn-lg'} btn-primary`}
+            style={compact ? { alignSelf: 'flex-end', marginBottom: 4 } : undefined}
+            onClick={() => {
+              setDecision({ kind: 'approve', sectionKey });
+              setDecisionNote('');
+              setDecisionOnSite(false);
+            }}
+          >
+            <Icon name="check" size={14} />
+            Client chose this
+          </button>
+        )
+        : lockedButton('Client chose this', 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', `lockDecide-${sectionKey}`, 'sm');
 
   return shell(
     <>
@@ -372,6 +502,13 @@ export function QuoteBuilderPage() {
               </span>
             )}
             <span className="chip chip-sm">Rev {quote.rev}</span>
+            {currentRound > 1 && <span className="chip chip-sm chip-outline">Round {currentRound}</span>}
+            {wo && (
+              <span className="chip chip-sm chip-outline" title="Work-order status">
+                <span className="pill-dot" aria-hidden="true" style={{ background: wo.status.color }} />
+                {wo.status.name}
+              </span>
+            )}
           </div>
           <div className="qhead-right">
             <AutosaveChip
@@ -393,19 +530,21 @@ export function QuoteBuilderPage() {
           </p>
         )}
 
-        <QuotePipeline status={status} />
+        <QuotePipeline status={status} round={currentRound} />
 
         <div className="actionbar">
           <span className="actor-note">
-            {editable
-              ? 'You can build and revise this quote.'
-              : canEdit
-                ? `This quote is ${QUOTE_STATUS[status].label.toLowerCase()} — its line items are read-only.`
-                : 'You can read this quote. Building and revising it is Senior OM and above.'}
+            {!allows('quote.edit') && (status === 'draft' || status === 'pending_approval')
+              ? blockedReason('quote.edit')
+              : editable
+                ? 'You can build and revise this quote.'
+                : canEdit
+                  ? `This quote is ${QUOTE_STATUS[status].label.toLowerCase()} — its line items are read-only.`
+                  : 'You can read this quote. Building and revising it is Senior OM and above.'}
           </span>
 
           <div className="ctas">
-            {blocked && (status === 'draft' || status === 'pending_approval') && (
+            {blocked && editable && (
               <button type="button" className="chip chip-danger" id="errChip" onClick={focusFirstProblem}>
                 <Icon name="alert" size={12} />
                 {problemChipText(problems.length)}
@@ -414,43 +553,77 @@ export function QuoteBuilderPage() {
 
             {status === 'draft' && (
               <>
-                {!canApprove && lockedButton('Approve & Send to CMMS', 'Requires ATL or above', 'lockTipApprove')}
-                {canEdit
-                  ? primary('Submit for approval', 'send', () => submitMutation.mutate())
-                  : lockedButton('Submit for approval', 'Requires Senior OM or above', 'lockTipSubmit')}
+                {!canApprove && lockedButton('Approve & Send', 'Needs the quote-approve permission', 'lockTipApprove')}
+                {gated('Submit for approval', 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')}
               </>
             )}
 
             {status === 'pending_approval' && (
               <>
-                {canApprove ? (
-                  <>
-                    <button type="button" className="btn btn-lg btn-danger" onClick={() => setRejectOpen(true)}>
-                      <Icon name="x" size={14} />
-                      Reject with note
-                    </button>
-                    {nteHold
-                      ? lockedButton('Approve & Send to CMMS', NTE_HOLD_TIP, 'lockTipApprove')
-                      : primary('Approve & Send to CMMS', 'check', () => approveMutation.mutate())}
-                  </>
-                ) : (
-                  lockedButton('Approve & Send to CMMS', 'Requires ATL or above', 'lockTipApprove')
+                {canApprove && allows('quote.approve') && (
+                  <button type="button" className="btn btn-lg btn-danger" onClick={() => setRejectOpen(true)}>
+                    <Icon name="x" size={14} />
+                    Reject with note
+                  </button>
                 )}
+                {gated('Approve & Send', 'check', canApprove, 'Needs the quote-approve permission', 'quote.approve', () => approveMutation.mutate(), 'lockTipApprove')}
               </>
             )}
 
             {status === 'approved' &&
-              (canApprove
-                ? nteHold
-                  ? lockedButton('Send to CMMS', NTE_HOLD_TIP, 'lockTipSend')
-                  : primary('Send to CMMS', 'send', () => sendMutation.mutate())
-                : lockedButton('Send to CMMS', 'Requires ATL or above', 'lockTipSend'))}
+              gated('Send to client', 'send', canApprove, 'Needs the quote-approve permission', 'quote.send', () => sendMutation.mutate(), 'lockTipSend', false)}
 
             {status === 'sent' && (
-              <span className="chip chip-accent">
-                <Icon name="check-circle" size={12} />
-                Sent to the client&rsquo;s CMMS
-              </span>
+              <>
+                {canApprove && allows('quote.send') && (
+                  <button type="button" className="btn btn-lg" onClick={() => cancelMutation.mutate()} title="Yoda: cancel submission — the quote returns to Approved">
+                    <Icon name="refresh" size={14} />
+                    Withdraw
+                  </button>
+                )}
+                {allows('quote.client_decide') && canClientDecide ? (
+                  <button
+                    type="button"
+                    className="btn btn-lg btn-danger"
+                    onClick={() => {
+                      setDecision({ kind: 'decline', sectionKey: null });
+                      setDecisionNote('');
+                    }}
+                  >
+                    <Icon name="x" size={14} />
+                    Client declined
+                  </button>
+                ) : (
+                  lockedButton('Client declined', blockedReason('quote.client_decide') ?? 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', 'lockTipDecline')
+                )}
+                {options.length === 1 && decisionButton(options[0].s.key, false)}
+                {options.length > 1 && (
+                  <span className="chip chip-accent">
+                    <Icon name="info" size={12} />
+                    Pick the approved option on its card
+                  </span>
+                )}
+              </>
+            )}
+
+            {(status === 'client_approved' || status === 'client_declined') && (
+              <>
+                <span className={`chip ${status === 'client_approved' ? 'chip-accent' : 'chip-danger'}`}>
+                  <Icon name={status === 'client_approved' ? 'check-circle' : 'x'} size={12} />
+                  {status === 'client_approved' ? 'Client approved' : 'Client declined'}
+                  {quote.client_decided_by ? ` · recorded by ${quote.client_decided_by.display_name}` : ''}
+                </span>
+                {gated(
+                  status === 'client_approved' ? 'Add additional quote' : 'Re-quote',
+                  'plus',
+                  canEdit,
+                  'Needs the quote-edit permission',
+                  'quote.new_round',
+                  () => newRoundMutation.mutate(),
+                  'lockTipRound',
+                  false,
+                )}
+              </>
             )}
           </div>
         </div>
@@ -462,25 +635,44 @@ export function QuoteBuilderPage() {
           </div>
         )}
 
-        {status === 'draft' && !canApprove && (
+        {status === 'draft' && !canApprove && allows('quote.submit') && (
           <div className="callout callout-lock">
             <Icon name="lock" size={14} />
             <span>
-              <b>Requires ATL or above.</b> Dispatchers build and revise quotes; approving and
-              pushing the summary to the client&rsquo;s CMMS is reserved for ATL, TL, AM and admin.
+              <b>Needs the quote-approve permission.</b> Dispatchers build and revise quotes; approving and
+              sending the summary to the client is reserved for ATL, TL, AM and admin.
               Submit for approval and an ATL picks it up — the control stays visible so you always
               know it exists.
             </span>
           </div>
         )}
-        {status === 'pending_approval' && canApprove && (
+        {status === 'pending_approval' && canApprove && allows('quote.approve') && (
           <div className="callout">
             <Icon name="check-circle" size={14} />
             <span>
               <b>You can approve this quote.</b> Approving fills <span className="mono">money.quote</span>{' '}
-              on {quote.wo_number}, writes the state change to the activity log and queues the summary
-              text for the client&rsquo;s CMMS. Rejecting returns it to <b>Draft</b> with your note
-              attached.
+              on {quote.wo_number}, writes the state change to the activity log and sends the summary
+              text to the client. Rejecting returns it to <b>Draft</b> with your note attached.
+            </span>
+          </div>
+        )}
+        {status === 'sent' && (
+          <div className="callout">
+            <Icon name="globe" size={14} />
+            <span>
+              <b>With the client since {quote.sent_at ? new Date(quote.sent_at).toLocaleDateString() : 'today'}.</b>{' '}
+              Record the client&rsquo;s decision here: approve the option they chose (its lines become
+              incurred work and the other options are retired) or decline with their reason.
+            </span>
+          </div>
+        )}
+        {status === 'client_approved' && (
+          <div className="callout">
+            <Icon name="check-circle" size={14} />
+            <span>
+              <b>Round {currentRound} is locked.</b> The approved option now bills with the job. If the
+              tech finds more on the return visit, <b>Add additional quote</b> opens round {currentRound + 1}{' '}
+              with the approved work as its incurred baseline.
             </span>
           </div>
         )}
@@ -512,6 +704,92 @@ export function QuoteBuilderPage() {
                 onClick={() => rejectNote.trim() !== '' && rejectMutation.mutate()}
               >
                 Reject with note
+              </button>
+            </div>
+          </div>
+        )}
+
+        {decision && (
+          <div className="callout" style={{ marginTop: 12, flexDirection: 'column', alignItems: 'stretch' }}>
+            <div className="field">
+              <span className="lbl">
+                {decision.kind === 'approve' ? 'Record the client’s approval' : 'Record the client’s decline'}
+              </span>
+              {options.length > 1 && (
+                <div className="radio-list" role="radiogroup" aria-label="Which option">
+                  {decision.kind === 'decline' && (
+                    <label className="ck">
+                      <input
+                        type="radio"
+                        name="decision-opt"
+                        checked={decision.sectionKey === null}
+                        onChange={() => setDecision({ ...decision, sectionKey: null })}
+                      />
+                      <span>The whole quote</span>
+                    </label>
+                  )}
+                  {options.map(({ s }, i) => (
+                    <label className="ck" key={s.key}>
+                      <input
+                        type="radio"
+                        name="decision-opt"
+                        checked={decision.sectionKey === s.key}
+                        onChange={() => setDecision({ ...decision, sectionKey: s.key })}
+                      />
+                      <span>
+                        Option {String.fromCharCode(65 + i)}{s.name ? ` — ${s.name}` : ''}
+                        {' '}· {usd(totals.options.find((o) => o.key === s.key)?.grandTotal ?? 0)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="field">
+              <label className="lbl" htmlFor="decision-note">
+                {decision.kind === 'approve' ? 'Reference / note' : 'Client’s reason'}{' '}
+                {decision.kind === 'approve' ? <span className="opt">optional</span> : <span className="req" aria-hidden="true">*</span>}
+              </label>
+              <textarea
+                className="fld"
+                id="decision-note"
+                rows={2}
+                placeholder={decision.kind === 'approve' ? 'PO number, who approved, how…' : 'What the client said'}
+                value={decisionNote}
+                onChange={(e) => setDecisionNote(e.target.value)}
+              />
+              <span className="hint">
+                {decision.kind === 'approve'
+                  ? 'Posted as a client-visible update on the work order; the Teams ✅ and ClickUp comment are queued.'
+                  : 'Kept internal. The round is locked; re-quote by opening a new round.'}
+              </span>
+            </div>
+            {decision.kind === 'approve' && (
+              <label className="ck">
+                <input type="checkbox" checked={decisionOnSite} onChange={(e) => setDecisionOnSite(e.target.checked)} />
+                <span>Approved on site (not through the client&rsquo;s CMMS)</span>
+              </label>
+            )}
+            <div className="sheet-f">
+              <button type="button" className="btn" onClick={() => setDecision(null)}>Cancel</button>
+              <button
+                type="button"
+                className={`btn ${decision.kind === 'approve' ? 'btn-primary' : 'btn-danger'}${decisionMutation.isPending ? ' is-busy' : ''}`}
+                aria-disabled={
+                  (decision.kind === 'approve' && !decision.sectionKey) ||
+                  (decision.kind === 'decline' && decisionNote.trim() === '') ||
+                  decisionMutation.isPending
+                    ? true
+                    : undefined
+                }
+                onClick={() => {
+                  if (decision.kind === 'approve' && !decision.sectionKey) return;
+                  if (decision.kind === 'decline' && decisionNote.trim() === '') return;
+                  decisionMutation.mutate();
+                }}
+              >
+                <Icon name={decision.kind === 'approve' ? 'check' : 'x'} size={14} />
+                {decision.kind === 'approve' ? 'Record approval' : 'Record decline'}
               </button>
             </div>
           </div>
@@ -555,12 +833,18 @@ export function QuoteBuilderPage() {
           <section className="card">
             <div className="card-head">
               <span className="sec-badge is-incurred">Incurred</span>
-              <h2 className="card-title">Work already performed</h2>
+              <h2 className="card-title">{currentRound > 1 ? 'Work already performed & approved' : 'Work already performed'}</h2>
               <span className="sec-sub">
                 {incurred.lines.length} line{incurred.lines.length === 1 ? '' : 's'}
               </span>
+              {incurred.locked && (
+                <span className="chip chip-sm chip-outline" title="Locked after the first round">
+                  <Icon name="lock" size={12} />
+                  Locked
+                </span>
+              )}
               <span className="subtotal-chip push">
-                Subtotal <b className="num">{usd(incurredTotals.total)}</b>
+                Subtotal <b className="num">{usd(totals.incurredSubtotal)}</b>
               </span>
             </div>
 
@@ -571,14 +855,14 @@ export function QuoteBuilderPage() {
                   <span className="sr">required</span>
                 </label>
                 <textarea
-                  className={`fld${showErrors && incurred.narrative.trim() === '' ? ' is-err' : ''}`}
+                  className={`fld${showErrors && incurredEditable && incurred.narrative.trim() === '' ? ' is-err' : ''}`}
                   id="inc-report"
                   rows={5}
                   value={incurred.narrative}
-                  disabled={!editable}
+                  disabled={!incurredEditable}
                   onChange={(e) => setSection(0, { ...incurred, narrative: e.target.value })}
                 />
-                {showErrors && incurred.narrative.trim() === '' && (
+                {showErrors && incurredEditable && incurred.narrative.trim() === '' && (
                   <span className="err"><Icon name="alert" size={12} />Tech report is required</span>
                 )}
                 <span className="hint">
@@ -589,7 +873,7 @@ export function QuoteBuilderPage() {
               <ScopeList
                 sectionKey={incurred.key}
                 lines={incurred.scope_lines}
-                editable={editable}
+                editable={incurredEditable}
                 onChange={(scope_lines) => setSection(0, { ...incurred, scope_lines })}
               />
             </div>
@@ -597,46 +881,70 @@ export function QuoteBuilderPage() {
             <LineItemsTable
               label="Incurred"
               lines={incurred.lines}
-              editable={editable}
-              showErrors={showErrors}
+              editable={incurredEditable}
+              showErrors={showErrors && incurredEditable}
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
 
             <div className="lt-foot">
-              {editable && (
+              {incurredEditable && (
                 <AddLineButton
                   lines={incurred.lines}
                   onChange={(lines) => setSection(0, { ...incurred, lines })}
+                  rate={quote.labor_rate}
                 />
               )}
               <span className="lt-note">
                 <Icon name={incurredNote ? 'alert' : 'info'} size={12} />
-                {incurredNote ?? 'Amount is computed (qty × rate, ×1.5 when OT) and read-only.'}
+                {incurredNote ?? 'Amount is computed (qty × rate, ×1.5 when OT; discounts subtract) and read-only.'}
               </span>
               <span className="subtotal-chip" style={{ marginLeft: 'auto' }}>
-                Incurred subtotal <b className="num">{usd(incurredTotals.total)}</b>
+                Incurred lines <b className="num">{usd(incurredTotals.total)}</b>
               </span>
             </div>
           </section>
 
-          {/* ── PROPOSED ── */}
+          {/* ── EARLIER ROUNDS (decided, read-only) ── */}
+          {priorRounds.map(([round, items]) => (
+            <section className="card is-history" key={`round-${round}`}>
+              <div className="card-head">
+                <span className="sec-badge is-proposed">Round {round}</span>
+                <h2 className="card-title">Decided — {items.some((x) => x.s.approved) ? 'client approved' : 'client declined'}</h2>
+                <span className="sec-sub">
+                  {items.length} option{items.length === 1 ? '' : 's'} · approved work prices as incurred
+                </span>
+                <span className="chip chip-sm chip-outline push">
+                  <Icon name="lock" size={12} />
+                  Locked
+                </span>
+              </div>
+              {items.map(({ s, i }, idx) => (
+                <OptionCard
+                  key={s.key}
+                  section={s}
+                  index={idx}
+                  editable={false}
+                  showErrors={false}
+                  onChange={(next) => setSection(i, next)}
+                  onRemove={() => undefined}
+                />
+              ))}
+            </section>
+          ))}
+
+          {/* ── PROPOSED (current round) ── */}
           <section className="card">
             <div className="card-head">
               <span className="sec-badge is-proposed">Proposed</span>
-              <h2 className="card-title">Options for the client</h2>
+              <h2 className="card-title">{currentRound > 1 ? `Round ${currentRound} — options for the client` : 'Options for the client'}</h2>
               <span className="sec-sub">
                 {options.length} option{options.length === 1 ? '' : 's'} · {includedCount} included in
                 summary
               </span>
-              {/* Migration 0003 has no column for this yet, so it is shown as the
-                  house "later sprint" control rather than a toggle that would
-                  silently forget itself on reload. */}
-              <label className="sw push" title="Coming in a later sprint">
-                <input type="checkbox" checked={draft.separate_quotes} disabled readOnly />
-                <span className="sw-track" aria-hidden="true" />
-                <span>Show all options as separate quotes</span>
-                <span className="sw-state">Off</span>
-              </label>
+              <span className="chip chip-sm chip-outline push" title={totals.totalRule === 'incurred_plus_option' ? 'Yoda rule: each option is priced as incurred + option + tax' : 'RULE B: options only'}>
+                <Icon name="info" size={12} />
+                {totals.totalRule === 'incurred_plus_option' ? 'Each option priced separately' : 'Options-only total'}
+              </span>
             </div>
 
             {options.length === 0 && (
@@ -645,17 +953,18 @@ export function QuoteBuilderPage() {
               </div>
             )}
 
-            {options.map((opt, i) => (
+            {options.map(({ s, i }, idx) => (
               <OptionCard
-                key={opt.key}
-                section={opt}
-                index={i}
+                key={s.key}
+                section={s}
+                index={idx}
                 editable={editable}
                 showErrors={showErrors}
-                onChange={(next) => setSection(i + 1, next)}
-                onRemove={() =>
-                  update({ ...draft, sections: removeAt(draft.sections, i + 1) })
-                }
+                grandTotal={totals.totalRule === 'incurred_plus_option' ? (totals.options.find((o) => o.key === s.key)?.grandTotal ?? null) : null}
+                rate={quote.labor_rate}
+                decisionActions={status === 'sent' && options.length > 1 ? decisionButton(s.key, true) : undefined}
+                onChange={(next) => setSection(i, next)}
+                onRemove={() => update({ ...draft, sections: removeAt(draft.sections, i) })}
               />
             ))}
 
@@ -663,7 +972,7 @@ export function QuoteBuilderPage() {
               <button
                 type="button"
                 className="addopt"
-                onClick={() => update({ ...draft, sections: [...draft.sections, blankOption()] })}
+                onClick={() => update({ ...draft, sections: [...draft.sections, blankOption(currentRound)] })}
               >
                 <Icon name="plus" size={14} />
                 Add option
@@ -680,18 +989,51 @@ export function QuoteBuilderPage() {
           <MoneyRail
             totals={totals}
             nte={nte}
-            salesTax={draft.sales_tax}
+            salesTaxPct={draft.sales_tax_pct}
             editable={editable}
             comp={wo?.billing_entity ?? null}
-            onSalesTaxChange={(sales_tax) => update({ ...draft, sales_tax })}
+            derived={taxQuery.data ?? null}
+            isCostTbd={draft.is_cost_tbd}
+            onSalesTaxPctChange={(sales_tax_pct) => update({ ...draft, sales_tax_pct })}
+            onCostTbdChange={(is_cost_tbd) => update({ ...draft, is_cost_tbd })}
           />
+
+          {quote.labor_rate && (
+            <section className="card">
+              <div className="card-head">
+                <h2 className="card-title grow">Labor rate card</h2>
+                <span className="card-meta">{[quote.labor_rate.billing_entity, quote.labor_rate.trade].filter(Boolean).join(' · ')}</span>
+              </div>
+              <dl className="kvlist">
+                <div className="kvrow"><dt>Tech / hr</dt><dd>{usd(quote.labor_rate.tech_rate)}</dd></div>
+                <div className="kvrow"><dt>Helper / hr</dt><dd>{usd(quote.labor_rate.helper_rate)}</dd></div>
+                <div className="kvrow"><dt>Trip</dt><dd>{usd(quote.labor_rate.trip_rate)}</dd></div>
+                <div className="kvrow"><dt>After-hours / hr</dt><dd>{usd(quote.labor_rate.afterhours_rate)}</dd></div>
+                <div className="kvrow"><dt>Holiday / hr</dt><dd>{usd(quote.labor_rate.holiday_rate)}</dd></div>
+                <div className="kvrow is-muted"><dt>Sales tax</dt><dd>{quote.labor_rate.is_sales_tax_required ? 'Required' : 'Not required'}</dd></div>
+              </dl>
+            </section>
+          )}
 
           <section className="card">
             <div className="card-head">
-              <h2 className="card-title grow">Specs</h2>
+              <h2 className="card-title grow">Specs &amp; billing</h2>
               <span className="card-meta">Internal</span>
             </div>
             <div className="card-pad">
+              <div className="field">
+                <label className="lbl" htmlFor="bill-to">
+                  Bill to <span className="opt">optional</span>
+                </label>
+                <input
+                  className="fld"
+                  id="bill-to"
+                  placeholder="Defaults to the FM company on the work order"
+                  value={draft.bill_to}
+                  disabled={!editable}
+                  onChange={(e) => update({ ...draft, bill_to: e.target.value })}
+                />
+              </div>
               <div className="field">
                 <label className="lbl" htmlFor="specs">
                   Equipment &amp; part specs <span className="opt">optional</span>
@@ -847,10 +1189,13 @@ function DismissSheet({ onStay, onLeave }: { onStay: () => void; onLeave: () => 
 
 function errorText(err: unknown, fallback: string): string {
   if (err instanceof ApiRequestError) {
+    const details = err.details as { code?: string } | null;
+    if (details?.code === 'WO_STATUS_BLOCKED') return err.message;
     if (err.code === 'FORBIDDEN') {
       return `${err.message} — your role does not allow this action.`;
     }
     return err.message;
   }
+  if (err instanceof Error && err.message) return err.message;
   return fallback;
 }

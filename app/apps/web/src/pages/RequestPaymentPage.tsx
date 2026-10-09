@@ -1,19 +1,19 @@
-/* /work-orders/:woNumber/request-payment — the technician payment request.
-   Ported from the approved comp, scratchpad/payment-comp.tpl.html.
+/* /work-orders/:woNumber/request-payment — the technician payment request,
+   at Yoda parity (PaymentEngine / payment-form).
 
-   Two hardened rules carry most of the weight here:
+   Hardened rules:
 
    · AMOUNT IS VALIDATED AS A RAW STRING. Sanitising before parseFloat approved
      "-500" as $500, "5e3" as $53 and "12.34.56" as $12.34. parseMoney() strips
      only currency chrome and then demands a full-string plain decimal — this is
      a money-releasing form, so anything else is an error, not a coercion.
-   · THE APPROVAL CONTROL SAYS WHAT IS ACTUALLY TRUE. Decisions are made from
-     the Payments tab (approve / reject by the approvers, send to Yoda / mark
-     paid by AP — 0016), so this screen points there instead of pretending to
-     hold an approve button of its own.
+   · THE WO STATUS GATES THE REQUEST (G-W01). A finished / canceled work order
+     renders the submit control locked with the reason, never hidden.
+   · W9 THRESHOLD (Yoda): a non-credit payment that takes the technician past
+     $599 this year flags the W9 requirement live, before submit.
 */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,15 +21,24 @@ import {
   ApiRequestError,
   PAYMENT_METHODS,
   getPaymentRequests,
+  getVendorYtd,
   getWorkOrder,
   getWorkOrderMessages,
   postPaymentRequest,
 } from '../api/client';
-import type { PaymentRequest } from '../api/client';
+import type { PaymentMethod, PaymentRequest, Vendor } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { CopyButton } from '../components/CopyButton';
 import { Icon } from '../components/Icon';
 import { PaymentsTable } from '../components/payments/PaymentsTable';
+import {
+  PaymentAddressFields,
+  addressErrors,
+  blankAddress,
+  toPaymentAddress,
+} from '../components/payments/PaymentAddressFields';
+import type { AddressDraft } from '../components/payments/PaymentAddressFields';
+import { VendorPicker } from '../components/payments/VendorPicker';
 import { parseMoney, usd } from '../lib/quoteTotals';
 import { deriveSite } from '../lib/woDerive';
 
@@ -37,7 +46,13 @@ interface Payee {
   vendor_id: string | null;
   name: string;
   phone: string | null;
+  is_w9_present: boolean | null;
+  is_blacklisted: boolean | null;
+  source: 'quo' | 'prior' | 'picked';
 }
+
+/** Yoda: a running total above $599 per technician + company + year needs a W9. */
+const W9_THRESHOLD = 599;
 
 export function RequestPaymentPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
@@ -69,83 +84,146 @@ export function RequestPaymentPage() {
 
   const linkedPayee: Payee | null = useMemo(() => {
     const vendor = messagesQuery.data?.conversation?.vendor;
-    if (vendor) return { vendor_id: vendor.id, name: vendor.name, phone: vendor.phone };
+    if (vendor) {
+      return { vendor_id: vendor.id, name: vendor.name, phone: vendor.phone, is_w9_present: null, is_blacklisted: null, source: 'quo' };
+    }
     const prior = items.find((p) => p.payee.vendor_id || p.payee.name);
     if (prior) {
       return {
         vendor_id: prior.payee.vendor_id,
         name: prior.payee.name ?? 'Vendor on this work order',
         phone: prior.payee.phone,
+        is_w9_present: prior.payee.is_w9_present,
+        is_blacklisted: prior.payee.is_blacklisted,
+        source: 'prior',
       };
     }
     return null;
   }, [messagesQuery.data, items]);
 
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [manual, setManual] = useState(false);
+  const [mode, setMode] = useState<'linked' | 'search' | 'manual'>('linked');
+  const [picked, setPicked] = useState<Vendor | null>(null);
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [purpose, setPurpose] = useState('');
   const [amount, setAmount] = useState('');
   const [amountTouched, setAmountTouched] = useState(false);
-  const [method, setMethod] = useState<string>(PAYMENT_METHODS[0]);
+  const [method, setMethod] = useState<PaymentMethod>('zelle');
+  const [address, setAddress] = useState<AddressDraft>(blankAddress);
+  const [addressTouched, setAddressTouched] = useState(false);
   const [note, setNote] = useState('');
   const [recipientOpen, setRecipientOpen] = useState(false);
   const [recipientName, setRecipientName] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('');
+  const [recipientIsStore, setRecipientIsStore] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<PaymentRequest | null>(null);
 
-  const usingManual = manual || linkedPayee === null;
+  // No linked technician → open straight on the search.
+  useEffect(() => {
+    if (!messagesQuery.isLoading && !paymentsQuery.isLoading && linkedPayee === null && mode === 'linked') setMode('search');
+  }, [messagesQuery.isLoading, paymentsQuery.isLoading, linkedPayee, mode]);
+
+  const payee: Payee | null =
+    mode === 'manual'
+      ? null
+      : mode === 'search'
+        ? picked
+          ? { vendor_id: picked.id, name: picked.name, phone: picked.phone, is_w9_present: picked.is_w9_present, is_blacklisted: picked.is_blacklisted, source: 'picked' }
+          : null
+        : linkedPayee;
+
+  const wo = woQuery.data;
+  const actionState = wo?.actions?.['payment.request'] ?? null;
+  const woBlocked = actionState ? !actionState.allowed : false;
+
+  // Yoda GetReciepientTotal — this year's non-credit payments to the technician.
+  const ytdQuery = useQuery({
+    queryKey: ['vendor-ytd', payee?.vendor_id, wo?.billing_entity],
+    queryFn: () => getVendorYtd(payee?.vendor_id as string, wo?.billing_entity ?? null),
+    enabled: !!payee?.vendor_id,
+    staleTime: 30_000,
+  });
+
   const parsedAmount = parseMoney(amount);
   const amountValid = !Number.isNaN(parsedAmount);
   const amountError = amountTouched && !amountValid;
-  const payeeName = usingManual ? manualName.trim() : (linkedPayee?.name ?? '');
   const purposeValid = purpose.trim().length > 0;
-  // A manual payee needs BOTH halves: the API rejects a name without a phone
-  // (vendor_id | (payee_name + payee_phone)), so the form asks for both rather
-  // than letting the operator discover it from a 400.
-  const payeeValid = usingManual
-    ? manualName.trim().length > 0 && manualPhone.trim().length > 0
-    : payeeName.length > 0;
-  const valid = amountValid && purposeValid && payeeValid;
+  const duplicatePurpose = items.some(
+    (p) => p.status !== 'rejected' && p.purpose.trim().toLowerCase() === purpose.trim().toLowerCase(),
+  );
+  const payeeValid =
+    mode === 'manual'
+      ? manualName.trim().length > 0 && manualPhone.trim().length > 0
+      : payee !== null;
+  const addrErrs = addressErrors(method, address);
+  const addressValid = Object.keys(addrErrs).length === 0;
+  const blacklisted = payee?.is_blacklisted === true;
+  const valid = amountValid && purposeValid && !duplicatePurpose && payeeValid && addressValid && !blacklisted && !woBlocked;
 
-  const helpText = !payeeValid
-    ? usingManual && manualName.trim().length > 0
-      ? 'Add the technician’s phone to submit'
-      : 'Name the technician to submit'
-    : !purposeValid
-      ? 'Add a purpose to submit'
-      : 'Enter an amount to submit';
+  const ytdTotal = ytdQuery.data?.total ?? 0;
+  const projected = ytdTotal + (amountValid && method !== 'credit' ? parsedAmount : 0);
+  const needsW9 = payee !== null && payee.is_w9_present !== true && method !== 'credit' && projected > W9_THRESHOLD;
+
+  const helpText = woBlocked
+    ? (actionState?.reason ?? 'Not allowed in this work-order status')
+    : blacklisted
+      ? 'This technician is blacklisted — AP cannot pay them'
+      : !payeeValid
+        ? mode === 'manual' && manualName.trim().length > 0
+          ? 'Add the technician’s phone to submit'
+          : 'Name the technician to submit'
+        : !purposeValid
+          ? 'Add a purpose to submit'
+          : duplicatePurpose
+            ? 'A payment with this purpose already exists on this WO'
+            : !amountValid
+              ? 'Enter an amount to submit'
+              : 'Complete the payout details to submit';
 
   const submitMutation = useMutation({
     mutationFn: () =>
       postPaymentRequest(woNumber, {
-        ...(usingManual
+        ...(mode === 'manual'
           ? { vendor_id: null, payee_name: manualName.trim(), payee_phone: manualPhone.trim() }
           : {
-              vendor_id: linkedPayee?.vendor_id ?? null,
+              vendor_id: payee?.vendor_id ?? null,
               // Falls back to the manual pair when the linked technician came
               // from a prior payable that had no vendor record behind it.
-              payee_name: linkedPayee?.vendor_id ? null : (linkedPayee?.name ?? null),
-              payee_phone: linkedPayee?.vendor_id ? null : (linkedPayee?.phone ?? null),
+              payee_name: payee?.vendor_id ? null : (payee?.name ?? null),
+              payee_phone: payee?.vendor_id ? null : (payee?.phone ?? null),
             }),
         purpose: purpose.trim(),
         amount: parsedAmount,
         method,
+        payment_address: toPaymentAddress(method, address),
         note: note.trim() === '' ? null : note.trim(),
         recipient_name: recipientOpen && recipientName.trim() !== '' ? recipientName.trim() : null,
+        recipient_phone: recipientOpen && recipientPhone.trim() !== '' ? recipientPhone.trim() : null,
+        recipient_is_store: recipientOpen && recipientIsStore,
       }),
     onSuccess: (res) => {
       setSubmitted(res.item);
       setSubmitError(null);
       void queryClient.invalidateQueries({ queryKey: paymentsKey });
       void queryClient.invalidateQueries({ queryKey: ['work-orders', 'detail', woNumber] });
+      void queryClient.invalidateQueries({ queryKey: ['vendor-ytd'] });
     },
     onError: (err) =>
       setSubmitError(
         err instanceof ApiRequestError ? err.message : 'The payment request could not be submitted.',
       ),
   });
+
+  const resetForAnother = () => {
+    setSubmitted(null);
+    setPurpose('');
+    setAmount('');
+    setAmountTouched(false);
+    setAddressTouched(false);
+    setNote('');
+  };
 
   // ── Chrome ─────────────────────────────────────────────────────────────────
   const woHref = `/work-orders/${encodeURIComponent(woNumber)}`;
@@ -172,7 +250,6 @@ export function RequestPaymentPage() {
     return shell(<div className="wo-state"><b>Loading {woNumber}…</b></div>);
   }
 
-  const wo = woQuery.data;
   const site = wo ? deriveSite(wo) : null;
   const totalPaid = paymentsQuery.data?.total_paid ?? 0;
   const totalRequested = paymentsQuery.data?.total_requested ?? 0;
@@ -195,6 +272,12 @@ export function RequestPaymentPage() {
               <Icon name="dollar" size={12} />
               Technician payment
             </span>
+            {wo && (
+              <span className="chip chip-sm chip-outline" title="Work-order status">
+                <span className="pill-dot" aria-hidden="true" style={{ background: wo.status.color }} />
+                {wo.status.name}
+              </span>
+            )}
           </div>
           <div className="pghead-actions">
             <Link className="btn" to={woHref}>
@@ -234,6 +317,15 @@ export function RequestPaymentPage() {
           <Icon name="lock" size={12} />
           Read-only — pulled from the work order. Edit it on {woNumber}.
         </span>
+        {woBlocked && (
+          <div className="callout callout-lock" style={{ marginTop: 12 }}>
+            <Icon name="lock" size={14} />
+            <span>
+              <b>Payment requests are closed on this work order.</b> {actionState?.reason}. Existing
+              requests can still be processed by AP below.
+            </span>
+          </div>
+        )}
       </section>
 
       <div className="pay-grid">
@@ -259,36 +351,7 @@ export function RequestPaymentPage() {
                     <span className="sr">(required)</span>
                   </span>
 
-                  {linkedPayee && !manual ? (
-                    <div className="vpick" role="group" aria-labelledby="lbl-vendor">
-                      <div className="vpick-top">
-                        <span className="chip chip-outline">
-                          <Icon name="truck" size={12} />
-                          External vendor
-                        </span>
-                        <span className="chip chip-accent chip-sm">
-                          <Icon name="check" size={12} />
-                          Selected
-                        </span>
-                      </div>
-                      <div className="vpick-name">{linkedPayee.name}</div>
-                      <div className="vpick-sub">
-                        {[wo?.trade, site?.addressLines[site.addressLines.length - 1]]
-                          .filter(Boolean)
-                          .join(' · ') || 'Linked to this work order'}
-                      </div>
-                      <div className="vpick-foot">
-                        <span className="vpick-phone">
-                          <Icon name="phone" size={14} />
-                          <span className="mono">{linkedPayee.phone ?? 'No number on file'}</span>
-                        </span>
-                        <span className="ro-chip">
-                          <Icon name="lock" size={12} />
-                          Auto-filled from the work order&rsquo;s technician
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
+                  {mode === 'manual' ? (
                     <div className="frow">
                       <div className="field">
                         <label className="flabel" htmlFor="payee-name">
@@ -316,16 +379,80 @@ export function RequestPaymentPage() {
                           value={manualPhone}
                           onChange={(e) => setManualPhone(e.target.value)}
                         />
+                        <p className="fhelp">
+                          <Icon name="info" size={12} />
+                          A matching phone links the existing vendor; otherwise a vendor record is created.
+                        </p>
                       </div>
                     </div>
+                  ) : payee ? (
+                    <div className={`vpick${blacklisted ? ' is-blocked' : ''}`} role="group" aria-labelledby="lbl-vendor">
+                      <div className="vpick-top">
+                        <span className="chip chip-outline">
+                          <Icon name="truck" size={12} />
+                          External vendor
+                        </span>
+                        <span className="chip chip-accent chip-sm">
+                          <Icon name="check" size={12} />
+                          Selected
+                        </span>
+                        {payee.is_w9_present === false && (
+                          <span className="chip chip-sm chip-outline" title="No W9 on file for this vendor">No W9 on file</span>
+                        )}
+                        {blacklisted && (
+                          <span className="chip chip-sm chip-danger"><Icon name="alert" size={12} />Blacklisted</span>
+                        )}
+                      </div>
+                      <div className="vpick-name">{payee.name}</div>
+                      <div className="vpick-sub">
+                        {[wo?.trade, site?.addressLines[site.addressLines.length - 1]]
+                          .filter(Boolean)
+                          .join(' · ') || 'Linked to this work order'}
+                      </div>
+                      <div className="vpick-foot">
+                        <span className="vpick-phone">
+                          <Icon name="phone" size={14} />
+                          <span className="mono">{payee.phone ?? 'No number on file'}</span>
+                        </span>
+                        <span className="ro-chip">
+                          <Icon name="lock" size={12} />
+                          {payee.source === 'quo'
+                            ? 'Auto-filled from the work order’s technician'
+                            : payee.source === 'prior'
+                              ? 'From an earlier payment on this WO'
+                              : 'Picked from the vendor list'}
+                        </span>
+                        {ytdQuery.data && (
+                          <span className="ro-chip" title="Non-credit payments to this technician this calendar year">
+                            <Icon name="history" size={12} />
+                            YTD {usd(ytdQuery.data.total)}{wo?.billing_entity ? ` · ${wo.billing_entity}` : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <VendorPicker
+                      trade={wo?.trade ?? null}
+                      onPick={(v) => {
+                        setPicked(v);
+                        setMode('search');
+                      }}
+                      onManual={() => setMode('manual')}
+                    />
                   )}
 
-                  {linkedPayee && (
+                  {(payee || mode === 'manual') && (
                     <div className="fallback">
                       <Icon name="user-plus" size={14} />
-                      <button type="button" className="linkbtn" onClick={() => setManual((m) => !m)}>
-                        {manual
-                          ? `Pay ${linkedPayee.name} — the technician linked to this work order`
+                      {mode !== 'manual' && (
+                        <button type="button" className="linkbtn" onClick={() => { setPicked(null); setMode('search'); }}>
+                          Pay a different technician
+                        </button>
+                      )}
+                      {mode !== 'manual' && <span aria-hidden="true"> · </span>}
+                      <button type="button" className="linkbtn" onClick={() => setMode(mode === 'manual' ? (linkedPayee ? 'linked' : 'search') : 'manual')}>
+                        {mode === 'manual'
+                          ? linkedPayee ? `Pay ${linkedPayee.name} — the technician linked to this work order` : 'Search the vendor list instead'
                           : 'Technician not in the vendor list? Enter a name and phone manually'}
                       </button>
                     </div>
@@ -333,7 +460,7 @@ export function RequestPaymentPage() {
                 </div>
 
                 <div className="frow">
-                  <div className="field">
+                  <div className={`field${purposeValid && duplicatePurpose ? ' is-error' : ''}`}>
                     <label className="flabel" htmlFor="purpose">
                       Purpose <span className="req" aria-hidden="true">*</span>
                       <span className="sr">(required)</span>
@@ -344,12 +471,20 @@ export function RequestPaymentPage() {
                       type="text"
                       placeholder="e.g. Assessment trip charge"
                       value={purpose}
+                      aria-invalid={purposeValid && duplicatePurpose ? true : undefined}
                       onChange={(e) => setPurpose(e.target.value)}
                     />
-                    <p className="fhelp">
-                      <Icon name="info" size={12} />
-                      Shown to AP and on this work order&rsquo;s payment ledger. Keep it specific.
-                    </p>
+                    {purposeValid && duplicatePurpose ? (
+                      <p className="ferr">
+                        <Icon name="alert-circle" size={12} />
+                        A payment with this purpose already exists on {woNumber} — make it specific.
+                      </p>
+                    ) : (
+                      <p className="fhelp">
+                        <Icon name="info" size={12} />
+                        Shown to AP and on this work order&rsquo;s payment ledger. One purpose per payment.
+                      </p>
+                    )}
                   </div>
                   <div className={`field${amountError ? ' is-error' : ''}`}>
                     <label className="flabel" htmlFor="amount">
@@ -379,6 +514,20 @@ export function RequestPaymentPage() {
                     )}
                   </div>
                 </div>
+
+                {needsW9 && (
+                  <div className="callout w9-alert" role="status">
+                    <Icon name="alert" size={14} />
+                    <span>
+                      <b>W9 needed.</b>{' '}
+                      {amountValid
+                        ? `This payment takes ${payee?.name ?? 'the technician'} to ${usd(projected)} this year`
+                        : `${payee?.name ?? 'The technician'} is already at ${usd(ytdTotal)} this year`}
+                      {wo?.billing_entity ? ` with ${wo.billing_entity}` : ''} — past the ${W9_THRESHOLD} threshold
+                      with no W9 on file. AP will hold it until the W9 lands; credit-card payments don&rsquo;t count.
+                    </span>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -402,10 +551,13 @@ export function RequestPaymentPage() {
                         id="method"
                         aria-describedby="method-help"
                         value={method}
-                        onChange={(e) => setMethod(e.target.value)}
+                        onChange={(e) => {
+                          setMethod(e.target.value as PaymentMethod);
+                          setAddressTouched(false);
+                        }}
                       >
                         {PAYMENT_METHODS.map((m) => (
-                          <option key={m} value={m}>{m}</option>
+                          <option key={m.value} value={m.value}>{m.label}</option>
                         ))}
                       </select>
                       <span className="sel-chev" aria-hidden="true">
@@ -414,8 +566,7 @@ export function RequestPaymentPage() {
                     </div>
                     <p className="fhelp" id="method-help">
                       <Icon name="info" size={12} />
-                      Zelle and ACH use the payout details already on the vendor record. Check and
-                      card requests take an extra AP day.
+                      {PAYMENT_METHODS.find((m) => m.value === method)?.hint}
                     </p>
                   </div>
                   <div className="field">
@@ -426,15 +577,19 @@ export function RequestPaymentPage() {
                       <Icon name="card" size={14} />
                       <span className="ro-v">
                         {payeeValid
-                          ? `${method}${(usingManual ? manualPhone.trim() : linkedPayee?.phone) ? ` · ${usingManual ? manualPhone.trim() : linkedPayee?.phone}` : ''}`
+                          ? `${PAYMENT_METHODS.find((m) => m.value === method)?.label} · ${recipientOpen && recipientName.trim() ? recipientName.trim() : (mode === 'manual' ? manualName.trim() : payee?.name)}`
                           : 'Name the technician first'}
                       </span>
                     </div>
                     <p className="fhelp">
                       <Icon name="lock" size={12} />
-                      From the technician on this request.
+                      {recipientOpen && recipientName.trim() ? 'The alternate recipient below.' : 'The technician on this request.'}
                     </p>
                   </div>
+                </div>
+
+                <div onBlur={() => setAddressTouched(true)}>
+                  <PaymentAddressFields method={method} value={address} showErrors={addressTouched} onChange={setAddress} />
                 </div>
               </div>
             </section>
@@ -495,32 +650,57 @@ export function RequestPaymentPage() {
               </div>
               <div className="fsec-body">
                 {recipientOpen ? (
-                  <div className="field">
-                    <label className="flabel" htmlFor="recipient">
-                      Send payment to <span className="opt">(instead of the technician)</span>
+                  <>
+                    <div className="frow">
+                      <div className="field">
+                        <label className="flabel" htmlFor="recipient">
+                          Send payment to <span className="opt">(instead of the technician)</span>
+                        </label>
+                        <input
+                          className="finput"
+                          id="recipient"
+                          type="text"
+                          placeholder="Name of the alternate payee"
+                          value={recipientName}
+                          onChange={(e) => setRecipientName(e.target.value)}
+                        />
+                      </div>
+                      <div className="field">
+                        <label className="flabel" htmlFor="recipient-phone">
+                          Recipient phone <span className="opt">{recipientIsStore ? '(not needed for a store)' : '(optional)'}</span>
+                        </label>
+                        <input
+                          className="finput"
+                          id="recipient-phone"
+                          type="tel"
+                          placeholder="(409) 555-0100"
+                          value={recipientPhone}
+                          disabled={recipientIsStore}
+                          onChange={(e) => setRecipientPhone(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <label className="ck">
+                      <input type="checkbox" checked={recipientIsStore} onChange={(e) => setRecipientIsStore(e.target.checked)} />
+                      <span>This is a store / business, not a person (Yoda IsStore)</span>
                     </label>
-                    <input
-                      className="finput"
-                      id="recipient"
-                      type="text"
-                      placeholder="Name of the alternate payee"
-                      value={recipientName}
-                      onChange={(e) => setRecipientName(e.target.value)}
-                    />
                     <p className="fhelp">
                       <Icon name="info" size={12} />
+                      Payments to an alternate recipient do not count toward the technician&rsquo;s W9 threshold.{' '}
                       <button
                         type="button"
                         className="linkbtn"
                         onClick={() => {
                           setRecipientOpen(false);
                           setRecipientName('');
+                          setRecipientPhone('');
+                          setRecipientIsStore(false);
                         }}
                       >
                         Pay the technician instead
                       </button>
                     </p>
-                  </div>
+                  </>
                 ) : (
                   <button type="button" className="addrow" onClick={() => setRecipientOpen(true)}>
                     <Icon name="user-plus" />
@@ -542,7 +722,7 @@ export function RequestPaymentPage() {
                 {submitted ? (
                   <>
                     <Icon name="check-circle" size={12} />
-                    Submitted · awaiting approval
+                    Submitted · in the AP queue{submitted.needs_w9 ? ' · W9 needed' : ''}
                   </>
                 ) : (
                   <>
@@ -553,8 +733,7 @@ export function RequestPaymentPage() {
               </span>
               <div className="submit-right">
                 {/* §3.5 — the decision lives elsewhere and says so: the
-                    Payments tab is where this request gets approved and
-                    handed to Yoda (0016). */}
+                    Payments tab is where this request gets approved and paid. */}
                 <span className="locked">
                   <Link className="btn" to="/payments">
                     <Icon name="card" size={14} />
@@ -562,33 +741,39 @@ export function RequestPaymentPage() {
                   </Link>
                   <span className="locked-cap">
                     <Icon name="info" size={12} />
-                    Approved and sent to Yoda from the Payments tab
+                    Approved and paid from the Payments tab
                   </span>
                 </span>
 
                 {!valid && !submitted && (
                   <span className="submit-help" id="submit-help">
-                    <Icon name="alert" size={14} />
+                    <Icon name={woBlocked || blacklisted ? 'lock' : 'alert'} size={14} />
                     {helpText}
                   </span>
                 )}
 
-                <button
-                  type="button"
-                  className={`btn btn-primary btn-lg${submitMutation.isPending ? ' is-busy' : ''}`}
-                  aria-disabled={!valid || submitMutation.isPending || submitted !== null ? true : undefined}
-                  aria-describedby={!valid ? 'submit-help' : undefined}
-                  onClick={() => {
-                    setAmountTouched(true);
-                    if (valid && !submitted) submitMutation.mutate();
-                  }}
-                >
-                  <Icon name="send" size={14} className="btn-ic" />
-                  <span className="spin" aria-hidden="true" />
-                  <span className="btn-txt">
-                    {submitted ? 'Submitted' : 'Submit payment request'}
-                  </span>
-                </button>
+                {submitted ? (
+                  <button type="button" className="btn btn-lg" onClick={resetForAnother}>
+                    <Icon name="plus" size={14} />
+                    Request another
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={`btn btn-lg ${woBlocked || blacklisted ? 'btn-locked' : 'btn-primary'}${submitMutation.isPending ? ' is-busy' : ''}`}
+                    aria-disabled={!valid || submitMutation.isPending ? true : undefined}
+                    aria-describedby={!valid ? 'submit-help' : undefined}
+                    onClick={() => {
+                      setAmountTouched(true);
+                      setAddressTouched(true);
+                      if (valid) submitMutation.mutate();
+                    }}
+                  >
+                    <Icon name={woBlocked || blacklisted ? 'lock' : 'send'} size={14} className="btn-ic" />
+                    <span className="spin" aria-hidden="true" />
+                    <span className="btn-txt">Submit payment request</span>
+                  </button>
+                )}
               </div>
               {submitError && (
                 <p className="ferr" style={{ flexBasis: '100%' }}>
@@ -622,11 +807,11 @@ export function RequestPaymentPage() {
                 <span className="pill-label">{submitted ? 'Requested' : 'Draft'}</span>
               </span>
             </div>
-            {/* Requested → Approved → Sent to Yoda → Paid (0016). Nothing on
-                the timeline is reached until submit succeeds, so a pre-submit
-                draft shows all four greyed. */}
+            {/* Requested → Approved → Paid (requirements §2). Nothing on the
+                timeline is reached until submit succeeds, so a pre-submit draft
+                shows all three greyed. */}
             <ol className="lifebar" aria-label="Payment request lifecycle">
-              {(['requested', 'approved', 'sent_to_yoda', 'paid'] as const).map((step) => {
+              {(['requested', 'approved', 'paid'] as const).map((step) => {
                 const reached = status !== null && lifeIndex(status) >= lifeIndex(step);
                 const current = status === step;
                 return (
@@ -648,8 +833,8 @@ export function RequestPaymentPage() {
             </ol>
             <p className="life-when">
               {submitted
-                ? 'Requested just now. It now sits in the Payments tab for approval; a rejection posts the reviewer’s reason as an internal update on this work order.'
-                : 'Not yet submitted. Submitting adds it to the Payments tab, where it is approved and sent to Yoda; a rejection posts the reviewer’s reason as an internal update on this work order.'}
+                ? 'Requested just now. A rejected request comes back here as a draft with AP’s reason attached.'
+                : 'Not yet submitted. Submitting adds it to the AP queue. A rejected request comes back here as a draft with AP’s reason attached.'}
             </p>
           </section>
 
@@ -704,13 +889,8 @@ export function RequestPaymentPage() {
   );
 }
 
-const LIFE_LABEL = {
-  requested: 'Requested',
-  approved: 'Approved',
-  sent_to_yoda: 'Sent to Yoda',
-  paid: 'Paid',
-} as const;
+const LIFE_LABEL = { requested: 'Requested', approved: 'Approved', paid: 'Paid' } as const;
 
 function lifeIndex(status: string): number {
-  return ['requested', 'approved', 'sent_to_yoda', 'paid'].indexOf(status);
+  return ['requested', 'approved', 'paid'].indexOf(status);
 }

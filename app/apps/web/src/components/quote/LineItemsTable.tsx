@@ -9,6 +9,7 @@ import type { DraftLine } from '../../lib/quoteDraft';
 import { DAY_VALUES, LINE_TYPES, blankLine, moveItem, removeAt, replaceAt } from '../../lib/quoteDraft';
 import { lineAmount, lineErrors, lineFieldId, usd } from '../../lib/quoteTotals';
 import { useReorder } from '../../hooks/useReorder';
+import type { LaborRate } from '../../api/client';
 import { Icon } from '../Icon';
 
 interface LineItemsTableProps {
@@ -52,8 +53,8 @@ export function LineItemsTable({ label, lines, editable, showErrors, onChange }:
               <button
                 type="button"
                 className="qmk"
-                title="Day / per-diem multiplier — semantics still open (requirements §4.1)"
-                aria-label="About the Day column: day / per-diem multiplier — semantics still open (requirements §4.1)"
+                title="Multi-day jobs: lines are grouped “Day N” on the client summary and the invoice"
+                aria-label="About the Day column: on multi-day jobs lines are grouped Day N on the client summary and the invoice"
               >
                 ?
               </button>
@@ -194,7 +195,7 @@ export function LineItemsTable({ label, lines, editable, showErrors, onChange }:
                   >
                     <option value="">—</option>
                     {DAY_VALUES.map((d) => (
-                      <option key={d} value={d}>{d}</option>
+                      <option key={d} value={d}>Day {d}</option>
                     ))}
                   </select>
                 </td>
@@ -239,12 +240,49 @@ export function LineItemsTable({ label, lines, editable, showErrors, onChange }:
 }
 
 /** The "Add line" affordance — the comp puts it in the section footer, beside
-    the read-only-amount note and the subtotal chip. */
-export function AddLineButton({ lines, onChange }: { lines: DraftLine[]; onChange: (l: DraftLine[]) => void }) {
+    the read-only-amount note and the subtotal chip. When the WO's labor rate
+    is known (Yoda LaborRate per Comp × FM × Trade) the Yoda presets sit beside
+    it: Tech hour, Helper hour, Trip, After-hours, Holiday. */
+export function AddLineButton({
+  lines,
+  onChange,
+  rate,
+}: {
+  lines: DraftLine[];
+  onChange: (l: DraftLine[]) => void;
+  rate?: LaborRate | null;
+}) {
+  const preset = (label: string, value: number | null, line_type: DraftLine['line_type'], description: string) =>
+    value == null ? null : (
+      <button
+        key={label}
+        type="button"
+        className="chip chip-sm"
+        title={`Add a ${label.toLowerCase()} line at ${usd(value)}`}
+        onClick={() =>
+          onChange([...lines, { ...blankLine(), line_type, description, rate: value.toFixed(2) }])
+        }
+      >
+        <Icon name="plus" size={12} />
+        {label} {usd(value)}
+      </button>
+    );
+
   return (
-    <button type="button" className="btn btn-sm btn-ghost" onClick={() => onChange([...lines, blankLine()])}>
-      <Icon name="plus" size={12} />
-      Add line
-    </button>
+    <span className="lt-add">
+      <button type="button" className="btn btn-sm btn-ghost" onClick={() => onChange([...lines, blankLine()])}>
+        <Icon name="plus" size={12} />
+        Add line
+      </button>
+      {rate && (
+        <span className="lt-presets" aria-label="Rate presets from the labor rate card">
+          {preset('Tech hr', rate.tech_rate, 'labor', 'Tech — labor')}
+          {preset('Helper hr', rate.helper_rate, 'labor', 'Helper — labor')}
+          {preset('Trip', rate.trip_rate, 'service', 'Trip charge')}
+          {preset('After-hours', rate.afterhours_rate, 'labor', 'Tech — after-hours labor')}
+          {preset('Holiday', rate.holiday_rate, 'labor', 'Tech — holiday labor')}
+        </span>
+      )}
+    </span>
   );
 }

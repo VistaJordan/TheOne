@@ -30,10 +30,19 @@ import type {
   QuoteLineType as SharedQuoteLineType,
   QuotePermissions as SharedQuotePermissions,
   QuoteStatus as SharedQuoteStatus,
+  QuoteTotalRule as SharedQuoteTotalRule,
   PaymentRequest as SharedPaymentRequest,
   PaymentRequestsResponse as SharedPaymentRequestsResponse,
   PaymentListResponse,
   PaymentRequestResponse,
+  PaymentDeleteResponse,
+  PaymentMethod as SharedPaymentMethod,
+  PaymentAddress as SharedPaymentAddress,
+  PaymentRequestStatus as SharedPaymentRequestStatus,
+  VendorsResponse as SharedVendorsResponse,
+  Vendor as SharedVendor,
+  VendorYtd as SharedVendorYtd,
+  SalesTaxLookup as SharedSalesTaxLookup,
   // S4.1 — the "Viewing as" list.
   PrincipalsResponse as SharedPrincipalsResponse,
   // S6 — the list's field catalogue, filter vocabulary and saved views.
@@ -230,6 +239,7 @@ export type {
   QuoteStatus,
   QuoteSectionKind,
   QuoteLineType,
+  QuoteTotalRule,
   QuoteLine,
   QuoteSection,
   QuoteOptionTotal,
@@ -237,10 +247,19 @@ export type {
   QuoteSummary,
   QuotePermissions,
   Quote,
+  LaborRate,
+  SalesTaxLookup,
+  WoAction,
+  WoActionState,
+  WoActionMap,
   PaymentRequestStatus,
   PaymentRequestPayee,
   PaymentRequest,
   PaymentRequestsResponse,
+  PaymentAddress,
+  Vendor,
+  VendorsResponse,
+  VendorYtd,
   // S4.1 — principals ("Viewing as").
   PrincipalListItem,
   PrincipalsResponse,
@@ -271,14 +290,15 @@ export interface QuoteLineInput {
   description: string;
   qty: number;
   rate: number;
-  /** Day column: stored VERBATIM, no math (semantics TBD — requirements §4.1). */
-  day_value: string | null;
+  /** Yoda Day (1-based). null = single-day job. */
+  day: number | null;
   ot: boolean;
 }
 
-/** One section of the PUT body. Sections are REPLACED whole, in array order:
-    the incurred section first, then the options (whose A/B/C labels are derived
-    from that position server-side and never stored). */
+/** One section of the PUT body. The CURRENT round's unlocked sections are
+    replaced whole, in array order: the incurred section first (round 1 only),
+    then the options (whose A/B/C labels are derived from that position
+    server-side and never stored). */
 export interface QuoteSectionInput {
   kind: 'incurred' | 'option';
   name: string | null;
@@ -290,7 +310,11 @@ export interface QuoteSectionInput {
 
 /** PUT /api/work-orders/:id/quote — everything an editor can change. */
 export interface QuoteUpdateInput {
-  sales_tax: number;
+  /** D2 — a PERCENT; the $ amount is computed server-side. */
+  sales_tax_pct: number;
+  total_rule: SharedQuoteTotalRule;
+  bill_to: string | null;
+  is_cost_tbd: boolean;
   specs: string | null;
   note_to_customer: string | null;
   /** Non-null once someone used "Edit text": a PINNED manual summary that stops
@@ -308,6 +332,8 @@ export interface QuoteListItem {
   title: string | null;
   client: string | null;
   status: SharedQuoteStatus;
+  rev: number;
+  current_round: number;
   grand_total: number | null;
   updated_at: string | null;
   /** The work order's own numbers as they stand now (Approvals inbox columns). */
@@ -323,16 +349,18 @@ export interface QuoteListResponse {
 
 // ── Payment requests (payables) ──────────────────────────────────────────────
 
-/** Payment methods (requirements §2 — the real list is imported later). The
-    column is free text, so this is the UI's vocabulary, not a DB enum. */
-export const PAYMENT_METHODS = [
-  'Zelle',
-  'ACH transfer',
-  'Check',
-  'Company card',
-  'Cash App',
-] as const;
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+/** Yoda method CODES (D7) with their display labels. The wire carries the code. */
+export const PAYMENT_METHODS: readonly { value: SharedPaymentMethod; label: string; hint: string }[] = [
+  { value: 'zelle', label: 'Zelle', hint: 'Email or phone enrolled with Zelle' },
+  { value: 'ach', label: 'ACH', hint: 'Routing + account number — 1 extra AP day' },
+  { value: 'check', label: 'Check', hint: 'Mailed — allow 3–5 business days' },
+  { value: 'cashapp', label: 'Cash App', hint: '$cashtag' },
+  { value: 'credit', label: 'Credit card', hint: 'Paid on a company card — does not count toward the W9 threshold' },
+];
+export type PaymentMethod = SharedPaymentMethod;
+export function methodLabel(m: string): string {
+  return PAYMENT_METHODS.find((x) => x.value === m)?.label ?? m;
+}
 
 /**
  * POST /api/work-orders/:id/payment-requests.
@@ -348,13 +376,35 @@ export interface PaymentRequestInput {
   payee_phone: string | null;
   purpose: string;
   amount: number;
-  method: string;
+  method: SharedPaymentMethod;
+  payment_address: SharedPaymentAddress | null;
   note: string | null;
   recipient_name: string | null;
+  recipient_phone: string | null;
+  recipient_is_store: boolean;
+  override_blacklist?: boolean;
 }
 
 export interface PaymentRequestCreatedResponse {
   item: SharedPaymentRequest;
+}
+
+export interface PaymentItemResponse {
+  item: SharedPaymentRequest;
+}
+
+export type { PaymentDeleteResponse } from '@theone/shared';
+
+/** GET /api/payments query — every filter is optional. */
+export interface PaymentQueueParams {
+  status?: SharedPaymentRequestStatus;
+  billing_entity?: string;
+  vendor_id?: string;
+  q?: string;
+  pending_delete?: 'true';
+  needs_w9?: 'true';
+  page?: number;
+  page_size?: number;
 }
 
 /** Thrown for any non-2xx response, carrying the API's { error } envelope. */
@@ -650,42 +700,134 @@ export function postPaymentRequest(
   );
 }
 
-// ── Payments tab — decisions (0016) ──────────────────────────────────────────
+// ── Payments tab / AP queue — the Yoda lifecycle (0016 → 0028) ───────────────
 
 export type { PaymentListItem, PaymentListResponse, PaymentRequestResponse } from '@theone/shared';
 
-/** GET /api/payments — every request across work orders, waiting ones first. */
-export function listPayments(): Promise<PaymentListResponse> {
-  return request<PaymentListResponse>('/payments');
+/** GET /api/payments — every request across work orders the viewer may see,
+    pending deletes first, then the ones waiting on somebody, then newest. */
+export function listPayments(params: PaymentQueueParams = {}): Promise<PaymentListResponse> {
+  return request<PaymentListResponse>(`/payments${toQuery(params)}`);
 }
 
+const payPath = (id: string, suffix = '') => `/payment-requests/${encodeURIComponent(id)}${suffix}`;
+
 function decidePayment(id: string, verb: string, body: Record<string, unknown> = {}) {
-  return request<PaymentRequestResponse>(`/payment-requests/${encodeURIComponent(id)}/${verb}`, {
+  return request<PaymentRequestResponse>(payPath(id, `/${verb}`), {
     method: 'POST',
     body: JSON.stringify(body),
   });
 }
 
+/** GET …/payment-requests/:id — one row; a processor sees the full payout address. */
+export function getPaymentRequest(id: string): Promise<PaymentItemResponse> {
+  return request<PaymentItemResponse>(payPath(id));
+}
+
 /** POST …/approve — requested → approved (payments:approve). */
-export function approvePayment(id: string): Promise<PaymentRequestResponse> {
+export function approvePaymentRequest(id: string): Promise<PaymentRequestResponse> {
   return decidePayment(id, 'approve');
 }
 
-/** POST …/reject — requested | approved → rejected; the note is posted as an
+/** POST …/pay — requested | approved → paid; rolls the amount into the WO's
+    Cost (payments/process:edit). Yoda "Verify". */
+export function payPaymentRequest(id: string): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'pay');
+}
+
+/** POST …/reject — requested | approved → rejected; the reason is posted as an
     internal update on the work order (payments:approve). */
-export function rejectPayment(id: string, note: string): Promise<PaymentRequestResponse> {
-  return decidePayment(id, 'reject', { note });
+export function rejectPaymentRequest(id: string, reason: string): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'reject', { reason });
 }
 
-/** POST …/send-to-yoda — approved → sent_to_yoda, with Yoda's reference if
-    there is one (payments/process:edit). */
-export function sendPaymentToYoda(id: string, yodaRef: string | null): Promise<PaymentRequestResponse> {
-  return decidePayment(id, 'send-to-yoda', { yoda_ref: yodaRef });
+/** POST …/convert-method — a processor changes the method; payout details are cleared. */
+export function convertPaymentMethod(id: string, method: SharedPaymentMethod): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'convert-method', { method });
 }
 
-/** POST …/mark-paid — approved | sent_to_yoda → paid (payments/process:edit). */
-export function markPaymentPaid(id: string): Promise<PaymentRequestResponse> {
-  return decidePayment(id, 'mark-paid');
+/** Soft delete with reason. A processed row answers `{ deleted: false, item }`
+    with `pending_delete = true` — an admin has to confirm. */
+export function deletePaymentRequest(id: string, reason: string): Promise<PaymentDeleteResponse> {
+  return request<PaymentDeleteResponse>(payPath(id, '/delete'), {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function confirmDeletePaymentRequest(id: string): Promise<PaymentDeleteResponse> {
+  return request<PaymentDeleteResponse>(payPath(id, '/confirm-delete'), { method: 'POST', body: '{}' });
+}
+
+export function rejectDeletePaymentRequest(id: string): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'reject-delete');
+}
+
+// 0016 names, kept so nothing that imported them breaks mid-merge.
+export const approvePayment = approvePaymentRequest;
+export const rejectPayment = rejectPaymentRequest;
+export const markPaymentPaid = payPaymentRequest;
+
+// ── Vendors (technicians) ────────────────────────────────────────────────────
+
+export function searchVendors(q: string, trade?: string | null): Promise<SharedVendorsResponse> {
+  return request<SharedVendorsResponse>(`/vendors${toQuery({ q, trade: trade ?? undefined, limit: 8 })}`);
+}
+
+export function getVendor(id: string): Promise<{ item: SharedVendor }> {
+  return request<{ item: SharedVendor }>(`/vendors/${encodeURIComponent(id)}`);
+}
+
+/** Yoda GetReciepientTotal — this year's non-credit payments to a technician. */
+export function getVendorYtd(id: string, billingEntity?: string | null): Promise<SharedVendorYtd> {
+  return request<SharedVendorYtd>(
+    `/vendors/${encodeURIComponent(id)}/ytd${toQuery({ billing_entity: billingEntity ?? undefined })}`,
+  );
+}
+
+// ── Quote lifecycle additions (Yoda parity) ──────────────────────────────────
+
+/** POST …/quote/cancel-submission — Sent → Approved (Yoda CancelSubmission). */
+export function cancelQuoteSubmission(idOrNumber: string): Promise<QuoteResponse> {
+  return request<QuoteResponse>(quotePath(idOrNumber, '/cancel-submission'), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+/** POST …/quote/client-approve — the client chose ONE option (Yoda Approval). */
+export function clientApproveQuote(
+  idOrNumber: string,
+  input: { section_id: string; note: string | null; on_site: boolean },
+): Promise<QuoteResponse> {
+  return request<QuoteResponse>(quotePath(idOrNumber, '/client-approve'), {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** POST …/quote/client-decline — the client declined (one option or the round). */
+export function clientDeclineQuote(
+  idOrNumber: string,
+  input: { note: string; section_id: string | null },
+): Promise<QuoteResponse> {
+  return request<QuoteResponse>(quotePath(idOrNumber, '/client-decline'), {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** POST …/quote/new-round — open the next quote round after a client decision. */
+export function startQuoteRound(idOrNumber: string): Promise<QuoteResponse> {
+  return request<QuoteResponse>(quotePath(idOrNumber, '/new-round'), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+/** GET …/quote/sales-tax — the derived rate for this WO's (Comp, FM, Trade). */
+export function getQuoteSalesTax(idOrNumber: string): Promise<SharedSalesTaxLookup> {
+  return request<SharedSalesTaxLookup>(quotePath(idOrNumber, '/sales-tax'));
 }
 
 // ── Approvals — the manager's inbox (0020) ───────────────────────────────────

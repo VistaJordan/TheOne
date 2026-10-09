@@ -1,29 +1,48 @@
 /* The quote's money card (comp: right rail #1) — NTE meter, the per-option
-   rows, the sales-tax input and the grand total.
+   rows, the sales-tax % input and the grand total.
 
-   The caption under the totals is the RULE B explanation and is not decorative:
-   without it "Grand Total $2,890" beside "Incurred subtotal $930" reads like an
-   arithmetic bug. */
+   Under the Yoda rule (D1) every option is priced as (incurred + option) × (1 +
+   tax%), so each option row shows ITS client price and the caption names which
+   option the Grand Total is. RULE B keeps its original caption. */
 
 import type { QuoteTotals } from '../../lib/quoteTotals';
-import { NTE_WARN_PCT, parseTax, usd, usd0 } from '../../lib/quoteTotals';
+import { NTE_WARN_PCT, parsePct, usd, usd0 } from '../../lib/quoteTotals';
+import type { SalesTaxLookup } from '../../api/client';
 import { Icon } from '../Icon';
 
 interface MoneyRailProps {
   totals: QuoteTotals;
   nte: number | null;
-  salesTax: string;
+  salesTaxPct: string;
   editable: boolean;
   comp: string | null;
-  onSalesTaxChange: (v: string) => void;
+  /** The derived rate for this WO, when the lookup has answered. */
+  derived?: SalesTaxLookup | null;
+  isCostTbd: boolean;
+  onSalesTaxPctChange: (v: string) => void;
+  onCostTbdChange: (v: boolean) => void;
 }
 
-export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxChange }: MoneyRailProps) {
+export function MoneyRail({
+  totals,
+  nte,
+  salesTaxPct,
+  editable,
+  comp,
+  derived,
+  isCostTbd,
+  onSalesTaxPctChange,
+  onCostTbdChange,
+}: MoneyRailProps) {
   const pct = nte != null && nte > 0 ? (totals.grandTotal / nte) * 100 : null;
   const warn = pct != null && pct >= NTE_WARN_PCT;
   const over = pct != null && pct > 100;
   const headroom = nte == null ? null : nte - totals.grandTotal;
-  const taxErr = Number.isNaN(parseTax(salesTax));
+  const taxErr = Number.isNaN(parsePct(salesTaxPct));
+  const yoda = totals.totalRule !== 'options_only';
+  const priced = totals.options.find((o) => o.key === totals.pricedKey) ?? null;
+  const derivedDiffers =
+    derived && derived.required && !taxErr && Math.abs(derived.pct - (parsePct(salesTaxPct) || 0)) > 0.0005;
 
   return (
     <section className="card">
@@ -79,23 +98,30 @@ export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxCha
         </div>
 
         {totals.options.map((opt) => (
-          <div className="kvrow" key={opt.key}>
+          <div className={`kvrow${opt.key === totals.pricedKey ? ' is-priced' : ''}`} key={opt.key}>
             <dt>
               {opt.label}
-              {opt.include_in_summary && <span className="chip chip-sm chip-accent">Included</span>}
+              {opt.approved && (
+                <span className="chip chip-sm chip-accent">
+                  <Icon name="check" size={12} />
+                  Approved
+                </span>
+              )}
+              {!opt.approved && opt.include_in_summary && <span className="chip chip-sm chip-accent">Included</span>}
+              {yoda && <span className="kv-sub">lines {usd(opt.total)} · tax {usd(opt.tax)}</span>}
             </dt>
-            <dd>{usd(opt.total)}</dd>
+            <dd>{usd(yoda ? opt.grandTotal : opt.total)}</dd>
           </div>
         ))}
 
         <div className="kvrow">
           <dt>
-            <label htmlFor="sales-tax">Sales Tax</label>
+            <label htmlFor="sales-tax">Sales tax %</label>
             <button
               type="button"
               className="qmk"
-              title="Manual entry vs. derived per state — open (requirements §4.2)"
-              aria-label="About Sales Tax: manual entry vs. derived per state — open (requirements §4.2)"
+              title="Derived from the labor-rate card (Comp × FM × Trade) and the site ZIP; override here when needed"
+              aria-label="About Sales tax: derived from the labor-rate card and the site ZIP; override here when needed"
             >
               ?
             </button>
@@ -103,34 +129,62 @@ export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxCha
           <dd>
             {editable ? (
               <span className="money-in tax-in">
-                <span className="cur" aria-hidden="true">$</span>
                 <input
                   className={`fld${taxErr ? ' is-err' : ''}`}
                   id="sales-tax"
                   inputMode="decimal"
-                  placeholder="0.00"
-                  aria-label="Sales tax"
+                  placeholder="0"
+                  aria-label="Sales tax percent"
                   aria-invalid={taxErr ? true : undefined}
-                  value={salesTax}
-                  onChange={(e) => onSalesTaxChange(e.target.value)}
+                  value={salesTaxPct}
+                  onChange={(e) => onSalesTaxPctChange(e.target.value)}
                 />
+                <span className="cur" aria-hidden="true">%</span>
               </span>
             ) : (
-              usd(totals.salesTax)
+              `${totals.salesTaxPct}%`
             )}
           </dd>
         </div>
+        {derived && (
+          <div className="kvrow is-muted kv-note">
+            <dt>
+              {derived.required
+                ? `Derived ${derived.pct}%${derived.zip ? ` · ZIP ${derived.zip}` : ''}`
+                : 'No sales tax required for this Comp × FM × Trade'}
+            </dt>
+            <dd>
+              {editable && derivedDiffers && (
+                <button type="button" className="linkbtn" onClick={() => onSalesTaxPctChange(String(derived.pct))}>
+                  Use {derived.pct}%
+                </button>
+              )}
+            </dd>
+          </div>
+        )}
+        <div className="kvrow is-muted">
+          <dt>Sales tax</dt>
+          <dd>{usd(totals.salesTax)}</dd>
+        </div>
 
         <div className="kvrow is-total">
-          <dt>Grand Total</dt>
+          <dt>Grand Total{yoda && priced ? <span className="kv-sub">{priced.label}</span> : null}</dt>
           <dd>{usd(totals.grandTotal)}</dd>
         </div>
 
         <div className="kvblock">
           <div className="kvrow">
-            <dt>Total Cost</dt>
+            <dt>
+              Total Cost
+              {editable && (
+                <label className="ck" style={{ marginLeft: 8 }}>
+                  <input type="checkbox" checked={isCostTbd} onChange={(e) => onCostTbdChange(e.target.checked)} />
+                  <span>TBD</span>
+                </label>
+              )}
+            </dt>
             <dd className={totals.totalCost == null ? 'is-none' : undefined}>
-              {totals.totalCost == null ? '—' : usd(totals.totalCost)}
+              {isCostTbd ? 'TBD' : totals.totalCost == null ? '—' : usd(totals.totalCost)}
             </dd>
           </div>
           <div className="kvrow">
@@ -147,10 +201,10 @@ export function MoneyRail({ totals, nte, salesTax, editable, comp, onSalesTaxCha
         </div>
       </dl>
 
-      {/* RULE B, in the operator's words. */}
       <p className="money-cap">
-        Grand Total is the price of the options included in the summary. Incurred lines are already
-        on the WO and bill with the job — they are shown here for context, not added twice.
+        {yoda
+          ? 'Each option is priced as incurred work + that option, plus sales tax. Grand Total is the approved option’s price — or the first included option’s until the client decides.'
+          : 'Grand Total is the price of the options included in the summary. Incurred lines are already on the WO and bill with the job — they are shown here for context, not added twice.'}
       </p>
     </section>
   );
