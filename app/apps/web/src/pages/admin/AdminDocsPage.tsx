@@ -133,7 +133,8 @@ export function AdminDocsPage() {
 
       <div className={`docs-layout${toc.length ? '' : ' is-wide'}`}>
         {toc.length > 0 && (
-          <nav className="docs-toc no-print" aria-label="Contents">
+          <nav className="docs-toc no-print" aria-label="Contents" data-oknob-own="">
+            {/* data-oknob-own: no rail on Contents, only the page's (Elise, 2026-10-12). */}
             <b className="docs-toc-title">Contents</b>
             <ul>
               {toc.map((t) => (
