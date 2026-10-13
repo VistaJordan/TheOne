@@ -71,7 +71,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     vendor: 'Ecotrak',
     group: 'clients',
     summary:
-      'New work orders and every change made on Ecotrak (status, NTE, description, site, asset…) come into The One every 10 minutes, or straight away with Sync now. New ones land in Incoming Work Orders. Read only: The One never changes anything on Ecotrak, so clients see nothing.',
+      'New work orders and every change made on Ecotrak (status, NTE, description, site, asset…) come into The One within a minute, or straight away with Sync now. New ones land in Incoming Work Orders, and accepting one on Ecotrak accepts it here. Read only: The One never changes anything on Ecotrak, so clients see nothing.',
     off_means:
       'The One does not contact Ecotrak at all, not even to sign in: no new or changed work orders arrive. Work orders already here stay as they are, and the Ecotrak checks on a status change keep reading what is on file.',
     logo: 'ecotrak.png',

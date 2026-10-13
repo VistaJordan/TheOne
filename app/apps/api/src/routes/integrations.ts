@@ -1,6 +1,6 @@
 // Integration routes. POST /api/integrations/ecotrak/sync is the manual "sync
 // now" trigger (Admin › Integrations has its own button on the same run, and
-// Vercel's cron calls it every 10 minutes — routes/webhooks.ts). Read-only
+// Vercel's cron calls it every minute — routes/webhooks.ts). Read-only
 // against Ecotrak — nothing is written back.
 //
 // 0079 · both routes need Admin › Integrations (view for the status, edit for

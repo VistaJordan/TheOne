@@ -10,7 +10,7 @@
     { "path": "/api/webhooks/planned-maintenance-run", "schedule": "0 12 * * *" },
     { "path": "/api/webhooks/client-updates-run", "schedule": "0 * * * *" },
     { "path": "/api/webhooks/clickup-sync", "schedule": "* * * * *" },
-    { "path": "/api/webhooks/ecotrak-sync", "schedule": "*/10 * * * *" }
+    { "path": "/api/webhooks/ecotrak-sync", "schedule": "* * * * *" }
   ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api" },

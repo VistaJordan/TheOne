@@ -113,7 +113,7 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
   app.get('/webhooks/clickup-sync', async (req) => clickUpRun(req));
   app.post('/webhooks/clickup-sync', async (req) => clickUpRun(req));
 
-  // 0079 · Ecotrak → The One: Vercel's cron calls it every 10 minutes (same
+  // 0079 · Ecotrak → The One: Vercel's cron calls it every minute (same
   // CRON_SECRET). Read only against Ecotrak; switched off in Admin ›
   // Integrations = it answers straight away without contacting Ecotrak.
   const ecotrakRun = async (req: { headers: Record<string, unknown> }) => {

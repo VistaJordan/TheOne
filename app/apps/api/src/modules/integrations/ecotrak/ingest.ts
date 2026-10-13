@@ -15,7 +15,7 @@ import { EcotrakClient, configFromEnv, type EcotrakWorkOrder } from './client.js
 import { classifyInbound } from './statusMap.js';
 import { resolveTrade } from './tradeMap.js';
 import { planFolder, stateAbbr } from './sharepointPath.js';
-import { raiseAcceptanceTasks } from '../../../services/approvals.js';
+import { raiseAcceptanceTasks, settleAcceptanceFromClient } from '../../../services/approvals.js';
 import { integrationOnNow, requireIntegration } from '../../../services/integrations.js';
 import { logTaskChanges, type TaskChange } from '../../../services/woAudit.js';
 import { ecotrakSyncActorId } from '../../../services/serviceActors.js';
@@ -87,11 +87,33 @@ export interface IngestResult {
   skippedHumanMoved: number;
   /** 0079 · seen again with nothing changed on Ecotrak's side: not touched. */
   unchanged: number;
+  /** Incoming items closed because Ecotrak says accepted / rejected. */
+  accepted: number;
+  declined: number;
   unmappedStatus: string[];
   unmappedTrade: string[];
   errors: string[];
   /** 0079 · one line for Admin › Integrations. */
   note: string;
+}
+
+/** where a work order stands on Ecotrak's side of the acceptance:
+    still waiting for us (PENDING_SP_ACCEPTANCE, UNASSIGNED, REASSIGN),
+    turned down (REJECTED, CANCELLED), or accepted (every other status —
+    ACCEPTED and everything that can only follow it). */
+const WAITING_ON_ECOTRAK = new Set(['PENDING_SP_ACCEPTANCE', 'UNASSIGNED', 'REASSIGN']);
+const DECLINED_ON_ECOTRAK = new Set(['REJECTED', 'CANCELLED']);
+export function ecotrakAcceptance(status: string | null | undefined): 'waiting' | 'declined' | 'accepted' {
+  const s = (status ?? '').toUpperCase();
+  if (WAITING_ON_ECOTRAK.has(s)) return 'waiting';
+  if (DECLINED_ON_ECOTRAK.has(s)) return 'declined';
+  return 'accepted';
+}
+
+/** Work orders whose acceptance was answered on Ecotrak in this run. */
+interface Settle {
+  accepted: string[];
+  rejected: string[];
 }
 
 interface ConnectionRow {
@@ -130,7 +152,7 @@ export async function ingestEcotrak(opts: { sinceDays?: number; trigger?: Ingest
   requireIntegration('ecotrak');
   const trigger: IngestTrigger = opts.trigger ?? 'manual';
   const res: IngestResult = {
-    fetched: 0, created: 0, updated: 0, skippedHumanMoved: 0, unchanged: 0,
+    fetched: 0, created: 0, updated: 0, skippedHumanMoved: 0, unchanged: 0, accepted: 0, declined: 0,
     unmappedStatus: [], unmappedTrade: [], errors: [], note: '',
   };
 
@@ -189,10 +211,11 @@ export async function ingestEcotrak(opts: { sinceDays?: number; trigger?: Ingest
     // row must never fail the sync), signed by the sync's own service
     // principal so the trail says which system put it there.
     const createdIds: string[] = [];
+    const settle: Settle = { accepted: [], rejected: [] };
     for (const wo of orders) {
       try {
         await withTransaction(async (tx) => {
-          await upsertOne(tx, conn, wo, statusByName, res, createdIds, actorId);
+          await upsertOne(tx, conn, wo, statusByName, res, createdIds, actorId, settle);
         });
       } catch (e) {
         res.errors.push(`WO ${wo.id}: ${(e as Error).message}`);
@@ -205,13 +228,22 @@ export async function ingestEcotrak(opts: { sinceDays?: number; trigger?: Ingest
         res.errors.push(`acceptance queue: ${(e as Error).message}`);
       }
     }
+    // accepted (or rejected) on Ecotrak = answered here too.
+    for (const id of settle.accepted) {
+      if (await settleAcceptanceFromClient(id, 'accepted', 'Ecotrak', actorId)) res.accepted++;
+    }
+    for (const id of settle.rejected) {
+      if (await settleAcceptanceFromClient(id, 'rejected', 'Ecotrak', actorId)) res.declined++;
+    }
   } catch (e) {
     // Never the response body: an auth error can echo the request back.
     res.errors.push((e as Error).message);
   } finally {
     const parts = [
       fetchedOk ? `${res.fetched} read from Ecotrak` : 'Could not read from Ecotrak',
-      res.created > 0 && `${res.created} new (in Incoming Work Orders)`,
+      res.created > 0 && `${res.created} new`,
+      res.accepted > 0 && `${res.accepted} accepted on Ecotrak`,
+      res.declined > 0 && `${res.declined} rejected on Ecotrak`,
       res.updated + res.skippedHumanMoved > 0 && `${res.updated + res.skippedHumanMoved} updated`,
       res.unchanged > 0 && `${res.unchanged} unchanged`,
       res.unmappedStatus.length > 0 && `held back, unknown status: ${res.unmappedStatus.join(', ')}`,
@@ -278,6 +310,7 @@ async function upsertOne(
   res: IngestResult,
   createdIds: string[],
   actorId: string,
+  settle: Settle,
 ): Promise<void> {
   const externalId = String(wo.id);
   const hash = fingerprint(wo);
@@ -288,7 +321,7 @@ async function upsertOne(
     [conn.id, externalId],
   );
 
-  // 0079 · the poll runs every 10 minutes and re-reads today and yesterday:
+  // 0079 · the poll runs every minute and re-reads today and yesterday:
   // a work order nobody touched on Ecotrak since the last look is left alone
   // (no raw row, no write, no audit row).
   if (existing.rows[0]?.last_payload_hash === hash) {
@@ -396,7 +429,10 @@ async function upsertOne(
     );
     await markProcessed(tx, conn.id, externalId);
     res.created++;
-    createdIds.push(taskId);
+    // only a work order still waiting for us on Ecotrak goes to
+    // Incoming Work Orders; one first seen already accepted (or rejected)
+    // there has had its answer.
+    if (ecotrakAcceptance(wo.status) === 'waiting') createdIds.push(taskId);
     return;
   }
 
@@ -446,6 +482,11 @@ async function upsertOne(
       [taskId, ...common, siteId, assetId],
     );
     res.updated++;
+    // Ecotrak's status moved: if that answers the acceptance, the
+    // Incoming item is closed after this transaction commits.
+    const answer = ecotrakAcceptance(wo.status);
+    if (answer === 'accepted') settle.accepted.push(taskId);
+    else if (answer === 'declined') settle.rejected.push(taskId);
   }
 
   // 0079 · every change Ecotrak made is an audit row, signed "Ecotrak sync"

@@ -817,6 +817,82 @@ async function reconcileAcceptance(taskId: string, actorId: string): Promise<voi
 // ── Pending acceptance (rules 7.1.1 – 7.1.4, 0036) ──────────────────────────
 
 /**
+ * Ecotrak acceptance (2026-10-13): the acceptance was answered in the client's system (Elise,
+ * 2026-10-13): accepted on Ecotrak = accepted here, rejected or cancelled on
+ * Ecotrak = closed here. Called by the Ecotrak sync AFTER its transaction
+ * commits, signed by the sync's service principal. No assignee is picked —
+ * Ecotrak does not say who — so rule 7.1.3's "accept = assign" and the 11.1.1
+ * intake gate do not apply: the acceptance already happened on Ecotrak and
+ * cannot be refused here. The decision comment says the work order still
+ * needs an assignee. An already-decided task is left alone. Never throws.
+ */
+export async function settleAcceptanceFromClient(
+  taskId: string,
+  outcome: 'accepted' | 'rejected',
+  where: string,
+  actorId: string,
+): Promise<boolean> {
+  try {
+    const open = await query<{ id: string; title: string; detail: Record<string, unknown> | null }>(
+      `SELECT id::text AS id, title, detail FROM approval_task
+        WHERE task_id = $1 AND type = 'wo_acceptance' AND status = 'open' LIMIT 1`,
+      [taskId],
+    );
+    const r = open.rows[0];
+    if (!r) return false;
+    if (outcome === 'rejected') {
+      await cancelTask(taskId, r.id, 'wo_acceptance', r.title, `Rejected or cancelled on ${where}`, actorId, r.detail);
+      return true;
+    }
+    const note = `Accepted on ${where} — pick who it is assigned to on the work order`;
+    const body = `${TYPE_LABEL.wo_acceptance} approved — ${r.title} — ${note}`;
+    await withTransaction(async (tx) => {
+      await tx.query(
+        `UPDATE approval_task
+            SET status = 'approved', decided_by = $1, decided_at = now(), decision_note = $2, updated_at = now()
+          WHERE id = $3 AND status = 'open'`,
+        [actorId, note, r.id],
+      );
+      await tx.query(
+        `INSERT INTO activity_log
+           (actor_principal_id, entity_type, entity_id, action, field, before, after)
+         VALUES ($1, 'task', $2, 'approval_task_approved', 'approval_task.status', $3::jsonb, $4::jsonb)`,
+        [
+          actorId,
+          taskId,
+          JSON.stringify({ approval_task_id: r.id, status: 'open' }),
+          JSON.stringify({ approval_task_id: r.id, type: 'wo_acceptance', status: 'approved', title: r.title, detail: r.detail, note, via: where.toLowerCase() }),
+        ],
+      );
+      const ins = await tx.query<{ id: string }>(
+        `INSERT INTO comment (task_id, author_principal_id, body, client_visible)
+         VALUES ($1, $2, $3, false) RETURNING id::text AS id`,
+        [taskId, actorId, body],
+      );
+      await tx.query(
+        `INSERT INTO activity_log
+           (actor_principal_id, entity_type, entity_id, action, field, before, after)
+         VALUES ($1, 'task', $2, 'comment_added', NULL, NULL, $3::jsonb)`,
+        [
+          actorId,
+          taskId,
+          JSON.stringify({
+            comment_id: ins.rows[0].id,
+            client_visible: false,
+            approval_task_id: r.id,
+            approval: { type: 'wo_acceptance', title: r.title, detail: r.detail, status: 'approved', note },
+          }),
+        ],
+      );
+    });
+    return true;
+  } catch (err) {
+    console.error('[approvals] could not settle acceptance for', taskId, err);
+    return false;
+  }
+}
+
+/**
  * Rule 7.1.1: whatever creates a work order — the Ecotrak sync, a CSV import
  * — calls this AFTER its transaction commits with the ids it created. Each
  * one that still has no assignee gets a `wo_acceptance` task, which is the

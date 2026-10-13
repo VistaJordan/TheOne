@@ -516,6 +516,9 @@ export async function syncClickUpNow(user: Admin): Promise<ClickUpOverview> {
 const CALL_BUDGET = 80; // of ClickUp's 100 a minute
 const TIME_BUDGET_MS = 45_000;
 const BACKOFF_MIN = [1, 2, 5, 15, 60];
+/** Ecotrak acceptance · how long an accepted Ecotrak work order waits before ClickUp is
+    searched for it and, if absent, the task is created. */
+const ACCEPT_GRACE = '10 minutes';
 
 interface TaskRow {
   id: string;
@@ -972,10 +975,27 @@ async function runOnce(reason: string): Promise<{ pushed: number; note: string }
       const fresh = await getConfig();
       if (!fresh.sync_from) break;
       const [map, people] = await Promise.all([resolveMap(fresh), peopleMap(fresh.cu_members)]);
+      // Ecotrak acceptance (2026-10-13): a work order goes to ClickUp only once it is accepted (Elise,
+      // 2026-10-13): while its acceptance is open in Incoming Work Orders it
+      // is neither looked for nor created. An Ecotrak work order also waits
+      // ACCEPT_GRACE after it was accepted (or after it arrived already
+      // accepted), so the old Ecotrak → ClickUp integration — which fires on
+      // the acceptance on Ecotrak — has made its task before the 0081 lookup
+      // runs. Updates to a task already linked are never held.
       const links = await query<LinkRow>(
-        `SELECT task_id, clickup_task_id, pushed, attempts FROM clickup_link
-          WHERE dirty AND NOT skipped AND (next_try_at IS NULL OR next_try_at <= now())
-          ORDER BY dirty_since LIMIT 60`,
+        `SELECT l.task_id, l.clickup_task_id, l.pushed, l.attempts FROM clickup_link l
+          WHERE l.dirty AND NOT l.skipped AND (l.next_try_at IS NULL OR l.next_try_at <= now())
+            AND (l.clickup_task_id IS NOT NULL OR (
+                  NOT EXISTS (SELECT 1 FROM approval_task a
+                               WHERE a.task_id = l.task_id AND a.type = 'wo_acceptance'
+                                 AND (a.status = 'open'
+                                      OR (a.decided_at > now() - $1::interval
+                                          AND EXISTS (SELECT 1 FROM task t WHERE t.id = l.task_id AND t.fields->>'Client Portal Type' = 'Ecotrak'))))
+              AND NOT EXISTS (SELECT 1 FROM task t
+                               WHERE t.id = l.task_id AND t.fields->>'Client Portal Type' = 'Ecotrak'
+                                 AND t.created_at > now() - $1::interval)))
+          ORDER BY l.dirty_since LIMIT 60`,
+        [ACCEPT_GRACE],
       );
       if (links.rows.length === 0) break;
       if (!refreshed && links.rows.some((l) => !l.clickup_task_id)) {

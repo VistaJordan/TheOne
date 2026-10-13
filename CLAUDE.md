@@ -1662,7 +1662,7 @@ keeps the 0074 "no row = on"); 0079 turns `ecotrak` off on existing
 databases. Gates, three deep: `integrationOnNow('ecotrak')` reads the table
 before every run (fail closed), `requireIntegration`, and the client refuses
 even the token while `integrationOn('ecotrak')` is false. Vercel's cron hits
-`/api/webhooks/ecotrak-sync` every 10 minutes (CRON_SECRET) and returns at
+`/api/webhooks/ecotrak-sync` every minute (CRON_SECRET) and returns at
 once while off. A run takes a 5-minute lease on `cmms_connection.run_started_at`,
 re-reads today + yesterday page by page, skips a payload whose sha256 matches
 `cmms_wo_link.last_payload_hash`, MERGES Ecotrak's bag keys over the stored
@@ -1672,6 +1672,22 @@ wiped), logs a `created` row (source ecotrak) or field / status rows `via:
 `cmms_connection.last_run` for the panel (Sync now, last look, errors). Ingest
 still does not dispatch automations. The old `POST /integrations/ecotrak/sync`
 now needs admin/integrations edit (it was any signed-in user).
+
+Acceptance follows Ecotrak (Elise, 2026-10-13, no migration):
+`ecotrakAcceptance(status)` in ingest says waiting (PENDING_SP_ACCEPTANCE /
+UNASSIGNED / REASSIGN), declined (REJECTED / CANCELLED) or accepted
+(anything else). Only a work order created while still waiting raises the
+`wo_acceptance` task; when Ecotrak's status changes, the sync calls
+`settleAcceptanceFromClient` (approvals.ts) after its commit — approved
+"Accepted on Ecotrak" with NO assignee (rule 7.1.3 and the 11.1.1 gate are
+skipped on purpose: the acceptance happened on Ecotrak and cannot be refused
+here) or cancelled "Rejected or cancelled on Ecotrak". The ClickUp runner's
+queue query holds a link with no ClickUp task while the work order's
+acceptance is open, and an Ecotrak work order for `ACCEPT_GRACE` (10 min)
+after its acceptance was decided or after it arrived already accepted, so the
+old Ecotrak → ClickUp integration (fires on the Ecotrak accept, creates the
+task with few details, sends no updates) has made its task before the 0081
+lookup links to it. Updates to an already-linked task are never held.
 
 **ClickUp sync** (migrations 0078 + 0080 + 0081, `services/clickup.ts`, `lib/clickupApi.ts`,
 `lib/clickupValues.ts`, `pages/admin/ClickUpPanel.tsx`, `tests/clickup.test.ts`).

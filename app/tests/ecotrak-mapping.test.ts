@@ -30,7 +30,21 @@ import {
   baseFolderPath,
   encodeGraphPath,
 } from '../apps/api/src/modules/integrations/ecotrak/sharepointPath';
-import { mapPriority } from '../apps/api/src/modules/integrations/ecotrak/ingest';
+import { ecotrakAcceptance, mapPriority } from '../apps/api/src/modules/integrations/ecotrak/ingest';
+
+describe('acceptance answered on Ecotrak (2026-10-13)', () => {
+  it('waits while Ecotrak still waits for us', () => {
+    for (const s of ['PENDING_SP_ACCEPTANCE', 'UNASSIGNED', 'REASSIGN']) expect(ecotrakAcceptance(s)).toBe('waiting');
+  });
+  it('closes as rejected when Ecotrak rejects or cancels', () => {
+    for (const s of ['REJECTED', 'CANCELLED']) expect(ecotrakAcceptance(s)).toBe('declined');
+  });
+  it('accepts on ACCEPTED and on every status that can only follow it', () => {
+    for (const s of ['ACCEPTED', 'ENROUTE', 'ARRIVED', 'PENDING_PARTS', 'SUBMITTING_PROPOSAL', 'PROPOSAL_SUBMITTED', 'SOFT_COMPLETED', 'COMPLETED']) {
+      expect(ecotrakAcceptance(s)).toBe('accepted');
+    }
+  });
+});
 
 /** Statuses observed in the production read, with counts. Sums to 232. */
 const PRODUCTION_STATUSES: Record<string, number> = {

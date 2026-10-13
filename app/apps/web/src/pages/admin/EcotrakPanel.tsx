@@ -57,7 +57,7 @@ export function EcotrakPanel({ canEdit, enabled }: { canEdit: boolean; enabled: 
       )}
       <p className="intg-note">
         {d.enabled
-          ? 'On: The One reads Ecotrak every 10 minutes. It only reads; nothing is changed on Ecotrak.'
+          ? 'On: The One reads Ecotrak every minute. It only reads; nothing is changed on Ecotrak.'
           : 'Off: The One does not contact Ecotrak at all. Turn the switch on to start reading.'}
       </p>
       <div className="cu-stats">
