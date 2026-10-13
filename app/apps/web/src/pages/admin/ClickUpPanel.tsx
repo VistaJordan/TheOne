@@ -157,7 +157,7 @@ export function ClickUpPanel({ canEdit }: { canEdit: boolean }) {
           {d.unmatched_people.length > 0 && (
             <details className="cu-details">
               <summary className="intg-note is-warn">
-                {d.unmatched_people.length} of our people have no ClickUp account with the same email, so they cannot be
+                {d.unmatched_people.length} of our people have no ClickUp account (matched by email, then by full name), so they cannot be
                 set as assignees there
               </summary>
               <p className="intg-note">{d.unmatched_people.join(', ')}</p>

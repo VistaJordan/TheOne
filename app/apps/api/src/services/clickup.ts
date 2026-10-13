@@ -58,7 +58,10 @@ import {
 import {
   fits,
   isBlank,
+  bareName,
+  findOption,
   matchName,
+  personKey,
   sig,
   toCuDate,
   toCuFieldValue,
@@ -121,7 +124,7 @@ export async function clickUpReady(): Promise<boolean> {
 
 // ── What can be sent: our side ───────────────────────────────────────────────
 
-interface Source {
+export interface Source {
   source: string;
   label: string;
   /** text | number | money | date | datetime | select | boolean | users */
@@ -161,8 +164,13 @@ interface Mapping {
   cu_field_id: string | null;
 }
 
+// In the team's ClickUp the task NAME is the client's WO number
+// ("1084067-00000011"); "WO-41017" there is ClickUp's own custom task id,
+// which only ClickUp can assign. So Client WO # names the task (the title,
+// then our WO #, when it is blank) and the title is not sent by default.
 const NATIVE_AUTO: Record<string, ClickUpTarget> = {
-  title: 'name',
+  ext_name: 'name',
+  title: 'none',
   description: 'description',
   status: 'status',
   priority: 'priority',
@@ -170,16 +178,20 @@ const NATIVE_AUTO: Record<string, ClickUpTarget> = {
 };
 
 /** The match by name for a source nobody has chosen for. */
-function autoMapping(s: Source, cuFields: ClickUpFieldDef[], taken: Set<string>): Mapping {
+export function autoMapping(s: Source, cuFields: ClickUpFieldDef[], taken: Set<string>): Mapping {
   const native = NATIVE_AUTO[s.source];
   if (native) return { target: native, cu_field_id: null };
-  const names = new Set([matchName(s.source.replace(/^fields\./, '')), matchName(s.label)]);
-  if (s.source === 'wo_number') ['wo', 'wo number', 'work order number', 'wo no'].forEach((n) => names.add(n));
-  if (s.source === 'ext_name') ['client wo', 'client wo number'].forEach((n) => names.add(n));
-  const hit = cuFields.find((f) => !taken.has(f.id) && names.has(matchName(f.name)) && fits(s.type, f.type));
+  // In order of trust: our key (the old ClickUp name, verbatim), our label,
+  // then the aliases; each exactly first, then without ClickUp's "32." prefix.
+  const names = [matchName(s.source.replace(/^fields\./, '')), matchName(s.label)];
+  if (s.source === 'wo_number') names.push('wo', 'wo number', 'work order number', 'wo no');
+  const free = cuFields.filter((f) => !taken.has(f.id) && fits(s.type, f.type));
+  const hit =
+    names.map((n) => free.find((f) => matchName(f.name) === n)).find(Boolean) ??
+    names.map((n) => free.find((f) => bareName(f.name) === n.replace(/^\d+ /, ''))).find(Boolean);
   if (hit) return { target: 'custom', cu_field_id: hit.id };
   // Our due date with no custom field of that name: ClickUp's own due date.
-  if (names.has('due date') && (s.type === 'date' || s.type === 'datetime')) return { target: 'due_date', cu_field_id: null };
+  if (names.includes('due date') && (s.type === 'date' || s.type === 'datetime')) return { target: 'due_date', cu_field_id: null };
   return { target: 'none', cu_field_id: null };
 }
 
@@ -213,8 +225,16 @@ async function resolveMap(cfg: ConfigRow): Promise<Resolved[]> {
 // ── People ───────────────────────────────────────────────────────────────────
 
 /** Our display name (lower-case) → ClickUp user id, matched by email. */
+/** Our display name (lower-case) → ClickUp user id. By email first; then by
+    full name, because the team's ClickUp emails are often the short form
+    (matt@ where we hold matt.hammond@). A name two members share is not used. */
 async function peopleMap(members: CuMember[]): Promise<{ idByName: Map<string, number>; unmatched: string[] }> {
   const byEmail = new Map(members.filter((m) => m.email).map((m) => [m.email!.toLowerCase(), m.id]));
+  const byPerson = new Map<string, number | null>();
+  for (const m of members) {
+    const k = personKey(m.username);
+    if (k) byPerson.set(k, byPerson.has(k) ? null : m.id);
+  }
   const r = await query<{ display_name: string; email: string | null }>(
     // Invited people count: most are assigned work before they first sign in.
     `SELECT display_name, email FROM principal WHERE kind = 'human' AND status <> 'disabled' ORDER BY display_name`,
@@ -222,7 +242,7 @@ async function peopleMap(members: CuMember[]): Promise<{ idByName: Map<string, n
   const idByName = new Map<string, number>();
   const unmatched: string[] = [];
   for (const p of r.rows) {
-    const id = p.email ? byEmail.get(p.email.toLowerCase()) : undefined;
+    const id = (p.email ? byEmail.get(p.email.toLowerCase()) : undefined) ?? byPerson.get(personKey(p.display_name)) ?? undefined;
     if (id === undefined) unmatched.push(p.display_name);
     else idByName.set(p.display_name.toLowerCase(), id);
   }
@@ -246,8 +266,7 @@ function warningFor(m: Resolved, cfg: ConfigRow, ourStatuses: string[]): string 
   if (m.target === 'custom' && m.cu_field_id) {
     const f = cfg.cu_fields.find((x) => x.id === m.cu_field_id);
     if (f && (f.type === 'drop_down' || f.type === 'labels') && m.options?.length) {
-      const have = new Set((f.options ?? []).map((o) => matchName(o.name)));
-      const missing = m.options.filter((o) => !have.has(matchName(o)));
+      const missing = m.options.filter((o) => !findOption(f.options ?? [], o));
       if (missing.length) return `Not options in ClickUp: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` +${missing.length - 4}` : ''}`;
     }
   }
@@ -503,7 +522,7 @@ function wants(t: TaskRow, map: Resolved[], cfg: ConfigRow, idByName: Map<string
     const raw = rawValue(t, m.source);
     switch (m.target) {
       case 'name':
-        out.set('name', { key: 'name', target: 'name', value: String(isBlank(raw) ? t.wo_number : raw).slice(0, 1000) });
+        out.set('name', { key: 'name', target: 'name', value: String(!isBlank(raw) ? raw : !isBlank(t.title) ? t.title : t.wo_number).slice(0, 1000) });
         break;
       case 'description':
         out.set('description', { key: 'description', target: 'description', value: isBlank(raw) ? '' : String(raw) });
@@ -528,7 +547,7 @@ function wants(t: TaskRow, map: Resolved[], cfg: ConfigRow, idByName: Map<string
           key: 'assignees',
           target: 'assignees',
           value: ids.sort((a, b) => a - b),
-          error: missing.length ? `No ClickUp member for ${missing.join(', ')} (matched by email)` : undefined,
+          error: missing.length ? `No ClickUp member for ${missing.join(', ')} (matched by email or name)` : undefined,
         });
         break;
       }
@@ -564,7 +583,7 @@ class TaskGone extends Error {}
     changes; anything else (network, 5xx, rate limit, auth) is the run's
     problem, not the value's. */
 const valueRefused = (e: unknown): e is ClickUpError =>
-  e instanceof ClickUpError && e.status >= 400 && e.status < 500 && ![401, 404, 429].includes(e.status);
+  e instanceof ClickUpError && e.status >= 400 && e.status < 500 && ![401, 403, 404, 429].includes(e.status);
 
 async function pushOne(link: LinkRow, t: TaskRow, map: Resolved[], cfg: ConfigRow, idByName: Map<string, number>): Promise<{ errors: string[]; pushed: Record<string, unknown>; id: string; url: string | null }> {
   const all = wants(t, map, cfg, idByName);
@@ -839,8 +858,9 @@ async function runOnce(reason: string): Promise<{ pushed: number; note: string }
                     last_error = $4, last_error_at = now() WHERE task_id = $1`,
             [t.id, attempts, String(wait), (e as Error).message.slice(0, 500)],
           );
-          if (e instanceof ClickUpError && e.status === 401) {
-            note = 'ClickUp refused the API token';
+          if (e instanceof ClickUpError && (e.status === 401 || e.status === 403)) {
+            // 403: a view-only token reads the List but may not write tasks.
+            note = e.status === 401 ? 'ClickUp refused the API token' : 'The API token can read ClickUp but not write to it';
             break;
           }
         }

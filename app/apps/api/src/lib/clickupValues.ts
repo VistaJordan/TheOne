@@ -13,8 +13,16 @@ export const matchName = (s: string): string =>
   s
     .normalize('NFKD')
     .toLowerCase()
+    .replace(/#/g, ' number ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+
+/** The same without ClickUp's ordering prefix ("32. Tech Name" → "tech name"),
+    the second-chance match when no field carries the exact name. */
+export const bareName = (s: string): string => matchName(s).replace(/^\d+ /, '');
+
+/** A person's name for matching our display name to a ClickUp username. */
+export const personKey = (s: string | null | undefined): string => (s ?? '').toLowerCase().replace(/[^a-z]/g, '');
 
 export const WRITABLE_CU_TYPES = new Set(CLICKUP_WRITABLE_TYPES);
 
@@ -104,20 +112,27 @@ export type CuValue =
 
 const optionName = (o: { name?: string; label?: string }) => (o.name ?? o.label ?? '').trim();
 
+/** The option for one of our values: same name, else the same name behind
+    ClickUp's ordering prefix ("1. Checked-in" for "Checked-in"). Only the
+    ClickUp side loses its prefix, so "7-Eleven" never reads as "Eleven". */
+export function findOption<O extends { name?: string; label?: string }>(options: O[], value: string): O | undefined {
+  const want = matchName(value);
+  return options.find((o) => matchName(optionName(o)) === want) ?? options.find((o) => bareName(optionName(o)) === want);
+}
+
 /** One of our values for one ClickUp custom field. Users fields return the
     full id list as `value`; the caller turns it into ClickUp's {add, rem}. */
 export function toCuFieldValue(field: ClickUpFieldDef, v: unknown, idByName: Map<string, number>): CuValue {
   if (isBlank(v) || (field.type === 'labels' && splitNames(v).length === 0)) return { kind: 'clear' };
   switch (field.type) {
     case 'drop_down': {
-      const want = matchName(String(v));
-      const opt = (field.options ?? []).find((o) => matchName(optionName(o)) === want);
+      const opt = findOption(field.options ?? [], String(v));
       return opt ? { kind: 'set', value: opt.id } : { kind: 'error', message: `"${String(v)}" is not an option of ClickUp's "${field.name}"` };
     }
     case 'labels': {
       const ids: string[] = [];
       for (const n of splitNames(v)) {
-        const opt = (field.options ?? []).find((o) => matchName(optionName(o)) === matchName(n));
+        const opt = findOption(field.options ?? [], n);
         if (!opt) return { kind: 'error', message: `"${n}" is not a label of ClickUp's "${field.name}"` };
         ids.push(opt.id);
       }
@@ -140,7 +155,7 @@ export function toCuFieldValue(field: ClickUpFieldDef, v: unknown, idByName: Map
     }
     case 'users': {
       const { ids, missing } = userIds(v, idByName);
-      if (missing.length) return { kind: 'error', message: `No ClickUp member for ${missing.join(', ')} (matched by email)` };
+      if (missing.length) return { kind: 'error', message: `No ClickUp member for ${missing.join(', ')} (matched by email or name)` };
       return { kind: 'set', value: ids };
     }
     default:

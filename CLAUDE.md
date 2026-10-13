@@ -1677,8 +1677,13 @@ cache answers "on" before its first refresh and ClickUp ships off; no row =
 off here). Field map: our sources are title / wo_number / ext_name /
 description / status / priority + every field_def; with no saved row a
 source takes the automatic match by name (`matchName` drops case,
-punctuation and emoji — our keys are the old ClickUp names), title → task
-name, Assignee → assignees, Due Date → a custom "Due Date" or else the
+punctuation and emoji — our keys are the old ClickUp names; key before
+label, then without ClickUp's "32." prefix, which dropdown options get too),
+Client WO # (`ext_name`) → task name (in the team's ClickUp the task name IS
+the client's WO number; "WO-41017" there is ClickUp's own custom task id,
+which the API cannot set), title not sent, Assignee → assignees (people
+matched by email, then by full name — their ClickUp emails are the short
+form), a 403 stops the run (view-only token), Due Date → a custom "Due Date" or else the
 native due date. Statuses go through `CLICKUP_STATUS_ALIASES` (the seed's
 STATUS_ALIAS — keep the two in step: "!! approved", "assessment ongoing",
 "done/incurred"…). Dates are Chicago wall time (`wallToInstant` in

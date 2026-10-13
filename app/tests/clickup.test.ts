@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { clickUpFits, type ClickUpFieldDef } from '../packages/shared/src/integrations';
 import { parseListId } from '../apps/api/src/lib/clickupApi';
-import { matchName, splitNames, toCuStatus, toCuDate, toCuFieldValue, toCuPriority, userIds } from '../apps/api/src/lib/clickupValues';
+import { bareName, matchName, splitNames, toCuStatus, toCuDate, toCuFieldValue, toCuPriority, userIds } from '../apps/api/src/lib/clickupValues';
 
 const people = new Map([
   ['jordan brown', 11],
@@ -35,7 +35,9 @@ describe('the List id', () => {
 describe('matching by name', () => {
   it('forgives case, punctuation and the emoji markers', () => {
     expect(matchName('16. Client NTE 🔴')).toBe(matchName('16 client nte'));
-    expect(matchName('WO #')).toBe('wo');
+    expect(matchName('WO #')).toBe('wo number');
+    expect(bareName('32. Tech Name')).toBe(bareName('Tech Name'));
+    expect(bareName('33. Tech Phone #')).toBe('tech phone number');
   });
   it('offers only the ClickUp field types a value fits', () => {
     expect(clickUpFits('money', 'currency')).toBe(true);
@@ -67,6 +69,13 @@ describe('values in ClickUp shapes', () => {
     expect(toCuFieldValue(dd, 'hvac', people)).toEqual({ kind: 'set', value: 'o-2' });
     const miss = toCuFieldValue(dd, 'Roofing', people);
     expect(miss.kind).toBe('error');
+  });
+  it("finds an option behind ClickUp's numbering, never ours", () => {
+    const cico: ClickUpFieldDef = { id: 'c', name: 'Check-in/out status', type: 'drop_down', options: [{ id: 'a', name: '1. Checked-in' }, { id: 'b', name: '3. Checked-out - RTN' }] };
+    expect(toCuFieldValue(cico, 'Checked-in', people)).toEqual({ kind: 'set', value: 'a' });
+    expect(toCuFieldValue(cico, 'Checked-out - RTN', people)).toEqual({ kind: 'set', value: 'b' });
+    const client: ClickUpFieldDef = { id: 'k', name: 'Client', type: 'drop_down', options: [{ id: 'e', name: 'Eleven' }] };
+    expect(toCuFieldValue(client, '7-Eleven', people).kind).toBe('error');
   });
   it('clears an empty value instead of sending it', () => {
     expect(toCuFieldValue(dd, '', people)).toEqual({ kind: 'clear' });
