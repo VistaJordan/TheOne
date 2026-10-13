@@ -86,6 +86,19 @@ export const MONEY_PART: DocPart = {
           since: '0054',
           deferred: ['Needs ANTHROPIC_API_KEY on the server; pricing references from past quotes (vector search) are next.'],
         },
+        {
+          name: 'AI quote draft from an imported transcript',
+          what: 'Import transcript on the quote builder (beside Create quote when there is none, in the header while the quote is a draft) and on the Client quote card ("Draft the quote from a transcript": Choose a file — .txt, .vtt or .srt, the Teams / Zoom / Meet exports — or paste it; Conversation with; They are the…; Import and draft the quote). Caption files lose their header, cue numbers and timings, voice tags become speakers and one speaker\'s consecutive cues join; plain text reads as "Name: what they said". The transcript is kept as a number-less entry in the Calls card ("Transcript imported by …") and the AI quote draft page opens on it and drafts straight away; review and Submit quote are exactly the call path\'s.',
+          value: 'A quote discussed in a Teams meeting, on a recorded site walk or from a personal phone gets the same AI first draft as a Quo call.',
+          rules: [
+            'Needs quotes edit; the button is locked with the work order\'s reason while quoting is closed and hidden once the quote is past draft.',
+            'An empty transcript is refused ("The transcript is empty"); files over 2 MB are refused in the browser.',
+            'An imported transcript cannot be overwritten by Save transcript — import the corrected one instead.',
+          ],
+          permissions: ['quotes edit'],
+          audit: ['call_transcribed (source imported, with the file name)'],
+          since: '0077',
+        },
       ],
     },
     {

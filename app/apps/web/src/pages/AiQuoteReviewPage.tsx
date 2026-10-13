@@ -179,6 +179,8 @@ export function AiQuoteReviewPage() {
 
   const call = data.call;
   const hasTranscript = (call.transcript?.length ?? 0) > 0;
+  /** 0077: imported from the quote — a transcript with no call behind it. */
+  const imported = call.transcript_source === 'imported';
   const quote = data.quote;
   const quoteLocked = quote !== null && quote.status !== 'draft' && quote.status !== 'pending_approval';
 
@@ -215,7 +217,7 @@ export function AiQuoteReviewPage() {
     blocker = generate.isPending ? (
       <div className="wo-state aiq-working">
         <span className="aiq-spinner" aria-hidden="true" />
-        <b>Drafting the quote from the call…</b>
+        <b>Drafting the quote from the {imported ? 'transcript' : 'call'}…</b>
         <span>The AI is reading the transcript, the work order and its contract rates. This usually takes under a minute.</span>
       </div>
     ) : (
@@ -234,15 +236,22 @@ export function AiQuoteReviewPage() {
   const transcriptCard = (
     <section className="card aiq-transcript">
       <div className="card-head">
-        <h2 className="card-title grow">The call</h2>
+        <h2 className="card-title grow">{imported ? 'The transcript' : 'The call'}</h2>
         {call.duration_seconds != null && <span className="card-meta num">{callDuration(call.duration_seconds)}</span>}
       </div>
       <div className="card-pad">
         <p className="aiq-callmeta">
-          {call.placed_by.name} <Icon name="arrow-r" size={12} /> <b>{call.contact_name ?? call.phone}</b>{' '}
+          {imported ? (
+            <>Imported by {call.placed_by.name}{call.contact_name && <> · with <b>{call.contact_name}</b></>}</>
+          ) : (
+            <>{call.placed_by.name} <Icon name="arrow-r" size={12} /> <b>{call.contact_name ?? call.phone}</b></>
+          )}{' '}
           <span className="chip chip-sm">{WO_CALL_CONTACT_LABELS[call.contact_role]}</span>
           <br />
-          <span className="hint">{feedTime(call.created_at)}{call.transcript_source === 'pasted' ? ' · pasted by hand' : ' · from Quo'}</span>
+          <span className="hint">
+            {feedTime(call.created_at)}
+            {imported ? ' · imported transcript' : call.transcript_source === 'pasted' ? ' · pasted by hand' : ' · from Quo'}
+          </span>
         </p>
         {call.summary && call.summary.summary.length > 0 && (
           <ul className="call-sum-list">
@@ -285,7 +294,11 @@ export function AiQuoteReviewPage() {
           <div className="qhead-idline">
             <h1 className="q-title">AI quote draft</h1>
             <span className="q-wo"><span className="q-wo-v">{woNumber}</span></span>
-            <span className="chip chip-accent chip-sm"><Icon name="zap" size={12} />From the call with {call.contact_name ?? call.phone}</span>
+            <span className="chip chip-accent chip-sm"><Icon name="zap" size={12} />
+              {imported
+                ? `From an imported transcript${call.contact_name ? ` with ${call.contact_name}` : ''}`
+                : `From the call with ${call.contact_name ?? call.phone}`}
+            </span>
           </div>
           <div className="qhead-right">
             <span className="autosave">

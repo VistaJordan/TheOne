@@ -2449,6 +2449,7 @@ export function listRoutingLists(): Promise<{ items: RoutingList[] }> {
 
 import type {
   AiQuoteDraftResponse,
+  ImportTranscriptInput,
   PlaceCallResponse,
   QuoteDraftBody,
   WoCall,
@@ -2482,6 +2483,15 @@ export function pasteCallTranscript(idOrNumber: string, callId: string, text: st
   return request(callsPath(idOrNumber, `/${encodeURIComponent(callId)}/transcript`), {
     method: 'POST',
     body: JSON.stringify({ text }),
+  });
+}
+
+/** POST /api/work-orders/:id/transcripts (0077) — a transcript imported from
+    the quote; the AI draft page opens on the returned row. */
+export function importWoTranscript(idOrNumber: string, input: ImportTranscriptInput): Promise<{ call: WoCall }> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/transcripts`, {
+    method: 'POST',
+    body: JSON.stringify(input),
   });
 }
 

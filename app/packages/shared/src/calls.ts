@@ -52,7 +52,8 @@ export interface WoCall {
   placed_by: FeedActor;
   contact_name: string | null;
   contact_role: WoCallContactRole;
-  phone: string;
+  /** Null for an imported transcript (0077): nobody dialled anything. */
+  phone: string | null;
   purpose: WoCallPurpose;
   status: WoCallStatus;
   quo_call_id: string | null;
@@ -61,12 +62,31 @@ export interface WoCall {
   completed_at: string | null;
   duration_seconds: number | null;
   transcript: WoCallTranscriptLine[] | null;
-  transcript_source: 'quo' | 'pasted' | null;
+  /** quo = the webhook; pasted = typed onto a call placed from the work
+   *  order; imported = a conversation held anywhere else, imported from the
+   *  quote (0077) — there is no call behind it. */
+  transcript_source: WoCallTranscriptSource | null;
   summary: WoCallSummary | null;
   created_at: string;
   /** The AI quote draft made from this call, if any. */
   draft: { id: string; status: AiQuoteDraftStatus } | null;
 }
+
+export type WoCallTranscriptSource = 'quo' | 'pasted' | 'imported';
+
+/** POST /work-orders/:id/transcripts — a transcript imported from the quote. */
+export interface ImportTranscriptInput {
+  text: string;
+  /** Who the conversation was with, when the importer says. */
+  contact_name?: string | null;
+  contact_role?: WoCallContactRole;
+  /** The file it came from, for the audit trail; null when pasted. */
+  file_name?: string | null;
+}
+
+/** File types the Import transcript picker offers: plain text and the
+ *  caption formats Teams, Zoom and Meet export. Read in the browser. */
+export const TRANSCRIPT_FILE_ACCEPT = '.txt,.vtt,.srt,.md,text/plain,text/vtt';
 
 export interface WoCallsResponse {
   calls: WoCall[];
@@ -193,6 +213,55 @@ export function parsePastedTranscript(text: string): WoCallTranscriptLine[] {
     }
   }
   return out;
+}
+
+/** A caption cue's timing line: '00:00:01.000 --> 00:00:04.200 align:start'. */
+const CUE_TIME_RE = /^\d{1,2}:\d{2}(?::\d{2})?[.,]\d{1,3}\s*-->\s*\d{1,2}:\d{2}(?::\d{2})?[.,]\d{1,3}.*$/;
+/** WebVTT voice tag: '<v Jane Doe>Hello' (Teams, Zoom). */
+const VOICE_RE = /^<v(?:\.[^\s>]*)?\s+([^>]+)>(.*)$/;
+/** A Teams cue id above the timing: '6d1c…-0/12-0'. */
+const CUE_ID_RE = /^[\w-]+\/[\w-]+$/;
+
+/**
+ * An imported transcript file → lines. A WebVTT or SRT export (Teams, Zoom,
+ * Meet) is stripped of its header, cue numbers, cue ids and timings; its
+ * <v Name> voice tags become speakers, and consecutive cues by the same
+ * speaker are joined into one line. Anything else reads like a pasted
+ * transcript ("Name: what they said").
+ */
+export function parseTranscriptFile(text: string): WoCallTranscriptLine[] {
+  const raw = text.replace(/^﻿/, '');
+  const rows = raw.split(/\r?\n/);
+  const isCaptions = /^WEBVTT/.test(raw.trimStart()) || rows.some((l) => CUE_TIME_RE.test(l.trim()));
+  if (!isCaptions) return parsePastedTranscript(raw);
+
+  const kept: string[] = [];
+  let skipBlock = false;
+  for (const row of rows) {
+    const line = row.trim();
+    if (line === '') {
+      skipBlock = false;
+      continue;
+    }
+    if (skipBlock) continue;
+    // The header and its metadata blocks run to the next blank line.
+    if (/^(WEBVTT|NOTE|STYLE|REGION)\b/.test(line)) {
+      skipBlock = true;
+      continue;
+    }
+    if (/^\d+$/.test(line) || CUE_TIME_RE.test(line) || CUE_ID_RE.test(line)) continue;
+    const v = VOICE_RE.exec(line);
+    const body = (v ? v[2] : line).replace(/<\/?[^>]+>/g, '').trim();
+    if (body === '') continue;
+    kept.push(v ? `${v[1].trim()}: ${body}` : body);
+  }
+  const merged: WoCallTranscriptLine[] = [];
+  for (const l of parsePastedTranscript(kept.join('\n'))) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.speaker === l.speaker) merged[merged.length - 1] = { ...prev, line: `${prev.line} ${l.line}` };
+    else merged.push(l);
+  }
+  return merged;
 }
 
 /** True when the draft has something a quote could be made of: a line item or

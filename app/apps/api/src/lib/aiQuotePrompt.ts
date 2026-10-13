@@ -208,7 +208,11 @@ export function buildUserMessage(
     ratesText,
     '</contract_rates>',
     '',
-    `<call placed_by="${call.placed_by.name}" with="${who || call.phone}" date="${call.created_at.slice(0, 10)}">`,
+    // 0077: an imported transcript has no number — it may be a meeting or a
+    // recorded site walk rather than a phone call; the model reads it the same.
+    call.transcript_source === 'imported'
+      ? `<call source="imported transcript" imported_by="${call.placed_by.name}"${who ? ` with="${who}"` : ''} date="${call.created_at.slice(0, 10)}">`
+      : `<call placed_by="${call.placed_by.name}" with="${who || call.phone || 'unknown'}" date="${call.created_at.slice(0, 10)}">`,
     transcript,
     '</call>',
     ...(quoSummary ? ['', '<quo_call_summary>', quoSummary, '</quo_call_summary>'] : []),

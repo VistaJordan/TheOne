@@ -788,7 +788,16 @@ and submitting also need `quotes` edit (create when the WO has no quote).
 Audit: `call_placed`, `call_completed`, `call_transcribed` (the 'Quo' service
 principal, or the person who pasted), `quote_ai_drafted|redrafted|submitted|
 discarded`. Next: past quotes from the ClickUp import as pricing references
-(vector search) go into `buildUserMessage`.
+(vector search) go into `buildUserMessage`. **Import transcript** (migration
+0077, `components/quote/ImportTranscriptButton.tsx`, on the quote builder and
+the Client quote card): a conversation held outside Quo (Teams / Zoom / Meet
+.vtt or .srt, a .txt, or pasted) → `POST /work-orders/:id/transcripts`
+(`quotes` edit) → a `wo_call` row with **`phone` NULL**, `transcript_source
+'imported'`, purpose `quote`, already `transcribed` (a CHECK allows a NULL
+phone only for imported rows; the webhook matches by number so never sees
+them), parsed by `parseTranscriptFile` in shared, logged `call_transcribed`
+with `source: 'imported'` + `file_name`. The browser then opens the AI draft
+page on it, which drafts straight away; everything after is the call path.
 
 **Sign-off sheets** (migration 0070, `services/signoff.ts`,
 `lib/signoffPdf.ts`, `lib/signoffAssets.ts`, `lib/quoApi.ts`,

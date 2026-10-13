@@ -6,6 +6,7 @@
 //   GET    /work-orders/:id/calls                              the call log
 //   POST   /work-orders/:id/calls                              record + get the tel: link
 //   POST   /work-orders/:id/calls/:callId/transcript           paste a transcript by hand
+//   POST   /work-orders/:id/transcripts                        import one from the quote (0077)
 //   GET    /work-orders/:id/calls/:callId/quote-draft          call + draft + quote state
 //   POST   /work-orders/:id/calls/:callId/quote-draft          (re)draft with Claude
 //   PUT    /work-orders/:id/calls/:callId/quote-draft          save the reviewer's edits
@@ -16,11 +17,11 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { CALL_PERM_KEY, parsePastedTranscript } from '@theone/shared';
+import { CALL_PERM_KEY, parsePastedTranscript, parseTranscriptFile } from '@theone/shared';
 import { notFound, parse } from '../errors.js';
 import { actingPrincipalFromRequest, resolveTaskId } from '../services/activity.js';
 import { requirePerm } from '../services/permissions.js';
-import { getCall, listCalls, pasteTranscript, placeCall } from '../services/woCalls.js';
+import { getCall, importTranscript, listCalls, pasteTranscript, placeCall } from '../services/woCalls.js';
 import { discardDraft, generateDraft, getDraftForCall, saveDraft, submitDraft } from '../services/aiQuote.js';
 import { assertRawMoney } from '../validation.js';
 import { sectionSchema } from './quotes.js';
@@ -44,6 +45,27 @@ const placeSchema = z
   .strict();
 
 const transcriptSchema = z.object({ text: z.string().max(200_000) }).strict();
+
+const importSchema = z
+  .object({
+    text: z.string().max(400_000),
+    contact_name: z
+      .string()
+      .trim()
+      .max(200)
+      .nullable()
+      .optional()
+      .transform((v) => (v ? v : null)),
+    contact_role: z.enum(['tech', 'vendor', 'client', 'other']).default('other'),
+    file_name: z
+      .string()
+      .trim()
+      .max(255)
+      .nullable()
+      .optional()
+      .transform((v) => (v ? v : null)),
+  })
+  .strict();
 
 /** The builder's section tree plus the two free-text fields the AI fills. */
 const draftBodySchema = z
@@ -114,6 +136,27 @@ export default async function callRoutes(app: FastifyInstance): Promise<void> {
     requirePerm(actor, CALL_PERM_KEY, 'create', 'You cannot add a transcript to this call');
     const { text } = parse(transcriptSchema, req.body);
     return { call: await pasteTranscript(taskId, callId, parsePastedTranscript(text), actor) };
+  });
+
+  // 0077 · Import transcript, from the quote: a conversation held outside Quo
+  // becomes a transcribed, number-less "call" the AI draft page works from.
+  // Gated like editing the quote — the import exists only to draft one.
+  app.post('/work-orders/:id/transcripts', async (req, reply) => {
+    const taskId = await taskIdOf(req);
+    const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'quotes', 'edit', 'You cannot draft quotes on this work order');
+    const input = parse(importSchema, req.body);
+    const call = await importTranscript(
+      taskId,
+      {
+        lines: parseTranscriptFile(input.text),
+        contact_name: input.contact_name,
+        contact_role: input.contact_role,
+        file_name: input.file_name,
+      },
+      actor,
+    );
+    return reply.status(201).send({ call });
   });
 
   app.get('/work-orders/:id/calls/:callId/quote-draft', async (req) => {

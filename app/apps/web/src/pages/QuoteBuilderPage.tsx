@@ -37,6 +37,7 @@ import {
 import type { Quote, QuotePermissions, WoActionMap } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { CopyButton } from '../components/CopyButton';
+import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
 import { Icon } from '../components/Icon';
 import { LineItemsTable, AddLineButton } from '../components/quote/LineItemsTable';
 import { MoneyRail } from '../components/quote/MoneyRail';
@@ -368,6 +369,12 @@ export function QuoteBuilderPage() {
             {createMutation.isPending ? 'Creating…' : 'Create quote'}
           </button>
         )}
+        {/* 0077 · or let the AI draft it from a meeting / call transcript. */}
+        <ImportTranscriptButton
+          woNumber={woNumber}
+          size="lg"
+          disabledReason={createBlocked ? blockedReason('quote.create') : null}
+        />
       </div>,
     );
   }
@@ -536,6 +543,8 @@ export function QuoteBuilderPage() {
             )}
           </div>
           <div className="qhead-right">
+            {/* 0077 · redraft from a transcript; Submit on the draft asks before replacing. */}
+            {editable && <ImportTranscriptButton woNumber={quote.wo_number} />}
             <AutosaveChip
               editable={editable}
               saving={saveMutation.isPending}

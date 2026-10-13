@@ -86,16 +86,18 @@ function CallRow({ call, woId, woNumber }: { call: WoCall; woId: string; woNumbe
   const lines = call.transcript ?? [];
   const shown = expanded ? lines : lines.slice(0, PREVIEW_LINES);
   const hidden = Math.max(0, lines.length - PREVIEW_LINES);
-  const canPaste = can(CALL_PERM_KEY, 'create') && call.transcript_source !== 'quo';
+  // 0077: an imported transcript has no call behind it — no number, no paste.
+  const imported = call.transcript_source === 'imported';
+  const canPaste = can(CALL_PERM_KEY, 'create') && call.transcript_source !== 'quo' && !imported;
   const canDraft = can('quotes', 'edit') && lines.length > 0;
   const draftHref = `/work-orders/${encodeURIComponent(woNumber)}/calls/${call.id}/quote`;
-  const who = call.contact_name ?? call.phone;
+  const who = call.contact_name ?? call.phone ?? 'Imported transcript';
 
   return (
     <li className={`call-row${call.purpose === 'quote' ? ' is-quote' : ''}`}>
       <div className="call">
         <span className="call-ic" aria-hidden="true">
-          <Icon name="phone-out" size={18} />
+          <Icon name={imported ? 'upload' : 'phone-out'} size={18} />
         </span>
         <div className="call-body">
           <div className="call-head">
@@ -119,7 +121,11 @@ function CallRow({ call, woId, woNumber }: { call: WoCall; woId: string; woNumbe
             <time className="msg-time" dateTime={call.created_at}>{feedTime(call.created_at)}</time>
           </div>
           <div className="call-meta">
-            {call.placed_by.name} <Icon name="arrow-r" size={12} /> <span className="mono">{call.phone}</span>
+            {imported ? (
+              <>Transcript imported by {call.placed_by.name}</>
+            ) : (
+              <>{call.placed_by.name} <Icon name="arrow-r" size={12} /> <span className="mono">{call.phone}</span></>
+            )}
             {call.transcript_source === 'pasted' && <span> · transcript pasted by hand</span>}
           </div>
 

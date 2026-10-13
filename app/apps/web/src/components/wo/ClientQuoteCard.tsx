@@ -4,6 +4,7 @@ import type { WorkOrderDetailV2, QuoteStatus } from '../../api/client';
 import { FIELD, field, str } from '../../lib/fields';
 import { QUOTE_STATUS } from '../quote/QuoteStatusPill';
 import { QuoteDecision } from '../quote/QuoteDecision';
+import { ImportTranscriptButton } from '../quote/ImportTranscriptButton';
 import { Icon } from '../Icon';
 import { useAuth } from '../../auth/AuthProvider';
 import { InlineField } from './fieldEdit';
@@ -70,6 +71,13 @@ export function ClientQuoteCard({ wo, quoteStatus, quote }: ClientQuoteCardProps
               <Icon name="file" size={12} />
               {quoteStatus === null ? 'Create quote' : 'Open quote'}
             </Link>
+          )}
+          {/* 0077 · draft the quote from a meeting / call transcript — while
+              there is none yet, or it is still a draft. */}
+          {(quoteStatus === null
+            ? !wo.actions || wo.actions['quote.create'].allowed
+            : quoteStatus === 'draft' && (!wo.actions || wo.actions['quote.edit'].allowed)) && (
+            <ImportTranscriptButton woNumber={wo.wo_number} />
           )}
           {quoteStatus !== null && (
             <span className="chip chip-sm">{QUOTE_STATUS[quoteStatus]?.label ?? quoteStatus}</span>

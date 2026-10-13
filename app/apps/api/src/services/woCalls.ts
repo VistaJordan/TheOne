@@ -32,6 +32,7 @@ import type {
   WoCallPurpose,
   WoCallSummary,
   WoCallTranscriptLine,
+  WoCallTranscriptSource,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import type { Queryable } from '../db.js';
@@ -49,7 +50,7 @@ type CallRow = {
   placed_by_kind: 'human' | 'service';
   contact_name: string | null;
   contact_role: WoCallContactRole;
-  phone: string;
+  phone: string | null;
   purpose: WoCallPurpose;
   status: StoredStatus;
   quo_call_id: string | null;
@@ -58,7 +59,7 @@ type CallRow = {
   completed_at: Date | null;
   duration_seconds: number | null;
   transcript: WoCallTranscriptLine[] | null;
-  transcript_source: 'quo' | 'pasted' | null;
+  transcript_source: WoCallTranscriptSource | null;
   summary: WoCallSummary | null;
   created_at: Date;
   draft_id: string | null;
@@ -162,6 +163,9 @@ export async function pasteTranscript(
   if (call.transcript_source === 'quo') {
     throw badRequest('Quo already sent the transcript for this call');
   }
+  if (call.transcript_source === 'imported') {
+    throw badRequest('This transcript was imported — import the corrected one from the quote instead');
+  }
   if (lines.length === 0) throw badRequest('The transcript is empty', { field: 'text' });
   await withTransaction(async (tx) => {
     await tx.query(
@@ -176,6 +180,44 @@ export async function pasteTranscript(
     });
   });
   return getCall(taskId, callId);
+}
+
+export interface ImportTranscriptArgs {
+  lines: WoCallTranscriptLine[];
+  contact_name: string | null;
+  contact_role: WoCallContactRole;
+  file_name: string | null;
+}
+
+/** 0077 · A conversation held anywhere else (Teams, Zoom, a recorded site
+    walk), imported from the quote to draft one. Stored as a wo_call row with
+    no number — already transcribed, purpose 'quote' — so the AI draft page
+    and Submit quote treat it exactly like a call's transcript. */
+export async function importTranscript(
+  taskId: string,
+  input: ImportTranscriptArgs,
+  actor: ActingPrincipal,
+): Promise<WoCall> {
+  if (input.lines.length === 0) throw badRequest('The transcript is empty', { field: 'text' });
+  const id = await withTransaction(async (tx) => {
+    const ins = await tx.query<{ id: string }>(
+      `INSERT INTO wo_call (task_id, placed_by, contact_name, contact_role, phone, purpose,
+                            status, transcript, transcript_source)
+       VALUES ($1, $2, $3, $4, NULL, 'quote', 'transcribed', $5::jsonb, 'imported')
+       RETURNING id::text AS id`,
+      [taskId, actor.id, input.contact_name, input.contact_role, JSON.stringify(input.lines)],
+    );
+    const callId = ins.rows[0].id;
+    await logCall(tx, actor.id, taskId, 'call_transcribed', {
+      call_id: callId,
+      source: 'imported',
+      file_name: input.file_name,
+      contact_name: input.contact_name,
+      lines: input.lines.length,
+    });
+    return callId;
+  });
+  return getCall(taskId, id);
 }
 
 // ── The Quo webhook ──────────────────────────────────────────────────────────
