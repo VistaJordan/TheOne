@@ -164,7 +164,7 @@ export const ADMIN_PART: DocPart = {
         },
         {
           name: 'Quo, Claude, Outgoing email, Escalation emails, SharePoint, File storage, Microsoft sign-in',
-          what: 'Quo: calls, transcripts and summaries by webhook (signature verified), texts through the API from the Quo line. Claude: the AI quote draft and the assistant. Outgoing email: client updates through Microsoft Graph (the mailbox needs the Mail.Send application permission) or Resend. Escalation emails: the mailbox webhook that flags a work order Escalated. SharePoint: the folder tree through Graph. File storage: the private Vercel Blob store behind photos, documents and sheets. Microsoft sign-in: the platform\'s sign-in, always on.',
+          what: 'Quo: calls, transcripts and summaries by webhook (signature verified), texts through the API from the Quo line. Claude: the AI quote draft and the assistant. Outgoing email: client updates from contact@seamlessfm.com through Gmail (Google Workspace: a service account allowed by domain-wide delegation to send as the mailbox with the gmail.send scope); Microsoft Graph and Resend remain as alternatives. Escalation emails: the mailbox webhook that flags a work order Escalated. SharePoint: the folder tree through Graph. File storage: the private Vercel Blob store behind photos, documents and sheets. Microsoft sign-in: the platform\'s sign-in, always on.',
           value: 'Each is one switch and one credential set, and the page says which credentials are present.',
         },
         {

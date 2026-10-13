@@ -134,11 +134,11 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     key: 'email',
     name: 'Outgoing email',
-    vendor: 'Microsoft 365 or Resend',
+    vendor: 'Gmail (Google Workspace)',
     group: 'communications',
-    summary: 'Client Updates sent by email from the shared mailbox.',
+    summary: 'Client Updates sent by email from the shared mailbox contact@seamlessfm.com, through Gmail.',
     off_means: 'Scheduled and one-off sends fail with a clear reason and nothing is queued to go out later.',
-    logo: 'outlook.png',
+    logo: 'gmail.png',
     built: true,
   },
   {

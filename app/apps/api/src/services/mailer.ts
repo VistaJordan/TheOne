@@ -1,8 +1,11 @@
 // Outbound email (0055) — the first thing in the app that sends mail.
 //
-// One port, two providers, both plain fetch (no SDK, nothing extra for the
+// One port, three providers, all plain fetch (no SDK, nothing extra for the
 // Vercel bundle):
 //
+//   gmail   Gmail as MAIL_FROM (contact@seamlessfm.com is on Google
+//           Workspace): a service account with domain-wide delegation and the
+//           gmail.send scope — lib/gmail.ts.
 //   graph   Microsoft Graph `POST /users/{from}/sendMail`, app-only token by
 //           client credentials. The mailbox is MAIL_FROM (contact@
 //           seamlessfm.com), so the sent copy lands in its Sent Items. Needs
@@ -16,6 +19,7 @@
 import type { MailStatus } from '@theone/shared';
 import { config } from '../config.js';
 import { integrationOn } from './integrations.js';
+import { sendViaGmail } from '../lib/gmail.js';
 
 export interface MailAttachment {
   filename: string;
@@ -34,7 +38,7 @@ export interface OutboundEmail {
 }
 
 export interface SentEmail {
-  provider: 'graph' | 'resend';
+  provider: 'gmail' | 'graph' | 'resend';
   messageId: string | null;
 }
 
@@ -58,6 +62,21 @@ export async function sendEmail(msg: OutboundEmail): Promise<SentEmail> {
   if (msg.to.length === 0) throw new Error('An email needs at least one recipient');
   if (!integrationOn('email')) throw new MailNotConfiguredError('off');
   switch (config.mail.provider) {
+    case 'gmail': {
+      if (!config.mail.gmail) throw new MailNotConfiguredError();
+      const r = await sendViaGmail(config.mail.gmail, {
+        from: config.mail.from,
+        fromName: config.mail.fromName,
+        replyTo: config.mail.replyTo,
+        to: msg.to,
+        cc: msg.cc,
+        subject: msg.subject,
+        html: msg.html,
+        text: msg.text,
+        attachments: msg.attachments ?? [],
+      });
+      return { provider: 'gmail', messageId: r.messageId };
+    }
     case 'graph':
       return sendViaGraph(msg);
     case 'resend':

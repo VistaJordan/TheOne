@@ -454,6 +454,11 @@ export const ACTION_LABELS: Record<string, string> = {
   view_deleted: 'View deleted',
   work_orders_exported: 'Work orders exported',
   audit_log_exported: 'Audit log exported',
+  // Admin › Integrations (0074): every switch flip; ClickUp's setup (0078).
+  integration_turned_on: 'Integration turned on',
+  integration_turned_off: 'Integration turned off',
+  clickup_list_set: 'ClickUp List chosen',
+  clickup_map_updated: 'ClickUp field map changed',
   // Rule 7.3.2: the email tool's escalations (api/services/escalations.ts).
   escalation_received: 'Escalation received by email',
   escalation_unmatched: 'Escalation email for an unknown work order',
@@ -489,6 +494,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   vendor: 'Vendor',
   vendor_setting: 'Vendor settings',
   preferred_vendor: 'Preferred vendor',
+  integration: 'Integration',
 };
 
 export function entityLabel(entityType: string): string {
@@ -513,6 +519,9 @@ const SNAPSHOT_KEYS: Record<string, string> = {
   email: 'Email',
   role: 'Role',
   status: 'Status',
+  list_id: 'List id',
+  list_name: 'List',
+  map: 'Field map',
   is_super_admin: 'Super admin',
   enabled: 'Enabled',
   entity: 'Applies to',

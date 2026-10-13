@@ -11,6 +11,7 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { gmailCredentialsFromEnv, type GmailCredentials } from './lib/gmail.js';
 
 // Node 24 built-in; loads app/.env into process.env if the file exists. Values
 // already in the real environment win, so a deployed process is never
@@ -118,11 +119,15 @@ export interface Config {
 }
 
 export interface MailConfig {
-  /** MAIL_PROVIDER: 'graph' = Microsoft Graph sendMail as MAIL_FROM (needs the
-      app registration to hold the Mail.Send application permission);
-      'resend' = the Resend API (RESEND_API_KEY). Unset = Resend when its key is
-      present, else nothing. */
-  provider: 'graph' | 'resend' | null;
+  /** MAIL_PROVIDER: 'gmail' = Gmail as MAIL_FROM through a Google service
+      account with domain-wide delegation (GMAIL_SERVICE_ACCOUNT_JSON, or
+      GMAIL_SERVICE_ACCOUNT_EMAIL + GMAIL_PRIVATE_KEY) — the team's mailbox is
+      on Google Workspace; 'graph' = Microsoft Graph sendMail as MAIL_FROM
+      (needs the Mail.Send application permission); 'resend' = the Resend API
+      (RESEND_API_KEY). Unset = Gmail when its credentials are present, else
+      Resend when its key is, else nothing. */
+  provider: 'gmail' | 'graph' | 'resend' | null;
+  gmail: GmailCredentials | null;
   from: string;
   fromName: string;
   replyTo: string | null;
@@ -141,14 +146,17 @@ function buildMail(entra: EntraConfig | null, demoMode: boolean): MailConfig {
   const clientId = str('MAIL_GRAPH_CLIENT_ID') ?? entra?.clientId;
   const clientSecret = str('MAIL_GRAPH_CLIENT_SECRET') ?? entra?.clientSecret;
   const graph = tenantId && clientId && clientSecret ? { tenantId, clientId, clientSecret } : null;
+  const gmail = gmailCredentialsFromEnv();
   const want = (str('MAIL_PROVIDER') ?? '').toLowerCase();
   let provider: MailConfig['provider'] = null;
-  if (want === 'graph') provider = graph ? 'graph' : null;
+  if (want === 'gmail') provider = gmail ? 'gmail' : null;
+  else if (want === 'graph') provider = graph ? 'graph' : null;
   else if (want === 'resend') provider = resendApiKey ? 'resend' : null;
+  else if (want === '' && gmail) provider = 'gmail';
   else if (want === '' && resendApiKey) provider = 'resend';
   // The public demo runs on seed data; it must never mail a real address.
   if (demoMode) provider = null;
-  return { provider, from, fromName, replyTo, resendApiKey, graph };
+  return { provider, from, fromName, replyTo, resendApiKey, graph, gmail };
 }
 
 function buildAssistant(): Config['assistant'] {

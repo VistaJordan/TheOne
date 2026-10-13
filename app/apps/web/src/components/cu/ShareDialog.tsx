@@ -152,7 +152,7 @@ function MailBanner({ mail }: { mail: MailStatus | undefined }) {
     <p className="cu-banner" role="status">
       <Icon name="alert-circle" size={14} />
       Email is not switched on for this site yet, so Send will not go out. An admin sets the mail provider on the
-      server (Microsoft 365 for {mail.from}); preview and the client link work today.
+      server (Gmail for {mail.from}); preview and the client link work today.
     </p>
   );
 }

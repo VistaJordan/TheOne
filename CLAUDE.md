@@ -1411,7 +1411,14 @@ AppShell, no session; `authGuard` allows exactly
 `/api/public/client-updates/<token>(/csv)` by pattern; revocable,
 regenerable, optional expiry, `share_origin` remembers the site so cron
 emails carry the right link), and **email** from `MAIL_FROM` (default
-contact@seamlessfm.com) through `services/mailer.ts` — `MAIL_PROVIDER=graph`
+contact@seamlessfm.com) through `services/mailer.ts` — **`MAIL_PROVIDER=gmail`**
+(the mailbox is on Google Workspace, not Microsoft 365 — Elise 2026-10-13;
+`lib/gmail.ts`: a Google service account signs an RS256 JWT with `sub` =
+the mailbox and the `gmail.send` scope, which needs Domain-wide delegation
+for its client id in the Workspace admin console; key in
+`GMAIL_SERVICE_ACCOUNT_JSON` or `GMAIL_SERVICE_ACCOUNT_EMAIL` +
+`GMAIL_PRIVATE_KEY`; one base64url MIME message to `users/me/messages/send`;
+unset MAIL_PROVIDER picks Gmail when its key is present), or `graph`
 (Graph sendMail as that mailbox; the app registration needs the **Mail.Send
 application permission** with admin consent; creds `MAIL_GRAPH_*` fall back
 to `ENTRA_*`) or `resend` (`RESEND_API_KEY`); unset = not configured, the

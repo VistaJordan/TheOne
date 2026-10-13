@@ -193,6 +193,7 @@ const ENTITY_LABELS: Record<string, string> = {
   fm_cico_method: 'Check-in method',
   saved_view: 'Saved view',
   export: 'Export',
+  integration: 'Integration',
 };
 
 /** Admin rows hold whole snapshots; the CSV lists only the keys that changed,

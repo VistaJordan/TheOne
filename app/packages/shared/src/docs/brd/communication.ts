@@ -120,7 +120,7 @@ export const COMMUNICATION_PART: DocPart = {
           rules: ['A send with no recipients, or with email not switched on, records a failed delivery; every real send also writes client_update_sent on each work order in it (a chase for the approval follow-up).'],
           permissions: ['client_updates/share edit'],
           audit: ['client_update_sent', 'client_update_test_sent', 'client_update_send_failed', 'client_update_link_enabled', 'client_update_link_disabled', 'client_update_link_regenerated', 'client_update_link_updated'],
-          deferred: ['Outgoing email needs a mail provider (Graph with Mail.Send, or Resend) and the Outgoing email integration on.'],
+          deferred: ['Outgoing email needs a mail provider (Gmail through a Google service account with domain-wide delegation — the team mailbox is on Google Workspace; Graph or Resend also work) and the Outgoing email integration on.'],
         },
         {
           name: 'What the client sees',

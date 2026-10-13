@@ -162,8 +162,8 @@ async function configuredOf(key: IntegrationKey): Promise<Configured> {
         : { configured: false, note: 'ANTHROPIC_API_KEY is not set on the server.' };
     case 'email':
       return config.mail.provider
-        ? { configured: true, note: `${config.mail.provider === 'graph' ? 'Microsoft 365' : 'Resend'} · from ${config.mail.from}.` }
-        : { configured: false, note: 'No mail provider set (MAIL_PROVIDER with its credentials).' };
+        ? { configured: true, note: `${({ gmail: 'Gmail (Google Workspace)', graph: 'Microsoft 365', resend: 'Resend' } as const)[config.mail.provider]} · from ${config.mail.from}.` }
+        : { configured: false, note: `No mail provider set: MAIL_PROVIDER=gmail with GMAIL_SERVICE_ACCOUNT_JSON (a Google service account allowed to send as ${config.mail.from}).` };
     case 'email_escalations':
       return config.escalationWebhookSecret
         ? { configured: true, note: 'Webhook secret set · POST /api/webhooks/email-escalation.' }

@@ -178,7 +178,7 @@ export interface ClientUpdatesResponse {
 
 export interface MailStatus {
   configured: boolean;
-  provider: 'graph' | 'resend' | null;
+  provider: 'gmail' | 'graph' | 'resend' | null;
   from: string;
 }
 
