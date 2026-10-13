@@ -168,7 +168,8 @@ export function ClickUpPanel({ canEdit }: { canEdit: boolean }) {
             />
             <span>
               Look for the work order in ClickUp before creating it (tasks created in the last {d.dedupe_days > 0 ? d.dedupe_days : 30} days,
-              by name or Ecotrak ID). Keeps the old Ecotrak → ClickUp integration from causing duplicates.
+              by name or Ecotrak ID). Found: it is linked to that task; not found: it is created. A new work order waits a
+              minute before going to ClickUp while this is on.
             </span>
           </label>
 

@@ -1711,10 +1711,13 @@ onto it. The lookup is local: `clickup_recent_task` is topped up once a run
 before the first creation (`GET /team/{team_id}/task?date_created_gt=…&
 space_ids[]=…`, 100 a page; the first fill reads the whole window) and
 pruned past the window; if the top-up fails, creations wait
-(`DedupeNotReady`) rather than risk a duplicate. Work orders typed in by
-hand have no Client WO # / Ecotrak ID, so they are always created. A race
-remains: if The One sends first and the old integration creates later, both
-exist. **One-way** (Elise 2026-10-13:
+(`DedupeNotReady`) rather than risk a duplicate. While the check is on, a
+new work order is created only once it is `CREATE_WAIT_SECONDS` (60, Elise;
+env `CLICKUP_CREATE_WAIT_SECONDS` for tests) old — the minute cron creates
+it; updates never wait. Work orders typed in by
+hand have no Client WO # / Ecotrak ID, so they are always created. A task
+made elsewhere more than a minute after the work order arrived here is not
+caught. **One-way** (Elise 2026-10-13:
 "The One is the source of truth"): nothing is read back but the List's
 vocabulary (fields + options, statuses, workspace members), so an edit made
 in ClickUp is overwritten by the next change here. This lifts the July

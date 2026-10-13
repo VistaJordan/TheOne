@@ -514,6 +514,13 @@ export async function syncClickUpNow(user: Admin): Promise<ClickUpOverview> {
 // ── The runner ───────────────────────────────────────────────────────────────
 
 const CALL_BUDGET = 80; // of ClickUp's 100 a minute
+
+/** While the duplicate check is on, a new work order is created in ClickUp
+    only once it is this old (Elise, 2026-10-13: one minute), so a task
+    another integration makes for it in that minute is found, not doubled.
+    The minute cron picks it up; updates to linked tasks never wait.
+    CLICKUP_CREATE_WAIT_SECONDS overrides it (tests). */
+const CREATE_WAIT_SECONDS = Math.max(0, Number(process.env.CLICKUP_CREATE_WAIT_SECONDS ?? 60) || 0);
 const TIME_BUDGET_MS = 45_000;
 const BACKOFF_MIN = [1, 2, 5, 15, 60];
 /** Ecotrak acceptance · how long an accepted Ecotrak work order waits before ClickUp is
@@ -983,19 +990,22 @@ async function runOnce(reason: string): Promise<{ pushed: number; note: string }
       // the acceptance on Ecotrak — has made its task before the 0081 lookup
       // runs. Updates to a task already linked are never held.
       const links = await query<LinkRow>(
-        `SELECT l.task_id, l.clickup_task_id, l.pushed, l.attempts FROM clickup_link l
+        // Every work order also waits CREATE_WAIT_SECONDS ($2, one minute)
+        // while the duplicate check is on, so a task made for it elsewhere in
+        // that minute is found.
+        `SELECT l.task_id, l.clickup_task_id, l.pushed, l.attempts
+           FROM clickup_link l JOIN task t ON t.id = l.task_id
           WHERE l.dirty AND NOT l.skipped AND (l.next_try_at IS NULL OR l.next_try_at <= now())
             AND (l.clickup_task_id IS NOT NULL OR (
                   NOT EXISTS (SELECT 1 FROM approval_task a
                                WHERE a.task_id = l.task_id AND a.type = 'wo_acceptance'
                                  AND (a.status = 'open'
                                       OR (a.decided_at > now() - $1::interval
-                                          AND EXISTS (SELECT 1 FROM task t WHERE t.id = l.task_id AND t.fields->>'Client Portal Type' = 'Ecotrak'))))
-              AND NOT EXISTS (SELECT 1 FROM task t
-                               WHERE t.id = l.task_id AND t.fields->>'Client Portal Type' = 'Ecotrak'
-                                 AND t.created_at > now() - $1::interval)))
+                                          AND t.fields->>'Client Portal Type' = 'Ecotrak')))
+              AND NOT (COALESCE(t.fields->>'Client Portal Type', '') = 'Ecotrak' AND t.created_at > now() - $1::interval)
+              AND ($2::int = 0 OR t.created_at <= now() - make_interval(secs => $2::int))))
           ORDER BY l.dirty_since LIMIT 60`,
-        [ACCEPT_GRACE],
+        [ACCEPT_GRACE, fresh.dedupe_days > 0 ? CREATE_WAIT_SECONDS : 0],
       );
       if (links.rows.length === 0) break;
       if (!refreshed && links.rows.some((l) => !l.clickup_task_id)) {
