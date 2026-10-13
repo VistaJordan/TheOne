@@ -144,11 +144,11 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     key: 'email_escalations',
     name: 'Escalation emails',
-    vendor: 'Mailbox webhook',
+    vendor: 'Gmail (Google Workspace) mailbox',
     group: 'communications',
-    summary: 'An email forwarded to the webhook marks its work order as Escalated and pins it in the inbox (rule 7.3.2).',
+    summary: 'An email forwarded from the Gmail mailbox to the webhook marks its work order as Escalated and pins it in the inbox (rule 7.3.2).',
     off_means: 'The webhook refuses every email until it is back on; nothing is marked.',
-    logo: 'outlook.png',
+    logo: 'gmail.png',
     built: true,
   },
   {
