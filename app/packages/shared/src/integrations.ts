@@ -117,7 +117,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     vendor: 'ClickUp',
     group: 'team',
     summary: "Every new work order is created in the team's ClickUp List, and every change made in The One (status, cost, any mapped field) follows it there. One-way: The One is the source of truth.",
-    off_means: 'Nothing is sent. Changes made while it is off are sent when it is turned back on; work orders created while it is off are sent too.',
+    off_means: 'Nothing is sent, and what happens while it is off is skipped for good: turning it back on carries on from that moment. Work orders received while it is off are never created in ClickUp.',
     logo: 'clickup.png',
     built: true,
   },
@@ -320,7 +320,8 @@ export interface ClickUpOverview {
   sync_from: string | null;
   last_run_at: string | null;
   last_run_note: string | null;
-  counts: { linked: number; waiting: number; failing: number };
+  /** skipped = arrived while the switch was off: never sent (0080). */
+  counts: { linked: number; waiting: number; skipped: number; failing: number };
   problems: ClickUpProblem[];
   cu_fields: ClickUpFieldDef[];
   /** Our statuses ClickUp's List does not have (a push to them fails). */

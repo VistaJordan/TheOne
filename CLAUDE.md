@@ -1673,12 +1673,18 @@ wiped), logs a `created` row (source ecotrak) or field / status rows `via:
 still does not dispatch automations. The old `POST /integrations/ecotrak/sync`
 now needs admin/integrations edit (it was any signed-in user).
 
-**ClickUp sync** (migration 0078, `services/clickup.ts`, `lib/clickupApi.ts`,
+**ClickUp sync** (migrations 0078 + 0080, `services/clickup.ts`, `lib/clickupApi.ts`,
 `lib/clickupValues.ts`, `pages/admin/ClickUpPanel.tsx`, `tests/clickup.test.ts`).
 Every work order created after the ClickUp switch was FIRST turned on
 (`clickup_config.sync_from`; today's mock data never goes) becomes a task in
 the List pasted on the ClickUp panel under its row in Admin › Integrations,
-and every change made in The One follows it. **One-way** (Elise 2026-10-13:
+and every change made in The One follows it. **Off skips for good** (0080,
+Elise 2026-10-13): turning the switch on stamps `resumed_at` and runs
+`clickUpSwitchedOn` — every linked task's `pushed` becomes its current
+values with no ClickUp call, the cursor jumps to the newest activity row, and
+work orders created while it was off get a `skipped` link (never created,
+never marked dirty); `needs_baseline` makes the runner redo it if the call
+from the switch failed. **One-way** (Elise 2026-10-13:
 "The One is the source of truth"): nothing is read back but the List's
 vocabulary (fields + options, statuses, workspace members), so an edit made
 in ClickUp is overwritten by the next change here. This lifts the July

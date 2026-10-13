@@ -131,6 +131,11 @@ export function ClickUpPanel({ canEdit }: { canEdit: boolean }) {
             <span><b>{d.counts.linked}</b> in ClickUp</span>
             <span><b>{d.counts.waiting}</b> waiting</span>
             <span className={d.counts.failing ? 'is-warn' : ''}><b>{d.counts.failing}</b> with a problem</span>
+            {d.counts.skipped > 0 && (
+              <span title="Received while ClickUp was switched off: never sent">
+                <b>{d.counts.skipped}</b> skipped while off
+              </span>
+            )}
             <span className="cu-run">
               Last run {when(d.last_run_at)}
               {d.last_run_note ? ` · ${d.last_run_note}` : ''}
@@ -145,7 +150,8 @@ export function ClickUpPanel({ canEdit }: { canEdit: boolean }) {
             {d.sync_from
               ? `Sending every work order created since ${when(d.sync_from)}, and every change made to them.`
               : 'Nothing has been sent yet. Work orders created after you turn it on are sent; the ones already here are not.'}{' '}
-            One-way: a change made in ClickUp is overwritten by the next change here.
+            One-way: a change made in ClickUp is overwritten by the next change here. While the switch is off nothing
+            is sent, and nothing done in that time is sent later.
           </p>
 
           {d.missing_statuses.length > 0 && (

@@ -88,6 +88,8 @@ interface ConfigRow {
   fetched_at: Date | string | null;
   sync_from: Date | string | null;
   cursor_log_id: string | number;
+  resumed_at: Date | string | null;
+  needs_baseline: boolean;
   last_run_at: Date | string | null;
   last_run_note: string | null;
 }
@@ -279,9 +281,10 @@ export async function clickUpOverview(user: Admin): Promise<ClickUpOverview> {
   const cfg = await getConfig();
   const [map, counts, problems, statuses, people] = await Promise.all([
     resolveMap(cfg),
-    query<{ linked: string; waiting: string; failing: string }>(
+    query<{ linked: string; waiting: string; skipped: string; failing: string }>(
       `SELECT count(*) FILTER (WHERE clickup_task_id IS NOT NULL) AS linked,
-              count(*) FILTER (WHERE dirty) AS waiting,
+              count(*) FILTER (WHERE dirty AND NOT skipped) AS waiting,
+              count(*) FILTER (WHERE skipped) AS skipped,
               count(*) FILTER (WHERE last_error IS NOT NULL) AS failing
          FROM clickup_link`,
     ),
@@ -313,7 +316,12 @@ export async function clickUpOverview(user: Admin): Promise<ClickUpOverview> {
     sync_from: iso(cfg.sync_from),
     last_run_at: iso(cfg.last_run_at),
     last_run_note: cfg.last_run_note,
-    counts: { linked: Number(c?.linked ?? 0), waiting: Number(c?.waiting ?? 0), failing: Number(c?.failing ?? 0) },
+    counts: {
+      linked: Number(c?.linked ?? 0),
+      waiting: Number(c?.waiting ?? 0),
+      skipped: Number(c?.skipped ?? 0),
+      failing: Number(c?.failing ?? 0),
+    },
     problems: problems.rows.map((p) => ({
       task_id: p.task_id,
       wo_number: p.wo_number,
@@ -739,6 +747,49 @@ async function pushOne(link: LinkRow, t: TaskRow, map: Resolved[], cfg: ConfigRo
 }
 
 /** Phase 1: link new work orders, mark changed ones. */
+/** 0080 · the switch went on: what happened while it was off is skipped
+    for good. Everything as it stands now counts as sent — each linked task's
+    `pushed` becomes its current values (no ClickUp call), the cursor jumps
+    to the newest activity row, and work orders that arrived while it was off
+    get a skipped link so they are never created in ClickUp. Called from the
+    switch itself (services/integrations.ts) and, as a fallback, by the
+    runner while `needs_baseline` is still raised. */
+export async function clickUpSwitchedOn(): Promise<void> {
+  const cfg = await getConfig();
+  const max = Number((await query<{ m: string | null }>(`SELECT max(id)::text AS m FROM activity_log`)).rows[0]?.m ?? 0);
+  if (!cfg.sync_from) {
+    // The first time ever: from now on, and nothing before.
+    await query(`UPDATE clickup_config SET sync_from = now(), cursor_log_id = $1, needs_baseline = false WHERE id = 1`, [max]);
+    return;
+  }
+  const resumed = cfg.resumed_at ?? new Date();
+  await query(
+    `INSERT INTO clickup_link (task_id, skipped, dirty)
+     SELECT t.id, true, false FROM task t
+      WHERE t.created_at >= $1 AND t.created_at < $2
+        AND NOT EXISTS (SELECT 1 FROM clickup_link l WHERE l.task_id = t.id)
+     ON CONFLICT (task_id) DO NOTHING`,
+    [cfg.sync_from, resumed],
+  );
+  const [map, people] = await Promise.all([resolveMap(cfg), peopleMap(cfg.cu_members)]);
+  const rows = await query<TaskRow & { clickup_task_id: string }>(
+    `SELECT t.id, t.wo_number, t.ext_name, t.title, t.description, t.priority, t.fields, s.name AS status_name, t.deleted_at,
+            l.clickup_task_id
+       FROM clickup_link l JOIN task t ON t.id = l.task_id JOIN status s ON s.id = t.status_id
+      WHERE l.clickup_task_id IS NOT NULL AND NOT l.skipped`,
+  );
+  for (const t of rows.rows) {
+    const pushed: Record<string, unknown> = {};
+    for (const w of wants(t, map, cfg, people.idByName)) if (w.value !== undefined) pushed[w.key] = wantSig(w);
+    await query(
+      `UPDATE clickup_link SET pushed = $2::jsonb, dirty = false, attempts = 0, next_try_at = NULL,
+              last_error = NULL, last_error_at = NULL WHERE task_id = $1`,
+      [t.id, JSON.stringify(pushed)],
+    );
+  }
+  await query(`UPDATE clickup_config SET cursor_log_id = $1, needs_baseline = false WHERE id = 1`, [max]);
+}
+
 async function markDirty(cfg: ConfigRow): Promise<void> {
   if (!cfg.sync_from) {
     // First run with the switch on: from now on, and nothing before.
@@ -750,13 +801,15 @@ async function markDirty(cfg: ConfigRow): Promise<void> {
   const max = Number((await query<{ m: string | null }>(`SELECT max(id)::text AS m FROM activity_log`)).rows[0]?.m ?? 0);
   // A re-seed restarts the ids under the cursor.
   const cursor = max < Number(cfg.cursor_log_id) ? 0 : Number(cfg.cursor_log_id);
+  // Only what arrived since the switch last went on (0080).
+  const since = cfg.resumed_at ?? cfg.sync_from;
   await query(
     `INSERT INTO clickup_link (task_id)
      SELECT t.id FROM task t
       WHERE t.created_at >= $1 AND t.deleted_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM clickup_link l WHERE l.task_id = t.id)
      ON CONFLICT (task_id) DO NOTHING`,
-    [cfg.sync_from],
+    [since],
   );
   await query(
     `UPDATE clickup_link l
@@ -765,9 +818,10 @@ async function markDirty(cfg: ConfigRow): Promise<void> {
       WHERE l.task_id::text IN (
               SELECT a.entity_id FROM activity_log a
                WHERE a.entity_type = 'task'
-                 AND (a.id > $1 OR a.created_at > now() - interval '10 minutes'))
-        AND NOT l.dirty`,
-    [cursor],
+                 AND (a.id > $1 OR a.created_at > now() - interval '10 minutes')
+                 AND a.created_at >= $2)
+        AND NOT l.dirty AND NOT l.skipped`,
+    [cursor, since],
   );
   await query(`UPDATE clickup_config SET cursor_log_id = $1 WHERE id = 1`, [max]);
 }
@@ -796,6 +850,7 @@ async function runOnce(reason: string): Promise<{ pushed: number; note: string }
   let failed = 0;
   let note = '';
   try {
+    if ((await getConfig()).needs_baseline) await clickUpSwitchedOn();
     for (let pass = 0; pass < 3; pass++) {
       const cfg = await getConfig();
       await markDirty(cfg);
@@ -804,7 +859,7 @@ async function runOnce(reason: string): Promise<{ pushed: number; note: string }
       const [map, people] = await Promise.all([resolveMap(fresh), peopleMap(fresh.cu_members)]);
       const links = await query<LinkRow>(
         `SELECT task_id, clickup_task_id, pushed, attempts FROM clickup_link
-          WHERE dirty AND (next_try_at IS NULL OR next_try_at <= now())
+          WHERE dirty AND NOT skipped AND (next_try_at IS NULL OR next_try_at <= now())
           ORDER BY dirty_since LIMIT 60`,
       );
       if (links.rows.length === 0) break;

@@ -256,6 +256,14 @@ export async function setIntegration(key: string, enabled: boolean, user: Admin)
   );
   flags.set(key, enabled);
   loadedAt = Date.now();
+  // 0080 · ClickUp back on: what happened while it was off is skipped for
+  // good. The stamp is the record; the baseline runs at once (imported late:
+  // the connector imports this file), and the runner redoes it if this fails.
+  if (key === 'clickup' && enabled && !before) {
+    await query(`UPDATE clickup_config SET resumed_at = now(), needs_baseline = true WHERE id = 1`).catch(() => undefined);
+    const { clickUpSwitchedOn } = await import('./clickup.js');
+    await clickUpSwitchedOn().catch((e: unknown) => console.warn('[clickup] baseline failed; the next run redoes it:', e));
+  }
   if (before !== enabled) {
     await logAdminEvent({
       actorId: user.id,
