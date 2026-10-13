@@ -7,7 +7,7 @@ import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@
 // 0073: a work order saved as a PDF.
 import type { WoPdfKind, WoPdfLayoutInput, WoPdfLayoutsResponse } from '@theone/shared';
 // 0074: Admin › Integrations.
-import type { ClickUpOverview, IntegrationsResponse } from '@theone/shared';
+import type { ClickUpOverview, EcotrakOverview, IntegrationsResponse } from '@theone/shared';
 // 0075: Admin › Documentation.
 import type { DocsSnapshot } from '@theone/shared';
 import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
@@ -2232,6 +2232,15 @@ export function getIntegrations(): Promise<IntegrationsResponse> {
 
 export function setIntegrationEnabled(key: string, enabled: boolean): Promise<IntegrationsResponse> {
   return request(`/admin/integrations/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ enabled }) });
+}
+
+// 0079 · Ecotrak → The One's panel under its row (read only against Ecotrak).
+export function getEcotrak(): Promise<EcotrakOverview> {
+  return request('/admin/integrations/ecotrak');
+}
+
+export function syncEcotrakNow(): Promise<{ overview: EcotrakOverview }> {
+  return request('/admin/integrations/ecotrak/sync', { method: 'POST', body: '{}' });
 }
 
 // 0078 · ClickUp's panel under its row.

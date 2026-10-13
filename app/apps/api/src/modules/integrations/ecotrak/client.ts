@@ -3,7 +3,12 @@
  * READ ONLY by construction: this module exposes no method that mutates
  * anything on Ecotrak's side. The only POST is the OAuth2 token exchange, which
  * is authentication rather than a data write. Writing (PUT /status, /eta, notes)
- * comes later, gated behind cmms_connection.shadow_mode.
+ * comes later, behind its own switch (Admin › Integrations › The One → Ecotrak,
+ * locked off until go-live), and is tested on Ecotrak's test system first.
+ *
+ * 0079 · every call checks the Ecotrak → The One switch first: off means this
+ * client does not contact Ecotrak at all, not even for a token. The sync
+ * checks the table itself before it starts; this is the second lock.
  *
  * Verified against production 2026-08-19: 232 work orders over 3 weeks.
  */
@@ -93,6 +98,8 @@ export function configFromEnv(ref = 'ECOTRAK'): EcotrakConfig {
   };
 }
 
+import { integrationOn } from '../../../services/integrations.js';
+
 const ymd = (d: Date): string => d.toISOString().slice(0, 10);
 
 /** Spring Data page envelope — what /v1/workorders/search actually returns. */
@@ -111,6 +118,7 @@ export class EcotrakClient implements WorkOrderSource {
 
   /** Cached bearer token. Ecotrak issues 1-hour tokens; refresh 60s early. */
   private async accessToken(): Promise<string> {
+    if (!integrationOn('ecotrak')) throw new Error('Ecotrak → The One is switched off in Admin › Integrations');
     if (this.token && Date.now() < this.token.expiresAt - 60_000) return this.token.value;
 
     const res = await fetch(this.cfg.tokenUrl, {
@@ -136,6 +144,7 @@ export class EcotrakClient implements WorkOrderSource {
   }
 
   private async get<T>(path: string): Promise<T> {
+    if (!integrationOn('ecotrak')) throw new Error('Ecotrak → The One is switched off in Admin › Integrations');
     const res = await fetch(`${this.cfg.baseUrl}${path}`, {
       headers: { Authorization: `Bearer ${await this.accessToken()}`, Accept: 'application/json' },
     });
@@ -149,6 +158,11 @@ export class EcotrakClient implements WorkOrderSource {
    * The API filters by a single `updated_date` DAY, not a range, so this walks
    * one request per day and dedupes by id. Days are capped at 90 so a bad
    * `since` cannot spawn thousands of calls.
+   *
+   * 0079 · each day is read page by page (100 a page) until the envelope says
+   * `last`, so a busy day is no longer cut at 100. Stops early on a page that
+   * adds nothing new (an API that ignored `page` would otherwise loop), and at
+   * 30 pages a day.
    */
   async fetchUpdatedSince(since: Date): Promise<EcotrakWorkOrder[]> {
     const out = new Map<string, EcotrakWorkOrder>();
@@ -161,11 +175,19 @@ export class EcotrakClient implements WorkOrderSource {
     for (let back = 0; back <= days; back++) {
       const d = new Date(today);
       d.setUTCDate(d.getUTCDate() - back);
-      const page = await this.get<{ work_orders?: Page<EcotrakWorkOrder> }>(
-        `/v1/workorders/search?updated_date=${ymd(d)}&size=100`,
-      );
-      for (const wo of page.work_orders?.content ?? []) {
-        if (wo && wo.id != null) out.set(String(wo.id), wo);
+      for (let p = 0; p < 30; p++) {
+        const page = await this.get<{ work_orders?: Page<EcotrakWorkOrder> }>(
+          `/v1/workorders/search?updated_date=${ymd(d)}&size=100&page=${p}`,
+        );
+        const content = page.work_orders?.content ?? [];
+        let added = 0;
+        for (const wo of content) {
+          if (wo && wo.id != null && !out.has(String(wo.id))) {
+            out.set(String(wo.id), wo);
+            added++;
+          }
+        }
+        if (content.length === 0 || added === 0 || page.work_orders?.last !== false) break;
       }
     }
     return [...out.values()];

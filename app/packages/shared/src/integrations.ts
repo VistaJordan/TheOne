@@ -15,6 +15,7 @@
 export const INTEGRATION_KEYS = [
   'quo',
   'ecotrak',
+  'ecotrak_outbound',
   'servicechannel',
   'corrigo',
   'sharepoint',
@@ -54,18 +55,41 @@ export interface IntegrationDef {
   built: boolean;
   /** Cannot be switched off from inside the app. */
   locked?: boolean;
+  /** Cannot be switched ON from inside the app (the code that would run
+      does not exist yet). The reason is shown on the switch. */
+  locked_off?: string;
+  /** What the switch reads when nobody has set it, or when the setting
+      cannot be read. Omitted = on (the 0074 rule). False for anything that
+      talks to a client's system: if in doubt it stays off. */
+  default_on?: boolean;
 }
 
 export const INTEGRATIONS: IntegrationDef[] = [
   {
     key: 'ecotrak',
-    name: 'Ecotrak',
+    name: 'Ecotrak → The One',
     vendor: 'Ecotrak',
     group: 'clients',
-    summary: "Work orders pulled in from the client's Ecotrak portal. Inbound only: nothing is written back to Ecotrak before go-live.",
-    off_means: 'The sync stops: no new or refreshed work orders arrive from Ecotrak. The Ecotrak checks on a status change keep reading what is already on file.',
+    summary:
+      'New work orders and every change made on Ecotrak (status, NTE, description, site, asset…) come into The One every 10 minutes, or straight away with Sync now. New ones land in Incoming Work Orders. Read only: The One never changes anything on Ecotrak, so clients see nothing.',
+    off_means:
+      'The One does not contact Ecotrak at all, not even to sign in: no new or changed work orders arrive. Work orders already here stay as they are, and the Ecotrak checks on a status change keep reading what is on file.',
     logo: 'ecotrak.png',
     built: true,
+    default_on: false,
+  },
+  {
+    key: 'ecotrak_outbound',
+    name: 'The One → Ecotrak',
+    vendor: 'Ecotrak',
+    group: 'clients',
+    summary:
+      'Changes made in The One (status, ETA, notes) sent back to Ecotrak, where the client sees them. Not connected yet: The One has no code that can write to Ecotrak.',
+    off_means: 'Nothing is ever sent to Ecotrak. This is the only state today.',
+    logo: 'ecotrak.png',
+    built: false,
+    default_on: false,
+    locked_off: 'Not connected yet: it is built and tested on Ecotrak\'s test system first, then turned on at go-live.',
   },
   {
     key: 'servicechannel',
@@ -309,3 +333,32 @@ export interface ClickUpOverview {
 
 /** The error code every refused call carries when its connector is off. */
 export const INTEGRATION_OFF = 'INTEGRATION_OFF';
+
+// ── Ecotrak → The One (0079) ─────────────────────────────────────────────────
+// The panel under the Ecotrak row: is it set up, when did it last look, and
+// what did that look bring in. Read only against Ecotrak, always.
+
+export interface EcotrakRun {
+  at: string;
+  trigger: 'cron' | 'manual';
+  ok: boolean;
+  fetched: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  /** One line for the panel: what happened, or why it stopped. */
+  note: string;
+  errors: string[];
+}
+
+export interface EcotrakOverview {
+  enabled: boolean;
+  /** The four ECOTRAK_* settings are on the server (values never leave it). */
+  credentials_set: boolean;
+  connection: string | null;
+  last_synced_at: string | null;
+  last_run: EcotrakRun | null;
+  /** Work orders that came from Ecotrak and are tied to it. */
+  linked: number;
+  can: { edit: boolean };
+}

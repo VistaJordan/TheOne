@@ -12,6 +12,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ApiError, parse } from '../errors.js';
 import { listIntegrations, setIntegration } from '../services/integrations.js';
+import { ecotrakOverview, syncEcotrakNow } from '../services/ecotrakAdmin.js';
 import {
   clickUpOverview,
   refreshClickUp,
@@ -48,6 +49,12 @@ export default async function adminIntegrationRoutes(app: FastifyInstance): Prom
     const { enabled } = parse(body, req.body);
     return setIntegration(key, enabled, realUser(req));
   });
+
+  // 0079 · Ecotrak → The One's panel: last run, Sync now (read only).
+  //   GET  /admin/integrations/ecotrak              the panel
+  //   POST /admin/integrations/ecotrak/sync         read Ecotrak now
+  app.get('/admin/integrations/ecotrak', async (req) => ecotrakOverview(realUser(req)));
+  app.post('/admin/integrations/ecotrak/sync', async (req) => syncEcotrakNow(realUser(req)));
 
   //   GET  /admin/integrations/clickup              the panel
   //   PUT  /admin/integrations/clickup/list         { list: URL or id }

@@ -9,13 +9,15 @@
  * `work_order_id` (ours to set, null on 100% of production records).
  */
 
+import { createHash } from 'node:crypto';
 import { query, withTransaction, type Queryable } from '../../../db.js';
 import { EcotrakClient, configFromEnv, type EcotrakWorkOrder } from './client.js';
 import { classifyInbound } from './statusMap.js';
 import { resolveTrade } from './tradeMap.js';
 import { planFolder, stateAbbr } from './sharepointPath.js';
 import { raiseAcceptanceTasks } from '../../../services/approvals.js';
-import { requireIntegration } from '../../../services/integrations.js';
+import { integrationOnNow, requireIntegration } from '../../../services/integrations.js';
+import { logTaskChanges, type TaskChange } from '../../../services/woAudit.js';
 import { ecotrakSyncActorId } from '../../../services/serviceActors.js';
 
 export const MAP_VERSION = '2026-09-01.1';
@@ -83,9 +85,13 @@ export interface IngestResult {
   created: number;
   updated: number;
   skippedHumanMoved: number;
+  /** 0079 · seen again with nothing changed on Ecotrak's side: not touched. */
+  unchanged: number;
   unmappedStatus: string[];
   unmappedTrade: string[];
   errors: string[];
+  /** 0079 · one line for Admin › Integrations. */
+  note: string;
 }
 
 interface ConnectionRow {
@@ -105,71 +111,163 @@ export async function getEcotrakConnection(): Promise<ConnectionRow | null> {
   return r.rows[0] ?? null;
 }
 
+/** Who started a run: Vercel's 10-minute cron, or Sync now in Admin. */
+export type IngestTrigger = 'cron' | 'manual';
+
 /**
  * Pull work orders updated since the last sync (or `sinceDays` back on a cold
  * start) and upsert them. Every payload is landed raw BEFORE mapping, so a
  * mapping bug is always replayable without re-fetching.
+ *
+ * 0079 · the switch is read from the table itself before anything else (off =
+ * Ecotrak is not contacted, not even for a token); one run at a time per
+ * connection (a 5-minute lease, so a crashed run cannot block the next);
+ * the outcome of every run is kept on the connection for the Admin panel.
  */
-export async function ingestEcotrak(opts: { sinceDays?: number } = {}): Promise<IngestResult> {
-  // 0074 · the switch in Admin › Integrations (manual trigger and any poll).
+export async function ingestEcotrak(opts: { sinceDays?: number; trigger?: IngestTrigger } = {}): Promise<IngestResult> {
+  // 0074 · the switch in Admin › Integrations (manual trigger and the poll).
+  await integrationOnNow('ecotrak');
   requireIntegration('ecotrak');
+  const trigger: IngestTrigger = opts.trigger ?? 'manual';
   const res: IngestResult = {
-    fetched: 0, created: 0, updated: 0, skippedHumanMoved: 0,
-    unmappedStatus: [], unmappedTrade: [], errors: [],
+    fetched: 0, created: 0, updated: 0, skippedHumanMoved: 0, unchanged: 0,
+    unmappedStatus: [], unmappedTrade: [], errors: [], note: '',
   };
 
   const conn = await getEcotrakConnection();
   if (!conn) {
     res.errors.push('no active ecotrak connection (run migration 0005)');
+    res.note = 'No Ecotrak connection on file.';
     return res;
   }
 
-  const client = new EcotrakClient(configFromEnv(conn.credentials_ref));
-
-  // An explicit sinceDays OVERRIDES the incremental cursor. Without this a
-  // backfill is impossible once last_synced_at is set: the caller asks for 21
-  // days and silently gets today only, which is how the first re-run after a
-  // mapping fix missed the 19 records it was meant to repair.
-  const since =
-    typeof opts.sinceDays === 'number'
-      ? new Date(Date.now() - opts.sinceDays * 86_400_000)
-      : conn.last_synced_at
-        ? new Date(conn.last_synced_at)
-        : new Date(Date.now() - 21 * 86_400_000);
-
-  const orders = await client.fetchUpdatedSince(since);
-  res.fetched = orders.length;
-
-  // Resolve status ids once — the pipeline is small and static.
-  const statusRows = await query<{ id: string; name: string; status_group: string }>(
-    `SELECT s.id, s.name, s.status_group FROM status s`,
+  const lease = await query<{ started: string }>(
+    `UPDATE cmms_connection SET run_started_at = now()
+      WHERE id = $1 AND (run_started_at IS NULL OR run_started_at < now() - interval '5 minutes')
+      RETURNING run_started_at::text AS started`,
+    [conn.id],
   );
-  const statusByName = new Map(statusRows.rows.map((s) => [s.name.toLowerCase(), s]));
-
-  // Rule 7.1.1 (0036): every work order this run CREATES goes to the
-  // manager's Pending Acceptance queue. Raised after each commit (the queue
-  // row must never fail the sync), signed by the sync's own service
-  // principal so the trail says which system put it there.
-  const createdIds: string[] = [];
-  for (const wo of orders) {
-    try {
-      await withTransaction(async (tx) => {
-        await upsertOne(tx, conn, wo, statusByName, res, createdIds);
-      });
-    } catch (e) {
-      res.errors.push(`WO ${wo.id}: ${(e as Error).message}`);
-    }
+  if (lease.rows.length === 0) {
+    res.note = 'A sync is already running; this one was skipped.';
+    return res;
   }
-  if (createdIds.length > 0) {
-    try {
-      await raiseAcceptanceTasks(createdIds, await ecotrakSyncActorId(), 'ecotrak');
-    } catch (e) {
-      res.errors.push(`acceptance queue: ${(e as Error).message}`);
-    }
-  }
+  // The cursor moves to when this run STARTED, so a change made on Ecotrak
+  // while it runs is picked up next time rather than lost.
+  const startedAt = lease.rows[0].started;
 
-  await query(`UPDATE cmms_connection SET last_synced_at = now() WHERE id = $1`, [conn.id]);
+  let fetchedOk = false;
+  try {
+    const client = new EcotrakClient(configFromEnv(conn.credentials_ref));
+
+    // An explicit sinceDays OVERRIDES the incremental cursor. Without this a
+    // backfill is impossible once last_synced_at is set: the caller asks for 21
+    // days and silently gets today only, which is how the first re-run after a
+    // mapping fix missed the 19 records it was meant to repair.
+    // 0079 · the incremental cursor always reaches back one extra day: the API
+    // filters by Ecotrak's calendar day, which is not ours at midnight.
+    const dayAgo = new Date(Date.now() - 86_400_000);
+    const since =
+      typeof opts.sinceDays === 'number'
+        ? new Date(Date.now() - opts.sinceDays * 86_400_000)
+        : conn.last_synced_at
+          ? new Date(Math.min(new Date(conn.last_synced_at).getTime(), dayAgo.getTime()))
+          : new Date(Date.now() - 21 * 86_400_000);
+
+    const orders = await client.fetchUpdatedSince(since);
+    fetchedOk = true;
+    res.fetched = orders.length;
+
+    // Resolve status ids once — the pipeline is small and static.
+    const statusRows = await query<{ id: string; name: string; status_group: string }>(
+      `SELECT s.id, s.name, s.status_group FROM status s`,
+    );
+    const statusByName = new Map(statusRows.rows.map((s) => [s.name.toLowerCase(), s]));
+    const actorId = await ecotrakSyncActorId();
+
+    // Rule 7.1.1 (0036): every work order this run CREATES goes to the
+    // manager's Pending Acceptance queue. Raised after each commit (the queue
+    // row must never fail the sync), signed by the sync's own service
+    // principal so the trail says which system put it there.
+    const createdIds: string[] = [];
+    for (const wo of orders) {
+      try {
+        await withTransaction(async (tx) => {
+          await upsertOne(tx, conn, wo, statusByName, res, createdIds, actorId);
+        });
+      } catch (e) {
+        res.errors.push(`WO ${wo.id}: ${(e as Error).message}`);
+      }
+    }
+    if (createdIds.length > 0) {
+      try {
+        await raiseAcceptanceTasks(createdIds, actorId, 'ecotrak');
+      } catch (e) {
+        res.errors.push(`acceptance queue: ${(e as Error).message}`);
+      }
+    }
+  } catch (e) {
+    // Never the response body: an auth error can echo the request back.
+    res.errors.push((e as Error).message);
+  } finally {
+    const parts = [
+      fetchedOk ? `${res.fetched} read from Ecotrak` : 'Could not read from Ecotrak',
+      res.created > 0 && `${res.created} new (in Incoming Work Orders)`,
+      res.updated + res.skippedHumanMoved > 0 && `${res.updated + res.skippedHumanMoved} updated`,
+      res.unchanged > 0 && `${res.unchanged} unchanged`,
+      res.unmappedStatus.length > 0 && `held back, unknown status: ${res.unmappedStatus.join(', ')}`,
+      res.errors.length > 0 && `${res.errors.length} error${res.errors.length === 1 ? '' : 's'}`,
+    ].filter(Boolean);
+    res.note = `${parts.join(' · ')}.`;
+    const run = {
+      at: new Date().toISOString(),
+      trigger,
+      ok: fetchedOk && res.errors.length === 0,
+      fetched: res.fetched,
+      created: res.created,
+      updated: res.updated + res.skippedHumanMoved,
+      unchanged: res.unchanged,
+      note: res.note,
+      errors: res.errors.slice(0, 20),
+    };
+    await query(
+      `UPDATE cmms_connection
+          SET run_started_at = NULL,
+              last_run = $2::jsonb,
+              last_synced_at = CASE WHEN $3::boolean THEN $4::timestamptz ELSE last_synced_at END
+        WHERE id = $1`,
+      [conn.id, JSON.stringify(run), fetchedOk, startedAt],
+    );
+  }
   return res;
+}
+
+/** What the payload looked like last time, to leave an unchanged one alone. */
+function fingerprint(wo: EcotrakWorkOrder): string {
+  return createHash('sha256').update(JSON.stringify(wo)).digest('hex');
+}
+
+/** The task as it stands, for the audit rows a refresh writes. */
+interface TaskNow {
+  title: string | null;
+  description: string | null;
+  status_id: string | null;
+  status_name: string | null;
+  client: string | null;
+  trade: string | null;
+  city: string | null;
+  state: string | null;
+  nte: string | null;
+  date_received: string | null;
+  priority: string | null;
+  site_id: string | null;
+  asset_id: string | null;
+  fields: Record<string, unknown> | null;
+}
+
+/** Same value? Numbers compare as numbers ('250.00' is 250), the rest as text. */
+function same(a: unknown, b: unknown, numeric = false): boolean {
+  if (numeric) return num(a) === num(b);
+  return String(a ?? '') === String(b ?? '');
 }
 
 async function upsertOne(
@@ -179,8 +277,24 @@ async function upsertOne(
   statusByName: Map<string, { id: string; name: string; status_group: string }>,
   res: IngestResult,
   createdIds: string[],
+  actorId: string,
 ): Promise<void> {
   const externalId = String(wo.id);
+  const hash = fingerprint(wo);
+
+  const existing = await tx.query<{ task_id: string; last_seen_external_status: string | null; last_payload_hash: string | null }>(
+    `SELECT task_id, last_seen_external_status, last_payload_hash FROM cmms_wo_link
+      WHERE connection_id = $1 AND external_id = $2`,
+    [conn.id, externalId],
+  );
+
+  // 0079 · the poll runs every 10 minutes and re-reads today and yesterday:
+  // a work order nobody touched on Ecotrak since the last look is left alone
+  // (no raw row, no write, no audit row).
+  if (existing.rows[0]?.last_payload_hash === hash) {
+    res.unchanged++;
+    return;
+  }
 
   // 1. Land the raw payload FIRST, verbatim and immutable.
   await tx.query(
@@ -214,13 +328,7 @@ async function upsertOne(
   const siteId = await upsertSite(tx, wo);
   const assetId = await upsertAsset(tx, wo, siteId);
 
-  const existing = await tx.query<{ task_id: string; last_seen_external_status: string | null }>(
-    `SELECT task_id, last_seen_external_status FROM cmms_wo_link
-      WHERE connection_id = $1 AND external_id = $2`,
-    [conn.id, externalId],
-  );
-
-  const fields = {
+  const fields: Record<string, unknown> = {
     // Rule 2.6.1: the portal the work order came from (0033 field_def).
     'Client Portal Type': 'Ecotrak',
     'Ecotrak ID': externalId,
@@ -275,9 +383,16 @@ async function upsertOne(
 
     await tx.query(
       `INSERT INTO cmms_wo_link
-         (connection_id, external_id, task_id, last_seen_external_status, last_seen_at, sharepoint_path)
-       VALUES ($1, $2, $3, $4, now(), $5)`,
-      [conn.id, externalId, taskId, wo.status, sp?.fullPath ?? null],
+         (connection_id, external_id, task_id, last_seen_external_status, last_seen_at, sharepoint_path, last_payload_hash)
+       VALUES ($1, $2, $3, $4, now(), $5, $6)`,
+      [conn.id, externalId, taskId, wo.status, sp?.fullPath ?? null, hash],
+    );
+    // 0079 · the creation row every other path writes (source ecotrak).
+    await tx.query(
+      `INSERT INTO activity_log
+         (actor_principal_id, entity_type, entity_id, action, field, before, after)
+       VALUES ($1, 'task', $2, 'created', NULL, NULL, $3::jsonb)`,
+      [actorId, taskId, JSON.stringify({ wo_number: `ECO-${externalId}`, source: 'ecotrak', ecotrak_id: externalId, ecotrak_status: wo.status })],
     );
     await markProcessed(tx, conn.id, externalId);
     res.created++;
@@ -289,16 +404,32 @@ async function upsertOne(
   const link = existing.rows[0];
   const taskId = link.task_id;
 
+  const nowRow = await tx.query<TaskNow>(
+    `SELECT t.title, t.description, t.status_id::text AS status_id, s.name AS status_name,
+            t.client, t.trade, t.city, t.state, t.nte::text AS nte, t.date_received::text AS date_received,
+            t.priority, t.site_id::text AS site_id, t.asset_id::text AS asset_id, t.fields
+       FROM task t LEFT JOIN status s ON s.id = t.status_id
+      WHERE t.id = $1
+      FOR UPDATE OF t`,
+    [taskId],
+  );
+  const before = nowRow.rows[0];
+
   // Shadow-mode guard: if the external status has not changed since we last saw
   // it, a human may have moved the WO on our side and a stale poll must not
   // drag it back. Descriptive fields still refresh; only status is withheld.
   const externalUnchanged = link.last_seen_external_status === wo.status;
 
+  // 0079 · the bag is MERGED: Ecotrak's keys over what is on file, so every
+  // key a person set (Assignee, FM, Comp, …) survives a refresh. Before 0079
+  // the refresh replaced the whole bag with Ecotrak's ten keys.
+  const mergedFields = (p: string) =>
+    `COALESCE(fields, '{}'::jsonb) || ${p}::jsonb || jsonb_build_object('Date Created', COALESCE(fields->'Date Created', ${p}::jsonb->'Date Created'))`;
   if (externalUnchanged) {
     await tx.query(
       `UPDATE task SET title=$2, description=$3, client=$4, trade=$5, city=$6,
               state=$7, nte=$8, date_received=$9,
-              fields=$10::jsonb || jsonb_build_object('Date Created', COALESCE(fields->'Date Created', $10::jsonb->'Date Created')),
+              fields=${mergedFields('$10')},
               priority=$11, site_id=$12, asset_id=$13
          WHERE id=$1`,
       [taskId, common[0], common[1], common[4], common[5], common[6],
@@ -309,7 +440,7 @@ async function upsertOne(
     await tx.query(
       `UPDATE task SET title=$2, description=$3, status_id=$4, status_group=$5,
               client=$6, trade=$7, city=$8, state=$9, nte=$10, date_received=$11,
-              fields=$12::jsonb || jsonb_build_object('Date Created', COALESCE(fields->'Date Created', $12::jsonb->'Date Created')),
+              fields=${mergedFields('$12')},
               priority=$13, site_id=$14, asset_id=$15
          WHERE id=$1`,
       [taskId, ...common, siteId, assetId],
@@ -317,11 +448,45 @@ async function upsertOne(
     res.updated++;
   }
 
+  // 0079 · every change Ecotrak made is an audit row, signed "Ecotrak sync"
+  // and stamped via: 'ecotrak' (rule 1.2.1). It is also what tells the
+  // ClickUp sync the work order moved.
+  if (before) {
+    const changes: TaskChange[] = [];
+    const col = (field: string, b: unknown, a: unknown, numeric = false) => {
+      if (!same(b, a, numeric)) changes.push({ field, before: b ?? null, after: a ?? null });
+    };
+    col('title', before.title, common[0]);
+    col('description', before.description, common[1]);
+    if (!externalUnchanged && before.status_id !== status.id) {
+      changes.push({
+        field: 'status_id',
+        before: { status_id: before.status_id, status_name: before.status_name },
+        after: { status_id: status.id, status_name: status.name, ecotrak_status: wo.status },
+      });
+    }
+    col('client', before.client, common[4]);
+    col('trade', before.trade, common[5]);
+    col('city', before.city, common[6]);
+    col('state', before.state, common[7]);
+    col('nte', before.nte, common[8], true);
+    col('date_received', before.date_received, common[9]);
+    col('priority', before.priority, common[11]);
+    col('site_id', before.site_id, siteId);
+    col('asset_id', before.asset_id, assetId);
+    const bagBefore = before.fields ?? {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (k === 'Date Created' && bagBefore[k] != null) continue; // kept, never overwritten
+      col(`fields.${k}`, bagBefore[k], v);
+    }
+    await logTaskChanges(tx, actorId, taskId, changes, 'ecotrak');
+  }
+
   await tx.query(
     `UPDATE cmms_wo_link
-        SET last_seen_external_status = $1, last_seen_at = now()
+        SET last_seen_external_status = $1, last_seen_at = now(), last_payload_hash = $4
       WHERE connection_id = $2 AND external_id = $3`,
-    [wo.status, conn.id, externalId],
+    [wo.status, conn.id, externalId, hash],
   );
 
   await markProcessed(tx, conn.id, externalId);

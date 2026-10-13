@@ -1643,6 +1643,29 @@ marks are the tools' favicons fetched once at build time (Corrigo's from
 corrigopro.com, SharePoint shown as the Microsoft mark); a missing image
 falls back to a monogram tile.
 
+**Ecotrak, two switches** (migration 0079, `services/ecotrakAdmin.ts`,
+`pages/admin/EcotrakPanel.tsx`). Elise, 2026-10-13: nothing may contact
+Ecotrak unless it is switched on in Admin › Integrations, and nothing may
+change what clients see there. Key `ecotrak` is now **"Ecotrak → The One"**
+(read only) and `ecotrak_outbound` **"The One → Ecotrak"** is listed with
+`locked_off` (cannot be turned on; `setIntegration` 409s) — no write method
+exists in `ecotrak/client.ts` and a test asserts the only POST is the token.
+Both carry `default_on: false`: unset or unreadable = OFF (every other key
+keeps the 0074 "no row = on"); 0079 turns `ecotrak` off on existing
+databases. Gates, three deep: `integrationOnNow('ecotrak')` reads the table
+before every run (fail closed), `requireIntegration`, and the client refuses
+even the token while `integrationOn('ecotrak')` is false. Vercel's cron hits
+`/api/webhooks/ecotrak-sync` every 10 minutes (CRON_SECRET) and returns at
+once while off. A run takes a 5-minute lease on `cmms_connection.run_started_at`,
+re-reads today + yesterday page by page, skips a payload whose sha256 matches
+`cmms_wo_link.last_payload_hash`, MERGES Ecotrak's bag keys over the stored
+bag (before 0079 a refresh replaced the whole bag — Assignee, FM, Comp were
+wiped), logs a `created` row (source ecotrak) or field / status rows `via:
+'ecotrak'` signed "Ecotrak sync", and stores the outcome in
+`cmms_connection.last_run` for the panel (Sync now, last look, errors). Ingest
+still does not dispatch automations. The old `POST /integrations/ecotrak/sync`
+now needs admin/integrations edit (it was any signed-in user).
+
 **ClickUp sync** (migration 0078, `services/clickup.ts`, `lib/clickupApi.ts`,
 `lib/clickupValues.ts`, `pages/admin/ClickUpPanel.tsx`, `tests/clickup.test.ts`).
 Every work order created after the ClickUp switch was FIRST turned on

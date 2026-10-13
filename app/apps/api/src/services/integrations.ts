@@ -62,10 +62,31 @@ function kick(): void {
   });
 }
 
+/** What a key reads when nobody has set it (or the table cannot be read):
+    on, except connectors marked `default_on: false` (Ecotrak, 0079). */
+function defaultOf(key: IntegrationKey): boolean {
+  return INTEGRATION_BY_KEY[key]?.default_on ?? true;
+}
+
 /** Is the connector switched on? Synchronous; refreshes in the background. */
 export function integrationOn(key: IntegrationKey): boolean {
   kick();
-  return flags.get(key) ?? true;
+  return flags.get(key) ?? defaultOf(key);
+}
+
+/** The same question asked of the table itself, right now — for a path that
+    is about to contact a client's system (the Ecotrak sync, 0079), where the
+    20-second copy is not good enough. A table that cannot be read answers
+    the key's default, which for those connectors is OFF. */
+export async function integrationOnNow(key: IntegrationKey): Promise<boolean> {
+  try {
+    const r = await query<{ enabled: boolean }>(`SELECT enabled FROM integration_setting WHERE key = $1`, [key]);
+    const on = r.rows[0]?.enabled ?? defaultOf(key);
+    flags.set(key, on);
+    return on;
+  } catch {
+    return defaultOf(key);
+  }
 }
 
 /** The refusal every gated path raises: a 409 the UI can show as-is. */
@@ -94,8 +115,10 @@ async function ecotrakConfigured(): Promise<Configured> {
     );
     const c = r.rows[0];
     if (!c) return { configured: false, note: 'No active Ecotrak connection on file.' };
+    const creds = ['TOKEN_URL', 'BASE_URL', 'CLIENT_ID', 'CLIENT_SECRET'].filter((k) => !process.env[`ECOTRAK_${k}`]?.trim());
+    if (creds.length > 0) return { configured: false, note: `Missing ${creds.map((k) => `ECOTRAK_${k}`).join(', ')} on the server.` };
     const synced = c.last_synced_at ? `last sync ${new Date(c.last_synced_at).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'never synced';
-    return { configured: true, note: `${c.name}${c.shadow_mode ? ' · shadow mode (inbound only)' : ''} · ${synced}.` };
+    return { configured: true, note: `${c.name} · read only · ${synced}.` };
   } catch {
     return { configured: false, note: 'No Ecotrak connection table yet.' };
   }
@@ -126,6 +149,8 @@ async function configuredOf(key: IntegrationKey): Promise<Configured> {
     }
     case 'ecotrak':
       return ecotrakConfigured();
+    case 'ecotrak_outbound':
+      return { configured: false, note: 'Nothing can be sent to Ecotrak: the sending side is not built. Turned on only at go-live, after a test on Ecotrak\'s test system.' };
     case 'servicechannel':
     case 'corrigo':
       return { configured: false, note: 'No connector built yet. Client messages for these sites wait in the outbox.' };
@@ -203,7 +228,7 @@ export async function listIntegrations(user: Admin): Promise<IntegrationsRespons
     const c = conf.get(d.key) ?? { configured: false, note: '' };
     return {
       ...d,
-      enabled: r?.enabled ?? true,
+      enabled: r?.enabled ?? d.default_on ?? true,
       configured: c.configured,
       configured_note: c.note,
       changed_by: r?.by_id && r.by_name ? { id: r.by_id, name: r.by_name } : null,
@@ -220,7 +245,10 @@ export async function setIntegration(key: string, enabled: boolean, user: Admin)
   if (def.locked && !enabled) {
     throw new ApiError('CONFLICT', `${def.name} cannot be switched off from inside the app`, { code: 'INTEGRATION_LOCKED' });
   }
-  const before = (await rows()).get(key)?.enabled ?? true;
+  if (def.locked_off && enabled) {
+    throw new ApiError('CONFLICT', `${def.name} cannot be turned on yet. ${def.locked_off}`, { code: 'INTEGRATION_LOCKED' });
+  }
+  const before = (await rows()).get(key)?.enabled ?? def.default_on ?? true;
   await query(
     `INSERT INTO integration_setting (key, enabled, updated_by, updated_at) VALUES ($1, $2, $3, now())
      ON CONFLICT (key) DO UPDATE SET enabled = EXCLUDED.enabled, updated_by = EXCLUDED.updated_by, updated_at = now()`,

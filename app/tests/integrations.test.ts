@@ -4,7 +4,7 @@
  * answers "on" for anything it has never read. The database half (the page
  * and the toggles) is exercised against the live site. */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
@@ -15,6 +15,7 @@ import {
 } from '../packages/shared/src/integrations';
 import { ADMIN_PERM_SECTIONS } from '../packages/shared/src/permissions';
 import { integrationOn } from '../apps/api/src/services/integrations';
+import { EcotrakClient } from '../apps/api/src/modules/integrations/ecotrak/client';
 
 describe('the connector list', () => {
   it('describes every key exactly once, in a known group', () => {
@@ -42,7 +43,46 @@ describe('the connector list', () => {
 });
 
 describe('integrationOn', () => {
-  it('answers on for anything never read (before 0074, or with the database away)', () => {
-    for (const k of INTEGRATION_KEYS) expect(integrationOn(k)).toBe(true);
+  it('answers on for anything never read (before 0074, or with the database away)…', () => {
+    for (const k of INTEGRATION_KEYS) {
+      if (k === 'ecotrak' || k === 'ecotrak_outbound') continue;
+      expect(integrationOn(k)).toBe(true);
+    }
+  });
+  it('…except Ecotrak, both ways: if in doubt it is off (0079)', () => {
+    expect(integrationOn('ecotrak')).toBe(false);
+    expect(integrationOn('ecotrak_outbound')).toBe(false);
+    expect(INTEGRATIONS.filter((d) => d.default_on === false).map((d) => d.key).sort()).toEqual(['ecotrak', 'ecotrak_outbound']);
+  });
+});
+
+describe('Ecotrak (0079)', () => {
+  it('The One → Ecotrak cannot be turned on: nothing that writes exists', () => {
+    expect(INTEGRATION_BY_KEY.ecotrak_outbound.locked_off).toBeTruthy();
+    expect(INTEGRATIONS.filter((d) => d.locked_off).map((d) => d.key)).toEqual(['ecotrak_outbound']);
+  });
+
+  it('the client does not contact Ecotrak, not even for a token, while the switch is off', async () => {
+    const calls: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string) => {
+      calls.push(String(url));
+      throw new Error('no network in tests');
+    }) as typeof fetch;
+    try {
+      const c = new EcotrakClient({ tokenUrl: 'https://auth.example/token', baseUrl: 'https://api.example', clientId: 'x', clientSecret: 'y' });
+      await expect(c.fetchUpdatedSince(new Date())).rejects.toThrow(/switched off/);
+      await expect(c.fetchWorkOrder('1')).rejects.toThrow(/switched off/);
+      expect(calls).toEqual([]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('the client has no method that writes to Ecotrak', () => {
+    const src = readFileSync(resolve(__dirname, '..', 'apps', 'api', 'src', 'modules', 'integrations', 'ecotrak', 'client.ts'), 'utf8');
+    expect(src).not.toMatch(/method:\s*'(PUT|PATCH|DELETE)'/);
+    // The only POST is the OAuth token exchange.
+    expect(src.match(/method:\s*'POST'/g)?.length ?? 0).toBe(1);
   });
 });

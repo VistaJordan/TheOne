@@ -20,6 +20,7 @@ import { Icon } from '../../components/Icon';
 import { errText } from '../../components/ui/Sheet';
 import { AdminShell } from './AdminShell';
 import { ClickUpPanel } from './ClickUpPanel';
+import { EcotrakPanel } from './EcotrakPanel';
 
 const KEY = ['admin', 'integrations'];
 
@@ -94,6 +95,7 @@ export function AdminIntegrationsPage() {
 }
 
 function stateOf(it: IntegrationStatus): { label: string; tone: 'ok' | 'warn' | 'off' | 'muted' } {
+  if (it.locked_off) return { label: 'Not connected yet', tone: 'muted' };
   if (!it.enabled) return { label: 'Off', tone: 'off' };
   if (!it.built) return { label: 'Connector not built yet', tone: 'muted' };
   if (it.configured) return { label: 'Connected', tone: 'ok' };
@@ -107,6 +109,9 @@ function IntegrationRow({ it, canEdit, busy, onFlip }: { it: IntegrationStatus; 
   const [imgOk, setImgOk] = useState(true);
   const s = stateOf(it);
   const locked = Boolean(it.locked);
+  // 0079 · a connector whose sending side does not exist yet (The One →
+  // Ecotrak): the switch is drawn off and cannot be turned on.
+  const lockedOff = it.locked_off ?? null;
   return (
     <li className={`intg-row${it.enabled ? ' is-on' : ' is-off'}`}>
       <div className="intg-logo" aria-hidden="true">
@@ -139,13 +144,18 @@ function IntegrationRow({ it, canEdit, busy, onFlip }: { it: IntegrationStatus; 
         aria-checked={it.enabled}
         aria-label={`${it.name}: ${it.enabled ? 'on' : 'off'}`}
         className={`intg-switch${it.enabled ? ' is-on' : ''}`}
-        disabled={!canEdit || locked || busy}
-        title={locked ? 'Always on' : canEdit ? (it.enabled ? 'Turn off' : 'Turn on') : 'Only Admin › Integrations editors can change this'}
+        disabled={!canEdit || locked || Boolean(lockedOff) || busy}
+        title={lockedOff ?? (locked ? 'Always on' : canEdit ? (it.enabled ? 'Turn off' : 'Turn on') : 'Only Admin › Integrations editors can change this')}
         onClick={() => onFlip(!it.enabled)}
       >
         <span className="intg-track"><span className="intg-knob" /></span>
         <span className="intg-switch-label">{locked ? 'Always on' : it.enabled ? 'On' : 'Off'}</span>
       </button>
+      {it.key === 'ecotrak' && (
+        <div className="intg-extra">
+          <EcotrakPanel canEdit={canEdit} enabled={it.enabled} />
+        </div>
+      )}
       {it.key === 'clickup' && (
         <div className="intg-extra">
           <ClickUpPanel canEdit={canEdit} />
