@@ -99,7 +99,8 @@ export interface Config {
   /** 0054: the Claude API key that drafts a quote from a call transcript.
       Unset = the draft page says AI drafting is not configured. Never logged. */
   anthropicApiKey: string | null;
-  /** 0054: the Claude model that drafts quotes (QUOTE_AI_MODEL). */
+  /** 0054: the Claude model that drafts quotes (QUOTE_AI_MODEL). Default
+      Claude Haiku 4.5, the cheapest current model (Elise, 2026-10-13). */
   quoteAiModel: string;
   /** 0068: the assistant. ASSISTANT_AI_MODEL is the Claude model that answers,
       ASSISTANT_AI_EFFORT how hard it thinks (low | medium | high), and
@@ -259,7 +260,7 @@ function build(): Config {
     quoFromNumber: str('QUO_FROM_NUMBER') ?? null,
     quoApiBase: (str('QUO_API_BASE') ?? 'https://api.quo.com/v1').replace(/\/+$/, ''),
     anthropicApiKey: str('ANTHROPIC_API_KEY') ?? null,
-    quoteAiModel: str('QUOTE_AI_MODEL') ?? 'claude-opus-5',
+    quoteAiModel: str('QUOTE_AI_MODEL') ?? 'claude-haiku-4-5',
     assistant: buildAssistant(),
     mail: buildMail(entra, demoMode),
     sharepoint: buildSharePoint(entra),

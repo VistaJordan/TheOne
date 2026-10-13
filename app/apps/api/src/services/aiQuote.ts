@@ -128,8 +128,14 @@ async function taskContext(taskId: string): Promise<TaskContextRow> {
   return res.rows[0];
 }
 
+/** Models whose safety classifiers can decline and that take the server-side
+    `fallbacks: "default"` parameter. Claude Haiku 4.5 (the default) is not
+    one of them: it gets neither, and a decline fails the draft as before. */
+const SERVER_FALLBACK = /^claude-(fable|mythos|opus-5|sonnet-5-5)/;
+
 async function askClaude(userMessage: string): Promise<{ out: ModelOutput; model: string; usage: unknown }> {
   const client = new Anthropic({ apiKey: config.anthropicApiKey!, timeout: 240_000, maxRetries: 1 });
+  const fallback = SERVER_FALLBACK.test(config.quoteAiModel);
   let res;
   try {
     res = await client.beta.messages.create({
@@ -137,8 +143,7 @@ async function askClaude(userMessage: string): Promise<{ out: ModelOutput; model
       max_tokens: 16000,
       // A safety decline on the primary model re-runs on the server's default
       // fallback in the same call rather than failing the draft.
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+      ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
       system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
       output_config: { format: { type: 'json_schema', schema: DRAFT_SCHEMA } },

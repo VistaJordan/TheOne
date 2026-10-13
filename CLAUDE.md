@@ -771,7 +771,8 @@ is a Calls card at the top of the Messages tab (polls every 15 s while a call
 waits on Quo). **The AI draft** (`quote_ai_draft`, one per call):
 `POST …/calls/:callId/quote-draft` sends the transcript, the work order and
 its client contract rates (`contractForTask`) to Claude (`ANTHROPIC_API_KEY`,
-`QUOTE_AI_MODEL` default `claude-opus-5`, structured JSON output, server-side
+`QUOTE_AI_MODEL` default `claude-haiku-4-5` (cheapest, Elise 2026-10-13; the
+server-side fallback is sent only to models that take it), structured JSON output, server-side
 refusal fallback) and stores the answer as **the quote builder's PUT body**
 plus `assumptions` / `missing_info`. Prices are never invented: stated client
 price → vendor cost + contract markup → contract hourly / trip rate → rate 0
