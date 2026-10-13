@@ -79,6 +79,12 @@ describe('Ecotrak (0079)', () => {
     }
   });
 
+  it('every Vercel cron path gets past the sign-in guard (it checks CRON_SECRET itself)', () => {
+    const vercel = JSON.parse(readFileSync(resolve(__dirname, '..', 'vercel.json'), 'utf8')) as { crons: { path: string }[] };
+    const guard = readFileSync(resolve(__dirname, '..', 'apps', 'api', 'src', 'plugins', 'authGuard.ts'), 'utf8');
+    for (const c of vercel.crons) expect(guard, c.path).toContain(`'${c.path}'`);
+  });
+
   it('the client has no method that writes to Ecotrak', () => {
     const src = readFileSync(resolve(__dirname, '..', 'apps', 'api', 'src', 'modules', 'integrations', 'ecotrak', 'client.ts'), 'utf8');
     expect(src).not.toMatch(/method:\s*'(PUT|PATCH|DELETE)'/);

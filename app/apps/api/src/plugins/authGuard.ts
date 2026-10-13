@@ -40,6 +40,9 @@ const PUBLIC_PATHS = new Set([
   // 0078: the once-a-minute cron that pushes work-order changes to ClickUp
   // (CRON_SECRET).
   '/api/webhooks/clickup-sync',
+  // 0079: the once-a-minute cron that reads Ecotrak while Ecotrak → The One
+  // is on (CRON_SECRET; read only).
+  '/api/webhooks/ecotrak-sync',
 ]);
 
 // 0055: a client's read-only tracker link. Exactly a 32-character share token
