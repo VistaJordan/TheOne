@@ -53,7 +53,7 @@ export const WORK_ORDERS_PART: DocPart = {
           value: 'Fields are configuration: the team adds one in Admin and it appears on the record, the list, the filters, the automations and the exports.',
           rules: [
             'Visit-owned fields (Visit Type, Check-in/out Status, Checked-in At, Checked-out At, Tech Name, Tech Phone Number, CICO Method) mirror the latest visit and cannot be typed; Quote Due Date is computed; Sign-Off Link is written by the sign-off sheet; formula and attachment subtypes are read-only.',
-            'Cost is the sum of accepted payment requests once the system has written it; Total Invoiced is the quote total once stamped; Profit = Total Invoiced minus Cost.',
+            'Cost moves with paid payment requests (Pay adds, deleting a paid one subtracts) and is locked once the system has written it; Total Invoiced is the quote total once stamped; Profit = Total Invoiced minus Cost.',
             'A field needs view and edit on its own path; a hidden field is absent from the payload altogether.',
           ],
           permissions: ['work_orders edit + edit on the field', 'work_orders/history view'],
@@ -296,7 +296,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'NTE override',
-          what: 'Raised by the seeded rule when Cost rises above the client NTE ("Cost $X is over the client NTE $Y by $Z"; a repeat refreshes the open task, one per work order); while open, quote approve / send and payment approve / send to Yoda are held (409 with the task id; the buttons read "On hold — the NTE override on this work order has to be decided first (rule 1.5.2)"); cancelled by itself once Cost is back under the NTE or either figure is cleared. Decisions post an internal comment.',
+          what: 'Raised by the seeded rule when Cost rises above the client NTE ("Cost $X is over the client NTE $Y by $Z"; a repeat refreshes the open task, one per work order); while open, quote approve / send / client approval and payment approve / pay are held (409 with the task id; the buttons read "On hold — the NTE override on this work order has to be decided first (rule 1.5.2)"); cancelled by itself once Cost is back under the NTE or either figure is cleared. Decisions post an internal comment.',
           value: 'No money moves past the client\'s ceiling without a manager\'s yes.',
           brd: ['1.5.2'],
         },

@@ -32,6 +32,9 @@ const LANES: { key: Lane; label: string }[] = [
   { key: 'pending_approval', label: 'Pending approval' },
   { key: 'approved', label: 'Approved' },
   { key: 'sent', label: 'Sent' },
+  // 0076 · the client's decision (Yoda parity).
+  { key: 'client_approved', label: 'Client approved' },
+  { key: 'client_declined', label: 'Client declined' },
 ];
 
 export function QuotesPage() {

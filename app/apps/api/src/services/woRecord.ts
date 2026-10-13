@@ -446,7 +446,7 @@ async function loadRelated(taskId: string, t: TaskRow, actor: ActingPrincipal, n
       `SELECT (SELECT count(*)::int FROM quote WHERE task_id = $1) AS quotes,
               (SELECT count(*)::int FROM invoice WHERE task_id = $1) AS invoices,
               (SELECT count(*)::int FROM vendor_bill WHERE task_id = $1) AS bills,
-              (SELECT count(*)::int FROM payment_request WHERE task_id = $1) AS payments,
+              (SELECT count(*)::int FROM payment_request WHERE task_id = $1 AND deleted_at IS NULL) AS payments,
               (SELECT count(*)::int FROM wo_visit WHERE task_id = $1) AS visits,
               (SELECT count(*)::int FROM comment WHERE task_id = $1) AS messages,
               (SELECT count(*)::int FROM attachment WHERE task_id = $1) AS photos`,

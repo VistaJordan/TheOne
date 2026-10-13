@@ -65,7 +65,17 @@ export function QuotePrintPage() {
   const entity = wo?.billing_entity ?? '';
   const issued = (quote.sent_at ?? quote.updated_at).slice(0, 10);
   const incurred = quote.sections.find((s) => s.kind === 'incurred') ?? null;
-  const options = quote.sections.filter((s) => s.kind === 'option' && s.include_in_summary);
+  // 0076 · rounds: an option the client approved in an earlier round is work
+  // already performed; the document offers only the current round's options.
+  const approvedEarlier = quote.sections.filter(
+    (s) => s.kind === 'option' && s.round < quote.current_round && s.approved_at !== null,
+  );
+  const options = quote.sections.filter(
+    (s) => s.kind === 'option' && s.round === quote.current_round && s.include_in_summary,
+  );
+  const yoda = quote.totals.total_rule !== 'options_only';
+  const priced = quote.totals.option_totals.find((o) => o.section_id === quote.totals.priced_section_id) ?? null;
+  const offered = quote.totals.option_totals.filter((o) => o.include_in_summary && options.some((s) => s.id === o.section_id));
   const summaryText = quote.summary.pinned ?? quote.summary.auto;
   const backHref = `/work-orders/${encodeURIComponent(quote.wo_number)}/quote`;
 
@@ -125,31 +135,54 @@ export function QuotePrintPage() {
           <LinesBlock section={incurred} heading="Work performed" note="Billed with the work order" />
         )}
 
+        {approvedEarlier.map((s) => (
+          <LinesBlock
+            key={s.id}
+            section={s}
+            heading={`${s.name ?? 'Approved work'} (approved, round ${s.round})`}
+            note="Billed with the work order"
+          />
+        ))}
+
         {options.map((s) => (
           <LinesBlock key={s.id} section={s} heading={`${s.label}${s.name ? ` — ${s.name}` : ''}`} />
         ))}
 
+        {/* The Yoda rule (0076): each option is priced as the work performed +
+            that option, plus sales tax; the Total is the approved option's
+            price, or the first offered one's until the client decides. */}
         <section className="qdoc-totals">
           <table>
             <tbody>
-              {quote.totals.option_totals
-                .filter((o) => o.include_in_summary)
-                .map((o) => (
-                  <tr key={o.section_id}>
-                    <th>{o.label}{o.name ? ` — ${o.name}` : ''}</th>
-                    <td>{usd(o.total)}</td>
-                  </tr>
-                ))}
+              {yoda && quote.totals.incurred_subtotal !== 0 && (
+                <tr><th>Work performed</th><td>{usd(quote.totals.incurred_subtotal)}</td></tr>
+              )}
+              {offered.map((o) => (
+                <tr key={o.section_id}>
+                  <th>{o.label}{o.name ? ` — ${o.name}` : ''}</th>
+                  <td>{usd(o.total)}</td>
+                </tr>
+              ))}
               {quote.totals.line_tax > 0 && (
                 <tr><th>Tax</th><td>{usd(quote.totals.line_tax)}</td></tr>
               )}
               {quote.totals.sales_tax > 0 && (
-                <tr><th>Sales tax</th><td>{usd(quote.totals.sales_tax)}</td></tr>
+                <tr><th>Sales tax ({quote.totals.sales_tax_pct}%)</th><td>{usd(quote.totals.sales_tax)}</td></tr>
               )}
               <tr className="qdoc-grand">
-                <th>Total</th>
-                <td>{usd(quote.totals.grand_total + quote.totals.sales_tax)}</td>
+                <th>Total{yoda && priced && offered.length > 1 ? ` — ${priced.label}` : ''}</th>
+                <td>{usd(quote.totals.grand_total)}</td>
               </tr>
+              {yoda &&
+                offered.length > 1 &&
+                offered
+                  .filter((o) => o.section_id !== priced?.section_id)
+                  .map((o) => (
+                    <tr key={`alt-${o.section_id}`}>
+                      <th>Total with {o.label} instead</th>
+                      <td>{usd(o.grand_total)}</td>
+                    </tr>
+                  ))}
             </tbody>
           </table>
         </section>

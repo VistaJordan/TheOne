@@ -1,8 +1,11 @@
 // Cost and Total Invoiced, kept by the system (shared/moneyRules.ts has the
 // two rules and why a field is only locked while its source exists).
 //
-//   syncCostFromPayments   called by payments.ts inside the transaction of
-//                          every payment-request decision.
+//   addToCost              called by payments.ts inside the transaction of a
+//                          pay (+amount) or of deleting a paid request
+//                          (−amount) — the Yoda rule, 0076.
+//   syncCostFromPayments   the pre-0076 rule (Cost = sum of accepted
+//                          requests); no longer called.
 //   syncInvoicedFromQuote  called by workOrders.changeStatus after a move to
 //                          Invoiced / Invoiced Not Paid commits.
 //   assertMoneyNotLocked   called by the field editor and bulk edit, beside
@@ -65,7 +68,7 @@ async function writeField(
 }
 
 /**
- * Cost := the sum of the accepted payment requests. Runs INSIDE the caller's
+ * Pre-0076 (unused): Cost := the sum of the accepted, undeleted payment requests. Runs INSIDE the caller's
  * transaction, so the decision and the figure it implies commit together.
  * `justUnaccepted` = this decision took back a request that had counted.
  * The caller dispatches automations with the returned changes after it commits.
@@ -77,12 +80,39 @@ export async function syncCostFromPayments(
   justUnaccepted: boolean,
 ): Promise<TaskChange[]> {
   const rows = await tx.query<{ status: string; amount: string | number | null }>(
-    `SELECT status, amount FROM payment_request WHERE task_id = $1`,
+    `SELECT status, amount FROM payment_request WHERE task_id = $1 AND deleted_at IS NULL`,
     [taskId],
   );
   const d = costDecision(rows.rows, justUnaccepted);
   if (d.action === 'keep') return [];
   return writeField(tx, taskId, actorId, COST_FIELD_KEY, d.action === 'set' ? d.cost : null, 'payment');
+}
+
+/**
+ * Yoda UpdateCostInClickUp (0076, Jeff's rules): Cost += the amount when AP
+ * pays a request, −= it when a paid request is deleted. Whatever Cost already
+ * held (typed, imported) is the starting point, never overwritten; it does
+ * not go below zero. Runs INSIDE the caller's transaction and writes through
+ * writeField, so it is an ordinary audited field change stamped
+ * `via: 'payment'` (which also arms the lock) and re-derives Profit. The
+ * caller dispatches automations with the returned changes after it commits.
+ */
+export async function addToCost(
+  tx: Queryable,
+  taskId: string,
+  actorId: string,
+  delta: number,
+): Promise<TaskChange[]> {
+  const t = await tx.query<{ cost: unknown }>(
+    `SELECT fields -> $2 AS cost FROM task WHERE id = $1 AND deleted_at IS NULL`,
+    [taskId, COST_FIELD_KEY],
+  );
+  if (!t.rows[0]) return [];
+  const raw = t.rows[0].cost;
+  const parsed = raw === null || raw === undefined || raw === '' ? 0 : Number(String(raw).replace(/[$,\s"]/g, ''));
+  const before = Number.isFinite(parsed) ? parsed : 0;
+  const after = Math.max(0, Math.round((before + delta + Number.EPSILON) * 100) / 100);
+  return writeField(tx, taskId, actorId, COST_FIELD_KEY, after, 'payment');
 }
 
 /**

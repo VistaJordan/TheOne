@@ -13,9 +13,10 @@
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { PaymentRequest, WorkOrderDetailV2 } from '../../api/client';
+import type { PaymentRequest, WoActionState, WorkOrderDetailV2 } from '../../api/client';
 import { FieldHistory, HistoryToggle } from './FieldHistory';
 import { payeeLabel, PAYMENT_STATUS_LABEL } from '../payments/PaymentsTable';
+import { methodLabel } from '../../api/client';
 import type { PaymentRequestStatus } from '@theone/shared';
 import { shortDate } from '../../lib/fields';
 import { usd } from '../../lib/quoteTotals';
@@ -79,18 +80,25 @@ interface PaymentHistoryCardProps {
   items: PaymentRequest[];
   totalPaid: number | null;
   loading: boolean;
+  /** The WO-status gate for requesting a payment (G-W01). */
+  requestAction?: WoActionState | null;
 }
 
-export function PaymentHistoryCard({ woNumber, items, totalPaid, loading }: PaymentHistoryCardProps) {
+export function PaymentHistoryCard({ woNumber, items, totalPaid, loading, requestAction }: PaymentHistoryCardProps) {
   // 0015 · the entry point needs payments:create; the ledger needs only view.
   const canRequest = useAuth().can('payments', 'create');
+  // WO-status gate (allowedWoActions): a blocked request renders LOCKED with
+  // the reason rather than vanishing (§3.5).
+  const blocked = requestAction ? !requestAction.allowed : false;
+  const flagged = items.filter((p) => p.needs_w9 || p.pending_delete).length;
+
   return (
     <section className="card">
       <div className="card-head">
         <h2 className="card-title">Payment requests</h2>
         {!loading && items.length > 0 && (
           <span className="card-meta">
-            {`${usd(totalPaid ?? 0)} paid · ${items.length} request${items.length === 1 ? '' : 's'}`}
+            {`${usd(totalPaid ?? 0)} paid · ${items.length} request${items.length === 1 ? '' : 's'}${flagged ? ` · ${flagged} flagged` : ''}`}
           </span>
         )}
       </div>
@@ -102,21 +110,26 @@ export function PaymentHistoryCard({ woNumber, items, totalPaid, loading }: Paym
       ) : (
         <ul className="payh">
           {items.map((p) => (
-            <li className="payh-row" key={p.id}>
+            <li className={`payh-row${p.pending_delete ? ' is-pending-delete' : ''}`} key={p.id}>
               <span className="payh-when">{shortDate(p.created_at) ?? '—'}</span>
               <span className="payh-who">
                 <span className="payh-name">
                   {payeeLabel(p)}
                   {p.recipient_name && <span className="payh-sub"> · paid to {p.recipient_name}</span>}
+                  {p.needs_w9 && (
+                    <span className="chip chip-sm chip-danger" style={{ marginLeft: 6 }} title="Technician crossed $599 this year without a W9 on file">
+                      W9
+                    </span>
+                  )}
                 </span>
                 {(p.purpose || p.method) && (
                   <span className="payh-sub">
-                    {[p.purpose, p.method].filter(Boolean).join(' · ')}
+                    {[p.purpose, methodLabel(p.method)].filter(Boolean).join(' · ')}
                   </span>
                 )}
               </span>
-              <span className={`chip chip-sm ${STATUS_CHIP[p.status]}`.trim()}>
-                {PAYMENT_STATUS_LABEL[p.status]}
+              <span className={`chip chip-sm ${p.pending_delete ? 'chip-warn' : STATUS_CHIP[p.status]}`.trim()}>
+                {p.pending_delete ? 'Pending delete' : PAYMENT_STATUS_LABEL[p.status]}
               </span>
               <span className="payh-amt">{usd(p.amount)}</span>
             </li>
@@ -126,13 +139,34 @@ export function PaymentHistoryCard({ woNumber, items, totalPaid, loading }: Paym
 
       {canRequest && (
         <div className="card-foot">
-          <Link
-            className="btn btn-sm"
-            to={`/work-orders/${encodeURIComponent(woNumber)}/request-payment`}
-          >
-            <Icon name="dollar" size={12} />
-            Request payment
-          </Link>
+          {blocked ? (
+            <>
+              <span className="tipwrap">
+                <button type="button" className="btn btn-sm btn-locked" tabIndex={0} aria-disabled="true" aria-describedby="lockTipPayReq">
+                  <Icon name="lock" size={12} />
+                  Request payment
+                </button>
+                <span className="tip tip-below" id="lockTipPayReq" role="tooltip">
+                  <Icon name="lock" size={12} />
+                  {requestAction?.reason}
+                </span>
+              </span>
+              {items.length > 0 && (
+                <Link className="btn btn-sm" to={`/work-orders/${encodeURIComponent(woNumber)}/request-payment`}>
+                  <Icon name="list" size={12} />
+                  View ledger
+                </Link>
+              )}
+            </>
+          ) : (
+            <Link
+              className="btn btn-sm"
+              to={`/work-orders/${encodeURIComponent(woNumber)}/request-payment`}
+            >
+              <Icon name="dollar" size={12} />
+              Request payment
+            </Link>
+          )}
         </div>
       )}
     </section>

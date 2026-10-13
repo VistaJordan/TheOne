@@ -570,7 +570,7 @@ async function collectDesired(
            FROM payment_request pr
            JOIN task t ON t.id = pr.task_id
            LEFT JOIN container hl ON hl.id = t.home_list_id
-          WHERE pr.status = $1 AND t.deleted_at IS NULL ${scope}`,
+          WHERE pr.status = $1 AND pr.deleted_at IS NULL AND t.deleted_at IS NULL ${scope}`,
         params,
       );
       for (const r of res.rows) {

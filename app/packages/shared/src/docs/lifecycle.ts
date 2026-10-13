@@ -64,7 +64,7 @@ export const LIFECYCLE: LifecycleModel = {
       title: 'Soft close and audit',
       phases: ['Done'],
       summary:
-        'Done / Incurred needs a visit checked in and out, the final Cost (the sum of accepted payment requests), a quote with data and an approved after photo (or, for Bill For Incurred, a before photo and a sign-off). Entering the Done group may propose an invoice and a vendor bill when an auto-invoice contract covers the job. AR audits the record and marks it Ready to Invoice.',
+        'Done / Incurred needs a visit checked in and out, the final Cost (paying a request adds it to Cost), a quote with data and an approved after photo (or, for Bill For Incurred, a before photo and a sign-off). Entering the Done group may propose an invoice and a vendor bill when an auto-invoice contract covers the job. AR audits the record and marks it Ready to Invoice.',
       who: ['OM (dispatcher)', 'Accounts Payable', 'Accounts Receivable'],
     },
     {
@@ -352,12 +352,12 @@ export const LIFECYCLE: LifecycleModel = {
       key: 'money',
       title: 'Technician payments and the Cost rule',
       statuses: ['On Site (Job)', 'Done / Incurred'],
-      brd: ['1.5.2', '6.2.3', '11.3.2'],
-      summary: 'A payment request per vendor payment: requested → approved → sent to Yoda → paid, or rejected. Cost = the sum of accepted requests.',
+      brd: ['1.5.2', '11.3.2'],
+      summary: 'A payment request per technician payment (the Yoda flow, 0076): requested → approved → paid, or rejected; processed rows are deleted only with an admin as the second person. Paying adds the amount to Cost; deleting a paid request subtracts it.',
       steps: [
-        'Request payment on the work order (vendor record or a typed name and phone, purpose, amount, method); Approve or Reject in Payments › Needs approval; Send to Yoda and Mark paid in To process.',
-        'Approval tiers by amount decide which roles may say yes inside each band; the button is locked with the reason first.',
-        'When accepted requests take Cost past the NTE, an nte_override task lands in Approvals and holds Approve and Send to Yoda; the task cancels itself once Cost is back under the NTE.',
+        'Request payment on the work order (vendor typeahead or a typed name and phone, purpose, amount, method and payout details; W9 flagged past $599 a year); Approve or Reject in Payments › Needs approval; Mark paid (or Pay now) in To pay.',
+        'The work order\'s status decides whether a request may be raised (until Invoiced or Cancelled); AP may always process existing ones.',
+        'When a payment takes Cost past the NTE, an nte_override task lands in Approvals and holds Approve and Pay; the task cancels itself once Cost is back under the NTE.',
         'Once the system has written Cost, it cannot be typed over; before that, a typed Cost stands.',
         'Vendor bills (the vendor\'s own invoice) run received → approved → paid, or disputed, beside the requests and never feed Cost.',
       ],

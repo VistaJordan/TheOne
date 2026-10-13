@@ -1,15 +1,20 @@
-// Routes: technician payment requests (S4, decisions 0016).
-//   GET  /work-orders/:id/payment-requests        (list + totals — payments:view)
-//   POST /work-orders/:id/payment-requests        (201 requested — payments:create)
-//   GET  /payments                                (the Payments tab — payments:view)
-//   POST /payment-requests/:id/approve            (requested → approved — payments:approve)
-//   POST /payment-requests/:id/reject             (→ rejected + internal note — payments:approve)
-//   POST /payment-requests/:id/send-to-yoda       (approved → sent_to_yoda — payments/process:edit)
-//   POST /payment-requests/:id/mark-paid          (→ paid — payments/process:edit)
+// Routes: technician payment requests at Yoda parity (on the 0015 permission tree).
+//   GET    /work-orders/:id/payment-requests        (list + totals — payments:view)
+//   POST   /work-orders/:id/payment-requests        (201 requested — payments:create; WO status gated)
+//   GET    /payments                                (the Payments tab / AP queue — payments:view, 0026 scoped)
+//   GET    /payment-requests/:pid                   (one row; full payout address for a processor)
+//   PATCH  /payment-requests/:pid                   (edit while requested — requester | processor)
+//   POST   /payment-requests/:pid/approve|reject    (payments:approve)
+//   POST   /payment-requests/:pid/pay|convert-method (payments/process:edit)
+//   POST   /payment-requests/:pid/delete            (owner | processor; processed rows → pending_delete)
+//   POST   /payment-requests/:pid/confirm-delete|reject-delete        (payments/process:delete)
+//   GET    /payment-vendors?q=&trade=   GET /payment-vendors/:vid   (the technician typeahead)
+//   GET    /payment-vendors/:vid/ytd?billing_entity=               (Yoda GetReciepientTotal)
+// The vendor RECORD (W9, COI, blacklist) is edited on the Vendors page (/vendors, 0057).
 //
 // The acting principal is resolved once, up front, and the permission checks
-// live in the service so no route can forget one. The amount goes through the
-// same hardened money validation as the quote's line items.
+// live in the service so no route can forget one. Money goes through the same
+// hardened validation as the quote's line items.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -19,16 +24,45 @@ import {
   listPaymentRequests,
   listAllPaymentRequests,
   createPaymentRequest,
+  getPaymentRequest,
+  updatePaymentRequest,
   approvePaymentRequest,
+  payPaymentRequest,
   rejectPaymentRequest,
-  sendPaymentRequestToYoda,
-  markPaymentRequestPaid,
+  convertPaymentMethod,
+  deletePaymentRequest,
+  confirmDeletePaymentRequest,
+  rejectDeletePaymentRequest,
+  vendorYtd,
 } from '../services/payments.js';
+import { searchPaymentVendors, getPaymentVendor } from '../services/paymentVendors.js';
 import { requirePerm } from '../services/permissions.js';
 import { assertRawMoney, zMoney } from '../validation.js';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
-const uuidParamsSchema = z.object({ id: z.string().uuid() });
+const pidParamsSchema = z.object({ pid: z.string().uuid() });
+const vidParamsSchema = z.object({ vid: z.string().uuid() });
+
+const methodSchema = z.enum(['zelle', 'ach', 'credit', 'check', 'cashapp']);
+
+/** Yoda PaymentAddress — one shape per method (D8). */
+const addressSchema = z.discriminatedUnion('method', [
+  z.object({ method: z.literal('zelle'), zelle_handle: z.string().trim().min(3).max(120) }),
+  z.object({
+    method: z.literal('ach'),
+    bank_name: z.string().trim().max(120).nullable().optional().transform((v) => v ?? null),
+    routing_number: z.string().trim().regex(/^\d{9}$/, 'Routing number is 9 digits'),
+    account_number: z.string().trim().regex(/^\d{4,17}$/, 'Account number is 4–17 digits'),
+    account_type: z.enum(['checking', 'savings']).nullable().optional().transform((v) => v ?? null),
+  }),
+  z.object({ method: z.literal('cashapp'), cashtag: z.string().trim().regex(/^\$?[A-Za-z][A-Za-z0-9_-]{0,24}$/, 'Enter a $cashtag') }),
+  z.object({
+    method: z.literal('check'),
+    payable_to: z.string().trim().min(1).max(200),
+    mailing_address: z.string().trim().min(5).max(400),
+  }),
+  z.object({ method: z.literal('credit'), note: z.string().trim().max(400).nullable().optional().transform((v) => v ?? null) }),
+]);
 
 // The payee is a vendor OR a manual name+phone — the either/or is enforced in
 // the service, where the 400 can explain itself.
@@ -39,14 +73,57 @@ const createSchema = z
     payee_phone: z.string().trim().max(40).nullable().optional(),
     purpose: z.string().trim().min(1).max(500),
     amount: zMoney('Amount', 0.01),
-    method: z.string().trim().min(1).max(60),
+    method: methodSchema,
+    payment_address: addressSchema.nullable().optional(),
     note: z.string().max(4000).nullable().optional(),
     recipient_name: z.string().trim().max(200).nullable().optional(),
+    recipient_phone: z.string().trim().max(40).nullable().optional(),
+    recipient_is_store: z.boolean().optional(),
+    attachment_id: z.string().uuid().nullable().optional(),
+    override_blacklist: z.boolean().optional(),
   })
   .strict();
 
-const rejectSchema = z.object({ note: z.string().trim().min(1).max(2000) });
-const sendSchema = z.object({ yoda_ref: z.string().trim().max(200).nullable().optional() });
+const editSchema = z
+  .object({
+    purpose: z.string().trim().min(1).max(500).optional(),
+    amount: zMoney('Amount', 0.01).optional(),
+    method: methodSchema.optional(),
+    payment_address: addressSchema.nullable().optional(),
+    note: z.string().max(4000).nullable().optional(),
+    recipient_name: z.string().trim().max(200).nullable().optional(),
+    recipient_phone: z.string().trim().max(40).nullable().optional(),
+    recipient_is_store: z.boolean().optional(),
+  })
+  .strict();
+
+// 0016 called the field `note`; the parity UI sends `reason`. Accept either.
+const reasonSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(2000).optional(),
+    note: z.string().trim().min(1).max(2000).optional(),
+  })
+  .refine((v) => Boolean(v.reason ?? v.note), { message: 'A reason is required' })
+  .transform((v) => ({ reason: (v.reason ?? v.note) as string }));
+const convertSchema = z.object({ method: methodSchema });
+
+const queueSchema = z.object({
+  status: z.enum(['requested', 'approved', 'sent_to_yoda', 'paid', 'rejected']).optional(),
+  billing_entity: z.string().trim().max(120).optional(),
+  vendor_id: z.string().uuid().optional(),
+  q: z.string().trim().max(200).optional(),
+  pending_delete: z.enum(['true', 'false']).optional(),
+  needs_w9: z.enum(['true', 'false']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  page_size: z.coerce.number().int().min(1).max(500).default(100),
+});
+
+const vendorsQuerySchema = z.object({
+  q: z.string().trim().max(200).optional(),
+  trade: z.string().trim().max(120).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+const ytdQuerySchema = z.object({ billing_entity: z.string().trim().max(120).optional() });
 
 async function taskIdOf(req: FastifyRequest): Promise<string> {
   const { id } = parse(idParamsSchema, req.params);
@@ -56,6 +133,7 @@ async function taskIdOf(req: FastifyRequest): Promise<string> {
 }
 
 export default async function paymentRoutes(app: FastifyInstance): Promise<void> {
+  // ── Per work order ─────────────────────────────────────────────────────────
   app.get('/work-orders/:id/payment-requests', async (req) => {
     requirePerm(actingPrincipalFromRequest(req), 'payments', 'view', 'You cannot view payment requests');
     const taskId = await taskIdOf(req);
@@ -72,36 +150,107 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
     return reply.status(201).send({ item });
   });
 
-  /** GET /payments — the sidebar tab. Needs payments:view (0015). */
+  // ── The Payments tab / AP queue + single row ───────────────────────────────
+  /** GET /payments — the sidebar tab. Needs payments:view (0015); 0026 scopes the rows. */
   app.get('/payments', async (req) => {
     const viewer = actingPrincipalFromRequest(req);
     requirePerm(viewer, 'payments', 'view', 'You cannot view payment requests');
-    return listAllPaymentRequests(undefined, viewer);
+    const q = parse(queueSchema, req.query);
+    return listAllPaymentRequests(
+      {
+        status: q.status ?? null,
+        billing_entity: q.billing_entity ?? null,
+        vendor_id: q.vendor_id ?? null,
+        q: q.q ?? null,
+        pending_delete: q.pending_delete === undefined ? null : q.pending_delete === 'true',
+        needs_w9: q.needs_w9 === undefined ? null : q.needs_w9 === 'true',
+        page: q.page,
+        page_size: q.page_size,
+      },
+      viewer,
+    );
   });
 
-  app.post('/payment-requests/:id/approve', async (req) => {
-    const { id } = parse(uuidParamsSchema, req.params);
+  app.get('/payment-requests/:pid', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
     const actor = actingPrincipalFromRequest(req);
-    return { item: await approvePaymentRequest(id, actor) };
+    requirePerm(actor, 'payments', 'view', 'You cannot view payment requests');
+    return { item: await getPaymentRequest(pid, actor) };
   });
 
-  app.post('/payment-requests/:id/reject', async (req) => {
-    const { id } = parse(uuidParamsSchema, req.params);
-    const { note } = parse(rejectSchema, req.body);
-    const actor = actingPrincipalFromRequest(req);
-    return { item: await rejectPaymentRequest(id, note, actor) };
+  app.patch('/payment-requests/:pid', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    assertRawMoney(req.rawBody);
+    const input = parse(editSchema, req.body);
+    return { item: await updatePaymentRequest(pid, input, actingPrincipalFromRequest(req)) };
   });
 
-  app.post('/payment-requests/:id/send-to-yoda', async (req) => {
-    const { id } = parse(uuidParamsSchema, req.params);
-    const { yoda_ref } = parse(sendSchema, req.body ?? {});
-    const actor = actingPrincipalFromRequest(req);
-    return { item: await sendPaymentRequestToYoda(id, yoda_ref?.trim() || null, actor) };
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  app.post('/payment-requests/:pid/approve', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    return { item: await approvePaymentRequest(pid, actingPrincipalFromRequest(req)) };
   });
 
-  app.post('/payment-requests/:id/mark-paid', async (req) => {
-    const { id } = parse(uuidParamsSchema, req.params);
-    const actor = actingPrincipalFromRequest(req);
-    return { item: await markPaymentRequestPaid(id, actor) };
+  app.post('/payment-requests/:pid/pay', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    return { item: await payPaymentRequest(pid, actingPrincipalFromRequest(req)) };
+  });
+
+  // 0016's verb for the same move; kept so the Payments tab's older callers keep working.
+  app.post('/payment-requests/:pid/mark-paid', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    return { item: await payPaymentRequest(pid, actingPrincipalFromRequest(req)) };
+  });
+
+  app.post('/payment-requests/:pid/reject', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    const { reason } = parse(reasonSchema, req.body);
+    return { item: await rejectPaymentRequest(pid, reason, actingPrincipalFromRequest(req)) };
+  });
+
+  app.post('/payment-requests/:pid/convert-method', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    const { method } = parse(convertSchema, req.body);
+    return { item: await convertPaymentMethod(pid, method, actingPrincipalFromRequest(req)) };
+  });
+
+  // ── Delete (soft, two-person on processed rows) ────────────────────────────
+  app.post('/payment-requests/:pid/delete', async (req, reply) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    const { reason } = parse(reasonSchema, req.body);
+    const item = await deletePaymentRequest(pid, reason, actingPrincipalFromRequest(req));
+    if (item === null) return reply.status(200).send({ item: null, deleted: true });
+    return { item, deleted: false };
+  });
+
+  app.post('/payment-requests/:pid/confirm-delete', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    await confirmDeletePaymentRequest(pid, actingPrincipalFromRequest(req));
+    return { item: null, deleted: true };
+  });
+
+  app.post('/payment-requests/:pid/reject-delete', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    return { item: await rejectDeletePaymentRequest(pid, actingPrincipalFromRequest(req)) };
+  });
+
+  // ── The payee typeahead — anyone who may request a payment may look one up ──
+  app.get('/payment-vendors', async (req) => {
+    requirePerm(actingPrincipalFromRequest(req), 'payments', 'create', 'You cannot look up payees');
+    const q = parse(vendorsQuerySchema, req.query);
+    return searchPaymentVendors(q.q ?? null, q.trade ?? null, q.limit);
+  });
+
+  app.get('/payment-vendors/:vid', async (req) => {
+    requirePerm(actingPrincipalFromRequest(req), 'payments', 'view', 'You cannot view payment requests');
+    const { vid } = parse(vidParamsSchema, req.params);
+    return { item: await getPaymentVendor(vid) };
+  });
+
+  app.get('/payment-vendors/:vid/ytd', async (req) => {
+    requirePerm(actingPrincipalFromRequest(req), 'payments', 'view', 'You cannot view payment requests');
+    const { vid } = parse(vidParamsSchema, req.params);
+    const { billing_entity } = parse(ytdQuerySchema, req.query);
+    return vendorYtd(vid, billing_entity ?? null);
   });
 }

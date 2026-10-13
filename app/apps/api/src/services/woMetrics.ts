@@ -153,7 +153,7 @@ const SOURCE_MODELS: Record<Exclude<WidgetSource, 'work_orders'>, SourceModel> =
   payments: {
     // 0057 · the two principal joins are on primary keys, so no row is
     // ever counted twice; they only add names a card may group by.
-    from: `FROM payment_request x JOIN task t ON t.id = x.task_id LEFT JOIN vendor v ON v.id = x.vendor_id
+    from: `FROM payment_request x JOIN task t ON t.id = x.task_id AND x.deleted_at IS NULL LEFT JOIN vendor v ON v.id = x.vendor_id
            LEFT JOIN principal rq ON rq.id = x.requested_by LEFT JOIN principal vo ON vo.id = v.owner_id`,
     fields: {
       amount: 'x.amount',

@@ -133,7 +133,7 @@ export interface AiQuoteDraftResponse {
   call: WoCall;
   draft: AiQuoteDraft | null;
   /** The work order's real quote, when one exists — Submit quote fills it. */
-  quote: { status: 'draft' | 'pending_approval' | 'approved' | 'sent'; has_content: boolean } | null;
+  quote: { status: 'draft' | 'pending_approval' | 'approved' | 'sent' | 'client_approved' | 'client_declined'; has_content: boolean } | null;
   /** False when ANTHROPIC_API_KEY is unset: the page says so instead of failing. */
   ai_configured: boolean;
 }

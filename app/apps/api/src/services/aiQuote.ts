@@ -265,7 +265,7 @@ export async function submitDraft(
   const state = await quoteState(taskId);
   if (state && state.status !== 'draft' && state.status !== 'pending_approval') {
     throw conflict(
-      `The quote on this work order is ${state.status === 'approved' ? 'approved' : 'sent'} — reject it back to draft before replacing it`,
+      `The quote on this work order is ${state.status.replace('_', ' ')} — it can only be replaced while it is a draft or pending approval`,
       { code: 'QUOTE_LOCKED', status: state.status },
     );
   }

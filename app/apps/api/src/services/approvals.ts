@@ -1094,7 +1094,7 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
   if (allow('payments', 'approve') && allow(approvalSectionPermKey('payments'), 'view')) {
     const pr = await query<{ n: number | string }>(
       `SELECT count(*)::int AS n FROM payment_request pr JOIN task t ON t.id = pr.task_id
-        WHERE pr.status = 'requested' AND t.deleted_at IS NULL ${only}`,
+        WHERE pr.status = 'requested' AND pr.deleted_at IS NULL AND t.deleted_at IS NULL ${only}`,
       qp.values,
     );
     to_decide += Number(pr.rows[0]?.n ?? 0);

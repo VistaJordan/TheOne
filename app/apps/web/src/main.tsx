@@ -23,6 +23,7 @@ import './styles/assignee.css';
 import './styles/client-updates.css';
 import './styles/assistant.css';
 import './styles/docs.css';
+import './styles/parity.css';
 import { App } from './App';
 import { initOKnob } from './lib/oknob';
 

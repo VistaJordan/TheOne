@@ -1,0 +1,243 @@
+/* ── Yoda-parity additions (quotes rounds / option decisions, payment
+   lifecycle, AP queue). Builds ONLY on the existing tokens and the .qb / .pay
+   scopes — no new palette, no new type ramp. ─────────────────────────────── */
+
+/* ═══ Quote builder ═══════════════════════════════════════════════════════ */
+
+/* Decided rounds read as history: quieter card, dashed edge, locked chips. */
+.qb .card.is-history {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--surface) 92%, var(--chip));
+}
+.qb .card.is-history .card-title { color: var(--ink-2); }
+
+/* Option card states (Yoda IsAdminApproved / RejectionMessage / IsLocked). */
+.qb .opt-card.is-locked { opacity: 0.96; }
+.qb .opt-card.is-locked .fld:disabled,
+.qb .opt-card.is-locked .fld[disabled] { background: transparent; border-color: transparent; padding-left: 0; }
+.qb .opt-card.is-approved {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.qb .opt-card.is-declined {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+.qb .opt-card.is-approved .opt-tag {
+  background: var(--accent);
+  color: var(--accent-ink, #fff);
+  border-color: transparent;
+}
+.qb .opt-card.is-declined .opt-tag {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+/* Per-option client price beside the lines total. */
+.qb .subtotal-chip.is-grand {
+  margin-left: 8px;
+  border-color: color-mix(in srgb, var(--accent) 48%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.qb .subtotal-chip.is-grand .num { color: var(--accent-text); }
+
+/* Add-line + Yoda rate presets in the section footer. */
+.qb .lt-add { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qb .lt-presets { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.qb .lt-presets .chip { cursor: pointer; }
+.qb .lt-presets .chip:hover { border-color: var(--accent); color: var(--accent-text); }
+
+/* Money rail: per-option sub-line (lines · tax) and the priced row. */
+.qb .kvrow .kv-sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.qb .kvrow.is-total .kv-sub { display: inline; margin-left: 8px; font-size: 11px; text-transform: none; letter-spacing: 0; }
+.qb .kvrow.is-priced dt { color: var(--accent-text); }
+.qb .kvrow.is-priced dd { font-weight: 700; }
+.qb .kvrow.kv-note dt { font-size: 11px; }
+.qb .kvrow.kv-note .linkbtn,
+.qb .linkbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.qb .tax-in .cur { order: 2; margin-left: 4px; }
+
+/* Decision sheet: option radio list. */
+.qb .radio-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+
+/* Pipeline: the declined terminal step. */
+.qb .pstep.is-declined { color: var(--danger); }
+.qb .pstep.is-declined .pstep-mark {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+/* WO-status chip in the quote header carries the status colour as its dot. */
+.qb .qhead-idline .chip .pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+/* ═══ Payment request ═════════════════════════════════════════════════════ */
+
+.pay .ck {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+  margin-top: 8px;
+}
+.pay .ck input[type='checkbox'],
+.pay .ck input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.pay .finput.mono { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); letter-spacing: 0.02em; }
+.pay .finput:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Vendor search. */
+.pay .vpick-search { padding-bottom: 10px; }
+.pay .vpick-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.pay .vpick-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.pay li:last-child .vpick-row { border-bottom: 0; }
+.pay button.vpick-row:hover,
+.pay button.vpick-row:focus-visible { background: var(--chip); outline: none; }
+.pay .vpick-row.is-muted { color: var(--ink-3); cursor: default; }
+.pay .vpick-row-name { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.pay .vpick-row-sub { font-size: 12px; color: var(--ink-3); }
+.pay .vpick.is-blocked { box-shadow: inset 3px 0 0 var(--danger) !important; }
+
+/* W9 alert (Yoda shakes it — we pulse once and stay). */
+.pay .w9-alert {
+  margin-top: 12px;
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--ink);
+  animation: w9-pulse 0.6s ease-out 1;
+}
+@keyframes w9-pulse {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+  100% { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) { .pay .w9-alert { animation: none; } }
+
+/* Ledger rows. */
+.pay .tbl tr.is-pending-delete td { background: color-mix(in srgb, var(--warn-bg) 60%, transparent); }
+.pay .tbl tr.is-rejected td { color: var(--ink-3); }
+.pay .tbl tr.is-rejected .td-amt { text-decoration: line-through; }
+.pay .td-actions { white-space: nowrap; }
+
+/* AP row actions + inline reason sheets. */
+.pay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.pay-actions.is-compact { justify-content: flex-end; }
+.pay-actions .btn-icon { padding: 4px 6px; }
+.pay-actions .tipwrap:hover .tip,
+.pay-actions .tipwrap:focus-within .tip { opacity: 1; }
+.pay-sheet {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: var(--chip);
+  margin-top: 4px;
+  text-align: left;
+}
+.pay-sheet .sheet-f { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.pay-sheet .finput,
+.pay-sheet .fselect {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.pay-sheet .flabel { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.pay-sheet .fhelp { font-size: 12px; color: var(--ink-3); display: flex; gap: 6px; align-items: center; margin: 0; }
+.pay-sheet .selwrap { position: relative; }
+.pay-sheet .sel-chev { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--ink-3); }
+
+/* ═══ AP queue page ═══════════════════════════════════════════════════════ */
+
+.pay-filters { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.pay-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto;
+  gap: 14px;
+  align-items: end;
+}
+.pay-filter-row .ck { margin: 0 0 10px; }
+@media (max-width: 900px) {
+  .pay-filter-row { grid-template-columns: minmax(0, 1fr); }
+}
+.pay-queue td .site strong { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.pay-queue td .pay-actions { justify-content: flex-start; }
+.pay-queue tr.is-pending-delete td { background: color-mix(in srgb, var(--warn-bg) 60%, transparent); }
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 0 24px;
+}
+.pager-txt { font-size: 12px; color: var(--ink-3); }
+
+/* ═══ WO detail rail ══════════════════════════════════════════════════════ */
+
+.card-foot .tipwrap:hover .tip,
+.card-foot .tipwrap:focus-within .tip { opacity: 1; }

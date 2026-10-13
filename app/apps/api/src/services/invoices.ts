@@ -37,6 +37,7 @@ import {
   type InvoiceStatus,
   type InvoiceUpdateInput,
   type InvoicesResponse,
+  type QuoteLineType,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { ApiError, badRequest, conflict, notFound } from '../errors.js';
@@ -267,37 +268,64 @@ interface QuoteLineRow {
   kind: string;
   include_in_summary: boolean;
   position: number;
+  round: number;
+  approved: boolean;
+  sales_tax_pct: string | number | null;
+  total_rule: string | null;
 }
 
 /**
- * The lines an invoice starts with: the incurred work, plus every option the
- * quote included in its summary — which is exactly what the client agreed to
- * (rule B of the quote's own arithmetic). Overtime and markup are folded into
- * the unit price here, because an invoice line says what it costs, not how
- * the rate was arrived at; the quote's per-line tax (0048) comes back as the
- * invoice's tax figure.
+ * The lines an invoice starts with — what the client agreed to, by the quote's
+ * own arithmetic (0076, the Yoda rule): the incurred work plus the option the
+ * client approved (in any round; an earlier round's approved option is
+ * incurred work by now). Before the client has decided, the current round's
+ * included options stand in. Under RULE B (`options_only`) it is the incurred
+ * work plus every included option, as before. Declined siblings (soft-deleted)
+ * never bill. Overtime and markup are folded into the unit price, because an
+ * invoice line says what it costs, not how the rate was arrived at; the tax is
+ * the quote's sales-tax % on the billed lines plus their own per-line tax (0048).
  */
 async function prefillFromQuote(taskId: string): Promise<{ lines: InvoiceLineInput[]; tax: number }> {
   const res = await query<QuoteLineRow>(
     `SELECT l.line_type, l.description, l.qty, l.rate, l.ot, l.tax_pct, l.markup_pct,
-            q.ot_multiplier, s.kind, s.include_in_summary, l.position
+            q.ot_multiplier, q.sales_tax_pct, q.total_rule,
+            s.kind, s.include_in_summary, s.round, (s.approved_at IS NOT NULL) AS approved, l.position
        FROM quote q
-       JOIN quote_section s ON s.quote_id = q.id
+       JOIN quote_section s ON s.quote_id = q.id AND s.deleted_at IS NULL
        JOIN quote_line l ON l.section_id = s.id
       WHERE q.task_id = $1
-        AND (s.kind = 'incurred' OR s.include_in_summary)
-      ORDER BY s.position, l.position`,
+      ORDER BY CASE s.kind WHEN 'incurred' THEN 0 ELSE 1 END, s.round, s.position, l.position`,
     [taskId],
   );
+  const lastRound = res.rows.reduce((m, r) => Math.max(m, n(r.round)), 1);
+  const anyApproved = res.rows.some((r) => r.kind === 'option' && r.approved);
+  const yoda = res.rows[0]?.total_rule !== 'options_only';
+  const billed = (r: QuoteLineRow) => {
+    if (r.kind === 'incurred') return true;
+    if (!yoda) return r.include_in_summary;
+    if (r.approved) return true;
+    // Nothing approved yet: the current round's included options stand in.
+    return !anyApproved && n(r.round) === lastRound && r.include_in_summary;
+  };
+  const salesPct = yoda ? n(res.rows[0]?.sales_tax_pct) : 0;
 
   let taxCents = 0;
+  let baseCents = 0;
   const lines = res.rows
-    .filter((r) => String(r.description ?? '').trim() !== '')
+    .filter((r) => billed(r) && String(r.description ?? '').trim() !== '')
     .map((r) => {
       const qty = n(r.qty);
       const mult = r.ot_multiplier === null ? OT_MULTIPLIER : n(r.ot_multiplier);
-      const math = { qty, rate: n(r.rate), ot: r.ot, tax_pct: n(r.tax_pct), markup_pct: n(r.markup_pct) };
+      const math = {
+        qty,
+        rate: n(r.rate),
+        ot: r.ot,
+        line_type: r.line_type as QuoteLineType,
+        tax_pct: n(r.tax_pct),
+        markup_pct: n(r.markup_pct),
+      };
       const amount = computeLineAmount(math, mult);
+      baseCents += Math.round(amount * 100);
       if (math.tax_pct > 0) taxCents += Math.round((amount * math.tax_pct) / 100 * 100);
       // Unit price back out of the amount, so qty × unit price always equals
       // what the quote said — including the overtime multiplier and markup.
@@ -309,6 +337,7 @@ async function prefillFromQuote(taskId: string): Promise<{ lines: InvoiceLineInp
         unit_price: unit,
       };
     });
+  if (salesPct > 0) taxCents += Math.round((baseCents * salesPct) / 100);
   return { lines, tax: taxCents / 100 };
 }
 

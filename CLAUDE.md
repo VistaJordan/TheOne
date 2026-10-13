@@ -100,8 +100,8 @@ type); `reconcileApprovalTasks` (called from `dispatchAutomations`) cancels an
 NTE task once the cost is back under the NTE. Decisions post an internal
 comment on the work order. Permission path `approvals` (view / approve).
 The second half of 1.5.2 ("financial progression is blocked") is
-`assertNoOpenNteOverride` in the same service: quote approve / send and
-payment approve / send-to-Yoda call it first and get a **409 `CONFLICT`**
+`assertNoOpenNteOverride` in the same service: quote approve / send / client
+approval and payment approve / pay call it first and get a **409 `CONFLICT`**
 while an `nte_override` task is open; rejecting is never blocked. The
 `Quote` payload and each `/api/payments` row carry `nte_override_open` so the
 builder and the Payments tab draw the verb locked before the click. The
@@ -1234,30 +1234,75 @@ Unified Ops. Tests: `tests/dashboard-tabs.test.ts`.
 **Cost and Total Invoiced follow the money records** (no migration;
 `shared/moneyRules.ts`, `services/moneySync.ts`, `tests/money-rules.test.ts`).
 Two rules Elise set on 2026-10-05, encoded on purpose (not editable from
-Admin yet): **`34. Cost` = the sum of the work order's accepted payment
-requests** (approved, sent to Yoda or paid), re-derived inside the
-transaction of every payment decision (`payments.decide` →
-`syncCostFromPayments`); and **`Total Invoiced` = the total of the work
+Admin yet): **`34. Cost` moves with the money that went out** (since 0076 —
+Jeff's Yoda rules, Elise 2026-10-13: Pay adds the amount to whatever Cost
+holds, deleting a paid request subtracts it, `moneySync.addToCost`, inside
+the payment's transaction; before 0076 Cost was re-derived as the sum of
+"accepted" requests, `syncCostFromPayments`, now unused); and
+**`Total Invoiced` = the total of the work
 order's quote** (whatever state the quote is in), stamped when the status
 moves to Invoiced or Invoiced Not Paid (`changeStatus` and the bulk status
 move → `syncInvoicedFromQuote`). This is the automation BRD rule 11.3.2
 promised for the final vendor cost. A system write is an ordinary
 `field_updated` row stamped `via: 'payment'` / `via: 'quote'`, re-derives
 Profit, and is dispatched to the automations after the commit — so an
-accepted payment that takes Cost past the NTE raises the `nte_override` task
-(1.5.2), which then holds Send to Yoda, and rejecting it clears the task.
-Edge cases, all in `costDecision`: no accepted request and none taken back →
-whatever is typed stays; the last accepted one rejected → Cost is cleared; no
+paid request that takes Cost past the NTE raises the `nte_override` task
+(1.5.2), which then holds Approve and Pay, and deleting it clears the task.
+Edge cases: a typed Cost is the starting point a payment adds to; Cost never
+goes below zero; no
 quote, or a quote totalling nothing → Total Invoiced is left alone. **The
 lock** (`assertMoneyNotLocked`, called by the field editor and bulk edit
 beside the visit-owned guard; a 400 that names the work orders): a hand edit
 is refused only while the field's LATEST audit row is a system write with a
-value. So a work order with no accepted payment still takes a typed Cost (or
+value. So a work order with no paid payment still takes a typed Cost (or
 11.3.2 would keep it out of Done), and figures typed before these rules stay
 correctable until the system first writes them. Not covered on purpose:
 vendor bills do not feed Cost, CSV import is not guarded, nothing was
 back-filled, and Total Invoiced does not follow the invoice record yet
 ("for now the total of the quote").
+
+**Quotes & payments at Yoda parity** (migration 0076, Jeff Soren's port of
+the standalone Yoda tool, D1–D16; Elise 2026-10-13: **his rules are the
+source of truth** where they clash with ours). Quotes: option-level client
+decision (`client_approved` / `client_declined`, `POST …/quote/client-approve
+{section_id, on_site?}` / `client-decline`), rounds (`quote_section.round`,
+`…/quote/new-round` after a decision; an earlier round's approved option
+prices as incurred, the incurred section locks from round 2), withdraw
+(`cancel-submission`, sent → approved), revision snapshots
+(`quote_revision_snapshot`), and the **Yoda total rule**: each option is
+`(incurred + option) × (1 + sales_tax_pct)` plus the per-line taxes (0048),
+Grand Total = the approved option's, else the first included one's;
+`total_rule = 'options_only'` keeps the old RULE B. Sales tax is a PERCENT
+(`sales_tax_pct`, derived from `labor_rate` + ZIP via `services/salesTax.ts`,
+cache → RapidAPI → state fallback); the old `$ sales_tax` column is unread.
+fee / discount line types (discount is negative by type), integer `day`.
+Our 0046/0048 work rides inside it: per-line markup / tax / UOM, the contract
+OT multiplier, quote numbers, document type, bill/ship-to, Print / PDF.
+**WO-status gating** (`allowedWoActions` in shared, `services/woPolicy.ts`,
+403 `WO_STATUS_BLOCKED`, served as `WorkOrderDetail.actions` and
+`Quote.wo_actions`): quoting closes from Done, the client decision still
+records at Done, payment requests run until Invoiced / Cancelled, AP
+processing is never gated; a status the phase map does not know stays live.
+Payments: requested → approved → **paid** (Pay straight from requested is
+allowed); **`sent_to_yoda` is retired** (0076 folded those rows to approved,
+the value stays legal in the CHECK). Method codes `zelle|ach|credit|check|
+cashapp` (CHECK) with a per-method `payment_address` (ACH masked unless
+`payments/process:edit`); duplicate purpose 409; blacklisted vendor 409
+(admin override); W9 running total > $599 per vendor + billing entity + year,
+non-credit, alternate recipients excluded (`needs_w9`); soft delete with
+reason, processed rows → `pending_delete` until `payments/process:delete`
+(admin, granted by 0076) confirms or keeps. **Payment requests are NOT
+tier-gated any more** (6.2.3 bands still gate vendor bills and invoices).
+The payee typeahead is `/api/payment-vendors` (`services/paymentVendors.ts`)
+and reads OUR vendor record (0057: `w9_received = 'YES'`, `blacklisted`,
+earliest `vendor_expiry`); Jeff's duplicate vendor columns and his
+`/vendors` routes were NOT brought (they collided with the Vendors module).
+A manual payee creates a `kind = 'tech'` vendor + `vendor_phone` row. Every
+ClickUp / Teams push Yoda made is an `outbox` row (nothing drains it yet;
+distinct from 0052's `comment_delivery`). Soft-deleted payments are excluded
+by every reader (`deleted_at IS NULL`). Smoke script:
+`scripts/smoke-quotes-payments.ps1` (needs a running API). The demo AP user
+"Dana Reyes" is seeded locally only, never inserted by the migration.
 
 **The assistant** (migration 0068; `shared/assistant.ts`,
 `services/assistant.ts`, `lib/assistantPrompt.ts`, `lib/assistantTools.ts`,

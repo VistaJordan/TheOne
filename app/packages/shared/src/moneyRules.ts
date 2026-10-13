@@ -3,24 +3,27 @@
 // Two rules, written here once so the API, the tests and the assistant's
 // guide say the same thing:
 //
-//   Cost            = the sum of the work order's ACCEPTED payment requests
-//                     (approved, sent to Yoda or paid). Re-derived every time a
-//                     payment request changes state. BRD rule 11.3.2 called
+//   Cost            moves with the money that went out (0076, the Yoda rule
+//                     UpdateCostInClickUp): paying a request ADDS its amount
+//                     to whatever Cost holds, deleting a paid one subtracts it
+//                     (apps/api moneySync.addToCost). BRD rule 11.3.2 called
 //                     the hand-typed cost "manual input for V1, with
-//                     automation planned"; this is that automation.
+//                     automation planned"; this is that automation. The
+//                     sum-of-requests helpers below (costFromPayments /
+//                     costDecision) are the pre-0076 rule, kept for its tests.
 //   Total Invoiced  = the total of the work order's quote, stamped when the
 //                     status moves to Invoiced or Invoiced Not Paid.
 //
 // A field is only locked against hand edits while the figure in it is one the
 // system wrote (its latest audit row is stamped via 'payment' / via 'quote').
-// A work order with no accepted payment still takes a typed Cost — or rule
+// A work order with no paid payment still takes a typed Cost — or rule
 // 11.3.2 would keep it from ever reaching Done — and figures typed before
 // these rules existed stay correctable until the system first writes them.
 
 export const COST_FIELD_KEY = '34. Cost';
 export const TOTAL_INVOICED_FIELD_KEY = 'Total Invoiced';
 
-/** The payment-request states that count toward Cost. */
+/** The payment-request states the pre-0076 rule counted toward Cost. */
 export const ACCEPTED_PAYMENT_STATUSES = ['approved', 'sent_to_yoda', 'paid'] as const;
 
 export function isAcceptedPaymentStatus(status: string): boolean {
@@ -82,6 +85,6 @@ export function invoicedFromQuote(total: number | null | undefined): number | nu
 }
 
 export const COST_LOCKED_MESSAGE =
-  'Cost follows the accepted payment requests on this work order — it is their total and cannot be typed. Change it by approving or rejecting a payment request.';
+  'Cost on this work order is written by the payments — it changes when AP pays a request or a paid request is deleted, and cannot be typed.';
 export const INVOICED_LOCKED_MESSAGE =
   'Total Invoiced was set from the quote when this work order was invoiced and cannot be typed.';

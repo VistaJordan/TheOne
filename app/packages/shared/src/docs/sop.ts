@@ -34,7 +34,7 @@ export const SOP: SopDocument = {
     { term: 'NTE', definition: 'Not-to-exceed: the client\'s ceiling for the job. Cost above it raises an NTE override task that holds the quote and the payment until a manager decides.' },
     { term: 'Visit (CICO)', definition: 'One technician visit with its check-in and check-out stamps: Assessment, Job or Return trip. A check-in moves the work order On Site.' },
     { term: 'Quote clock', definition: 'Quote Due Date: 48 business hours after the assessment check-out, skipping weekends and the holiday table, Chicago time.' },
-    { term: 'Yoda', definition: 'The payment tool Accounts Payable hands approved technician payments to (Send to Yoda).' },
+    { term: 'Yoda', definition: 'The standalone quoting and technician-payment tool The One replaces. Its rules (option pricing, client decisions, rounds, W9, two-person delete, Cost on pay) live in The One since 0076; nothing is handed to it any more.' },
     { term: 'Scope ("Only theirs")', definition: 'A role or person who sees only the work orders assigned to them, widened by billing entities, assigned clients, or narrowed to a list of sites.' },
     { term: 'Super admin', definition: 'One of the four named people who pass every permission check and alone can adjust one person\'s permissions, restrict a person to sites, or view as someone else.' },
     { term: 'Audit log', definition: 'The append-only record of every change (who, when, before, after). Nothing in it can be edited or deleted.' },
@@ -329,20 +329,23 @@ export const SOP: SopDocument = {
     {
       n: 12,
       title: 'Paying the Technician',
-      lead: 'A request per payment, approved by the right tier, handed to Yoda, marked paid.',
+      lead: 'A request per payment, approved, paid by AP in The One (the Yoda payment flow, 0076), rolled into Cost.',
       who: ['Dispatchers (request)', 'Team Lead / Assistant TL / Account Manager (approve)', 'Accounts Payable (process)'],
       where: 'The Payables tab; Payments',
       needs: ['payments create', 'payments approve', 'payments/process edit'],
       blocks: [
         { kind: 'steps', items: [
-          'On the work order\'s **Payables** tab, **Payment requests** card, click **Request payment**. Pick the **Vendor record**, or type a name and phone ("Technician not in the vendor list? Enter a name and phone manually"); optionally **Add recipient** to pay someone other than the technician; fill **Purpose**, **Amount** (above $0) and **Method** (Zelle, ACH transfer, Check, Company card, Cash App), a note for AP, then **Submit payment request**. Receipts cannot be attached here yet.',
-          'An approver opens **Payments › Needs approval** and clicks **Approve** then **Approve payment**, or **Reject**, gives the reason and clicks **Reject with note** (also possible after approval). The button is locked with the reason when the amount is outside the approver\'s tier (Admin › Settings › Approval tiers) or while an NTE override is open.',
-          'Accounts Payable opens **Payments › To process**, clicks **Send to Yoda** (optional **Yoda reference**, e.g. YD-10422) and later **Mark paid**.',
+          'On the work order\'s **Payables** tab, **Payment requests** card, click **Request payment**. Find the technician in the vendor typeahead (name or phone), or type a name and phone (a new phone creates the technician\'s record); optionally add a **Recipient** (a person or a store); fill **Purpose**, **Amount** (above $0), **Method** (Zelle, ACH, Check, Cash App, Credit card) and its payout details, a note for AP, then submit. Watch the year-to-date line: past $599 with no W9 on file the request is flagged **W9 needed**. Receipts cannot be attached here yet.',
+          'An approver opens **Payments › Needs approval** and clicks **Approve**, or **Reject** with a reason for the requester. Approve is locked while an NTE override is open.',
+          'Accounts Payable opens **Payments › To pay** and clicks **Mark paid** (or **Pay now** straight from requested). **Change method** swaps the method and clears the payout details. Paying adds the amount to the work order\'s Cost.',
+          'To remove a request, click **Delete** with a reason: a requested or rejected one goes at once; an approved or paid one becomes **Pending delete** until an admin clicks **Confirm delete** or **Keep**.',
         ] },
         { kind: 'table', head: ['Rule', 'What happens'], rows: [
-          ['Cost follows the payments', 'Cost = the sum of accepted requests (approved, sent to Yoda or paid); rejecting one takes it back out, and rejecting the last one clears Cost.'],
-          ['NTE override (1.5.2)', 'When Cost passes the client NTE an NTE override task lands in Approvals and holds Approve and Send to Yoda (not Reject or Mark paid) and the quote; it cancels itself once Cost is back under the NTE.'],
-          ['Tiers (6.2.3)', 'As seeded: under $500 anyone with the permission; $500 to $3,000 TL / ATL / AM / Admin; over $3,000 TL / Admin. Admin › Settings edits the bands; super admins are never restricted.'],
+          ['Cost follows the payments', 'Paying a request adds its amount to Cost (on top of any figure already there); deleting a paid one takes it back off. Approving moves nothing.'],
+          ['NTE override (1.5.2)', 'When Cost passes the client NTE an NTE override task lands in Approvals and holds Approve and Pay (not Reject) and the quote; it cancels itself once Cost is back under the NTE.'],
+          ['Work-order status', 'Requests can be raised until the work order is Invoiced or Cancelled / Postponed; AP can always process the ones already raised.'],
+          ['Duplicates, blacklist, W9', 'The same purpose twice on one work order is refused; a blacklisted technician cannot be paid (an admin may override); past $599 a year per company (credit card and alternate recipients excluded) without a W9 on the vendor record, requests are flagged W9 needed.'],
+          ['Tiers (6.2.3)', 'Payment requests are no longer limited by amount bands (0076); the bands still apply to vendor bills and client invoices.'],
         ] },
         { kind: 'sub', title: 'Vendor bills and credit notes' },
         { kind: 'steps', items: [
@@ -389,7 +392,7 @@ export const SOP: SopDocument = {
           ['Status changes', 'Requests from request-mode roles, with from → to, "Requested by <name>", and an Ecotrak tag when Ecotrak would refuse.', 'Approve moves the work order (the gate and the Ecotrak check run again); Reject (reason) sends it back.'],
           ['Manager reviews', 'Review tasks raised by automations (the section appears once one exists).', 'Approve / Reject with a note.'],
           ['Quotes', 'Quotes pending approval.', 'Approve quote (approves only: "Sending it … is a separate step in the quote builder") / Return this quote to draft with a note.'],
-          ['Payments', 'Payment requests in requested.', 'Approve payment ("clears it for AP to send to Yoda") / Reject this payment with a note.'],
+          ['Payments', 'Payment requests in requested.', 'Approve payment (clears it for AP to pay) / Reject this payment with a note.'],
         ] },
         { kind: 'bullets', items: [
           'Lanes: **For me**, **Open**, **Done**, **My requests**. Filters **Entity / Client / Trade / For**; **Columns** adds Client, Waiting for, NTE, Cost, WO Due Date, For, Raised, Status; pages of rows, up to 500. Escalated rows pin to the top; open rows are oldest first and every decision is per row.',

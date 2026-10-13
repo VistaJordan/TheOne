@@ -19,25 +19,28 @@ import type {
   QuoteLineType,
   QuoteSection,
   QuoteSectionInput,
+  QuoteTotalRule,
   QuoteUpdateInput,
 } from '../api/client';
 import type { QuoteDocumentType, QuoteDraftBody, QuoteDraftSection } from '@theone/shared';
-import { parseMoney, parsePct, parseTax } from './quoteTotals';
+import { parseLinePct, parseMoney, parsePct } from './quoteTotals';
 
-// ── Vocabulary ───────────────────────────────────────────────────────────────
+// ── Vocabulary ────────────────────────────────────────────────────────────────────
 
-/** The four line types (requirements §1). Value is the stored lowercase enum
-    (0003 CHECK constraint); label is the comp's capitalised display text. */
+/** The Yoda line types (Labor, Materials, Service, Fees, Discount) + part.
+    Value is the stored lowercase enum; label is the display text. A discount's
+    amount is negative BY TYPE — the operator still types a positive number. */
 export const LINE_TYPES: { value: QuoteLineType; label: string }[] = [
   { value: 'service', label: 'Service' },
   { value: 'labor', label: 'Labor' },
   { value: 'part', label: 'Part' },
   { value: 'material', label: 'Material' },
+  { value: 'fee', label: 'Fee' },
+  { value: 'discount', label: 'Discount' },
 ];
 
-/** The Day column's options. The selected value is stored VERBATIM and no math
-    is ever done on it — its semantics are TBD (errata §3 / requirements §4.1). */
-export const DAY_VALUES = ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5'];
+/** The Day column's options (Yoda `Day` int). '' = single-day job. */
+export const DAY_VALUES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 
 /** 'Option A', 'Option B', … derived from position among the option sections —
     the letter is never stored, so deleting A promotes B. */
@@ -59,7 +62,7 @@ export interface DraftLine {
   /** RAW user input — validated as typed, never pre-sanitised. */
   qty: string;
   rate: string;
-  /** '' = nothing selected. */
+  /** '' = single day; otherwise the Day number as typed ('2'). */
   day_value: string;
   ot: boolean;
   /** 0048 · unit of measure ('' = none) and the line's own tax / markup
@@ -71,6 +74,8 @@ export interface DraftLine {
 
 export interface DraftSection {
   key: string;
+  /** Server id when the section came from the wire (needed to approve an option). */
+  id: string | null;
   kind: 'incurred' | 'option';
   /** Option title ("Condenser fan motor + start kit replacement"); '' on incurred. */
   name: string;
@@ -79,22 +84,29 @@ export interface DraftSection {
   scope_lines: string[];
   include_in_summary: boolean;
   lines: DraftLine[];
+  /** Yoda round. Sections of earlier rounds are history and render locked. */
+  round: number;
+  locked: boolean;
+  approved: boolean;
+  rejection_note: string | null;
 }
 
 export interface DraftQuote {
-  /** [0] is always the INCURRED section; the rest are the options in order. */
+  /** [0] is always the INCURRED section; the rest are the options in order
+      (earlier-round options first, then the current round's). */
   sections: DraftSection[];
-  sales_tax: string;
+  current_round: number;
+  /** Sales tax PERCENT as typed (D2). */
+  sales_tax_pct: string;
+  total_rule: QuoteTotalRule;
+  bill_to: string;
+  is_cost_tbd: boolean;
   specs: string;
   note_to_customer: string;
   /** Non-null = the operator used "Edit text" and pinned a manual summary. */
   summary_pinned: string | null;
-  /** "Show all options as separate quotes" — UI-only. Migration 0003 has no
-      column for it, so it is deliberately not sent and not persisted. */
-  separate_quotes: boolean;
-  /** 0048 · the document fields. */
+  /** 0048 · the document fields (bill_to is above). */
   document_type: QuoteDocumentType;
-  bill_to: string;
   ship_to: string;
 }
 
@@ -135,78 +147,111 @@ export function blankLine(): DraftLine {
   };
 }
 
-export function blankOption(): DraftSection {
+export function blankOption(round = 1): DraftSection {
   return {
     key: uid('opt'),
+    id: null,
     kind: 'option',
     name: '',
     narrative: '',
     scope_lines: [],
     include_in_summary: true,
     lines: [blankLine()],
+    round,
+    locked: false,
+    approved: false,
+    rejection_note: null,
   };
 }
 
 function blankIncurred(): DraftSection {
   return {
     key: uid('inc'),
+    id: null,
     kind: 'incurred',
     name: 'Work already performed',
     narrative: '',
     scope_lines: [''],
     include_in_summary: true,
     lines: [blankLine()],
+    round: 1,
+    locked: false,
+    approved: false,
+    rejection_note: null,
   };
 }
 
 // ── wire → draft ─────────────────────────────────────────────────────────────
 
 /** Takes a saved section or an AI draft section (0054) — the draft is the
-    builder's PUT body, so its lines carry every field the form reads. */
-function sectionToDraft(section: QuoteSection | QuoteDraftSection): DraftSection {
+    builder's PUT body, so it carries the lines but no round, lock or
+    decision: it lands in the current round, open for editing. */
+function sectionToDraft(section: QuoteSection | QuoteDraftSection, currentRound: number): DraftSection {
+  const saved = 'round' in section ? (section as QuoteSection) : null;
+  const round = saved ? saved.round : currentRound;
+  const locked = saved ? saved.locked || saved.round < currentRound : false;
   return {
     key: uid(section.kind === 'incurred' ? 'inc' : 'opt'),
+    id: saved ? saved.id : null,
     kind: section.kind,
     name: section.name ?? '',
     narrative: section.narrative_reported ?? '',
-    scope_lines: section.scope_lines.length > 0 ? [...section.scope_lines] : [''],
-    include_in_summary: section.include_in_summary,
-    lines: section.lines.map((line) => ({
+    scope_lines:
+      (section.scope_lines ?? []).length > 0 ? [...(section.scope_lines ?? [])] : locked ? [] : [''],
+    include_in_summary: section.include_in_summary ?? true,
+    lines: (section.lines ?? []).map((line) => ({
       key: uid('line'),
       line_type: line.line_type,
       description: line.description,
       qty: qtyToInput(line.qty),
       rate: rateToInput(line.rate),
-      day_value: line.day_value ?? '',
-      ot: line.ot,
+      // A saved line carries the Day as a number; an AI draft line (0054) only
+      // as text ("Day 2") — the digits are the Day either way.
+      day_value:
+        'day' in line && line.day != null
+          ? String(line.day)
+          : (line.day_value ?? '').replace(/\D/g, ''),
+      ot: line.ot ?? false,
       uom: line.uom ?? '',
-      tax_pct: line.tax_pct > 0 ? String(line.tax_pct) : '',
-      markup_pct: line.markup_pct > 0 ? String(line.markup_pct) : '',
+      tax_pct: (line.tax_pct ?? 0) > 0 ? String(line.tax_pct) : '',
+      markup_pct: (line.markup_pct ?? 0) > 0 ? String(line.markup_pct) : '',
     })),
+    round,
+    locked,
+    approved: saved ? saved.approved_at !== null : false,
+    rejection_note: saved ? saved.rejection_note : null,
   };
+}
+
+function pctToInput(n: number): string {
+  if (!Number.isFinite(n)) return '0';
+  return String(parseFloat(n.toFixed(3)));
 }
 
 /**
  * Build the editable draft from the saved quote. The incurred section is
  * guaranteed to exist and to sit at index 0 even if the server ever answers
  * without one — the comp has no "add incurred" affordance, so the screen would
- * otherwise be unbuildable.
+ * otherwise be unbuildable. Options of earlier rounds come before the current
+ * round's so the letters the server derived line up with the cards.
  */
 export function fromQuote(quote: Quote): DraftQuote {
   const incurred = quote.sections.find((s) => s.kind === 'incurred');
   const options = quote.sections.filter((s) => s.kind === 'option');
+  const inc = incurred ? sectionToDraft(incurred, quote.current_round) : blankIncurred();
+  // From round 2 on the incurred work is what the client already approved — locked.
+  if (quote.current_round > 1) inc.locked = true;
   return {
-    sections: [
-      incurred ? sectionToDraft(incurred) : blankIncurred(),
-      ...options.map(sectionToDraft),
-    ],
-    sales_tax: quote.totals.sales_tax.toFixed(2),
+    sections: [inc, ...options.map((o) => sectionToDraft(o, quote.current_round))],
+    current_round: quote.current_round,
+    sales_tax_pct: pctToInput(quote.sales_tax_pct),
+    total_rule: quote.total_rule,
+    bill_to: quote.bill_to ?? '',
+    is_cost_tbd: quote.is_cost_tbd,
     specs: quote.specs ?? '',
     note_to_customer: quote.note_to_customer ?? '',
     summary_pinned: quote.summary.pinned,
-    separate_quotes: false,
     document_type: quote.document_type ?? 'quote',
-    bill_to: quote.bill_to ?? '',
     ship_to: quote.ship_to ?? '',
   };
 }
@@ -243,25 +288,34 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
         description: line.description.trim(),
         qty: toNumber(line.qty),
         rate: toNumber(line.rate),
-        day_value: line.day_value === '' ? null : line.day_value,
+        day: line.day_value === '' ? null : Number(line.day_value),
         ot: line.ot,
         uom: line.uom.trim() === '' ? null : line.uom.trim(),
-        tax_pct: Number.isNaN(parsePct(line.tax_pct)) ? 0 : parsePct(line.tax_pct),
-        markup_pct: Number.isNaN(parsePct(line.markup_pct)) ? 0 : parsePct(line.markup_pct),
+        tax_pct: Number.isNaN(parseLinePct(line.tax_pct)) ? 0 : parseLinePct(line.tax_pct),
+        markup_pct: Number.isNaN(parseLinePct(line.markup_pct)) ? 0 : parseLinePct(line.markup_pct),
       })),
   };
 }
 
+/**
+ * Only the CURRENT round's unlocked sections go over the wire: earlier rounds
+ * are history the server refuses to rewrite, and from round 2 on the incurred
+ * section is locked too (409 SECTION_LOCKED if sent).
+ */
 export function toUpdateInput(draft: DraftQuote): QuoteUpdateInput {
-  const tax = parseTax(draft.sales_tax);
+  const pct = parsePct(draft.sales_tax_pct);
   return {
-    sales_tax: Number.isNaN(tax) ? 0 : tax,
+    sales_tax_pct: Number.isNaN(pct) ? 0 : pct,
+    total_rule: draft.total_rule,
+    bill_to: draft.bill_to.trim() === '' ? null : draft.bill_to.trim(),
+    is_cost_tbd: draft.is_cost_tbd,
     specs: draft.specs.trim() === '' ? null : draft.specs,
     note_to_customer: draft.note_to_customer.trim() === '' ? null : draft.note_to_customer,
     summary_pinned: draft.summary_pinned,
-    sections: draft.sections.map(sectionToInput),
+    sections: draft.sections
+      .filter((s) => !s.locked && s.round === draft.current_round)
+      .map(sectionToInput),
     document_type: draft.document_type,
-    bill_to: draft.bill_to.trim() === '' ? null : draft.bill_to,
     ship_to: draft.ship_to.trim() === '' ? null : draft.ship_to,
   };
 }
@@ -276,14 +330,19 @@ export function fromDraftBody(body: QuoteDraftBody): DraftQuote {
   const incurred = body.sections.find((s) => s.kind === 'incurred');
   const options = body.sections.filter((s) => s.kind === 'option');
   return {
-    sections: [incurred ? sectionToDraft(incurred) : blankIncurred(), ...options.map(sectionToDraft)],
-    sales_tax: '0.00',
+    sections: [
+      incurred ? sectionToDraft(incurred, 1) : blankIncurred(),
+      ...options.map((o) => sectionToDraft(o, 1)),
+    ],
+    current_round: 1,
+    sales_tax_pct: '0',
+    total_rule: 'incurred_plus_option',
+    bill_to: '',
+    is_cost_tbd: false,
     specs: body.specs ?? '',
     note_to_customer: body.note_to_customer ?? '',
     summary_pinned: null,
-    separate_quotes: false,
     document_type: 'quote',
-    bill_to: '',
     ship_to: '',
   };
 }
@@ -293,10 +352,33 @@ export function fromDraftBody(body: QuoteDraftBody): DraftQuote {
 export function toDraftBody(draft: DraftQuote): QuoteDraftBody {
   const input = toUpdateInput(draft);
   return {
-    sections: draft.sections.map(sectionToInput),
+    // The draft keeps the S4 line shape: the Day as text, every field present.
+    sections: draft.sections.map(sectionToInput).map((s) => ({
+      kind: s.kind,
+      name: s.name ?? null,
+      narrative_reported: s.narrative_reported ?? null,
+      scope_lines: s.scope_lines ?? [],
+      include_in_summary: s.include_in_summary ?? true,
+      lines: (s.lines ?? []).map((l) => ({
+        line_type: l.line_type,
+        description: l.description,
+        qty: l.qty,
+        rate: l.rate,
+        day_value: l.day == null ? null : `Day ${l.day}`,
+        ot: l.ot ?? false,
+        uom: l.uom ?? null,
+        tax_pct: l.tax_pct ?? 0,
+        markup_pct: l.markup_pct ?? 0,
+      })),
+    })),
     specs: input.specs ?? null,
     note_to_customer: input.note_to_customer ?? null,
   };
+}
+
+/** The sections the operator can still type into. */
+export function editableSections(draft: DraftQuote): DraftSection[] {
+  return draft.sections.filter((s) => !s.locked && s.round === draft.current_round);
 }
 
 // ── Immutable list helpers (used by every editor in components/quote) ─────────

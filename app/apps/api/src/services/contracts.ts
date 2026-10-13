@@ -223,7 +223,7 @@ export async function taskVendor(taskId: string): Promise<{ name: string | null;
             t.fields->>'Tech Phone Number' AS tech_phone,
             (SELECT COALESCE(v.name, pr.payee_name)
                FROM payment_request pr LEFT JOIN vendor v ON v.id = pr.vendor_id
-              WHERE pr.task_id = t.id ORDER BY pr.created_at DESC LIMIT 1) AS payee
+              WHERE pr.task_id = t.id AND pr.deleted_at IS NULL ORDER BY pr.created_at DESC LIMIT 1) AS payee
        FROM task t WHERE t.id = $1`,
     [taskId],
   );

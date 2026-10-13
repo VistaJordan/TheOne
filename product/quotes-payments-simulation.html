@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The One — Quotes & Payments: Yoda parity walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ── Tokens: lifted from app/apps/web/src/theme/tokens.css ─────────────────── */
+:root[data-theme="night"]{--bg:#050505;--surface:#0c0d0e;--border:rgba(255,255,255,.09);--border-strong:rgba(255,255,255,.14);--row-border:rgba(255,255,255,.055);--ink:#f2f3f5;--ink-2:#9aa0ab;--ink-3:#7f838c;--side-bg:#000;--topbar-bg:#000;--accent:#35b8f3;--on-accent:#00121c;--accent-text:#35b8f3;--chip:rgba(255,255,255,.08);--danger:#ff6b6a;--danger-border:rgba(255,107,106,.35);--danger-bg:rgba(255,107,106,.12);--warn:#f8ae00;--warn-solid:#f8ae00;--warn-bg:rgba(248,174,0,.13);--warn-border:rgba(248,174,0,.34);--ok:#6bed5e;--ok-bg:rgba(107,237,94,.12);--radius:4px;--radius-sm:3px;--pill-radius:3px;--shadow:none;--mono:'JetBrains Mono',ui-monospace,monospace}
+:root[data-theme="day"]{--bg:#f2f4f6;--surface:#fff;--border:#e3e6ea;--border-strong:#d4d9df;--row-border:#edf0f3;--ink:#191c21;--ink-2:#555c68;--ink-3:#6c727b;--side-bg:#fff;--topbar-bg:#000;--accent:#1a9fd4;--on-accent:#fff;--accent-text:#0d6e97;--chip:#eceff2;--danger:#c92a29;--danger-border:#f3b9b9;--danger-bg:#fdecec;--warn:#7c5700;--warn-solid:#d98c00;--warn-bg:#fdf3e0;--warn-border:#f0d49a;--ok:#1e7a46;--ok-bg:#e6f6ec;--radius:10px;--radius-sm:7px;--pill-radius:999px;--shadow:0 1px 2px rgba(20,25,35,.05);--mono:'JetBrains Mono',ui-monospace,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Barlow,system-ui,sans-serif}
+a{color:var(--accent-text)}
+.topbar{background:var(--topbar-bg);color:#fff;display:flex;align-items:center;gap:16px;padding:0 20px;height:52px;position:sticky;top:0;z-index:10}
+.topbar .brand{font:800 18px 'Barlow Condensed';letter-spacing:.04em;text-transform:uppercase}
+.topbar .brand b{color:#35b8f3}
+.topbar .sub{color:#9aa0ab;font-size:12px}
+.topbar .sp{flex:1}
+.topbar button{background:#1a1b1e;color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:6px 10px;font:600 12px Barlow;cursor:pointer}
+.tabs{display:flex;gap:4px;padding:12px 20px 0;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:52px;z-index:9;overflow-x:auto}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:10px 12px;font:600 13px Barlow;color:var(--ink-2);cursor:pointer;white-space:nowrap}
+.tab.is-on{color:var(--accent-text);border-bottom-color:var(--accent)}
+main{max-width:1240px;margin:0 auto;padding:20px}
+.panel{display:none}.panel.is-on{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px}
+.card-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.card-title{margin:0;font:700 13px 'Barlow Condensed';text-transform:uppercase;letter-spacing:.06em}
+.card-meta{margin-left:auto;font-size:12px;color:var(--ink-3)}
+.card-pad{padding:14px 16px}
+h1{font:800 28px 'Barlow Condensed';margin:0 0 4px}
+h2{font:700 20px 'Barlow Condensed';margin:18px 0 8px}
+h3{font:700 15px Barlow;margin:14px 0 6px}
+p{margin:6px 0}
+.lede{color:var(--ink-2);max-width:900px}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:980px){.g2,.g3,.g4{grid-template-columns:1fr}}
+.kpi{padding:14px 16px}.kpi .v{font:800 28px 'Barlow Condensed';color:var(--accent-text)}.kpi .k{font-size:12px;color:var(--ink-3)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--chip);border:1px solid transparent;font-size:11.5px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+.chip.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-border)}
+.chip.danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border)}
+.chip.accent{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent-text)}
+.chip.outline{background:transparent;border-color:var(--border-strong)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:var(--pill-radius);font-weight:700;font-size:12px;background:color-mix(in srgb,var(--pill) 16%,transparent);color:var(--pill)}
+.pill .dot{width:7px;height:7px;border-radius:999px;background:var(--pill)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--surface);color:var(--ink);font:600 12.5px Barlow;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.btn.danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border)}
+.btn.locked{background:var(--chip);border:1px dashed var(--border-strong);color:var(--ink-2);cursor:not-allowed;position:relative}
+.btn.locked::before{content:"🔒 "}
+.btn.locked[data-tip]:hover::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:0;background:var(--ink);color:var(--bg);padding:6px 8px;border-radius:6px;font-size:11.5px;font-weight:500;white-space:normal;width:260px;z-index:5}
+.btn.sm{padding:4px 8px;font-size:11.5px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-2)}
+select,input{font:inherit;padding:6px 8px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font:700 11px 'Barlow Condensed';letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:8px 10px;border-bottom:1px solid var(--border)}
+td{padding:8px 10px;border-bottom:1px solid var(--row-border);vertical-align:top}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-size:12px}
+pre{background:var(--chip);border-radius:var(--radius-sm);padding:10px 12px;font:12px/1.5 var(--mono);overflow:auto;margin:6px 0;white-space:pre-wrap}
+.pipe{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 0}
+.pstep{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3)}
+.pstep .m{width:22px;height:22px;border-radius:999px;border:1px solid var(--border-strong);display:grid;place-items:center;font-size:11px}
+.pstep.done{color:var(--ink-2)}.pstep.done .m{background:color-mix(in srgb,var(--accent) 16%,transparent);border-color:var(--accent);color:var(--accent-text)}
+.pstep.cur{color:var(--warn)}.pstep.cur .m{background:var(--warn-bg);border-color:var(--warn-border)}
+.pstep.declined{color:var(--danger)}.pstep.declined .m{background:var(--danger-bg);border-color:var(--danger-border)}
+.link{height:1px;flex:0 0 18px;background:var(--border-strong)}
+.callout{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--chip);font-size:12.5px;margin:8px 0}
+.callout.lock{border-style:dashed}
+.callout.ok{background:var(--ok-bg);border-color:transparent}
+.callout.warn{background:var(--warn-bg);border-color:var(--warn-border)}
+.callout.danger{background:var(--danger-bg);border-color:var(--danger-border)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:13px}
+.kv dt{color:var(--ink-2)}.kv dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.kv .tot{font-weight:700;border-top:1px solid var(--border);padding-top:6px}
+.phases{display:flex;gap:6px;flex-wrap:wrap}
+.ph{border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;background:var(--surface);min-width:120px}
+.ph h4{margin:0 0 6px;font:700 11px 'Barlow Condensed';letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.st{display:block;width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:6px;padding:3px 6px;font:500 12px Barlow;color:var(--ink);cursor:pointer}
+.st:hover{background:var(--chip)}.st.is-on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent-text);font-weight:700}
+.matrix td:first-child{font-family:var(--mono);font-size:12px}
+#p-endpoints .card-pad{overflow-x:auto}
+#p-endpoints table{min-width:900px}
+#p-endpoints td .mono{white-space:nowrap}
+.ok-t{color:var(--ok);font-weight:700}.no-t{color:var(--danger);font-weight:700}
+.log{font:12px/1.55 var(--mono);background:var(--chip);border-radius:var(--radius-sm);padding:10px 12px;max-height:260px;overflow:auto}
+.log .t{color:var(--ink-3)}
+.log .k{color:var(--accent-text)}
+.badge-stat{font:700 11px 'Barlow Condensed';letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:4px}
+.b-brought{background:var(--ok-bg);color:var(--ok)}.b-adapted{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent-text)}.b-seam{background:var(--warn-bg);color:var(--warn)}.b-dropped{background:var(--chip);color:var(--ink-2)}
+.journey{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px}
+@media(max-width:980px){.journey{grid-template-columns:1fr}}
+.steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.steps button{border:1px solid var(--border-strong);background:var(--surface);border-radius:999px;padding:4px 10px;font:600 12px Barlow;color:var(--ink-2);cursor:pointer}
+.steps button.is-on{border-color:var(--accent);color:var(--accent-text);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.opt{border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin:8px 0;position:relative}
+.opt.approved{box-shadow:inset 3px 0 0 var(--accent)}.opt.declined{box-shadow:inset 3px 0 0 var(--danger)}.opt.locked{opacity:.85}
+.opt .tag{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--chip);font:700 12px 'Barlow Condensed';margin-right:8px}
+.sr{position:absolute;left:-9999px}
+small.src{color:var(--ink-3);font-size:11px}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--ink-2)}
+footer{color:var(--ink-3);font-size:12px;text-align:center;padding:30px 0}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">THE <b>ONE</b></div>
+  <div class="sub">Quotes &amp; Payments — Yoda parity walkthrough · simulation of the shipped behaviour</div>
+  <div class="sp"></div>
+  <button id="themeBtn" type="button">Switch to Blackout</button>
+</div>
+
+<nav class="tabs" role="tablist">
+  <button class="tab is-on" data-tab="overview">Overview</button>
+  <button class="tab" data-tab="woflow">WO flow &amp; status gating</button>
+  <button class="tab" data-tab="quote">Quote journey</button>
+  <button class="tab" data-tab="payment">Payment journey</button>
+  <button class="tab" data-tab="map">Yoda ↔ The One map</button>
+  <button class="tab" data-tab="integrations">Integrations &amp; gaps</button>
+  <button class="tab" data-tab="endpoints">Endpoints &amp; payout methods</button>
+  <button class="tab" data-tab="notbrought">What we did not bring</button>
+</nav>
+
+<main>
+
+<!-- ═══════════════════════════════════════ OVERVIEW ═══════════════════════ -->
+<section class="panel is-on" id="p-overview">
+  <h1>Yoda's quoting &amp; technician-payment behaviour, embedded in The One</h1>
+  <p class="lede">Yoda is a <b>standalone</b> tool: you reach it through a link ClickUp writes into a custom field, it looks the work order up by TaskId, and it talks back to ClickUp and Teams. In The One the work order <i>is</i> the page — the quote and the payments hang off the WO, and the <b>WO status decides what is allowed</b>. Everything below is live in the code; this page simulates it so the behaviour can be read without running the stack.</p>
+
+  <div class="grid g4">
+    <div class="card kpi"><div class="v">6</div><div class="k">quote statuses (was 4) — adds <span class="mono">client_approved</span>, <span class="mono">client_declined</span></div></div>
+    <div class="card kpi"><div class="v">9</div><div class="k">WO actions gated by status — <span class="mono">allowedWoActions()</span>, one table, enforced server-side</div></div>
+    <div class="card kpi"><div class="v">16</div><div class="k">payment endpoints (was 6) — approve · pay · reject · convert · delete · confirm · keep · queue · vendors · YTD</div></div>
+    <div class="card kpi"><div class="v">38</div><div class="k">HTTP smoke assertions passing — <span class="mono">scripts/smoke-quotes-payments.ps1</span> (session-cookie auth)</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2 class="card-title">Branch &amp; base</h2><span class="card-meta">CLAUDE.md § Branches</span></div>
+    <div class="card-pad">
+      <p style="margin:0 0 10px">This work lives on <span class="mono">Primary-Updates-quotes-payments</span>, cut from <span class="mono">Primary-Updates</span> (<span class="mono">519584a</span>) — the repo's rule is that every batch starts from the previous review branch so PRs fast-forward in order. It is <b>not</b> a rebase of the first <span class="mono">main</span>-based port: 17 files conflicted and six things had changed underneath, so the parity work was re-applied on top of what Primary-Updates already had.</p>
+      <table>
+        <thead><tr><th>Primary-Updates already had</th><th>How the parity work sits on it</th></tr></thead>
+        <tbody>
+          <tr><td>Real auth — Entra / dev-bypass, server-side sessions, <span class="mono">X-Actor-Id</span> gone</td><td>Every route reads <span class="mono">actingPrincipalFromRequest</span>; the smoke test signs each actor in through <span class="mono">POST /auth/dev-login</span> and keeps a cookie jar per actor.</td></tr>
+          <tr><td>Permission tree (0015) — <span class="mono">role.permissions</span> + per-person overrides</td><td>Role lists are gone. WHO: <span class="mono">quotes:create|edit|approve</span>, <span class="mono">payments:approve</span>, <span class="mono">payments/process:edit</span> (AP), <span class="mono">payments/process:delete</span> (admin, new in 0028). WHEN: <span class="mono">allowedWoActions</span> unchanged.</td></tr>
+          <tr><td>0016 payment approval + <b>Yoda hand-off</b> (<span class="mono">sent_to_yoda</span>, <span class="mono">yoda_ref</span>)</td><td><b>Retired.</b> This branch <i>is</i> the Yoda payment flow, so there is nothing to hand off to. 0028 folds <span class="mono">sent_to_yoda</span> rows back to <span class="mono">approved</span>; the value stays legal in the CHECK for history. 0016's stamps (<span class="mono">approved_by/at</span>, <span class="mono">rejected_by/at</span>, <span class="mono">rejection_note</span>, <span class="mono">paid_by/at</span>) are reused.</td></tr>
+          <tr><td>Rule 1.5.2 — <span class="mono">assertNoOpenNteOverride</span> (409 while an NTE override is open)</td><td>Added to quote approve / send / <b>client-approve</b> and payment approve / <b>pay</b>. The builder and the queue draw the verb locked with the hold reason first.</td></tr>
+          <tr><td>Append-only audit (0023), <span class="mono">entity_id</span> as text (0017), whole-quote <span class="mono">quote_updated</span> snapshots</td><td><span class="mono">snapshotQuote</span> re-done for the parity schema (rounds, <span class="mono">sales_tax_pct</span>, <span class="mono">total_rule</span>, <span class="mono">day</span>); an autosave that changed nothing logs nothing.</td></tr>
+          <tr><td>WO scope (0026) — OM tiers see only their work orders</td><td>The quotes list and the payments queue apply <span class="mono">woScopeSql</span>; per-WO routes resolve through <span class="mono">resolveTaskId(id, actor)</span>.</td></tr>
+          <tr><td>27 migrations, <span class="mono">/payments</span> tab, 18-status vocabulary</td><td>Parity migration is <span class="mono">0028_quotes_payments_v2.sql</span>; the AP queue merged into the existing <span class="mono">PaymentsPage</span> (lanes + filters + row actions); demo WO opens at <span class="mono">Quote Ready</span>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">Yoda (standalone)</h2></div>
+      <div class="card-pad">
+        <ol style="margin:0;padding-left:18px;line-height:1.7">
+          <li>ClickUp webhook → <span class="mono">POST /Quote/GenerateQuoteLink</span> writes a URL into the <b>ClientQuote</b> field.</li>
+          <li>Dispatcher opens <span class="mono">/quote?customTaskId=…</span>; prefilled WO fields are read-only.</li>
+          <li>Builds <b>QuoteSection → QuoteOption → QuoteLineItem</b>; <b>Submit</b> writes the summary into ClickUp; <b>SubmitOnSite</b> also posts Summary + Cost to Teams.</li>
+          <li>Admin <b>Approval</b> on one option: <span class="mono">IsAdminApproved=1</span>, lines <span class="mono">IsIncurred=1</span>, section <span class="mono">IsLocked=1</span>, siblings soft-deleted, Teams ✅, ClickUp comment.</li>
+          <li>Payments: <span class="mono">/payment?customTaskId=…</span>; create posts to the company's Teams chat; AP <b>Verify</b> adds the amount to ClickUp <b>Cost</b>; delete is soft, with <span class="mono">IsPending</span> for processed rows.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">The One (embedded)</h2></div>
+      <div class="card-pad">
+        <ol style="margin:0;padding-left:18px;line-height:1.7">
+          <li>WO detail → <b>Client quote</b> card “Create quote” / <b>Payables</b> tab “Request payment”. Locked with the reason when the WO status closes them.</li>
+          <li>Quote builder at <span class="mono">/work-orders/:wo/quote</span>; WO context read-only; autosave; permission gates visible-but-locked.</li>
+          <li><b>Rounds</b> replace Yoda sections; options carry the Yoda flags; each option priced <span class="mono">(incurred + option) × (1 + tax%)</span>.</li>
+          <li>Internal approve/send → <b>client decision</b> on one option (same side effects as Yoda), or decline; <b>Add additional quote</b> opens the next round with the approved work as incurred.</li>
+          <li>Payments: vendor typeahead, method-specific payout, live W9 alert; the <b>Payments</b> tab at <span class="mono">/payments</span> is the queue (lanes, filters, row actions); <b>Pay</b> rolls into <span class="mono">34. Cost</span>; delete semantics identical. ClickUp/Teams posts become <b>outbox</b> rows.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2 class="card-title">Decisions applied</h2><span class="card-meta">product/quotes-payments-gap-analysis.md §5</span></div>
+    <div class="card-pad">
+    <table>
+      <thead><tr><th>#</th><th>Decision</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>D1</td><td>Yoda grand total per option: <span class="mono">(incurred + option) × (1 + tax%)</span>; RULE B kept behind <span class="mono">total_rule</span></td><td>Matches invoices and QuickBooks today; a different client number would be a billing regression.</td></tr>
+        <tr><td>D2</td><td>Sales tax stored as <b>%</b>, $ computed; derived from labor-rate card + ZIP, overridable</td><td>A stored $ goes stale on every line change — Yoda stores %.</td></tr>
+        <tr><td>D3</td><td><b>Option-level</b> client approval with lock / incurred flip / sibling retire</td><td>That is the business event; whole-quote approval cannot say “Option B won”.</td></tr>
+        <tr><td>D4</td><td>Rounds; new round only after a client decision</td><td>Multi-visit re-quotes are the canonical flow; mirrors Yoda “last section must have an approved option”.</td></tr>
+        <tr><td>D5</td><td>Client decision: anyone with <span class="mono">quotes:approve</span>; a dispatcher (OM tiers) while the WO is in the Approval phase (on-site)</td><td>On-site approval happens in the field; status gate + audit keeps it controlled. The phase exception is a lifecycle rule, not a grant, so it stays a role test.</td></tr>
+        <tr><td>D6</td><td>Status gating matrix: quoting through In Progress/Parts; payment requests through Done; AP processing always</td><td>AP pays techs at final soft close; Yoda blocks only “finished” WOs.</td></tr>
+        <tr><td>D7–D8</td><td>Yoda method codes + method-specific payout address, ACH masked except for <span class="mono">payments/process:edit</span></td><td>W9 logic keys on <span class="mono">credit</span>; AP cannot pay without payout details.</td></tr>
+        <tr><td>D9–D10</td><td>Vendor carries W9/COI/blacklist; two-person delete on processed payments (<span class="mono">payments/process:delete</span> confirms)</td><td>One record per technician; deleting paid money needs a second person.</td></tr>
+        <tr><td>D11</td><td>Outbox seam instead of live ClickUp/Teams</td><td>Fully functional offline; adapters become drop-ins.</td></tr>
+        <tr><td>D12–D15</td><td>fee/discount lines; round half-up; keep <span class="mono">payable</span>; gating → quote → payments order</td><td>See “What we did not bring” for the <span class="mono">payable</span> reasoning.</td></tr>
+        <tr><td>D16</td><td><b>Retire <span class="mono">sent_to_yoda</span></b> (0016's hand-off); approve/reject stay with the quote approvers, pay with AP</td><td>This branch replaces Yoda's payment flow — a “send to Yoda” verb would point at the thing being retired. Confirmed 2026-10-09.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ WO FLOW ════════════════════════ -->
+<section class="panel" id="p-woflow">
+  <h1>How quotes &amp; payments sit inside the work-order flow</h1>
+  <p class="lede">Yoda had no notion of WO status except “is the task still in the <i>AllTasks</i> folder?”. The One has 19 ClickUp statuses in 9 phases. <b>Click a status</b> to see which actions open and which lock — this is the exact <span class="mono">allowedWoActions()</span> table served on every WO detail (<span class="mono">actions</span>) and quote (<span class="mono">wo_actions</span>), and enforced as <span class="mono">403 WO_STATUS_BLOCKED</span>.</p>
+
+  <div class="card"><div class="card-pad">
+    <div class="phases" id="phases"></div>
+  </div></div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">Action matrix for <span id="mxStatus" class="mono"></span></h2><span class="card-meta" id="mxPhase"></span></div>
+      <div class="card-pad">
+        <table class="matrix"><thead><tr><th>Action</th><th>Allowed</th><th>Reason shown on the locked control</th></tr></thead><tbody id="mxBody"></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2 class="card-title">Where it lands in the lifecycle</h2><span class="card-meta">product/wo-lifecycle.md</span></div>
+      <div class="card-pad">
+        <table>
+          <thead><tr><th>Lifecycle stage</th><th>WO statuses</th><th>Quote / payment activity</th></tr></thead>
+          <tbody>
+            <tr><td>Intake · Hire · Assessment visit</td><td>Open, emergency, assessment *</td><td>Quote may already start (early on-site quotes); trip advances can be requested.</td></tr>
+            <tr><td>Soft close pt 1</td><td>waiting for quote, quote ready</td><td><b>Build the quote</b>, submit for internal approval (senior OM → ATL).</td></tr>
+            <tr><td>TL/ATL audit → client decision</td><td>!! waiting for approval, !! waiting for advice, approved</td><td>Quote <b>sent</b>; record <b>client approve/decline</b>; OM may record on-site approval here.</td></tr>
+            <tr><td>Materials · Fulfilment visit</td><td>parts *, job scheduled, job ongoing</td><td>Additional rounds (tech found more); payment requests for parts/advances.</td></tr>
+            <tr><td>Soft close final → AR audit</td><td>done/incurred, !! ready to invoice</td><td><b>Quoting closed</b>; late client decision still recordable; <b>AP pays the tech</b> — payment requests still allowed.</td></tr>
+            <tr><td>Invoice · Collection</td><td>&lt;&lt; invoiced not paid &gt;&gt;, invoiced</td><td>Everything closed except AP <i>processing</i> of existing requests (Yoda “finished WO” guard).</td></tr>
+            <tr><td>Exception</td><td>!! canceled/postponed</td><td>All closed; AP processing of existing requests only.</td></tr>
+          </tbody>
+        </table>
+        <div class="callout lock">🔒 <span><b>UX rule:</b> a blocked action is never hidden. The WO rail, the builder and the payment form render the control locked with the matrix reason as its tooltip, so people learn <i>why</i> and <i>when</i> it reopens.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2 class="card-title">What the WO detail rail looks like for the selected status</h2></div>
+    <div class="card-pad grid g2" id="railSim"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ QUOTE JOURNEY ══════════════════ -->
+<section class="panel" id="p-quote">
+  <h1>Quote journey — step through it</h1>
+  <p class="lede">Pick who you are and which WO status you are on, then walk the quote from Draft to a second round. The left side is a faithful mock of the builder's header, money rail and option cards; the right side shows what the API writes and the Yoda behaviour it reproduces.</p>
+
+  <div class="card"><div class="card-pad row">
+    <label class="field">Viewing as
+      <select id="qRole">
+        <option value="om">Bob Sanders · OM</option>
+        <option value="senior_om" selected>Matt Hammond · Senior OM</option>
+        <option value="atl">Elise · ATL</option>
+        <option value="admin">Jordan Brown · Admin</option>
+      </select></label>
+    <label class="field">WO status
+      <select id="qWoStatus"></select></label>
+    <label class="field">Total rule
+      <select id="qRule"><option value="incurred_plus_option">Yoda: (incurred + option) × (1 + tax)</option><option value="options_only">RULE B: options only</option></select></label>
+    <label class="field">Sales tax %
+      <input id="qTax" type="number" step="0.001" min="0" max="30" value="8.25" style="width:90px"></label>
+    <span style="margin-left:auto" class="row"><button class="btn sm" id="qReset">Reset journey</button></span>
+  </div></div>
+
+  <div class="steps" id="qSteps"></div>
+
+  <div class="journey">
+    <div>
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">Quote · WO-39403</h2>
+          <span class="chip">Rev <span id="qRev">3</span></span>
+          <span class="chip outline" id="qRoundChip">Round 1</span>
+          <span class="chip outline" id="qWoChip"></span>
+          <span class="card-meta"><span class="pill" id="qPill"><span class="dot"></span><span id="qPillTxt"></span></span></span>
+        </div>
+        <div class="card-pad">
+          <div class="pipe" id="qPipe"></div>
+          <div class="row" id="qActions"></div>
+          <div id="qCallout"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="chip accent">Incurred</span><h2 class="card-title">Work already performed</h2><span class="card-meta" id="qIncLock"></span></div>
+        <div class="card-pad">
+          <div id="qIncurred"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="chip warn">Proposed</span><h2 class="card-title" id="qPropTitle">Options for the client</h2><span class="card-meta" id="qPropMeta"></span></div>
+        <div class="card-pad" id="qOptions"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Money</h2><span class="card-meta">Comp SFM · NTE $3,202</span></div>
+        <div class="card-pad"><dl class="kv" id="qMoney"></dl><p id="qMoneyCap" style="font-size:12px;color:var(--ink-3)"></p></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Behind the scenes</h2><span class="card-meta">DB · activity_log · outbox</span></div>
+        <div class="card-pad"><div class="log" id="qLog"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Yoda equivalent</h2></div>
+        <div class="card-pad" id="qYoda" style="font-size:13px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ PAYMENT JOURNEY ════════════════ -->
+<section class="panel" id="p-payment">
+  <h1>Technician payment journey — step through it</h1>
+  <p class="lede">The request form (OM) and the AP queue (Dana · AP) in one simulation. The technician already has <b>$475 YTD</b> (75 + 400) with SFM — type an amount and watch the Yoda W9 threshold trip at $599, then process, delete and confirm the way Yoda does.</p>
+
+  <div class="card"><div class="card-pad row">
+    <label class="field">Viewing as
+      <select id="pRole">
+        <option value="om">Bob Sanders · OM</option>
+        <option value="senior_om" selected>Matt Hammond · Senior OM (requester)</option>
+        <option value="ap">Dana Reyes · AP</option>
+        <option value="admin">Jordan Brown · Admin</option>
+      </select></label>
+    <label class="field">WO status <select id="pWoStatus"></select></label>
+    <span style="margin-left:auto" class="row"><button class="btn sm" id="pReset">Reset journey</button></span>
+  </div></div>
+
+  <div class="journey">
+    <div>
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Request payment · WO-39403</h2><span class="chip outline" id="pWoChip"></span></div>
+        <div class="card-pad">
+          <div id="pBlocked"></div>
+          <h3>1 · Technician</h3>
+          <div class="row">
+            <select id="pVendor">
+              <option value="gulf">Gulf Coast Refrigeration LLC · (409) 555-0143 · no W9 on file</option>
+              <option value="black">Bayou HVAC Pros · blacklisted</option>
+              <option value="manual">— not in the list: enter name + phone (creates a vendor) —</option>
+            </select>
+            <span class="chip outline">YTD $475 · SFM</span>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <label class="field">Purpose <input id="pPurpose" value="Return trip" style="width:220px"></label>
+            <label class="field">Amount $ <input id="pAmount" type="number" step="0.01" value="150" style="width:120px"></label>
+          </div>
+          <div id="pDup"></div>
+          <div id="pW9"></div>
+          <h3>2 · Payment method</h3>
+          <div class="row">
+            <select id="pMethod">
+              <option value="zelle">Zelle</option><option value="ach" selected>ACH</option><option value="check">Check</option><option value="cashapp">Cash App</option><option value="credit">Credit card</option>
+            </select>
+            <span class="chip" id="pMethodHint"></span>
+          </div>
+          <div id="pAddress" class="row" style="margin-top:8px"></div>
+          <h3>3 · Recipient <span class="chip outline">optional</span></h3>
+          <div class="row"><label class="field"><input type="checkbox" id="pAlt"> Send to someone else (name + phone, or a store)</label></div>
+          <div class="row" style="margin-top:12px">
+            <span style="flex:1;font-size:12px;color:var(--ink-3)">Nothing is sent until you submit · AP processes from the ledger or the Payments queue</span>
+            <span id="pSubmitWrap"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Payments on this work order</h2><span class="card-meta" id="pLedgerMeta"></span></div>
+        <div class="card-pad" style="padding:0">
+          <table><thead><tr><th>Date</th><th>Recipient</th><th>Method</th><th>Purpose</th><th>Status</th><th class="num">Amount</th><th>Actions</th></tr></thead><tbody id="pLedger"></tbody>
+          <tfoot><tr><td colspan="5" style="text-align:right;color:var(--ink-3)">Total paid on this WO</td><td class="num" id="pPaid"></td><td></td></tr></tfoot></table>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Money on this WO</h2></div>
+        <div class="card-pad"><dl class="kv" id="pMoney"></dl></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Behind the scenes</h2><span class="card-meta">DB · activity_log · outbox</span></div>
+        <div class="card-pad"><div class="log" id="pLog"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Yoda equivalent</h2></div>
+        <div class="card-pad" style="font-size:13px">
+          <p><b>PaymentEngine.Create</b> → HandleFinishedWo (folder guard) · HandlePurpose (duplicate) · SetChatId (per-company Teams) · HandleSettingTechnician (by phone, create if new) · SetNeedsW9ForTechnicianAsync (running total &gt; $599, non-credit) · PostMessageToTeams → <span class="mono">PostedMessagePlain</span>.</p>
+          <p><b>VerifyPayment</b> → IsVerified, Payer, 👍 reaction, <b>UpdateCostInClickUp (+Amount)</b>, confirmation posts.</p>
+          <p><b>MarkPaymentAsDeleted</b> → immediate if !verified or owner, else <span class="mono">IsPending=1</span>; verified → Cost −Amount; ⛔ reaction. <b>RejectDeletePayment</b> clears IsPending. <b>ConvertToAch</b>.</p>
+          <p><b>Policies</b>: PaymentUsersPolicy (process) · PaymentUsersOrAdminsPolicy · admin-only delete confirmation.</p>
+          <p>In The One: same order of checks in <span class="mono">createPaymentRequest</span>; Teams/ClickUp posts → <span class="mono">outbox</span> rows; Cost → <span class="mono">task.fields['34. Cost']</span>; roles <span class="mono">ap</span>/<span class="mono">admin</span>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ MAP ════════════════════════════ -->
+<section class="panel" id="p-map">
+  <h1>Yoda ↔ The One — behaviour map</h1>
+  <p class="lede">Every Yoda capability, where it lives in The One now, and its status. <span class="badge-stat b-brought">brought</span> = same rule, same effect · <span class="badge-stat b-adapted">adapted</span> = same outcome, embedded shape · <span class="badge-stat b-seam">seam</span> = recorded locally, external push deferred · <span class="badge-stat b-dropped">not needed</span>.</p>
+  <div class="card"><div class="card-pad" style="padding:0">
+  <table>
+    <thead><tr><th>Yoda</th><th>Rule / effect</th><th>The One</th><th>Status</th></tr></thead>
+    <tbody id="mapBody"></tbody>
+  </table></div></div>
+</section>
+
+<!-- ═══════════════════════════════════════ INTEGRATIONS ═══════════════════ -->
+<section class="panel" id="p-integrations">
+  <h1>Integrations — what Yoda talks to, and whether The One needs it</h1>
+  <p class="lede">Yoda's value is partly in what it pushes outward. For each integration: what Yoda does, what The One does today (the seam), whether we actually need it, and when.</p>
+  <div class="grid g2" id="intGrid"></div>
+
+  <div class="card">
+    <div class="card-head"><h2 class="card-title">How the outbox seam works</h2><span class="card-meta">apps/api/src/services/outbox.ts · migration 0004</span></div>
+    <div class="card-pad">
+      <p>Every event Yoda would push is written <b>inside the same database transaction</b> as the business change — so the record that “a push is owed” can never drift from the quote or payment it belongs to. Nothing leaves the process yet. When the S6 adapters land they drain <span class="mono">status='pending'</span> rows; until then the feature is complete offline and the text that <i>would</i> have been posted is already stored (<span class="mono">payment_request.posted_message_plain</span>).</p>
+<pre>outbox(kind, entity_type, entity_id, payload, status='pending', attempts, last_error, created_at, processed_at)
+
+quote.sent              → ClickUp: set ClientQuote field = summary · (Teams Summary + Cost posts on on-site path)
+quote.cancelled         → ClickUp: clear ClientQuote (post old value as comment) · Teams ❌
+quote.client_approved   → Teams ✅ + "Approved by … for $…" reply · ClickUp comment
+quote.client_declined   → Teams ❌ + "reject: …" reply · ClickUp comment · clear ClientQuote
+payment.requested       → Teams post to the company's pay chat (AF/RF/BKR/SFM/TPM/EDS) with posted_message_plain
+payment.approved/paid   → Teams 👍 · ClickUp confirmation comment · DM to requester
+payment.rejected        → (The One) internal comment already written; Teams reply
+payment.deleted / delete_requested → Teams ⛔</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ ENDPOINTS ══════════════════════ -->
+<section class="panel" id="p-endpoints">
+  <h1>Endpoints — what came over from Yoda, what did not, and how money goes out</h1>
+  <p class="lede">Yoda exposes <span class="mono">[Route("[controller]")]</span> controllers behind Entra JWT (<span class="mono">[Authorize]</span> on <span class="mono">BaseController</span>) with <span class="mono">PaymentUsersPolicy</span> / <span class="mono">PaymentUsersOrAdminsPolicy</span> gates and a few <span class="mono">[AllowAnonymous]</span> ClickUp webhooks. The One mounts everything under <span class="mono">/api</span> on Fastify, keyed by the work order (<span class="mono">:id</span> = WO number or uuid), with the actor taken from <span class="mono">X-Actor-Id</span> until Entra lands. <span class="badge-stat b-brought">brought</span> same behaviour · <span class="badge-stat b-adapted">adapted</span> same outcome, WO-scoped shape · <span class="badge-stat b-seam">seam</span> recorded, push deferred · <span class="badge-stat b-dropped">not brought</span>.</p>
+
+  <div class="row" style="margin:8px 0 14px">
+    <span class="field">Filter <select id="epFilter"><option value="">all</option><option value="brought">brought</option><option value="adapted">adapted</option><option value="seam">seam</option><option value="dropped">not brought</option></select></span>
+    <span class="chip" id="epCount"></span>
+  </div>
+
+  <div class="card"><div class="card-head"><h2 class="card-title">Quote endpoints</h2><span class="card-meta">Yoda Controllers/Quote*.cs → apps/api/src/routes/quotes.ts</span></div>
+    <div class="card-pad" style="padding:0"><table><thead><tr><th>Yoda</th><th>Gate</th><th>The One</th><th>Gate</th><th>Notes</th><th>Status</th></tr></thead><tbody id="epQuote"></tbody></table></div></div>
+
+  <div class="card"><div class="card-head"><h2 class="card-title">Payment endpoints</h2><span class="card-meta">Yoda Controllers/Payment.cs → apps/api/src/routes/payments.ts</span></div>
+    <div class="card-pad" style="padding:0"><table><thead><tr><th>Yoda</th><th>Gate</th><th>The One</th><th>Gate</th><th>Notes</th><th>Status</th></tr></thead><tbody id="epPay"></tbody></table></div></div>
+
+  <div class="card"><div class="card-head"><h2 class="card-title">Vendors (technicians), rates &amp; tax</h2><span class="card-meta">Yoda Technician / QuoteRate / QuoteSalesTax → routes/payments.ts · routes/quotes.ts</span></div>
+    <div class="card-pad" style="padding:0"><table><thead><tr><th>Yoda</th><th>Gate</th><th>The One</th><th>Gate</th><th>Notes</th><th>Status</th></tr></thead><tbody id="epAux"></tbody></table></div></div>
+
+  <h2>Payout (invoicing) methods set in place</h2>
+  <p class="lede">Yoda stored <span class="mono">PaymentMethod</span> as free text and a <span class="mono">PaymentAddress</span> JSON blob, parsed per method when the Teams card is rendered (<span class="mono">TeamService.ParsePaymentAddress</span>). The One pins the five codes with a DB <span class="mono">CHECK</span> (migration 0004, D7), validates the address shape per method with a Zod discriminated union (D8), and renders the same plain-text line into <span class="mono">posted_message_plain</span>.</p>
+  <div class="card"><div class="card-pad" style="padding:0"><table><thead><tr><th>Method</th><th>Yoda address keys</th><th>The One <span class="mono">payment_address</span></th><th>Rendered on the card</th><th>Rules</th></tr></thead><tbody id="epMethods"></tbody></table></div></div>
+
+  <div class="grid g2">
+    <div class="card"><div class="card-head"><h2 class="card-title">Method lifecycle rules carried over</h2></div><div class="card-pad" style="font-size:13px">
+      <ul style="margin:0;padding-left:18px;line-height:1.8">
+        <li><b>Convert method</b> — Yoda only had <span class="mono">PUT Payment/ConvertToAch/{id}</span>. The One generalises it to <span class="mono">POST /payment-requests/:pid/convert-method {method}</span> (AP), any code → any code, logged in <span class="mono">activity_log</span>.</li>
+        <li><b>Credit is excluded from W9</b> — <span class="mono">GetReciepientTotal</span> and <span class="mono">SetNeedsW9ForTechnicianAsync</span> skip <span class="mono">credit</span>; The One's <span class="mono">recomputeNeedsW9</span> and <span class="mono">/vendors/:vid/ytd</span> use <span class="mono">method &lt;&gt; 'credit' AND recipient_name IS NULL</span>, threshold <span class="mono">W9_THRESHOLD = 599</span>.</li>
+        <li><b>Per-company totals</b> — Yoda split Credit / NonCredit per company (AF, RF, BKR, SFM, TPM) on the technician card; The One keys the same split on <span class="mono">billing_entity</span>.</li>
+        <li><b>Edit locked after processing</b> — Yoda <span class="mono">Verify</span> blocks <span class="mono">Update</span>; The One's <span class="mono">PATCH</span> is only accepted while <span class="mono">status='requested'</span>.</li>
+        <li><b>Alternate payee</b> — Yoda Recipient (store or person) → inline <span class="mono">recipient_name / recipient_phone / recipient_is_store</span>; such rows never count toward the technician's W9 total.</li>
+      </ul>
+    </div></div>
+    <div class="card"><div class="card-head"><h2 class="card-title">Invoicing hooks (what the WO sees)</h2></div><div class="card-pad" style="font-size:13px">
+      <ul style="margin:0;padding-left:18px;line-height:1.8">
+        <li><b>Cost roll-up</b> — Yoda <span class="mono">UpdateCostInClickUp</span> on Verify. The One: <span class="mono">pay</span> adds the amount to <span class="mono">task.fields['34. Cost']</span>; <span class="mono">confirm-delete</span> on a paid row subtracts it. Same field ClickUp used for invoicing margin.</li>
+        <li><b>Quote → money.quote</b> — once the quote is <span class="mono">approved | sent | client_approved</span>, <span class="mono">getBindableQuoteTotal</span> exposes it on the WO's Money card as the billable figure.</li>
+        <li><b>Status gating</b> — <span class="mono">!! ready to invoice</span> / <span class="mono">done/incurred</span> close quote editing but still accept the client decision and payment requests; <span class="mono">&lt;&lt; invoiced not paid &gt;&gt;</span> / <span class="mono">invoiced</span> close both; <span class="mono">payment.process</span> (AP) is never gated.</li>
+        <li><b>Sales tax</b> — stored as a <span class="mono">sales_tax_pct</span> on the quote (Yoda: % by ZIP, only when <span class="mono">LaborRate.IsSalesTaxRequired</span>), so the future QBO invoice gets the exact rate used on the quote.</li>
+        <li><b>Not brought</b> — Yoda's <span class="mono">QuickBooks SendInvoice</span> / <span class="mono">Bfi</span> (AR). Quote retains every input (lines, day, tax %, bill_to); it lands with the Invoicing module via an <span class="mono">AccountingAdapter</span> seam.</li>
+      </ul>
+    </div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════ NOT BROUGHT ════════════════════ -->
+<section class="panel" id="p-notbrought">
+  <h1>What we deliberately did not bring — and why</h1>
+  <div class="grid g2" id="nbGrid"></div>
+  <div class="card">
+    <div class="card-head"><h2 class="card-title">Still open (next slices)</h2></div>
+    <div class="card-pad">
+      <ul style="margin:0;padding-left:18px;line-height:1.8">
+        <li><b>Receipt upload</b> — <span class="mono">attachment_id</span> is on the request and the <span class="mono">attachment</span> table exists; the multipart route + local storage is the remaining piece (SharePoint later).</li>
+        <li><b>Unit tests</b> (vitest) for <span class="mono">computeQuoteTotals</span>, transitions, W9 window — the HTTP smoke script covers the lifecycle today.</li>
+        <li><b>Outbox drain adapters</b> — ClickUp field/comment, Teams Graph posts, with the config keys mirrored from Yoda's appsettings.</li>
+        <li><b>Entra ID auth</b> — <i>landed on Primary-Updates</i>: sessions + the permission tree are the actor source; what remains is exercising the Entra path against a real tenant and mapping Yoda's groups (PROCESS_VERIFIED → <span class="mono">ap</span>) onto roles in Admin › Users.</li>
+        <li><b>Rates admin page</b> — <span class="mono">GET/PUT /api/rates</span> exist; the UI is read-only on the builder for now.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>Simulation of the code shipped in TheOne-main · app/ (migration 0004, shared policy, API services, React views). Numbers match the seeded demo WO-39403.</footer>
+</main>
+
+<script>
+// ───────────────────────────── shared vocabulary (mirrors @theone/shared) ───
+const PHASE_BY_STATUS = {
+  'Open':'Intake','emergency':'Intake',
+  'assessment scheduled':'Assessment','assessment ongoing':'Assessment','return trip needed':'Assessment',
+  'waiting for quote':'Quote','quote ready':'Quote',
+  'approved':'Approval','!! waiting for advice':'Approval','!! waiting for approval':'Approval',
+  'job scheduled':'Scheduled','pm scheduled':'Scheduled',
+  'job ongoing':'In Progress',
+  'please order parts':'Parts','waiting for parts':'Parts',
+  '!! ready to invoice':'Done','done/incurred':'Done',
+  '<< invoiced not paid >>':'Invoiced','invoiced':'Invoiced',
+  '!! canceled/postponed':null,
+};
+const PHASE_ORDER = ['Intake','Assessment','Quote','Approval','Scheduled','In Progress','Parts','Done','Invoiced','Off-pipeline'];
+const ACTIONS = ['quote.create','quote.edit','quote.submit','quote.approve','quote.send','quote.client_decide','quote.new_round','payment.request','payment.process'];
+
+function allowedWoActions(statusName){
+  const phase = PHASE_BY_STATUS[statusName] ?? null;
+  const canceled = statusName.toLowerCase()==='!! canceled/postponed' || phase===null;
+  const invoiced = phase==='Invoiced', done = phase==='Done';
+  const live = !canceled && !invoiced && !done;
+  const m = {};
+  const set=(a,ok,r)=>m[a]={allowed:ok,reason:ok?null:r};
+  for (const a of ['quote.create','quote.edit','quote.submit','quote.approve','quote.send'])
+    set(a, live, canceled?`Quotes are closed — the work order is ${statusName}`:`Quotes are closed once a work order reaches ${statusName}`);
+  set('quote.client_decide', live||done, canceled?`The work order is ${statusName}`:`The client decision cannot be recorded on an ${statusName} work order`);
+  set('quote.new_round', live, `Additional quotes are closed once a work order reaches ${statusName}`);
+  set('payment.request', live||done, canceled?`Payments cannot be requested — the work order is ${statusName}`:`Payments cannot be requested on a finished work order (${statusName})`);
+  set('payment.process', true, '');
+  return {phase, actions:m};
+}
+const ROLE_LABEL={om:'OM',senior_om:'Senior OM',atl:'ATL',tl:'TL',am:'AM',admin:'Admin',ap:'AP'};
+const canEdit=r=>['senior_om','atl','tl','am','admin'].includes(r);
+const canApprove=r=>['atl','tl','am','admin'].includes(r);
+const canClientDecide=(r,phase)=>canApprove(r)||((r==='om'||r==='senior_om')&&phase==='Approval');
+const canProcess=r=>['ap','admin'].includes(r);          // payments/process:edit (0016)
+const canApprovePay=r=>['atl','tl','am','admin'].includes(r); // payments:approve — the quote approvers (0016)
+const usd=n=>(n<0?'-$':'$')+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const round2=n=>Math.round((n+Number.EPSILON)*100)/100;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+// ───────────────────────────── chrome ───────────────────────────────────────
+$('themeBtn').onclick=()=>{const h=document.documentElement;const n=h.dataset.theme==='day'?'night':'day';h.dataset.theme=n;$('themeBtn').textContent=n==='day'?'Switch to Blackout':'Switch to Daylight';};
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('is-on',x===t));document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('is-on',p.id==='p-'+t.dataset.tab));});
+function fillStatusSelect(sel, def){sel.innerHTML=Object.keys(PHASE_BY_STATUS).map(s=>`<option ${s===def?'selected':''}>${esc(s)}</option>`).join('');}
+
+// ───────────────────────────── WO flow panel ────────────────────────────────
+let mxSel='quote ready';
+function renderPhases(){
+  const groups={};for(const [s,p] of Object.entries(PHASE_BY_STATUS)){(groups[p??'Off-pipeline'] ??= []).push(s);}
+  $('phases').innerHTML=PHASE_ORDER.map(p=>`<div class="ph"><h4>${p}</h4>${(groups[p]||[]).map(s=>`<button class="st ${s===mxSel?'is-on':''}" data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div>`).join('');
+  document.querySelectorAll('#phases .st').forEach(b=>b.onclick=()=>{mxSel=b.dataset.s;renderPhases();renderMatrix();});
+}
+function renderMatrix(){
+  const {phase,actions}=allowedWoActions(mxSel);
+  $('mxStatus').textContent=mxSel;$('mxPhase').textContent='phase: '+(phase??'off-pipeline');
+  $('mxBody').innerHTML=ACTIONS.map(a=>`<tr><td>${a}</td><td class="${actions[a].allowed?'ok-t':'no-t'}">${actions[a].allowed?'✓ allowed':'✗ locked'}</td><td>${esc(actions[a].reason??'—')}</td></tr>`).join('');
+  const qc=actions['quote.create'], pr=actions['payment.request'];
+  $('railSim').innerHTML=`
+    <div class="card" style="margin:0"><div class="card-head"><h2 class="card-title">Money</h2><span class="card-meta">21. Comp · SFM</span></div>
+      <div class="card-pad"><dl class="kv"><dt>16. Client NTE</dt><dd>$3,202</dd><dt>Quote</dt><dd>—</dd><dt>34. Cost</dt><dd>$1,610</dd></dl>
+      <div class="row" style="margin-top:10px">${qc.allowed?'<button class="btn sm">📄 Create quote</button>':`<button class="btn sm locked" data-tip="${esc(qc.reason)}">Create quote</button>`}${!actions['quote.edit'].allowed?'<span class="chip outline">🔒 Quoting closed</span>':''}</div></div></div>
+    <div class="card" style="margin:0"><div class="card-head"><h2 class="card-title">Payables</h2><span class="card-meta">$475.00 paid · 2 requests</span></div>
+      <div class="card-pad"><div style="font-size:12.5px;color:var(--ink-2)">Jul 22 · Gulf Coast Refrigeration · $400.00<br>Jul 15 · Gulf Coast Refrigeration · $75.00</div>
+      <div class="row" style="margin-top:10px">${pr.allowed?'<button class="btn sm">$ Request payment</button>':`<button class="btn sm locked" data-tip="${esc(pr.reason)}">Request payment</button><button class="btn sm">View ledger</button>`}</div></div></div>`;
+}
+renderPhases();renderMatrix();
+
+// ───────────────────────────── quote journey ────────────────────────────────
+const Q0=()=>({status:'pending_approval',rev:3,round:1,
+  incurred:{lines:[['Trip — dispatch to site, Galveston',75],['Tech 1 — diagnostic & temp logging',180],['Tech 2 — after-hours assist (2.5h × $180 × 1.5 OT)',675]]},
+  options:[
+    {key:'A',round:1,name:'Condenser fan motor + start kit replacement',lines:[['Condenser fan motor, OEM',830],['Hard-start kit + relay',260],['Tech 1 — install',1080],['Tech 2 — assist & brazing',720]],include:true,approved:false,deleted:false,rejection:null,locked:false},
+    {key:'B',round:1,name:'Fan motor only (no start kit)',lines:[['Condenser fan motor, OEM',830],['Tech 1 — install',1080]],include:true,approved:false,deleted:false,rejection:null,locked:false},
+  ],approvedKey:null,decided:null,log:[]});
+let Q=Q0();
+const QSTEPS=[
+  {id:'draft',label:'1 · Draft'},{id:'submit',label:'2 · Submit for approval'},{id:'approve',label:'3 · ATL approves & sends'},
+  {id:'sent',label:'4 · With the client'},{id:'client',label:'5 · Client chooses Option A'},{id:'round2',label:'6 · Add additional quote (round 2)'},{id:'declined',label:'alt · Client declines'}];
+const QMETA={draft:['Draft','#4466ff'],pending_approval:['Pending approval','#0f9d9f'],approved:['Approved','#36772f'],sent:['Sent to client','#326351'],client_approved:['Client approved','#1e7a46'],client_declined:['Client declined','#c92a29']};
+function qlog(s){Q.log.unshift(`<span class="t">${new Date().toLocaleTimeString()}</span> ${s}`);}
+function qTotals(){
+  const pct=parseFloat($('qTax').value)||0, yoda=$('qRule').value!=='options_only';
+  const incurredLike=[Q.incurred.lines.reduce((s,l)=>s+l[1],0), ...Q.options.filter(o=>o.round<Q.round&&o.approved&&!o.deleted).map(o=>o.lines.reduce((s,l)=>s+l[1],0))];
+  const incurred=round2(incurredLike.reduce((a,b)=>a+b,0));
+  const opts=Q.options.filter(o=>o.round===Q.round&&!o.deleted).map(o=>{const t=round2(o.lines.reduce((s,l)=>s+l[1],0));const base=yoda?round2(incurred+t):t;const tax=yoda?round2(base*pct/100):0;return {...o,total:t,tax,grand:round2(base+tax)};});
+  let grand,tax,priced=null;
+  if(yoda){priced=opts.find(o=>o.approved)??opts.find(o=>o.include)??null; if(priced){grand=priced.grand;tax=priced.tax;}else{tax=round2(incurred*pct/100);grand=round2(incurred+tax);}}
+  else{grand=round2(opts.reduce((s,o)=>s+(o.include?o.total:0),0));tax=0;}
+  return {incurred,opts,grand,tax,pct,yoda,priced};
+}
+function qRender(){
+  const role=$('qRole').value, wo=$('qWoStatus').value, {phase,actions}=allowedWoActions(wo);
+  const allow=a=>actions[a].allowed, reason=a=>actions[a].reason;
+  const st=Q.status; const [lbl,col]=QMETA[st];
+  $('qRev').textContent=Q.rev;$('qRoundChip').textContent='Round '+Q.round;$('qWoChip').textContent=wo;
+  $('qPill').style.setProperty('--pill',col);$('qPillTxt').textContent=lbl;
+  // pipeline
+  const pipe=['draft','pending_approval','approved','sent','client_approved'];
+  const idx=st==='client_declined'?4:pipe.indexOf(st);
+  $('qPipe').innerHTML=pipe.map((s,i)=>{const done=i<idx||(i===idx&&st==='client_approved');const cur=i===idx&&!done;const dec=st==='client_declined'&&i===4;const name=s==='client_approved'?(dec?'Client declined':'Client decision'):QMETA[s][0];return `<div class="pstep ${done?'done':''} ${cur?'cur':''} ${dec?'declined':''}"><span class="m">${done?'✓':dec?'✕':i+1}</span>${name}</div>${i<4?'<span class="link"></span>':''}`;}).join('');
+  // actions
+  const lock=(l,tip)=>`<button class="btn locked" data-tip="${esc(tip)}">${l}</button>`;
+  const gated=(l,ok,roleTip,action,fn,primary=true)=>!allow(action)?lock(l,reason(action)):ok?`<button class="btn ${primary?'primary':''}" data-fn="${fn}">${l}</button>`:lock(l,roleTip);
+  let html='', call='';
+  const editable=canEdit(role)&&(st==='draft'||st==='pending_approval')&&allow('quote.edit');
+  if(st==='draft'){html+=(!canApprove(role)?lock('Approve & Send','Requires ATL or above'):'')+gated('Submit for approval',canEdit(role),'Requires Senior OM or above','quote.submit','submit');
+    call=!allow('quote.edit')?`<div class="callout lock">🔒 ${esc(reason('quote.edit'))}</div>`:!canApprove(role)?`<div class="callout lock">🔒 <span><b>Requires ATL or above.</b> Dispatchers build and revise; approving and sending is ATL, TL, AM, admin. The control stays visible so you know it exists.</span></div>`:'';}
+  if(st==='pending_approval'){html+=(canApprove(role)&&allow('quote.approve')?`<button class="btn danger" data-fn="reject">✕ Reject with note</button>`:'')+gated('Approve & Send',canApprove(role),'Requires ATL or above','quote.approve','approve');
+    call=canApprove(role)&&allow('quote.approve')?`<div class="callout ok">✓ <span><b>You can approve this quote.</b> Approving fills <span class="mono">money.quote</span> on WO-39403, logs the transition, and sending posts the client-visible update + snapshot + outbox row.</span></div>`:'';}
+  if(st==='approved'){html+=gated('Send to client',canApprove(role),'Requires ATL or above','quote.send','send');}
+  if(st==='sent'){const opts=Q.options.filter(o=>o.round===Q.round&&!o.deleted);
+    html+=(canApprove(role)&&allow('quote.send')?`<button class="btn" data-fn="cancel">↺ Withdraw</button>`:'');
+    html+=(allow('quote.client_decide')&&canClientDecide(role,phase))?`<button class="btn danger" data-fn="decline">✕ Client declined</button>`:lock('Client declined',allow('quote.client_decide')?'Requires ATL or above (or a dispatcher while the WO is awaiting approval)':reason('quote.client_decide'));
+    html+=opts.length>1?`<span class="chip accent">ℹ Pick the approved option on its card</span>`:(allow('quote.client_decide')&&canClientDecide(role,phase)?`<button class="btn primary" data-fn="clientA">✓ Client chose this</button>`:lock('Client chose this','Requires ATL or above'));
+    call=`<div class="callout">🌐 <span><b>With the client.</b> Record their decision here: approve the option they chose (its lines become incurred work and the other options are retired) or decline with their reason.${canClientDecide(role,phase)&&!canApprove(role)?' <b>You may record it because the WO is in the Approval phase (on-site approval path).</b>':''}</span></div>`;}
+  if(st==='client_approved'||st==='client_declined'){html+=`<span class="chip ${st==='client_approved'?'ok':'danger'}">${st==='client_approved'?'✓ Client approved':'✕ Client declined'} · recorded by Elise</span>`+gated(st==='client_approved'?'＋ Add additional quote':'＋ Re-quote',canEdit(role),'Requires Senior OM or above','quote.new_round','round',false);
+    call=st==='client_approved'?`<div class="callout ok">✓ <span><b>Round ${Q.round} is locked.</b> The approved option now bills with the job. If the tech finds more on the return visit, <b>Add additional quote</b> opens round ${Q.round+1} with the approved work as its incurred baseline.</span></div>`:`<div class="callout danger">✕ <span>The round is locked with the client's reason on the option. Re-quote by opening a new round.</span></div>`;}
+  $('qActions').innerHTML=html;$('qCallout').innerHTML=call;
+  document.querySelectorAll('#qActions [data-fn]').forEach(b=>b.onclick=()=>qAct(b.dataset.fn));
+  // incurred + options
+  const T=qTotals();
+  $('qIncLock').innerHTML=Q.round>1?'🔒 Locked after round 1 · includes round-1 approved option':(editable?'editable · autosave 900 ms':'read-only');
+  $('qIncurred').innerHTML=`<p style="font-size:12.5px;color:var(--ink-2)"><b>Tech reported that</b> the customer-facing standing freezer was reading +18°F… condenser fan motor seized…</p>
+    <table>${Q.incurred.lines.map(l=>`<tr><td>${esc(l[0])}</td><td class="num">${usd(l[1])}</td></tr>`).join('')}
+    ${Q.options.filter(o=>o.round<Q.round&&o.approved).map(o=>`<tr><td><span class="chip ok">✓ Round ${o.round} · Option ${o.key} approved → incurred</span> ${esc(o.name)}</td><td class="num">${usd(o.lines.reduce((s,l)=>s+l[1],0))}</td></tr>`).join('')}
+    <tr><td style="text-align:right;color:var(--ink-3)">Incurred subtotal</td><td class="num"><b>${usd(T.incurred)}</b></td></tr></table>`;
+  $('qPropTitle').textContent=Q.round>1?`Round ${Q.round} — options for the client`:'Options for the client';
+  $('qPropMeta').textContent=T.yoda?'each option priced separately':'options-only total';
+  const prior=Q.options.filter(o=>o.round<Q.round);
+  $('qOptions').innerHTML=(prior.length?`<div class="callout lock" style="margin-top:0">🔒 <span><b>Round ${prior[0].round} (decided)</b> — ${prior.filter(o=>o.approved).map(o=>'Option '+o.key+' approved').join(', ')||'declined'}; ${prior.filter(o=>o.deleted).map(o=>'Option '+o.key+' retired (soft-deleted sibling)').join(', ')}. Read-only history.</span></div>`:'')+
+    T.opts.map(o=>`<div class="opt ${o.approved?'approved':''} ${o.rejection&&!o.approved?'declined':''} ${o.locked?'locked':''}"><div class="row"><span class="tag">${o.key}</span><b style="flex:1">${esc(o.name)}</b>
+      ${o.approved?'<span class="chip ok">✓ Client approved</span>':o.rejection?'<span class="chip danger">✕ Declined</span>':`<span class="chip ${o.include?'accent':'outline'}">${o.include?'Included in summary':'Not in summary'}</span>`}
+      ${st==='sent'&&T.opts.length>1&&allow('quote.client_decide')&&canClientDecide(role,phase)?`<button class="btn sm primary" data-opt="${o.key}">✓ Client chose this</button>`:''}
+      ${o.locked?'<span class="chip outline">🔒 Locked</span>':''}</div>
+      ${o.rejection?`<div class="callout danger" style="margin:6px 0">ℹ <span><b>Client said:</b> ${esc(o.rejection)}</span></div>`:''}
+      <table>${o.lines.map(l=>`<tr><td>${esc(l[0])}</td><td class="num">${usd(l[1])}</td></tr>`).join('')}</table>
+      <div class="row" style="justify-content:flex-end;margin-top:6px"><span class="chip">Option ${o.key} lines <b>${usd(o.total)}</b></span>${T.yoda?`<span class="chip accent" title="incurred + option + tax">Client price <b>${usd(o.grand)}</b></span>`:''}</div></div>`).join('')+
+    (editable?`<button class="btn" style="width:100%;justify-content:center;border-style:dashed">＋ Add option</button>`:'');
+  document.querySelectorAll('#qOptions [data-opt]').forEach(b=>b.onclick=()=>qAct('client'+b.dataset.opt));
+  // money
+  const nte=3202, over=T.grand>nte;
+  $('qMoney').innerHTML=`<dt>Client NTE</dt><dd>$3,202</dd><dt style="color:var(--ink-3)">Incurred subtotal</dt><dd>${usd(T.incurred)}</dd>`+
+    T.opts.map(o=>`<dt>Option ${o.key}${o.approved?' <span class="chip ok">Approved</span>':o.include?' <span class="chip accent">Included</span>':''}<br><small style="color:var(--ink-3)">${T.yoda?`lines ${usd(o.total)} · tax ${usd(o.tax)}`:''}</small></dt><dd>${usd(T.yoda?o.grand:o.total)}</dd>`).join('')+
+    `<dt>Sales tax %</dt><dd>${T.pct}% <small style="color:var(--ink-3)">derived · ZIP 77550</small></dd><dt style="color:var(--ink-3)">Sales tax</dt><dd>${usd(T.tax)}</dd>
+     <dt class="tot">Grand Total ${T.priced?`<small>Option ${T.priced.key}</small>`:''}</dt><dd class="tot">${usd(T.grand)}</dd>
+     <dt>Total cost</dt><dd>$1,610.00</dd><dt>Profit</dt><dd>${usd(T.grand-1610)} <span class="chip">${Math.round((T.grand-1610)/T.grand*100)}% margin</span></dd>
+     <dt class="${over?'no-t':'ok-t'}" style="grid-column:1/-1;text-align:left">${over?`Over the client NTE by ${usd(T.grand-nte)}`:`Within the client NTE of ${usd(nte)}`}</dt>`;
+  $('qMoneyCap').textContent=T.yoda?'Each option is priced as incurred work + that option, plus sales tax. Grand Total is the approved option’s price — or the first included option’s until the client decides.':'Grand Total is the price of the options included in the summary. Incurred lines bill with the job and are shown for context only (RULE B).';
+  $('qLog').innerHTML=Q.log.join('<br>')||'<span class="t">— seed: quote pending_approval, rev 3, round 1, sales_tax_pct 8.25, total_rule incurred_plus_option —</span>';
+  $('qYoda').innerHTML=qYodaText();
+  // steps highlight
+  const stepId={draft:'draft',pending_approval:'submit',approved:'approve',sent:'sent',client_approved:Q.round>1?'round2':'client',client_declined:'declined'}[st];
+  $('qSteps').innerHTML=QSTEPS.map(s=>`<button class="${s.id===stepId?'is-on':''}" data-step="${s.id}">${s.label}</button>`).join('');
+  document.querySelectorAll('#qSteps button').forEach(b=>b.onclick=()=>qJump(b.dataset.step));
+}
+function qYodaText(){
+  const st=Q.status;
+  const map={
+    draft:'<b>Quote / Section / Option / LineItem controllers</b> — per-field PUTs; Amount is a DB computed column (Qty × Rate) with OT ×1.5 applied in the Angular UI. The One: whole-tree PUT on the current round, amounts computed server-side incl. OT and discount sign.',
+    pending_approval:'Yoda has no internal review step — the dispatcher submits straight to the client. The One keeps its Senior OM → ATL review (product spec §1) <i>before</i> the Yoda submit happens.',
+    approved:'Equivalent to “ready to Submit”. The One stamps <span class="mono">approved_by</span> and binds <span class="mono">money.quote</span> for the NTE meter.',
+    sent:'<b>ActionEngine.Submit</b> → <span class="mono">UpdateSectionStatus(IsSubmitted)</span>, <span class="mono">SetSubmittedOptions</span>, <span class="mono">SetClientQuoteField(taskId, summary)</span>. <b>SubmitOnSite</b> adds Teams Summary + Cost posts. <b>CancelSubmission</b> reverses it. The One: <span class="mono">sendQuote</span> → client-visible comment + snapshot + outbox <span class="mono">quote.sent</span>; <span class="mono">cancelSubmission</span> → outbox <span class="mono">quote.cancelled</span>.',
+    client_approved:'<b>ActionEngine.ApproveAsync</b> + <b>QuoteOptionRepository.Sql_SwitchIsAdminApproved</b>: option <span class="mono">IsAdminApproved=1</span> · section <span class="mono">IsLocked=1</span> · option lines <span class="mono">IsIncurred=1</span> · other unapproved options in the section <span class="mono">IsDeleted=1</span> · Teams ✅ + “Approved By … for $…” · ClickUp comment. The One does the same four writes in one transaction, then comment + snapshot + outbox.',
+    client_declined:'<b>ActionEngine.DeclineAsync</b>: <span class="mono">RejectionMessage</span> on the option, section un-submitted, ClickUp ClientQuote cleared (old value posted as comment), Teams ❌; section deleted if no options remain. The One: rejection_note on the option(s), round locked, internal comment, outbox <span class="mono">quote.client_declined</span>; re-quote = new round.',
+  }[st];
+  return `<p>${map}</p>${Q.round>1?'<p><b>QuoteSectionEngine.CreateAsync</b>: “Cannot add another section: the last section should have one option approved”. The One: <span class="mono">startNewRound</span> only from <span class="mono">client_approved | client_declined</span>; the round-1 approved option now prices as incurred.</p>':''}`;
+}
+function qAct(fn){
+  const role=$('qRole').value;
+  if(fn==='submit'){Q.status='pending_approval';qlog(`POST /quote/submit → <span class="k">draft → pending_approval</span> · activity_log quote_submitted`);}
+  if(fn==='approve'){Q.status='approved';qlog(`POST /quote/approve → <span class="k">approved</span>, approved_by=Elise · WO money.quote bound`);Q.status='sent';qlog(`POST /quote/send → <span class="k">sent</span>, sent_at · comment(client_visible) "Quote for ${usd(qTotals().grand)} submitted…" · quote_revision_snapshot(rev ${Q.rev},'sent') · outbox quote.sent {summary, grand_total}`);}
+  if(fn==='send'){Q.status='sent';qlog(`POST /quote/send → <span class="k">sent</span> · comment · snapshot · outbox quote.sent`);}
+  if(fn==='reject'){Q.status='draft';Q.rev++;qlog(`POST /quote/reject {note} → <span class="k">draft</span>, rev ${Q.rev}, approved_by=NULL · internal comment "Quote returned to draft — …"`);}
+  if(fn==='cancel'){Q.status='approved';qlog(`POST /quote/cancel-submission → <span class="k">approved</span>, sent_* = NULL · comment(client_visible) "Quote withdrawn" · outbox quote.cancelled`);}
+  if(fn.startsWith('client')&&fn!=='clientDecline'){const key=fn.slice(6);const o=Q.options.find(x=>x.key===key&&x.round===Q.round);Q.status='client_approved';Q.approvedKey=key;
+    Q.options.filter(x=>x.round===Q.round).forEach(x=>{x.locked=true;if(x!==o&&!x.approved)x.deleted=true;});o.approved=true;
+    const T=qTotals();qlog(`POST /quote/client-approve {section_id: Option ${key}} → <span class="k">client_approved</span> · section ${key}: approved_at, approved_by, locked · round ${Q.round}: all locked · siblings deleted_at=now() · quote.approved_section_id · comment(client_visible) "Client approved Option ${key} for ${usd(T.grand)}" · snapshot · outbox quote.client_approved · WO money.quote = ${usd(T.grand)}`);}
+  if(fn==='decline'){Q.status='client_declined';Q.options.filter(x=>x.round===Q.round).forEach(x=>{x.locked=true;x.rejection='Too expensive — will replace the unit next quarter';});qlog(`POST /quote/client-decline {note} → <span class="k">client_declined</span> · rejection_note on round options · round locked · internal comment · snapshot · outbox quote.client_declined`);}
+  if(fn==='round'){Q.round++;Q.rev++;Q.status='draft';Q.options.push({key:'A',round:Q.round,name:'Compressor swap (found on return visit)',lines:[['Compressor',1200],['Loyalty discount (type: discount → negative)',-100]],include:true,approved:false,deleted:false,rejection:null,locked:false});
+    qlog(`POST /quote/new-round → <span class="k">draft</span>, rev ${Q.rev}, round ${Q.round} · blank option inserted (round ${Q.round}) · client fields cleared · approved round-${Q.round-1} option now priced_as incurred (${usd(qTotals().incurred)})`);}
+  qRender();
+}
+function qJump(step){Q=Q0();Q.log=[];
+  const run=f=>qAct(f);
+  if(step==='draft'){Q.status='draft';}
+  if(step==='submit'){Q.status='pending_approval';}
+  if(step==='approve'){run('approve');Q.status='approved';}
+  if(step==='sent'){run('approve');}
+  if(step==='client'){run('approve');run('clientA');}
+  if(step==='round2'){run('approve');run('clientA');run('round');}
+  if(step==='declined'){run('approve');run('decline');}
+  qRender();
+}
+fillStatusSelect($('qWoStatus'),'quote ready');
+['qRole','qWoStatus','qRule','qTax'].forEach(id=>$(id).addEventListener('input',qRender));
+$('qReset').onclick=()=>{Q=Q0();qRender();};
+qRender();
+
+// ───────────────────────────── payment journey ──────────────────────────────
+const P0=()=>({ledger:[
+  {id:1,date:'Jul 15',who:'Gulf Coast Refrigeration LLC',method:'zelle',purpose:'Assessment trip charge',amount:75,status:'paid',pending:false,needsW9:false,by:'Matt'},
+  {id:2,date:'Jul 22',who:'Gulf Coast Refrigeration LLC',method:'ach',purpose:'Parts advance',amount:400,status:'paid',pending:false,needsW9:false,by:'Matt'},
+],cost:1610,log:[],next:3});
+let P=P0();
+const MLABEL={zelle:'Zelle',ach:'ACH',check:'Check',cashapp:'Cash App',credit:'Credit card'};
+const MHINT={zelle:'Email or phone enrolled with Zelle',ach:'Routing + account number — 1 extra AP day',check:'Mailed — allow 3–5 business days',cashapp:'$cashtag',credit:'Company card — does not count toward the W9 threshold'};
+function plog(s){P.log.unshift(`<span class="t">${new Date().toLocaleTimeString()}</span> ${s}`);}
+function ytd(){return round2(P.ledger.filter(p=>p.status!=='rejected'&&p.method!=='credit'&&!p.alt).reduce((s,p)=>s+p.amount,0));}
+function pRender(){
+  const role=$('pRole').value, wo=$('pWoStatus').value, {actions}=allowedWoActions(wo);
+  const canReq=actions['payment.request'].allowed; $('pWoChip').textContent=wo;
+  $('pBlocked').innerHTML=canReq?'':`<div class="callout lock">🔒 <span><b>Payment requests are closed on this work order.</b> ${esc(actions['payment.request'].reason)}. Existing requests can still be processed by AP below.</span></div>`;
+  const vendor=$('pVendor').value, method=$('pMethod').value, amount=parseFloat($('pAmount').value)||0, purpose=$('pPurpose').value.trim();
+  $('pMethodHint').textContent=MHINT[method];
+  $('pAddress').innerHTML={zelle:'<label class="field">Zelle email or phone * <input placeholder="tech@example.com"></label>',
+    ach:'<label class="field">Bank <input placeholder="Chase"></label><label class="field">Routing (9 digits) * <input placeholder="021000021"></label><label class="field">Account (4–17 digits) * <input placeholder="000123456789"></label><span class="chip outline">🔒 masked ••••6789 for everyone but AP</span>',
+    check:'<label class="field">Payable to * <input></label><label class="field">Mailing address * <input style="width:280px"></label>',
+    cashapp:'<label class="field">$cashtag * <input placeholder="$gulfcoastrefrig"></label>',
+    credit:'<label class="field">Card note <input placeholder="which company card / last four"></label>'}[method];
+  const dup=P.ledger.some(p=>p.status!=='rejected'&&p.purpose.toLowerCase()===purpose.toLowerCase());
+  $('pDup').innerHTML=dup&&purpose?`<div class="callout danger">⚠ <span>A payment with this purpose already exists on WO-39403 — make it specific. <span class="mono">409 DUPLICATE_PURPOSE</span></span></div>`:'';
+  const alt=$('pAlt').checked; const projected=ytd()+(method!=='credit'&&!alt?amount:0);
+  const needsW9=vendor==='gulf'&&!alt&&method!=='credit'&&projected>599;
+  $('pW9').innerHTML=needsW9?`<div class="callout warn">⚠ <span><b>W9 needed.</b> This payment takes Gulf Coast Refrigeration to <b>${usd(projected)}</b> this year with SFM — past the $599 threshold with no W9 on file. AP will hold it until the W9 lands; credit-card payments don’t count. <small class="src">Yoda: PaymentRepository.SetNeedsW9ForTechnicianAsync — running total &gt; 599 per (Technician, Company, Year), PaymentMethod ≠ 'Credit'</small></span></div>`:(vendor==='gulf'?`<div class="callout">ℹ <span>YTD with SFM: <b>${usd(ytd())}</b> · W9 threshold $599 · this request ${method==='credit'?'is a credit payment and does not count':alt?'goes to an alternate recipient and does not count':`would bring it to ${usd(projected)}`}.</span></div>`:'');
+  const black=vendor==='black';
+  const valid=canReq&&!black&&!dup&&amount>0&&purpose;
+  const why=!canReq?actions['payment.request'].reason:black?'This technician is blacklisted — AP cannot pay them (409 VENDOR_BLACKLISTED; admin may override)':dup?'Duplicate purpose':amount<=0?'Enter an amount':!purpose?'Add a purpose':'';
+  $('pSubmitWrap').innerHTML=valid?`<button class="btn primary" id="pSubmit">➤ Submit payment request</button>`:`<button class="btn locked" data-tip="${esc(why)}">Submit payment request</button>`;
+  const sb=$('pSubmit');if(sb)sb.onclick=()=>{const id=P.next++;P.ledger.unshift({id,date:'Oct 8',who:vendor==='manual'?'New Tech (manual → vendor created)':'Gulf Coast Refrigeration LLC',method,purpose,amount,status:'requested',pending:false,needsW9,by:ROLE_LABEL[role],alt});
+    plog(`POST /work-orders/WO-39403/payment-requests → <span class="k">requested</span> · assertWoAllows(payment.request) ✓ · purpose unique ✓ · ${vendor==='manual'?'vendor created from phone · ':''}payment_address(${method}) stored${method==='ach'?' (masked in lists)':''} · recomputeNeedsW9 → needs_w9=${needsW9} · posted_message_plain · activity payment_requested · outbox payment.requested {billing_entity SFM}`);pRender();};
+  // ledger
+  const canProc=canProcess(role), canAppr=canApprovePay(role), isAdmin=role==='admin';
+  $('pLedger').innerHTML=P.ledger.map(p=>{
+    const st=p.pending?'<span class="pill" style="--pill:#c98a00"><span class="dot"></span>Pending delete</span>':`<span class="pill" style="--pill:${{requested:'#4466ff',approved:'#0f9d9f',paid:'#1e7a46',rejected:'#c92a29'}[p.status]}"><span class="dot"></span>${p.status[0].toUpperCase()+p.status.slice(1)}</span>`;
+    const lk=(l,tip)=>`<button class="btn sm locked" data-tip="${esc(tip)}">${l}</button>`;
+    const b=(l,fn,cls='')=>`<button class="btn sm ${cls}" data-pid="${p.id}" data-fn="${fn}">${l}</button>`;
+    let act='';
+    if(p.pending){act=isAdmin?b('Confirm delete','confirm','danger')+b('Keep','keep'):lk('Confirm delete','Requires admin')+lk('Keep','Requires admin');}
+    else{const open=p.status==='requested'||p.status==='approved';
+      if(p.status==='requested')act+=canAppr?b('Approve','approve'):lk('Approve','Requires payments:approve');
+      if(open)act+=canProc?b(p.status==='approved'?'Mark paid':'Pay now','pay','primary'):lk('Pay now','Requires payments/process:edit (AP)');
+      if(open)act+=canAppr?b('Reject','reject','danger'):lk('Reject','Requires payments:approve');
+      if(p.status!=='paid')act+=canProc?b('Method','convert'):lk('Method','Requires payments/process:edit (AP)');
+      const owner=p.by===ROLE_LABEL[role];const canDel=(p.status==='requested'||p.status==='rejected')?(owner||canProc):(canProc||owner);
+      act+=canDel?b('Delete','delete','danger'):lk('Delete','Only the requester or AP can delete');}
+    return `<tr style="${p.pending?'background:var(--warn-bg)':p.status==='rejected'?'color:var(--ink-3)':''}"><td>${p.date}</td><td>${esc(p.who)}${p.alt?' <small>· paid to alt recipient</small>':''}${p.needsW9?' <span class="chip danger">⚠ W9 needed</span>':''}</td><td><span class="chip">${MLABEL[p.method]}</span></td><td>${esc(p.purpose)}${p.reason?`<br><small style="color:var(--ink-3)">${esc(p.reason)}</small>`:''}</td><td>${st}</td><td class="num">${usd(p.amount)}</td><td><div class="row" style="gap:4px">${act}</div></td></tr>`;}).join('');
+  document.querySelectorAll('#pLedger [data-fn]').forEach(bt=>bt.onclick=()=>pAct(+bt.dataset.pid,bt.dataset.fn));
+  const paid=round2(P.ledger.filter(p=>p.status==='paid').reduce((s,p)=>s+p.amount,0)), req=round2(P.ledger.filter(p=>p.status!=='rejected').reduce((s,p)=>s+p.amount,0));
+  $('pPaid').textContent=usd(paid);$('pLedgerMeta').textContent=`${P.ledger.length} payments · ${P.ledger.filter(p=>p.pending).length} pending delete`;
+  $('pMoney').innerHTML=`<dt>Client NTE</dt><dd>$3,202</dd><dt>34. Cost (WO field)</dt><dd><b>${usd(P.cost)}</b></dd><dt>Paid to technician</dt><dd>${usd(paid)}</dd><dt>Payables total (non-rejected)</dt><dd>${usd(req)}</dd><dt>Vendor YTD · SFM · ${new Date().getFullYear()}</dt><dd>${usd(ytd())} <small style="color:var(--ink-3)">/ $599</small></dd>`;
+  $('pLog').innerHTML=P.log.join('<br>')||'<span class="t">— seed: 2 paid payments (zelle 75, ach 400) processed by Dana Reyes (AP) —</span>';
+}
+function pAct(id,fn){const p=P.ledger.find(x=>x.id===id);const role=$('pRole').value;
+  if(fn==='approve'){p.status='approved';plog(`POST /payment-requests/${id}/approve → <span class="k">approved</span> · approved_by, approved_at · 409 if an NTE override is open · outbox payment.approved`);}
+  if(fn==='pay'){p.status='paid';P.cost=round2(P.cost+p.amount);plog(`POST /payment-requests/${id}/pay → <span class="k">paid</span> · paid_by/paid_at · <b>rollCost: task.fields['34. Cost'] ${usd(P.cost-p.amount)} → ${usd(P.cost)}</b> (activity field_changed) · outbox payment.paid  ⟵ Yoda VerifyPayment + UpdateCostInClickUp`);}
+  if(fn==='reject'){p.status='rejected';p.reason='Receipt missing';plog(`POST /payment-requests/${id}/reject {reason} → <span class="k">rejected</span> · rejected_by, rejection_note · internal comment · recomputeNeedsW9 · outbox payment.rejected`);}
+  if(fn==='convert'){p.method=p.method==='ach'?'zelle':'ach';plog(`POST /payment-requests/${id}/convert-method {method:${p.method}} · payment_address cleared · activity payment_method_changed  ⟵ Yoda ConvertToAch`);}
+  if(fn==='delete'){if(p.status==='requested'||p.status==='rejected'||role==='admin'){const paid=p.status==='paid';P.ledger=P.ledger.filter(x=>x!==p);if(paid)P.cost=round2(P.cost-p.amount);plog(`POST /payment-requests/${id}/delete {reason} → <span class="k">deleted_at</span> (immediate: ${role==='admin'?'admin':'unprocessed row'})${paid?` · rollCost −${usd(p.amount)} → ${usd(P.cost)}`:''} · recomputeNeedsW9 · outbox payment.deleted`);}
+    else{p.pending=true;plog(`POST /payment-requests/${id}/delete {reason} → processed row: <span class="k">pending_delete=true</span>, delete_requested_by, delete_reason · outbox payment.delete_requested · awaits admin  ⟵ Yoda IsPending`);}}
+  if(fn==='confirm'){const paid=p.status==='paid';P.ledger=P.ledger.filter(x=>x!==p);if(paid)P.cost=round2(P.cost-p.amount);plog(`POST /payment-requests/${id}/confirm-delete (admin) → deleted_at${paid?` · rollCost −${usd(p.amount)} → ${usd(P.cost)}`:''}`);}
+  if(fn==='keep'){p.pending=false;plog(`POST /payment-requests/${id}/reject-delete (admin) → pending_delete=false  ⟵ Yoda RejectDeletePayment`);}
+  pRender();
+}
+fillStatusSelect($('pWoStatus'),'quote ready');
+['pRole','pWoStatus','pVendor','pPurpose','pAmount','pMethod','pAlt'].forEach(id=>$(id).addEventListener('input',pRender));
+$('pReset').onclick=()=>{P=P0();pRender();};
+pRender();
+
+// ───────────────────────────── map ──────────────────────────────────────────
+const MAP=[
+ ['Quote(1 per TaskId) · GenerateQuoteLink / GetQuoteLinkData','ClickUp writes a link; quote opens by customTaskId','Quote hangs off the WO; opened from the Money card; WO fields are the read-only context strip','dropped','Not needed — the WO page is the link'],
+ ['QuoteSection = submission round · IsSubmitted / IsLocked / IsTeamsSubmitted','Only one open section; next needs an approved option','quote_section.round + locked; startNewRound only from client_approved/declined; earlier rounds read-only','adapted'],
+ ['QuoteOption · IsAdminApproved / IncludeInSummary / RejectionMessage','Option approved → lines IsIncurred, section locked, siblings soft-deleted','clientApproveQuote: approved_at/by, round locked, siblings deleted_at, approved option prices as incurred next round','brought'],
+ ['QuoteLineItem · Amount computed (Qty×Rate), IsOT (×1.5 in UI), Day int, LineItemType Labor/Materials/Service/Fees/Discount','Discount negative; Day groups lines on multi-day','computeLineAmount (OT ×1.5, discount sign) server-side; line_type + fee/discount; day int grouped “Day N” in summary','brought'],
+ ['GrandTotal = (incurred + option) × (1 + tax%) · ShowAllProposedOptions','Per-option client price','total_rule incurred_plus_option (default) with per-option grand totals; RULE B behind flag','brought'],
+ ['QuoteSalesTaxEngine · LaborRate.IsSalesTaxRequired(Company,FM,Trade) · RapidAPI by ZIP','Tax only when required; % from ZIP','labor_rate table + GET /quote/sales-tax (cache → provider → state fallback); % stored on the quote, overridable','adapted'],
+ ['QuoteRate · LaborRate Tech/Helper/Trip/Afterhours/Holiday','Rates per combo; admin edits','labor_rate + GET/PUT /api/rates; builder shows rate card + “Add line” presets','brought'],
+ ['ActionEngine.Submit · SetClientQuoteField','Summary into ClickUp ClientQuote','sendQuote → client-visible comment + snapshot + outbox quote.sent','seam'],
+ ['ActionEngine.SubmitOnSite · Teams Summary + Cost posts, reactions','Internal approval over Teams','on_site flag on client approval; Teams posts → outbox','seam'],
+ ['ActionEngine.ApproveAsync · Teams ✅ · ClickUp comment','Client approval recorded','clientApproveQuote (+ comment, snapshot, outbox quote.client_approved); WO money.quote bound','brought'],
+ ['ActionEngine.DeclineAsync · RejectionMessage · clear ClientQuote','Decline one option / section','clientDeclineQuote (rejection_note, round locked, internal comment, outbox)','brought'],
+ ['ActionEngine.CancelSubmission','Retract a submitted quote','cancelSubmission: sent → approved, “Quote withdrawn” client-visible, outbox quote.cancelled','brought'],
+ ['Quote.Nte · UpdateNte webhook','NTE from ClickUp','NTE read from WO field “16. Client NTE”; meter binds to approved/sent/client_approved quote','adapted'],
+ ['Quote.BillTo · IsCostTBD · Keywords · Spec · NoteToCustomer · Summary','Header fields','bill_to, is_cost_tbd, specs, note_to_customer, summary auto/pinned (keywords dropped)','brought'],
+ ['IsTemplate · Clone · Historical · Summarize (AI) · ExportForIndexing','Templates & AI','Not ported (P2/P3) — see “not brought”','dropped'],
+ ['Bfi · QuickBooks SendInvoice · IsSentToQuickbooks','Invoice from quote','Not ported; adapter seam only (S6)','seam'],
+ ['PaymentEngine.Create · HandleFinishedWo · HandlePurpose · Technician by phone · W9 window · Teams post · PostedMessagePlain','Request creation rules','createPaymentRequest: WO-status gate, duplicate purpose 409, vendor link/create by phone, recomputeNeedsW9 (>599, non-credit, per entity/year), posted_message_plain, outbox payment.requested','brought'],
+ ['PaymentAddress JSON per method · zelle/ach/credit/check/cashapp','Payout details','payment_address jsonb (Zod per method); ACH masked except AP; method codes pinned by CHECK','brought'],
+ ['VerifyPayment · UpdateCostInClickUp · 👍 · confirmation posts','AP pays','approve + pay; pay rolls into task.fields["34. Cost"]; outbox payment.paid','brought'],
+ ['UpdatePayment (only if !IsVerified)','Edit before processing','PATCH /payment-requests/:id while requested (requester or AP)','brought'],
+ ['MarkPaymentAsDeleted (IsPending for verified) · RejectDeletePayment · ConvertToAch','Soft delete, two-person','delete / confirm-delete / reject-delete / convert-method with identical semantics','brought'],
+ ['Payment/All (paged, filtered) · GetIsDeleted · HasPendingDelete · Pending/{technicianId}','AP list','GET /api/payment-requests (status, company, vendor, q, pending_delete, needs_w9, paging) + /payments page','brought'],
+ ['GetReciepientTotal (YTD by phone + company)','W9 threshold check','GET /api/vendors/:id/ytd?billing_entity','brought'],
+ ['Technician · IsW9Present · IsBlacklisted · Insurance expiry (daily sweep) · Recipient / IsStore','Compliance records','vendor compliance columns + PATCH /vendors/:id/compliance; recipient_name/phone/is_store inline; expiry sweep not yet','adapted'],
+ ['GeneratePaymentLink / GetPaymentLinkData (anonymous)','Prefilled form by link','Not needed — form opens from the WO','dropped'],
+ ['Entra groups · PaymentUsersPolicy (PROCESS_VERIFIED) · admin','Authorization','Roles on principal: ap/admin for processing, admin for delete confirmation; Entra mapping in S5','adapted'],
+ ['Hangfire · ClickUp incremental/full sync · Gmail watch · insurance cleanup','Background jobs','Not ported; The One has its own WO ingestion; expiry sweep is a small timer later','dropped'],
+];
+$('mapBody').innerHTML=MAP.map(([y,r,t,s,why])=>`<tr><td><span class="mono">${esc(y)}</span></td><td>${esc(r)}</td><td>${esc(t)}${why?`<br><small class="src">${esc(why)}</small>`:''}</td><td><span class="badge-stat b-${s}">${s==='dropped'?'not needed':s}</span></td></tr>`).join('');
+
+// ───────────────────────────── integrations ─────────────────────────────────
+const INT=[
+ {n:'ClickUp — ClientQuote custom field, comments, Cost field',y:'Submit writes the summary into the ClientQuote field; approve/decline post comments; Verify adds to Cost; link fields PPRLink/ClientQuote.',o:'Quote summary is a client-visible WO comment; Cost is updated on the WO record itself (task.fields["34. Cost"]); every push is an outbox row.',need:'Yes, while ClickUp is still the system clients/ops look at. No, once The One is the system of record.',when:'S6 adapter drains outbox → ClickUp API. Config: CLICKUP_FIELD_CLIENT_QUOTE, CLICKUP_FIELD_COST.',cls:'seam'},
+ {n:'Microsoft Teams — per-company pay chats, NTE-increase chats, reactions',y:'Payment create posts an HTML card to AF/RF/BKR/SFM/TPM/EDS chat; quotes post Summary + Cost; ✅/❌/👍/⛔ reactions; Message table stores ids for threading.',o:'posted_message_plain stored on the row; outbox kinds carry the payload; internal comments already land on the WO feed.',need:'Yes for the AP team’s current habit (they work from Teams). Could be replaced by the /payments queue + notifications over time.',when:'S6 Graph adapter. Config: TEAMS_CHAT_PAY_{AF,RF,BKR,SFM,TPM,EDS}, TEAMS_CHAT_NTE_{BKR,SFM,OTHER}.',cls:'seam'},
+ {n:'RapidAPI sales-tax by ZIP',y:'GetCombinedRateByZipAsync(zip) when LaborRate.IsSalesTaxRequired.',o:'Seam implemented: cache table → provider (SALES_TAX_API_KEY/HOST) → state fallback; % is overridable on the quote.',need:'Yes (cheap, already wired). Works today with the fallback; add the key to go live.',when:'Now — set env vars.',cls:'brought'},
+ {n:'QuickBooks Online — SendInvoice',y:'Builds the QBO invoice from quote lines (tax line, Day prefix, memo per company, customer by FM, terms).',o:'Not ported. Quote keeps all inputs the invoice needs (lines, day, tax %, bill_to).',need:'Later — belongs to the Invoicing module (AR), not to quoting.',when:'S6/Invoicing: AccountingAdapter seam.',cls:'dropped'},
+ {n:'SharePoint — receipt DriveItemId',y:'Payment attachment uploaded to SharePoint; id stored on the payment.',o:'attachment table + attachment_id FK exist; no upload route yet.',need:'Yes (AP approves faster with a receipt).',when:'Next slice: multipart upload to local storage; SharePoint adapter later.',cls:'seam'},
+ {n:'Entra ID / MSAL — groups → policies',y:'PaymentUsersPolicy (7df59488…), admin, dispatcher, jack… groups gate every screen.',o:'Entra OIDC or dev-bypass sign-in, server-side sessions (Primary-Updates); every gate reads the 0015 permission tree (role grants + per-person overrides) — payments:approve, payments/process:edit (ap), payments/process:delete (admin).',need:'Group → role mapping before production.',when:'Exercise the Entra path against the real tenant; map PROCESS_VERIFIED → ap in Admin › Users.',cls:'brought'},
+ {n:'ClickUp webhooks — GenerateQuoteLink, UpdateNte, GeneratePaymentLink (anonymous)',y:'ClickUp calls Yoda to create links and push NTE changes.',o:'Not needed: the WO page is the entry point; NTE comes from the WO field.',need:'No.',when:'—',cls:'dropped'},
+ {n:'Hangfire — ClickUp incremental/full sync, Gmail watch, insurance cleanup',y:'Keeps Yoda’s WorkOrder table in step with ClickUp; expires COI records.',o:'The One owns WO ingestion separately; COI expiry is shown from vendor.insurance_expires_on (no sweep yet).',need:'Only the COI sweep (tiny). Sync is The One’s own concern.',when:'Small daily timer when vendors module lands.',cls:'dropped'},
+];
+$('intGrid').innerHTML=INT.map(i=>`<div class="card"><div class="card-head"><h2 class="card-title">${esc(i.n)}</h2><span class="card-meta"><span class="badge-stat b-${i.cls}">${i.cls==='dropped'?'not now':i.cls==='brought'?'wired':'seam'}</span></span></div><div class="card-pad" style="font-size:13px">
+  <p><b>Yoda:</b> ${esc(i.y)}</p><p><b>The One today:</b> ${esc(i.o)}</p><p><b>Do we need it?</b> ${esc(i.need)}</p><p><b>When / how:</b> ${esc(i.when)}</p></div></div>`).join('');
+
+// ───────────────────────────── not brought ──────────────────────────────────
+const NB=[
+ ['Anonymous link pages (GetQuoteLinkData / GetPaymentLinkData) and the TaskId dialog','Yoda is reached through a link ClickUp writes; it has to look the WO up and lock the prefilled fields. In The One the quote and the payment form are routes <i>under the WO</i> (/work-orders/:wo/quote, /request-payment); the WO context strip is read-only by construction.'],
+ ['Per-field PUT endpoints (/Section, /Option, /LineItem, /LineItem/Bulk)','The builder autosaves the whole current round in one PUT (900 ms debounce) inside one transaction. Diffing rows the operator dragged around is a bigger surface than rewriting a dozen rows; locked rounds are simply not in the payload.'],
+ ['Hard-delete of an emptied section (DeclineAsync → RejectSectionAsync)','The One keeps the declined round as locked history with the client’s reason on each option, and lets the dispatcher re-quote with a new round. Nothing the client saw is erased; the audit stays complete.'],
+ ['Templates / Clone / Historical / AI Summarize / ExportForIndexing','Productivity features, not business rules. Deferred (P2/P3). The data model (quote_revision_snapshot, rounds) does not block them.'],
+ ['QuickBooks SendInvoice / BFI','Invoicing is a separate module (AR). The quote retains every input the invoice needs (lines, day grouping, tax %, bill_to), so the adapter can be added without touching quoting.'],
+ ['Truncation to 2 dp (TruncateDecimalPipe)','The One rounds half-up, same as QuickBooks. Mixing truncation and rounding makes the quote and the invoice disagree by a cent.'],
+ ['Separate Technician and Recipient tables','One technician = one vendor record (The One’s vendor module is the sourcing concept). The alternate payee stays inline on the request (recipient_name / phone / is_store) — it is a per-payment fact, not a master record.'],
+ ['Dropping the S4 payable table (D14 as first proposed)','Kept on purpose: the Messages tab correlates WO → payable.vendor_id → Quo conversation. Dropping it would have broken the Messages tab; instead the correlation was widened to also use payment_request.vendor_id.'],
+ ['Eastern-time offsets applied server-side','Timestamps are ISO-8601 UTC on the wire; the browser renders in the operator’s locale.'],
+ ['Live ClickUp / Teams calls inside the request path','Replaced by the outbox so the features work offline and tests do not need credentials. The push is owed, recorded, and drained by adapters later — same data, decoupled delivery.'],
+];
+$('nbGrid').innerHTML=NB.map(([t,w])=>`<div class="card"><div class="card-head"><h2 class="card-title">${esc(t)}</h2></div><div class="card-pad" style="font-size:13px">${w}</div></div>`).join('');
+
+// ───────────────────────────── endpoints ────────────────────────────────────
+// [yoda, yodaGate, theOne, theOneGate, notes, status]
+const EP_QUOTE=[
+ ['POST Quote','JWT','POST /work-orders/:id/quote → 201','any role; WO status quote.create','One quote per WO (Yoda: one per TaskId). Creates round 1 in draft.','adapted'],
+ ['PUT Quote (+ PUT Section / Option / LineItem / LineItem/Bulk)','JWT','PUT /work-orders/:id/quote','senior_om+; draft|pending_approval; quote.edit','Whole current round replaced in one transaction (900 ms autosave). Locked rounds are not in the payload.','adapted'],
+ ['POST Quote/Details {TaskId}','JWT','GET /work-orders/:id/quote','any role','Returns the quote tree + totals + wo_actions (allowedWoActions) so the UI locks controls with a reason.','adapted'],
+ ['GET Quote/All','JWT','GET /quotes','any role','Sidebar list page; same header shape (WO, client, status, grand total).','brought'],
+ ['QuoteActionEngine submit / submitonsite','JWT','POST /work-orders/:id/quote/submit → …/approve → …/send','senior_om+ / atl+ / atl+; quote.submit|approve|send','Yoda flagged section IsSubmitted and wrote ClickUp ClientQuote; The One splits internal approval from sending and writes outbox quote.sent.','adapted'],
+ ['QuoteActionEngine approve (option)','JWT','POST /work-orders/:id/quote/client-approve {option_id}','atl+ (om in Approval phase); quote.client_decide','Approved option lines flip to incurred, round locks, sibling options soft-deleted. Outbox quote.client_approved (Teams ✅ + ClickUp comment).','brought'],
+ ['QuoteActionEngine decline','JWT','POST /work-orders/:id/quote/client-decline {option_id?, reason}','atl+; quote.client_decide','Reason stored per option (RejectionMessage); round kept as locked history instead of hard-deleting the section. Outbox quote.client_declined.','adapted'],
+ ['QuoteActionEngine cancel','JWT','POST /work-orders/:id/quote/cancel-submission','atl+; quote.submit','Back to draft, rev++. Outbox quote.cancelled (clear ClientQuote, post old value as comment).','brought'],
+ ['New section after approval (UI “Add section”)','JWT','POST /work-orders/:id/quote/new-round','senior_om+; quote.new_round','Explicit round with the round-1 approved option carried as incurred. Blocked once WO leaves live phases.','adapted'],
+ ['— (internal reviewer reject did not exist)','—','POST /work-orders/:id/quote/reject {note}','atl+','The One adds an internal review step before the client sees anything: pending_approval → draft with a note.','adapted'],
+ ['DELETE Quote','JWT','—','—','No hard delete; cancel-submission + rounds cover the use case and keep the audit.','dropped'],
+ ['PATCH Quote (SwitchIsTemplate) · POST Clone · POST Historical · POST Summarize · POST ExportForIndexing','JWT or X-Api-Key','—','—','Templates / AI / search corpus — productivity features, deferred (P2/P3).','dropped'],
+ ['POST Quote/GenerateQuoteLink · POST Quote/UpdateNte','AllowAnonymous (ClickUp webhook)','—','—','Entry point is the WO page; NTE comes from the WO field.','dropped'],
+ ['GET Quote/GetQuoteLinkData?customTaskId','JWT','GET /work-orders/:id (actions, nte, client, trade…)','any role','WO detail already carries the context strip; no separate link-data call.','adapted'],
+ ['POST Quote/Summary {Id} (client summary text)','JWT','computed server-side on send → WO comment + outbox payload','—','Same text Yoda wrote into ClickUp ClientQuote.','brought'],
+ ['POST Quote/Bfi {WorkOrderNumber} (QuickBooks)','JWT','—','—','AR / invoicing module later (AccountingAdapter seam).','dropped'],
+];
+const EP_PAY=[
+ ['POST Payment','JWT','POST /work-orders/:id/payment-requests → 201','payments:create; WO status payment.request','Same check order: duplicate purpose 409, blacklisted vendor 409 (admin override), W9 recompute, posted_message_plain built, outbox payment.requested.','brought'],
+ ['GET Payment/GetByWoNumber?woNumber','JWT','GET /work-orders/:id/payment-requests','payments:view','List + totals per WO; full payout address only to payments/process:edit.','brought'],
+ ['GET Payment/All?sorting&filter&pageSize&pageNumber','PaymentUsersOrAdminsPolicy','GET /payments?status&billing_entity&vendor_id&q&pending_delete&needs_w9&page&page_size','payments:view (0026 scoped)','The Payments tab. Typed filters instead of a free-text filter string; counts per status + pending_delete_count ride along.','adapted'],
+ ['GET Payment/Light · GET Payment/Pending/{technicianId}?woNumber','JWT','GET /payments?vendor_id=&status=requested','payments:view','Covered by the queue filters.','adapted'],
+ ['— (one row)','—','GET /payment-requests/:pid','payments:view (full address with payments/process:edit)','Needed by the queue drawer.','adapted'],
+ ['PUT Payment/Update/{id}','PaymentUsersPolicy','PATCH /payment-requests/:pid','requester | payments/process:edit; status=requested only','Yoda: blocked after Verify. Same lock.','brought'],
+ ['PUT Payment/Verify/{id}','PaymentUsersPolicy','POST /payment-requests/:pid/pay (approve is optional before it)','payments/process:edit; 409 while an NTE override is open','Yoda Verify = pay + Cost in one step — kept: pay works straight from requested and stamps the approver too. approve/reject are the quote approvers’ (payments:approve, 0016).','brought'],
+ ['— (no reject; AP deleted instead)','—','POST /payment-requests/:pid/reject {reason}','payments:approve','Explicit rejected status with reason → internal WO comment + outbox payment.rejected.','adapted'],
+ ['PUT Payment/ConvertToAch/{id}','PaymentUsersOrAdminsPolicy','POST /payment-requests/:pid/convert-method {method}','payments/process:edit','Generalised: any method code → any method code.','adapted'],
+ ['PUT Payment/Delete/{id} {reason}','PaymentUsersOrAdminsPolicy','POST /payment-requests/:pid/delete {reason}','owner | payments/process:edit','requested rows → soft-deleted now; approved/paid rows → pending_delete (two-person). Outbox payment.delete_requested ⛔.','brought'],
+ ['PUT Payment/GetIsDeletedAsync · GET Payment/HasPendingDelete','PaymentUsersOrAdminsPolicy','GET /payments?pending_delete=true','payments:view','Queue badge count comes from the same filter.','adapted'],
+ ['(admin confirms in Teams)','—','POST /payment-requests/:pid/confirm-delete','payments/process:delete (admin)','Finalises the soft delete; Cost −= amount if it had been paid.','adapted'],
+ ['DELETE Payment/RejectDelete/{id}','JWT','POST /payment-requests/:pid/reject-delete','payments/process:delete (admin)','Restores the row (IsPending cleared).','brought'],
+ ['GET Payment/GetReciepientTotal?phoneNumber&company','JWT','GET /vendors/:vid/ytd?billing_entity','any role','Keyed on vendor instead of phone number; same non-credit, calendar-year window; returns w9_threshold.','adapted'],
+ ['POST Payment/GeneratePaymentLink','AllowAnonymous (ClickUp webhook)','—','—','Form lives at /work-orders/:wo/request-payment.','dropped'],
+ ['GET Payment/GetPaymentLinkData?customTaskId','JWT','GET /work-orders/:id','any role','WO detail is the prefill source.','adapted'],
+];
+const EP_AUX=[
+ ['Technician search / card (TechnicianEngine)','JWT','GET /vendors?q&trade&limit · GET /vendors/:vid · POST /vendors','any role','One technician = one vendor record; VendorPicker in the payment form.','adapted'],
+ ['Technician flags: W9 present, blacklist + reason, COI expiry','JWT','PATCH /vendors/:vid/compliance','ap | admin','is_w9_present, is_blacklisted, blacklist_reason, insurance_expires_on, notes.','brought'],
+ ['GET QuoteRate (GetRates) · PUT QuoteRate/LaborRate','JWT','GET /rates · PUT /rates','any role / admin','labor_rate per (billing_entity, fm, trade) incl. is_sales_tax_required; UI read-only for now.','brought'],
+ ['POST QuoteSalesTax/SalesTaxPercentage','JWT','GET /work-orders/:id/quote/sales-tax','any role','cache table → RapidAPI (SALES_TAX_API_KEY/HOST) → state fallback. % overridable on the quote.','brought'],
+ ['GET QuoteStatus/All · GET QuoteLineItemType/All','JWT','constants in @theone/shared','—','Enumerations are code, not lookups: quote statuses and line_type CHECK (service/labor/part/material/fee/discount).','adapted'],
+];
+const EP_METHODS=[
+ ['zelle','zellePhoneNumber | zelleEmail','{ zelle_handle }','phone or e-mail handle','Default for technicians; counts toward W9.'],
+ ['ach','routingNumber, accountNumber','{ bank_name?, routing_number (9 digits), account_number (4–17 digits), account_type? }','( Rout: … , Acct: … )','Yoda’s ConvertToAch target; routing/account shown only to ap/admin.'],
+ ['check','payableTo, mailingAddress','{ payable_to, mailing_address }','Payable to … · address','Used for stores / alternate payees.'],
+ ['credit','(card note)','{ note? }','Company card','Excluded from W9 totals and from the technician YTD; shown as Credit column per company.'],
+ ['cashapp','cashtag','{ cashtag ($name) }','$cashtag','Validated with a $cashtag regex; counts toward W9.'],
+];
+const epRow=([y,yg,t,tg,n,s])=>`<tr data-s="${s}"><td><span class="mono">${esc(y)}</span></td><td><small>${esc(yg)}</small></td><td><span class="mono">${esc(t)}</span></td><td><small>${esc(tg)}</small></td><td>${esc(n)}</td><td><span class="badge-stat b-${s}">${s==='dropped'?'not brought':s}</span></td></tr>`;
+$('epQuote').innerHTML=EP_QUOTE.map(epRow).join('');
+$('epPay').innerHTML=EP_PAY.map(epRow).join('');
+$('epAux').innerHTML=EP_AUX.map(epRow).join('');
+$('epMethods').innerHTML=EP_METHODS.map(([m,y,o,r,n])=>`<tr><td><span class="chip accent mono">${m}</span></td><td><span class="mono">${esc(y)}</span></td><td><span class="mono">${esc(o)}</span></td><td>${esc(r)}</td><td>${esc(n)}</td></tr>`).join('');
+function applyEpFilter(){
+  const f=$('epFilter').value;let shown=0,total=0;
+  document.querySelectorAll('#p-endpoints tr[data-s]').forEach(tr=>{total++;const on=!f||tr.dataset.s===f;tr.style.display=on?'':'none';if(on)shown++;});
+  $('epCount').textContent=`${shown} of ${total} endpoints`;
+}
+$('epFilter').onchange=applyEpFilter;applyEpFilter();
+</script>
+</body>
+</html>
