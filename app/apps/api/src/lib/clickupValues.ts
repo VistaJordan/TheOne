@@ -17,6 +17,15 @@ export const matchName = (s: string): string =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
+/** A work-order number for comparing across systems: case, spaces and
+    dashes do not count ("WOT 0452814" = "wot0452814"). Null when too short
+    to trust (fewer than 4 characters). */
+export function idKey(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const k = String(v).toLowerCase().replace(/[\s\-_.]/g, '');
+  return k.length >= 4 ? k : null;
+}
+
 /** The same without ClickUp's ordering prefix ("32. Tech Name" → "tech name"),
     the second-chance match when no field carries the exact name. */
 export const bareName = (s: string): string => matchName(s).replace(/^\d+ /, '');

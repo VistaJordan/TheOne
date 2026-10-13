@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CLICKUP_NATIVE_TARGETS, clickUpFits } from '@theone/shared';
 import type { ClickUpMapRow, ClickUpOverview } from '@theone/shared';
-import { getClickUp, refreshClickUp, retryClickUpTask, saveClickUpMap, setClickUpList, syncClickUpNow } from '../../api/client';
+import { getClickUp, refreshClickUp, retryClickUpTask, saveClickUpMap, setClickUpDedupe, setClickUpList, syncClickUpNow } from '../../api/client';
 import { Icon } from '../../components/Icon';
 import { errText } from '../../components/ui/Sheet';
 
@@ -131,6 +131,11 @@ export function ClickUpPanel({ canEdit }: { canEdit: boolean }) {
             <span><b>{d.counts.linked}</b> in ClickUp</span>
             <span><b>{d.counts.waiting}</b> waiting</span>
             <span className={d.counts.failing ? 'is-warn' : ''}><b>{d.counts.failing}</b> with a problem</span>
+            {d.counts.matched > 0 && (
+              <span title="Already in ClickUp when it arrived here: linked to that task instead of creating another">
+                <b>{d.counts.matched}</b> found already in ClickUp
+              </span>
+            )}
             {d.counts.skipped > 0 && (
               <span title="Received while ClickUp was switched off: never sent">
                 <b>{d.counts.skipped}</b> skipped while off
@@ -153,6 +158,19 @@ export function ClickUpPanel({ canEdit }: { canEdit: boolean }) {
             One-way: a change made in ClickUp is overwritten by the next change here. While the switch is off nothing
             is sent, and nothing done in that time is sent later.
           </p>
+
+          <label className="cu-line cu-check">
+            <input
+              type="checkbox"
+              checked={d.dedupe_days > 0}
+              disabled={!canEdit || busy}
+              onChange={(e) => m.mutate(() => setClickUpDedupe(e.target.checked ? 30 : 0))}
+            />
+            <span>
+              Look for the work order in ClickUp before creating it (tasks created in the last {d.dedupe_days > 0 ? d.dedupe_days : 30} days,
+              by name or Ecotrak ID). Keeps the old Ecotrak → ClickUp integration from causing duplicates.
+            </span>
+          </label>
 
           {d.missing_statuses.length > 0 && (
             <p className="intg-note is-warn">

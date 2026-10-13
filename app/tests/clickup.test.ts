@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { clickUpFits, type ClickUpFieldDef } from '../packages/shared/src/integrations';
 import { parseListId } from '../apps/api/src/lib/clickupApi';
-import { bareName, matchName, splitNames, statusSent, toCuStatus, toCuDate, toCuFieldValue, toCuPriority, userIds } from '../apps/api/src/lib/clickupValues';
+import { bareName, idKey, matchName, splitNames, statusSent, toCuStatus, toCuDate, toCuFieldValue, toCuPriority, userIds } from '../apps/api/src/lib/clickupValues';
 
 const people = new Map([
   ['jordan brown', 11],
@@ -44,6 +44,18 @@ describe('matching by name', () => {
     expect(clickUpFits('money', 'drop_down')).toBe(false);
     expect(clickUpFits('date', 'text')).toBe(true);
     expect(clickUpFits('text', 'formula')).toBe(false);
+  });
+});
+
+describe('finding a work order ClickUp already has', () => {
+  it('compares numbers without case, spaces or dashes', () => {
+    expect(idKey('1084067-00000011')).toBe(idKey('108406700000011'));
+    expect(idKey(' WOT 0452814 ')).toBe('wot0452814');
+    expect(idKey(357881756)).toBe('357881756');
+  });
+  it('does not trust a number too short to be unique', () => {
+    expect(idKey('12')).toBeNull();
+    expect(idKey(null)).toBeNull();
   });
 });
 

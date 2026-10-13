@@ -2520,6 +2520,8 @@ a.dash-widget-total:hover strong { color: var(--accent-text); }
 .cu-run { color: var(--ink-3); flex: 1 1 200px; }
 .cu-details summary { cursor: pointer; }
 .cu-toggle { justify-self: start; }
+.cu-check { align-items: flex-start; flex-wrap: nowrap; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; cursor: pointer; }
+.cu-check input { margin-top: 3px; flex: none; }
 .cu-problems, .cu-map { width: 100%; font-size: 12.5px; }
 .cu-err { color: var(--warn); overflow-wrap: anywhere; }
 .cu-map select.fld { max-width: 320px; }

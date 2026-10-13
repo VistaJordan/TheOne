@@ -48,18 +48,21 @@ import {
   getList,
   getListFields,
   getMembers,
+  getTasksCreatedSince,
   parseListId,
   setField,
   updateTask,
   type CuMember,
   type CuStatus,
   type CuTaskBody,
+  type CuTaskSummary,
 } from '../lib/clickupApi.js';
 import {
   fits,
   isBlank,
   bareName,
   findOption,
+  idKey,
   matchName,
   personKey,
   sig,
@@ -90,6 +93,10 @@ interface ConfigRow {
   cursor_log_id: string | number;
   resumed_at: Date | string | null;
   needs_baseline: boolean;
+  team_id: string | null;
+  space_id: string | null;
+  dedupe_days: number;
+  recent_synced_ms: string | number | null;
   last_run_at: Date | string | null;
   last_run_note: string | null;
 }
@@ -281,10 +288,11 @@ export async function clickUpOverview(user: Admin): Promise<ClickUpOverview> {
   const cfg = await getConfig();
   const [map, counts, problems, statuses, people] = await Promise.all([
     resolveMap(cfg),
-    query<{ linked: string; waiting: string; skipped: string; failing: string }>(
+    query<{ linked: string; waiting: string; skipped: string; matched: string; failing: string }>(
       `SELECT count(*) FILTER (WHERE clickup_task_id IS NOT NULL) AS linked,
               count(*) FILTER (WHERE dirty AND NOT skipped) AS waiting,
               count(*) FILTER (WHERE skipped) AS skipped,
+              count(*) FILTER (WHERE matched_existing) AS matched,
               count(*) FILTER (WHERE last_error IS NOT NULL) AS failing
          FROM clickup_link`,
     ),
@@ -314,12 +322,14 @@ export async function clickUpOverview(user: Admin): Promise<ClickUpOverview> {
     list: cfg.list_id ? { id: cfg.list_id, name: cfg.list_name, url: cfg.list_url } : null,
     fetched_at: iso(cfg.fetched_at),
     sync_from: iso(cfg.sync_from),
+    dedupe_days: cfg.dedupe_days,
     last_run_at: iso(cfg.last_run_at),
     last_run_note: cfg.last_run_note,
     counts: {
       linked: Number(c?.linked ?? 0),
       waiting: Number(c?.waiting ?? 0),
       skipped: Number(c?.skipped ?? 0),
+      matched: Number(c?.matched ?? 0),
       failing: Number(c?.failing ?? 0),
     },
     problems: problems.rows.map((p) => ({
@@ -352,16 +362,25 @@ function wrapCu(e: unknown): never {
 }
 
 /** Read the List's fields, statuses and the workspace members again. */
-async function fetchStructure(listId: string): Promise<{ name: string; fields: ClickUpFieldDef[]; statuses: CuStatus[]; members: CuMember[] }> {
+async function fetchStructure(listId: string): Promise<{
+  name: string;
+  fields: ClickUpFieldDef[];
+  statuses: CuStatus[];
+  members: CuMember[];
+  teamId: string | null;
+  spaceId: string | null;
+}> {
   try {
-    const [list, raw, members] = await Promise.all([getList(listId), getListFields(listId), getMembers()]);
+    const [list, raw, team] = await Promise.all([getList(listId), getListFields(listId), getMembers()]);
+    const { members, teamId } = team;
+    const spaceId = list.space?.id ? String(list.space.id) : null;
     const fields: ClickUpFieldDef[] = raw.map((f) => ({
       id: f.id,
       name: f.name,
       type: f.type,
       options: f.type_config?.options?.map((o) => ({ id: String(o.id), name: (o.name ?? o.label ?? '').trim() })),
     }));
-    return { name: list.name, fields, statuses: list.statuses ?? [], members };
+    return { name: list.name, fields, statuses: list.statuses ?? [], members, teamId, spaceId };
   } catch (e) {
     wrapCu(e);
   }
@@ -378,9 +397,10 @@ export async function setClickUpList(user: Admin, raw: string): Promise<ClickUpO
   await query(
     `UPDATE clickup_config
         SET list_id = $1, list_name = $2, list_url = $3, cu_fields = $4::jsonb, cu_statuses = $5::jsonb,
-            cu_members = $6::jsonb, fetched_at = now(), updated_by = $7, updated_at = now()
+            cu_members = $6::jsonb, fetched_at = now(), updated_by = $7, updated_at = now(),
+            team_id = $8, space_id = $9, recent_synced_ms = NULL
       WHERE id = 1`,
-    [listId, s.name, url, JSON.stringify(s.fields), JSON.stringify(s.statuses), JSON.stringify(s.members), user.id],
+    [listId, s.name, url, JSON.stringify(s.fields), JSON.stringify(s.statuses), JSON.stringify(s.members), user.id, s.teamId, s.spaceId],
   );
   if (before.list_id !== listId) {
     await logAdminEvent({
@@ -402,8 +422,9 @@ export async function refreshClickUp(user: Admin): Promise<ClickUpOverview> {
   if (!cfg.list_id) throw badRequest('Choose the ClickUp List first');
   const s = await fetchStructure(cfg.list_id);
   await query(
-    `UPDATE clickup_config SET list_name = $1, cu_fields = $2::jsonb, cu_statuses = $3::jsonb, cu_members = $4::jsonb, fetched_at = now() WHERE id = 1`,
-    [s.name, JSON.stringify(s.fields), JSON.stringify(s.statuses), JSON.stringify(s.members)],
+    `UPDATE clickup_config SET list_name = $1, cu_fields = $2::jsonb, cu_statuses = $3::jsonb, cu_members = $4::jsonb,
+            team_id = $5, space_id = $6, fetched_at = now() WHERE id = 1`,
+    [s.name, JSON.stringify(s.fields), JSON.stringify(s.statuses), JSON.stringify(s.members), s.teamId, s.spaceId],
   );
   return clickUpOverview(user);
 }
@@ -447,6 +468,26 @@ export async function saveClickUpMap(
   });
   // A newly mapped field is owed on every linked work order.
   await query(`UPDATE clickup_link SET dirty = true, dirty_since = now() WHERE clickup_task_id IS NOT NULL AND NOT dirty`);
+  return clickUpOverview(user);
+}
+
+/** 0081 · look for the work order in ClickUp before creating it: the
+    window in days (0 = off). */
+export async function setClickUpDedupe(user: Admin, days: number): Promise<ClickUpOverview> {
+  requirePerm(user, INTEGRATIONS_PERM_KEY, 'edit', 'You cannot change Admin › Integrations');
+  if (!Number.isInteger(days) || days < 0 || days > 90) throw badRequest('Pick between 0 and 90 days');
+  const before = (await getConfig()).dedupe_days;
+  if (before !== days) {
+    await query(`UPDATE clickup_config SET dedupe_days = $1, recent_synced_ms = NULL WHERE id = 1`, [days]);
+    await logAdminEvent({
+      actorId: user.id,
+      entity: 'integration',
+      entityId: 'clickup',
+      action: 'clickup_dedupe_changed',
+      before: { name: 'ClickUp: look before creating', days: before },
+      after: { name: 'ClickUp: look before creating', days },
+    });
+  }
   return clickUpOverview(user);
 }
 
@@ -588,6 +629,69 @@ const wantSig = (w: Want) => sig(w.time === undefined ? w.value : [w.value, w.ti
 
 class TaskGone extends Error {}
 
+// ── 0081 · finding a work order ClickUp already has ──────────────────────────
+
+/** The local copy of recent tasks is current for this run; false = it could
+    not be topped up, so creations wait rather than risk a duplicate. */
+let recentReady = false;
+
+class DedupeNotReady extends Error {}
+
+function ecotrakIdOf(task: CuTaskSummary): string | null {
+  const f = (task.custom_fields ?? []).find((c) => bareName(c.name) === 'ecotrak id');
+  return f && typeof f.value === 'string' ? f.value : f && typeof f.value === 'number' ? String(f.value) : null;
+}
+
+/** Top up the copy of tasks created in the window: since the last top-up
+    (with five minutes of overlap), or the whole window the first time. */
+async function refreshRecent(cfg: ConfigRow): Promise<void> {
+  recentReady = false;
+  if (cfg.dedupe_days <= 0) {
+    recentReady = true;
+    return;
+  }
+  let teamId = cfg.team_id;
+  if (!teamId) {
+    teamId = (await getMembers()).teamId;
+    if (!teamId) return;
+    await query(`UPDATE clickup_config SET team_id = $1 WHERE id = 1`, [teamId]);
+  }
+  const windowStart = Date.now() - cfg.dedupe_days * 86_400_000;
+  const last = cfg.recent_synced_ms === null ? null : Number(cfg.recent_synced_ms);
+  const from = last && last > windowStart ? last - 5 * 60_000 : windowStart;
+  const startedAt = Date.now();
+  const tasks = await getTasksCreatedSince(teamId, cfg.space_id, from);
+  for (const k of tasks) {
+    await query(
+      `INSERT INTO clickup_recent_task (cu_task_id, name_key, ecotrak_key, url, created_ms) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (cu_task_id) DO UPDATE SET name_key = EXCLUDED.name_key, ecotrak_key = EXCLUDED.ecotrak_key, url = EXCLUDED.url`,
+      [k.id, idKey(k.name), idKey(ecotrakIdOf(k)), k.url ?? `https://app.clickup.com/t/${k.id}`, Number(k.date_created) || startedAt],
+    );
+  }
+  await query(`DELETE FROM clickup_recent_task WHERE created_ms < $1`, [windowStart]);
+  await query(`UPDATE clickup_config SET recent_synced_ms = $1 WHERE id = 1`, [startedAt]);
+  recentReady = true;
+}
+
+/** A task created in the window whose name or "Ecotrak ID" is this work
+    order's Client WO # or Ecotrak ID, and that no other work order holds. */
+async function findExisting(t: TaskRow, cfg: ConfigRow): Promise<{ id: string; url: string } | null> {
+  if (cfg.dedupe_days <= 0) return null;
+  if (!recentReady) throw new DedupeNotReady('Could not check ClickUp for this work order yet; it will be created on the next run');
+  const keys = [idKey(t.ext_name), idKey(t.fields?.['Ecotrak ID'])].filter((k): k is string => Boolean(k));
+  if (keys.length === 0) return null;
+  const r = await query<{ cu_task_id: string; url: string | null }>(
+    `SELECT r.cu_task_id, r.url FROM clickup_recent_task r
+      WHERE (r.name_key = ANY($1::text[]) OR r.ecotrak_key = ANY($1::text[]))
+        AND r.created_ms >= $2
+        AND NOT EXISTS (SELECT 1 FROM clickup_link l WHERE l.clickup_task_id = r.cu_task_id)
+      ORDER BY r.created_ms DESC LIMIT 1`,
+    [keys, Date.now() - cfg.dedupe_days * 86_400_000],
+  );
+  const hit = r.rows[0];
+  return hit ? { id: hit.cu_task_id, url: hit.url ?? `https://app.clickup.com/t/${hit.cu_task_id}` } : null;
+}
+
 /** ClickUp's reply to a value it would not take is final until the value
     changes; anything else (network, 5xx, rate limit, auth) is the run's
     problem, not the value's. */
@@ -621,7 +725,14 @@ async function pushOne(link: LinkRow, t: TaskRow, map: Resolved[], cfg: ConfigRo
   let id = link.clickup_task_id;
   let url: string | null = null;
 
-  if (!id) {
+  // 0081 · already in ClickUp (the old Ecotrak integration made it)? Link to
+  // it; every mapped value then goes to that task in the update pass below.
+  const existing = !id ? await findExisting(t, cfg) : null;
+  if (existing) {
+    id = existing.id;
+    url = existing.url;
+    await query(`UPDATE clickup_link SET clickup_task_id = $2, clickup_url = $3, matched_existing = true WHERE task_id = $1`, [t.id, id, url]);
+  } else if (!id) {
     const body: CuTaskBody = { name: String(live.find((w) => w.key === 'name')?.value ?? t.wo_number) };
     const statusOk = new Set(cfg.cu_statuses.map((s) => s.status.toLowerCase()));
     const custom: NonNullable<CuTaskBody['custom_fields']> = [];
@@ -851,6 +962,10 @@ async function runOnce(reason: string): Promise<{ pushed: number; note: string }
   let note = '';
   try {
     if ((await getConfig()).needs_baseline) await clickUpSwitchedOn();
+    // The copy of recent ClickUp tasks is topped up once a run, before the
+    // first creation; until then no creation is allowed (0081).
+    recentReady = false;
+    let refreshed = false;
     for (let pass = 0; pass < 3; pass++) {
       const cfg = await getConfig();
       await markDirty(cfg);
@@ -863,6 +978,10 @@ async function runOnce(reason: string): Promise<{ pushed: number; note: string }
           ORDER BY dirty_since LIMIT 60`,
       );
       if (links.rows.length === 0) break;
+      if (!refreshed && links.rows.some((l) => !l.clickup_task_id)) {
+        refreshed = true;
+        await refreshRecent(fresh).catch((e: unknown) => console.warn('[clickup] could not top up recent tasks:', e));
+      }
       for (const link of links.rows) {
         if (callCounter.n >= CALL_BUDGET || Date.now() - started > TIME_BUDGET_MS) {
           note = 'budget spent; the rest goes on the next run';
@@ -905,6 +1024,10 @@ async function runOnce(reason: string): Promise<{ pushed: number; note: string }
           if (e instanceof ClickUpRateLimited) {
             note = e.message;
             break;
+          }
+          if (e instanceof DedupeNotReady) {
+            // Leave it dirty for the next run, without counting it a failure.
+            continue;
           }
           failed++;
           const attempts = link.attempts + 1;

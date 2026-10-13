@@ -321,7 +321,10 @@ export interface ClickUpOverview {
   last_run_at: string | null;
   last_run_note: string | null;
   /** skipped = arrived while the switch was off: never sent (0080). */
-  counts: { linked: number; waiting: number; skipped: number; failing: number };
+  counts: { linked: number; waiting: number; skipped: number; matched: number; failing: number };
+  /** 0081 · look for the work order in ClickUp (created in the last N days)
+      before creating it; 0 = off. */
+  dedupe_days: number;
   problems: ClickUpProblem[];
   cu_fields: ClickUpFieldDef[];
   /** Our statuses ClickUp's List does not have (a push to them fails). */

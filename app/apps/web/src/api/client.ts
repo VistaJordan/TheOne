@@ -2260,6 +2260,10 @@ export function saveClickUpMap(rows: { source: string; target: string; cu_field_
   return request('/admin/integrations/clickup/map', { method: 'PUT', body: JSON.stringify({ rows }) });
 }
 
+export function setClickUpDedupe(days: number): Promise<ClickUpOverview> {
+  return request('/admin/integrations/clickup/dedupe', { method: 'PUT', body: JSON.stringify({ days }) });
+}
+
 export function syncClickUpNow(): Promise<ClickUpOverview> {
   return request('/admin/integrations/clickup/sync', { method: 'POST', body: '{}' });
 }

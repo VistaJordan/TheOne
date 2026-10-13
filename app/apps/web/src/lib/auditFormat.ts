@@ -459,6 +459,7 @@ export const ACTION_LABELS: Record<string, string> = {
   integration_turned_off: 'Integration turned off',
   clickup_list_set: 'ClickUp List chosen',
   clickup_map_updated: 'ClickUp field map changed',
+  clickup_dedupe_changed: 'ClickUp duplicate check changed',
   // Rule 7.3.2: the email tool's escalations (api/services/escalations.ts).
   escalation_received: 'Escalation received by email',
   escalation_unmatched: 'Escalation email for an unknown work order',
@@ -522,6 +523,7 @@ const SNAPSHOT_KEYS: Record<string, string> = {
   list_id: 'List id',
   list_name: 'List',
   map: 'Field map',
+  days: 'Days',
   is_super_admin: 'Super admin',
   enabled: 'Enabled',
   entity: 'Applies to',

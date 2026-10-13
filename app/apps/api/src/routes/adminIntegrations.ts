@@ -18,9 +18,11 @@ import {
   refreshClickUp,
   retryClickUpTask,
   saveClickUpMap,
+  setClickUpDedupe,
   setClickUpList,
   syncClickUpNow,
 } from '../services/clickup.js';
+const clickUpDedupeBody = z.object({ days: z.number().int().min(0).max(90) }).strict();
 
 // 0078 · ClickUp's own panel under its row.
 const clickUpListBody = z.object({ list: z.string().min(1).max(500) }).strict();
@@ -67,6 +69,7 @@ export default async function adminIntegrationRoutes(app: FastifyInstance): Prom
   app.post('/admin/integrations/clickup/refresh', async (req) => refreshClickUp(realUser(req)));
   app.put('/admin/integrations/clickup/map', async (req) => saveClickUpMap(realUser(req), parse(clickUpMapBody, req.body).rows));
   app.post('/admin/integrations/clickup/sync', async (req) => syncClickUpNow(realUser(req)));
+  app.put('/admin/integrations/clickup/dedupe', async (req) => setClickUpDedupe(realUser(req), parse(clickUpDedupeBody, req.body).days));
   app.post('/admin/integrations/clickup/retry/:taskId', async (req) =>
     retryClickUpTask(realUser(req), parse(taskParams, req.params).taskId),
   );

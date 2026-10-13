@@ -73,6 +73,7 @@ export interface CuList {
   id: string;
   name: string;
   statuses?: CuStatus[];
+  space?: { id: string };
 }
 export interface CuFieldRaw {
   id: string;
@@ -93,15 +94,45 @@ export async function getListFields(listId: string): Promise<CuFieldRaw[]> {
   return r.fields ?? [];
 }
 
-export async function getMembers(): Promise<CuMember[]> {
-  const r = await call<{ teams: { members?: { user: { id: number; username?: string | null; email?: string | null } }[] }[] }>('GET', '/team');
+/** The workspace (ClickUp calls it a team) and its members. */
+export async function getMembers(): Promise<{ teamId: string | null; members: CuMember[] }> {
+  const r = await call<{ teams: { id: string; members?: { user: { id: number; username?: string | null; email?: string | null } }[] }[] }>('GET', '/team');
   const byId = new Map<number, CuMember>();
   for (const t of r.teams ?? []) {
     for (const m of t.members ?? []) {
       byId.set(m.user.id, { id: m.user.id, username: m.user.username ?? null, email: m.user.email ?? null });
     }
   }
-  return [...byId.values()];
+  return { teamId: r.teams?.[0]?.id ? String(r.teams[0].id) : null, members: [...byId.values()] };
+}
+
+export interface CuTaskSummary {
+  id: string;
+  name: string;
+  url?: string;
+  date_created: string;
+  custom_fields?: { id: string; name: string; value?: unknown }[];
+}
+
+/** Every task in the space created after `createdGtMs` (closed ones too),
+    100 a page. Bounded: at most `maxPages` calls. */
+export async function getTasksCreatedSince(teamId: string, spaceId: string | null, createdGtMs: number, maxPages = 40): Promise<CuTaskSummary[]> {
+  const out: CuTaskSummary[] = [];
+  for (let page = 0; page < maxPages; page++) {
+    const q = new URLSearchParams({
+      date_created_gt: String(createdGtMs),
+      include_closed: 'true',
+      subtasks: 'true',
+      order_by: 'created',
+      page: String(page),
+    });
+    if (spaceId) q.append('space_ids[]', spaceId);
+    const r = await call<{ tasks?: CuTaskSummary[]; last_page?: boolean }>('GET', `/team/${encodeURIComponent(teamId)}/task?${q}`);
+    const tasks = r.tasks ?? [];
+    out.push(...tasks);
+    if (tasks.length < 100 || r.last_page) break;
+  }
+  return out;
 }
 
 // ── Writing tasks ────────────────────────────────────────────────────────────
