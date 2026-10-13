@@ -1643,6 +1643,55 @@ marks are the tools' favicons fetched once at build time (Corrigo's from
 corrigopro.com, SharePoint shown as the Microsoft mark); a missing image
 falls back to a monogram tile.
 
+**ClickUp sync** (migration 0078, `services/clickup.ts`, `lib/clickupApi.ts`,
+`lib/clickupValues.ts`, `pages/admin/ClickUpPanel.tsx`, `tests/clickup.test.ts`).
+Every work order created after the ClickUp switch was FIRST turned on
+(`clickup_config.sync_from`; today's mock data never goes) becomes a task in
+the List pasted on the ClickUp panel under its row in Admin › Integrations,
+and every change made in The One follows it. **One-way** (Elise 2026-10-13:
+"The One is the source of truth"): nothing is read back but the List's
+vocabulary (fields + options, statuses, workspace members), so an edit made
+in ClickUp is overwritten by the next change here. This lifts the July
+"ClickUp is read-only" house rule in `clickup-map-handoff.md` for task
+writes only. **The queue is the activity log** — no write path is hooked:
+the runner links work orders created since `sync_from`, marks dirty every
+link with an `activity_log` row past `cursor_log_id` (plus a 10-minute
+look-back for late commits; a re-seed that restarts the ids resets the
+cursor), then per dirty link creates the task (POST to the List, custom
+fields inline; one bad custom value → bare create, then field by field) or
+sends only what differs from `clickup_link.pushed` (one PUT for name /
+description / status / priority / dates / assignees {add, rem}, one call per
+custom field; null = DELETE the field). A value ClickUp refuses or cannot
+take (no matching status / option, no ClickUp member by email, field absent
+from the List the task was moved to) is remembered under `pushed.__errors`
+by its signature and not retried until it changes; network / 5xx / 429 back
+off 1-2-5-15-60 min; 401 stops the run; a 404 on the task re-creates it
+next run; trashed work orders are left alone. Runs straight after every
+non-GET request (`onResponse` hook in `app.ts`, kept alive with Vercel's
+`waitUntil` via the request-context symbol) and from the every-minute
+cron `/api/webhooks/clickup-sync` (CRON_SECRET; local dev: a 60 s timer in
+`index.ts`); a lease on `clickup_config` stops two runs overlapping; a
+run stops at 80 calls / 45 s (ClickUp allows 100 a minute). **The switch is
+read from `integration_setting` directly**, not `integrationOn()` (its
+cache answers "on" before its first refresh and ClickUp ships off; no row =
+off here). Field map: our sources are title / wo_number / ext_name /
+description / status / priority + every field_def; with no saved row a
+source takes the automatic match by name (`matchName` drops case,
+punctuation and emoji — our keys are the old ClickUp names), title → task
+name, Assignee → assignees, Due Date → a custom "Due Date" or else the
+native due date. Statuses go through `CLICKUP_STATUS_ALIASES` (the seed's
+STATUS_ALIAS — keep the two in step: "!! approved", "assessment ongoing",
+"done/incurred"…). Dates are Chicago wall time (`wallToInstant` in
+`businessDays.ts`). In the Vista space every List shares the same 96
+custom fields (Space-level), so values follow a task the ClickUp
+automations move out of Incoming WOs (`900501628245`). Needs
+CLICKUP_API_TOKEN (raw `pk_…` token, sent with no "Bearer");
+CLICKUP_API_BASE points it at a stand-in server for testing. Audit:
+`integration_turned_on|off`, `clickup_list_set`, `clickup_map_updated`
+(entity `integration`, id `clickup`); pushes themselves are not logged
+(they change no record) — the panel shows linked / waiting / failing and a
+Retry per work order.
+
 **Admin › Documentation** (migration 0075, `packages/shared/src/docs/`,
 `services/docsSnapshot.ts`, `routes/adminDocs.ts`, `pages/admin/AdminDocsPage.tsx`,
 `components/docs/`, `styles/docs.css`, `tests/docs.test.ts` +

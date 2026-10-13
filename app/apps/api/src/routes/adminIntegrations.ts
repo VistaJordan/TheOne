@@ -12,6 +12,25 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ApiError, parse } from '../errors.js';
 import { listIntegrations, setIntegration } from '../services/integrations.js';
+import {
+  clickUpOverview,
+  refreshClickUp,
+  retryClickUpTask,
+  saveClickUpMap,
+  setClickUpList,
+  syncClickUpNow,
+} from '../services/clickup.js';
+
+// 0078 · ClickUp's own panel under its row.
+const clickUpListBody = z.object({ list: z.string().min(1).max(500) }).strict();
+const clickUpMapBody = z
+  .object({
+    rows: z
+      .array(z.object({ source: z.string().min(1).max(200), target: z.string().min(1).max(40), cu_field_id: z.string().max(100).nullable() }).strict())
+      .max(500),
+  })
+  .strict();
+const taskParams = z.object({ taskId: z.string().uuid() });
 
 const keyParams = z.object({ key: z.string().min(1).max(40) });
 const body = z.object({ enabled: z.boolean() }).strict();
@@ -29,4 +48,19 @@ export default async function adminIntegrationRoutes(app: FastifyInstance): Prom
     const { enabled } = parse(body, req.body);
     return setIntegration(key, enabled, realUser(req));
   });
+
+  //   GET  /admin/integrations/clickup              the panel
+  //   PUT  /admin/integrations/clickup/list         { list: URL or id }
+  //   POST /admin/integrations/clickup/refresh      re-read fields / statuses / members
+  //   PUT  /admin/integrations/clickup/map          { rows: [{ source, target, cu_field_id }] }
+  //   POST /admin/integrations/clickup/sync         push what is owed now
+  //   POST /admin/integrations/clickup/retry/:taskId
+  app.get('/admin/integrations/clickup', async (req) => clickUpOverview(realUser(req)));
+  app.put('/admin/integrations/clickup/list', async (req) => setClickUpList(realUser(req), parse(clickUpListBody, req.body).list));
+  app.post('/admin/integrations/clickup/refresh', async (req) => refreshClickUp(realUser(req)));
+  app.put('/admin/integrations/clickup/map', async (req) => saveClickUpMap(realUser(req), parse(clickUpMapBody, req.body).rows));
+  app.post('/admin/integrations/clickup/sync', async (req) => syncClickUpNow(realUser(req)));
+  app.post('/admin/integrations/clickup/retry/:taskId', async (req) =>
+    retryClickUpTask(realUser(req), parse(taskParams, req.params).taskId),
+  );
 }

@@ -134,7 +134,7 @@ export const ADMIN_PART: DocPart = {
       key: 'integrations',
       title: 'Admin › Integrations',
       where: 'Admin › Integrations.',
-      purpose: 'Every connector on one page, grouped Client systems / Calls, texts and email / AI / Files / Platform, each with the tool\'s mark, what it does, whether it is set up on the server ("Connected", "On · not set up on the server", "Connector not built yet", "Off"), a "When off:" line, who changed it and one switch: Ecotrak, ServiceChannel, Corrigo, Quo, Outgoing email, Escalation emails, Claude, SharePoint, File storage, Microsoft sign-in (Always on).',
+      purpose: 'Every connector on one page, grouped Client systems / Team tools / Calls, texts and email / AI / Files / Platform, each with the tool\'s mark, what it does, whether it is set up on the server ("Connected", "On · not set up on the server", "Connector not built yet", "Off"), a "When off:" line, who changed it and one switch: Ecotrak, ServiceChannel, Corrigo, ClickUp, Quo, Outgoing email, Escalation emails, Claude, SharePoint, File storage, Microsoft sign-in (Always on).',
       value: 'An integration misbehaving is switched off in one click, every button that uses it explains itself, and the keys stay on the server so switching back on needs nothing else.',
       features: [
         {
@@ -152,13 +152,21 @@ export const ADMIN_PART: DocPart = {
           brd: ['2.6.1', '2.6.3'],
         },
         {
+          name: 'ClickUp (outbound only)',
+          what: 'Every work order created after the switch was first turned on becomes a task in the ClickUp List chosen on the ClickUp panel (paste the List link); every later change made in The One follows it — status, Cost, assignee, any mapped field. One-way: The One is the source of truth and nothing is read back, so an edit made in ClickUp is overwritten by the next change here. Work orders that existed before are never sent. The panel matches our fields to the List\'s fields by name (our keys are the old ClickUp names) and lets an editor change any row (Not sent, the task\'s own name / description / status / priority / assignees / due / start date, or a ClickUp custom field of a fitting type); it lists our statuses the List lacks and our people with no ClickUp account of the same email (assignees are matched by email). The push runs straight after each save and from a once-a-minute cron; only values that differ from the last push are sent. A value ClickUp refuses (a missing status or option, a field absent from the List the task was moved to) shows under the work order with a Retry and is not sent again until it changes; network and rate-limit failures back off and retry. Trashed work orders are left alone in ClickUp; a task deleted in ClickUp is created again. Ships off; needs CLICKUP_API_TOKEN on the server.',
+          value: 'The team keeps working in ClickUp during the move without anyone typing a work order twice.',
+          permissions: ['admin/integrations view / edit'],
+          audit: ['integration_turned_on / integration_turned_off', 'clickup_list_set', 'clickup_map_updated'],
+          since: '0078',
+        },
+        {
           name: 'Quo, Claude, Outgoing email, Escalation emails, SharePoint, File storage, Microsoft sign-in',
           what: 'Quo: calls, transcripts and summaries by webhook (signature verified), texts through the API from the Quo line. Claude: the AI quote draft and the assistant. Outgoing email: client updates through Microsoft Graph (the mailbox needs the Mail.Send application permission) or Resend. Escalation emails: the mailbox webhook that flags a work order Escalated. SharePoint: the folder tree through Graph. File storage: the private Vercel Blob store behind photos, documents and sheets. Microsoft sign-in: the platform\'s sign-in, always on.',
           value: 'Each is one switch and one credential set, and the page says which credentials are present.',
         },
         {
           name: 'Webhooks and scheduled runs',
-          what: 'POST /api/webhooks/email-escalation (shared secret), POST /api/webhooks/quo (Quo signature), and the two cron endpoints planned-maintenance-run (daily 12:00 UTC) and client-updates-run (hourly; also sweeps lapsed dispatch offers and retries SharePoint filing), each accepting GET from Vercel or POST by hand with the CRON_SECRET as a Bearer or x-webhook-secret header; an unset secret answers 403, a wrong one 401, the public demo 403. Server functions may run up to 300 seconds (the AI draft).',
+          what: 'POST /api/webhooks/email-escalation (shared secret), POST /api/webhooks/quo (Quo signature), and the two cron endpoints planned-maintenance-run (daily 12:00 UTC) and client-updates-run (hourly; also sweeps lapsed dispatch offers and retries SharePoint filing) and clickup-sync (every minute), each accepting GET from Vercel or POST by hand with the CRON_SECRET as a Bearer or x-webhook-secret header; an unset secret answers 403, a wrong one 401, the public demo 403. Server functions may run up to 300 seconds (the AI draft).',
           value: 'The scheduled work has a door, a key and a log.',
         },
       ],

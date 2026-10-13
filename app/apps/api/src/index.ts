@@ -5,6 +5,7 @@
 import { buildApp } from './app.js';
 import { config, describeAuth } from './config.js';
 import { startAutomationScheduler } from './services/automations.js';
+import { runClickUpSync } from './services/clickup.js';
 
 async function main(): Promise<void> {
   const app = await buildApp();
@@ -14,6 +15,11 @@ async function main(): Promise<void> {
   // Delayed automations: sweep the DB-backed timer queue (catches anything
   // that came due while the process was down, then polls every 30 s).
   startAutomationScheduler();
+
+  // 0078 · ClickUp: the local stand-in for Vercel's minute cron.
+  setInterval(() => {
+    void runClickUpSync('timer').catch((e: unknown) => app.log.warn({ err: e }, 'ClickUp sync failed'));
+  }, 60_000);
 
   app.log.info(describeAuth());
   if (config.authMode === 'bypass') {

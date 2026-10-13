@@ -65,6 +65,21 @@ export function wallStamp(instant: Date): string {
   return new Date(toWall(instant)).toISOString().slice(0, 16);
 }
 
+/** A zoneless Chicago stamp ('YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM[:SS]') as the
+    instant it names; a stamp carrying its own zone ('Z', '+02:00') is read as
+    written. Null for anything that is not a date. */
+export function wallToInstant(stamp: string): Date | null {
+  const s = stamp.trim();
+  if (s.includes('T') && /(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(s);
+  if (!m) return null;
+  const wall = Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] ?? 0), +(m[5] ?? 0), +(m[6] ?? 0));
+  return Number.isNaN(wall) ? null : fromWall(wall);
+}
+
 /** Saturday / Sunday in wall space (getUTCDay reads the wall date). */
 function isWeekend(wall: number): boolean {
   const d = new Date(wall).getUTCDay();

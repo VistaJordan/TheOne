@@ -17,6 +17,7 @@ This file is self-contained — hand it to any project that needs to understand 
   The token in `Downloads/ECOTRAK API/.env` failed to connect as of 2026-07-23.
 - **Rate limit:** ~100 requests/minute for personal tokens — pace bulk pulls.
 - **House rule: ClickUp is READ-ONLY.** No POST/PUT/PATCH/DELETE, no webhook creation, from any project, until explicitly decided otherwise.
+  - **2026-10-13 — decided otherwise for The One only:** Elise asked for every work order and every change in The One to be pushed into ClickUp (one-way, The One is the source of truth). The One's ClickUp connector (migration 0078) creates and updates tasks in the List chosen in Admin › Integrations; it creates no webhooks and changes nothing else. The rule still holds for every other project.
 
 ## 2. Key IDs (verified live)
 

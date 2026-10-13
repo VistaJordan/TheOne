@@ -37,6 +37,9 @@ const PUBLIC_PATHS = new Set([
   '/api/webhooks/quo',
   // 0055: the hourly cron that sends scheduled client updates (CRON_SECRET).
   '/api/webhooks/client-updates-run',
+  // 0078: the once-a-minute cron that pushes work-order changes to ClickUp
+  // (CRON_SECRET).
+  '/api/webhooks/clickup-sync',
 ]);
 
 // 0055: a client's read-only tracker link. Exactly a 32-character share token

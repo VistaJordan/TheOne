@@ -19,6 +19,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../../components/Icon';
 import { errText } from '../../components/ui/Sheet';
 import { AdminShell } from './AdminShell';
+import { ClickUpPanel } from './ClickUpPanel';
 
 const KEY = ['admin', 'integrations'];
 
@@ -145,6 +146,11 @@ function IntegrationRow({ it, canEdit, busy, onFlip }: { it: IntegrationStatus; 
         <span className="intg-track"><span className="intg-knob" /></span>
         <span className="intg-switch-label">{locked ? 'Always on' : it.enabled ? 'On' : 'Off'}</span>
       </button>
+      {it.key === 'clickup' && (
+        <div className="intg-extra">
+          <ClickUpPanel canEdit={canEdit} />
+        </div>
+      )}
     </li>
   );
 }

@@ -18,6 +18,7 @@ import cookie from '@fastify/cookie';
 import { config } from './config.js';
 import { registerErrorHandler, badRequest } from './errors.js';
 import authGuard from './plugins/authGuard.js';
+import { kickClickUp } from './services/clickup.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import workOrdersRoutes from './routes/workOrders.js';
@@ -82,6 +83,17 @@ export async function buildApp(): Promise<FastifyInstance> {
   );
 
   await app.register(cookie);
+
+  // 0078 · after any write, push what ClickUp is owed (a no-op while the
+  // switch is off or no token is set). Runs after the response is sent; on
+  // Vercel kickClickUp keeps the work alive with waitUntil, and the minute
+  // cron catches whatever a frozen lambda drops.
+  app.addHook('onResponse', async (req, reply) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
+    if (reply.statusCode >= 400 || !req.url.startsWith('/api/') || req.url.startsWith('/api/auth/')) return;
+    if (req.url.startsWith('/api/admin/integrations/clickup') || req.url.startsWith('/api/webhooks/clickup-sync')) return;
+    kickClickUp();
+  });
 
   // Liveness only — deliberately says nothing about who is asking.
   app.get('/api/health', async () => ({ ok: true, auth_mode: config.authMode }));

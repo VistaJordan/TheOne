@@ -23,13 +23,15 @@ export const INTEGRATION_KEYS = [
   'email_escalations',
   'blob',
   'entra',
+  'clickup',
 ] as const;
 export type IntegrationKey = (typeof INTEGRATION_KEYS)[number];
 
-export type IntegrationGroup = 'clients' | 'communications' | 'ai' | 'files' | 'platform';
-export const INTEGRATION_GROUPS: readonly IntegrationGroup[] = ['clients', 'communications', 'ai', 'files', 'platform'];
+export type IntegrationGroup = 'clients' | 'team' | 'communications' | 'ai' | 'files' | 'platform';
+export const INTEGRATION_GROUPS: readonly IntegrationGroup[] = ['clients', 'team', 'communications', 'ai', 'files', 'platform'];
 export const INTEGRATION_GROUP_LABELS: Record<IntegrationGroup, string> = {
   clients: 'Client systems',
+  team: 'Team tools',
   communications: 'Calls, texts and email',
   ai: 'AI',
   files: 'Files',
@@ -84,6 +86,16 @@ export const INTEGRATIONS: IntegrationDef[] = [
     off_means: 'Nothing yet: the connector is not built. The switch is remembered for when it is.',
     logo: 'corrigo.png',
     built: false,
+  },
+  {
+    key: 'clickup',
+    name: 'ClickUp',
+    vendor: 'ClickUp',
+    group: 'team',
+    summary: "Every new work order is created in the team's ClickUp List, and every change made in The One (status, cost, any mapped field) follows it there. One-way: The One is the source of truth.",
+    off_means: 'Nothing is sent. Changes made while it is off are sent when it is turned back on; work orders created while it is off are sent too.',
+    logo: 'clickup.png',
+    built: true,
   },
   {
     key: 'quo',
@@ -176,6 +188,122 @@ export interface IntegrationStatus extends IntegrationDef {
 
 export interface IntegrationsResponse {
   items: IntegrationStatus[];
+  can: { edit: boolean };
+}
+
+// ── ClickUp (0078) ───────────────────────────────────────────────────────────
+// The setup panel under the ClickUp row: which List new work orders land in,
+// which of our fields goes to which ClickUp field, and how the queue is doing.
+
+/** Where one of our fields can go on the ClickUp task. */
+export type ClickUpTarget =
+  | 'none'
+  | 'name'
+  | 'description'
+  | 'status'
+  | 'priority'
+  | 'assignees'
+  | 'due_date'
+  | 'start_date'
+  | 'custom';
+
+export const CLICKUP_NATIVE_TARGETS: { value: Exclude<ClickUpTarget, 'none' | 'custom'>; label: string }[] = [
+  { value: 'name', label: 'Task name' },
+  { value: 'description', label: 'Description' },
+  { value: 'status', label: 'Status' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'assignees', label: 'Assignees' },
+  { value: 'due_date', label: 'Due date' },
+  { value: 'start_date', label: 'Start date' },
+];
+
+/** ClickUp field types a value can be written to. Formula, progress,
+    relationship, attachment, button and location fields are read-only or
+    need data we do not hold. */
+export const CLICKUP_WRITABLE_TYPES: readonly string[] = [
+  'drop_down',
+  'labels',
+  'text',
+  'short_text',
+  'number',
+  'currency',
+  'date',
+  'checkbox',
+  'email',
+  'url',
+  'phone',
+  'users',
+  'emoji',
+];
+
+/** Which ClickUp field types fit one of our value types — the mapping
+    dropdown offers only these. Text fits anything (written as text). */
+export function clickUpFits(ourType: string, cuType: string): boolean {
+  if (!CLICKUP_WRITABLE_TYPES.includes(cuType)) return false;
+  if (cuType === 'text' || cuType === 'short_text') return true;
+  switch (ourType) {
+    case 'number':
+    case 'money':
+      return cuType === 'number' || cuType === 'currency' || cuType === 'emoji';
+    case 'date':
+    case 'datetime':
+      return cuType === 'date';
+    case 'boolean':
+      return cuType === 'checkbox';
+    case 'select':
+      return cuType === 'drop_down' || cuType === 'labels' || cuType === 'users';
+    case 'users':
+      return cuType === 'users';
+    default:
+      return ['email', 'url', 'phone', 'drop_down', 'labels'].includes(cuType);
+  }
+}
+
+export interface ClickUpFieldDef {
+  id: string;
+  name: string;
+  type: string;
+  options?: { id: string; name: string }[];
+}
+
+export interface ClickUpMapRow {
+  /** Our key: 'title', 'status', … or 'fields.<bag key>'. */
+  source: string;
+  label: string;
+  /** Our value type, to say what a ClickUp field can take. */
+  type: string;
+  target: ClickUpTarget;
+  cu_field_id: string | null;
+  /** True when nobody has chosen yet and this is the match by name. */
+  automatic: boolean;
+  /** Something that will stop a value going through (an option ClickUp lacks…). */
+  warning: string | null;
+}
+
+export interface ClickUpProblem {
+  task_id: string;
+  wo_number: string;
+  error: string;
+  at: string | null;
+  attempts: number;
+}
+
+export interface ClickUpOverview {
+  enabled: boolean;
+  token_set: boolean;
+  list: { id: string; name: string | null; url: string | null } | null;
+  fetched_at: string | null;
+  sync_from: string | null;
+  last_run_at: string | null;
+  last_run_note: string | null;
+  counts: { linked: number; waiting: number; failing: number };
+  problems: ClickUpProblem[];
+  cu_fields: ClickUpFieldDef[];
+  /** Our statuses ClickUp's List does not have (a push to them fails). */
+  missing_statuses: string[];
+  /** Our people with no ClickUp member of the same email. */
+  unmatched_people: string[];
+  map: ClickUpMapRow[];
   can: { edit: boolean };
 }
 

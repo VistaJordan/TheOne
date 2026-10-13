@@ -98,6 +98,21 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
   app.get('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));
   app.post('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));
 
+  // 0078 · ClickUp: Vercel's cron calls it every minute (same CRON_SECRET) —
+  // the backstop for the push that runs straight after each write.
+  const clickUpRun = async (req: { headers: Record<string, unknown> }) => {
+    if (config.demoMode) throw new ApiError('FORBIDDEN', 'Webhooks are disabled in the public demo.');
+    const outcome = checkWebhookSecret(presentedSecret(req.headers), config.cronSecret);
+    if (outcome === 'unconfigured') {
+      throw new ApiError('FORBIDDEN', 'The cron is not configured (CRON_SECRET is unset).');
+    }
+    if (outcome !== 'ok') throw new ApiError('UNAUTHORIZED', 'Cron secret missing or invalid');
+    const { runClickUpSync } = await import('../services/clickup.js');
+    return { ok: true, ...(await runClickUpSync('cron')) };
+  };
+  app.get('/webhooks/clickup-sync', async (req) => clickUpRun(req));
+  app.post('/webhooks/clickup-sync', async (req) => clickUpRun(req));
+
   app.post('/webhooks/email-escalation', async (req) => {
     // The public demo runs on seed data with the dev bypass; a reachable
     // receiver there would let anyone flag demo rows from the internet.

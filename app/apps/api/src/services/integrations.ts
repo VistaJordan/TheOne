@@ -147,6 +147,19 @@ async function configuredOf(key: IntegrationKey): Promise<Configured> {
       return blobToken()
         ? { configured: true, note: 'Blob store connected (BLOB_READ_WRITE_TOKEN).' }
         : { configured: false, note: 'No Blob store connected to this environment.' };
+    case 'clickup': {
+      const token = Boolean(process.env.CLICKUP_API_TOKEN?.trim());
+      let list: string | null = null;
+      try {
+        const r = await query<{ list_id: string | null; list_name: string | null }>(`SELECT list_id, list_name FROM clickup_config WHERE id = 1`);
+        list = r.rows[0]?.list_id ? (r.rows[0].list_name ?? r.rows[0].list_id) : null;
+      } catch {
+        /* before 0078 */
+      }
+      if (token && list) return { configured: true, note: `Token set · new work orders go to the "${list}" List.` };
+      const missing = [!token && 'CLICKUP_API_TOKEN on the server', !list && 'the List (set it up below)'].filter(Boolean);
+      return { configured: false, note: `Missing ${missing.join(' and ')}.` };
+    }
     case 'entra':
       return config.entra
         ? { configured: true, note: 'Tenant and app registration set · sign-in through Microsoft.' }
