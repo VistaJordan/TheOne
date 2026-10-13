@@ -63,6 +63,7 @@ import {
   matchName,
   personKey,
   sig,
+  statusSent,
   toCuDate,
   toCuFieldValue,
   toCuPriority,
@@ -255,7 +256,7 @@ type Admin = PermissionBearer & { id: string };
 
 function missingStatuses(cfg: ConfigRow, ours: string[]): string[] {
   const cu = cfg.cu_statuses.map((s) => s.status);
-  return cu.length ? ours.filter((s) => toCuStatus(s, cu) === null) : [];
+  return cu.length ? ours.filter((s) => statusSent(s) && toCuStatus(s, cu) === null) : [];
 }
 
 function warningFor(m: Resolved, cfg: ConfigRow, ourStatuses: string[]): string | null {
@@ -528,7 +529,7 @@ function wants(t: TaskRow, map: Resolved[], cfg: ConfigRow, idByName: Map<string
         out.set('description', { key: 'description', target: 'description', value: isBlank(raw) ? '' : String(raw) });
         break;
       case 'status': {
-        if (isBlank(raw)) break;
+        if (isBlank(raw) || !statusSent(String(raw))) break;
         const cu = toCuStatus(String(raw), cfg.cu_statuses.map((s) => s.status));
         out.set(
           'status',

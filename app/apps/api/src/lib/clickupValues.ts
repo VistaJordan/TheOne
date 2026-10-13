@@ -67,6 +67,15 @@ export const CLICKUP_STATUS_ALIASES: Record<string, string> = {
   '!! canceled/postponed': 'Cancelled / Postponed',
 };
 
+/** Our statuses that are never sent as a ClickUp status. Invoiced: in the
+    team's ClickUp an invoiced work order is told by "Total Invoiced" being
+    filled (Elise, 2026-10-13), not by a status, and The One fills Total
+    Invoiced on the move to Invoiced — so the task keeps its ClickUp status
+    and the amount carries the news. */
+export const CLICKUP_STATUS_NOT_SENT = new Set(['invoiced']);
+
+export const statusSent = (ours: string): boolean => !CLICKUP_STATUS_NOT_SENT.has(ours.trim().toLowerCase());
+
 /** Our status as the List spells it: through the alias table, else the same
     name give or take case and punctuation ("!! approved" = "Approved").
     Null when the List has nothing that fits. With no statuses known yet, our

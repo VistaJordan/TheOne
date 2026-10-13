@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { clickUpFits, type ClickUpFieldDef } from '../packages/shared/src/integrations';
 import { parseListId } from '../apps/api/src/lib/clickupApi';
-import { bareName, matchName, splitNames, toCuStatus, toCuDate, toCuFieldValue, toCuPriority, userIds } from '../apps/api/src/lib/clickupValues';
+import { bareName, matchName, splitNames, statusSent, toCuStatus, toCuDate, toCuFieldValue, toCuPriority, userIds } from '../apps/api/src/lib/clickupValues';
 
 const people = new Map([
   ['jordan brown', 11],
@@ -57,6 +57,10 @@ describe('statuses', () => {
     expect(toCuStatus('Done / Incurred', vista)).toBe('done/incurred');
     expect(toCuStatus('Cancelled / Postponed', vista)).toBe('!! canceled/postponed');
     expect(toCuStatus('Open', vista)).toBe('Open');
+  });
+  it('never sends Invoiced: Total Invoiced tells ClickUp instead', () => {
+    expect(statusSent('Invoiced')).toBe(false);
+    expect(statusSent('Invoiced Not Paid')).toBe(true);
   });
   it('says when the List has nothing that fits', () => {
     expect(toCuStatus('Invoiced', vista)).toBeNull();
