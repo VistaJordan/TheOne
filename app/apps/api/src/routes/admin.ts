@@ -2,7 +2,9 @@
 // (0015): `admin/<section>` view for reads, edit for writes. Super admins hold
 // every permission; any role can be granted a section from the Roles screen.
 //
-//   Users        GET/POST  /admin/users · PATCH /admin/users/:id
+//   Users        GET/POST  /admin/users · PATCH /admin/users/:id · POST /admin/users/:id/disable
+//                          (`is_super_admin` in the body, and any change to a
+//                          super admin's row, need a super admin — W4-1)
 //                GET/PUT   /admin/users/:id/permissions   (super admins only)
 //   Roles        GET/POST  /admin/roles · PATCH/DELETE /admin/roles/:id
 //   Permissions  GET       /admin/permission-fields  (the whole catalogue, for the editor)
@@ -21,6 +23,7 @@ import { WO_CREATE_MODES, adminPermKey, permAllows, type PermAction } from '@the
 import { ApiError, parse } from '../errors.js';
 import { unauthorized } from '../services/auth.js';
 import {
+  assertMaySetSuperAdmin,
   disableUser,
   getUserClients,
   getUserPermissions,
@@ -104,6 +107,16 @@ function requireSuperAdmin(req: FastifyRequest): string {
   return req.auth.user.id;
 }
 
+/** W4-1 · whether the REAL signed-in user is a super admin — never `actingAs`,
+    consistent with requireAdmin. Granting or removing `is_super_admin` on
+    POST/PATCH /admin/users needs it (`assertMaySetSuperAdmin` refuses
+    otherwise), and so does any change to a super admin's row — PATCH and
+    the disable route hand the flag to the service, which checks the target. */
+function isRealSuperAdmin(req: FastifyRequest): boolean {
+  if (!req.auth) throw unauthorized();
+  return req.auth.user.isSuperAdmin;
+}
+
 const idParams = z.object({ id: z.string().uuid() });
 
 // ── Users ────────────────────────────────────────────────────────────────────
@@ -169,22 +182,30 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { items: await listUsers() };
   });
 
+  // W4-1 · `is_super_admin` is accepted from a super admin only — the REAL
+  // user (`req.auth.user`), never `actingAs`, consistent with requireAdmin.
   app.post('/admin/users', async (req, reply) => {
     const actorId = requireAdmin(req, 'users', 'edit');
-    const user = await inviteUser(parse(inviteSchema, req.body), actorId);
+    const body = parse(inviteSchema, req.body);
+    const realSuper = isRealSuperAdmin(req);
+    assertMaySetSuperAdmin(body, realSuper);
+    const user = await inviteUser(body, actorId, realSuper);
     return reply.status(201).send({ user });
   });
 
   app.patch('/admin/users/:id', async (req) => {
     const actorId = requireAdmin(req, 'users', 'edit');
     const { id } = parse(idParams, req.params);
-    return { user: await updateUser(id, parse(updateUserSchema, req.body), actorId) };
+    const body = parse(updateUserSchema, req.body);
+    const realSuper = isRealSuperAdmin(req);
+    assertMaySetSuperAdmin(body, realSuper);
+    return { user: await updateUser(id, body, actorId, realSuper) };
   });
 
   app.post('/admin/users/:id/disable', async (req) => {
     const actorId = requireAdmin(req, 'users', 'edit');
     const { id } = parse(idParams, req.params);
-    return { user: await disableUser(id, actorId) };
+    return { user: await disableUser(id, actorId, isRealSuperAdmin(req)) };
   });
 
   // Per-user overrides (0015) — super admins only, both ways.
@@ -203,7 +224,9 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   // 0072 · the clients assigned to a person — what "their clients" means on
   // the Sales dashboard and under "Which work orders = Only theirs". An
-  // assignment, not an override, so Admin › Users edit is enough.
+  // assignment, not an override, so Admin › Users edit is enough — except on
+  // a super admin's row, which the W4-1 ring keeps to super admins: the
+  // service checks the REAL user's flag, as PATCH and disable do.
   app.get('/admin/users/:id/clients', async (req) => {
     requireAdmin(req, 'users');
     const { id } = parse(idParams, req.params);
@@ -217,7 +240,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       z.object({ client_ids: z.array(z.string().uuid()).max(2000) }).strict(),
       req.body,
     );
-    return setUserClients(id, client_ids, actorId);
+    return setUserClients(id, client_ids, actorId, isRealSuperAdmin(req));
   });
 
   // ── Roles ──────────────────────────────────────────────────────────────────

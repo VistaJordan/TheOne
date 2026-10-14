@@ -1,7 +1,8 @@
 # The One — guide for Claude Code
 
 Work-order, quote and vendor-payment platform for Seamless FM (Byblos Vista).
-React + Vite front end, Fastify API, embedded Postgres (PGlite). Read this
+React + Vite front end, Fastify API, Postgres 16 through node-postgres (a local
+server in development, native or under Docker; Neon in production). Read this
 before touching code; it is the map, the run book and the list of rules that
 are easy to break without noticing.
 
@@ -10,9 +11,12 @@ are easy to break without noticing.
 ```
 app/                      npm workspace root — run npm commands here (or use the root shim)
   packages/shared/        @theone/shared — types + shared vocab (status groups, capability names)
-  packages/db/            @theone/db — PGlite client, migrations/, seed.ts
+  packages/db/            @theone/db — node-postgres (pg.Pool) client, migrations/, migrate.ts, seed.ts
   apps/api/               @theone/api — Fastify on :5174 (src/routes, src/services, src/auth, src/plugins)
+  apps/worker/            @theone/worker — a second process on the same pool, started by `npm run dev`
   apps/web/               @theone/web — React on :5173 (src/pages, src/components, src/styles, src/theme)
+  tests/                  vitest suite (tests/**/*.test.ts); tests/setup.ts makes it hermetic
+  docker-compose.yml      Postgres 16 for local development under Docker (service `db`, localhost:5432); optional
 product/                  product docs: feature-roadmap.md is the sprint plan; the others are domain specs
 docs/ (inside app/)       SPRINT1-SPEC.md — original schema/API contract
 package.json (root)       scripts-only shim that forwards to app/ so `npm run dev` works from the repo root
@@ -20,17 +24,37 @@ package.json (root)       scripts-only shim that forwards to app/ so `npm run de
 
 ## Run
 
+First, a Postgres 16 server on localhost:5432 with user, password and database
+`theone`. `app/docker-compose.yml` defines one for Docker users (`docker compose
+up -d db` from `app/`); a native install works the same and is what the main
+machine runs (it has no Docker: PostgreSQL 16.14 runs natively from the
+`@embedded-postgres/windows-x64` binaries under `%LOCALAPPDATA%\theone-pg`,
+cluster in `data\`, log in `server.log`). Then:
+
 ```
-npm run setup     # migrate + seed the local PGlite DB (app/packages/db/pgdata, gitignored)
-npm run dev       # API :5174 + web :5173 via concurrently
+npm run setup             # migrate + seed whatever DATABASE_URL names (unset = postgres://theone:theone@localhost:5432/theone, the client.ts default)
+npm run dev               # API :5174 + worker + web :5173 via concurrently
 ```
 
-Open http://localhost:5173. Both commands work from the repo root or `app/`.
+Open http://localhost:5173. `npm run setup` and `npm run dev` work from the repo
+root or `app/`; `docker compose` needs `app/`, where `docker-compose.yml` is.
 
 Rules that bite:
-- **PGlite is single-writer.** Stop the API before `setup`/`db:seed`; a second
-  process opening `pgdata` reads a stale view (symptom: empty user list).
-- **`db:seed` TRUNCATEs and re-inserts.** Re-seeding wipes local edits.
+- **The database is a real Postgres server** (node-postgres `pg.Pool`,
+  `packages/db/src/client.ts`), shared by the API, the worker and `setup`, so
+  nothing is single-writer any more: a read-then-write must lock its row
+  inside `withTransaction` (a `task.fields` write: `FOR NO KEY UPDATE`, the
+  reason in `woFieldValues.ts` `updateWorkOrderFields`; see "Guards added
+  2026-10-14"). `setup` does not load `app/.env` (the API and the worker do):
+  it reads `DATABASE_URL` from the shell, else the `client.ts` default, so a
+  server named only in `app/.env` is not the one it migrates and seeds.
+- **`db:seed` TRUNCATEs and re-inserts.** Re-seeding wipes local edits. It
+  refuses a `DATABASE_URL` host that is not localhost unless
+  `ALLOW_SEED=<host>/<database>` is set (`packages/db/src/seedGuard.ts`), so it
+  cannot empty Neon by accident. `db:migrate` records a sha256 per file and
+  refuses an applied file that changed (`MIGRATE_ALLOW_CHECKSUM_MISMATCH=1`
+  accepts the new checksums), and a file to apply that runs its own BEGIN /
+  COMMIT or a CONCURRENTLY (no override: fix the file).
 - Vite binds `127.0.0.1` (see `vite.config.ts` comment); the API is v4-only too.
 - `EADDRINUSE` on :5174 means an old `tsx src/index.ts` is still alive — find it
   with `netstat -ano | findstr 5174` and stop that PID.
@@ -86,7 +110,8 @@ a `BEFORE UPDATE OR DELETE` trigger raises (rule 1.2.2), so a correction is a
 new row, never an edit; TRUNCATE still works for the local seed. `entity_id`
 is **text** since 0023 (phase groups are keyed by code):
 join it as `t.id::text = a.entity_id`, and never feed one `$n` parameter to both
-a uuid column and `entity_id` in the same statement — PGlite refuses to type it.
+a uuid column and `entity_id` in the same statement: Postgres infers one type
+per parameter and the statement fails.
 
 **Approval tasks** (migration 0026, `services/approvals.ts`, `/approvals` in
 the sidebar) are the generic "a manager has to say yes or no" queue. The rules
@@ -571,9 +596,10 @@ gives 149.98 and short-changes the client a cent. The queue is scoped by
 `woScopeSql` like every other read. Logged `invoice_created|updated|
 status_changed` under field `invoice:<id>`. Permission path `invoicing` (view
 / create / edit / **approve** = send); 0045 grants the full set to admin + ar
-and view/create to am + tl. The Ready lane is still DERIVED from the audit
-(clean + Admin + Quote ticked, and not already billed); everything past it is
-a record.
+and view/create to am + tl. The Ready lane is DERIVED, not stored (since
+2026-10-14, W2-1): a Done work order whose quote is approved, sent or
+client-approved and that has no invoice row yet, read from the quotes list;
+everything past it is a record.
 
 **Contracts and labor rates** (migration 0046, `services/contracts.ts`,
 `/contracts` in the sidebar, permission path `contracts`) are the client rate
@@ -1369,7 +1395,15 @@ task with the labels as they are on screen, and the permission the API checks
 for it. **It is written by hand from the JSX — when a screen, a button label
 or a gate changes, change its entry there**, or the assistant will repeat the
 old name to people; it is told to say it is not sure about anything the guide
-does not cover. The guide rides in the cached static block
+does not cover. `tests/assistant-guide.test.ts` is the guide's drift guard:
+every **bold label** in it must occur verbatim somewhere in
+`apps/web/src/**/*.{ts,tsx}` (comments stripped, JSX entities decoded) or sit
+in its `ALLOWLIST` / `TEMPLATES` / `FROM_SHARED` with a reason (a stale-entry
+test keeps those lists honest); the API sentences it quotes are checked
+against `services/users.ts`, `plugins/authGuard.ts`, `services/woBulk.ts` and
+`services/woScope.ts`, the screen sentences against their pages, and the
+Payments lanes against `PaymentsPage`'s `LANE_LABEL`. Rename one and the test
+fails until the guide follows. The guide rides in the cached static block
 (`STATIC_INSTRUCTIONS` = briefing + guide, about 10k tokens). Every question
 carries "What this person may do": `describeAbilities` resolves the
 permission tree (`buildPermissionTree([])`, two levels) for the asker, one row
@@ -1770,7 +1804,7 @@ Retry per work order.
 **Admin › Documentation** (migration 0075, `packages/shared/src/docs/`,
 `services/docsSnapshot.ts`, `routes/adminDocs.ts`, `pages/admin/AdminDocsPage.tsx`,
 `components/docs/`, `styles/docs.css`, `tests/docs.test.ts` +
-`tests/docs-render.test.tsx`). Three living documents on one page, tabs
+`tests/docs-render.test.ts`). Three living documents on one page, tabs
 **BRD · SOP · Lifecycle**, each with Print / Save as PDF (the print
 stylesheet at the foot of `docs.css`, `body.docs-printing`), Download
 Markdown (`brdMarkdown` / `sopMarkdown` / `lifecycleMarkdown`, pure, in
@@ -1803,28 +1837,215 @@ edge joins a status that is not a node, or when a feature cites a rule the
 register lacks. The lifecycle chart (`LifecycleChart.tsx`) is one SVG:
 columns = `PHASE_ORDER` + Off-ramp, node colours from the live statuses,
 lock badge on gated nodes, Ecotrak push from `ECOTRAK_PUSH_BY_STATUS_NAME`,
-click a node for its card; stages and side-process cards under it. No
-local database on phase-0: `docs-render.test.tsx` renders the three
+click a node for its card; stages and side-process cards under it. The
+test suite opens no database: `docs-render.test.ts` renders the three
 documents to static markup with and without a snapshot instead.
+
+**Guards added 2026-10-14** (the audit batch, AUDIT.md Must-fix 1 to 12; the
+operator half, secrets, Neon branches, the repository and `main`, is
+FIX-RUNBOOK.md at the repo root). **Viewing as is read-only**:
+`plugins/authGuard.ts` refuses every non-GET/HEAD/OPTIONS call under `/api`
+while `req.auth.isImpersonating` with 403 `FORBIDDEN`, `details.code =
+IMPERSONATION_READ_ONLY` ("Viewing as another user is read-only. Stop viewing
+as them to make changes."), except `IMPERSONATION_WRITE_ALLOWLIST` (POST and
+DELETE `/api/auth/impersonate`, POST `/api/auth/logout`); the five GETs that
+log a row under the acting principal are refused too
+(`IMPERSONATION_GET_DENYLIST_ROUTES`: the work-order and vendor CSV exports,
+Save as PDF, the technician map, the client-updates CSV), matched on the
+Fastify route pattern and on the decoded path, while
+`GET /api/admin/audit/export` stays open because `requireAdmin` reads the real
+user; the ActorSwitcher shows a Read-only chip, and the five download links
+(Work Orders › Export, Client Updates › CSV, Vendors › Export CSV, the two
+Save as PDF items) go through `downloadLinkProps` (`lib/actor.ts`): while
+viewing as someone they have no href and no `download`, are `aria-disabled`
+with `role="link"`, keep a tab stop, swallow the click and carry
+`READ_ONLY_HINT` as their title, so the browser never saves the 403 body as
+the file (`tests/impersonation-readonly.test.ts`). **DEMO_MODE guards**
+(`config.ts`, `services/auth.ts`, `routes/auth.ts`, migration 0082): the API
+refuses to boot while `DEMO_MODE=true` if any of the 14 credentials in
+`DEMO_MODE_SECRET_VARS` is set (`demoModeConflict`, pure; `SALES_TAX_API_KEY`
+is the fourteenth). `CRON_SECRET` is left out on purpose: it authenticates
+Vercel's cron to us, reaches nothing outside, and is inert in the demo, where
+every cron route answers 403 before it reads it. The list is not exhaustive
+by construction: `DATABASE_URL` (`user:pass@host`, no credential suffix) is
+not boot-checked, and the seed marker is what refuses a demo pointed at a real
+database, which was never seeded: `devBypassSignIn` and
+`GET /auth/dev-candidates` answer 403 `DEMO_NOT_SEEDED` until the `app_meta`
+row `seeded` exists (`assertDemoSeeded`: a missing table counts as not seeded,
+any other database error is rethrown); 0082 creates `app_meta`, `seed.ts`
+writes the marker as its last step and never truncates the table
+(`tests/config-guards.test.ts`; it also fails when the API reads a
+`*_SECRET` / `*_KEY` / `*_TOKEN` / `*_JSON` / `*_PASSWORD` name that is in
+neither the list nor its allowlist with a reason, and pins the four files that
+read `process.env` by computed name — `config.ts`, `ecotrak/client.ts`,
+`ecotrakAdmin.ts`, `integrations.ts` — so a new computed read fails until its
+author pins the credentials it reaches, as `ECOTRAK_CLIENT_SECRET` is, or
+reads them by literal name; its `CRON_SECRET` tripwire reads
+`routes/webhooks.ts` by meaning, so only presenting the secret outward,
+comparing it by hand or dropping the demo guard trips it). **Seed host guard**
+(`packages/db/src/seedGuard.ts`, `tests/seed-guard.test.ts`): before any pool
+exists `seed.ts` resolves the host the way pg-connection-string does (a
+`?host=` parameter wins, the last one given) and refuses unless it is
+localhost / 127.0.0.1 / ::1 or `ALLOW_SEED` spells its `<host>/<database>`
+(the host case-insensitively, the database exactly; the name alone is refused
+because every Neon branch's database is `neondb`, and the refusal prints the
+exact value to set). **Bag
+writes lock the row**, and this is THE rule for `task.fields`: a whole-bag
+`UPDATE task SET fields` runs inside the same `withTransaction` as a
+`SELECT fields FROM task WHERE id = $1 ... FOR NO KEY UPDATE` and merges from
+that read, never from a pool read; a transaction that also inserts a child row
+(a visit, a sign-off sheet) locks the task row FIRST; bulk edit and the import
+lock rows in id order; `assertMoneyNotLocked` takes a `Queryable` so the money
+lock is checked on the transaction (`woFieldValues.ts`, `woBulk.ts` per row
+and in the import's update branch, `visits.ts` `syncMirrors` and
+`createVisit`, both `signoff.ts` writes, `assigneeHistory.ts`, `moneySync.ts`;
+`tests/bag-lock.test.ts`). NO KEY, not plain `FOR UPDATE`, in all six: no bag
+write changes `id` or `wo_number` (the only unique-indexed columns of `task`),
+so it serialises bag writers just as `FOR UPDATE` would but neither blocks the
+KEY SHARE a child INSERT (a comment, an attachment, a visit, an approval task,
+a payment request) takes through its foreign key nor deadlocks two of them
+upgrading it. The reason is written once, in `updateWorkOrderFields`
+(`woFieldValues.ts:127-140`), and the other five point at it; the test reads
+the unique columns of `task` off the migrations and fails when a new unique
+index on `task`, or a bag-writer SET naming `id` / `wo_number`, would break
+that premise (that writer then needs plain `FOR UPDATE` back). Other row locks
+keep their own strength: purchasing (`rfq`, `purchase_order`) `FOR UPDATE`,
+`users.ts` (`principal`) `FOR NO KEY UPDATE`, the Ecotrak ingest
+(`ingest.ts:449`) `FOR UPDATE OF t`. **Purchasing and maintenance write in
+transactions** (`services/purchasing.ts`, `services/maintenance.ts`,
+`tests/purchasing-tx.test.ts`): `awardQuote`, `saveRfq`, `saveVendorQuote`,
+`deleteVendorQuote` and `receiveOrder` lock the RFQ or the purchase order
+`FOR UPDATE` and re-check its status under the lock (`awardQuote` reads the
+vendor's blacklist flag under it too), and the delete-then-insert line
+rewrites (requests, orders, job plans) commit as one. Every status move in
+`actOnRequest` (submit, approve, reject, cancel, back to draft), `actOnRfq`
+(send, close, reopen, cancel) and `actOnOrder` (close, reopen) is ONE
+conditional `UPDATE … WHERE id = $1 AND status … RETURNING id` on the status
+it moves from (the one it was read in; a purchase-order close from issued,
+partly or fully received; the RFQ cancel from anything but awarded), refused
+with the pre-check's own 409 when no row comes back; `actOnOrder` issue and
+cancel lock the order `FOR UPDATE` and re-check under the lock (cancel also
+its grant and the value received) before writing, the request freed in the
+same commit; `saveRequest` / `saveOrder` rewrite only a record still in the
+status they expect (`saveOrder` moves its request
+`AND status IN ('approved','ordered')`); `saveDocTemplate`'s default flip is
+one transaction, and a template saved as not the default clears that template
+only (it used to clear the kind's default on every edit of another template);
+every move logs after its statement (request back to draft, RFQ close /
+reopen and purchase-order reopen gained their rows on 2026-10-14);
+`vendorWork.ts` holds no delete-then-insert rewrite
+(`tests/vendor-workflow.test.ts`). **The Pulse works and is gated**
+(`services/obligations.ts`, `routes/obligations.ts`,
+`tests/obligations-sql.test.ts`): the four `activity_log` joins cast
+`t.id::text` (they had compared text with uuid since 0023, the error was
+swallowed and the engine returned nothing), `/pulse`, `/obligations`,
+`/notifications` and the snooze need `work_orders` view (`NAV_PERM.Pulse`,
+`RequireCan` on the route; the top-bar bell polls `/notifications` only with
+that grant, `useNotifications(enabled)`, so a role without it, sales, sees
+its app notices alone), the list and the snooze append `woScopeSql` (an
+out-of-book snooze is the 403 `outOfScope`), `?wo=` resolves through
+`resolveTaskId`, the reconcile INSERT is `ON CONFLICT ... DO NOTHING` on the
+0004 partial index, and a swallowed error logs `code`, `message` and
+`task_id`. **The CSV import is scoped** (`services/woBulk.ts`,
+`importWorkOrders(rows, opts, actor)`, `tests/import-scope.test.ts`): a WO
+number outside the actor's rule-8.5 scope refuses the whole file with 403
+`IMPORT_SCOPE` (`details.wo_numbers`); a non-blank status cell, or a home-list
+cell on a new row, without `work_orders/status` edit refuses with 403
+`IMPORT_STATUS_PERMISSION`; dry runs included, super admins never refused; a
+number in Trash is skipped ("In trash"), and the update branch diffs against
+the locked row and writes a status only when the file named one
+(`importRefusal`, pure); the import dialog lists `details.wo_numbers` under
+the API's sentence (the first 20, then "…and N more."). **Only a super admin
+changes super admins** (`services/users.ts`, `routes/admin.ts`,
+`services/dashboards.ts`, `tests/admin-super-admin.test.ts`):
+`is_super_admin` in POST or PATCH `/admin/users` needs
+`req.auth.user.isSuperAdmin` (the REAL user, never the acting one) or 403
+`SUPER_ADMIN_ONLY` (`assertMaySetSuperAdmin`); a super admin's row (role,
+name, status), client list (`PUT /admin/users/:id/clients`, clearing
+included; a non-empty list on them stays the 400 "A super admin sees every
+client already") and per-person dashboard overrides (`setUserOverrideView`,
+the Share dialog's write) are changed by super admins only
+(`assertMayEditSuperAdmin`). `actorIsSuperAdmin` is a required parameter of
+all five writers (`inviteUser`, `updateUser`, `disableUser`,
+`setUserClients`, `setUserOverrideView`): the admin routes pass the real
+user's flag, the Share dialog the acting identity's, which is never wider.
+The ring check runs again where the write happens: on the principal row
+locked `FOR NO KEY UPDATE` in `updateUser` and in `setUserClients` (whose
+DELETE + INSERT now run under that lock, so two replacements of one person's
+list serialise), and in `setUserOverrideView`'s conditional UPDATE (409 "The
+account changed while it was being edited — try again" when the row was
+promoted in between). The last-super-admin count and the UPDATE run in one
+transaction under `pg_advisory_xact_lock(ADVISORY_LOCKS.superAdminRing)`
+(7262027), and `user_updated` / `user_disabled` log the row as locked
+(before) and the UPDATE's RETURNING (after). The Users page locks the switch
+and a super admin's Role / Disable controls with the API's sentence.
+**Receivables is
+gated and honest** (`App.tsx`, `pages/ReceivablesPage.tsx`,
+`lib/receivables.ts`, `tests/receivables-no-fake.test.ts`): `/receivables`
+needs `invoicing` view (`RequireCan`), the Audit tab carries a prototype
+banner, every fact is read from the list payload (Assignee, CICO status, BFI
+through `columns=`, the quote through `/quotes`) or drawn as "not tracked
+yet" and never counted as a finding, and the three list windows are the
+pinned constants `WO_LIST_CAP` (500), `QUOTES_LIST_CAP` (200) and
+`INVOICES_LIST_CAP` (500), the page saying when one is hit. **The migration
+ledger is checksummed and locked** (`packages/db/src/migrate.ts`,
+`migrateLedger.ts`, `tests/migrate-ledger.test.ts`): `_migrations.checksum`
+is the sha256 of the file with CRLF folded to LF, each file and its ledger row
+commit in one explicit transaction, the run holds
+`pg_advisory_lock(ADVISORY_LOCKS.migrate)` (7262026) on a DIRECT connection
+(it prefers `DATABASE_URL_UNPOOLED` and refuses a `-pooler` host before
+connecting), waits at most 120 s for another run, refuses an applied file
+whose checksum changed unless `MIGRATE_ALLOW_CHECKSUM_MISMATCH=1`, backfills
+NULL checksums from the files on disk, and writes nothing when refused. Also
+refused before anything is written, exit 1, with no override: a file to apply
+that, outside comments, strings, quoted identifiers and `$$` bodies, manages
+its own transaction (BEGIN / START TRANSACTION / COMMIT / ROLLBACK at a
+statement start) or says CONCURRENTLY anywhere (`migrationFileProblems`,
+named with its file and line); and a `DATABASE_URL_UNPOOLED` the guard cannot
+read as a URL (`u:p@/db`, which pg would open as PGHOST or localhost),
+whatever `DATABASE_URL` or `ALLOW_MIGRATE` say. `ALLOW_MIGRATE` is compared
+as `ALLOW_SEED` is (`seedConfirmed`: the host case-insensitively, the
+database exactly, a target with no host or no database refused outright).
+**Advisory locks have one registry** (`packages/shared/src/advisoryLocks.ts`,
+`tests/advisory-locks.test.ts`): `ADVISORY_LOCKS` names every key (`migrate`
+7262026, `superAdminRing` 7262027); the test pins the values, that they
+differ, and that every `pg_advisory*` call site in the tree (today
+`services/users.ts` and `packages/db/src/migrate.ts`) reads its key from
+there, so a new advisory lock is a key there and a path in the test, never a
+literal. **The tests are hermetic**
+(`vitest.config.mts` `setupFiles: ['tests/setup.ts']`; `config.ts` skips
+`loadEnvFile` under `VITEST`): the suite sets its own auth, origin and
+database variables, opens no database, and passes under
+`env -i PATH SYSTEMROOT npx vitest run`, which is what CI gets. Error codes
+the batch added, all under the house `details.code`: `IMPERSONATION_READ_ONLY`,
+`DEMO_NOT_SEEDED`, `SUPER_ADMIN_ONLY`, `IMPORT_SCOPE`,
+`IMPORT_STATUS_PERMISSION`. The dependency update (fastify 5.12.7, fast-uri
+3.1.8 / 4.2.2, react-router and react-router-dom 6.30.6) changed only
+`package-lock.json`.
 
 ## Verify
 
 ```
-npm -w @theone/web run build          # from app/: tsc -b && vite build — the only typecheck that exists
+npm run typecheck                     # from app/: tsc over shared, db, api, worker and web (tsc -b); 0 errors
+npm test                              # vitest over tests/**/*.test.ts, hermetic (tests/setup.ts), opens no database
+npm -w @theone/web run build          # tsc -b && vite build: the bundle Vercel deploys
 curl -s http://127.0.0.1:5174/api/health                      # {"ok":true,"auth_mode":"bypass"}
 curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   # 401 without a session
 ```
 
-- The **API and shared packages have no tsconfig** — they run under `tsx` and
-  are never type-checked. An ad-hoc `tsc` over `apps/api/src` reports ~27
-  `TS2344` errors from `db.query<T>`'s `Record<string, unknown>` constraint;
-  that pattern predates auth and is in untouched files (`feed.ts`,
-  `messages.ts`, `payments.ts`, `principals.ts`). Not a regression.
+- Every workspace has a `tsconfig.json`; `npm run typecheck` covers all five
+  (`packages/shared`, `packages/db`, `apps/api`, `apps/worker`, `apps/web`) and
+  passes with 0 errors. CI (`.github/workflows/ci.yml`, job "typecheck + test")
+  runs it and `npm test` on every push; it is green only because
+  `tests/setup.ts` sets the environment and `config.ts` skips `app/.env` under
+  `VITEST`, so never let a test depend on a developer's `.env`.
+- The vitest suite under `app/tests/` (60 files, 957 tests on 2026-10-14) is
+  the regression net: pure functions and source-text pins, no database and no
+  network, so a SQL change still needs a seeded local Postgres, curl and
+  headless Chromium screenshots of both themes before it is believed.
 - Dev-bypass smoke test: `POST /api/auth/dev-login {"principal_id":"<id>"}`
   (ids from `GET /api/auth/dev-candidates`), keep the cookie, then hit
   `/api/auth/me`, `/api/work-orders`, `/api/admin/users` (403 unless super admin).
-- No test suite exists yet. Verification so far has been build + curl + headless
-  Chromium screenshots of both themes.
 
 ## Front-end conventions
 
@@ -1848,9 +2069,11 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
 
 - Entra mode has not been exercised against a real tenant yet (no app
   registration existed at build time); the code path is complete and typed.
-- Vendors appears in the sidebar but is an inert placeholder (batch 1 of
-  `product/facilio-parity.md`). Invoicing is live since 0045 (Receivables ›
-  Invoicing); vendor bills since 0047 (Payments › Vendor bills).
+- Vendors is live (0056 to 0059, 0066, 0069: records, map, workflow, portal);
+  the VR - CRM parity items still open are listed at the end of its paragraphs
+  above. Invoicing is live since 0045 (Receivables › Invoicing); vendor bills
+  since 0047 (Payments › Vendor bills). Receivables › Audit is a browser-side
+  prototype (W2-1) and says so on the page.
 - React Router prints v7 future-flag warnings in the console; harmless.
 - `public/brand/logo-the-one-2.png` is an unused leftover of the previous
   logo (committed for safekeeping, referenced nowhere) — safe to delete.
@@ -1859,6 +2082,25 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
 
 ## Branches
 
-`main` = last reviewed state. Work lands on `Primary-Updates*` branches, one
-per review batch; each is frozen once it is up for review and the next batch
-starts from it, so PRs fast-forward in order.
+`phase-0-ground` is the line of record: every migration from 0004 on, the move
+to node-postgres and the 2026-10-14 audit batch live there. `main` diverged
+from it at `3226570` and carries 48 commits of its own, with migrations 0004
+to 0027 under different file names, so the two histories do not fast-forward
+and the filename-keyed `_migrations` ledger reads differently on each.
+`origin/Primary-Updates*` are earlier review batches. FIX-RUNBOOK.md at the
+repo root (W3-6, W6-9) has the order: read the production ledger, reset `main`
+to `phase-0-ground`, then protect `main` (pull request, CI green, one review).
+
+## Agent skills
+
+### Issue tracker
+
+GitHub issues on `VistaJordan/TheOne`, driven with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels, unchanged: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/`, created lazily by `/domain-modeling`. See `docs/agents/domain.md`.

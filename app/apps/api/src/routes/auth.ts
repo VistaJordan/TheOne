@@ -8,8 +8,9 @@
 //   POST /auth/impersonate    super admin only — the "Viewing as" switcher
 //   DELETE /auth/impersonate  drop back to yourself
 //
-// Everything here is registered BEFORE the auth guard, so these are the only
-// routes reachable without a session (see plugins/authGuard.ts).
+// The auth guard (plugins/authGuard.ts) is registered before these routes and
+// names the ones reachable without a session in its PUBLIC_PATHS; the rest
+// need a session like every other /api route.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -27,6 +28,7 @@ import {
 import {
   SESSION_COOKIE,
   consumeAuthTransaction,
+  assertDemoSeeded,
   createSession,
   destroySession,
   devBypassSignIn,
@@ -152,6 +154,9 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
   // ── Dev bypass ────────────────────────────────────────────────────────────
   app.get('/auth/dev-candidates', async () => {
     if (config.authMode !== 'bypass') throw new ApiError('NOT_FOUND', 'Route not found');
+    // DEMO_MODE: the public account picker lists nobody until the seed marker
+    // is on file (W4-11, skeptic S2-2) — the same refusal as the sign-in itself.
+    await assertDemoSeeded();
     return { items: await listSignInCandidates() };
   });
 

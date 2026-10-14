@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ImportResult, WoFieldDescriptor } from '../../../api/client';
-import { importWorkOrders } from '../../../api/client';
+import { ApiRequestError, importWorkOrders } from '../../../api/client';
 import { headerKey, parseCsv, readFileText } from '../../../lib/csv';
 import { Icon } from '../../Icon';
 
@@ -34,6 +34,20 @@ const WRITABLE = new Set([
   'date_received',
 ]);
 
+/** The rows an import refusal names (W4-4): the API refuses the WHOLE file
+    with 403 IMPORT_SCOPE (work orders outside the actor's scope) or
+    IMPORT_STATUS_PERMISSION (status / home-list cells the actor may not set)
+    and lists them in `details.wo_numbers` — a WO number, or `row N` for a row
+    that would be created. Any other failure names no rows. Pure; never
+    throws on a payload it does not recognise. */
+export function importRefusalRows(e: unknown): string[] {
+  if (!(e instanceof ApiRequestError)) return [];
+  const d = e.details as { code?: unknown; wo_numbers?: unknown } | null;
+  if (!d || typeof d !== 'object') return [];
+  if (d.code !== 'IMPORT_SCOPE' && d.code !== 'IMPORT_STATUS_PERMISSION') return [];
+  return Array.isArray(d.wo_numbers) ? d.wo_numbers.filter((x): x is string => typeof x === 'string') : [];
+}
+
 /**
  * Import work orders from a CSV.
  *
@@ -52,7 +66,9 @@ export function ImportDialog({ fields, onClose }: ImportDialogProps) {
   const [mapping, setMapping] = useState<Record<number, string>>({});
   const [mode, setMode] = useState<'upsert' | 'create'>('upsert');
   const [preview, setPreview] = useState<ImportResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /** The failure on screen: the sentence and, for a refusal that names rows
+      (IMPORT_SCOPE / IMPORT_STATUS_PERMISSION), the WO numbers it named. */
+  const [error, setError] = useState<{ message: string; rows: string[] } | null>(null);
 
   const targets = useMemo(() => {
     const writable = fields.filter((f) => WRITABLE.has(f.key) || f.custom);
@@ -81,7 +97,7 @@ export function ImportDialog({ fields, onClose }: ImportDialogProps) {
     try {
       const parsed = parseCsv(await readFileText(file));
       if (parsed.headers.length === 0) {
-        setError('That file has no header row.');
+        setError({ message: 'That file has no header row.', rows: [] });
         return;
       }
       setFileName(file.name);
@@ -89,7 +105,7 @@ export function ImportDialog({ fields, onClose }: ImportDialogProps) {
       setRows(parsed.rows);
       setMapping(autoMap(parsed.headers));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not read that file.');
+      setError({ message: e instanceof Error ? e.message : 'Could not read that file.', rows: [] });
     }
   };
 
@@ -106,7 +122,7 @@ export function ImportDialog({ fields, onClose }: ImportDialogProps) {
   const run = useMutation({
     mutationFn: (dry: boolean) =>
       importWorkOrders({ rows: buildRows(), mode, dry_run: dry }),
-    onError: (e: Error) => setError(e.message || 'The import failed'),
+    onError: (e: Error) => setError({ message: e.message || 'The import failed', rows: importRefusalRows(e) }),
   });
 
   const runDry = () => {
@@ -279,7 +295,18 @@ export function ImportDialog({ fields, onClose }: ImportDialogProps) {
             </section>
           )}
 
-          {error && <p className="modal-error">{error}</p>}
+          {error && <p className="modal-error">{error.message}</p>}
+          {/* A refusal that names rows (outside your scope, or a status you
+              may not set) lists them, so the file can be fixed rather than
+              guessed at. Same cap and tail as the row errors above. */}
+          {error && error.rows.length > 0 && (
+            <ul className="import-errors" aria-label="The rows the import refused">
+              {error.rows.slice(0, 20).map((n, i) => (
+                <li key={`${i}:${n}`}>{n}</li>
+              ))}
+              {error.rows.length > 20 && <li>…and {error.rows.length - 20} more.</li>}
+            </ul>
+          )}
         </div>
 
         <div className="modal-foot">

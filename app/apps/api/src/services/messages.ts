@@ -41,7 +41,7 @@ interface ConversationRow {
   vendor_trades: string[] | string | null;
 }
 
-/** text[] comes back as a JS array from PGlite; tolerate the `{a,b}` literal too. */
+/** text[] comes back as a JS array from node-postgres; tolerate the `{a,b}` literal too. */
 function toTrades(v: string[] | string | null): string[] {
   if (Array.isArray(v)) return v;
   if (typeof v === 'string') {
@@ -236,10 +236,10 @@ export async function resolveConversationId(taskId: string): Promise<string | nu
  * real Quo pipe takes over) and an `activity_log` row
  * `action='tech_message_sent'`, so the audit trail never misses a write.
  *
- * The actor MUST be resolved before the transaction opens: PGlite is
- * single-connection, so a non-transactional query() issued inside
- * db.transaction() queues behind it and self-deadlocks (same note as S1's
- * changeStatus and S2's addComment).
+ * The actor comes in already resolved: a read that needs no lock runs on the
+ * pool before the transaction opens, so the transaction holds its connection
+ * for the two INSERTs alone (neither depends on a row read first, so there is
+ * nothing to lock).
  */
 export async function sendMessage(
   taskId: string,

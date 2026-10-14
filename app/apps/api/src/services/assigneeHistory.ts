@@ -10,7 +10,7 @@
 // it was first replaced. The current assignee is never removed from the
 // history — being assigned again does not erase that you once handed it on.
 
-import { query, withTransaction } from '../db.js';
+import { withTransaction } from '../db.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 
 export const ASSIGNEE_FIELD = 'fields.Assignee';
@@ -50,17 +50,28 @@ export function mergePreviousAssignees(current: unknown, departed: string[]): { 
 export async function recordPreviousAssignees(taskId: string, changes: TaskChange[], actorId: string): Promise<TaskChange[]> {
   const departed = changes.flatMap((c) => (c.field === ASSIGNEE_FIELD ? departedAssignees(c.before, c.after) : []));
   if (departed.length === 0) return [];
-  const t = await query<{ fields: Record<string, unknown> | null }>(`SELECT fields FROM task WHERE id = $1 AND deleted_at IS NULL`, [taskId]);
-  const fields = t.rows[0]?.fields ?? {};
-  const merged = mergePreviousAssignees(fields[K_PREVIOUS], departed);
-  if (!merged || !changed(merged.before, merged.after)) return [];
-  const change: TaskChange = { field: `fields.${K_PREVIOUS}`, before: merged.before, after: merged.after };
+  // The bag is read FOR NO KEY UPDATE inside the transaction (W3-3; the
+  // strength is explained in woFieldValues.ts): the history is appended to
+  // the row as it is now, so a field edit landing at the same moment is kept,
+  // not overwritten. Nothing is written when nothing is new, or when the work
+  // order is gone.
+  const written: TaskChange[] = [];
   await withTransaction(async (tx) => {
+    const t = await tx.query<{ fields: Record<string, unknown> | null }>(
+      `SELECT fields FROM task WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`,
+      [taskId],
+    );
+    if (!t.rows[0]) return;
+    const fields = t.rows[0].fields ?? {};
+    const merged = mergePreviousAssignees(fields[K_PREVIOUS], departed);
+    if (!merged || !changed(merged.before, merged.after)) return;
+    const change: TaskChange = { field: `fields.${K_PREVIOUS}`, before: merged.before, after: merged.after };
     await tx.query(`UPDATE task SET fields = $2::jsonb, updated_at = now() WHERE id = $1`, [
       taskId,
       JSON.stringify({ ...fields, [K_PREVIOUS]: merged.after }),
     ]);
     await logTaskChanges(tx, actorId, taskId, [change], 'assignment');
+    written.push(change);
   });
-  return [change];
+  return written;
 }

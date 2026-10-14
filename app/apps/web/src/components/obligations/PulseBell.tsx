@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PulseNotification } from '../../api/client';
 import { getNoticeCount, getNotices, markAllNoticesRead, markAllNotificationsRead, markNoticeRead, markNotificationRead } from '../../api/client';
+import { useAuth } from '../../auth/AuthProvider';
 import { NOTIFICATIONS_KEY, useNotifications } from '../../hooks/useObligations';
 import { useNow } from '../../hooks/useNow';
 import { TIER_LABEL, tierClass, tierOf } from '../../lib/obligations';
@@ -27,9 +28,15 @@ export function PulseBell() {
   const qc = useQueryClient();
   const now = useNow(30_000);
 
-  const query = useNotifications();
-  const items = (query.data?.items ?? []).slice(0, MAX_ROWS);
-  const unread = query.data?.unread ?? 0;
+  // The Pulse half is gated on work_orders view — the same can() the sidebar
+  // reads, so a role without it (sales, 0072) never polls /notifications and
+  // is not answered 403 once a minute: the badge counts notices alone and the
+  // dropdown shows "For you" only. The notices half below is untouched.
+  const { can } = useAuth();
+  const canPulse = can('work_orders', 'view');
+  const query = useNotifications(canPulse);
+  const items = canPulse ? (query.data?.items ?? []).slice(0, MAX_ROWS) : [];
+  const unread = canPulse ? (query.data?.unread ?? 0) : 0;
 
   const readOne = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
@@ -140,63 +147,81 @@ export function PulseBell() {
               ))}
             </>
           )}
-          <div className="pulse-pop-head">
-            <span className="overline">The Pulse</span>
-            <button
-              type="button"
-              className="pulse-linkbtn"
-              disabled={unread === 0 || readAll.isPending}
-              onClick={() => readAll.mutate()}
-            >
-              Mark all read
-            </button>
-          </div>
-
-          {query.isLoading && <div className="pulse-pop-note">Loading…</div>}
-          {query.isError && !query.isLoading && (
-            <div className="pulse-pop-note">Notifications are unavailable right now.</div>
+          {/* A role without the Pulse sees the notices' own three states, so
+              "Nothing for you" is never printed while the list (enabled on
+              open) is still on its way. */}
+          {!canPulse && (
+            <>
+              {notices.isLoading && <div className="pulse-pop-note">Loading…</div>}
+              {notices.isError && !notices.isLoading && (
+                <div className="pulse-pop-note">Notifications are unavailable right now.</div>
+              )}
+              {!notices.isLoading && !notices.isError && forYou.length === 0 && (
+                <div className="pulse-pop-note">Nothing for you right now.</div>
+              )}
+            </>
           )}
-          {!query.isLoading && !query.isError && items.length === 0 && (
-            <div className="pulse-pop-note">All clear — nothing has escalated.</div>
+          {canPulse && (
+            <>
+              <div className="pulse-pop-head">
+                <span className="overline">The Pulse</span>
+                <button
+                  type="button"
+                  className="pulse-linkbtn"
+                  disabled={unread === 0 || readAll.isPending}
+                  onClick={() => readAll.mutate()}
+                >
+                  Mark all read
+                </button>
+              </div>
+
+              {query.isLoading && <div className="pulse-pop-note">Loading…</div>}
+              {query.isError && !query.isLoading && (
+                <div className="pulse-pop-note">Notifications are unavailable right now.</div>
+              )}
+              {!query.isLoading && !query.isError && items.length === 0 && (
+                <div className="pulse-pop-note">All clear — nothing has escalated.</div>
+              )}
+
+              {items.map((n) => {
+                const tier = tierOf(n);
+                return (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    key={n.id}
+                    className={`pulse-row ${tierClass(tier)}${n.read_at ? '' : ' is-unread'}`}
+                    onClick={() => openItem(n)}
+                  >
+                    <span className="pulse-row-stripe" aria-hidden="true" />
+                    <span className="pulse-row-body">
+                      <span className="pulse-row-title">{n.title}</span>
+                      <span className="pulse-row-meta">
+                        {n.wo_number && <span className="pulse-row-wo">{n.wo_number}</span>}
+                        <span className={`pulse-row-tier ${tierClass(tier)}`}>{TIER_LABEL[tier]}</span>
+                        <span className="pulse-row-ago">{timeAgo(n.created_at, now)}</span>
+                      </span>
+                    </span>
+                    {!n.read_at && <span className="pulse-row-dot" aria-hidden="true" />}
+                  </button>
+                );
+              })}
+
+              <div className="pulse-pop-foot">
+                <button
+                  type="button"
+                  className="pulse-linkbtn"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate('/pulse');
+                  }}
+                >
+                  Open the Pulse
+                  <Icon name="chev-r" size={12} />
+                </button>
+              </div>
+            </>
           )}
-
-          {items.map((n) => {
-            const tier = tierOf(n);
-            return (
-              <button
-                type="button"
-                role="menuitem"
-                key={n.id}
-                className={`pulse-row ${tierClass(tier)}${n.read_at ? '' : ' is-unread'}`}
-                onClick={() => openItem(n)}
-              >
-                <span className="pulse-row-stripe" aria-hidden="true" />
-                <span className="pulse-row-body">
-                  <span className="pulse-row-title">{n.title}</span>
-                  <span className="pulse-row-meta">
-                    {n.wo_number && <span className="pulse-row-wo">{n.wo_number}</span>}
-                    <span className={`pulse-row-tier ${tierClass(tier)}`}>{TIER_LABEL[tier]}</span>
-                    <span className="pulse-row-ago">{timeAgo(n.created_at, now)}</span>
-                  </span>
-                </span>
-                {!n.read_at && <span className="pulse-row-dot" aria-hidden="true" />}
-              </button>
-            );
-          })}
-
-          <div className="pulse-pop-foot">
-            <button
-              type="button"
-              className="pulse-linkbtn"
-              onClick={() => {
-                setOpen(false);
-                navigate('/pulse');
-              }}
-            >
-              Open the Pulse
-              <Icon name="chev-r" size={12} />
-            </button>
-          </div>
         </div>
       )}
     </div>

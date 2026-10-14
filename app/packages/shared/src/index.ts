@@ -2014,3 +2014,5 @@ export * from './assigneeAvailability';
 export * from './integrations';
 // 0075 · Admin › Documentation: the living BRD, SOP and lifecycle registry.
 export * from './docs';
+// Advisory lock keys: the one registry, so no two purposes can ever share an int4.
+export * from './advisoryLocks';

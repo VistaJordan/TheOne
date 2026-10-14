@@ -404,7 +404,10 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const keys = new Set<string>();
     for (const row of rows) for (const k of Object.keys(row)) keys.add(k);
     assertFieldWrites(allow, [...keys].filter((k) => k !== 'wo_number' && k !== 'title' && k !== 'status'));
-    return importWorkOrders(rows, { mode, dry_run }, actorIdFromRequest(req));
+    // The principal goes down whole (D7): the service refuses a file that
+    // touches work orders outside their scope, or carries a status cell
+    // without `work_orders/status` edit — the same two gates bulk edit runs.
+    return importWorkOrders(rows, { mode, dry_run }, p);
   });
 
   // ── Raising one by hand (0041) ─────────────────────────────────────────────
@@ -717,7 +720,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const conversationId = await resolveConversationId(taskId);
     if (!conversationId) throw notFound('No Quo conversation linked to this work order');
 
-    // Resolved outside the transaction — PGlite is single-connection (see messages.ts).
+    // Reads that need no lock run on the pool first; sendMessage opens its own transaction.
     const actor = actorFromRequest(req);
     const item = await sendMessage(taskId, conversationId, body, actor);
 

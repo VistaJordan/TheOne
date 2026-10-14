@@ -59,7 +59,7 @@ import type {
   VendorQuoteInput,
   WoPurchasing,
 } from '@theone/shared';
-import { query } from '../db.js';
+import { query, withTransaction, type Queryable } from '../db.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { resolveTaskId, type ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
@@ -259,9 +259,21 @@ export async function saveDocTemplate(id: string | null, input: DocTemplateInput
     rowId = ins.rows[0].id;
   }
   if (input.is_default !== undefined) {
-    // One default per kind: clear the others first (the index allows only one).
-    await query(`UPDATE doc_template SET is_default = false WHERE kind = $1 AND is_default`, [kind]);
-    if (input.is_default) await query(`UPDATE doc_template SET is_default = true, is_active = true WHERE id = $1`, [rowId]);
+    // One default per kind (the index allows only one). Making this one the
+    // default clears the kind's current default and sets this one in one
+    // transaction, so two saves at once serialise on the rows and a failure
+    // between the two statements leaves the kind the default it had, never
+    // none. Saved as NOT the default, this template alone is cleared: the
+    // Admin card sends the tick with every save, and editing another template
+    // of the kind must not unset the one in use. The audit row follows.
+    if (input.is_default) {
+      await withTransaction(async (tx) => {
+        await tx.query(`UPDATE doc_template SET is_default = false WHERE kind = $1 AND is_default`, [kind]);
+        await tx.query(`UPDATE doc_template SET is_default = true, is_active = true WHERE id = $1`, [rowId]);
+      });
+    } else {
+      await query(`UPDATE doc_template SET is_default = false WHERE id = $1`, [rowId]);
+    }
   }
   await logAdminEvent({ actorId: actor.id, entity: 'doc_template', entityId: rowId!, action: id ? 'doc_template_updated' : 'doc_template_added', after: { name: input.name ?? 'template', kind } });
   return financeSetup(actor);
@@ -574,21 +586,23 @@ async function loadRequest(id: string, actor: ActingPrincipal): Promise<Purchase
   return (await hydrateRequests(res.rows))[0];
 }
 
-async function vendorRef(vendorId: string | null | undefined, vendorName: string | null | undefined): Promise<{ id: string | null; name: string | null }> {
+async function vendorRef(q: Queryable, vendorId: string | null | undefined, vendorName: string | null | undefined): Promise<{ id: string | null; name: string | null }> {
   const id = uuid(vendorId);
   if (id) {
-    const v = await query<{ name: string }>(`SELECT name FROM vendor WHERE id = $1 AND deleted_at IS NULL`, [id]);
+    const v = await q.query<{ name: string }>(`SELECT name FROM vendor WHERE id = $1 AND deleted_at IS NULL`, [id]);
     if (!v.rows[0]) throw badRequest('That vendor does not exist', { field: 'vendor_id' });
     return { id, name: v.rows[0].name };
   }
   return { id: null, name: clean(vendorName, 200) };
 }
 
-async function writeRequestLines(requestId: string, lines: ReturnType<typeof cleanLines>): Promise<void> {
-  await query(`DELETE FROM purchase_request_line WHERE request_id = $1`, [requestId]);
+/** The lines of a request, rewritten in full. Runs on the caller's transaction,
+ *  so the DELETE and the INSERTs land together with the request's own row. */
+async function writeRequestLines(q: Queryable, requestId: string, lines: ReturnType<typeof cleanLines>): Promise<void> {
+  await q.query(`DELETE FROM purchase_request_line WHERE request_id = $1`, [requestId]);
   let pos = 0;
   for (const l of lines) {
-    await query(`INSERT INTO purchase_request_line (request_id, position, description, qty, unit, est_unit_cost) VALUES ($1, $2, $3, $4, $5, $6)`, [requestId, pos++, l.description, l.qty, l.unit, l.unit_cost]);
+    await q.query(`INSERT INTO purchase_request_line (request_id, position, description, qty, unit, est_unit_cost) VALUES ($1, $2, $3, $4, $5, $6)`, [requestId, pos++, l.description, l.qty, l.unit, l.unit_cost]);
   }
 }
 
@@ -599,42 +613,60 @@ export async function saveRequest(id: string | null, input: PurchaseRequestInput
   const title = input.title !== undefined ? (clean(input.title, 200) ?? '') : (before?.title ?? '');
   if (!title) throw badRequest('Say what is being bought', { field: 'title' });
   const taskId = input.task_ref !== undefined ? await taskOf(input.task_ref, actor) : (before?.task?.id ?? null);
-  const vendor = input.vendor_id !== undefined || input.vendor_name !== undefined ? await vendorRef(input.vendor_id, input.vendor_name) : { id: before?.vendor?.id ?? null, name: before?.vendor?.name ?? null };
+  const vendor = input.vendor_id !== undefined || input.vendor_name !== undefined ? await vendorRef({ query }, input.vendor_id, input.vendor_name) : { id: before?.vendor?.id ?? null, name: before?.vendor?.name ?? null };
   const neededBy = input.needed_by !== undefined ? day(input.needed_by, 'The date it is needed by') : (before?.needed_by ?? null);
   const cc = input.cost_center_id !== undefined ? uuid(input.cost_center_id) : (before?.cost_center?.id ?? null);
   const reason = input.reason !== undefined ? clean(input.reason) : (before?.reason ?? null);
-  let rowId = id;
-  if (id) {
-    await query(
-      `UPDATE purchase_request SET task_id = $2, title = $3, reason = $4, needed_by = $5::date, vendor_id = $6, vendor_name = $7,
-              cost_center_id = (SELECT c.id FROM cost_center c WHERE c.id = $8::uuid), updated_at = now() WHERE id = $1`,
-      [id, taskId, title, reason, neededBy, vendor.id, vendor.name, cc],
-    );
-  } else {
-    const ins = await query<{ id: string; pr_number: string }>(
-      `INSERT INTO purchase_request (task_id, title, reason, needed_by, vendor_id, vendor_name, cost_center_id, requested_by)
-       VALUES ($1, $2, $3, $4::date, $5, $6, (SELECT c.id FROM cost_center c WHERE c.id = $7::uuid), $8) RETURNING id::text AS id, pr_number`,
-      [taskId, title, reason, neededBy, vendor.id, vendor.name, cc, actor.id],
-    );
-    rowId = ins.rows[0].id;
-    await logWo(taskId, actor, 'Purchase request', `${ins.rows[0].pr_number} raised: ${title}`);
-  }
-  if (input.lines !== undefined) await writeRequestLines(rowId!, cleanLines(input.lines));
-  return loadRequest(rowId!, actor);
+  const lines = input.lines !== undefined ? cleanLines(input.lines) : null;
+  // The request's row and its lines commit together; the audit row and the
+  // read-back follow on the pool once they are committed.
+  const saved = await withTransaction(async (tx) => {
+    let rowId = id;
+    let prNumber: string | null = null;
+    if (id) {
+      // Only while it is still a draft or rejected, in the statement: a
+      // request submitted, decided or cancelled since it was read above
+      // matches no row, and the save is refused instead of rewriting it.
+      const kept = await tx.query(
+        `UPDATE purchase_request SET task_id = $2, title = $3, reason = $4, needed_by = $5::date, vendor_id = $6, vendor_name = $7,
+                cost_center_id = (SELECT c.id FROM cost_center c WHERE c.id = $8::uuid), updated_at = now()
+          WHERE id = $1 AND status IN ('draft', 'rejected') RETURNING id`,
+        [id, taskId, title, reason, neededBy, vendor.id, vendor.name, cc],
+      );
+      if (!kept.rows[0]) throw conflict('Only a draft or a rejected request can be changed');
+    } else {
+      const ins = await tx.query<{ id: string; pr_number: string }>(
+        `INSERT INTO purchase_request (task_id, title, reason, needed_by, vendor_id, vendor_name, cost_center_id, requested_by)
+         VALUES ($1, $2, $3, $4::date, $5, $6, (SELECT c.id FROM cost_center c WHERE c.id = $7::uuid), $8) RETURNING id::text AS id, pr_number`,
+        [taskId, title, reason, neededBy, vendor.id, vendor.name, cc, actor.id],
+      );
+      rowId = ins.rows[0].id;
+      prNumber = ins.rows[0].pr_number;
+    }
+    if (lines !== null) await writeRequestLines(tx, rowId!, lines);
+    return { rowId: rowId!, pr_number: prNumber };
+  });
+  if (saved.pr_number) await logWo(taskId, actor, 'Purchase request', `${saved.pr_number} raised: ${title}`);
+  return loadRequest(saved.rowId, actor);
 }
 
 export async function actOnRequest(id: string, action: PrAction, note: string | null, actor: ActingPrincipal): Promise<PurchaseRequest> {
   const cur = await loadRequest(id, actor);
   const link = '/purchasing?tab=requests';
-  const set = async (status: PrStatus, extra = '', params: unknown[] = []) => {
-    await query(`UPDATE purchase_request SET status = $2, updated_at = now()${extra} WHERE id = $1`, [id, status, ...params]);
+  // Every move is ONE conditional statement on the status the request was
+  // read in: a move another save committed since (a cancel under an approve,
+  // an order under a cancel) matches no row and is refused (409), never
+  // written over. `extra` numbers the columns it sets from $4.
+  const set = async (status: PrStatus, refused: string, extra = '', params: unknown[] = []) => {
+    const done = await query(`UPDATE purchase_request SET status = $2, updated_at = now()${extra} WHERE id = $1 AND status = $3 RETURNING id`, [id, status, cur.status, ...params]);
+    if (!done.rows[0]) throw conflict(refused);
   };
   if (action === 'submit') {
     requirePerm(actor, PURCHASING_PERM.requests, 'create', 'You cannot submit purchase requests');
     if (cur.status !== 'draft' && cur.status !== 'rejected') throw conflict('Only a draft can be submitted');
     const problem = purchaseRequestProblem(cur.title, cur.lines);
     if (problem) throw badRequest(problem);
-    await set('submitted', ', submitted_at = now(), requested_by = COALESCE(requested_by, $3), decided_by = NULL, decided_at = NULL, decision_note = NULL', [actor.id]);
+    await set('submitted', 'Only a draft can be submitted', ', submitted_at = now(), requested_by = COALESCE(requested_by, $4), decided_by = NULL, decided_at = NULL, decision_note = NULL', [actor.id]);
     await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} submitted for approval`);
     await notify(await holders(PURCHASING_PERM.requests, 'approve'), { kind: 'purchasing', title: `${cur.pr_number} needs approval`, body: `${cur.title} — about $${cur.estimate.toFixed(2)}${cur.task ? ` · ${cur.task.wo_number}` : ''}.`, link, actorId: actor.id });
   } else if (action === 'approve' || action === 'reject') {
@@ -642,18 +674,19 @@ export async function actOnRequest(id: string, action: PrAction, note: string | 
     if (cur.status !== 'submitted') throw conflict('This request is not waiting for a decision');
     const reason = clean(note, 500);
     if (action === 'reject' && !reason) throw badRequest('Say why the request is rejected', { field: 'note' });
-    await set(action === 'approve' ? 'approved' : 'rejected', ', decided_by = $3, decided_at = now(), decision_note = $4', [actor.id, reason]);
+    await set(action === 'approve' ? 'approved' : 'rejected', 'This request is not waiting for a decision', ', decided_by = $4, decided_at = now(), decision_note = $5', [actor.id, reason]);
     await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} ${action === 'approve' ? 'approved' : `rejected: ${reason}`}`);
     await notify([cur.requested_by?.id], { kind: 'purchasing', title: `${cur.pr_number} was ${action === 'approve' ? 'approved' : 'rejected'}`, body: action === 'approve' ? cur.title : `${cur.title}: ${reason}`, link, actorId: actor.id });
   } else if (action === 'cancel') {
     requirePerm(actor, PURCHASING_PERM.requests, 'edit', 'You cannot cancel purchase requests');
     if (cur.status === 'ordered' || cur.status === 'cancelled') throw conflict(cur.status === 'ordered' ? 'It was already ordered: cancel the purchase order instead' : 'It is already cancelled');
-    await set('cancelled');
+    await set('cancelled', 'The request moved on since it was opened: reload it');
     await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} cancelled`);
   } else {
     requirePerm(actor, PURCHASING_PERM.requests, 'edit', 'You cannot change purchase requests');
     if (cur.status !== 'rejected' && cur.status !== 'cancelled') throw conflict('Only a rejected or a cancelled request can go back to draft');
-    await set('draft');
+    await set('draft', 'Only a rejected or a cancelled request can go back to draft');
+    await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} back to draft`);
   }
   return loadRequest(id, actor);
 }
@@ -765,67 +798,95 @@ export async function saveRfq(id: string | null, input: RfqInput, actor: ActingP
   const taskId = input.task_ref !== undefined ? await taskOf(input.task_ref, actor) : (before?.task?.id ?? from?.task?.id ?? null);
   const due = input.due_on !== undefined ? day(input.due_on, 'The due date') : (before?.due_on ?? null);
   const description = input.description !== undefined ? clean(input.description) : (before?.description ?? from?.reason ?? null);
-  let rowId = id;
-  if (id) {
-    await query(`UPDATE rfq SET task_id = $2, title = $3, description = $4, due_on = $5::date, updated_at = now() WHERE id = $1`, [id, taskId, title, description, due]);
-  } else {
-    const ins = await query<{ id: string; rfq_number: string }>(
-      `INSERT INTO rfq (task_id, request_id, title, description, due_on, created_by) VALUES ($1, $2, $3, $4, $5::date, $6) RETURNING id::text AS id, rfq_number`,
-      [taskId, from?.id ?? null, title, description, due, actor.id],
-    );
-    rowId = ins.rows[0].id;
-    await logWo(taskId, actor, 'Request for quotation', `${ins.rows[0].rfq_number} raised: ${title}`);
-  }
   const lines = input.lines !== undefined ? cleanLines(input.lines) : !id && from ? from.lines.map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, unit_cost: null })) : null;
-  if (lines !== null) {
-    // A line that vendors already priced keeps its id (and so its prices)
-    // when its wording is unchanged; the rest are replaced.
-    const existing = before?.lines ?? [];
-    const keep = new Set<string>();
-    let pos = 0;
-    for (const l of lines) {
-      const same = existing.find((e) => !keep.has(e.id) && e.description === l.description);
-      if (same) {
-        keep.add(same.id);
-        await query(`UPDATE rfq_line SET position = $2, qty = $3, unit = $4 WHERE id = $1`, [same.id, pos++, l.qty, l.unit]);
-      } else {
-        await query(`INSERT INTO rfq_line (rfq_id, position, description, qty, unit) VALUES ($1, $2, $3, $4, $5)`, [rowId, pos++, l.description, l.qty, l.unit]);
+  const vendorIds = input.vendor_ids !== undefined ? [...new Set(input.vendor_ids.filter((v) => UUID_RE.test(v)))].slice(0, 30) : null;
+  // The RFQ's row, its lines and its vendors commit together. An existing
+  // request is locked first and its status read again under the lock, so an
+  // award or a cancellation committed since the read above is never written
+  // over; the audit row and the read-back follow on the pool once committed.
+  const saved = await withTransaction(async (tx) => {
+    let rowId = id;
+    let rfqNumber: string | null = null;
+    if (id) {
+      const fresh = await tx.query<{ status: string }>(`SELECT status FROM rfq WHERE id = $1 FOR UPDATE`, [id]);
+      if (!fresh.rows[0]) throw notFound('That request for quotation does not exist');
+      if (fresh.rows[0].status === 'awarded' || fresh.rows[0].status === 'cancelled') throw conflict('An awarded or cancelled request for quotation cannot be changed');
+      await tx.query(`UPDATE rfq SET task_id = $2, title = $3, description = $4, due_on = $5::date, updated_at = now() WHERE id = $1`, [id, taskId, title, description, due]);
+    } else {
+      const ins = await tx.query<{ id: string; rfq_number: string }>(
+        `INSERT INTO rfq (task_id, request_id, title, description, due_on, created_by) VALUES ($1, $2, $3, $4, $5::date, $6) RETURNING id::text AS id, rfq_number`,
+        [taskId, from?.id ?? null, title, description, due, actor.id],
+      );
+      rowId = ins.rows[0].id;
+      rfqNumber = ins.rows[0].rfq_number;
+    }
+    if (lines !== null) {
+      // A line that vendors already priced keeps its id (and so its prices)
+      // when its wording is unchanged; the rest are replaced. The lines on
+      // file are read under the lock, not from the read above.
+      const existing: { id: string; description: string }[] = id ? (await tx.query<{ id: string; description: string }>(`SELECT id::text AS id, description FROM rfq_line WHERE rfq_id = $1 ORDER BY position`, [id])).rows : [];
+      const keep = new Set<string>();
+      let pos = 0;
+      for (const l of lines) {
+        const same = existing.find((e) => !keep.has(e.id) && e.description === l.description);
+        if (same) {
+          keep.add(same.id);
+          await tx.query(`UPDATE rfq_line SET position = $2, qty = $3, unit = $4 WHERE id = $1`, [same.id, pos++, l.qty, l.unit]);
+        } else {
+          await tx.query(`INSERT INTO rfq_line (rfq_id, position, description, qty, unit) VALUES ($1, $2, $3, $4, $5)`, [rowId, pos++, l.description, l.qty, l.unit]);
+        }
+      }
+      const drop = existing.filter((e) => !keep.has(e.id)).map((e) => e.id);
+      if (drop.length) await tx.query(`DELETE FROM rfq_line WHERE id = ANY($1::uuid[])`, [drop]);
+    }
+    if (vendorIds !== null) {
+      await tx.query(`DELETE FROM rfq_vendor WHERE rfq_id = $1 AND NOT (vendor_id = ANY($2::uuid[])) AND vendor_id NOT IN (SELECT vendor_id FROM vendor_quote WHERE rfq_id = $1)`, [rowId, vendorIds]);
+      if (vendorIds.length) {
+        await tx.query(
+          `INSERT INTO rfq_vendor (rfq_id, vendor_id) SELECT $1, v.id FROM vendor v WHERE v.id = ANY($2::uuid[]) AND v.deleted_at IS NULL AND NOT v.blacklisted ON CONFLICT DO NOTHING`,
+          [rowId, vendorIds],
+        );
       }
     }
-    const drop = existing.filter((e) => !keep.has(e.id)).map((e) => e.id);
-    if (drop.length) await query(`DELETE FROM rfq_line WHERE id = ANY($1::uuid[])`, [drop]);
-  }
-  if (input.vendor_ids !== undefined) {
-    const want = [...new Set(input.vendor_ids.filter((v) => UUID_RE.test(v)))].slice(0, 30);
-    await query(`DELETE FROM rfq_vendor WHERE rfq_id = $1 AND NOT (vendor_id = ANY($2::uuid[])) AND vendor_id NOT IN (SELECT vendor_id FROM vendor_quote WHERE rfq_id = $1)`, [rowId, want]);
-    if (want.length) {
-      await query(
-        `INSERT INTO rfq_vendor (rfq_id, vendor_id) SELECT $1, v.id FROM vendor v WHERE v.id = ANY($2::uuid[]) AND v.deleted_at IS NULL AND NOT v.blacklisted ON CONFLICT DO NOTHING`,
-        [rowId, want],
-      );
-    }
-  }
-  return loadRfq(rowId!, actor);
+    return { rowId: rowId!, rfq_number: rfqNumber };
+  });
+  if (saved.rfq_number) await logWo(taskId, actor, 'Request for quotation', `${saved.rfq_number} raised: ${title}`);
+  return loadRfq(saved.rowId, actor);
 }
 
 export async function actOnRfq(id: string, action: RfqAction, actor: ActingPrincipal): Promise<Rfq> {
   requirePerm(actor, PURCHASING_PERM.rfqs, 'edit', 'You cannot change requests for quotation');
   const cur = await loadRfq(id, actor);
+  // Every move is ONE conditional statement that names the status it moves
+  // from. A request another save moved since it was read above (cancelled
+  // under a send, awarded under a close or a reopen) matches no row, and the
+  // move is refused (409) instead of being written over it.
   if (action === 'send') {
     if (cur.status !== 'draft') throw conflict('Only a draft can be marked as sent');
     if (cur.lines.length === 0) throw badRequest('List what is to be quoted first.');
     if (cur.vendors.length === 0) throw badRequest('Pick at least one vendor to ask.');
-    await query(`UPDATE rfq SET status = 'sent', sent_at = now(), updated_at = now() WHERE id = $1`, [id]);
+    const done = await query(`UPDATE rfq SET status = 'sent', sent_at = now(), updated_at = now() WHERE id = $1 AND status = 'draft' RETURNING id`, [id]);
+    if (!done.rows[0]) throw conflict('Only a draft can be marked as sent');
     await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number} out to ${cur.vendors.length} ${cur.vendors.length === 1 ? 'vendor' : 'vendors'}`);
   } else if (action === 'close') {
     if (cur.status !== 'sent') throw conflict('Only a request that is out to vendors can be closed');
-    await query(`UPDATE rfq SET status = 'closed', updated_at = now() WHERE id = $1`, [id]);
+    const done = await query(`UPDATE rfq SET status = 'closed', updated_at = now() WHERE id = $1 AND status = 'sent' RETURNING id`, [id]);
+    if (!done.rows[0]) throw conflict('Only a request that is out to vendors can be closed');
+    await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number} closed`);
   } else if (action === 'reopen') {
     if (cur.status !== 'closed' && cur.status !== 'cancelled') throw conflict('Only a closed or cancelled request can be reopened');
-    await query(`UPDATE rfq SET status = $2, updated_at = now() WHERE id = $1`, [id, cur.sent_at ? 'sent' : 'draft']);
+    // Back to where it was (sent if it ever went out, else draft), and only
+    // from the status it was read in: a reopen racing an award never writes
+    // 'sent' over 'awarded'.
+    const done = await query(`UPDATE rfq SET status = $2, updated_at = now() WHERE id = $1 AND status = $3 RETURNING id`, [id, cur.sent_at ? 'sent' : 'draft', cur.status]);
+    if (!done.rows[0]) throw conflict('Only a closed or cancelled request can be reopened');
+    await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number} reopened${cur.sent_at ? ', out to vendors again' : ' as a draft'}`);
   } else {
     if (cur.status === 'awarded') throw conflict('It was awarded: cancel the purchase order instead');
-    await query(`UPDATE rfq SET status = 'cancelled', updated_at = now() WHERE id = $1`, [id]);
+    // One conditional statement: an award committed since the read above
+    // leaves the row awarded, and the cancel is refused instead of undoing it.
+    const done = await query(`UPDATE rfq SET status = 'cancelled', updated_at = now() WHERE id = $1 AND status <> 'awarded' RETURNING id`, [id]);
+    if (!done.rows[0]) throw conflict('It was awarded: cancel the purchase order instead');
     await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number} cancelled`);
   }
   return loadRfq(id, actor);
@@ -838,29 +899,42 @@ export async function saveVendorQuote(rfqId: string, input: VendorQuoteInput, ac
   if (!UUID_RE.test(input.vendor_id)) throw badRequest('Pick the vendor the quote is from', { field: 'vendor_id' });
   const v = await query<{ name: string }>(`SELECT name FROM vendor WHERE id = $1 AND deleted_at IS NULL`, [input.vendor_id]);
   if (!v.rows[0]) throw badRequest('That vendor does not exist', { field: 'vendor_id' });
-  const prices: Record<string, number> = {};
-  for (const l of cur.lines) {
-    const price = input.prices?.[l.id];
-    if (typeof price === 'number' && Number.isFinite(price) && price >= 0) prices[l.id] = round2(price);
-  }
-  const fromLines = quoteTotalFromLines(cur.lines, prices);
-  const total = fromLines ?? (typeof input.total === 'number' && Number.isFinite(input.total) && input.total >= 0 ? round2(input.total) : null);
-  if (total === null) throw badRequest('Give a price for every line, or the total the vendor quoted.', { field: 'total' });
   const validUntil = day(input.valid_until, 'The date the quote is valid until');
   const lead = input.lead_days === null || input.lead_days === undefined ? null : Math.max(0, Math.round(input.lead_days));
-  await query(`INSERT INTO rfq_vendor (rfq_id, vendor_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [rfqId, input.vendor_id]);
-  const up = await query<{ id: string }>(
-    `INSERT INTO vendor_quote (rfq_id, vendor_id, quote_ref, total, lead_days, valid_until, note, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8)
-     ON CONFLICT (rfq_id, vendor_id) DO UPDATE SET quote_ref = EXCLUDED.quote_ref, total = EXCLUDED.total, lead_days = EXCLUDED.lead_days,
-            valid_until = EXCLUDED.valid_until, note = EXCLUDED.note
-     RETURNING id::text AS id`,
-    [rfqId, input.vendor_id, clean(input.quote_ref, 80), total, lead, validUntil, clean(input.note, 1000), actor.id],
-  );
-  await query(`DELETE FROM vendor_quote_line WHERE quote_id = $1`, [up.rows[0].id]);
-  for (const [lineId, price] of Object.entries(prices)) {
-    await query(`INSERT INTO vendor_quote_line (quote_id, rfq_line_id, unit_price) VALUES ($1, $2, $3)`, [up.rows[0].id, lineId, price]);
-  }
+  // The RFQ row is locked first and its status read again under the lock, so
+  // a quote never lands on a request that an award or a cancellation closed a
+  // moment earlier, and the lines are priced as they stand under that lock.
+  // The vendor's row, the quote and its prices commit together: a reader never
+  // sees a quote whose lines are half rewritten.
+  const total = await withTransaction(async (tx) => {
+    const fresh = await tx.query<{ status: string }>(`SELECT status FROM rfq WHERE id = $1 FOR UPDATE`, [rfqId]);
+    if (!fresh.rows[0]) throw notFound('That request for quotation does not exist');
+    if (fresh.rows[0].status === 'awarded' || fresh.rows[0].status === 'cancelled') throw conflict('This request for quotation is closed to quotes');
+    const onFile = await tx.query<{ id: string; qty: string }>(`SELECT id::text AS id, qty FROM rfq_line WHERE rfq_id = $1 ORDER BY position`, [rfqId]);
+    const lines = onFile.rows.map((l) => ({ id: l.id, qty: Number(l.qty) }));
+    const prices: Record<string, number> = {};
+    for (const l of lines) {
+      const price = input.prices?.[l.id];
+      if (typeof price === 'number' && Number.isFinite(price) && price >= 0) prices[l.id] = round2(price);
+    }
+    const fromLines = quoteTotalFromLines(lines, prices);
+    const quoted = fromLines ?? (typeof input.total === 'number' && Number.isFinite(input.total) && input.total >= 0 ? round2(input.total) : null);
+    if (quoted === null) throw badRequest('Give a price for every line, or the total the vendor quoted.', { field: 'total' });
+    await tx.query(`INSERT INTO rfq_vendor (rfq_id, vendor_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [rfqId, input.vendor_id]);
+    const up = await tx.query<{ id: string }>(
+      `INSERT INTO vendor_quote (rfq_id, vendor_id, quote_ref, total, lead_days, valid_until, note, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8)
+       ON CONFLICT (rfq_id, vendor_id) DO UPDATE SET quote_ref = EXCLUDED.quote_ref, total = EXCLUDED.total, lead_days = EXCLUDED.lead_days,
+              valid_until = EXCLUDED.valid_until, note = EXCLUDED.note
+       RETURNING id::text AS id`,
+      [rfqId, input.vendor_id, clean(input.quote_ref, 80), quoted, lead, validUntil, clean(input.note, 1000), actor.id],
+    );
+    await tx.query(`DELETE FROM vendor_quote_line WHERE quote_id = $1`, [up.rows[0].id]);
+    for (const [lineId, price] of Object.entries(prices)) {
+      await tx.query(`INSERT INTO vendor_quote_line (quote_id, rfq_line_id, unit_price) VALUES ($1, $2, $3)`, [up.rows[0].id, lineId, price]);
+    }
+    return quoted;
+  });
   await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number}: ${v.rows[0].name} quoted $${total.toFixed(2)}`);
   return loadRfq(rfqId, actor);
 }
@@ -870,8 +944,16 @@ export async function deleteVendorQuote(rfqId: string, quoteId: string, actor: A
   const cur = await loadRfq(rfqId, actor);
   if (cur.status === 'awarded') throw conflict('This request for quotation is awarded');
   if (!UUID_RE.test(quoteId)) throw notFound('That quote does not exist');
-  const res = await query(`DELETE FROM vendor_quote WHERE id = $1 AND rfq_id = $2 RETURNING id`, [quoteId, rfqId]);
-  if (!res.rows[0]) throw notFound('That quote does not exist');
+  // Under the RFQ's row lock, with the status read again there: the winning
+  // quote of an award in flight cannot be pulled from under it
+  // (rfq.awarded_quote_id has no foreign key to catch that).
+  await withTransaction(async (tx) => {
+    const fresh = await tx.query<{ status: string }>(`SELECT status FROM rfq WHERE id = $1 FOR UPDATE`, [rfqId]);
+    if (!fresh.rows[0]) throw notFound('That request for quotation does not exist');
+    if (fresh.rows[0].status === 'awarded') throw conflict('This request for quotation is awarded');
+    const res = await tx.query(`DELETE FROM vendor_quote WHERE id = $1 AND rfq_id = $2 RETURNING id`, [quoteId, rfqId]);
+    if (!res.rows[0]) throw notFound('That quote does not exist');
+  });
   return loadRfq(rfqId, actor);
 }
 
@@ -885,19 +967,42 @@ export async function awardQuote(rfqId: string, quoteId: string, actor: ActingPr
   if (cur.status === 'cancelled') throw conflict('This request for quotation is cancelled');
   const win = cur.quotes.find((q) => q.id === quoteId);
   if (!win) throw notFound('That quote does not exist');
-  const blocked = await query<{ blacklisted: boolean }>(`SELECT blacklisted FROM vendor WHERE id = $1`, [win.vendor.id]);
-  if (blocked.rows[0]?.blacklisted) throw conflict(`${win.vendor.name} is blacklisted and cannot be awarded an order`);
-  await query(`UPDATE vendor_quote SET status = CASE WHEN id = $2 THEN 'selected' ELSE 'rejected' END WHERE rfq_id = $1`, [rfqId, quoteId]);
-  await query(`UPDATE rfq SET status = 'awarded', awarded_quote_id = $2, updated_at = now() WHERE id = $1`, [rfqId, quoteId]);
-  // Per-line prices when the vendor gave them; otherwise one line for the lot.
-  const priced = cur.lines.every((l) => typeof win.prices[l.id] === 'number');
-  const lines: PurchaseLineInput[] = priced
-    ? cur.lines.map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, unit_cost: win.prices[l.id] }))
-    : [{ description: `${cur.title} — as quoted${win.quote_ref ? ` (${win.quote_ref})` : ''}`, qty: 1, unit: 'lot', unit_cost: win.total }];
-  const order = await createOrder({ vendor_id: win.vendor.id, rfq_id: rfqId, request_id: cur.request?.id ?? null, lines, note: win.note }, actor, cur.task?.id ?? null);
-  if (cur.request) await query(`UPDATE purchase_request SET status = 'ordered', updated_at = now() WHERE id = $1 AND status = 'approved'`, [cur.request.id]);
-  await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number} awarded to ${win.vendor.name} for $${win.total.toFixed(2)} → ${order.po_number}`);
-  return { rfq: await loadRfq(rfqId, actor), order };
+  // One transaction for the whole award. The RFQ row is locked first and its
+  // status read again under the lock: two people awarding at once serialise
+  // here, and the second finds it awarded (409) instead of drafting a second
+  // purchase order. The winning quote, the vendor's blacklist flag, the lines
+  // and the prices are read again under the same lock, so the order goes to a
+  // vendor who is not blacklisted at the moment of the award and is priced
+  // from what is on file then, not from the pool read above. The quote
+  // statuses, the RFQ, the order with its lines and the request all commit or
+  // roll back together; the audit rows and the read-back follow on the pool
+  // once they are committed.
+  const won = await withTransaction(async (tx) => {
+    const fresh = await tx.query<{ status: string; title: string }>(`SELECT status, title FROM rfq WHERE id = $1 FOR UPDATE`, [rfqId]);
+    if (!fresh.rows[0]) throw notFound('That request for quotation does not exist');
+    if (fresh.rows[0].status === 'awarded') throw conflict('This request for quotation is already awarded');
+    if (fresh.rows[0].status === 'cancelled') throw conflict('This request for quotation is cancelled');
+    const quote = await tx.query<{ quote_ref: string | null; total: string; note: string | null }>(`SELECT quote_ref, total, note FROM vendor_quote WHERE id = $1 AND rfq_id = $2`, [quoteId, rfqId]);
+    if (!quote.rows[0]) throw notFound('That quote does not exist');
+    const blocked = await tx.query<{ blacklisted: boolean }>(`SELECT blacklisted FROM vendor WHERE id = $1`, [win.vendor.id]);
+    if (blocked.rows[0]?.blacklisted) throw conflict(`${win.vendor.name} is blacklisted and cannot be awarded an order`);
+    const onFile = await tx.query<{ id: string; description: string; qty: string; unit: string }>(`SELECT id::text AS id, description, qty, unit FROM rfq_line WHERE rfq_id = $1 ORDER BY position`, [rfqId]);
+    const priced = await tx.query<{ rfq_line_id: string; unit_price: string }>(`SELECT rfq_line_id::text AS rfq_line_id, unit_price FROM vendor_quote_line WHERE quote_id = $1`, [quoteId]);
+    const price = new Map(priced.rows.map((p) => [p.rfq_line_id, Number(p.unit_price)]));
+    const total = Number(quote.rows[0].total);
+    // Per-line prices when the vendor gave them; otherwise one line for the lot.
+    const lines: PurchaseLineInput[] = onFile.rows.every((l) => price.has(l.id))
+      ? onFile.rows.map((l) => ({ description: l.description, qty: Number(l.qty), unit: l.unit, unit_cost: price.get(l.id)! }))
+      : [{ description: `${fresh.rows[0].title} — as quoted${quote.rows[0].quote_ref ? ` (${quote.rows[0].quote_ref})` : ''}`, qty: 1, unit: 'lot', unit_cost: total }];
+    await tx.query(`UPDATE vendor_quote SET status = CASE WHEN id = $2 THEN 'selected' ELSE 'rejected' END WHERE rfq_id = $1`, [rfqId, quoteId]);
+    await tx.query(`UPDATE rfq SET status = 'awarded', awarded_quote_id = $2, updated_at = now() WHERE id = $1`, [rfqId, quoteId]);
+    const order = await createOrder(tx, { vendor_id: win.vendor.id, rfq_id: rfqId, request_id: cur.request?.id ?? null, lines, note: quote.rows[0].note }, actor, cur.task?.id ?? null);
+    if (cur.request) await tx.query(`UPDATE purchase_request SET status = 'ordered', updated_at = now() WHERE id = $1 AND status = 'approved'`, [cur.request.id]);
+    return { ...order, total };
+  });
+  await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${won.po_number} drafted for ${won.vendorName}`);
+  await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number} awarded to ${win.vendor.name} for $${won.total.toFixed(2)} → ${won.po_number}`);
+  return { rfq: await loadRfq(rfqId, actor), order: await getOrder(won.id, actor) };
 }
 
 // ═══ Purchase orders ═════════════════════════════════════════════════════════
@@ -1009,31 +1114,38 @@ export async function getOrder(id: string, actor: ActingPrincipal): Promise<Purc
   return (await hydrateOrders(res.rows))[0];
 }
 
-async function writeOrderLines(poId: string, lines: ReturnType<typeof cleanLines>, taxPct: number): Promise<void> {
-  await query(`DELETE FROM purchase_order_line WHERE po_id = $1`, [poId]);
+/** The lines of an order, rewritten in full, and the totals they add up to.
+ *  Runs on the caller's transaction, so the DELETE, the INSERTs and the totals
+ *  land together with the order's own row. */
+async function writeOrderLines(q: Queryable, poId: string, lines: ReturnType<typeof cleanLines>, taxPct: number): Promise<void> {
+  await q.query(`DELETE FROM purchase_order_line WHERE po_id = $1`, [poId]);
   let pos = 0;
   for (const l of lines) {
-    await query(`INSERT INTO purchase_order_line (po_id, position, description, qty, unit, unit_cost) VALUES ($1, $2, $3, $4, $5, $6)`, [poId, pos++, l.description, l.qty, l.unit, l.unit_cost ?? 0]);
+    await q.query(`INSERT INTO purchase_order_line (po_id, position, description, qty, unit, unit_cost) VALUES ($1, $2, $3, $4, $5, $6)`, [poId, pos++, l.description, l.qty, l.unit, l.unit_cost ?? 0]);
   }
   const t = purchaseTotals(lines, taxPct);
-  await query(`UPDATE purchase_order SET subtotal = $2, tax = $3, total = $4, updated_at = now() WHERE id = $1`, [poId, t.subtotal, t.tax, t.total]);
+  await q.query(`UPDATE purchase_order SET subtotal = $2, tax = $3, total = $4, updated_at = now() WHERE id = $1`, [poId, t.subtotal, t.tax, t.total]);
 }
 
-async function taxOf(rateId: string | null | undefined): Promise<{ name: string | null; pct: number }> {
+async function taxOf(q: Queryable, rateId: string | null | undefined): Promise<{ name: string | null; pct: number }> {
   const id = uuid(rateId);
   if (!id) return { name: null, pct: 0 };
-  const r = await query<{ name: string; rate: string }>(`SELECT name, rate FROM tax_rate WHERE id = $1`, [id]);
+  const r = await q.query<{ name: string; rate: string }>(`SELECT name, rate FROM tax_rate WHERE id = $1`, [id]);
   if (!r.rows[0]) throw badRequest('That tax rate does not exist', { field: 'tax_rate_id' });
   return { name: r.rows[0].name, pct: Number(r.rows[0].rate) };
 }
 
-async function createOrder(input: PurchaseOrderInput, actor: ActingPrincipal, taskId: string | null): Promise<PurchaseOrder> {
-  const vendor = await vendorRef(input.vendor_id, input.vendor_name);
+/** Draft a purchase order on the caller's transaction. It writes the row and
+ *  its lines and nothing else: the CALLER logs the audit row and reads the
+ *  order back once the transaction has committed — the pool cannot see an
+ *  uncommitted row. */
+async function createOrder(q: Queryable, input: PurchaseOrderInput, actor: ActingPrincipal, taskId: string | null): Promise<{ id: string; po_number: string; vendorName: string }> {
+  const vendor = await vendorRef(q, input.vendor_id, input.vendor_name);
   if (!vendor.name) throw badRequest('Say who the order goes to', { field: 'vendor_name' });
-  const tax = await taxOf(input.tax_rate_id);
+  const tax = await taxOf(q, input.tax_rate_id);
   // A work order's own cost center and AFE carry onto its purchase order.
-  const filing = taskId ? await query<{ cc: string | null; afe: string | null }>(`SELECT cost_center_id::text AS cc, afe_id::text AS afe FROM task WHERE id = $1`, [taskId]) : null;
-  const ins = await query<{ id: string; po_number: string }>(
+  const filing = taskId ? await q.query<{ cc: string | null; afe: string | null }>(`SELECT cost_center_id::text AS cc, afe_id::text AS afe FROM task WHERE id = $1`, [taskId]) : null;
+  const ins = await q.query<{ id: string; po_number: string }>(
     `INSERT INTO purchase_order (task_id, vendor_id, vendor_name, request_id, rfq_id, cost_center_id, afe_id, order_date, expected_on, ship_to, note, tax_rate_name, tax_pct, created_by)
      VALUES ($1, $2, $3, $4, $5, (SELECT c.id FROM cost_center c WHERE c.id = $6::uuid), (SELECT a.id FROM afe a WHERE a.id = $7::uuid),
              COALESCE($8::date, CURRENT_DATE), $9::date, $10, $11, $12, $13, $14)
@@ -1044,9 +1156,8 @@ async function createOrder(input: PurchaseOrderInput, actor: ActingPrincipal, ta
       day(input.order_date, 'The order date'), day(input.expected_on, 'The expected date'), clean(input.ship_to, 500), clean(input.note), tax.name, tax.pct, actor.id,
     ],
   );
-  await writeOrderLines(ins.rows[0].id, cleanLines(input.lines), tax.pct);
-  await logWo(taskId, actor, 'Purchase order', `${ins.rows[0].po_number} drafted for ${vendor.name}`);
-  return getOrder(ins.rows[0].id, actor);
+  await writeOrderLines(q, ins.rows[0].id, cleanLines(input.lines), tax.pct);
+  return { id: ins.rows[0].id, po_number: ins.rows[0].po_number, vendorName: vendor.name };
 }
 
 export async function saveOrder(id: string | null, input: PurchaseOrderInput, actor: ActingPrincipal): Promise<PurchaseOrder> {
@@ -1059,44 +1170,64 @@ export async function saveOrder(id: string | null, input: PurchaseOrderInput, ac
       if (from.status !== 'approved' && from.status !== 'ordered') throw conflict('Only an approved request can be ordered');
     }
     const taskId = input.task_ref !== undefined ? await taskOf(input.task_ref, actor) : (from?.task?.id ?? null);
-    const order = await createOrder(
-      {
-        ...input,
-        vendor_id: input.vendor_id ?? from?.vendor?.id ?? null,
-        vendor_name: input.vendor_name ?? from?.vendor?.name ?? null,
-        cost_center_id: input.cost_center_id ?? from?.cost_center?.id ?? null,
-        lines: input.lines ?? from?.lines.map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, unit_cost: l.unit_cost })) ?? [],
-      },
-      actor,
-      taskId,
-    );
-    if (from) await query(`UPDATE purchase_request SET status = 'ordered', updated_at = now() WHERE id = $1`, [from.id]);
-    return order;
+    // The order, its lines and the request's move to "ordered" commit together.
+    const created = await withTransaction(async (tx) => {
+      const order = await createOrder(
+        tx,
+        {
+          ...input,
+          vendor_id: input.vendor_id ?? from?.vendor?.id ?? null,
+          vendor_name: input.vendor_name ?? from?.vendor?.name ?? null,
+          cost_center_id: input.cost_center_id ?? from?.cost_center?.id ?? null,
+          lines: input.lines ?? from?.lines.map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, unit_cost: l.unit_cost })) ?? [],
+        },
+        actor,
+        taskId,
+      );
+      // The request moves to ordered only while it is approved (or ordered
+      // already: a second order from the same request), in the statement: a
+      // request cancelled since the read above matches no row, and the order
+      // drafted from it rolls back with the refusal.
+      if (from) {
+        const moved = await tx.query(`UPDATE purchase_request SET status = 'ordered', updated_at = now() WHERE id = $1 AND status IN ('approved', 'ordered') RETURNING id`, [from.id]);
+        if (!moved.rows[0]) throw conflict('Only an approved request can be ordered');
+      }
+      return order;
+    });
+    await logWo(taskId, actor, 'Purchase order', `${created.po_number} drafted for ${created.vendorName}`);
+    return getOrder(created.id, actor);
   }
   const before = await getOrder(id, actor);
   if (before.status !== 'draft') throw conflict('Only a draft purchase order can be changed. Cancel it and raise a new one, or record what was received.');
-  const vendor = input.vendor_id !== undefined || input.vendor_name !== undefined ? await vendorRef(input.vendor_id, input.vendor_name) : before.vendor;
+  const vendor = input.vendor_id !== undefined || input.vendor_name !== undefined ? await vendorRef({ query }, input.vendor_id, input.vendor_name) : before.vendor;
   if (!vendor.name) throw badRequest('Say who the order goes to', { field: 'vendor_name' });
-  const tax = input.tax_rate_id !== undefined ? await taxOf(input.tax_rate_id) : { name: before.tax_rate_name, pct: before.tax_pct };
+  const tax = input.tax_rate_id !== undefined ? await taxOf({ query }, input.tax_rate_id) : { name: before.tax_rate_name, pct: before.tax_pct };
   const taskId = input.task_ref !== undefined ? await taskOf(input.task_ref, actor) : (before.task?.id ?? null);
-  await query(
-    `UPDATE purchase_order SET task_id = $2, vendor_id = $3, vendor_name = $4,
-            cost_center_id = (SELECT c.id FROM cost_center c WHERE c.id = $5::uuid), afe_id = (SELECT a.id FROM afe a WHERE a.id = $6::uuid),
-            order_date = COALESCE($7::date, order_date), expected_on = $8::date, ship_to = $9, note = $10, tax_rate_name = $11, tax_pct = $12, updated_at = now()
-      WHERE id = $1`,
-    [
-      id, taskId, vendor.id, vendor.name,
-      input.cost_center_id !== undefined ? uuid(input.cost_center_id) : (before.cost_center?.id ?? null),
-      input.afe_id !== undefined ? uuid(input.afe_id) : (before.afe?.id ?? null),
-      day(input.order_date, 'The order date'),
-      input.expected_on !== undefined ? day(input.expected_on, 'The expected date') : before.expected_on,
-      input.ship_to !== undefined ? clean(input.ship_to, 500) : before.ship_to,
-      input.note !== undefined ? clean(input.note) : before.note,
-      tax.name, tax.pct,
-    ],
-  );
   const lines = input.lines !== undefined ? cleanLines(input.lines) : before.lines.map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, unit_cost: l.unit_cost }));
-  await writeOrderLines(id, lines, tax.pct);
+  // The order's row and its rewritten lines commit together, and only while
+  // it is still a draft, in the statement: an issue committed since the read
+  // above (it holds the row until it commits) leaves the order issued, and
+  // the save is refused instead of rewriting the lines of a firm order.
+  await withTransaction(async (tx) => {
+    const kept = await tx.query(
+      `UPDATE purchase_order SET task_id = $2, vendor_id = $3, vendor_name = $4,
+              cost_center_id = (SELECT c.id FROM cost_center c WHERE c.id = $5::uuid), afe_id = (SELECT a.id FROM afe a WHERE a.id = $6::uuid),
+              order_date = COALESCE($7::date, order_date), expected_on = $8::date, ship_to = $9, note = $10, tax_rate_name = $11, tax_pct = $12, updated_at = now()
+        WHERE id = $1 AND status = 'draft' RETURNING id`,
+      [
+        id, taskId, vendor.id, vendor.name,
+        input.cost_center_id !== undefined ? uuid(input.cost_center_id) : (before.cost_center?.id ?? null),
+        input.afe_id !== undefined ? uuid(input.afe_id) : (before.afe?.id ?? null),
+        day(input.order_date, 'The order date'),
+        input.expected_on !== undefined ? day(input.expected_on, 'The expected date') : before.expected_on,
+        input.ship_to !== undefined ? clean(input.ship_to, 500) : before.ship_to,
+        input.note !== undefined ? clean(input.note) : before.note,
+        tax.name, tax.pct,
+      ],
+    );
+    if (!kept.rows[0]) throw conflict('Only a draft purchase order can be changed. Cancel it and raise a new one, or record what was received.');
+    await writeOrderLines(tx, id, lines, tax.pct);
+  });
   return getOrder(id, actor);
 }
 
@@ -1107,26 +1238,67 @@ export async function actOnOrder(id: string, action: PoAction, actor: ActingPrin
     if (cur.status !== 'draft') throw conflict('Only a draft can be issued');
     if (cur.lines.length === 0) throw badRequest('List what is being ordered first.');
     if (cur.total <= 0) throw badRequest('The order has no value yet: give its lines a price.');
-    await query(`UPDATE purchase_order SET status = 'issued', approved_by = $2, approved_at = now(), updated_at = now() WHERE id = $1`, [id, actor.id]);
-    await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number} issued to ${cur.vendor.name} for $${cur.total.toFixed(2)}`);
-    await notify([cur.created_by?.id], { kind: 'purchasing', title: `${cur.po_number} was issued`, body: `${cur.vendor.name} · $${cur.total.toFixed(2)}`, link: '/purchasing?tab=orders', actorId: actor.id });
+    // The order's row is locked and read again under the lock — still a draft,
+    // still with lines and a value (a save rewrites them only while it is a
+    // draft, in its own statement, so one in flight waits here and is then
+    // refused) — and a cancel or a save committed since the read above is
+    // refused, not issued over. The audit row and the notice follow the
+    // commit with the figures the locked read found.
+    const issued = await withTransaction(async (tx) => {
+      const fresh = await tx.query<{ status: PoStatus; total: string; vendor_name: string }>(`SELECT status, total, vendor_name FROM purchase_order WHERE id = $1 FOR UPDATE`, [id]);
+      if (!fresh.rows[0]) throw notFound('That purchase order does not exist');
+      if (fresh.rows[0].status !== 'draft') throw conflict('Only a draft can be issued');
+      const lines = await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM purchase_order_line WHERE po_id = $1`, [id]);
+      if ((lines.rows[0]?.n ?? 0) === 0) throw badRequest('List what is being ordered first.');
+      const total = Number(fresh.rows[0].total);
+      if (total <= 0) throw badRequest('The order has no value yet: give its lines a price.');
+      await tx.query(`UPDATE purchase_order SET status = 'issued', approved_by = $2, approved_at = now(), updated_at = now() WHERE id = $1`, [id, actor.id]);
+      return { total, vendorName: fresh.rows[0].vendor_name };
+    });
+    await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number} issued to ${issued.vendorName} for $${issued.total.toFixed(2)}`);
+    await notify([cur.created_by?.id], { kind: 'purchasing', title: `${cur.po_number} was issued`, body: `${issued.vendorName} · $${issued.total.toFixed(2)}`, link: '/purchasing?tab=orders', actorId: actor.id });
   } else if (action === 'close') {
     requirePerm(actor, PURCHASING_PERM.orders, 'edit', 'You cannot close purchase orders');
     if (!['issued', 'partially_received', 'received'].includes(cur.status)) throw conflict('Only an issued order can be closed');
-    await query(`UPDATE purchase_order SET status = 'closed', updated_at = now() WHERE id = $1`, [id]);
+    // One conditional statement on the statuses a close may leave from: an
+    // order cancelled, or closed already, since the read above matches no row.
+    const done = await query(`UPDATE purchase_order SET status = 'closed', updated_at = now() WHERE id = $1 AND status IN ('issued', 'partially_received', 'received') RETURNING id`, [id]);
+    if (!done.rows[0]) throw conflict('Only an issued order can be closed');
     await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number} closed`);
   } else if (action === 'cancel') {
     requirePerm(actor, PURCHASING_PERM.orders, cur.status === 'draft' ? 'edit' : 'approve', 'You cannot cancel this purchase order');
     if (cur.status === 'cancelled' || cur.status === 'closed') throw conflict(`It is already ${cur.status}`);
     if (cur.received_value > 0) throw conflict('Something was already received against it: close it instead');
-    await query(`UPDATE purchase_order SET status = 'cancelled', updated_at = now() WHERE id = $1`, [id]);
-    // The request it came from can be ordered again.
-    if (cur.request) await query(`UPDATE purchase_request SET status = 'approved', updated_at = now() WHERE id = $1 AND status = 'ordered'`, [cur.request.id]);
+    // The order's row is locked and read again under the lock (its status,
+    // the grant that status asks for, and the value received against it: a
+    // receipt in flight holds the same lock), so an issue, a close or a
+    // receipt committed since the read above is refused, not cancelled over.
+    // The order and the request it came from move together; the audit row
+    // follows the commit.
+    await withTransaction(async (tx) => {
+      const fresh = await tx.query<{ status: PoStatus }>(`SELECT status FROM purchase_order WHERE id = $1 FOR UPDATE`, [id]);
+      if (!fresh.rows[0]) throw notFound('That purchase order does not exist');
+      const status = fresh.rows[0].status;
+      if (status === 'cancelled' || status === 'closed') throw conflict(`It is already ${status}`);
+      requirePerm(actor, PURCHASING_PERM.orders, status === 'draft' ? 'edit' : 'approve', 'You cannot cancel this purchase order');
+      const got = await tx.query<{ received: string }>(`SELECT COALESCE(sum(round((received_qty * unit_cost)::numeric, 2)), 0) AS received FROM purchase_order_line WHERE po_id = $1`, [id]);
+      if (Number(got.rows[0]?.received ?? 0) > 0) throw conflict('Something was already received against it: close it instead');
+      await tx.query(`UPDATE purchase_order SET status = 'cancelled', updated_at = now() WHERE id = $1`, [id]);
+      // The request it came from can be ordered again.
+      if (cur.request) await tx.query(`UPDATE purchase_request SET status = 'approved', updated_at = now() WHERE id = $1 AND status = 'ordered'`, [cur.request.id]);
+    });
     await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number} cancelled`);
   } else {
     requirePerm(actor, PURCHASING_PERM.orders, 'edit', 'You cannot reopen purchase orders');
     if (cur.status !== 'closed') throw conflict('Only a closed order can be reopened');
-    await query(`UPDATE purchase_order SET status = $2, updated_at = now() WHERE id = $1`, [id, poStatusAfterReceipt(cur.lines.map((l) => ({ qty: l.qty, received_qty: l.received_qty ?? 0 })))]);
+    // Back to what its lines say (issued, partly or fully received), and only
+    // from closed, in the statement: the lines of a closed order cannot move
+    // (a receipt and a save both refuse it), so the status derived from the
+    // read above still holds, and a reopen that already went through matches
+    // no row.
+    const done = await query(`UPDATE purchase_order SET status = $2, updated_at = now() WHERE id = $1 AND status = 'closed' RETURNING id`, [id, poStatusAfterReceipt(cur.lines.map((l) => ({ qty: l.qty, received_qty: l.received_qty ?? 0 })))]);
+    if (!done.rows[0]) throw conflict('Only a closed order can be reopened');
+    await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number} reopened`);
   }
   return getOrder(id, actor);
 }
@@ -1141,11 +1313,22 @@ export async function receiveOrder(id: string, received: { line_id: string; rece
     if (!line) throw badRequest('That line is not on this order');
     if (!(Number.isFinite(r.received_qty) && r.received_qty >= 0)) throw badRequest('A received quantity cannot be negative');
     if (r.received_qty > line.qty + 0.005) throw badRequest(`“${line.description}”: ${r.received_qty} is more than the ${line.qty} ordered`);
-    await query(`UPDATE purchase_order_line SET received_qty = $3 WHERE id = $1 AND po_id = $2`, [r.line_id, id, round2(r.received_qty)]);
   }
-  const lines = await query<{ qty: string; received_qty: string }>(`SELECT qty, received_qty FROM purchase_order_line WHERE po_id = $1`, [id]);
-  const status = poStatusAfterReceipt(lines.rows.map((l) => ({ qty: Number(l.qty), received_qty: Number(l.received_qty) })));
-  await query(`UPDATE purchase_order SET status = $2, updated_at = now() WHERE id = $1`, [id, status]);
+  // The quantities and the status they add up to commit together, under the
+  // order's row lock: two receipts recorded at once serialise, and the status
+  // is derived from the lines as they finally stand.
+  const status = await withTransaction(async (tx) => {
+    const fresh = await tx.query<{ status: string }>(`SELECT status FROM purchase_order WHERE id = $1 FOR UPDATE`, [id]);
+    if (!fresh.rows[0]) throw notFound('That purchase order does not exist');
+    if (!['issued', 'partially_received', 'received'].includes(fresh.rows[0].status)) throw conflict('Only an issued order can be received');
+    for (const r of received) {
+      await tx.query(`UPDATE purchase_order_line SET received_qty = $3 WHERE id = $1 AND po_id = $2`, [r.line_id, id, round2(r.received_qty)]);
+    }
+    const lines = await tx.query<{ qty: string; received_qty: string }>(`SELECT qty, received_qty FROM purchase_order_line WHERE po_id = $1`, [id]);
+    const next = poStatusAfterReceipt(lines.rows.map((l) => ({ qty: Number(l.qty), received_qty: Number(l.received_qty) })));
+    await tx.query(`UPDATE purchase_order SET status = $2, updated_at = now() WHERE id = $1`, [id, next]);
+    return next;
+  });
   await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number}: ${status === 'received' ? 'everything received' : status === 'partially_received' ? 'partly received' : 'nothing received'}`);
   return getOrder(id, actor);
 }

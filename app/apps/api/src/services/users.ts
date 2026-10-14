@@ -7,6 +7,7 @@
 // an invite-token scheme we would then have to secure separately.
 
 import type { PermMap, UserClient } from '@theone/shared';
+import { ADVISORY_LOCKS } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { ApiError } from '../errors.js';
 import { destroySessionsFor } from './auth.js';
@@ -14,8 +15,14 @@ import { parsePermMap } from './permissions.js';
 import { getRolePermissionsByCode } from './roles.js';
 import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 
+/** The columns the audit log keeps of an account row — also what updateUser's
+    locked read SELECTs and its UPDATE RETURNs, so both of its snapshots come
+    from the transaction, never from a pool read a change committed in between
+    could leave one step stale. */
+type AccountRow = Pick<AdminUser, 'name' | 'email' | 'role' | 'status' | 'is_super_admin'>;
+
 /** What the audit log keeps of an account row. */
-function snapshot(u: AdminUser): Snapshot {
+function snapshot(u: AccountRow): Snapshot {
   return {
     name: u.name,
     email: u.email,
@@ -122,7 +129,16 @@ export interface InviteInput {
   is_super_admin?: boolean;
 }
 
-export async function inviteUser(input: InviteInput, actorId: string): Promise<AdminUser> {
+export async function inviteUser(
+  input: InviteInput,
+  actorId: string,
+  /** Whether the REAL signed-in user is a super admin (routes/admin.ts passes
+      it). Required, never defaulted: a default of true was a fail-open
+      security check. A caller with no session in hand passes false; the
+      route is the first check, this the second. */
+  actorIsSuperAdmin: boolean,
+): Promise<AdminUser> {
+  assertMaySetSuperAdmin(input, actorIsSuperAdmin);
   await assertRole(input.role);
   const email = input.email.trim().toLowerCase();
 
@@ -161,14 +177,53 @@ export interface UpdateUserInput {
   status?: 'invited' | 'active' | 'disabled';
 }
 
+/** W4-1: the super-admin flag is granted and removed by super admins only. The REAL signed-in user decides, never `actingAs`. */
+export function assertMaySetSuperAdmin(input: { is_super_admin?: boolean }, actorIsSuperAdmin: boolean): void {
+  if (input.is_super_admin === undefined || actorIsSuperAdmin) return;
+  throw new ApiError('FORBIDDEN', 'Only a super admin can grant or remove super-admin access', {
+    code: 'SUPER_ADMIN_ONLY',
+    required: 'is_super_admin',
+  });
+}
+
+/** W4-1, the other half of the ring: a super admin's own row — name, role,
+    status — is changed by super admins only. Without this an Admin › Users
+    editor could not promote anyone (above) but could still disable or demote
+    every super admin but the last. Same 403 vocabulary; `target` is the row
+    as it stands. */
+export function assertMayEditSuperAdmin(target: { is_super_admin: boolean }, actorIsSuperAdmin: boolean): void {
+  if (!target.is_super_admin || actorIsSuperAdmin) return;
+  throw new ApiError('FORBIDDEN', "Only a super admin can change a super admin's account", {
+    code: 'SUPER_ADMIN_ONLY',
+    required: 'is_super_admin',
+  });
+}
+
+/** Transaction-level advisory lock taken by every change that could leave the
+    app with no super admin (its key is the registry's, ADVISORY_LOCKS in
+    @theone/shared, never a literal here): the "last super admin" count and
+    the UPDATE it protects run under it, so two demotions of the last two
+    super admins cannot both pass the count. */
+const SUPER_ADMIN_RING_LOCK_KEY = ADVISORY_LOCKS.superAdminRing;
+
 export async function updateUser(
   id: string,
   input: UpdateUserInput,
   actorId: string,
+  /** Whether the REAL signed-in user is a super admin (routes/admin.ts passes
+      it): needed to set `is_super_admin`, and to change a super admin's row at
+      all. Required, never defaulted: a default of true was a fail-open
+      security check. A caller with no session in hand passes false; the
+      route is the first check, this the second. */
+  actorIsSuperAdmin: boolean,
 ): Promise<AdminUser> {
+  assertMaySetSuperAdmin(input, actorIsSuperAdmin);
   if (input.role) await assertRole(input.role);
 
   const current = await getUser(id);
+  // The early answer, on a pool read; the check that counts runs again on the
+  // locked row inside the transaction below.
+  assertMayEditSuperAdmin(current, actorIsSuperAdmin);
 
   // ── Two guards against locking everyone out ─────────────────────────────
   // You cannot remove your own super-admin rights or disable yourself: both
@@ -181,51 +236,74 @@ export async function updateUser(
     throw new ApiError('BAD_REQUEST', 'You cannot disable your own account');
   }
 
-  // And never let the last super admin be demoted or disabled.
-  const losingSuper =
-    (input.is_super_admin === false || input.status === 'disabled') && current.is_super_admin;
-  if (losingSuper) {
-    const remaining = await query<{ n: number }>(
-      `SELECT COUNT(*)::int AS n FROM principal
-        WHERE is_super_admin = true AND status <> 'disabled' AND id <> $1`,
+  // And never let the last super admin be demoted or disabled. The count and
+  // the UPDATE it protects run in ONE transaction: the row is re-read under a
+  // row lock so the decision is made on the locked value, not on `current`, and
+  // the ring lock serialises it with every other demotion — as two pool
+  // queries, two concurrent demotions of the last two super admins both passed.
+  // The locked read carries the audit columns too and the UPDATE returns them:
+  // the before / after logged below are the row as it was locked and as it was
+  // written, not a pool read a change committed in between could leave stale.
+  const written = await withTransaction(async (tx) => {
+    // FOR NO KEY UPDATE: no path updates principal.id, so a child insert's FK KEY SHARE never waits on this lock.
+    const locked = await tx.query<AccountRow>(
+      `SELECT display_name AS name, email, role, status, is_super_admin
+         FROM principal WHERE id = $1 FOR NO KEY UPDATE`,
       [id],
     );
-    if (remaining.rows[0].n === 0) {
-      throw new ApiError('BAD_REQUEST', 'This is the last super admin — promote someone else first');
+    if (!locked.rows[0]) throw new ApiError('NOT_FOUND', 'No such user');
+    // The ring check on the LOCKED value: `current` was a pool read, and a
+    // promotion committed between it and this lock would otherwise let a
+    // non-super-admin change a super admin's row.
+    assertMayEditSuperAdmin(locked.rows[0], actorIsSuperAdmin);
+    const losingSuper =
+      (input.is_super_admin === false || input.status === 'disabled') && locked.rows[0].is_super_admin;
+    if (losingSuper) {
+      await tx.query(`SELECT pg_advisory_xact_lock($1::bigint)`, [SUPER_ADMIN_RING_LOCK_KEY]);
+      const remaining = await tx.query<{ n: number }>(
+        `SELECT COUNT(*)::int AS n FROM principal
+          WHERE is_super_admin = true AND status <> 'disabled' AND id <> $1`,
+        [id],
+      );
+      if (remaining.rows[0].n === 0) {
+        throw new ApiError('BAD_REQUEST', 'This is the last super admin — promote someone else first');
+      }
     }
-  }
 
-  await query(
-    `UPDATE principal
-        SET display_name   = COALESCE($2, display_name),
-            role           = COALESCE($3, role),
-            is_super_admin = COALESCE($4, is_super_admin),
-            status         = COALESCE($5, status),
-            initials       = CASE WHEN $2 IS NULL THEN initials ELSE $6 END
-      WHERE id = $1`,
-    [
-      id,
-      input.name?.trim() ?? null,
-      input.role ?? null,
-      input.is_super_admin ?? null,
-      input.status ?? null,
-      input.name ? initialsOf(input.name) : null,
-    ],
-  );
+    const row = await tx.query<AccountRow>(
+      `UPDATE principal
+          SET display_name   = COALESCE($2, display_name),
+              role           = COALESCE($3, role),
+              is_super_admin = COALESCE($4, is_super_admin),
+              status         = COALESCE($5, status),
+              initials       = CASE WHEN $2 IS NULL THEN initials ELSE $6 END
+        WHERE id = $1
+    RETURNING display_name AS name, email, role, status, is_super_admin`,
+      [
+        id,
+        input.name?.trim() ?? null,
+        input.role ?? null,
+        input.is_super_admin ?? null,
+        input.status ?? null,
+        input.name ? initialsOf(input.name) : null,
+      ],
+    );
+    return { before: locked.rows[0], after: row.rows[0] };
+  });
 
   // Disabling has to bite immediately, not whenever their cookie expires.
   if (input.status === 'disabled') await destroySessionsFor(id);
 
   const updated = await getUser(id);
-  const before = snapshot(current);
-  const after = snapshot(updated);
+  const before = snapshot(written.before);
+  const after = snapshot(written.after);
   if (snapshotsDiffer(before, after)) {
     await logAdminEvent({
       actorId,
       entity: 'principal',
       entityId: id,
       action:
-        input.status === 'disabled' && current.status !== 'disabled' ? 'user_disabled' : 'user_updated',
+        input.status === 'disabled' && written.before.status !== 'disabled' ? 'user_disabled' : 'user_updated',
       before,
       after,
     });
@@ -237,8 +315,9 @@ export async function updateUser(
  * Users are never deleted — activity_log rows reference them, and an audit
  * trail with dangling actors is worse than a disabled row. Disable instead.
  */
-export async function disableUser(id: string, actorId: string): Promise<AdminUser> {
-  return updateUser(id, { status: 'disabled' }, actorId);
+export async function disableUser(id: string, actorId: string, actorIsSuperAdmin: boolean): Promise<AdminUser> {
+  // The flag rides through: disabling a super admin needs a super admin (W4-1).
+  return updateUser(id, { status: 'disabled' }, actorId, actorIsSuperAdmin);
 }
 
 // ── Per-user overrides (0015) ────────────────────────────────────────────────
@@ -296,25 +375,38 @@ export async function setUserPermissions(
  * 0073 · set or clear ONE path's `view` in a person's overrides — the Share
  * dialog's per-person sharing of a dashboard. Logged like any override edit,
  * as a whole before/after of the map. `view = null` removes the entry so the
- * role decides again.
+ * role decides again. A super admin's overrides are a super admin's to change
+ * (W4-1 ring): checked on the read, and again by the UPDATE itself, so a
+ * promotion committed between the two writes nothing.
  */
 export async function setUserOverrideView(
   id: string,
   key: string,
   view: boolean | null,
   actorId: string,
+  /** Whether the actor is a super admin. Required, never defaulted (F1). The
+      Share dialog hands in the acting identity's flag, which is never wider
+      than the signed-in user's: only a super admin can act as someone else. */
+  actorIsSuperAdmin: boolean,
 ): Promise<void> {
   const current = await getUserPermissions(id);
+  assertMayEditSuperAdmin(current.user, actorIsSuperAdmin);
   const overrides: PermMap = { ...current.overrides };
   const grant = { ...(overrides[key] ?? {}) };
   if (view === null) delete grant.view;
   else grant.view = view;
   if (Object.keys(grant).length > 0) overrides[key] = grant;
   else delete overrides[key];
-  await query(`UPDATE principal SET permission_overrides = $2::jsonb WHERE id = $1`, [
-    id,
-    JSON.stringify(overrides),
-  ]);
+  const res = await query(
+    `UPDATE principal SET permission_overrides = $2::jsonb
+      WHERE id = $1 AND (NOT is_super_admin OR $3::boolean)`,
+    [id, JSON.stringify(overrides), actorIsSuperAdmin],
+  );
+  if ((res.rowCount ?? 0) === 0) {
+    // Promoted since the read (the ring refuses it), or no longer on file.
+    assertMayEditSuperAdmin(await getUser(id), actorIsSuperAdmin);
+    throw new ApiError('CONFLICT', 'The account changed while it was being edited — try again');
+  }
   const before: Snapshot = { name: current.user.name, overrides: current.overrides };
   const after: Snapshot = { name: current.user.name, overrides };
   if (snapshotsDiffer(before, after)) {
@@ -327,7 +419,9 @@ export async function setUserOverrideView(
 // role, because it IS the person's book — a role says *whether* their clients
 // count ("Which work orders" = Only theirs), this says *which*. Anyone who may
 // edit users keeps it (it is an assignment, not a permission override, so it
-// is not held back for super admins the way Adjust is).
+// is not held back for super admins the way Adjust is) — except a super
+// admin's own list, which the W4-1 ring keeps to super admins like the rest
+// of their row.
 
 export interface UserClientsResult {
   user: AdminUser;
@@ -343,18 +437,36 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** Replace one person's client list. Empty = none. A super admin sees every
     work order already, so a list on them would mean nothing — refused rather
-    than silently ignored. */
+    than silently ignored; and their row, the list included, is changed by
+    super admins only (W4-1 ring — before this any Admin › Users editor could
+    clear a super admin's list), decided on the row as locked, like updateUser. */
 export async function setUserClients(
   id: string,
   clientIds: string[],
   actorId: string,
+  /** Whether the REAL signed-in user is a super admin (routes/admin.ts passes
+      it). Required, never defaulted (F1). */
+  actorIsSuperAdmin: boolean,
 ): Promise<UserClientsResult> {
   const current = await getUser(id);
+  // The early answer, on a pool read; the check that counts runs again on the
+  // locked row inside the transaction below.
+  assertMayEditSuperAdmin(current, actorIsSuperAdmin);
   const ids = [...new Set(clientIds.filter((c) => UUID_RE.test(c)))];
   if (ids.length > 0 && current.is_super_admin) {
     throw new ApiError('BAD_REQUEST', 'A super admin sees every client already');
   }
   await withTransaction(async (tx) => {
+    // FOR NO KEY UPDATE: no path updates principal.id, so a child insert's FK KEY SHARE never waits on this lock.
+    const locked = await tx.query<{ is_super_admin: boolean }>(
+      `SELECT is_super_admin FROM principal WHERE id = $1 FOR NO KEY UPDATE`,
+      [id],
+    );
+    if (!locked.rows[0]) throw new ApiError('NOT_FOUND', 'No such user');
+    assertMayEditSuperAdmin(locked.rows[0], actorIsSuperAdmin);
+    if (ids.length > 0 && locked.rows[0].is_super_admin) {
+      throw new ApiError('BAD_REQUEST', 'A super admin sees every client already');
+    }
     await tx.query(`DELETE FROM principal_client WHERE principal_id = $1`, [id]);
     if (ids.length > 0) {
       await tx.query(

@@ -1,10 +1,18 @@
 // Seed — loads seed/clickup-data.json → rows, per SPRINT1-SPEC §4.
 // Idempotent: TRUNCATE … RESTART IDENTITY CASCADE, then insert. Re-seeding is safe.
 //
-// Single-writer: run via `npm run db:seed` (short-lived; opens pgdata, writes, exits).
-// Never run while the API is up.
+// Run via `npm run db:seed` (short-lived: connects to DATABASE_URL, writes,
+// exits). Refuses a non-localhost DATABASE_URL unless ALLOW_SEED spells its
+// <host>/<database> (W3-14, seedGuard.ts; the name alone would not do, every
+// Neon branch's database is `neondb`) — decided before any pool exists.
+// Warns when DATABASE_URL_UNPOOLED names some other database: the migrate
+// half of `npm run setup` reads that variable first, this seed never does.
+// Writes the `seeded` marker (app_meta, migration 0082) as its LAST step,
+// which the DEMO_MODE sign-in reads (W4-11).
 
-import { exec, query, closePool } from './client.js';
+import { exec, query, closePool, connectionString } from './client.js';
+import { seedAllowed } from './seedGuard.js';
+import { describeSeedUnpooledMismatch } from './migrateLedger.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, type StatusGroup } from '@theone/shared';
@@ -740,7 +748,19 @@ function chicagoDate(at: Date): string {
 }
 
 async function main() {
-
+  // W3-14: say which database, then refuse one that is not on this machine —
+  // BEFORE any pool exists (getPool() is lazy; nothing above has queried).
+  const url = connectionString();
+  const decision = seedAllowed(url, process.env.ALLOW_SEED);
+  console.log(`seed: database ${decision.target.host}/${decision.target.database}`);
+  // A DATABASE_URL_UNPOOLED left in the shell sends `npm run db:migrate`
+  // elsewhere (migrate refuses the pair that differs; this is the seed's half).
+  const unpooledWarning = describeSeedUnpooledMismatch(process.env.DATABASE_URL_UNPOOLED, decision.target);
+  if (unpooledWarning) console.warn(unpooledWarning);
+  if (!decision.ok) {
+    console.error(decision.reason);
+    process.exit(1);
+  }
 
   // ── 0. Idempotent reset ────────────────────────────────────────────────────
   await exec(`
@@ -1502,6 +1522,17 @@ async function main() {
   );
   await query(`INSERT INTO sales_tax_rate (zip, pct, source) VALUES ('77550', 8.25, 'seed')`);
 
+  // ── Last: the seed marker (W4-11) ──────────────────────────────────────────
+  // app_meta is migration 0082's (`npm run setup` migrates before it seeds) and
+  // is NOT on the TRUNCATE list above — no FK reaches it, the row is simply
+  // rewritten. The DEMO_MODE sign-in refuses until this row exists, which is
+  // why it is written last: a first seed that died halfway leaves no marker.
+  await query(
+    `INSERT INTO app_meta (key, value) VALUES ('seeded', $1::jsonb)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [JSON.stringify({ at: new Date().toISOString(), demo: true })],
+  );
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log('seed: done');
   console.log(`  containers        : ${2 + data.routing.length + listCount} (1 workspace, 1 space, ${data.routing.length} folders, ${listCount} lists)`);
@@ -1525,6 +1556,7 @@ async function main() {
   console.log(`  S5 demo state     : ${S5_TASKS.length} new WOs (${S5_TASKS.map((t) => t.wo_number).join(', ')}), 3 clocks aged, blown SLA ${slaDate}`);
   console.log(`  S5 obligations    : 0 rows seeded — the engine derives 10 on the first /api/pulse read`);
   console.log(`                      tier 3 x2 · tier 2 x4 · tier 1 x1 · tier 0 x3`);
+  console.log(`  app_meta          : seeded marker written (DEMO_MODE sign-in reads it)`);
 }
 
 main()

@@ -91,8 +91,9 @@ export const WO_LIST_MODULE: DocModule = {
         'Up to 2,000 rows in one transaction; a row without a WO # gets WO-<next>; duplicates within the file, unknown statuses and unknown home lists are errors; a new work order needs a title (the first line of the description serves); a create without a status starts in the first Open-group status and an update keeps its status; NTE and dates are cleaned or reported.',
         'Writable columns: Client WO #, Title, Description, Client, City, State, Trade, Billing entity, NTE, Priority, Date received and the custom fields, each checked against the person\'s field permissions.',
         'Not gated by the status gates on purpose (a data load is not a person pausing a job); created rows without an assignee raise acceptance tasks, SharePoint folders are filed, automations run per row.',
+        'Scope and status (2026-10-14): a WO # outside the importer\'s Which work orders scope refuses the whole file, the Preview included (403 IMPORT_SCOPE naming the numbers); a non-blank Status cell, or a Home list cell on a new row, needs work_orders/status edit (403 IMPORT_STATUS_PERMISSION); super admins are never refused. A number that is in Trash is skipped ("In trash"); a row trashed between the Preview and the run is skipped ("Deleted meanwhile"); an update rewrites only the columns that changed and never a status the file did not name.',
       ],
-      permissions: ['work_orders create'],
+      permissions: ['work_orders create', 'work_orders/status edit for Status cells, and for Home list on new rows'],
       audit: ['created (source import)', 'field_updated / status_changed via import'],
     },
     {

@@ -91,7 +91,7 @@ export async function updateWorkOrderFields(
   const entries = Object.entries(values);
   if (entries.length === 0) throw new ApiError('BAD_REQUEST', 'Nothing to change');
 
-  // Resolve every key + value BEFORE the transaction (PGlite is single-connection).
+  // Catalogue lookups need no lock; the bag itself is read FOR NO KEY UPDATE below.
   const patch: { jsonKey: string; value: unknown; resolved: ResolvedField }[] = [];
   for (const [key, raw] of entries) {
     const f = await resolveField(key);
@@ -114,59 +114,85 @@ export async function updateWorkOrderFields(
     (k) => patch.find((p) => p.jsonKey === k)?.resolved.label ?? k,
   );
 
-  const row = await query<{ id: string; fields: Record<string, unknown> }>(
-    `SELECT t.id, t.fields FROM task t
+  const row = await query<{ id: string }>(
+    `SELECT t.id FROM task t
       WHERE (t.id::text = $1 OR t.wo_number = $1) AND t.deleted_at IS NULL LIMIT 1`,
     [idOrWo],
   );
   if (!row.rows[0]) throw new ApiError('NOT_FOUND', 'Work order not found');
   const task = row.rows[0];
-  // Cost and Total Invoiced are not typed over a figure the system put there.
-  await assertMoneyNotLocked([task.id], patch.map((p) => p.jsonKey));
-
+  // Reads that need no lock run on the pool first; the bag is read FOR NO KEY UPDATE inside the transaction.
   const log: TaskChange[] = [];
-  const merged: Record<string, unknown> = { ...(task.fields ?? {}) };
-  const mirrorSets: { column: string; cast: string; value: unknown }[] = [];
+  await withTransaction(async (tx) => {
+    // THE lock strength for a bag write — here and in every other writer of
+    // task.fields (woBulk, visits, signoff, assigneeHistory, moneySync), which
+    // point back to this note: FOR NO KEY UPDATE, not FOR UPDATE. No bag write
+    // changes task.id or task.wo_number, the unique-indexed columns, so NO KEY
+    // UPDATE serialises bag writers among themselves exactly as FOR UPDATE
+    // does, but it does not conflict with the KEY SHARE a child INSERT (a
+    // comment, an attachment, a visit, an approval task, a payment request)
+    // takes on the task row through its foreign key: a child insert no longer
+    // waits behind a bag write, and the deadlock where two transactions each
+    // hold that KEY SHARE and wait to upgrade to FOR UPDATE cannot happen.
+    // The parent-first order createVisit and the sign-off writes take stays
+    // as belt and braces. A SET that ever names id or wo_number takes FOR
+    // UPDATE on its own and would need the explicit FOR UPDATE back — keep
+    // this true when a SET list grows (tests/bag-lock.test.ts pins it).
+    const locked = await tx.query<{ fields: Record<string, unknown> | null }>(
+      `SELECT fields FROM task WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`,
+      [task.id],
+    );
+    if (!locked.rows[0]) throw new ApiError('NOT_FOUND', 'Work order not found');
+    // Cost and Total Invoiced are not typed over a figure the system put
+    // there — asked under the row lock, so a payment or quote write that
+    // lands between the pool reads above and this lock is seen (W3-3).
+    await assertMoneyNotLocked([task.id], patch.map((p) => p.jsonKey), tx);
+    // THE locked read: before / after and the merged bag come from this row,
+    // never from an earlier read, so a key another connection wrote in the
+    // meantime is kept, not overwritten (W3-3).
+    const fields = locked.rows[0].fields ?? {};
+    const merged: Record<string, unknown> = { ...fields };
+    const mirrorSets: { column: string; cast: string; value: unknown }[] = [];
 
-  for (const p of patch) {
-    const before = task.fields?.[p.jsonKey] ?? null;
-    if (!changed(before, p.value)) continue;
-    if (p.value === null) delete merged[p.jsonKey];
-    else merged[p.jsonKey] = p.value;
-    log.push({ field: `fields.${p.jsonKey}`, before, after: p.value });
+    for (const p of patch) {
+      const before = fields[p.jsonKey] ?? null;
+      if (!changed(before, p.value)) continue;
+      if (p.value === null) delete merged[p.jsonKey];
+      else merged[p.jsonKey] = p.value;
+      log.push({ field: `fields.${p.jsonKey}`, before, after: p.value });
 
-    const mirror = MIRROR_BY_JSON_KEY[p.jsonKey];
-    if (mirror) mirrorSets.push({ ...mirror, value: mirrorValue(mirror.cast, p.value) });
-  }
+      const mirror = MIRROR_BY_JSON_KEY[p.jsonKey];
+      if (mirror) mirrorSets.push({ ...mirror, value: mirrorValue(mirror.cast, p.value) });
+    }
+    if (log.length === 0) return;
 
-  if (log.length > 0) {
     // Rule 11.1.1: filling the Assignee seat on a work order still waiting in
     // Incoming is the same act as accepting it, so the intake fields must be
     // filled — checked against the bag as this save leaves it.
     if (
       log.some((c) => c.field === 'fields.Assignee' && c.after !== null && String(c.after).trim() !== '') &&
-      (await awaitingAcceptance({ query }, task.id))
+      (await awaitingAcceptance(tx, task.id))
     ) {
-      await assertReadyToAssign({ query }, task.id, merged);
+      await assertReadyToAssign(tx, task.id, merged);
     }
     // Profit = Total Invoiced − Cost, recomputed on every write. Derived, so
     // no activity row of its own (the mirror-column rule) — the trail shows
     // the input that moved.
     applyProfitFormula(merged);
-      await withTransaction(async (tx) => {
-      const sets = [`fields = $1::jsonb`];
-      const params: unknown[] = [JSON.stringify(merged)];
-      for (const m of mirrorSets) {
-        params.push(m.value);
-        sets.push(`${m.column} = $${params.length}::${m.cast}`);
-      }
-      params.push(task.id);
-      await tx.query(
-        `UPDATE task SET ${sets.join(', ')}, updated_at = now() WHERE id = $${params.length}`,
-        params,
-      );
-      await logTaskChanges(tx, actorId, task.id, log, auto?.by);
-    });
+    const sets = [`fields = $1::jsonb`];
+    const params: unknown[] = [JSON.stringify(merged)];
+    for (const m of mirrorSets) {
+      params.push(m.value);
+      sets.push(`${m.column} = $${params.length}::${m.cast}`);
+    }
+    params.push(task.id);
+    await tx.query(
+      `UPDATE task SET ${sets.join(', ')}, updated_at = now() WHERE id = $${params.length}`,
+      params,
+    );
+    await logTaskChanges(tx, actorId, task.id, log, auto?.by);
+  });
+  if (log.length > 0) {
     // Automations react after the commit, before the fresh detail is read.
     await dispatchAutomations({ taskId: task.id, kind: 'changed', changes: log }, auto);
   }

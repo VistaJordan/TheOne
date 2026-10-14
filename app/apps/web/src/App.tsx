@@ -238,11 +238,19 @@ export function App() {
               {/* 0065 — the maintenance modules. */}
               <Route path="/maintenance" element={<RequireAuth><RequireCan perm="maintenance" nav="Maintenance"><MaintenancePage /></RequireCan></RequireAuth>} />
               {/* S5 — the Pulse: every open obligation, by how much clock is left. */}
-              <Route path="/pulse" element={<RequireAuth><PulsePage /></RequireAuth>} />
-              {/* AR — Receivables: the completion audit (Grey Flag queue) and the
-                  invoicing pipeline it feeds. :tab is 'invoicing'; bare =/audit. */}
-              <Route path="/receivables" element={<RequireAuth><ReceivablesPage /></RequireAuth>} />
-              <Route path="/receivables/:tab" element={<RequireAuth><ReceivablesPage /></RequireAuth>} />
+              <Route path="/pulse" element={<RequireAuth><RequireCan perm="work_orders" nav="Pulse"><PulsePage /></RequireCan></RequireAuth>} />
+              {/* AR — Receivables: the completion audit (a browser-side prototype
+                  over the lists) and the invoicing pipeline. :tab is 'invoicing';
+                  bare = /audit. Gated on `invoicing`, the same permission the
+                  sidebar hides the item behind (NAV_PERM.Receivables). */}
+              <Route
+                path="/receivables"
+                element={<RequireAuth><RequireCan perm="invoicing" nav="Receivables"><ReceivablesPage /></RequireCan></RequireAuth>}
+              />
+              <Route
+                path="/receivables/:tab"
+                element={<RequireAuth><RequireCan perm="invoicing" nav="Receivables"><ReceivablesPage /></RequireCan></RequireAuth>}
+              />
               {/* Payables queue — approve, reject, hand to Yoda, mark paid. */}
               <Route
                 path="/payments"

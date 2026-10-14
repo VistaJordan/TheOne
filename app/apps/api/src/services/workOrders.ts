@@ -560,9 +560,7 @@ export async function changeStatus(
 ): Promise<WorkOrderDetail> {
   const col = UUID_RE.test(idOrWo) ? 'id' : 'wo_number';
 
-  // Resolve the actor BEFORE opening the transaction. PGlite is single-connection:
-  // calling the non-transactional query() from inside db.transaction() would queue
-  // behind the open transaction and self-deadlock.
+  // Reads that need no lock (the actor, the target status) run on the pool first.
 
   // Captured for the automations engine, which runs AFTER the commit.
   let fired: { taskId: string; change: TaskChange; fromGroup: string | null; toGroup: string; toName: string } | null = null;
@@ -655,7 +653,7 @@ export async function changeStatus(
   // S5 · a status change is the single biggest silencer in the engine — it ends
   // schedule_owed, approval_followup, quote_owed and sla_blown, and starts
   // whatever the new status owes. Re-evaluate this work order inline, AFTER the
-  // transaction has committed (PGlite is single-connection). evaluateForTask
+  // transaction has committed, so its pool reads see the new status. evaluateForTask
   // never throws, so the status change cannot fail because of a clock.
   await evaluateForTask(detail.id);
 

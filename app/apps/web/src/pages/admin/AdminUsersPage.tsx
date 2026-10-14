@@ -85,7 +85,12 @@ const same = (a: PermMap, b: PermMap) => JSON.stringify(a) === JSON.stringify(b)
 export function AdminUsersPage() {
   // The ACTING principal throughout: viewing as someone shows the page as they
   // would see it ("You" on their row, Adjust only if they are a super admin).
-  const { actingAs, can } = useAuth();
+  // The one exception is the super-admin ring (W4-1): the API accepts
+  // `is_super_admin`, and any change to a super admin's row, from the REAL
+  // signed-in user only (`req.auth.user`), so those controls read `user`, not
+  // `actingAs`. And viewing as someone is read-only (every write is refused),
+  // so the Super admin switch is off then too rather than enabled-but-refused.
+  const { user, actingAs, isImpersonating, can } = useAuth();
   const { fail, done, strip } = useAdminFeedback();
   const [inviteOpen, setInviteOpen] = useState(false);
   // The user whose adjustments are open, if any (super admins only).
@@ -96,6 +101,8 @@ export function AdminUsersPage() {
   const allowed = can('admin/users', 'view');
   const canEdit = can('admin/users', 'edit');
   const isSuperAdmin = Boolean(actingAs?.is_super_admin);
+  const editorIsSuperAdmin = Boolean(user?.is_super_admin);
+  const canGrantSuper = editorIsSuperAdmin && !isImpersonating;
 
   const usersQuery = useQuery({ queryKey: ['admin-users'], queryFn: listAdminUsers, enabled: allowed, retry: 0 });
   // Roles feed the role <select> on every row and in the invite form.
@@ -138,6 +145,7 @@ export function AdminUsersPage() {
         <InviteForm
           roles={roles}
           busy={invite.isPending}
+          canGrantSuper={canGrantSuper}
           onCancel={() => setInviteOpen(false)}
           onSubmit={(v) => invite.mutate(v)}
         />
@@ -147,6 +155,8 @@ export function AdminUsersPage() {
         items={users}
         roles={roles}
         selfId={actingAs?.id}
+        editorIsSuperAdmin={editorIsSuperAdmin}
+        viewingAs={isImpersonating}
         loading={usersQuery.isLoading}
         error={usersQuery.isError}
         busy={patchUser.isPending || !canEdit}
@@ -247,12 +257,19 @@ export function AdminRolesPage() {
 // ── Users table ──────────────────────────────────────────────────────────────
 
 function UsersTable({
-  items, roles, selfId, loading, error, busy, canAdjust, adjusting, onAdjust,
+  items, roles, selfId, editorIsSuperAdmin, viewingAs, loading, error, busy, canAdjust, adjusting, onAdjust,
   canAssignClients, clientsFor, onClients, tree, onChange,
 }: {
   items: AdminUserItem[];
   roles: RoleRecord[];
   selfId?: string;
+  /** W4-1 · whether the REAL signed-in user is a super admin: the API lets
+      only them flip the Super admin switch or change a super admin's row at
+      all (role, status), so both key on `user`, never `actingAs`. */
+  editorIsSuperAdmin: boolean;
+  /** Viewing as someone is read-only — the switch is off rather than
+      enabled-but-refused. */
+  viewingAs: boolean;
   loading: boolean;
   error: boolean;
   busy: boolean;
@@ -266,6 +283,12 @@ function UsersTable({
   tree: PermNode[];
   onChange: (id: string, input: { role?: string; is_super_admin?: boolean; status?: UserStatus }) => void;
 }) {
+  // Why the Super admin switch is off on every row of this page, if it is.
+  const superLock = viewingAs
+    ? 'Viewing as another user is read-only'
+    : !editorIsSuperAdmin
+      ? 'Only a super admin can change this'
+      : null;
   const cols = canAdjust ? 8 : 7;
   return (
     <div className="table-wrap">
@@ -290,6 +313,11 @@ function UsersTable({
             const off = u.status === 'disabled';
             const open = adjusting === u.id;
             const clientsOpen = clientsFor === u.id;
+            // A super admin's row is changed by super admins only (W4-1): the
+            // API refuses a role or status change from anyone else.
+            const ringLock = u.is_super_admin && !editorIsSuperAdmin
+              ? "Only a super admin can change a super admin's account"
+              : null;
             return (
               <UserRows key={u.id} open={open || clientsOpen}>
                 <tr className={off ? 'is-dim' : undefined}>
@@ -304,17 +332,23 @@ function UsersTable({
                     </div>
                   </td>
                   <td>
-                    <select className="fld sm" value={u.role ?? ''} disabled={busy || off}
+                    <select className="fld sm" value={u.role ?? ''} disabled={busy || off || ringLock !== null}
+                      title={ringLock ?? undefined}
                       aria-label={`Role for ${u.name}`} onChange={(e) => onChange(u.id, { role: e.target.value })}>
                       {roles.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
                     </select>
                   </td>
                   <td><span className={`pill pill-${status.tone}`} title={status.hint}>{status.label}</span></td>
                   <td>
-                    {/* Off for yourself: the server refuses it too, so a live
-                        checkbox here would only produce an error. */}
-                    <label className="sw sm" title={isSelf ? 'You cannot change your own super-admin access' : undefined}>
-                      <input type="checkbox" checked={u.is_super_admin} disabled={busy || isSelf || off}
+                    {/* Off for yourself, while viewing as someone, and for
+                        anyone who is not a super admin themselves (W4-1): the
+                        server refuses all three, so a live checkbox here would
+                        only produce an error. */}
+                    <label
+                      className="sw sm"
+                      title={isSelf ? 'You cannot change your own super-admin access' : superLock ?? undefined}
+                    >
+                      <input type="checkbox" checked={u.is_super_admin} disabled={busy || isSelf || off || superLock !== null}
                         onChange={(e) => onChange(u.id, { is_super_admin: e.target.checked })} />
                       <span className="sw-track" aria-hidden="true" />
                       <span className="sr">Super admin</span>
@@ -381,11 +415,12 @@ function UsersTable({
                   )}
                   <td className="num">
                     {off ? (
-                      <button type="button" className="linkbtn" disabled={busy}
+                      <button type="button" className="linkbtn" disabled={busy || ringLock !== null}
+                        title={ringLock ?? undefined}
                         onClick={() => onChange(u.id, { status: 'invited' })}>Re-enable</button>
                     ) : (
-                      <button type="button" className="linkbtn is-danger" disabled={busy || isSelf}
-                        title={isSelf ? 'You cannot disable your own account' : 'Blocks sign-in and ends every live session'}
+                      <button type="button" className="linkbtn is-danger" disabled={busy || isSelf || ringLock !== null}
+                        title={isSelf ? 'You cannot disable your own account' : ringLock ?? 'Blocks sign-in and ends every live session'}
                         onClick={() => onChange(u.id, { status: 'disabled' })}>Disable</button>
                     )}
                   </td>
@@ -705,11 +740,14 @@ function RoleCard({
 
 // ── Forms ────────────────────────────────────────────────────────────────────
 
-function InviteForm({ roles, busy, onCancel, onSubmit }: {
+function InviteForm({ roles, busy, canGrantSuper, onCancel, onSubmit }: {
   roles: RoleRecord[];
   busy: boolean;
+  /** W4-1 · only a super admin (the REAL signed-in user) may invite one; for
+      anyone else the field is not drawn and the body never carries the key. */
+  canGrantSuper: boolean;
   onCancel: () => void;
-  onSubmit: (v: { email: string; name: string; role: string; is_super_admin: boolean }) => void;
+  onSubmit: (v: { email: string; name: string; role: string; is_super_admin?: boolean }) => void;
 }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -748,19 +786,28 @@ function InviteForm({ roles, busy, onCancel, onSubmit }: {
               {roles.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
             </select>
           </div>
-          <div className="field">
-            <span className="lbl">Super admin</span>
-            <label className="sw">
-              <input type="checkbox" checked={superAdmin} onChange={(e) => setSuperAdmin(e.target.checked)} />
-              <span className="sw-track" aria-hidden="true" />
-              <span>Every permission, the admin console, and view as anyone</span>
-            </label>
-          </div>
+          {/* W4-1 · drawn for a super admin only; anyone else's invitation
+              never mentions the flag, so the API has nothing to refuse. */}
+          {canGrantSuper && (
+            <div className="field">
+              <span className="lbl">Super admin</span>
+              <label className="sw">
+                <input type="checkbox" checked={superAdmin} onChange={(e) => setSuperAdmin(e.target.checked)} />
+                <span className="sw-track" aria-hidden="true" />
+                <span>Every permission, the admin console, and view as anyone</span>
+              </label>
+            </div>
+          )}
         </div>
         <div className="sheet-f">
           <button type="button" className="btn" onClick={onCancel}>Cancel</button>
           <button type="button" className="btn btn-primary" disabled={!valid || busy}
-            onClick={() => onSubmit({ email: email.trim(), name: name.trim(), role: effectiveRole, is_super_admin: superAdmin })}>
+            onClick={() => onSubmit({
+              email: email.trim(),
+              name: name.trim(),
+              role: effectiveRole,
+              ...(canGrantSuper ? { is_super_admin: superAdmin } : {}),
+            })}>
             <Icon name="user-plus" size={14} />
             {busy ? 'Inviting…' : 'Send invitation'}
           </button>

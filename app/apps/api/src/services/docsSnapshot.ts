@@ -128,7 +128,7 @@ export async function docsSnapshot(user: PermissionBearer & { id: string }): Pro
       auth_mode: config.authMode,
       node_env: config.nodeEnv,
       web_origin: config.webOrigin,
-      database: process.env.DATABASE_URL ? 'Postgres (Neon)' : 'PGlite (embedded Postgres 16)',
+      database: process.env.DATABASE_URL ? 'Postgres 16 (DATABASE_URL)' : 'Postgres 16 (localhost default)',
       migrations_applied: instance.rows[0]?.n ?? 0,
       latest_migration: instance.rows[0]?.latest ?? null,
     },

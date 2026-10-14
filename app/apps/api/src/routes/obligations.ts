@@ -7,11 +7,20 @@
 //   POST /notifications/read-all     the dropdown's footer action
 //   POST /obligations/:id/snooze     {hours<=72, reason} — reason MANDATORY
 //
+// WHO MAY LOOK (W4-7). Every handler is a Pulse surface and gates on
+// `work_orders` view — the permission the sidebar opens the Pulse door with
+// (NAV_PERM.Pulse in apps/web/src/components/AppShell.tsx; keep the two in
+// step). The list and the board are scoped by rule 8.5 inside
+// listObligations(), the snooze checks the same predicate before it writes,
+// and `?wo=` resolves through resolveTaskId(), so a work order outside the
+// viewer's book is the same 403 every per-work-order route gives, and an
+// unknown one is an empty list.
+//
 // THE LAZY EVALUATOR. There is no cron in the prototype: the two READ endpoints
 // nudge the evaluator (debounced to once per 30s) before answering, which is
 // what keeps the Pulse honest without a scheduler. The nudge is awaited so the
 // response reflects it, and it can never fail the request — evaluateDebounced()
-// swallows its own errors.
+// swallows its own errors (and logs the SQL code + message when it does).
 //
 // Every handler answers a well-formed EMPTY payload when migration 0004 has not
 // been applied yet, so the running app degrades to "no clocks" instead of 500s.
@@ -19,7 +28,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse } from '../errors.js';
-import { actingPrincipalFromRequest } from '../services/activity.js';
+import { actingPrincipalFromRequest, resolveTaskId } from '../services/activity.js';
+import { requirePerm } from '../services/permissions.js';
 import {
   evaluateDebounced,
   evaluateNow,
@@ -66,6 +76,7 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
    */
   app.get('/pulse', async (req) => {
     const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
     await evaluateDebounced();
     const board = await getPulse(actor);
     return {
@@ -83,8 +94,18 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
   app.get('/obligations', async (req) => {
     const q = parse(obligationQuerySchema, req.query);
     const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
+    // `?wo=` is a uuid or a WO number: resolve it the way every per-work-order
+    // route does — the scope 403 for a row outside the book, an empty list for
+    // one that does not exist — and hand the list the uuid.
+    let wo: string | undefined;
+    if (q.wo) {
+      const id = await resolveTaskId(q.wo, actor);
+      if (!id) return { items: [], total: 0 };
+      wo = id;
+    }
     await evaluateDebounced();
-    const items = await listObligations(q, actor);
+    const items = await listObligations({ ...q, wo }, actor);
     return { items, total: items.length };
   });
 
@@ -92,6 +113,7 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
   app.get('/notifications', async (req) => {
     const { limit } = parse(notificationsQuerySchema, req.query);
     const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
     await evaluateDebounced();
     const { items, unread } = await listNotifications(actor.id, limit);
     // `unread` and `unread_count` carry the same number: apps/web's reader
@@ -102,25 +124,30 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
   app.post('/notifications/:id/read', async (req) => {
     const { id } = parse(idParamsSchema, req.params);
     const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
     await markNotificationRead(id, actor.id);
     return { ok: true };
   });
 
   app.post('/notifications/read-all', async (req) => {
     const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
     const marked = await markAllNotificationsRead(actor.id);
     return { ok: true, marked };
   });
 
   /**
    * POST /api/obligations/:id/snooze — the only way a human moves a clock.
-   * 400 without a reason or beyond 72h; 403 when someone below ATL tries to
-   * snooze a tier-3 obligation; 404 when the obligation is already resolved.
+   * 400 without a reason or beyond 72h; 403 without `work_orders` view, for a
+   * clock on a work order outside the viewer's book (rule 8.5), or when
+   * someone below ATL tries to snooze a tier-3 obligation; 404 when the
+   * obligation is already resolved.
    */
   app.post('/obligations/:id/snooze', async (req) => {
     const { id } = parse(idParamsSchema, req.params);
     const { hours, reason } = parse(snoozeSchema, req.body);
     const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'work_orders', 'view', 'You cannot snooze obligations');
     const obligation = await snoozeObligation(id, hours, reason, actor);
     // The snooze changed the world the evaluator reads; re-run so the very next
     // read (the web invalidates immediately) already agrees with it.

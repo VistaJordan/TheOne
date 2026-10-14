@@ -14,8 +14,9 @@
 // Every write lands in activity_log: comment_added (the post, as before),
 // message_edited (before/after body and visibility), client_message_sent /
 // client_message_failed (a delivery flipping), client_message_received (an
-// inbound note). The actor is resolved BEFORE any transaction opens —
-// PGlite is single-connection (see feed.ts / messages.ts).
+// inbound note). The actor is resolved BEFORE any transaction opens: a read
+// that needs no lock runs on the pool first (the rule is written out at
+// withTransaction in packages/db/src/client.ts).
 
 import { query, withTransaction } from '../db.js';
 import { ApiError } from '../errors.js';

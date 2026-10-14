@@ -31,10 +31,10 @@ An automation watches work orders and, when its trigger and conditions are met, 
 Afterwards each automation is a card with a switch (on, or paused), its run log (When, Work order, Result) and edit and delete. Rules: an action can set a status, the priority or a custom field; the fields a visit owns (check-in and check-out fields) and Quote Due Date cannot be set by an automation's action because they are computed; an automation's own change does not trigger itself in a loop.
 
 **Users** (Admin › Users; needs \`admin/users\` edit)
-- Invite someone: click **Invite a user**, fill **Work email** and **Full name**, pick a **Role**, optionally tick **Super admin**, click **Send invitation**. The email must match their Microsoft account exactly. A byblosvista.com account needs no invitation: it enrols itself as OM Under Probation the first time it signs in.
+- Invite someone: click **Invite a user**, fill **Work email** and **Full name**, pick a **Role**, click **Send invitation**. The **Super admin** tick on the invitation is drawn for super admins only, and not while viewing as someone. The email must match their Microsoft account exactly. A byblosvista.com account needs no invitation: it enrols itself as OM Under Probation the first time it signs in.
 - Change a role: pick from the **Role** dropdown in the person's row; it saves at once.
-- Make or unmake a super admin: the **Super admin** switch in the row. Nobody can change their own, and the last super admin cannot be demoted.
-- Block or restore sign-in: **Disable** (ends their sessions immediately) or **Re-enable**. Nobody can disable themselves or the last super admin.
+- Make or unmake a super admin (super admins only, judged on the person really signed in): the **Super admin** switch in the row. It is off for anyone else ("Only a super admin can change this") and off while viewing as someone; the API refuses with "Only a super admin can grant or remove super-admin access". Nobody can change their own, and the last super admin cannot be demoted.
+- Block or restore sign-in: **Disable** (ends their sessions immediately) or **Re-enable**. Nobody can disable themselves or the last super admin. A super admin's **Role**, **Disable** and **Re-enable** are locked for anyone who is not a super admin ("Only a super admin can change a super admin's account").
 - Change one person's permissions without changing their role (super admins only): click **Adjust** in the **Permissions** column, click a cell to set it for that person (faded cells come from the role), then **Save adjustments**. **Remove all adjustments** clears them.
 
 **Roles** (Admin › Roles; needs \`admin/roles\` edit)
@@ -91,6 +91,8 @@ export const APP_GUIDE = `## Guide to the app's screens
 Each task says what it needs: a permission row and an action, as in \`admin/automations\` edit. Compare it with "What this person may do" before giving steps. Bold names are the labels on screen.
 
 The sidebar: Dashboard, Pulse, Work Orders, Vendors, Sites, Assets, Clients, Quotes, Payments, Incoming Work Orders, Planned Maintenance, Maintenance, Approvals, Receivables, Contracts, Purchasing, Client Updates, and Admin with its sections. A person only sees the items their role includes. The top bar has the search box, **Viewing as** (super admins), this assistant, the notifications bell and the theme switch.
+
+**Viewing as** (super admins only): pick a person in the top-bar select to see the app exactly as they do; **Myself** ends it. It is read-only: every change answers "Viewing as another user is read-only. Stop viewing as them to make changes." (403 IMPERSONATION_READ_ONLY), and so do the work-order and vendor CSV exports, **Save as PDF**, the technician map and the client-updates CSV; the top bar shows a **Read-only** chip while it is on. The admin console still reads the person really signed in.
 
 ${GUIDE_WORK_ORDERS}
 

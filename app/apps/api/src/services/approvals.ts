@@ -756,7 +756,8 @@ export async function openNteOverride(
  * with a 409 that names the task, so the screen can point at the inbox.
  * Rejecting stays allowed — saying no never needs the override.
  *
- * Runs BEFORE the caller's transaction opens (PGlite single-connection rule).
+ * Runs on the pool BEFORE the caller's transaction opens: a pre-check that
+ * needs no lock and takes none, so it answers for the moment it ran.
  */
 export async function assertNoOpenNteOverride(taskId: string, move: string): Promise<void> {
   const open = await openNteOverride(taskId);

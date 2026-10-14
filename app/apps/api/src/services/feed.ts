@@ -15,7 +15,7 @@ import { query } from '../db.js';
 import type { FeedItem, FeedResponse, FeedActor } from '@theone/shared';
 
 // Same ISO-8601 UTC rendering the S1 activity endpoint uses, so every timestamp
-// the API emits is byte-identical in shape regardless of PGlite's date parsing.
+// the API emits is byte-identical in shape regardless of the driver's date parsing.
 const ISO = (col: string) =>
   `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 

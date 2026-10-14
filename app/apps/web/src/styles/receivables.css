@@ -48,6 +48,20 @@
   max-width: 78ch;
 }
 
+/* The prototype banner (W2-1): the Audit tab is worked out in the browser
+   from the lists, and a dash is a fact The One does not track yet. Tokens
+   only — --topbar-warn exists in both themes. */
+.rcv-proto-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--topbar-warn);
+  background: var(--surface);
+  color: var(--ink, inherit);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 /* ── Stat cards (the queue header row) ────────────────────────────────────── */
 .rcv-stats {
   display: grid;

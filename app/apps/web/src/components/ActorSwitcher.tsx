@@ -5,17 +5,22 @@
    (Senior OM builds a quote, ATL approves it) otherwise needs four Microsoft
    accounts — but it is now a server-side, audited, super-admin-only capability.
 
-   Two invariants:
-     · the SESSION still belongs to the real human, so every write records who
-       actually did it; only the effective role changes.
-     · starting and stopping are written to activity_log as their own events. */
+   Three invariants:
+     · the SESSION still belongs to the real human; only the effective role
+       changes, never who is signed in.
+     · starting and stopping are written to activity_log as their own events.
+     · viewing as someone is READ-ONLY (W4-2): the API refuses every write made
+       while viewing as (403 IMPERSONATION_READ_ONLY) — and the CSV exports,
+       Save as PDF and the technician map, which log under the actor — so the
+       activity log never names the wrong author: a write would be attributed
+       to the impersonated person. Switch back to Myself to make changes. */
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { getPrincipals } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from './Icon';
-import { roleLabel } from '../lib/actor';
+import { READ_ONLY_HINT, roleLabel } from '../lib/actor';
 
 export function ActorSwitcher() {
   const { user, actingAs, isImpersonating, impersonate, stopImpersonating } = useAuth();
@@ -71,10 +76,15 @@ function ImpersonationPicker({
         {isImpersonating && <Icon name="swap" size={12} />}
         Viewing as
       </span>
+      {isImpersonating && (
+        <span className="chip chip-sm" title={READ_ONLY_HINT}>
+          Read-only
+        </span>
+      )}
       <select
         className="topbar-actor-select"
         aria-label="View as another user (super admin)"
-        title="Impersonation is recorded in the activity log"
+        title={isImpersonating ? READ_ONLY_HINT : 'Impersonation is recorded in the activity log'}
         value={actingId}
         disabled={busy || principals.isLoading}
         onChange={(e) => onPick(e.target.value)}

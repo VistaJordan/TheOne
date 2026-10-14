@@ -1,4 +1,4 @@
-// Receivables (AR) — the completion-audit rules engine and its queue model.
+// Receivables (AR) — the completion-audit rules and the Ready-to-invoice test.
 //
 // Ported from the Support Automation shadow-audit assistant (Support
 // Automation/support-automation/lib/audit-rules.ts): the same deterministic
@@ -7,14 +7,46 @@
 // before/after images, label convention), CO# format, and the Admin/Quote
 // release gate.
 //
-// The prototype has no ClickUp/Graph integration, so every audit fact the
-// rules read (BFI, CICO, folder contents…) is derived HERE, seeded by the WO
-// id — stable across reloads, different per WO, and entirely client-side.
-// The four audit checkboxes are interactive: ticking Admin + Quote on a WO
-// with no findings flips it clean, which is exactly what moves it into the
-// Invoicing subtab's "Ready" lane. One derivation, both subtabs.
+// The Audit tab is a CLIENT-SIDE PROTOTYPE over the work-order list payload
+// and the quotes list. Every fact a rule reads is either carried by those
+// payloads or `null` = The One does not track it yet; nothing is derived from
+// the work-order id, seeded, or invented (AUDIT.md W2-1). A null fact yields
+// ONE "offline" line in the evidence panel — coverage, never a finding. The
+// four audit checkboxes are page state (not saved) and do NOT feed invoicing:
+// a work order is ready to invoice when it is Done, its quote is approved and
+// no invoice exists for it yet (`isReadyToInvoice`).
+//
+// The lists are windows, not the whole table: GET /quotes answers its
+// QUOTES_LIST_CAP most recently updated quotes, GET /invoices its
+// INVOICES_LIST_CAP newest, and the page asks for WO_LIST_CAP Done work
+// orders. A quote a full window did not reach is an UNKNOWN fact (null),
+// never "missing" — the only real finding left must not depend on pagination.
 
-import type { WorkOrderListItemV2 } from '../api/client';
+import { BFI_KEY, VISIT_MIRROR_KEYS } from '@theone/shared';
+import type { QuoteListItem, WorkOrderListItemV2 } from '../api/client';
+
+/** A fact the audit reads. `null` = The One does not track this yet, or the
+    list did not carry it for this viewer (not asked / redacted); the page
+    draws it as a dash titled "not tracked yet". A TEXT fact the record
+    carries but holds empty is `''` — tracked, empty — and gets its own dash
+    ("unassigned", "no visit recorded"): an empty value is a fact too. */
+export type Fact<T> = T | null;
+
+// ── The windows the lists answer ────────────────────────────────────────────
+// Pinned against the API source by tests/receivables-no-fake.test.ts.
+
+/** services/quotes.ts `listQuotes(limit = 200)`; GET /quotes passes no limit. */
+export const QUOTES_LIST_CAP = 200;
+/** services/invoices.ts `listInvoices` — `LIMIT 500`, newest first. */
+export const INVOICES_LIST_CAP = 500;
+/** The most Done work orders the page asks for: the list route's maximum. */
+export const WO_LIST_CAP = 500;
+
+/** A list that came back full may have stopped before every row: what it
+    does not hold cannot be called missing. */
+export function listCapped(count: number, cap: number): boolean {
+  return count >= cap;
+}
 
 // ── Severity model (verbatim from the audit assistant) ──────────────────────
 export type AuditSeverity = 'major' | 'minor' | 'info' | 'offline';
@@ -43,49 +75,89 @@ export interface AuditChecks {
 
 export interface AuditRow {
   wo: WorkOrderListItemV2;
-  /** Billed For Invoice — after-images are not required when set. */
-  bfi: boolean;
-  cico: 'Checked-out' | 'Checked-in' | 'RTN';
-  hasClientQuote: boolean;
+  /** Bill For Incurred — after-images are not required when ticked. */
+  bfi: Fact<boolean>;
+  /** The latest visit's Check-in/out status, as the list mirrors it;
+      `''` = the work order has no visit recorded. */
+  cico: Fact<string>;
+  /** `''` = unassigned. */
+  assignee: Fact<string>;
+  /** A quote exists for the work order: true / false when the quotes list
+      was complete, null when it was unavailable or came back full (it may
+      have stopped before this work order's quote) — unknown, never missing. */
+  hasClientQuote: Fact<boolean>;
+  /** Number · total · status of that quote, when the list carries them. */
   clientQuotePreview: string | null;
-  /** Closeout number. Only validated when populated (6 digits). */
-  coNumber: string | null;
-  daysDone: number;
-  daysGrey: number;
+  /** Closeout number. Only validated when populated (6 digits). Not tracked yet. */
+  coNumber: Fact<string>;
+  /** Days since done / days on Grey. Not tracked yet. */
+  daysDone: Fact<number>;
+  daysGrey: Fact<number>;
   fm: string;
   comp: string;
-  assignee: string;
-  sp: {
-    live: boolean;
-    accessible: boolean;
-    empty: boolean;
-    hasSo: boolean;
-    hasBefore: boolean;
-    hasAfter: boolean;
-    mislabeled: number;
-  };
-  /** Seeded defaults; the page overlays the user's toggles on top. */
+  /** No SharePoint reader runs in the browser: folder checks are always offline. */
+  sp: { live: false };
+  /** Nothing is seeded: every tick starts off and lives in page state. */
   checks: AuditChecks;
 }
 
-// ── Seeded derivation ───────────────────────────────────────────────────────
-// FNV-1a over id+salt. Not randomness — a stable property of the WO.
+/** What the page asks the list for — the three facts the payload can carry
+    (the visit mirror's status key and the 0061 BFI checkbox, from shared). */
+export const AUDIT_COLUMNS = [
+  'fields.Assignee',
+  `fields.${VISIT_MIRROR_KEYS.status}`,
+  `fields.${BFI_KEY}`,
+] as const;
 
-function hash(str: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
+const ASSIGNEE_COL = AUDIT_COLUMNS[0];
+const CICO_COL = AUDIT_COLUMNS[1];
+const BFI_COL = AUDIT_COLUMNS[2];
+
+// ── Reading the payload ─────────────────────────────────────────────────────
+// The list projects `custom` only for the keys asked, and drops a key the
+// viewer may not see (field redaction). So: key absent = unknown (null);
+// key present = the record's own value, blank included.
+
+/** `undefined` when the list did not carry the key, else its text or null. */
+function projected(wo: WorkOrderListItemV2, key: string): string | null | undefined {
+  const custom = wo.custom;
+  if (!custom || !(key in custom)) return undefined;
+  return custom[key];
 }
 
-const unit = (id: string, salt: string) => (hash(id + salt) % 1000) / 1000;
-const chance = (id: string, salt: string, p: number) => unit(id, salt) < p;
-const intIn = (id: string, salt: string, min: number, max: number) =>
-  min + (hash(id + salt) % (max - min + 1));
+/** Absent → null (not carried for this viewer); carried but blank → '' (the
+    record is tracked and empty); else the value. */
+function textFact(wo: WorkOrderListItemV2, key: string): Fact<string> {
+  const v = projected(wo, key);
+  if (v === undefined) return null;
+  return (v ?? '').trim();
+}
 
-const ASSIGNEES = ['Elise T.', 'Mya R.', 'Kelly D.', 'Ram P.', 'Dana W.'];
+/** A checkbox arrives as the jsonb text ('true' / 'false'); an unticked box
+    may also be absent from the bag, which projects as null = not ticked. */
+function checkboxFact(wo: WorkOrderListItemV2, key: string): Fact<boolean> {
+  const v = projected(wo, key);
+  if (v === undefined) return null;
+  const s = (v ?? '').trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes';
+}
+
+const fmtMoney = (n: number) =>
+  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
+
+export function quotesByTask(quotes: QuoteListItem[]): Map<string, QuoteListItem> {
+  return new Map(quotes.map((q) => [q.task_id, q]));
+}
+
+function quotePreview(q: QuoteListItem | undefined): string | null {
+  if (!q) return null;
+  const parts = [
+    q.number,
+    q.grand_total != null ? fmtMoney(q.grand_total) : null,
+    q.status.replace(/_/g, ' '),
+  ].filter((p): p is string => typeof p === 'string' && p.length > 0);
+  return parts.length ? parts.join(' · ') : null;
+}
 
 /** Billing entity → the short "Comp" code the audit table shows. */
 function compCode(wo: WorkOrderListItemV2): string {
@@ -94,93 +166,79 @@ function compCode(wo: WorkOrderListItemV2): string {
   return letters.slice(0, 3) || 'SFM';
 }
 
-function deriveRow(wo: WorkOrderListItemV2): AuditRow {
-  const id = wo.id;
-  const cicoRoll = unit(id, 'cico');
-  const coApplicable = chance(id, 'co-app', 0.4);
-  const coRoll = unit(id, 'co-fmt');
-  const coNumber = !coApplicable
-    ? null
-    : coRoll < 0.15
-      ? null // applicable but not yet filled — reviewer optional, no finding
-      : coRoll < 0.32
-        ? `CO-${intIn(id, 'co-bad', 100, 9999)}` // wrong format → minor
-        : String(100000 + (hash(id + 'co-ok') % 900000)); // valid 6 digits
-
-  const daysGrey = Math.max(0, intIn(id, 'grey', 0, 11) - 4); // most sit at 0–2
-  const live = chance(id, 'sp-live', 0.88);
-  const accessible = chance(id, 'sp-acc', 0.93);
-  const empty = accessible && chance(id, 'sp-empty', 0.08);
-
+function deriveRow(
+  wo: WorkOrderListItemV2,
+  quoteByTask: Map<string, QuoteListItem>,
+  quotesComplete: boolean,
+): AuditRow {
+  const q = quoteByTask.get(wo.id);
   return {
     wo,
-    bfi: chance(id, 'bfi', 0.15),
-    cico: cicoRoll < 0.78 ? 'Checked-out' : cicoRoll < 0.92 ? 'Checked-in' : 'RTN',
-    hasClientQuote: chance(id, 'cq', 0.78),
-    clientQuotePreview: chance(id, 'cq', 0.78)
-      ? wo.nte != null
-        ? `$${wo.nte.toLocaleString('en-US')} — ${wo.trade ?? 'service'} per quote`
-        : `${wo.trade ?? 'Service'} — see quote thread`
-      : null,
-    coNumber,
-    daysDone: daysGrey + intIn(id, 'done', 1, 6),
-    daysGrey,
+    bfi: checkboxFact(wo, BFI_COL),
+    cico: textFact(wo, CICO_COL),
+    assignee: textFact(wo, ASSIGNEE_COL),
+    hasClientQuote: q !== undefined ? true : quotesComplete ? false : null,
+    clientQuotePreview: quotePreview(q),
+    coNumber: null,
+    daysDone: null,
+    daysGrey: null,
     fm: wo.client ?? '—',
     comp: compCode(wo),
-    assignee: ASSIGNEES[hash(id + 'who') % ASSIGNEES.length],
-    sp: {
-      live,
-      accessible,
-      empty,
-      hasSo: chance(id, 'sp-so', 0.72),
-      hasBefore: chance(id, 'sp-b', 0.9),
-      hasAfter: chance(id, 'sp-a', 0.78),
-      mislabeled: chance(id, 'sp-lbl', 0.18) ? intIn(id, 'sp-lbl-n', 1, 3) : 0,
-    },
-    checks: {
-      gtg: chance(id, 'ck-gtg', 0.55),
-      elise: chance(id, 'ck-el', 0.45),
-      admin: chance(id, 'ck-adm', 0.3),
-      quote: chance(id, 'ck-qt', 0.35),
-    },
+    sp: { live: false },
+    checks: { gtg: false, elise: false, admin: false, quote: false },
   };
 }
 
-/**
- * One partition, both subtabs. Done-group WOs split into:
- *   queue    — still held by the completion audit (the Grey Flag queue)
- *   history  — released and billed in a past life (plus any closed-group WOs);
- *              these seed the invoicing pipeline's Invoiced/Paid lanes.
- * A WO is in exactly one of the two, so the demo stays self-consistent.
- * Topped up from active rows when the seed data is thin.
- */
+/** The Grey Flag queue: every done-group work order, oldest first. Nothing
+    is padded in from active rows — an empty queue is a real answer. */
 export interface ReceivablesModel {
   queue: AuditRow[];
-  history: InvoiceRow[];
 }
 
-export function deriveReceivables(items: WorkOrderListItemV2[]): ReceivablesModel {
+/** `quotes` is the quotes list as it came back, or null when it did not
+    (failed, or the viewer may not read quotes): then no row can say whether
+    its quote exists. A list that came back full is treated the same way for
+    the rows it holds no quote for — it may have stopped before them. */
+export function deriveReceivables(
+  items: WorkOrderListItemV2[],
+  quotes: QuoteListItem[] | null,
+): ReceivablesModel {
   const byAge = (a: WorkOrderListItemV2, b: WorkOrderListItemV2) =>
     (b.age_days ?? 0) - (a.age_days ?? 0);
-  const done = items.filter((w) => w.status.group === 'done').sort(byAge);
-  const closed = items.filter((w) => w.status.group === 'closed').sort(byAge);
+  const byTask = quotes ? quotesByTask(quotes) : new Map<string, QuoteListItem>();
+  const complete = quotes !== null && !listCapped(quotes.length, QUOTES_LIST_CAP);
+  const queue = items
+    .filter((w) => w.status.group === 'done')
+    .sort(byAge)
+    .map((w) => deriveRow(w, byTask, complete));
+  return { queue };
+}
 
-  const split = Math.max(8, Math.ceil(done.length * 0.6));
-  const queueSrc = done.slice(0, split);
-  if (queueSrc.length < 8) {
-    const active = items.filter((w) => w.status.group === 'active').sort(byAge);
-    queueSrc.push(...active.slice(0, 8 - queueSrc.length));
-  }
+// ── Ready to invoice ────────────────────────────────────────────────────────
+// Real facts only: the status group, the quote's status, and whether an
+// invoice record already exists for the work order. The audit ticks above
+// are page state and decide nothing here.
 
-  const history = [...closed, ...done.slice(split)].slice(0, 24).map((wo) => ({
-    wo,
-    stage: chance(wo.id, 'inv-paid', 0.55) ? ('paid' as const) : ('invoiced' as const),
-    amount: invoiceAmount(wo),
-    invoiceNo: invoiceNoFor(wo),
-    agedDays: intIn(wo.id, 'inv-age', 1, 38),
-  }));
+export const READY_QUOTE_STATUSES: readonly QuoteListItem['status'][] = [
+  'approved',
+  'sent',
+  'client_approved',
+];
 
-  return { queue: queueSrc.map(deriveRow), history };
+export function isReadyToInvoice(
+  wo: WorkOrderListItemV2,
+  quoteByTask: Map<string, QuoteListItem>,
+  invoicedTaskIds: ReadonlySet<string>,
+): boolean {
+  if (wo.status.group !== 'done') return false;
+  const q = quoteByTask.get(wo.id);
+  if (!q || !READY_QUOTE_STATUSES.includes(q.status)) return false;
+  return !invoicedTaskIds.has(wo.id);
+}
+
+/** The quote's grand total, or null = the lane shows a dash, never a guess. */
+export function readyAmount(q: QuoteListItem | undefined): number | null {
+  return q?.grand_total ?? null;
 }
 
 // ── The rules engine (computeIssues, ported check-for-check) ────────────────
@@ -189,11 +247,34 @@ const WO_LINK = { label: 'Open work order', kind: 'wo' as const };
 const CU_LINK = { label: 'ClickUp task', kind: 'clickup' as const };
 const SP_LINK = { label: 'SharePoint folder', kind: 'sharepoint' as const };
 
+/** A fact The One does not carry: one coverage line, never a finding. */
+function notTracked(id: string, key: string, label: string, description: string): AuditIssue {
+  return { id: `${id}-${key}-offline`, severity: 'offline', title: `${label} not tracked yet`, description, resolve: [] };
+}
+
 export function computeAuditIssues(row: AuditRow, checks: AuditChecks): AuditIssue[] {
   const issues: AuditIssue[] = [];
   const id = row.wo.id;
 
-  if (row.cico !== 'Checked-out') {
+  if (row.cico === null) {
+    issues.push(
+      notTracked(
+        id,
+        'cico',
+        'CICO',
+        'The Check-in/out status did not come with the work order (the field is not defined, or not visible to you), so this check is skipped.',
+      ),
+    );
+  } else if (row.cico === '') {
+    issues.push({
+      id: `${id}-cico`,
+      severity: 'minor',
+      title: 'CICO is empty — no visit recorded',
+      description:
+        'No visit has been checked in or out on this work order, so there is no check-out to confirm. The dispatcher should log the visit.',
+      resolve: [WO_LINK, CU_LINK],
+    });
+  } else if (row.cico !== 'Checked-out') {
     issues.push({
       id: `${id}-cico`,
       severity: 'minor',
@@ -204,88 +285,59 @@ export function computeAuditIssues(row: AuditRow, checks: AuditChecks): AuditIss
     });
   }
 
-  if (!row.hasClientQuote) {
+  if (row.hasClientQuote === null) {
+    // Unknown, not missing: the quotes list did not come back, or came back
+    // full and may have stopped before this work order's quote.
+    issues.push({
+      id: `${id}-client-quote-offline`,
+      severity: 'offline',
+      title: 'Client Quote not checked',
+      description: `The quotes list did not load, or stopped at its ${QUOTES_LIST_CAP} most recently updated quotes before reaching this work order, so whether a quote exists cannot be read here. Open the work order to see its quote.`,
+      resolve: [WO_LINK],
+    });
+  } else if (!row.hasClientQuote) {
     issues.push({
       id: `${id}-client-quote`,
       severity: 'major',
       title: 'Client Quote missing',
       description:
-        'The Client Quote field is empty. The quote sent to the client must be filled before this WO can be audited.',
+        'No quote exists for this work order. The quote sent to the client must be filled before this WO can be audited.',
       resolve: [WO_LINK, CU_LINK],
     });
   }
 
-  if (!row.sp.live) {
-    issues.push({
-      id: `${id}-sp-offline`,
-      severity: 'offline',
-      title: 'SharePoint integration offline',
-      description:
-        'Folder content checks (SO present, before/after images, labeling) are skipped for this WO. They activate once the Microsoft Graph integration is wired up.',
-      resolve: [SP_LINK],
-    });
-  } else if (!row.sp.accessible) {
-    issues.push({
-      id: `${id}-sp-inaccessible`,
-      severity: 'major',
-      title: 'SharePoint folder inaccessible',
-      description:
-        'The SharePoint link is set but the folder cannot be accessed. Verify permissions or the path.',
-      resolve: [SP_LINK, CU_LINK],
-    });
-  } else if (row.sp.empty) {
-    issues.push({
-      id: `${id}-sp-empty`,
-      severity: 'major',
-      title: 'SharePoint folder is empty',
-      description:
-        'No images or sign-off sheet have been uploaded for this WO. Dispatcher or technician must add the deliverables.',
-      resolve: [SP_LINK],
-    });
-  } else {
-    if (!row.sp.hasSo) {
-      issues.push({
-        id: `${id}-so-missing`,
-        severity: 'major',
-        title: 'Sign-off sheet (SO) missing',
-        description:
-          "No file named 'SO' exists in the folder. The signed sign-off sheet must be uploaded before release.",
-        resolve: [SP_LINK],
-      });
-    }
-    if (!row.sp.hasBefore) {
-      issues.push({
-        id: `${id}-before-images`,
-        severity: 'major',
-        title: 'Before-images missing',
-        description:
-          "No before-work images detected (no file starting with 'B'). Before-images are required for every WO.",
-        resolve: [SP_LINK],
-      });
-    }
-    if (!row.bfi && !row.sp.hasAfter) {
-      issues.push({
-        id: `${id}-after-images`,
-        severity: 'major',
-        title: 'After-images missing',
-        description:
-          "No after-work images detected (no file starting with 'A') and the WO is not marked BFI. After-images are required.",
-        resolve: [SP_LINK],
-      });
-    }
-    if (row.sp.mislabeled > 0) {
-      issues.push({
-        id: `${id}-labels`,
-        severity: 'minor',
-        title: `${row.sp.mislabeled} image${row.sp.mislabeled > 1 ? 's' : ''} mislabeled`,
-        description:
-          "Image filenames do not follow the 'B (n)' / 'a (n)' convention and should be renamed before release.",
-        resolve: [SP_LINK],
-      });
-    }
+  // No SharePoint reader runs in the browser: the folder checks (SO present,
+  // before/after images, labeling) are always skipped here.
+  issues.push({
+    id: `${id}-sp-offline`,
+    severity: 'offline',
+    title: 'SharePoint integration offline',
+    description:
+      'Folder content checks (SO present, before/after images, labeling) are skipped for this WO. They activate once the Microsoft Graph integration is wired up.',
+    resolve: [SP_LINK],
+  });
+
+  if (row.bfi === null) {
+    issues.push(
+      notTracked(
+        id,
+        'bfi',
+        'BFI',
+        'The Bill For Incurred checkbox did not come with the work order (not defined, or not visible to you), so the after-images waiver cannot be read.',
+      ),
+    );
   }
 
-  if (row.coNumber !== null && !/^\d{6}$/.test(row.coNumber)) {
+  if (row.coNumber === null) {
+    issues.push(
+      notTracked(
+        id,
+        'co',
+        'CO#',
+        'The One does not track closeout numbers yet, so the 6-digit format check is skipped.',
+      ),
+    );
+  } else if (!/^\d{6}$/.test(row.coNumber)) {
     issues.push({
       id: `${id}-co`,
       severity: 'minor',
@@ -337,7 +389,8 @@ export function overallStatus(issues: AuditIssue[]): AuditStatus {
 
 // ── Auto-check lines (the per-WO evidence panel) ────────────────────────────
 // The expanded row shows every check the engine RAN, not only what failed —
-// that read-out is the audit assistant's signature surface.
+// that read-out is the audit assistant's signature surface. A fact The One
+// does not carry reads "not tracked yet".
 
 export type CheckOutcome = 'pass' | 'minor' | 'major' | 'info' | 'na' | 'offline';
 
@@ -347,96 +400,57 @@ export interface CheckLine {
   detail: string;
 }
 
+const NOT_TRACKED = 'not tracked yet';
+
 export function buildCheckLines(row: AuditRow, checks: AuditChecks): CheckLine[] {
   const lines: CheckLine[] = [];
   lines.push(
-    row.cico === 'Checked-out'
-      ? { label: 'CICO', outcome: 'pass', detail: 'Checked-out' }
-      : { label: 'CICO', outcome: 'minor', detail: `"${row.cico}" — expected Checked-out` },
+    row.cico === null
+      ? { label: 'CICO', outcome: 'offline', detail: NOT_TRACKED }
+      : row.cico === ''
+        ? { label: 'CICO', outcome: 'minor', detail: 'empty — no visit recorded' }
+        : row.cico === 'Checked-out'
+          ? { label: 'CICO', outcome: 'pass', detail: 'Checked-out' }
+          : { label: 'CICO', outcome: 'minor', detail: `"${row.cico}" — expected Checked-out` },
   );
   lines.push(
-    row.hasClientQuote
-      ? { label: 'Client Quote', outcome: 'pass', detail: row.clientQuotePreview ?? 'present' }
-      : { label: 'Client Quote', outcome: 'major', detail: 'missing' },
+    row.hasClientQuote === null
+      ? {
+          label: 'Client Quote',
+          outcome: 'offline',
+          detail: `not checked — the quotes list did not load or stopped at its ${QUOTES_LIST_CAP} newest`,
+        }
+      : row.hasClientQuote
+        ? { label: 'Client Quote', outcome: 'pass', detail: row.clientQuotePreview ?? 'present' }
+        : { label: 'Client Quote', outcome: 'major', detail: 'missing' },
   );
-  if (!row.sp.live) {
-    lines.push({
-      label: 'SharePoint folder',
-      outcome: 'offline',
-      detail: 'integration offline — content checks skipped',
-    });
-  } else if (!row.sp.accessible) {
-    lines.push({ label: 'SharePoint folder', outcome: 'major', detail: 'inaccessible' });
-  } else if (row.sp.empty) {
-    lines.push({ label: 'SharePoint folder', outcome: 'major', detail: 'empty — no deliverables' });
-  } else {
-    lines.push({ label: 'SharePoint folder', outcome: 'pass', detail: 'accessible, has files' });
-    lines.push(
-      row.sp.hasSo
-        ? { label: 'Sign-off sheet', outcome: 'pass', detail: 'SO.pdf present' }
-        : { label: 'Sign-off sheet', outcome: 'major', detail: 'no SO file found' },
-    );
-    lines.push(
-      row.sp.hasBefore
-        ? { label: 'Before-images', outcome: 'pass', detail: 'present' }
-        : { label: 'Before-images', outcome: 'major', detail: 'none found' },
-    );
-    lines.push(
-      row.bfi
-        ? { label: 'After-images', outcome: 'na', detail: 'not required — WO is BFI' }
-        : row.sp.hasAfter
-          ? { label: 'After-images', outcome: 'pass', detail: 'present' }
-          : { label: 'After-images', outcome: 'major', detail: 'none found' },
-    );
-    lines.push(
-      row.sp.mislabeled > 0
-        ? {
-            label: 'Image labels',
-            outcome: 'minor',
-            detail: `${row.sp.mislabeled} file${row.sp.mislabeled > 1 ? 's' : ''} off convention`,
-          }
-        : { label: 'Image labels', outcome: 'pass', detail: 'B (n) / a (n) convention held' },
-    );
-  }
+  lines.push({
+    label: 'SharePoint folder',
+    outcome: 'offline',
+    detail: 'integration offline — content checks skipped',
+  });
+  lines.push(
+    row.bfi === null
+      ? { label: 'BFI', outcome: 'offline', detail: NOT_TRACKED }
+      : row.bfi
+        ? { label: 'BFI', outcome: 'pass', detail: 'ticked — after-images not required' }
+        : { label: 'BFI', outcome: 'na', detail: 'not ticked — after-images required' },
+  );
   lines.push(
     row.coNumber === null
-      ? { label: 'CO#', outcome: 'na', detail: 'empty — reviewer optional' }
+      ? { label: 'CO#', outcome: 'offline', detail: NOT_TRACKED }
       : /^\d{6}$/.test(row.coNumber)
         ? { label: 'CO#', outcome: 'pass', detail: row.coNumber }
         : { label: 'CO#', outcome: 'minor', detail: `"${row.coNumber}" — must be 6 digits` },
   );
   lines.push(
     checks.admin && checks.quote
-      ? { label: 'Release gate', outcome: 'pass', detail: 'Admin ✓ · Quote ✓' }
+      ? { label: 'Release gate', outcome: 'pass', detail: 'Admin ✓ · Quote ✓ (not saved)' }
       : {
           label: 'Release gate',
           outcome: 'info',
-          detail: `Admin ${checks.admin ? '✓' : '✗'} · Quote ${checks.quote ? '✓' : '✗'} — both required`,
+          detail: `Admin ${checks.admin ? '✓' : '✗'} · Quote ${checks.quote ? '✓' : '✗'} — both required (not saved)`,
         },
   );
   return lines;
-}
-
-// ── Invoicing pipeline ──────────────────────────────────────────────────────
-// Downstream of the audit: a WO reaches "ready" the moment its audit is clean
-// and the release gate is ticked. Sent/paid rows are seeded from the CLOSED
-// status group — those already left the queue in a past life.
-
-export type InvoiceStage = 'ready' | 'invoiced' | 'paid';
-
-export interface InvoiceRow {
-  wo: WorkOrderListItemV2;
-  stage: InvoiceStage;
-  amount: number;
-  invoiceNo: string;
-  /** Days since sent (invoiced/paid rows). */
-  agedDays: number;
-}
-
-export function invoiceAmount(wo: WorkOrderListItemV2): number {
-  return wo.nte ?? intIn(wo.id, 'inv-amt', 18, 240) * 10;
-}
-
-export function invoiceNoFor(wo: WorkOrderListItemV2): string {
-  return `INV-${1000 + (hash(wo.id + 'inv-no') % 9000)}`;
 }

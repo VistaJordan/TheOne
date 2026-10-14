@@ -20,10 +20,15 @@ import { gmailCredentialsFromEnv, type GmailCredentials } from './lib/gmail.js';
 // The URL construction sits INSIDE the try: in the bundled Vercel lambda,
 // `import.meta.url` is undefined (CJS output) and `new URL` throws — and a
 // lambda has no .env file to load anyway.
-try {
-  process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url)));
-} catch {
-  /* no .env — expected in production, and in a fresh clone before setup */
+//
+// Not under vitest (W6-4): there the environment is tests/setup.ts, never a
+// developer's .env — CI has none, and a test must not depend on one.
+if (!process.env.VITEST) {
+  try {
+    process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url)));
+  } catch {
+    /* no .env — expected in production, and in a fresh clone before setup */
+  }
 }
 
 function str(key: string): string | undefined {
@@ -33,6 +38,45 @@ function str(key: string): string | undefined {
 
 function bool(key: string): boolean {
   return (str(key) ?? '').toLowerCase() === 'true';
+}
+
+/** W4-11: a credential that must never sit beside the password-less demo
+    sign-in — whatever lets this process reach something real (a key we
+    present to an outside system) or lets a real outside system feed it (the
+    webhook secrets Quo and the email tool present). Not CRON_SECRET: it
+    authenticates Vercel's cron TO US, reaches nothing outside The One, and
+    is named with its reason in the PUBLIC_OR_INTERNAL allowlist of
+    tests/config-guards.test.ts, whose drift test fails when config.ts (or
+    any file under apps/api/src) reads a *_SECRET / *_KEY / *_TOKEN / *_JSON
+    / *_PASSWORD name that is in neither list. */
+export const DEMO_MODE_SECRET_VARS = [
+  'ENTRA_CLIENT_SECRET',
+  'ECOTRAK_CLIENT_SECRET',
+  'CLICKUP_API_TOKEN',
+  'QUO_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'BLOB_READ_WRITE_TOKEN',
+  'GMAIL_SERVICE_ACCOUNT_JSON',
+  'GMAIL_PRIVATE_KEY',
+  'RESEND_API_KEY',
+  'MAIL_GRAPH_CLIENT_SECRET',
+  'SHAREPOINT_CLIENT_SECRET',
+  'ESCALATION_WEBHOOK_SECRET',
+  'QUO_WEBHOOK_SECRET',
+  // The RapidAPI key services/salesTax.ts presents for a ZIP → rate lookup.
+  'SALES_TAX_API_KEY',
+] as const;
+
+/** The first real credential set while DEMO_MODE is on, or null. Pure — it
+    reads the snapshot it is handed (same "set" rule as str()), so a test
+    needs no environment. */
+export function demoModeConflict(env: Record<string, string | undefined>): string | null {
+  if ((env.DEMO_MODE ?? '').trim().toLowerCase() !== 'true') return null;
+  for (const name of DEMO_MODE_SECRET_VARS) {
+    const v = env[name];
+    if (v !== undefined && v.trim() !== '') return name;
+  }
+  return null;
 }
 
 const NODE_ENV = str('NODE_ENV') ?? 'development';
@@ -62,8 +106,11 @@ export interface Config {
    * DEMO_MODE=true — a deliberately public demo running on SEED DATA ONLY.
    * It is the one sanctioned way to run the dev bypass on a server, and it
    * disables every integration that could pull production data into the
-   * demo (see routes/integrations.ts). Never combine it with a database
-   * that holds real work orders.
+   * demo (see routes/integrations.ts). Two guards keep the promise (W4-11):
+   * the boot refuses when any real credential (DEMO_MODE_SECRET_VARS) is
+   * set beside it, and sign-in refuses (DEMO_NOT_SEEDED) until the seed has
+   * written its marker row (app_meta.seeded, migration 0082) — so a
+   * database that holds real work orders admits nobody.
    */
   demoMode: boolean;
   /** Who may sign in without an invitation, and what they become (rule 5.1.1). */
@@ -211,6 +258,17 @@ function build(): Config {
   const devBypass = bool('AUTH_DEV_BYPASS');
   const demoMode = bool('DEMO_MODE');
   const entra = buildEntra();
+
+  // W4-11: the public demo runs on seed data with every real integration
+  // off. A real credential beside DEMO_MODE means the demo is pointed at
+  // something real — refuse to boot, naming it.
+  const clash = demoModeConflict(process.env);
+  if (clash) {
+    throw new Error(
+      `DEMO_MODE=true with ${clash} set. The public demo runs on seed data with every real ` +
+        `integration off — remove ${clash} from the environment, or unset DEMO_MODE.`,
+    );
+  }
 
   // ── The one refusal. A bypass in production is not a misconfiguration to
   //    warn about, it is an open front door. DEMO_MODE is the single, explicit

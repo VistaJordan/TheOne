@@ -27,7 +27,7 @@ import {
   minutesBetween,
 } from '@theone/shared';
 import type { WoPdfKind, WoRecord } from '@theone/shared';
-import { useCan } from '../../../auth/AuthProvider';
+import { useAuth, useCan } from '../../../auth/AuthProvider';
 import {
   ApiRequestError,
   addWoTag,
@@ -47,6 +47,7 @@ import {
   setWoVendor,
   workOrderPdfUrl,
 } from '../../../api/client';
+import { downloadLinkProps } from '../../../lib/actor';
 import { feedTime } from '../../../lib/fields';
 import { useEscape } from '../../../lib/useEscape';
 import { Icon } from '../../Icon';
@@ -458,6 +459,10 @@ const PDF_MENU_HINTS: Record<WoPdfKind, string> = {
 function PdfMenu({ woNumber }: { woNumber: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // W4-2 · the PDF route logs under the acting principal, so the API refuses
+  // it while viewing as someone; the items go inert (and the menu stays open
+  // on the hint) rather than save the 403's body as the file.
+  const { isImpersonating } = useAuth();
   useEscape(() => setOpen(false));
   useEffect(() => {
     if (!open) return;
@@ -475,7 +480,7 @@ function PdfMenu({ woNumber }: { woNumber: string }) {
       {open && (
         <div className="rec-pdf-pop" role="menu" aria-label="Save as PDF">
           {WO_PDF_KINDS.map((k) => (
-            <a key={k} role="menuitem" className="rec-pdf-item" href={workOrderPdfUrl(woNumber, k)} download onClick={() => setOpen(false)}>
+            <a key={k} className="rec-pdf-item" {...downloadLinkProps(isImpersonating, workOrderPdfUrl(woNumber, k), { download: true })} role="menuitem" onClick={isImpersonating ? (e) => e.preventDefault() : () => setOpen(false)}>
               <Icon name="file" size={14} />
               <span>
                 <b>{WO_PDF_KIND_LABELS[k]}</b>

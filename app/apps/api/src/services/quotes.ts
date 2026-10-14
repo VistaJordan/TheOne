@@ -11,9 +11,12 @@
 //  3. The lifecycle: draft → pending_approval → approved → sent (+ reject back
 //     to draft), each transition role-gated and written to activity_log.
 //
-// PGlite is single-connection: the acting principal is ALWAYS resolved BEFORE a
-// db.transaction() opens (a plain query() issued inside a transaction queues
-// behind it and self-deadlocks — same note as S1's changeStatus).
+// Ordering: the acting principal and the pre-checks are reads that need no
+// lock, so they run on the pool BEFORE withTransaction() opens and the
+// transaction holds its connection for the writes alone. A write that depends
+// on a row it read must re-read that row under a lock inside the transaction;
+// transition() and updateQuote() do not yet: they check the quote's status on
+// a pool read and their writes do not repeat the check.
 
 import { query, withTransaction } from '../db.js';
 import type { Queryable } from '../db.js';
@@ -1621,7 +1624,8 @@ export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise
   await assertWoAllows(taskId, 'quote.send');
   await assertNoOpenNteOverride(taskId, 'Sending the quote');
 
-  // Read the numbers BEFORE the transaction opens (single-connection rule).
+  // Read the numbers on the pool BEFORE the transaction opens: a read that
+  // needs no lock (an approved quote is no longer editable).
   const pre = await getQuote(taskId, actor);
   if (!pre) throw new ApiError('NOT_FOUND', 'No quote on this work order');
   const summaryText = pre.summary.pinned ?? pre.summary.auto;

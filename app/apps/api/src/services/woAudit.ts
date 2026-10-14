@@ -65,8 +65,8 @@ export function actionFor(field: string): 'status_changed' | 'routed' | 'field_u
   return 'field_updated';
 }
 
-/** Text comparison on purpose: numerics arrive as strings from PGlite and dates
-    as 'YYYY-MM-DD', so a typed comparison would log phantom changes. */
+/** Text comparison on purpose: numerics arrive as strings from node-postgres and
+    dates as 'YYYY-MM-DD', so a typed comparison would log phantom changes. */
 export function changed(before: unknown, after: unknown): boolean {
   return String(before ?? '') !== String(after ?? '');
 }

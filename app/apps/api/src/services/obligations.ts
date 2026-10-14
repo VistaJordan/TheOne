@@ -29,7 +29,9 @@
 //   · lazily on the read endpoints, debounced to once per 30s;
 //   · immediately after a write that could start or silence a clock.
 // Stable identity is (rule_key, subject_id) — enforced by a partial unique
-// index — so reconciliation UPDATES and never duplicates.
+// index — so reconciliation UPDATES and never duplicates; and when two runs on
+// two pooled connections race to INSERT the same clock, the index decides:
+// the loser's INSERT is ON CONFLICT DO NOTHING, never a swallowed 23505.
 //
 // ═══════════════════════════════════════════════════════════════════════════
 // DEMO-DAY SAFETY
@@ -40,8 +42,9 @@
 // is still pending. Write hooks additionally swallow their own errors: the
 // engine may never be the reason a status change fails.
 //
-// PGlite is single-connection: nothing here runs inside a caller's transaction,
-// and every hook is invoked AFTER the transaction it follows has committed.
+// Nothing here runs inside a caller's transaction: every hook is invoked AFTER
+// the transaction it follows has committed, and a read that arrives while a
+// full run is in flight shares the in-flight run instead of starting another.
 
 import { query } from '../db.js';
 import type {
@@ -65,6 +68,8 @@ import {
 } from '../lib/businessTime.js';
 import { forbidden, notFound, badRequest } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
+import { Params } from './woFields.js';
+import { outOfScope, woScopeSql } from './woScope.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
@@ -314,14 +319,19 @@ function inList(params: unknown[], values: readonly string[]): string {
  * `status_changed` activity row naming that status, falls back to the WO's
  * `created` row, then to `task.created_at` — so a work order that was seeded
  * straight into a status still has an honest clock start.
+ *
+ * `activity_log.entity_id` is TEXT since migration 0023 while `task.id` is a
+ * uuid: every comparison casts the uuid side, or Postgres answers
+ * `operator does not exist: text = uuid` and the engine derives nothing.
+ * Exported so the test can pin the casts (W3-2).
  */
-const STATUS_SINCE_SQL = `
+export const STATUS_SINCE_SQL = `
   COALESCE(
     (SELECT max(a.created_at) FROM activity_log a
-      WHERE a.entity_type = 'task' AND a.entity_id = t.id
+      WHERE a.entity_type = 'task' AND a.entity_id = t.id::text
         AND a.action = 'status_changed' AND a.after ->> 'status_name' = s.name),
     (SELECT min(a.created_at) FROM activity_log a
-      WHERE a.entity_type = 'task' AND a.entity_id = t.id AND a.action = 'created'),
+      WHERE a.entity_type = 'task' AND a.entity_id = t.id::text AND a.action = 'created'),
     t.created_at)
 `;
 
@@ -436,7 +446,7 @@ async function collectDesired(
         rule.params.statuses ?? ['Open', 'Emergency'],
         rule.params.priorities ?? ['high'],
         `NOT EXISTS (SELECT 1 FROM activity_log a
-                      WHERE a.entity_type = 'task' AND a.entity_id = b.task_id
+                      WHERE a.entity_type = 'task' AND a.entity_id = b.task_id::text
                         AND a.created_at > b.opened_at
                         AND a.action NOT LIKE 'obligation%')
          AND NOT EXISTS (SELECT 1 FROM comment c
@@ -532,7 +542,7 @@ async function collectDesired(
         `SELECT q.id::text AS quote_id, q.task_id::text AS task_id, hl.name AS home_list,
                 ${ISO(`COALESCE(
                    (SELECT max(a.created_at) FROM activity_log a
-                     WHERE a.entity_type = 'task' AND a.entity_id = q.task_id
+                     WHERE a.entity_type = 'task' AND a.entity_id = q.task_id::text
                        AND a.action = 'quote_submitted'),
                    q.updated_at)`)} AS opened_at
            FROM quote q
@@ -724,11 +734,17 @@ async function reconcile(scopeTaskId: string | undefined): Promise<void> {
 
     if (!existing) {
       const { tier } = tierFor(d.clock, d.opened_at, d.due_at, now, critical);
+      // `live` was read on one pooled connection; a post-write hook for the
+      // same work order, or the debounced full run, may be inserting this very
+      // clock on another. The partial unique index (0004) is the referee: the
+      // loser inserts nothing and gets no row back, so it skips the fan-out —
+      // the winner's run owns that, and the next reconcile sees `existing`.
       const ins = await query<{ id: string }>(
         `INSERT INTO obligation
            (rule_key, task_id, subject_kind, subject_id, owed_by_principal, owed_by_role,
             opened_at, due_at, clock, tier, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open')
+         ON CONFLICT (rule_key, subject_id) WHERE status <> 'resolved' DO NOTHING
          RETURNING id::text AS id`,
         [
           d.rule_key,
@@ -743,7 +759,8 @@ async function reconcile(scopeTaskId: string | undefined): Promise<void> {
           tier,
         ],
       );
-      if (tier >= 1) await fanOut(ins.rows[0].id, tier, people, rules);
+      const inserted = ins.rows[0];
+      if (inserted && tier >= 1) await fanOut(inserted.id, tier, people, rules);
       continue;
     }
 
@@ -876,8 +893,8 @@ let inFlight: Promise<void> | null = null;
 
 /**
  * The lazy evaluator behind every read endpoint. At most one full run per 30s,
- * and concurrent callers share the in-flight run rather than queueing a second
- * one behind PGlite's single connection.
+ * and concurrent callers share the in-flight run rather than starting a second
+ * one over the same rows.
  */
 export async function evaluateDebounced(): Promise<void> {
   if (!(await obligationsReady())) return;
@@ -886,7 +903,12 @@ export async function evaluateDebounced(): Promise<void> {
 
   inFlight = reconcile(undefined)
     .catch((err) => {
-      console.error('obligations: evaluation failed', err);
+      // Swallowed on purpose (a read must still answer) but never silently:
+      // the SQL error code and message are what would have shown W3-2.
+      // A pg error names itself by SQLSTATE; one without a code is a bug in
+      // this file, and only its stack says where.
+      const e = err as { code?: string; message?: string; stack?: string };
+      console.error('obligations: evaluation failed', { code: e.code, message: e.message, ...(e.code ? {} : { stack: e.stack }) });
     })
     .finally(() => {
       lastFullRunAt = Date.now();
@@ -910,7 +932,8 @@ export async function evaluateForTask(taskId: string | null | undefined): Promis
     if (!(await obligationsReady())) return;
     await reconcile(taskId);
   } catch (err) {
-    console.error('obligations: post-write evaluation failed', err);
+    const e = err as { code?: string; message?: string; stack?: string };
+    console.error('obligations: post-write evaluation failed', { task_id: taskId, code: e.code, message: e.message, ...(e.code ? {} : { stack: e.stack }) });
   }
 }
 
@@ -921,7 +944,8 @@ export async function evaluateNow(): Promise<void> {
     await reconcile(undefined);
     lastFullRunAt = Date.now();
   } catch (err) {
-    console.error('obligations: forced evaluation failed', err);
+    const e = err as { code?: string; message?: string; stack?: string };
+    console.error('obligations: forced evaluation failed', { code: e.code, message: e.message, ...(e.code ? {} : { stack: e.stack }) });
   }
 }
 
@@ -1040,36 +1064,45 @@ export interface ObligationQuery {
   limit?: number;
 }
 
-/** GET /api/obligations. Sorted worst-first: tier, then closest to breach. */
+/**
+ * GET /api/obligations. Sorted worst-first: tier, then closest to breach.
+ *
+ * Rule 8.5 (W4-7): a scoped person sees only the clocks on work orders in
+ * their book — the same `woScopeSql` predicate every list runs, over the
+ * joined `t`. Super admins and "Everything" roles get null and see every row;
+ * an obligation with no work order (none expected — every rule pushes one)
+ * drops out for a scoped viewer because the predicate sits on the LEFT JOIN.
+ */
 export async function listObligations(
   filters: ObligationQuery,
   actor: ActingPrincipal | null,
 ): Promise<Obligation[]> {
   if (!(await obligationsReady())) return [];
   const rules = await loadRules();
-  const params: unknown[] = [];
+  const p = new Params();
   const where: string[] = [];
 
   const state = filters.state ?? 'open';
   if (state === 'open') where.push(`o.status <> 'resolved'`);
-  else {
-    params.push(state);
-    where.push(`o.status = $${params.length}`);
-  }
+  else where.push(`o.status = ${p.add(state)}`);
 
   if (filters.wo) {
-    params.push(filters.wo);
-    const p = `$${params.length}`;
-    where.push(`(t.id::text = ${p} OR t.wo_number = ${p})`);
+    const hole = p.add(filters.wo);
+    where.push(`(t.id::text = ${hole} OR t.wo_number = ${hole})`);
   }
 
-  params.push(Math.min(Math.max(filters.limit ?? 200, 1), 500));
+  if (actor) {
+    const scope = woScopeSql(actor, p);
+    if (scope) where.push(scope);
+  }
+
+  const limit = p.add(Math.min(Math.max(filters.limit ?? 200, 1), 500));
   const res = await query<ObligationRow>(
     `${OBLIGATION_SELECT}
       WHERE ${where.join(' AND ')}
       ORDER BY o.tier DESC, o.due_at ASC
-      LIMIT $${params.length}`,
-    params,
+      LIMIT ${limit}`,
+    p.values,
   );
   const now = new Date();
   return res.rows.map((r) => mapObligation(r, rules, actor, now));
@@ -1313,6 +1346,8 @@ export const SNOOZE_MAX_HOURS = 72;
  *     engine is that nothing gets silently dismissed.
  *   · A TIER-3 obligation needs ATL or above. Critical work is not something an
  *     individual can quietly push out of their own way.
+ *   · ONLY YOUR OWN BOOK (rule 8.5). A clock the list would hide from this
+ *     viewer cannot be snoozed by them either — knowing its id is not scope.
  *
  * The snooze rewrites BOTH ends of the window — opened_at = now, due_at = now +
  * hours — so the tier genuinely resets instead of staying breached against an
@@ -1332,6 +1367,12 @@ export async function snoozeObligation(
   const trimmed = reason.trim();
   if (trimmed.length === 0) throw badRequest('A snooze needs a reason');
 
+  // Rule 8.5: the list hides a clock whose work order is outside the viewer's
+  // book, so the snooze refuses it too — the same predicate and the same 403
+  // as every per-work-order route (resolveTaskId's `in_scope` shape). A clock
+  // with no work order is in nobody's book, exactly as in the list.
+  const p = new Params();
+  const scope = woScopeSql(actor, p);
   const cur = await query<{
     id: string;
     tier: number;
@@ -1339,13 +1380,18 @@ export async function snoozeObligation(
     status: ObligationState;
     task_id: string | null;
     rule_key: string;
+    in_scope: boolean;
   }>(
-    `SELECT id::text AS id, tier, clock, status, task_id::text AS task_id, rule_key
-       FROM obligation WHERE id = $1 AND status <> 'resolved' LIMIT 1`,
-    [id],
+    `SELECT o.id::text AS id, o.tier, o.clock, o.status, o.task_id::text AS task_id, o.rule_key,
+            ${scope ? `COALESCE(${scope}, FALSE)` : 'TRUE'} AS in_scope
+       FROM obligation o
+       LEFT JOIN task t ON t.id = o.task_id
+      WHERE o.id = ${p.add(id)} AND o.status <> 'resolved' LIMIT 1`,
+    p.values,
   );
   if (cur.rows.length === 0) throw notFound('Obligation not found');
   const ob = cur.rows[0];
+  if (!ob.in_scope) throw outOfScope();
 
   if (ob.tier >= 3 && !(actor.role !== null && LEADERSHIP_ROLES.includes(actor.role))) {
     throw forbidden('Snoozing a critical obligation requires ATL or above', {

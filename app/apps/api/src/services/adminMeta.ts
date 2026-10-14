@@ -180,7 +180,7 @@ export async function getSettings(): Promise<SettingsResponse> {
       cookie_secure: config.cookieSecure,
     },
     database: {
-      engine: 'PGlite (embedded Postgres 16)',
+      engine: 'Postgres 16 (node-postgres)',
       migrations_applied: migrations.rows[0].n,
       latest_migration: migrations.rows[0].latest,
     },

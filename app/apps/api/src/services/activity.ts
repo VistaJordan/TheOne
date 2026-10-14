@@ -20,7 +20,7 @@ import type { ActivityEntry, FeedActor, PermissionSet } from '@theone/shared';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// ISO-8601 UTC render so the JSON is deterministic regardless of PGlite's date parsing.
+// ISO-8601 UTC render so the JSON is deterministic regardless of the driver's date parsing.
 const CREATED_AT_SQL = `to_char((a.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 
 /**
@@ -47,8 +47,9 @@ export function actorIdFromRequest(req: FastifyRequest): string {
  * S4 · the acting principal WITH its role — what the quote gates compare
  * against QUOTE_EDIT_ROLES / QUOTE_APPROVE_ROLES.
  *
- * Still resolved BEFORE any db.transaction() opens: PGlite is single-connection,
- * so a lookup inside a transaction deadlocks.
+ * Built from the session the auth guard loaded before the handler ran, so it
+ * is resolved once per request and never inside a transaction: a read that
+ * needs no lock belongs on the pool.
  */
 export interface ActingPrincipal {
   id: string;

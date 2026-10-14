@@ -77,9 +77,9 @@ export const INSIGHT_PART: DocPart = {
           name: 'The seven rules',
           what: 'Ack emergency (Emergency not acknowledged): 2 hours, 24 × 7, on an Open or Emergency work order with high priority, critical on any breach; cleared by any activity on the work order. Quote owed: 2 business days in Waiting for Quote; cleared when any quote exists. ETA owed (after approval): 2 business hours in Approved; cleared by the next status change. Chase client (Client approval needs chasing): 5 business days in Waiting for Approval; cleared by a client-visible staff message or a client update sent, or a status change. Quote review (Quote waiting on review): 4 business hours with the quote pending approval, owed to the ATL role; cleared by approve or reject. Payment owed (Payment request unprocessed): 2 business days in requested, owed to the admin role; cleared by any change on the request. SLA blown: SLA Due Date passed (18:00 Chicago that day) while open or active, with 10 business hours of grace; cleared when the work order leaves open / active. A business day is 10 hours; business clocks pause outside hours. The owner is the dispatcher named by the work order\'s home list, else the owed role.',
           value: 'Each promise has an owner, a clock and a way out.',
-          rules: ['The thresholds are rows in the obligation_rule table; there is no admin screen for them yet.'],
+          rules: ['The thresholds are rows in the obligation_rule table; there is no admin screen for them yet.', 'The page, the bell, the list and the snooze need work_orders view; the list and the snooze follow the viewer\'s Which work orders scope (an obligation outside the book is refused), and ?wo= resolves the work order like every per-work-order route, so a trashed work order answers an empty list.', 'The engine\'s audit-log joins cast the work order id to text since 2026-10-14; from migration 0023 until then they compared text with uuid, the error was swallowed and no obligation was ever raised, so the first read after that deploy raises every open clock at once and sends each tier\'s pings once.'],
           since: '0004',
-          deferred: ['Pulse is not scoped by Which work orders and its page is not permission-wrapped: an Only-theirs dispatcher sees every obligation under Watching.'],
+          deferred: ['A Postgres-backed test that the engine returns rows; tests/obligations-sql.test.ts pins the SQL text only.'],
         },
         {
           name: 'Tiers, escalation and the columns',
@@ -90,6 +90,8 @@ export const INSIGHT_PART: DocPart = {
           name: 'Snooze',
           what: 'Presets 1h · 2h · 4h · 8h · 1d · 2d · 3d (72 hours at most), a reason of 3 to 500 characters, measured in business hours for business-clock rules; it resets the clock. A critical (tier 3) obligation can be snoozed only by ATL, TL, AM or Admin. There is no dismiss.',
           value: 'A deadline is moved on the record, with a reason, never silenced.',
+          rules: ['A snooze on an obligation outside the viewer\'s Which work orders scope is refused with "This work order is not assigned to you" (403).'],
+          permissions: ['work_orders view'],
           audit: ['obligation_snoozed'],
         },
         {

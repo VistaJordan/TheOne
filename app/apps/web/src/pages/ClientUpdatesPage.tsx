@@ -58,6 +58,7 @@ import { CuChartGrid, CuTiles, NOT_SET } from '../components/cu/CuInsights';
 import { TrackerDialog, describeError } from '../components/cu/TrackerDialog';
 import { ShareDialog, whenCT } from '../components/cu/ShareDialog';
 import { useCanEditField } from '../components/wo/fieldEdit';
+import { downloadLinkProps } from '../lib/actor';
 import { EMPTY_FILTERS, filterUrl, formatCell, rawCell, sendableFilters } from '../lib/woView';
 
 const PERM = 'client_updates';
@@ -270,6 +271,9 @@ function TrackerView({
   savingFilters: boolean;
 }) {
   const byKey = useMemo(() => new Map(fields.map((f) => [f.key, f])), [fields]);
+  // W4-2 · the CSV route logs under the acting principal, so the API refuses
+  // it while viewing as someone; the link goes inert rather than save the 403.
+  const { isImpersonating } = useAuth();
   const savedFiltersJson = JSON.stringify(tracker.filters);
   const [draft, setDraft] = useState<WoFilterSet>(tracker.filters);
   useEffect(() => setDraft(JSON.parse(savedFiltersJson) as WoFilterSet), [savedFiltersJson]);
@@ -394,7 +398,7 @@ function TrackerView({
             </button>
           )}
           {canShare && (
-            <a className="btn btn-ghost" href={clientUpdateCsvUrl(tracker.id)} title="The client's columns, as a spreadsheet">
+            <a className="btn btn-ghost" {...downloadLinkProps(isImpersonating, clientUpdateCsvUrl(tracker.id), { title: "The client's columns, as a spreadsheet" })}>
               <Icon name="download" size={14} /> CSV
             </a>
           )}

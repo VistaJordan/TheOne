@@ -1,6 +1,5 @@
-# Unused in S1 — the prototype runs embedded PGlite (Postgres 16 WASM).
-# This service is the committed upgrade path: the same migrations/*.sql run
-# verbatim against real Postgres 16 later; upgrade is a connection-string swap.
+# The local Postgres 16 for Docker users: same credentials as the default URL in packages/db/src/client.ts.
+# Optional when a native Postgres 16 server already listens on localhost:5432 (what the main machine runs).
 services:
   db:
     image: postgres:16

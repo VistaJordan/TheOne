@@ -81,12 +81,14 @@ export async function query<T = Record<string, unknown>>(
  * Replaces PGlite's `db.transaction(cb)`. Commits on resolve, rolls back on
  * throw, and always releases the client.
  *
- * Note for anyone reading the older comments in the services: under PGlite the
- * actor had to be resolved BEFORE opening a transaction, because a second
- * query would queue behind the open one on the single connection and
- * self-deadlock. That constraint is gone — the pool hands out a separate
- * connection. The existing ordering is harmless, so it is left alone rather
- * than restructured without test cover.
+ * Ordering: a read that needs no lock (the acting principal, a scope or
+ * status pre-check) runs on the pool BEFORE the transaction opens, so the
+ * transaction holds its connection for the writes alone; a write that depends
+ * on a row it read must re-read that row under a lock inside `fn` (the task
+ * bag: updateWorkOrderFields in apps/api/src/services/woFieldValues.ts).
+ * Never await, from inside `fn`, a pool write to a row `fn` has locked: it
+ * runs on another connection and waits on that lock while `fn` waits on it,
+ * which is why the automations run after the commit.
  */
 export async function withTransaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T> {
   const client = await getPool().connect();

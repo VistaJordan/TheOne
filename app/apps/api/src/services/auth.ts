@@ -403,10 +403,43 @@ export async function consumeAuthTransaction(state: string): Promise<AuthTransac
 
 // ── 4 · Dev bypass ───────────────────────────────────────────────────────────
 
+/** Postgres "relation does not exist" — app_meta is migration 0082's table. */
+const UNDEFINED_TABLE = '42P01';
+
+/**
+ * W4-11: DEMO_MODE promises "seed data only"; the promise is a row the seed
+ * writes last (app_meta.seeded, migration 0082). No row — a database that was
+ * never seeded, or one the migration has not reached (42P01: no table yet) —
+ * is a 403 DEMO_NOT_SEEDED. Any OTHER database failure is rethrown: an outage
+ * must read as a 500 in the logs, not as an operator who forgot to seed. A
+ * no-op outside DEMO_MODE, so local AUTH_DEV_BYPASS never asks. Call it
+ * before anything the demo would hand out from an unseeded database: the
+ * sign-in below, and the account picker (GET /auth/dev-candidates in
+ * routes/auth.ts lists every active human's name, email and role).
+ */
+export async function assertDemoSeeded(): Promise<void> {
+  if (!config.demoMode) return;
+  let seeded = false;
+  try {
+    const m = await query<{ value: unknown }>(`SELECT value FROM app_meta WHERE key = 'seeded'`);
+    seeded = m.rows.length > 0;
+  } catch (err) {
+    if ((err as { code?: unknown } | null)?.code !== UNDEFINED_TABLE) throw err;
+    seeded = false; // the table is not there yet = never seeded
+  }
+  if (!seeded) {
+    throw new ApiError('FORBIDDEN', 'This demo database has not been seeded — sign-in is refused.', {
+      code: 'DEMO_NOT_SEEDED',
+    });
+  }
+}
+
 /**
  * Sign in as any non-disabled human without a password. Guarded twice: the
  * config module refuses to boot this mode in production, and this function
- * refuses again at call time. Two locks on a door that must never open.
+ * refuses again at call time. Two locks on a door that must never open — and
+ * a third in DEMO_MODE, the seed marker (W4-11), so the public demo can only
+ * ever open onto seed data.
  */
 export async function devBypassSignIn(principalId: string): Promise<SessionPrincipal> {
   // DEMO_MODE opens the production lock the same way it does in config.ts —
@@ -414,6 +447,7 @@ export async function devBypassSignIn(principalId: string): Promise<SessionPrinc
   if (config.authMode !== 'bypass' || (config.isProduction && !config.demoMode)) {
     throw new ApiError('FORBIDDEN', 'The development sign-in bypass is not enabled');
   }
+  await assertDemoSeeded();
   const touched = await query<{ id: string }>(
     `UPDATE principal SET last_login_at = now(), status = 'active'
       WHERE id = $1 AND kind = 'human' AND status <> 'disabled'

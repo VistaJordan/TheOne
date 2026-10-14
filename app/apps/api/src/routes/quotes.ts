@@ -14,7 +14,8 @@
 // Two invariants every handler here follows:
 //  1. The acting principal is resolved ONCE, up front, and passed down — the
 //     permission checks live in the service so no route can forget one, and
-//     PGlite's single connection is never asked for a principal mid-transaction.
+//     the lookup, a read that needs no lock, runs on the pool before any
+//     transaction opens.
 //  2. Money is validated on the RAW body before Zod sees it (validation.ts).
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';

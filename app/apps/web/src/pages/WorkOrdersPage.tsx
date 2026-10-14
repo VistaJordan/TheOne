@@ -32,6 +32,7 @@ import { ImportDialog } from '../components/wo/list/ImportDialog';
 import { CreateWorkOrderDialog } from '../components/wo/list/CreateWorkOrderDialog';
 import { ListPagination, PAGE_SIZES } from '../components/ListPagination';
 import { ToolButton } from '../components/wo/list/Popover';
+import { downloadLinkProps } from '../lib/actor';
 import { useStatusGroups } from '../lib/statusGroups';
 import {
   DUE_SECTIONS,
@@ -152,8 +153,9 @@ export function WorkOrdersPage() {
   const [showImport, setShowImport] = useState(false);
   // 0041 · "Add work order" — the manual create form.
   const [showCreate, setShowCreate] = useState(false);
-  // 0015 · Import needs work_orders:create, Export its own view grant.
-  const { can, actingAs } = useAuth();
+  // 0015 · Import needs work_orders:create, Export its own view grant — and
+  // Export goes inert while viewing as someone (W4-2, downloadLinkProps).
+  const { can, actingAs, isImpersonating } = useAuth();
   // 0026: a scoped person's list is "theirs" before any filter; say so, so an
   // empty list or a missing number is not read as a bug.
   const scope = useMemo(
@@ -489,12 +491,13 @@ export function WorkOrdersPage() {
                 </ToolButton>
               )}
               {/* A real link, so the browser handles the download and the file
-                  gets its name from Content-Disposition. */}
+                  gets its name from Content-Disposition. Inert while viewing
+                  as someone (W4-2): the API refuses that GET, and a live link
+                  would save the 403's body as the file. */}
               {can('work_orders/export', 'view') && (
                 <a
                   className="tool-btn"
-                  href={workOrdersExportUrl(criteria)}
-                  title="Export the filtered rows, in the columns shown"
+                  {...downloadLinkProps(isImpersonating, workOrdersExportUrl(criteria), { title: 'Export the filtered rows, in the columns shown' })}
                 >
                   <Icon name="download" size={14} />
                   Export

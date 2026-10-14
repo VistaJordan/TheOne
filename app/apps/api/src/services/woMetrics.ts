@@ -784,8 +784,9 @@ function lastValueOf(action: string, after: Record<string, unknown> | null): str
 }
 
 export async function getFieldTimes(taskId: string): Promise<WoFieldTime[]> {
-  // Two cheap queries beat one window function PGlite has to sort twice:
-  // the latest event per field (DISTINCT ON), and count+first per field.
+  // Two cheap queries, side by side on the pool, instead of one with window
+  // functions: the latest event per field (DISTINCT ON), and count+first per
+  // field.
   const [latest, spans] = await Promise.all([
     query<{ field: string; action: string; after: Record<string, unknown> | null; last_at: string }>(
       `SELECT DISTINCT ON (a.field) a.field, a.action, a.after, ${ISO('a.created_at')} AS last_at

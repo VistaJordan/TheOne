@@ -90,11 +90,15 @@ export function usePulse() {
   });
 }
 
-/** The bell. */
-export function useNotifications() {
+/** The bell. Off (`enabled` false) for a role without `work_orders` view —
+    /notifications is gated on it since the 2026-10-14 batch — so a sales
+    account is not answered 403 once a minute: nothing is fetched, polled or
+    retried until it turns on. */
+export function useNotifications(enabled = true) {
   return useQuery({
     queryKey: NOTIFICATIONS_KEY,
     queryFn: getNotifications,
+    enabled,
     staleTime: 30_000,
     refetchInterval: PULSE_REFRESH_MS,
     retry: 0,

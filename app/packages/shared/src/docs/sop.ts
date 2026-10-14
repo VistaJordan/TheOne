@@ -36,7 +36,7 @@ export const SOP: SopDocument = {
     { term: 'Quote clock', definition: 'Quote Due Date: 48 business hours after the assessment check-out, skipping weekends and the holiday table, Chicago time.' },
     { term: 'Yoda', definition: 'The standalone quoting and technician-payment tool The One replaces. Its rules (option pricing, client decisions, rounds, W9, two-person delete, Cost on pay) live in The One since 0076; nothing is handed to it any more.' },
     { term: 'Scope ("Only theirs")', definition: 'A role or person who sees only the work orders assigned to them, widened by billing entities, assigned clients, or narrowed to a list of sites.' },
-    { term: 'Super admin', definition: 'One of the four named people who pass every permission check and alone can adjust one person\'s permissions, restrict a person to sites, or view as someone else.' },
+    { term: 'Super admin', definition: 'One of the four named people who pass every permission check and alone can adjust one person\'s permissions, restrict a person to sites, view as someone else, or make and unmake another super admin.' },
     { term: 'Audit log', definition: 'The append-only record of every change (who, when, before, after). Nothing in it can be edited or deleted.' },
     { term: 'Service principal', definition: 'A named system account (Ecotrak sync, Quo, Planned maintenance, Client updates, Email escalations, Dispatch, Vendor portal, Automations) that signs what the system does by itself.' },
   ],
@@ -70,7 +70,7 @@ export const SOP: SopDocument = {
           '**Bell**: "For you" notices (a task given to you, a review to make, a decision on your request, a work order assigned to you, an insurance date expiring, a permit, a purchase request, a dispatch answer, an asset request) above the Pulse pings; **Mark all read**; **Open the Pulse**.',
           '**Sparkle**: the assistant. Ask a question about the data ("which of my work orders are waiting for parts?") or about the app ("how do I request a status change?"). It answers only from what you may see and never changes anything.',
           '**Sun / moon**: switch between the Blackout and Daylight Dispatch themes for this browser (the first visit follows your operating system).',
-          '**Viewing as** (super admins): act as another person to see what they see; **Myself** ends it; it is recorded in the audit log, and the admin console still reads you.',
+          '**Viewing as** (super admins): act as another person to see what they see. It is read-only: every change, the CSV exports, Save as PDF and the technician map answer "Viewing as another user is read-only. Stop viewing as them to make changes." and the top bar shows a **Read-only** chip; **Myself** ends it; it is recorded in the audit log, and the admin console still reads you.',
         ] },
         { kind: 'note', title: 'LOCKED WITH A REASON', text: 'A page or button you may not use is shown locked with a sentence saying why and who to ask ("This section is not available to you — Your role does not include it. Ask a super admin if you need access."). Nothing fails silently.' },
       ],
@@ -364,13 +364,13 @@ export const SOP: SopDocument = {
       blocks: [
         { kind: 'sub', title: 'Audit (prototype)' },
         { kind: 'steps', items: [
-          'Open **Receivables › Audit**. Lanes **All · Major · Minor · Clean** show "Auto-check results" and "Findings" per completed work order with a suggested QC.',
-          'Fix what the checks flag on the work order (**Open work order**), then tick **GTG**, **Elise**, **Admin** and **Quote**. A clean, ticked work order shows "Clean release — this WO is in Invoicing → Ready to invoice"; move its status to **Ready to Invoice**.',
+          'Open **Receivables › Audit** (needs invoicing view). Lanes **All · Major · Minor · Clean** show "Auto-check results" and "Findings" per Done work order (the 500 most recent) with a suggested QC; a dash in a fact column reads "not tracked yet".',
+          'Fix what the checks flag on the work order (**Open work order**), then tick **GTG**, **Elise**, **Admin** and **Quote**. A clean, ticked row reads "Clean on what The One tracks — release ticked here (not saved); Invoicing › Ready follows the quote"; move its status to **Ready to Invoice**.',
         ] },
-        { kind: 'note', title: 'PROTOTYPE', text: 'The audit tab is still a prototype: its findings are sampled, not read from the record or from SharePoint and ClickUp ("External systems are stubbed in this prototype"), and the four ticks live in this browser only — they are not saved or audited. Treat it as the shape of the audit, not its verdict.' },
+        { kind: 'note', title: 'PROTOTYPE', text: 'The banner says it: "Prototype — this tab is worked out in your browser from the work-order and quote lists." Only facts the lists carry are checked (Assignee, CICO status, Bill For Incurred, the quote on file); SharePoint folder contents, closeout numbers and days on Grey are not tracked yet and are never counted as findings; the four ticks live in this browser only and are not saved or audited. Treat it as the shape of the audit, not its verdict.' },
         { kind: 'sub', title: 'Invoicing' },
         { kind: 'steps', items: [
-          'On **Invoicing › Ready** click **Raise invoice**. The draft is built from the approved quote (incurred plus the options flagged for the summary, overtime folded in) or, with no quote and a T&M contract, from hours on site plus the trip charge, else a single line at Total Invoiced or the NTE. The lines are the prefill; there is no line editor on screen yet.',
+          'On **Invoicing › Ready** (Done work orders whose quote is approved, sent or client-approved and that have no invoice yet; a quote older than the 200 most recently updated reads "not checked" and the page says so) click **Raise invoice**. The draft is built from the approved quote (incurred plus the options flagged for the summary, overtime folded in) or, with no quote and a T&M contract, from hours on site plus the trip charge, else a single line at Total Invoiced or the NTE. The lines are the prefill; there is no line editor on screen yet.',
           'Click **Send** (needs approve; the amount tier applies; a zero total cannot be sent). The number (<entity>-<year>-<n>) is fixed, the lines are frozen and the due date is 30 days. Move the status to **Invoiced Not Paid**: Total Invoiced is stamped from the quote.',
           'When the client pays, click **Mark paid** (needs edit) and move the status to **Invoiced**. Void and reopen exist in the API only (no button yet).',
           '**Proposed**: when a contract has **Bill automatically on completion**, completion drafts a proposal; **Confirm** files the invoice with exactly those lines, **Dismiss** ("Why not? (optional)") drops it.',
@@ -520,8 +520,8 @@ export const SOP: SopDocument = {
       blocks: [
         { kind: 'sub', title: 'A. Users' },
         { kind: 'bullets', items: [
-          'Invite: **Invite a user**, **Work email**, **Full name**, **Role**, optionally **Super admin**, **Send invitation**. The email must match their Microsoft account exactly; no email is sent — the row is the invitation.',
-          'Change a role: the **Role** dropdown in the row (saves at once). **Super admin** switch: nobody changes their own; the last super admin cannot be demoted.',
+          'Invite: **Invite a user**, **Work email**, **Full name**, **Role**, optionally **Super admin** (shown to super admins only), **Send invitation**. The email must match their Microsoft account exactly; no email is sent — the row is the invitation.',
+          'Change a role: the **Role** dropdown in the row (saves at once). **Super admin** switch: super admins only ("Only a super admin can change this"), off while viewing as someone, nobody changes their own, and the last super admin cannot be demoted. A super admin\'s **Role**, **Disable** and **Re-enable** are locked for anyone who is not one ("Only a super admin can change a super admin\'s account").',
           '**Disable** (ends sessions at once) / **Re-enable**. **Clients** column: **Assign / Edit** the clients listed on the person (widens "Only theirs" to those clients). **Last sign-in** shows when they were last here.',
           '**Adjust** (super admins only): click cells to set one person\'s permissions on top of their role (faded cells come from the role), **Save adjustments**; **Remove all adjustments** clears them.',
         ] },

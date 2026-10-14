@@ -6,11 +6,14 @@
 // order that fired), and each action sets a catalogue field to a value.
 //
 // The engine is called by every write path AFTER its transaction commits
-// (dispatchAutomations below) — PGlite is single-connection, so nothing here
-// may run while a caller's transaction is open. Actions are applied through
-// the ordinary write services (changeStatus / updateWorkOrderFields), so an
-// automation's writes carry the same audit rows, mirror-column sync and typed
-// coercion as a human's — attributed to the "Automations" service principal.
+// (dispatchAutomations below), and nothing here may run while a caller's
+// transaction is open: the engine reads on the pool, which cannot see that
+// transaction's uncommitted writes, and its actions write the task row on
+// another connection, where they would wait on the caller's lock while the
+// caller waits on them. Actions are applied through the ordinary write
+// services (changeStatus / updateWorkOrderFields), so an automation's writes
+// carry the same audit rows, mirror-column sync and typed coercion as a
+// human's — attributed to the "Automations" service principal.
 //
 // LOOP GUARDS, two of them:
 //   1. one root event fires each rule AT MOST ONCE per work order — the fired

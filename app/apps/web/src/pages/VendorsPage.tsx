@@ -54,6 +54,7 @@ import { AdvancedFilterDialog, ColumnsDialog, VendorBoard, describeVendorFilter 
 import { BulkBar, BulkSearchDialog, SaveViewDialog } from '../components/vendors/VendorListTools';
 import { VendorAlertsTab, VendorDataQualityTab, VendorTasksTab } from '../components/vendors/VendorWorkTabs';
 import { useAuth } from '../auth/AuthProvider';
+import { downloadLinkProps } from '../lib/actor';
 import { tradeSlot } from '../lib/mapPoints';
 import { useTheme } from '../theme/ThemeProvider';
 
@@ -85,7 +86,7 @@ const day = (iso: string | null) =>
 const money = (n: number | null) => (n == null ? '—' : `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
 export function VendorsPage() {
-  const { can } = useAuth();
+  const { can, isImpersonating } = useAuth();
   const qc = useQueryClient();
   const [sp, setSp] = useSearchParams();
   const rawView = sp.get('view');
@@ -375,7 +376,10 @@ export function VendorsPage() {
                   </button>
                 )}
                 {can('vendors/export', 'view') && (
-                  <a className="btn btn-sm is-ghost" href={vendorExportUrl(filterParams)} download>
+                  // W4-2 · inert while viewing as someone: the export logs under
+                  // the actor, so the API refuses it and a live link would save
+                  // the 403's body as the file.
+                  <a className="btn btn-sm is-ghost" {...downloadLinkProps(isImpersonating, vendorExportUrl(filterParams), { download: true })}>
                     <Icon name="download" size={12} />
                     Export CSV
                   </a>

@@ -212,8 +212,12 @@ async function applySharing(
       const want = wanted.has(person.id);
       if (want === has.has(person.id)) continue;
       // A person opens the Dashboard section through their role; the share
-      // only lifts THIS board into view, it does not open the section.
-      await setUserOverrideView(person.id, key, want ? true : null, viewer.id);
+      // only lifts THIS board into view, it does not open the section. The
+      // W4-1 ring flag is the acting identity's — never wider than the real
+      // user's (only a super admin can act as someone else, and a write while
+      // viewing as someone is refused upstream) — and `peoplePerms` lists no
+      // super admin anyway.
+      await setUserOverrideView(person.id, key, want ? true : null, viewer.id, viewer.isSuperAdmin);
     }
   }
 

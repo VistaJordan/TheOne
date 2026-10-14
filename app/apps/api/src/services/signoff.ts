@@ -273,6 +273,21 @@ async function generate(taskId: string, actorId: string, via: 'button' | 'assign
   const linkToken = randomBytes(24).toString('base64url');
 
   return withTransaction(async (tx) => {
+    // The task row is locked FIRST, before the sheet rows: their foreign key
+    // takes a KEY SHARE on it, and under FOR UPDATE two sheets drawn at once
+    // — or a sheet and a visit — would each hold that share and wait for the
+    // other's to lift before upgrading, a deadlock Postgres settles by
+    // aborting one. The lock is FOR NO KEY UPDATE now (why: woFieldValues.ts),
+    // which a KEY SHARE never blocks; the order stays as belt and braces. The
+    // bag is read here, not taken from `f`: the pool read above is fine for
+    // drawing the sheet, but the write merges over the row as it is now
+    // (W3-3).
+    const locked = await tx.query<{ fields: Record<string, unknown> | null }>(
+      `SELECT fields FROM task WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`,
+      [taskId],
+    );
+    if (!locked.rows[0]) throw notFound('Work order not found');
+    const bag = locked.rows[0].fields ?? {};
     const old = await tx.query<{ id: string; storage_key: string }>(
       `UPDATE wo_signoff SET superseded_at = now() WHERE task_id = $1 AND superseded_at IS NULL RETURNING id::text AS id, storage_key`,
       [taskId],
@@ -287,10 +302,10 @@ async function generate(taskId: string, actorId: string, via: 'button' | 'assign
     });
     // The field shows the sheet from the start: the technician's link until
     // the signed copy replaces it (fileSignedCopy).
-    const before = f.fields[K_LINK] ?? null;
+    const before = bag[K_LINK] ?? null;
     const link = publicUrl(linkToken);
     if (changed(before, link)) {
-      await tx.query(`UPDATE task SET fields = $2::jsonb, updated_at = now() WHERE id = $1`, [taskId, JSON.stringify({ ...f.fields, [K_LINK]: link })]);
+      await tx.query(`UPDATE task SET fields = $2::jsonb, updated_at = now() WHERE id = $1`, [taskId, JSON.stringify({ ...bag, [K_LINK]: link })]);
       await logTaskChanges(tx, actorId, taskId, [{ field: `fields.${K_LINK}`, before, after: link }], 'signoff');
     }
     const res = await tx.query<SheetRow>(`${SHEET_SQL} WHERE g.id = $1`, [ins.rows[0].id]);
@@ -300,6 +315,12 @@ async function generate(taskId: string, actorId: string, via: 'button' | 'assign
       try { await del(o.storage_key, { token }); } catch { /* already gone */ }
     }
     return res.rows[0];
+  }).catch(async (err: unknown) => {
+    // Nothing recorded the upload: the blank drawn above would sit orphaned
+    // in the store (the work order was trashed meanwhile, or the transaction
+    // failed for any other reason), so it goes before the error does.
+    try { await del(blob.pathname, { token }); } catch { /* best effort */ }
+    throw err;
   });
 }
 
@@ -424,14 +445,25 @@ async function fileSignedCopy(
   const link = `${config.webOrigin}/api/work-orders/${encodeURIComponent(f.wo_number)}/attachments/${attachment.id}`;
   let changes: TaskChange[] = [];
   await withTransaction(async (tx) => {
+    // The bag as the row holds it now, locked FOR NO KEY UPDATE for this
+    // write (W3-3; the strength is explained in woFieldValues.ts) — `f` was
+    // read on the pool for the attachment's file path only. Task row first,
+    // sheet row second: the order generate() takes, so the two never wait on
+    // each other.
+    const locked = await tx.query<{ fields: Record<string, unknown> | null }>(
+      `SELECT fields FROM task WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`,
+      [taskId],
+    );
+    if (!locked.rows[0]) throw notFound('Work order not found');
+    const bag = locked.rows[0].fields ?? {};
     const sheet = await tx.query<{ id: string }>(
       `UPDATE wo_signoff SET signed_attachment_id = $2, signed_at = now()
         WHERE task_id = $1 AND superseded_at IS NULL RETURNING id::text AS id`,
       [taskId, attachment.id],
     );
-    const before = f.fields[K_LINK] ?? null;
+    const before = bag[K_LINK] ?? null;
     if (changed(before, link)) {
-      const merged = { ...f.fields, [K_LINK]: link };
+      const merged = { ...bag, [K_LINK]: link };
       await tx.query(`UPDATE task SET fields = $2::jsonb, updated_at = now() WHERE id = $1`, [taskId, JSON.stringify(merged)]);
       changes = [{ field: `fields.${K_LINK}`, before, after: link }];
       await logTaskChanges(tx, actorId, taskId, changes, 'signoff');

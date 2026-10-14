@@ -376,8 +376,12 @@ async function syncMirrors(q: Q, taskId: string): Promise<TaskChange[]> {
     [taskId],
   );
   const v = latest.rows[0] ? mapRow(latest.rows[0]) : null;
+  // Always called on the visit's transaction: FOR NO KEY UPDATE (the strength
+  // is explained in woFieldValues.ts) serialises this mirror write with the
+  // field editor's and the money sync's whole-bag writes (W3-3) — each merges
+  // over the row as the other left it.
   const t = await q.query<{ fields: Record<string, unknown> | null }>(
-    `SELECT fields FROM task WHERE id = $1`,
+    `SELECT fields FROM task WHERE id = $1 FOR NO KEY UPDATE`,
     [taskId],
   );
   const fields = t.rows[0]?.fields ?? {};
@@ -503,10 +507,10 @@ export async function createVisit(
   requireVisitEdit(actor);
   const c = clean(input, true);
 
-  // Everything that reads OUTSIDE the transaction goes first (PGlite is one
-  // connection): the FM's entry, for whatever the caller did not choose —
-  // the method when none was sent, and the instruction when the method is
-  // the FM's own and no instruction was sent.
+  // Reads that need no lock run on the pool first: the FM's entry, for
+  // whatever the caller did not choose — the method when none was sent, and
+  // the instruction when the method is the FM's own and no instruction was
+  // sent.
   let method = c.method;
   let detail = c.method_detail;
   if (method === undefined || detail === undefined) {
@@ -530,6 +534,16 @@ export async function createVisit(
   let items: WoVisit[] = [];
   let mirror: TaskChange[] = [];
   await withTransaction(async (tx) => {
+    // Parent before child (W3-3): the task row is locked FIRST. The visit
+    // INSERT's foreign key takes a KEY SHARE on it, and under FOR UPDATE two
+    // visits logged at once — or a visit and a sign-off sheet — would each
+    // hold that share and wait for the other's to lift before syncMirrors
+    // could lock: a deadlock Postgres settles by aborting one. The bag locks
+    // are FOR NO KEY UPDATE now (why: woFieldValues.ts), which a KEY SHARE
+    // never blocks, so this stays as belt and braces: it serialises the
+    // visits of one work order (and the next visit seq with them).
+    const owner = await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [taskId]);
+    if (owner.rows.length === 0) throw new ApiError('NOT_FOUND', 'Work order not found');
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO wo_visit
          (task_id, seq, visit_type, status, return_trip_needed, tech_name, tech_phone, method,

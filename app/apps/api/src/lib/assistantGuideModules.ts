@@ -9,30 +9,33 @@ Lanes on the Quotes page: **All**, **Drafts**, **Pending approval**, **Approved*
 
 - Start a quote (needs \`quotes\` create): on the work order's **Client quote** card click **Create quote**, then **Create quote** again in the builder. Fill **Tech reported that…** (required), add priced lines with **Add line**, scope with **Add scope line**, alternatives with **Add option**. It saves by itself as you type.
 - Send it for approval (needs \`quotes\` edit): fix anything the red chip flags, then click **Submit for approval**.
-- Approve and send (needs \`quotes\` approve): in the builder **Approve & Send to CMMS**; on the Quotes list **Approve & send**; in Approvals › **Quotes**, **Approve** then **Approve quote** (that approves only; sending is done from the builder).
+- Approve and send (needs \`quotes\` approve): in the builder **Approve & Send**; on the Quotes list **Approve & send**; in Approvals › **Quotes**, **Approve** then **Approve quote** (that approves only; sending is done from the builder).
 - Send back (needs \`quotes\` approve): **Reject with note** in the builder, or **Decline** on the list; a note is required, and the quote returns to draft.
 - Print: **Print / PDF**, then save as PDF from the print dialog.
 Rule: approving and sending are locked while an NTE increase is open on the work order ("On hold — decide the NTE override under Approvals first"). Rejecting is never locked.
 
 ### Payments (sidebar: Payments; also the **Payment requests** card on a work order)
 
-Lanes: **Needs approval**, **To process**, **All requests**, **Vendor bills**.
+Lanes: **Needs approval**, **To pay**, **All requests**, **Vendor bills**; filters **Search**, **Company**, **W9 needed**, **Pending delete**.
 
-- Request a vendor payment (needs \`payments\` create): on the work order's **Payment requests** card click **Request payment**, pick the **Vendor record**, fill **Purpose**, **Amount** and **Method**, then **Submit payment request**.
-- Approve or reject (needs \`payments\` approve): Payments › **Needs approval**, **Approve** then **Approve payment**, or **Reject**, give the reason, **Reject with note**.
-- Pay it (needs \`payments/process\` edit, normally accounts payable): Payments › **To process**, **Send to Yoda** (optional **Yoda reference**), and later **Mark paid**.
-- Record a vendor's bill (needs \`payments\` create): Payments › **Vendor bills**, **Record bill**, fill the work order, **Vendor**, **Their invoice #**, dates and lines, **Record bill**. Then **Approve** (\`payments\` approve), **Mark paid** (\`payments/process\` edit), or **Dispute** with what is wrong; **Credit note** raises a credit against it.
-Rules: every accepted payment request (approved, sent to Yoda or paid) counts toward the work order's Cost, which is their total; rejecting one takes it back out. If that total passes the NTE, an NTE increase request is raised in Approvals. Approving a payment and sending it to Yoda are locked while an NTE increase is open on the work order. Approval tiers by amount (set in Admin › Settings) can limit which roles may approve a payment or a bill of a given size; a role outside the band sees the button locked.
+- Request a vendor payment (needs \`payments\` create): on the work order's **Payment requests** card click **Request payment**, pick the **Vendor record** (or name the technician and phone by hand), fill **Purpose**, **Amount** and **Method** with its payout details, then **Submit payment request**. The same purpose twice on one work order is refused, and a blacklisted technician cannot be paid ("This technician is blacklisted — AP cannot pay them").
+- Approve or reject (needs \`payments\` approve): Payments › **Needs approval**, **Approve**; or **Reject**, fill **Reason for the requester**, **Reject** again — the request becomes **Rejected** (the reason shows on the row and as an internal comment on the work order; only a **Requested** one can be edited, so delete it and request again). The same rows sit in Approvals › **Payments** (**Approve** then **Approve payment**).
+- Pay it (needs \`payments/process\` edit, normally accounts payable): Payments › **To pay** lists the approved ones, **Mark paid**; a request still waiting for approval (under **Needs approval** or **All requests**) offers **Pay now** instead, which pays it straight away. **Change method** switches how it is sent.
+- Delete a request: **Delete**, fill **Deletion reason**, **Delete** again (the requester or AP). An approved or paid one waits as pending delete until an admin clicks **Confirm delete** or **Keep** (needs \`payments/process\` delete); an admin's own delete is immediate.
+- Record a vendor's bill (needs \`payments\` create): Payments › **Vendor bills**, **Record bill**, fill the work order, **Vendor**, **Their invoice #**, dates and lines, **Record bill**. Then **Approve** (\`payments\` approve), **Mark paid** (\`payments/process\` edit), or **Dispute** with what is wrong and **Resolved** once settled; **Credit note** then **Raise credit note** raises a credit against it.
+Rules: paying a request adds its amount to the work order's Cost, and deleting a paid one takes it back out. If Cost passes the NTE, an NTE increase task is raised in Approvals, and approving or paying is locked while it is open ("On hold — the NTE override on this work order has to be decided first"). Approval tiers by amount (Admin › Settings) limit which roles may approve a vendor bill or send a client invoice of a given size; payment requests are not tier-gated.
 
-### Receivables (sidebar: Receivables)
+### Receivables (sidebar: Receivables; needs \`invoicing\` view)
 
 Tabs **Audit** and **Invoicing**. Invoicing stages: **All**, **Proposed**, **Ready**, **Drafts**, **Sent**, **Paid**.
 
-- A work order becomes **Ready** to invoice when its audit is clean and the Admin and Quote checks are ticked on the **Audit** tab.
+- **Audit** is a browser-side prototype (its banner says so): Done work orders checked against what the lists carry. A dash means The One does not track that fact yet; it is never a finding. Filter with **All**, **Major**, **Minor**, **Clean**; click a row for **Auto-check results** and **Findings**. Its ticks are not saved and decide nothing on Invoicing.
+- A work order is **Ready** to invoice when it is in the Done group, its quote is approved, sent or client-approved, and it has no invoice yet.
 - Raise an invoice (needs \`invoicing\` create): on a ready row click **Raise invoice**; it is drafted from the approved quote. One invoice per work order.
 - Send it (needs \`invoicing\` approve): **Send** on the draft row. Amount tiers apply; an invoice totalling zero cannot be sent; its figures are fixed once sent.
 - Mark it paid (needs \`invoicing\` edit): **Mark paid** on the sent row.
 - Proposed invoices: when a contract has **Bill automatically on completion** ticked, a proposal appears under **Proposed** when the work order is completed; **Confirm** files the invoice, **Dismiss** drops it (needs \`invoicing\` create).
+- The lists are windows: the 500 most recent Done work orders, the 200 most recently updated quotes and the 500 newest invoices. A notice says when one is hit; a Done work order whose quote is past the window reads "not checked" and does not reach Ready.
 
 ### Contracts (sidebar: Contracts)
 
@@ -97,4 +100,4 @@ A tracker per client, shared read-only.
 ### Dashboard and Pulse (sidebar: Dashboard, Pulse)
 
 - Dashboard tabs **Needs Attention** and **Main Dashboard** are built in. Add your own (needs \`dashboard\` create): click **+** at the end of the tabs, name it, **Create dashboard**; it starts private. On your dashboard, **Add card**, say what it is called, how it looks, what it measures and which work orders, **Add card**. **Share…** opens it to everyone, to roles or to people one by one; which roles see which dashboard is set in Admin › Roles under **Which dashboards**. Only a dashboard's owner or a super admin can change it. Each card counts only what the viewer may see, and clicking a number opens the list behind it.
-- Pulse shows deadlines in three columns: **Needs me now**, **Due soon**, **Watching**. **Snooze** a card by picking a duration and giving a **Reason**. Snoozing a critical one needs an assistant team lead or above.`;
+- Pulse (needs \`work_orders\` view; it lists only the work orders the person may see, the same book as the Work Orders list) shows deadlines in three columns: **Needs me now**, **Due soon**, **Watching**. **Snooze** a card by picking a duration under **Snooze for** (up to 72 hours) and giving a **Reason** (required); a snooze on a work order outside the person's book answers "This work order is not assigned to you". Snoozing a critical one needs an assistant team lead or above.`;

@@ -40,7 +40,7 @@ import type {
   WorkPermit,
   WorkPermitInput,
 } from '@theone/shared';
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
@@ -267,40 +267,45 @@ export async function saveJobPlan(id: string | null, input: JobPlanInput, actor:
   const description = input.description !== undefined ? clean(input.description) : (before?.description ?? null);
   const est = input.est_minutes !== undefined ? (input.est_minutes === null ? null : Math.max(0, Math.round(input.est_minutes))) : (before?.est_minutes ?? null);
   const active = input.is_active ?? before?.is_active ?? true;
-  let planId = id;
-  if (id) {
-    await query(`UPDATE job_plan SET name = $2, trade = $3, description = $4, est_minutes = $5, is_active = $6, updated_at = now() WHERE id = $1`, [id, name, trade, description, est, active]);
-  } else {
-    const ins = await query<{ id: string }>(
-      `INSERT INTO job_plan (name, trade, description, est_minutes, is_active, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id::text AS id`,
-      [name, trade, description, est, active, actor.id],
-    );
-    planId = ins.rows[0].id;
-  }
-  if (input.steps !== undefined) {
-    const steps = input.steps.map((s) => s.trim()).filter(Boolean).slice(0, 100);
-    await query(`DELETE FROM job_plan_step WHERE plan_id = $1`, [planId]);
-    let pos = 0;
-    for (const title of steps) await query(`INSERT INTO job_plan_step (plan_id, position, title) VALUES ($1, $2, $3)`, [planId, pos++, title.slice(0, 300)]);
-  }
-  if (input.services !== undefined) {
-    await query(`DELETE FROM job_plan_service WHERE plan_id = $1`, [planId]);
-    const seen = new Set<string>();
-    for (const s of input.services) {
-      if (!UUID_RE.test(s.service_id) || seen.has(s.service_id)) continue;
-      seen.add(s.service_id);
-      const qty = Number.isFinite(s.qty) && s.qty > 0 ? s.qty : 1;
-      await query(
-        `INSERT INTO job_plan_service (plan_id, service_id, qty) SELECT $1, id, $3 FROM service_item WHERE id = $2`,
-        [planId, s.service_id, qty],
+  // The plan's row, its steps and its services commit together: the DELETE of
+  // a list and the INSERTs that replace it are never seen half done.
+  const planId = await withTransaction(async (tx) => {
+    let rowId = id;
+    if (id) {
+      await tx.query(`UPDATE job_plan SET name = $2, trade = $3, description = $4, est_minutes = $5, is_active = $6, updated_at = now() WHERE id = $1`, [id, name, trade, description, est, active]);
+    } else {
+      const ins = await tx.query<{ id: string }>(
+        `INSERT INTO job_plan (name, trade, description, est_minutes, is_active, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id::text AS id`,
+        [name, trade, description, est, active, actor.id],
       );
+      rowId = ins.rows[0].id;
     }
-  }
-  const after = (await loadPlans(planId!))[0];
+    if (input.steps !== undefined) {
+      const steps = input.steps.map((s) => s.trim()).filter(Boolean).slice(0, 100);
+      await tx.query(`DELETE FROM job_plan_step WHERE plan_id = $1`, [rowId]);
+      let pos = 0;
+      for (const title of steps) await tx.query(`INSERT INTO job_plan_step (plan_id, position, title) VALUES ($1, $2, $3)`, [rowId, pos++, title.slice(0, 300)]);
+    }
+    if (input.services !== undefined) {
+      await tx.query(`DELETE FROM job_plan_service WHERE plan_id = $1`, [rowId]);
+      const seen = new Set<string>();
+      for (const s of input.services) {
+        if (!UUID_RE.test(s.service_id) || seen.has(s.service_id)) continue;
+        seen.add(s.service_id);
+        const qty = Number.isFinite(s.qty) && s.qty > 0 ? s.qty : 1;
+        await tx.query(
+          `INSERT INTO job_plan_service (plan_id, service_id, qty) SELECT $1, id, $3 FROM service_item WHERE id = $2`,
+          [rowId, s.service_id, qty],
+        );
+      }
+    }
+    return rowId!;
+  });
+  const after = (await loadPlans(planId))[0];
   await logAdminEvent({
     actorId: actor.id,
     entity: 'job_plan',
-    entityId: planId!,
+    entityId: planId,
     action: id ? 'job_plan_updated' : 'job_plan_added',
     before: before ? { name: before.name, trade: before.trade, steps: before.steps.map((s) => s.title), services: before.services.map((s) => s.name), is_active: before.is_active } : null,
     after: { name: after.name, trade: after.trade, steps: after.steps.map((s) => s.title), services: after.services.map((s) => s.name), is_active: after.is_active },

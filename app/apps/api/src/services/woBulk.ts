@@ -6,16 +6,15 @@
 // per field, exactly as the single-row status path does — a bulk edit is a
 // shortcut for the operator, not a hole in the record.
 //
-// PGlite is single-connection, so every lookup a transaction needs (the actor,
-// the target status, the home list) is resolved BEFORE the transaction opens.
-// Calling the non-transactional query() from inside db.transaction() queues
-// behind the open transaction and self-deadlocks.
+// Reads that need no lock run on the pool first; the bag is read FOR NO KEY UPDATE inside the
+// transaction (the lock strength is explained once, in woFieldValues.ts).
 
 import { withTransaction, query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { listWorkOrders, type ListFilters } from './workOrders.js';
 import type { ActingPrincipal } from './activity.js';
-import { listCustomFields, resolveField } from './woFields.js';
+import { Params, listCustomFields, resolveField } from './woFields.js';
+import { woScopeSql } from './woScope.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
 import { raiseAcceptanceTasks } from './approvals.js';
@@ -36,12 +35,10 @@ import {
   type DoneGateCheck,
   type WorkOrderListItem,
   isComputedWoColumn,
+  permAllows,
 } from '@theone/shared';
 
-/** `$1, $2, …` for a list of values. PGlite's parameter serialisation for
-    array types is not exercised anywhere else in this codebase, so the id sets
-    below are bound as ordinary scalars — the one binding style every other
-    query here already proves works. */
+/** `$1, $2, …` for a list of values — the id sets below are bound as ordinary scalars. */
 function placeholders(n: number): string {
   return Array.from({ length: n }, (_, i) => `$${i + 1}`).join(', ');
 }
@@ -160,7 +157,8 @@ export async function bulkUpdate(
        FROM task t
        JOIN status s ON s.id = t.status_id
        LEFT JOIN container hl ON hl.id = t.home_list_id
-      WHERE t.id IN (${placeholders(ids.length)}) AND t.deleted_at IS NULL`,
+      WHERE t.id IN (${placeholders(ids.length)}) AND t.deleted_at IS NULL
+      ORDER BY t.id`,
     ids,
   );
 
@@ -218,7 +216,26 @@ export async function bulkUpdate(
   const firedRows: { id: string; log: TaskChange[] }[] = [];
 
   await withTransaction(async (tx) => {
+    // The rows came ORDER BY id and are locked in that order — the import's
+    // update loop sorts the same way — so two overlapping runs can never wait
+    // on each other in a circle (40P01).
     for (const row of rows.rows) {
+      // D4 (W3-3): the bag is read FOR NO KEY UPDATE here (the strength is
+      // explained in woFieldValues.ts), so the merge below is against what
+      // the row holds NOW — a write that landed between the pool read above
+      // and this lock is kept, not overwritten.
+      const locked = await tx.query<{ fields: Record<string, unknown> | null }>(
+        `SELECT fields FROM task WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`,
+        [row.id],
+      );
+      if (!locked.rows[0]) {
+        skipped.push({ wo_number: row.wo_number, reason: 'Deleted meanwhile' });
+        continue;
+      }
+      const rowFields = locked.rows[0].fields ?? {};
+      // Re-asked under the lock: the pool check above named every row in the
+      // way up front; this one catches a system write that landed since (W3-3).
+      await assertMoneyNotLocked([row.id], customPatch.map((c) => c.key), tx);
       const sets: string[] = [];
       const params: unknown[] = [];
       // One activity row per entry, written after the UPDATE (see woAudit.ts).
@@ -261,16 +278,16 @@ export async function bulkUpdate(
 
       if (customPatch.length > 0) {
         const changed = customPatch.filter(
-          (c) => String(row.fields?.[c.key] ?? '') !== String(c.value ?? ''),
+          (c) => String(rowFields[c.key] ?? '') !== String(c.value ?? ''),
         );
         if (changed.length > 0) {
           // Merge rather than replace — the bag holds ~100 keys this patch does
           // not mention. A null value removes the key outright.
-          const merged: Record<string, unknown> = { ...(row.fields ?? {}) };
+          const merged: Record<string, unknown> = { ...rowFields };
           for (const c of changed) {
             if (c.value === null || c.value === '') delete merged[c.key];
             else merged[c.key] = c.value;
-            log.push({ field: `fields.${c.key}`, before: row.fields?.[c.key] ?? null, after: c.value });
+            log.push({ field: `fields.${c.key}`, before: rowFields[c.key] ?? null, after: c.value });
           }
           // Rule 11.1.1: a bulk fill of the Assignee seat on a work order still
           // waiting in Incoming is gated like an accept (against the merged
@@ -461,7 +478,9 @@ export interface ImportResult {
 
 export const IMPORT_CAP = 2000;
 
-/** A matched work order as it stands before the import touches it. */
+/** A matched work order as the plan sees it: the bag the preview merges over,
+    the status an update keeps, and whether the row is theirs or in Trash. The
+    write diffs against its own locked read (`LockedRow`), not this. */
 interface ExistingRow {
   id: string;
   wo_number: string;
@@ -469,6 +488,19 @@ interface ExistingRow {
   status_id: string;
   status_name: string;
   status_group: string;
+  /** D7 (W4-4): the actor's row scope, projected by the lookup — false = refuse. */
+  in_scope: boolean;
+  /** In Trash: the number is taken, the row is never written. */
+  trashed: boolean;
+}
+
+/** What an update reads FOR NO KEY UPDATE: the bag, the status and every
+    column the file may set, so the diff and the write come from one locked
+    read. `wo_number` is never among the SETs (it is the match key), which is
+    what lets the lock be that strength — see woFieldValues.ts. */
+interface LockedRow {
+  fields: Record<string, unknown> | null;
+  status_id: string;
   ext_name: string | null;
   title: string | null;
   description: string | null;
@@ -520,6 +552,85 @@ function cleanDate(v: string): string | null {
   return null;
 }
 
+/** The bag an import writes: the file's keys over what the row holds, with
+    Profit (= Total Invoiced − Cost) re-derived — one rule for the preview's
+    plan and for the locked write. */
+function applyFieldPatch(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...base, ...patch };
+  applyProfitFormula(merged);
+  return merged;
+}
+
+export interface ImportGuardInput {
+  /** WO numbers in the file that matched a work order outside the actor's scope. */
+  outsideScope: string[];
+  /** The rows that carry a status cell: the WO number, or `row N` for a create. */
+  statusRows: string[];
+  /** The rows whose home-list cell would route them (creates only), named the same way. */
+  routingRows?: string[];
+  /** `work_orders/status` edit — may the actor set a status directly? */
+  canSetStatus: boolean;
+  isSuperAdmin: boolean;
+}
+
+/** How a refusal names a row: its WO number, or `row N` (1-based) without one. */
+function importRowName(r: ImportRow, i: number): string {
+  return (r.wo_number ?? '').toString().trim() || `row ${i + 1}`;
+}
+
+/** The rows of a file that name a status, as `importRefusal` lists them. */
+export function importStatusRows(rows: ImportRow[]): string[] {
+  return rows
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => (r.status ?? '').toString().trim() !== '')
+    .map(({ r, i }) => importRowName(r, i));
+}
+
+/** The rows whose home-list cell would take effect. Only a create honours it
+    (an update keeps the list it has), so a row matching a work order on file
+    is left out. Routing rides with the status grant, as it does in bulk edit. */
+export function importRoutingRows(rows: ImportRow[], existing: ReadonlySet<string>): string[] {
+  return rows
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => (r.home_list ?? '').toString().trim() !== '')
+    .filter(({ r }) => !existing.has((r.wo_number ?? '').toString().trim()))
+    .map(({ r, i }) => importRowName(r, i));
+}
+
+/** W4-4 (D7): the whole file is refused when any matched row is outside the
+    actor's scope, or any row names a status the actor may not set — like a
+    bulk edit, an import never half-applies. Super admins are never refused. */
+export function importRefusal(g: ImportGuardInput): ApiError | null {
+  if (g.isSuperAdmin) return null;
+  if (g.outsideScope.length > 0) {
+    return new ApiError('FORBIDDEN', 'Some rows in this file are work orders that are not assigned to you', {
+      code: 'IMPORT_SCOPE',
+      wo_numbers: g.outsideScope,
+      required_permission: 'work_orders/scope:view',
+    });
+  }
+  if (!g.canSetStatus && g.statusRows.length > 0) {
+    return new ApiError(
+      'FORBIDDEN',
+      'You cannot set work-order status — remove the status column, or clear it on these rows',
+      { code: 'IMPORT_STATUS_PERMISSION', wo_numbers: g.statusRows, required_permission: 'work_orders/status:edit' },
+    );
+  }
+  // Routing (the home list) rides with the status grant, as in bulk edit.
+  const routing = g.routingRows ?? [];
+  if (!g.canSetStatus && routing.length > 0) {
+    return new ApiError(
+      'FORBIDDEN',
+      'You cannot route work orders to a home list — remove the home list column, or clear it on these rows',
+      { code: 'IMPORT_STATUS_PERMISSION', wo_numbers: routing, required_permission: 'work_orders/status:edit' },
+    );
+  }
+  return null;
+}
+
 /**
  * Create or update work orders from parsed CSV rows.
  *
@@ -527,12 +638,16 @@ function cleanDate(v: string): string | null {
  * without writing. The import dialog always runs it first: an operator pasting
  * 400 rows from a client spreadsheet needs to see the damage before it lands,
  * not after.
+ *
+ * The acting principal, not just an id: a file that touches work orders
+ * outside their scope, or sets a status they may not, is refused whole (D7).
  */
 export async function importWorkOrders(
   rows: ImportRow[],
   opts: { mode: 'create' | 'upsert'; dry_run: boolean },
-  actorId: string,
+  actor: ActingPrincipal,
 ): Promise<ImportResult> {
+  const actorId = actor.id;
   if (rows.length === 0) throw new ApiError('BAD_REQUEST', 'Nothing to import');
   if (rows.length > IMPORT_CAP) {
     throw new ApiError('BAD_REQUEST', `An import is capped at ${IMPORT_CAP} rows`);
@@ -546,6 +661,7 @@ export async function importWorkOrders(
     throw new ApiError('INTERNAL', 'No statuses are configured');
   }
   const statusByName = new Map(statuses.rows.map((s) => [s.name.toLowerCase(), s]));
+  const statusById = new Map(statuses.rows.map((s) => [s.id, s]));
   const defaultStatus = statuses.rows.find((s) => s.status_group === 'open') ?? statuses.rows[0];
 
   const lists = await query<{ id: string; name: string }>(
@@ -561,22 +677,41 @@ export async function importWorkOrders(
   const numbers = rows
     .map((r) => (r.wo_number ?? '').toString().trim())
     .filter((n) => n.length > 0);
+  // D7 (W4-4): the actor's row scope rides along as a column — the trick
+  // resolveTaskId uses — so a match outside their book is known before
+  // anything is planned, previewed or written. A null scope (super admin,
+  // "Everything") projects TRUE.
+  const p = new Params();
+  const holes = numbers.map((n) => p.add(n)).join(', ');
+  const scope = woScopeSql(actor, p);
   // A file with no WO numbers at all is pure creation — skip the lookup rather
   // than send `IN ()`, which is a syntax error.
   const existing = numbers.length
     ? await query<ExistingRow>(
-        // Everything the import may overwrite, so an update can be diffed
-        // column by column and logged as what actually changed.
+        // A row in Trash is matched too: its number is taken (createWorkOrder
+        // refuses it the same way), but the plan skips it rather than write it.
         `SELECT t.id, t.wo_number, t.fields, t.status_id, s.name AS status_name, s.status_group,
-                t.ext_name, t.title, t.description, t.client, t.city, t.state, t.trade,
-                t.billing_entity, t.nte::text AS nte, t.priority,
-                t.date_received::text AS date_received
+                ${scope ?? 'TRUE'} AS in_scope,
+                (t.deleted_at IS NOT NULL) AS trashed
            FROM task t JOIN status s ON s.id = t.status_id
-          WHERE t.wo_number IN (${placeholders(numbers.length)})`,
-        numbers,
+          WHERE t.wo_number IN (${holes})`,
+        p.values,
       )
     : { rows: [] as ExistingRow[] };
   const existingByNumber = new Map(existing.rows.map((r) => [r.wo_number, r]));
+
+  // Refused as a whole — like a bulk edit outside the scope — and BEFORE the
+  // plan runs, in create and upsert mode alike: a dry run must not reveal
+  // out-of-scope numbers, and a status the actor may not set must never land
+  // by way of a file.
+  const refusal = importRefusal({
+    outsideScope: existing.rows.filter((r) => !r.in_scope).map((r) => r.wo_number),
+    statusRows: importStatusRows(rows),
+    routingRows: importRoutingRows(rows, new Set(existingByNumber.keys())),
+    canSetStatus: permAllows(actor.perms, 'work_orders/status', 'edit', actor.isSuperAdmin),
+    isSuperAdmin: actor.isSuperAdmin,
+  });
+  if (refusal) throw refusal;
 
   // New WO numbers continue the existing WO-#### series rather than restarting
   // it, so an imported batch sorts alongside what is already there.
@@ -592,13 +727,17 @@ export async function importWorkOrders(
     id?: string;
     wo_number: string;
     cols: Record<string, unknown>;
-    /** The full bag to write (existing keys merged with the file's). */
+    /** The full bag a CREATE writes. An update re-merges `fieldPatch` over the
+        bag it locks (D4), so for it this is only the preview's view. */
     fields: Record<string, unknown>;
     /** Only the keys the file supplied — what an update is diffed against. */
     fieldPatch: Record<string, unknown>;
     status_id: string;
     status_name: string;
     status_group: string;
+    /** True when the file's status cell chose it. False = the row's own: an
+        update then leaves the status alone, whatever moved it meanwhile. */
+    status_named: boolean;
     home_list_id: string | null;
   }
 
@@ -611,6 +750,12 @@ export async function importWorkOrders(
     const raw = (row.wo_number ?? '').toString().trim();
     const match = raw ? existingByNumber.get(raw) : undefined;
 
+    // A number in Trash is taken, but the row behind it is not written:
+    // restoring it is the admin console's job, in either mode.
+    if (match?.trashed) {
+      results.push({ row: rowNo, wo_number: raw, action: 'skip', message: 'In trash' });
+      return;
+    }
     if (match && opts.mode === 'create') {
       results.push({ row: rowNo, wo_number: raw, action: 'skip', message: 'Already exists' });
       return;
@@ -719,8 +864,7 @@ export async function importWorkOrders(
     if (!match) stampDateCreated(fields);
 
     // Profit = Total Invoiced − Cost, kept in step whatever the file said.
-    const mergedBag = match ? { ...(match.fields ?? {}), ...fields } : fields;
-    applyProfitFormula(mergedBag);
+    const mergedBag = applyFieldPatch(match ? (match.fields ?? {}) : {}, fields);
 
     plans.push({
       index: rowNo,
@@ -733,6 +877,7 @@ export async function importWorkOrders(
       status_id: status.id,
       status_name: status.name,
       status_group: status.status_group,
+      status_named: statusName !== '',
       home_list_id: homeList?.id ?? null,
     });
     results.push({ row: rowNo, wo_number: woNumber, action: match ? 'update' : 'create' });
@@ -756,8 +901,15 @@ export async function importWorkOrders(
   // For the automations engine, dispatched after the whole file commits.
   const createdIds: string[] = [];
   const updatedRows: { id: string; changes: TaskChange[] }[] = [];
+  // Updates first, locked in id order — bulk edit locks the same way — then
+  // the creates: two overlapping runs can never wait on each other in a circle.
+  const byId = (a: Plan, b: Plan) => ((a.id ?? '') < (b.id ?? '') ? -1 : (a.id ?? '') > (b.id ?? '') ? 1 : 0);
+  const ordered = [
+    ...plans.filter((pl) => pl.action === 'update').sort(byId),
+    ...plans.filter((pl) => pl.action === 'create'),
+  ];
   await withTransaction(async (tx) => {
-    for (const plan of plans) {
+    for (const plan of ordered) {
       if (plan.action === 'create') {
         const res = await tx.query<{ id: string }>(
           `INSERT INTO task
@@ -804,41 +956,65 @@ export async function importWorkOrders(
         );
         createdIds.push(id);
       } else {
-        // Diff against the row as it is now, so the trail records the change
-        // that happened — not the list of columns the file happened to have.
-        const cur = existingByNumber.get(plan.wo_number) as ExistingRow;
+        // D4 (W3-3): the row is read FOR NO KEY UPDATE inside the transaction
+        // (the strength is explained in woFieldValues.ts) — the bag, the
+        // status and every column the file may set — and the file is diffed
+        // against and merged over THAT, not the pool read the plan was built
+        // from, so a write that landed in between is kept, not overwritten.
+        // Only what the diff names is written, so every SET has its audit row
+        // and the trail records the change that happened.
+        const locked = await tx.query<LockedRow>(
+          `SELECT fields, status_id, ext_name, title, description, client, city, state, trade,
+                  billing_entity, nte::text AS nte, priority, date_received::text AS date_received
+             FROM task WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`,
+          [plan.id],
+        );
+        const live = locked.rows[0];
+        if (!live) {
+          // Trashed since the preview: the file does not restore it.
+          const r = results.find((x) => x.row === plan.index);
+          if (r) {
+            r.action = 'skip';
+            r.message = 'Deleted meanwhile';
+          }
+          continue;
+        }
+        const curFields = live.fields ?? {};
         const changes: TaskChange[] = [];
-        for (const [col, value] of Object.entries(plan.cols)) {
-          const before = cur[col as keyof ExistingRow] ?? null;
-          if (changed(before, value)) changes.push({ field: col, before, after: value });
-        }
-        for (const [key, value] of Object.entries(plan.fieldPatch)) {
-          const before = cur.fields?.[key] ?? null;
-          if (changed(before, value)) changes.push({ field: `fields.${key}`, before, after: value });
-        }
-        if (plan.status_id !== cur.status_id) {
-          changes.push({
-            field: 'status_id',
-            before: { status_id: cur.status_id, status_name: cur.status_name },
-            after: { status_id: plan.status_id, status_name: plan.status_name },
-          });
-        }
-        // The row already holds every value in the file: nothing to write.
-        if (changes.length === 0) continue;
-
         const sets: string[] = [];
         const params: unknown[] = [];
         for (const [col, value] of Object.entries(plan.cols)) {
+          const before = live[col as keyof LockedRow] ?? null;
+          if (!changed(before, value)) continue;
+          changes.push({ field: col, before, after: value });
           params.push(value);
           const cast = NUMERIC_COLS.has(col) ? '::numeric' : DATE_COLS.has(col) ? '::date' : '';
           sets.push(`${col} = $${params.length}${cast}`);
         }
-        params.push(JSON.stringify(plan.fields));
-        sets.push(`fields = $${params.length}::jsonb`);
-        params.push(plan.status_id);
-        sets.push(`status_id = $${params.length}`);
-        params.push(plan.status_group);
-        sets.push(`status_group = $${params.length}`);
+        const bagChanges: TaskChange[] = Object.entries(plan.fieldPatch)
+          .map(([key, value]) => ({ field: `fields.${key}`, before: curFields[key] ?? null, after: value }))
+          .filter((c) => changed(c.before, c.after));
+        if (bagChanges.length > 0) {
+          changes.push(...bagChanges);
+          params.push(JSON.stringify(applyFieldPatch(curFields, plan.fieldPatch)));
+          sets.push(`fields = $${params.length}::jsonb`);
+        }
+        // The status moves only when the file named one, and against the
+        // status the row holds NOW: a row without a status cell keeps whatever
+        // moved it meanwhile instead of being put back.
+        if (plan.status_named && plan.status_id !== live.status_id) {
+          changes.push({
+            field: 'status_id',
+            before: { status_id: live.status_id, status_name: statusById.get(live.status_id)?.name ?? null },
+            after: { status_id: plan.status_id, status_name: plan.status_name },
+          });
+          params.push(plan.status_id);
+          sets.push(`status_id = $${params.length}`);
+          params.push(plan.status_group);
+          sets.push(`status_group = $${params.length}`);
+        }
+        // The row already holds every value in the file: nothing to write.
+        if (changes.length === 0) continue;
         params.push(plan.id);
 
         await tx.query(
@@ -861,12 +1037,13 @@ export async function importWorkOrders(
   // rule on create — waits in the manager's Pending Acceptance queue. After
   // the rules ran, so an auto-assign on create needs no acceptance.
   await raiseAcceptanceTasks(createdIds, actorId, 'import');
-  // 0071 � a SharePoint folder for each new row, when that switch is on.
+  // 0071 � a SharePoint folder for each new row, when that switch is on.
   // Each call is bounded and never throws; the hourly sweep retries.
   if (createdIds.length > 0) {
     const { fileWorkOrder } = await import('./sharepoint.js');
     for (const id of createdIds) await fileWorkOrder(id, actorId);
   }
 
-  return summary;
+  // Recounted: a row trashed between the preview and the write is a skip now.
+  return { ...summary, updated: tally('update'), skipped: tally('skip') };
 }

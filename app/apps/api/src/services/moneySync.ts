@@ -43,8 +43,10 @@ async function writeField(
   value: number | null,
   source: ChangeSource,
 ): Promise<TaskChange[]> {
+  // Locked FOR NO KEY UPDATE on the caller's transaction (the strength is
+  // explained in woFieldValues.ts): the merge below is over the row as it is.
   const t = await q.query<{ fields: Record<string, unknown> | null }>(
-    `SELECT fields FROM task WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+    `SELECT fields FROM task WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`,
     [taskId],
   );
   if (!t.rows[0]) return [];
@@ -140,8 +142,13 @@ export async function syncInvoicedFromQuote(taskId: string, actorId: string, quo
  * `via: 'payment'` / `via: 'quote'` and holds a value. A figure somebody
  * typed — every work order from before these rules, and any with no accepted
  * payment or no quote — stays correctable by hand until the system writes it.
+ *
+ * `q` is the caller's transaction when it already holds the task row FOR NO
+ * KEY UPDATE: the latest audit row is then read under that lock, so a system
+ * write landing between a pool-side check and the lock cannot be typed over
+ * (W3-3).
  */
-export async function assertMoneyNotLocked(taskIds: string[], jsonKeys: string[]): Promise<void> {
+export async function assertMoneyNotLocked(taskIds: string[], jsonKeys: string[], q: Queryable = { query }): Promise<void> {
   if (taskIds.length === 0) return;
   const checks: [string, string, string][] = [
     [COST_FIELD_KEY, 'payment', COST_LOCKED_MESSAGE],
@@ -149,7 +156,7 @@ export async function assertMoneyNotLocked(taskIds: string[], jsonKeys: string[]
   ];
   for (const [key, via, message] of checks) {
     if (!jsonKeys.includes(key)) continue;
-    const res = await query<{ wo_number: string }>(
+    const res = await q.query<{ wo_number: string }>(
       `SELECT t.wo_number
          FROM task t
          JOIN LATERAL (SELECT a.after
