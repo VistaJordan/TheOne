@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DOC_TEMPLATE_KINDS, DOC_TEMPLATE_KIND_LABELS, type DocTemplate, type DocTemplateKind, type FinanceSetup } from '@theone/shared';
-import { deleteDocTemplate, getFinanceSetup, saveDocTemplate, saveTaxRate } from '../../api/client';
+import { deleteDocTemplate, getFinanceSetup, saveDocTemplate, savePoLimit, saveTaxRate } from '../../api/client';
 import { Icon } from '../../components/Icon';
 import { F, Sheet, errText, numOrNull } from '../../components/ui/Sheet';
 
@@ -32,6 +32,17 @@ export function FinanceSetupCards() {
     onError: fail,
   });
   const patchRate = useMutation({ mutationFn: (x: { id: string; is_default?: boolean; is_active?: boolean }) => saveTaxRate(x.id, { is_default: x.is_default, is_active: x.is_active }), onSuccess: done, onError: fail });
+  // 0083 (#21): the purchase-order limit.
+  const [limit, setLimit] = useState('');
+  const saveLimit = useMutation({
+    mutationFn: () => {
+      const n = numOrNull(limit);
+      if (n === null || n < 0) throw new Error('The limit is an amount of $0.00 or more.');
+      return savePoLimit(n);
+    },
+    onSuccess: () => { setLimit(''); setError(null); void qc.invalidateQueries({ queryKey: KEY }); void qc.invalidateQueries({ queryKey: ['purchasing', 'meta'] }); },
+    onError: fail,
+  });
   const d = q.data;
   if (!d) return null;
   const edit = d.can.edit;
@@ -59,6 +70,17 @@ export function FinanceSetupCards() {
             <input className="fld mt-qty" type="number" min="0" max="100" step="0.001" placeholder="%" value={rate.rate} onChange={(e) => setRate((c) => ({ ...c, rate: e.target.value }))} aria-label="Percent" />
             <input className="fld mt-qty" placeholder="State" value={rate.state} onChange={(e) => setRate((c) => ({ ...c, state: e.target.value }))} aria-label="State" />
             <button type="submit" className="btn btn-sm" disabled={addRate.isPending}>Add</button>
+          </form>
+        )}
+      </section>
+
+      <section className="card">
+        <div className="card-head"><h2 className="card-title grow">Purchase order limit</h2><span className="card-meta">${d.po_limit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
+        <p className="hint mt-hint">A purchase order raised without a purchase request above this amount needs <b>Approve over limit</b> from someone other than the person who drafted it before it can be issued.</p>
+        {edit && (
+          <form className="rec-add mt-add" onSubmit={(e) => { e.preventDefault(); saveLimit.mutate(); }}>
+            <input className="fld mt-qty" type="number" min="0" step="0.01" placeholder="New limit" value={limit} onChange={(e) => setLimit(e.target.value)} aria-label="PO limit" />
+            <button type="submit" className="btn btn-sm" disabled={saveLimit.isPending || limit.trim() === ''}>Save</button>
           </form>
         )}
       </section>

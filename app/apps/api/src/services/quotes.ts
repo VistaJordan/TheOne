@@ -38,7 +38,15 @@ import type {
   SalesTaxLookup,
   WoActionMap,
 } from '@theone/shared';
-import { DEFAULT_OT_MULTIPLIER, permAllows } from '@theone/shared';
+import {
+  DEFAULT_OT_MULTIPLIER,
+  QUOTE_OVER_NTE_CODE,
+  SELF_APPROVAL_CODE,
+  permAllows,
+  quoteOverNte,
+  selfApprovalMessage,
+  selfApprovalVerdict,
+} from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { evaluateForTask } from './obligations.js';
@@ -586,6 +594,9 @@ interface QuoteRow {
   contract_id: string | null;
   contract_name: string | null;
   ot_multiplier: number | null;
+  /** 0083 (D2): who sent it for approval (else who created it) — the one
+      person who may not approve or send it. */
+  maker_id: string | null;
 }
 
 const QUOTE_SQL = `
@@ -602,6 +613,7 @@ const QUOTE_SQL = `
          q.contract_id::text              AS contract_id,
          c.name                           AS contract_name,
          q.ot_multiplier::float8          AS ot_multiplier,
+         COALESCE(q.submitted_by, q.created_by)::text AS maker_id,
          ${ISO('q.sent_at')}              AS sent_at,
          ${ISO('q.client_decided_at')}    AS client_decided_at,
          ${ISO('q.created_at')}           AS created_at,
@@ -826,12 +838,36 @@ function totalsFor(q: QuoteRow, sections: QuoteSection[]): QuoteTotals {
   });
 }
 
-function permissionsFor(actor: ActingPrincipal, snap: WoStatusSnapshot | null): QuotePermissions {
+function permissionsFor(
+  actor: ActingPrincipal,
+  snap: WoStatusSnapshot | null,
+  q: { maker_id: string | null; nte: number | null },
+  grandTotal: number,
+): QuotePermissions {
   return {
     can_edit: canEditQuote(actor),
     can_approve: canApproveQuote(actor),
     can_client_decide: canClientDecide(actor, snap),
+    self_approval: selfApprovalVerdict(q.maker_id, actor.id, actor.isSuperAdmin) === 'blocked',
+    over_nte: quoteOverNte(grandTotal, q.nte),
   };
+}
+
+/**
+ * 0083 (D2, #8): the person who submitted the quote does not approve or send
+ * it. A super admin may — the quote_approved / quote_sent row then says
+ * self_approved. Returns whether this is that case.
+ */
+async function assertNotOwnQuote(taskId: string, actor: ActingPrincipal, verb: string): Promise<boolean> {
+  const res = await query<{ maker_id: string | null }>(
+    `SELECT COALESCE(submitted_by, created_by)::text AS maker_id FROM quote WHERE task_id = $1 LIMIT 1`,
+    [taskId],
+  );
+  const verdict = selfApprovalVerdict(res.rows[0]?.maker_id ?? null, actor.id, actor.isSuperAdmin);
+  if (verdict === 'blocked') {
+    throw forbidden(selfApprovalMessage('this quote', verb), { code: SELF_APPROVAL_CODE });
+  }
+  return verdict === 'self_approved';
 }
 
 /** The full quote payload for a work order, or null when none exists. */
@@ -916,7 +952,7 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     sections,
     totals,
     summary,
-    permissions: permissionsFor(actor, snap),
+    permissions: permissionsFor(actor, snap, q, totals.grand_total),
     nte_override_open: nteOverride !== null,
     wo_actions: snap.actions,
     labor_rate: laborRate,
@@ -1237,7 +1273,13 @@ export async function updateQuote(
     if (input.ship_to !== undefined) set('ship_to', input.ship_to);
     if (sets.length > 0) {
       params.push(cur.id);
-      await tx.query(`UPDATE quote SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+      // Only while the quote is still editable, in the statement (#25): an
+      // approve committed since the read above leaves the quote approved.
+      const kept = await tx.query(
+        `UPDATE quote SET ${sets.join(', ')} WHERE id = $${params.length} AND status IN ('draft', 'pending_approval') RETURNING id`,
+        params,
+      );
+      if (!kept.rows[0]) throw conflict('The quote was approved while you were editing it — reload it', { code: 'QUOTE_MOVED' });
     }
 
     if (input.sections !== undefined) {
@@ -1298,6 +1340,23 @@ export async function updateQuote(
     const after = await snapshotQuote(tx, cur.id);
     if (JSON.stringify(before) !== JSON.stringify(after)) {
       await logQuoteActivity(tx, actor.id, taskId, 'quote_updated', before, { ...after, round });
+      // 0083 (#23): a quote edited while it waits for approval is not the quote
+      // the approver was asked about — it goes back to draft (logged) and is
+      // submitted again. Conditional on the status it was read in.
+      if (cur.status === 'pending_approval') {
+        const back = await tx.query(
+          `UPDATE quote SET status = 'draft', submitted_by = NULL, submitted_at = NULL
+            WHERE id = $1 AND status = 'pending_approval' RETURNING id`,
+          [cur.id],
+        );
+        if (back.rows[0]) {
+          await logQuoteActivity(tx, actor.id, taskId, 'quote_returned_to_draft', { status: 'pending_approval' }, {
+            status: 'draft',
+            quote_id: cur.id,
+            reason: 'edited after it was submitted for approval',
+          });
+        }
+      }
     }
   });
 
@@ -1562,20 +1621,32 @@ async function transition(
   extra?: (tx: Queryable, quoteId: string) => Promise<void>,
   extraSet = '',
   extraParams: unknown[] = [],
+  selfApproved = false,
 ): Promise<Quote> {
   const cur = await currentStatus(taskId);
   if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');
   assertTransition(cur.status, from, to);
 
   await withTransaction(async (tx) => {
-    await tx.query(
-      `UPDATE quote SET status = $1${extraSet ? `, ${extraSet}` : ''} WHERE id = $2`,
-      [to, cur.id, ...extraParams],
+    // 0083 (#25): ONE conditional statement on the status the quote was read
+    // in — a double click or two approvers at once leave one transition; the
+    // second matches no row and is refused before its comment or outbox row.
+    const moved = await tx.query(
+      `UPDATE quote SET status = $1${extraSet ? `, ${extraSet}` : ''}
+        WHERE id = $2 AND status = $${3 + extraParams.length} RETURNING id`,
+      [to, cur.id, ...extraParams, cur.status],
     );
+    if (!moved.rows[0]) {
+      throw conflict('The quote changed while you were looking at it — reload it', {
+        code: 'QUOTE_MOVED',
+        status: cur.status,
+      });
+    }
     if (extra) await extra(tx, cur.id);
     await logQuoteActivity(tx, actor.id, taskId, action, { status: cur.status }, {
       status: to,
       quote_id: cur.id,
+      ...(selfApproved ? { self_approved: true } : {}),
     });
   });
 
@@ -1593,7 +1664,8 @@ async function transition(
 export async function submitQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanEdit(actor);
   await assertWoAllows(taskId, 'quote.submit');
-  return transition(taskId, ['draft'], 'pending_approval', 'quote_submitted', actor);
+  return transition(taskId, ['draft'], 'pending_approval', 'quote_submitted', actor, undefined,
+    'submitted_by = $3, submitted_at = now()', [actor.id]);
 }
 
 /** pending_approval → approved (quotes:approve). Fills money.quote on the WO.
@@ -1601,6 +1673,7 @@ export async function submitQuote(taskId: string, actor: ActingPrincipal): Promi
 export async function approveQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.approve');
+  const selfApproved = await assertNotOwnQuote(taskId, actor, 'approve');
   await assertNoOpenNteOverride(taskId, 'Approving the quote');
   return transition(
     taskId,
@@ -1611,6 +1684,7 @@ export async function approveQuote(taskId: string, actor: ActingPrincipal): Prom
     undefined,
     'approved_by = $3',
     [actor.id],
+    selfApproved,
   );
 }
 
@@ -1622,12 +1696,21 @@ export async function approveQuote(taskId: string, actor: ActingPrincipal): Prom
 export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.send');
+  const selfApproved = await assertNotOwnQuote(taskId, actor, 'send');
   await assertNoOpenNteOverride(taskId, 'Sending the quote');
 
   // Read the numbers on the pool BEFORE the transaction opens: a read that
   // needs no lock (an approved quote is no longer editable).
   const pre = await getQuote(taskId, actor);
   if (!pre) throw new ApiError('NOT_FOUND', 'No quote on this work order');
+  // 0083 (#23): a quote above the NTE is not sent until the NTE is raised
+  // (Increase NTE on the work order, decided by a manager).
+  if (pre.permissions.over_nte) {
+    throw conflict(
+      `The quote totals ${money(pre.totals.grand_total)}, above the work order's NTE — request an NTE increase and have it approved before sending`,
+      { code: QUOTE_OVER_NTE_CODE, grand_total: pre.totals.grand_total },
+    );
+  }
   const summaryText = pre.summary.pinned ?? pre.summary.auto;
   const firstLine = summaryText.split('\n').find((l) => l.trim().length > 0) ?? pre.wo_number;
   const body = `Quote for ${money(pre.totals.grand_total)} submitted for approval — ${firstLine.trim()}`;
@@ -1650,6 +1733,7 @@ export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise
     },
     'sent_by = $3, sent_at = now()',
     [actor.id],
+    selfApproved,
   );
 }
 
@@ -1674,7 +1758,7 @@ export async function rejectQuote(
     async (tx) => {
       await addComment(tx, actor.id, taskId, `Quote returned to draft — ${note}`, false);
     },
-    'rev = rev + 1, approved_by = NULL',
+    'rev = rev + 1, approved_by = NULL, submitted_by = NULL, submitted_at = NULL',
   );
 }
 

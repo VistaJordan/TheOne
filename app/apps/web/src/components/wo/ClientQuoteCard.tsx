@@ -88,6 +88,11 @@ export function ClientQuoteCard({ wo, quoteStatus, quote }: ClientQuoteCardProps
               status={quote.status}
               canApprove={quote.permissions?.can_approve ?? can('quotes', 'approve')}
               nteHold={quote.nte_override_open}
+              lockReason={
+                quote.permissions?.self_approval
+                  ? 'You submitted this quote — someone else has to approve and send it (maker ≠ checker)'
+                  : null
+              }
               size="card"
             />
           )}

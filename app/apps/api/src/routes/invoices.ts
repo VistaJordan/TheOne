@@ -6,13 +6,14 @@
 //   POST   /invoices                 raise one from a work order
 //   PATCH  /invoices/:id             edit a draft (lines, tax, discount, note)
 //   POST   /invoices/:id/send        to the client — needs `invoicing:approve`
-//   POST   /invoices/:id/paid        settle it, with an optional reference
+//   POST   /invoices/:id/paid        settle it: the payment reference and the date it arrived (0083, M7)
 //   POST   /invoices/:id/void        cancel it; the number stays used
 //   POST   /invoices/:id/reopen      a voided one back to draft
 //
 // (Registered under the /api prefix in app.ts.)
 
 import type { FastifyInstance } from 'fastify';
+import { MONEY_MAX } from '@theone/shared';
 import { z } from 'zod';
 import { INVOICE_LINE_KINDS } from '@theone/shared';
 import { parse } from '../errors.js';
@@ -38,21 +39,26 @@ const lineSchema = z.object({
   kind: z.union([z.enum(INVOICE_LINE_KINDS), z.string().trim().min(1).max(40)]).optional(),
   description: z.string().trim().min(1).max(400),
   quantity: z.number().min(0).max(100_000).optional(),
-  unit_price: z.number().min(-1_000_000).max(1_000_000).optional(),
+  unit_price: z.number().min(-MONEY_MAX).max(MONEY_MAX).optional(),
 });
 
 const updateSchema = z
   .object({
     note: z.string().trim().max(2000).nullable().optional(),
-    tax: z.number().min(0).max(1_000_000).optional(),
-    discount: z.number().min(0).max(1_000_000).optional(),
+    tax: z.number().min(0).max(MONEY_MAX).optional(),
+    discount: z.number().min(0).max(MONEY_MAX).optional(),
     due_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
     lines: z.array(lineSchema).max(200).optional(),
   })
   .strict();
 
 const createSchema = z.object({ task_id: z.string().uuid() }).strict();
-const paidSchema = z.object({ reference: z.string().trim().max(120).nullable().optional() }).strict();
+const paidSchema = z
+  .object({
+    reference: z.string().trim().min(1).max(120),
+    paid_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  })
+  .strict();
 
 export default async function invoiceRoutes(app: FastifyInstance): Promise<void> {
   app.get('/invoices', async (req) => listInvoices(actingPrincipalFromRequest(req)));
@@ -92,8 +98,8 @@ export default async function invoiceRoutes(app: FastifyInstance): Promise<void>
 
   app.post('/invoices/:id/paid', async (req) => {
     const { id } = parse(idParams, req.params);
-    const { reference } = parse(paidSchema, req.body ?? {});
-    return { invoice: await markInvoicePaid(id, actingPrincipalFromRequest(req), reference) };
+    const { reference, paid_on } = parse(paidSchema, req.body ?? {});
+    return { invoice: await markInvoicePaid(id, actingPrincipalFromRequest(req), reference, paid_on) };
   });
 
   app.post('/invoices/:id/void', async (req) => {

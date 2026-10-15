@@ -1994,10 +1994,11 @@ export function sendInvoice(id: string): Promise<{ invoice: Invoice }> {
   return request(`/invoices/${id}/send`, { method: 'POST' });
 }
 
-export function markInvoicePaid(id: string, reference?: string | null): Promise<{ invoice: Invoice }> {
+/** 0083 (M7): the payment reference and the date it arrived are required. */
+export function markInvoicePaid(id: string, reference: string, paidOn: string): Promise<{ invoice: Invoice }> {
   return request(`/invoices/${id}/paid`, {
     method: 'POST',
-    body: JSON.stringify({ reference: reference ?? null }),
+    body: JSON.stringify({ reference, paid_on: paidOn }),
   });
 }
 
@@ -3608,6 +3609,8 @@ export const getWoPurchasing = (woRef: string) => request<WoPurchasing>(recordPa
 export const setWoFiling = (woRef: string, input: { cost_center_id?: string | null; afe_id?: string | null }) => post<WoPurchasing>(recordPath(woRef, '/filing'), input, 'PUT');
 
 export const getFinanceSetup = () => request<FinanceSetup>('/admin/finance-setup');
+/** 0083 (#21): the PO limit (admin/settings edit). */
+export const savePoLimit = (po_limit: number) => post<{ po_limit: number }>('/purchasing/settings', { po_limit }, 'PUT');
 export const saveTaxRate = (id: string | null, input: { name?: string; rate?: number; state?: string | null; is_default?: boolean; is_active?: boolean }) =>
   post<FinanceSetup>(id ? `/admin/finance-setup/tax-rates/${enc(id)}` : '/admin/finance-setup/tax-rates', input, id ? 'PATCH' : 'POST');
 export const saveDocTemplate = (id: string | null, input: DocTemplateInput) =>

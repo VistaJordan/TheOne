@@ -355,7 +355,7 @@ export const LIFECYCLE: LifecycleModel = {
       brd: ['1.5.2', '11.3.2'],
       summary: 'A payment request per technician payment (the Yoda flow, 0076): requested → approved → paid, or rejected; processed rows are deleted only with an admin as the second person. Paying adds the amount to Cost; deleting a paid request subtracts it.',
       steps: [
-        'Request payment on the work order (vendor typeahead or a typed name and phone, purpose, amount, method and payout details; W9 flagged past $599 a year); Approve or Reject in Payments › Needs approval; Mark paid (or Pay now) in To pay.',
+        'Request payment on the work order (vendor typeahead or a typed name and phone, purpose J / M / A, amount, method and payout details; W9 flagged past $599 a year); Approve or Reject in Payments › Needs approval (not by the requester); Mark paid in To pay once approved.',
         'The work order\'s status decides whether a request may be raised (until Invoiced or Cancelled); AP may always process existing ones.',
         'When a payment takes Cost past the NTE, an nte_override task lands in Approvals and holds Approve and Pay; the task cancels itself once Cost is back under the NTE.',
         'Once the system has written Cost, it cannot be typed over; before that, a typed Cost stands.',

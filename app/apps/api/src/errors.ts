@@ -77,6 +77,22 @@ export function registerErrorHandler(app: FastifyInstance): void {
         .status(err.statusCode)
         .send({ error: { code: 'BAD_REQUEST', message: err.message, details: null } });
     }
+    // M1 (0083): a number the column cannot hold (22003 numeric_value_out_of_range)
+    // or text where a number belongs (22P02 invalid_text_representation) is the
+    // caller's input, not a server fault — 400 with details.code VALIDATION.
+    const pgCode = (rawErr as { code?: unknown }).code;
+    if (pgCode === '22003' || pgCode === '22P02') {
+      return reply.status(400).send({
+        error: {
+          code: 'BAD_REQUEST',
+          message:
+            pgCode === '22003'
+              ? 'A number is too large to store — amounts go up to 9,999,999.99 and percents up to 999.99'
+              : 'A value is not in the form this field takes',
+          details: { code: 'VALIDATION', pg_code: pgCode },
+        },
+      });
+    }
     app.log.error(err);
     return reply
       .status(500)

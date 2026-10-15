@@ -14,6 +14,7 @@
 // (Registered under the /api prefix in app.ts.)
 
 import type { FastifyInstance } from 'fastify';
+import { MONEY_MAX } from '@theone/shared';
 import { z } from 'zod';
 import { parse } from '../errors.js';
 import { actingPrincipalFromRequest, resolveTaskId } from '../services/activity.js';
@@ -38,7 +39,7 @@ const lineSchema = z.object({
   kind: z.string().trim().min(1).max(40).optional(),
   description: z.string().trim().min(1).max(400),
   quantity: z.number().min(0).max(100_000).optional(),
-  unit_price: z.number().min(-1_000_000).max(1_000_000).optional(),
+  unit_price: z.number().min(-MONEY_MAX).max(MONEY_MAX).optional(),
 });
 
 const createSchema = z
@@ -49,7 +50,7 @@ const createSchema = z
     bill_number: z.string().trim().max(80).nullable().optional(),
     received_on: day.optional(),
     due_on: day.nullable().optional(),
-    tax: z.number().min(0).max(1_000_000).optional(),
+    tax: z.number().min(0).max(MONEY_MAX).optional(),
     note: z.string().trim().max(2000).nullable().optional(),
     lines: z.array(lineSchema).min(1).max(200),
     contract_id: z.string().uuid().nullable().optional(),
@@ -62,7 +63,7 @@ const updateSchema = z
     bill_number: z.string().trim().max(80).nullable().optional(),
     received_on: day.optional(),
     due_on: day.nullable().optional(),
-    tax: z.number().min(0).max(1_000_000).optional(),
+    tax: z.number().min(0).max(MONEY_MAX).optional(),
     note: z.string().trim().max(2000).nullable().optional(),
     lines: z.array(lineSchema).max(200).optional(),
   })

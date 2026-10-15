@@ -29,6 +29,8 @@ import {
   type WorkOrderDetailV2,
 } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
+import { invoiceAllowedForStatus } from '@theone/shared';
+import { MarkInvoicePaid } from '../rcv/MarkInvoicePaid';
 import { Icon } from '../Icon';
 import { BillingProposalBlock } from './BillingProposalBlock';
 
@@ -37,7 +39,7 @@ const money = (n: number) =>
 
 export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
   const qc = useQueryClient();
-  const { can } = useAuth();
+  const { can, actingAs } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
   const canView = can('invoicing', 'view');
@@ -81,7 +83,7 @@ export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
     onError: fail,
   });
   const pay = useMutation({
-    mutationFn: (id: string) => markInvoicePaid(id),
+    mutationFn: (v: { id: string; reference: string; paidOn: string }) => markInvoicePaid(v.id, v.reference, v.paidOn),
     onSuccess: done,
     onError: fail,
   });
@@ -89,6 +91,8 @@ export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
   if (!canView) return null;
 
   const invoice = q.data?.invoice ?? null;
+  // 0083 (#2, money half): the API refuses an invoice before the job is done.
+  const doneEnough = invoiceAllowedForStatus(wo.status?.name ?? '', wo.status?.group ?? null);
   const busy = raise.isPending || send.isPending || pay.isPending;
 
   return (
@@ -109,8 +113,14 @@ export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
           invoice={invoice}
           busy={busy}
           canSend={canSend}
+          canEdit={can('invoicing', 'edit')}
+          sendLock={
+            invoice.created_by?.id === actingAs?.id && actingAs?.is_super_admin !== true
+              ? 'You raised this invoice — someone else has to send it (maker ≠ checker)'
+              : null
+          }
           onSend={() => send.mutate(invoice.id)}
-          onPaid={() => pay.mutate(invoice.id)}
+          onPaid={(reference, paidOn) => pay.mutate({ id: invoice.id, reference, paidOn })}
         />
       ) : pending ? (
         <BillingProposalBlock
@@ -129,7 +139,8 @@ export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
             <button
               type="button"
               className="btn btn-primary"
-              disabled={busy}
+              disabled={busy || !doneEnough}
+              title={doneEnough ? undefined : 'An invoice is raised once the job is done (Done / Incurred or later)'}
               onClick={() => raise.mutate()}
             >
               <Icon name="file" size={14} />
@@ -146,14 +157,19 @@ function InvoiceBody({
   invoice,
   busy,
   canSend,
+  canEdit,
+  sendLock,
   onSend,
   onPaid,
 }: {
   invoice: Invoice;
   busy: boolean;
   canSend: boolean;
+  canEdit: boolean;
+  /** 0083 (D2): why Send is locked for this viewer, or null. */
+  sendLock: string | null;
   onSend: () => void;
-  onPaid: () => void;
+  onPaid: (reference: string, paidOn: string) => void;
 }) {
   return (
     <>
@@ -250,16 +266,20 @@ function InvoiceBody({
             Print / PDF
           </Link>
           {invoice.status === 'draft' && canSend && (
-            <button type="button" className="btn-sm is-primary" disabled={busy} onClick={onSend}>
+            <button type="button" className="btn-sm is-primary" disabled={busy || !!sendLock} title={sendLock ?? undefined} onClick={onSend}>
               <Icon name="send" size={14} />
               Send to client
             </button>
           )}
           {invoice.status === 'sent' && (
-            <button type="button" className="btn-sm is-primary" disabled={busy} onClick={onPaid}>
-              <Icon name="check" size={14} />
-              Mark paid
-            </button>
+            <MarkInvoicePaid
+              number={invoice.number}
+              busy={busy}
+              canEdit={canEdit}
+              className="btn-sm is-primary"
+              iconSize={14}
+              onConfirm={onPaid}
+            />
           )}
         </span>
       </div>

@@ -1,8 +1,12 @@
 // Technician payment request service — the PPR replacement, at Yoda parity.
 //
 // Lifecycle (Yoda PaymentEngine, on top of 0016's decision stamps):
-//   requested ─approve→ approved ─pay→ paid         (Yoda "Verify" = pay; approve is optional)
+//   requested ─approve→ approved ─pay→ paid         (0083 #4: pay only from approved)
 //   requested | approved ─reject→ rejected
+//   Every move is ONE conditional UPDATE on the status it was read in (#25):
+//   two clicks race to one winner, the other gets a 409, Cost is added once.
+//   Maker ≠ checker (D2): the requester neither approves nor pays their own
+//   request; a super admin may, and the row says self_approved.
 //   edit      : only while `requested` (Yoda: "cannot update verified payments")
 //   delete    : a `requested` | `rejected` row deletes at once (owner | processor);
 //               a processed row becomes pending_delete until an admin confirms
@@ -25,10 +29,15 @@
 // rule 1.5.2 (`assertNoOpenNteOverride`) refuses approve / pay while an NTE
 // override waits on a manager.
 //
-// Rules carried over from Yoda: duplicate purpose on the same WO is a 409; a
-// blacklisted vendor is a 409 (admin override); the W9 flag is the running-total
+// Rules carried over from Yoda: a blacklisted vendor is a 409 (admin
+// override); the W9 flag is the running-total
 // window (> $599 per vendor + billing entity + year, non-credit); a manual payee
 // becomes a vendor record keyed by phone (Yoda creates the Technician).
+// 0083 (#24): the purpose is a code — J (Job), M (Materials), A (Assessment) —
+// and the server numbers repeats per work order (J, J1, J2…), replacing the
+// old duplicate-purpose 409. Pre-0083 free-text purposes are left as they are.
+// 0083 (#5 / #7): before approve and pay, a payment that would take Cost past
+// the NTE or past the approved quote raises the hold (D1b) and is refused.
 //
 // The payee is EITHER a vendor record OR a manual name+phone pair. The DB does
 // not CHECK across the two shapes — the rule is enforced here, where a useful
@@ -47,13 +56,29 @@ import type {
   PaymentRequestsResponse,
   VendorYtd,
 } from '@theone/shared';
-import { PAYMENT_METHOD_LABEL, PAYMENT_PROCESS_PERM_KEY, permAllows } from '@theone/shared';
+import {
+  NTE_OVERRIDE_REQUIRED_CODE,
+  OVER_QUOTE_CODE,
+  PAYMENT_METHOD_LABEL,
+  PAYMENT_PROCESS_PERM_KEY,
+  SELF_APPROVAL_CODE,
+  isPaymentPurposeCode,
+  nextPurpose,
+  overNte,
+  overQuoteReason,
+  permAllows,
+  projectedCost,
+  purposeBase,
+  selfApprovalMessage,
+  selfApprovalVerdict,
+} from '@theone/shared';
+import type { PaymentPurposeCode } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
 import { requirePerm } from './permissions.js';
-import { assertNoOpenNteOverride } from './approvals.js';
+import { approvedCover, assertNoOpenMoneyHold, assertNoOpenNteOverride, raiseMoneyHold } from './approvals.js';
 import { assertWoAllows } from './woPolicy.js';
 import { enqueueOutbox } from './outbox.js';
 import { evaluateForTask } from './obligations.js';
@@ -123,6 +148,9 @@ interface PaymentRow {
   wo_cost: string | null;
   wo_emergency: boolean | null;
   wo_escalated: boolean | null;
+  /** 0083: the largest cost an approved NTE override lets through. */
+  nte_covers: number | string | null;
+  over_quote_open: boolean;
 }
 
 const SELECT_SQL = `
@@ -164,7 +192,14 @@ const SELECT_SQL = `
          COALESCE(t.fields->'Escalated' = 'true'::jsonb, false) AS wo_escalated,
          EXISTS (SELECT 1 FROM approval_task a
                   WHERE a.task_id = pr.task_id AND a.type = 'nte_override' AND a.status = 'open')
-                            AS nte_override_open
+                            AS nte_override_open,
+         (SELECT max((a.detail->>'covers')::numeric) FROM approval_task a
+           WHERE a.task_id = pr.task_id AND a.type = 'nte_override' AND a.status = 'approved'
+             AND jsonb_typeof(a.detail->'covers') = 'number')
+                            AS nte_covers,
+         EXISTS (SELECT 1 FROM approval_task a
+                  WHERE a.task_id = pr.task_id AND a.type = 'over_quote' AND a.status = 'open')
+                            AS over_quote_open
     FROM payment_request pr
     JOIN task t            ON t.id = pr.task_id
     LEFT JOIN vendor v     ON v.id = pr.vendor_id
@@ -281,7 +316,24 @@ function mapPayment(r: PaymentRow, opts: { fullAddress: boolean } = { fullAddres
     paid_by: actorOf(r.paid_by_id, r.paid_by_name, r.paid_by_kind),
     paid_at: r.paid_at,
     nte_override_open: Boolean(r.nte_override_open),
+    money_hold: moneyHoldOf(r),
   };
+}
+
+/**
+ * 0083 (#5 / #7): what holds approving or paying this request, for the
+ * button's lock — the API asks the same questions (assertPaymentNotHeld) and
+ * raises the hold when the click comes. Only a waiting request is held.
+ */
+function moneyHoldOf(r: PaymentRow): string | null {
+  if (r.status !== 'requested' && r.status !== 'approved') return null;
+  if (r.over_quote_open) return 'On hold — paying more than the approved quote waits on a manager (Approvals › Money holds)';
+  const projected = projectedCost(moneyNum(r.wo_cost), Number(r.amount ?? 0));
+  const nte = moneyNum(r.wo_nte);
+  if (!r.nte_override_open && overNte(projected, nte, moneyNum(r.nte_covers))) {
+    return `Paying this takes Cost to ${money(projected)}, over the client NTE ${money(nte ?? 0)} — the click raises an NTE override for a manager`;
+  }
+  return null;
 }
 
 function mapListItem(r: PaymentRow, opts?: { fullAddress: boolean }): PaymentListItem {
@@ -561,21 +613,32 @@ async function loadRow(id: string): Promise<PaymentRow> {
   return res.rows[0];
 }
 
-async function assertUniquePurpose(taskId: string, purpose: string, exceptId: string | null): Promise<void> {
-  const dup = await query<{ id: string }>(
-    `SELECT id::text AS id FROM payment_request
-      WHERE task_id = $1 AND deleted_at IS NULL AND status <> 'rejected'
-        AND lower(trim(purpose)) = lower(trim($2)) AND ($3::uuid IS NULL OR id <> $3)
-      LIMIT 1`,
-    [taskId, purpose, exceptId],
-  );
-  if (dup.rows.length > 0) {
-    throw conflict('A payment with this purpose already exists on this work order', {
-      code: 'DUPLICATE_PURPOSE',
-      purpose,
-      payment_request_id: dup.rows[0].id,
+/** 0083 (#24): the purpose must be one of the codes; the stored value is numbered. */
+function purposeCodeOf(raw: string): PaymentPurposeCode {
+  const code = raw.trim().toUpperCase();
+  if (!isPaymentPurposeCode(code)) {
+    throw badRequest('Purpose must be J (Job), M (Materials) or A (Assessment)', {
+      code: 'PURPOSE_CODE',
+      purpose: raw,
+      allowed: ['J', 'M', 'A'],
     });
   }
+  return code;
+}
+
+/**
+ * The numbered purpose for a request of `code` on this work order: J, then
+ * J1, J2… Read on the caller's transaction AFTER it locked the task row, so
+ * two requests submitted at once take different numbers. Every live row
+ * counts, rejected ones included, so a number is never handed out twice.
+ */
+async function numberPurpose(tx: Queryable, taskId: string, code: PaymentPurposeCode, exceptId: string | null): Promise<string> {
+  const res = await tx.query<{ purpose: string }>(
+    `SELECT purpose FROM payment_request
+      WHERE task_id = $1 AND deleted_at IS NULL AND ($2::uuid IS NULL OR id <> $2)`,
+    [taskId, exceptId],
+  );
+  return nextPurpose(code, res.rows.map((r) => r.purpose));
 }
 
 function assertAddressMatches(method: PaymentMethod, address: PaymentAddress | null | undefined): void {
@@ -608,7 +671,7 @@ export async function createPaymentRequest(
     );
   }
   assertAddressMatches(input.method, input.payment_address);
-  await assertUniquePurpose(taskId, input.purpose, null);
+  const purposeCode = purposeCodeOf(input.purpose);
 
   // Yoda resolves the Technician by phone and creates one when unknown, so the
   // W9 / YTD bookkeeping has a record to hang off. Same here: a manual payee
@@ -643,6 +706,10 @@ export async function createPaymentRequest(
   let createdId: string | null = null;
 
   await withTransaction(async (tx) => {
+    // The task row first (the parent-first order of every child insert, and
+    // the lock the purpose numbering reads under). NO KEY: see woFieldValues.
+    await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [taskId]);
+    const purpose = await numberPurpose(tx, taskId, purposeCode, null);
     if (!vendorId && payeeName && payeePhone) {
       // A technician record (0057 kind = tech), findable by phone next time.
       const created = await tx.query<{ id: string }>(
@@ -668,7 +735,7 @@ export async function createPaymentRequest(
         vendorId,
         payeeName,
         payeePhone,
-        input.purpose.trim(),
+        purpose,
         input.amount,
         input.method,
         input.payment_address ? JSON.stringify(input.payment_address) : null,
@@ -693,6 +760,7 @@ export async function createPaymentRequest(
       status: 'requested',
       amount: input.amount,
       method: input.method,
+      purpose,
       needs_w9: full.needs_w9,
     });
     await enqueueOutbox(tx, 'payment.requested', 'payment_request', createdId, {
@@ -744,16 +812,22 @@ export async function updatePaymentRequest(
     // A method change invalidates the old payout details.
     input.payment_address = null;
   }
-  if (input.purpose !== undefined) await assertUniquePurpose(row.task_id, input.purpose, id);
+  // A new code is numbered again; the same code keeps the number it has.
+  const purposeCode = input.purpose !== undefined ? purposeCodeOf(input.purpose) : null;
 
   await withTransaction(async (tx) => {
+    await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [row.task_id]);
+    const purpose =
+      purposeCode === null ? null
+      : purposeBase(row.purpose) === purposeCode ? row.purpose
+      : await numberPurpose(tx, row.task_id, purposeCode, id);
     const sets: string[] = [];
     const params: unknown[] = [];
     const set = (col: string, v: unknown, cast = '') => {
       params.push(v);
       sets.push(`${col} = $${params.length}${cast}`);
     };
-    if (input.purpose !== undefined) set('purpose', input.purpose.trim());
+    if (purpose !== null) set('purpose', purpose);
     if (input.amount !== undefined) set('amount', input.amount);
     if (input.method !== undefined) set('method', input.method);
     if (input.payment_address !== undefined) set('payment_address', input.payment_address ? JSON.stringify(input.payment_address) : null, '::jsonb');
@@ -763,7 +837,12 @@ export async function updatePaymentRequest(
     if (input.recipient_is_store !== undefined) set('recipient_is_store', input.recipient_is_store);
     if (sets.length > 0) {
       params.push(id);
-      await tx.query(`UPDATE payment_request SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+      // Only while it is still requested, in the statement (#25).
+      const kept = await tx.query(
+        `UPDATE payment_request SET ${sets.join(', ')} WHERE id = $${params.length} AND status = 'requested' AND deleted_at IS NULL RETURNING id`,
+        params,
+      );
+      if (!kept.rows[0]) throw conflict('This payment request was processed while you were editing it — reload it', { code: 'PAYMENT_MOVED' });
     }
     if (row.vendor_id) await recomputeNeedsW9(tx, row.vendor_id);
     await logPayment(tx, actor.id, row.task_id, 'payment_updated', null, {
@@ -797,6 +876,7 @@ async function setStatus(
   extraSet: string,
   extraParams: unknown[],
   extra?: (tx: Queryable) => Promise<TaskChange[] | void>,
+  selfApproved = false,
 ): Promise<PaymentRequest> {
   if (!from.includes(row.status)) {
     throw badRequest(`This payment request is already ${LABEL[row.status]}; it cannot be ${LABEL[to]} now`, {
@@ -806,48 +886,152 @@ async function setStatus(
   }
   let costChanges: TaskChange[] = [];
   await withTransaction(async (tx) => {
-    await tx.query(
-      `UPDATE payment_request SET status = $1${extraSet ? `, ${extraSet}` : ''} WHERE id = $2`,
-      [to, row.id, ...extraParams],
+    // #25: ONE conditional statement on the status the row was read in. Two
+    // clicks on Pay race here; the second matches no row and is refused, so
+    // the money and the Cost roll-up below happen exactly once.
+    const moved = await tx.query(
+      `UPDATE payment_request SET status = $1${extraSet ? `, ${extraSet}` : ''}
+        WHERE id = $2 AND status = $${3 + extraParams.length} AND deleted_at IS NULL
+        RETURNING id`,
+      [to, row.id, ...extraParams, row.status],
     );
+    if (!moved.rows[0]) {
+      throw conflict(`This payment request changed while you were looking at it, so it was not ${LABEL[to]} — reload it`, {
+        code: 'PAYMENT_MOVED',
+        payment_request_id: row.id,
+        status: row.status,
+      });
+    }
     if (extra) costChanges = (await extra(tx)) ?? [];
     await logPayment(tx, actor.id, row.task_id, action, { payment_request_id: row.id, status: row.status }, {
       payment_request_id: row.id,
       status: to,
       amount: Number(row.amount ?? 0),
       payee: row.vendor_id ? row.vendor_name : row.payee_name,
+      ...(selfApproved ? { self_approved: true } : {}),
     });
   });
   await afterCost(row.task_id, costChanges);
   return mapPayment(await loadRow(row.id), { fullAddress: canProcessPayments(actor) });
 }
 
+/** D2: 403 SELF_APPROVAL when the requester decides their own request;
+    true when a super admin does (logged self_approved). */
+function assertNotOwnRequest(row: PaymentRow, actor: ActingPrincipal, verb: string): boolean {
+  const verdict = selfApprovalVerdict(row.requested_by_id, actor.id, actor.isSuperAdmin);
+  if (verdict === 'blocked') {
+    throw forbidden(selfApprovalMessage('this payment request', verb), {
+      code: SELF_APPROVAL_CODE,
+      payment_request_id: row.id,
+    });
+  }
+  return verdict === 'self_approved';
+}
+
+/** The approved quote's price and cost side, when the work order has one. */
+async function approvedQuoteFigures(taskId: string): Promise<{ total: number | null; cost: number | null } | null> {
+  const { getBindableQuoteTotal } = await import('./quotes.js');
+  const total = await getBindableQuoteTotal(taskId);
+  if (total === null) return null;
+  const c = await query<{ cost: string | number | null; tbd: boolean }>(
+    `SELECT total_cost AS cost, is_cost_tbd AS tbd FROM quote WHERE task_id = $1 LIMIT 1`,
+    [taskId],
+  );
+  const cost = c.rows[0] && !c.rows[0].tbd && c.rows[0].cost !== null ? Number(c.rows[0].cost) : null;
+  return { total, cost };
+}
+
+/**
+ * 0083 (#5 / #7, D1b) — asked BEFORE approve and pay write anything: an open
+ * NTE override or over-quote hold refuses the move (rule 1.5.2's pattern);
+ * otherwise, if paying this would take Cost past the NTE (with no approved
+ * override covering that much) or past the approved quote, the hold is raised
+ * and the move refused with a 409 that names it. A manager's approval stores
+ * the projected cost as `covers`, so the retry goes through.
+ */
+async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, move: string): Promise<void> {
+  await assertNoOpenNteOverride(row.task_id, move);
+  await assertNoOpenMoneyHold(row.task_id, 'over_quote', move, OVER_QUOTE_CODE);
+  const amount = Number(row.amount ?? 0);
+  const projected = projectedCost(moneyNum(row.wo_cost), amount);
+  const nte = moneyNum(row.wo_nte);
+  const payee = (row.vendor_id ? row.vendor_name : row.payee_name) ?? 'the technician';
+  const nteCover = await approvedCover(row.task_id, 'nte_override');
+  if (overNte(projected, nte, nteCover?.covers)) {
+    await raiseMoneyHold({
+      taskId: row.task_id,
+      type: 'nte_override',
+      actorId: actor.id,
+      title: `Paying ${money(amount)} to ${payee} would take Cost to ${money(projected)}, over the client NTE ${money(nte ?? 0)}`,
+      detail: {
+        cost: projected,
+        nte,
+        over_by: Math.round((projected - (nte ?? 0)) * 100) / 100,
+        covers: projected,
+        projected: true,
+        payment_request_id: row.id,
+      },
+      move,
+      code: NTE_OVERRIDE_REQUIRED_CODE,
+    });
+  }
+  const quote = await approvedQuoteFigures(row.task_id);
+  const quoteCover = await approvedCover(row.task_id, 'over_quote');
+  const reason = overQuoteReason(projected, quote, quoteCover?.covers);
+  if (reason) {
+    await raiseMoneyHold({
+      taskId: row.task_id,
+      type: 'over_quote',
+      actorId: actor.id,
+      title: `${reason} (paying ${money(amount)} to ${payee})`,
+      detail: {
+        cost: projected,
+        quote_total: quote?.total ?? null,
+        quote_cost: quote?.cost ?? null,
+        covers: projected,
+        payment_request_id: row.id,
+      },
+      move,
+      code: OVER_QUOTE_CODE,
+    });
+  }
+}
+
 /** requested → approved (payments:approve). Refused (409) while an NTE
-    override waits on a manager — rule 1.5.2. */
+    override waits on a manager — rule 1.5.2 — and (0083) when this payment
+    would go past the NTE or the approved quote; never by its own requester. */
 export async function approvePaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
   assertCanApprove(actor, 'approve');
   const row = await loadRow(id);
-  await assertNoOpenNteOverride(row.task_id, 'Approving this payment');
+  const selfApproved = assertNotOwnRequest(row, actor, 'approve');
+  await assertPaymentNotHeld(row, actor, 'Approving this payment');
   return setStatus(row, ['requested'], 'approved', 'payment_approved', actor,
     'approved_by = $3, approved_at = now()', [actor.id],
     async (tx) => {
       await enqueueOutbox(tx, 'payment.approved', 'payment_request', id, { task_id: row.task_id });
-    });
+    }, selfApproved);
 }
 
 /**
- * requested | approved → paid (payments/process:edit) — Yoda VerifyPayment:
- * stamps the payer (and the approver, when nobody approved first), rolls the
- * amount into the WO's Cost field and queues the confirmation post. Paid
- * straight from requested is allowed: money sometimes goes out by hand, and a
- * queue that cannot record the truth gets worked around. Rule 1.5.2 applies.
+ * approved → paid (payments/process:edit) — Yoda VerifyPayment: stamps the
+ * payer, rolls the amount into the WO's Cost field and queues the
+ * confirmation post. 0083 (#4): only from approved — paying straight from
+ * requested is retired, so every dollar out had a second person's yes — and
+ * never by the requester (D2). Rule 1.5.2 and the 0083 holds apply.
  */
 export async function payPaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
   assertCanProcess(actor, 'Paying');
   const row = await loadRow(id);
-  await assertNoOpenNteOverride(row.task_id, 'Paying this request');
+  if (row.status === 'requested') {
+    throw conflict('Approve this payment request before paying it', {
+      code: 'PAYMENT_NOT_APPROVED',
+      payment_request_id: id,
+    });
+  }
+  const selfApproved = assertNotOwnRequest(row, actor, 'pay');
+  await assertPaymentNotHeld(row, actor, 'Paying this request');
   const amount = Number(row.amount ?? 0);
-  return setStatus(row, ['requested', 'approved', 'sent_to_yoda'], 'paid', 'payment_paid', actor,
+  return setStatus(row, ['approved', 'sent_to_yoda'], 'paid', 'payment_paid', actor,
     'approved_by = COALESCE(approved_by, $3), approved_at = COALESCE(approved_at, now()), paid_by = $3, paid_at = now()', [actor.id],
     async (tx) => {
       await enqueueOutbox(tx, 'payment.paid', 'payment_request', id, {
@@ -856,7 +1040,7 @@ export async function payPaymentRequest(id: string, actor: ActingPrincipal): Pro
         paid_by: actor.name,
       });
       return rollCost(tx, row.task_id, actor.id, amount);
-    });
+    }, selfApproved);
 }
 
 /** requested | approved → rejected (payments:approve) with the reason for the requester. */

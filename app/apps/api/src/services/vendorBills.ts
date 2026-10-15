@@ -10,8 +10,24 @@
 //   vendor money at all) and the approval tier for the amount (rule 6.2.3,
 //   services/approvalTiers.ts), so a $4,000 bill needs a team lead even when
 //   an account manager could have approved a $400 one.
+//
+// 0083 (UAT round 1, Wave A, #20): a bill totals more than nothing; a
+// vendor's bill number is on file once (409 VENDOR_BILL_DUPLICATE, backed by
+// a partial unique index); whoever recorded a bill does not approve it (D2);
+// a bill above what is still owed on the work order — the approved quote's
+// cost side less what was paid and the other live bills — raises a
+// `bill_over_owed` hold that refuses Approve until a manager decides it
+// (D1b); every move is one conditional UPDATE on the status it was read in.
 
 import {
+  BILL_OVER_OWED_CODE,
+  MONEY_MAX,
+  SELF_APPROVAL_CODE,
+  VALIDATION_CODE,
+  billOverOwed,
+  selfApprovalMessage,
+  selfApprovalVerdict,
+  vendorOwed,
   VENDOR_BILL_LOCKED_CODE,
   PAYMENT_PROCESS_PERM_KEY,
   vendorBillEditable,
@@ -27,7 +43,8 @@ import {
   type VendorBillsResponse,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
-import { badRequest, conflict, notFound } from '../errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../errors.js';
+import { approvedCover, openMoneyHold, raiseMoneyHold } from './approvals.js';
 import { requirePerm } from './permissions.js';
 import { woScopeSql } from './woScope.js';
 import { Params } from './woFields.js';
@@ -194,6 +211,16 @@ async function hydrate(rows: Row[], actor: ActingPrincipal): Promise<VendorBill[
   const bills = rows.map((r) =>
     mapRow(r, lines.get(r.id) ?? [], tierSummary(tiers, 'vendor_bill', n(r.total), actor)),
   );
+  // 0083 (#20): an open over-what-is-owed hold on the bill's work order.
+  const held = await query<{ bill_id: string; title: string }>(
+    `SELECT a.detail->>'vendor_bill_id' AS bill_id, a.title FROM approval_task a
+      WHERE a.type = 'bill_over_owed' AND a.status = 'open' AND a.task_id = ANY($1::uuid[])`,
+    [[...new Set(rows.map((r) => r.task_id))]],
+  );
+  for (const b of bills) {
+    const h = held.rows.find((x) => x.bill_id === b.id);
+    b.money_hold = h ? `On hold — ${h.title}. A manager decides it under Approvals › Money holds.` : null;
+  }
   // 0066 · the invoicing-rule warnings and the credit notes. Read-only
   // decoration: if it fails, the bills still come back as they always did.
   try {
@@ -271,6 +298,40 @@ async function writeLines(
   }
 }
 
+/** #20: a bill is money owed — more than nothing, and no more than a column holds. */
+function assertBillTotal(total: number): void {
+  if (!(total > 0)) throw badRequest('A bill has to total more than $0.00', { code: 'VENDOR_BILL_TOTAL' });
+  if (total > MONEY_MAX) {
+    throw badRequest(`A bill can total at most ${MONEY_MAX.toLocaleString('en-US')}`, { code: VALIDATION_CODE });
+  }
+}
+
+/** #20: the same vendor's bill number once (void bills do not count). Asked
+    on the caller's transaction after it locked the task row. */
+async function assertBillNumberFree(
+  tx: { query: <R = unknown>(sql: string, params?: unknown[]) => Promise<{ rows: R[] }> },
+  vendorId: string | null,
+  vendorName: string,
+  billNumber: string | null,
+  exceptId: string | null,
+): Promise<void> {
+  if (!billNumber) return;
+  const dup = await tx.query<{ id: string; wo_number: string }>(
+    `SELECT b.id::text AS id, t.wo_number FROM vendor_bill b JOIN task t ON t.id = b.task_id
+      WHERE b.status <> 'void' AND lower(btrim(b.bill_number)) = lower(btrim($3))
+        AND COALESCE(b.vendor_id::text, lower(btrim(b.vendor_name))) = COALESCE($1::text, lower(btrim($2)))
+        AND ($4::uuid IS NULL OR b.id <> $4::uuid)
+      LIMIT 1`,
+    [vendorId, vendorName, billNumber, exceptId],
+  );
+  if (dup.rows[0]) {
+    throw conflict(`${vendorName}'s bill ${billNumber} is already on file (on ${dup.rows[0].wo_number})`, {
+      code: 'VENDOR_BILL_DUPLICATE',
+      vendor_bill_id: dup.rows[0].id,
+    });
+  }
+}
+
 export async function createVendorBill(input: VendorBillCreateInput, actor: ActingPrincipal): Promise<VendorBill> {
   requireRecord(actor);
   const vendorName = String(input.vendor_name ?? '').trim();
@@ -280,12 +341,16 @@ export async function createVendorBill(input: VendorBillCreateInput, actor: Acti
   const tax = Number(input.tax ?? 0);
   if (tax < 0) throw badRequest('Tax cannot be negative');
   const { subtotal, total } = vendorBillTotals(lines, tax);
+  assertBillTotal(total);
 
   const task = await query<{ id: string }>(`SELECT id::text AS id FROM task WHERE id = $1 AND deleted_at IS NULL`, [input.task_id]);
   if (!task.rows[0]) throw notFound('Work order not found');
 
   let id = '';
   await withTransaction(async (tx) => {
+    // The task row first (parent-first), then the duplicate check under it.
+    await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [input.task_id]);
+    await assertBillNumberFree(tx, input.vendor_id ?? null, vendorName, input.bill_number?.trim() || null, null);
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO vendor_bill
          (task_id, vendor_id, vendor_name, bill_number, received_on, due_on, status, subtotal, tax, total, note, created_by, contract_id)
@@ -319,24 +384,29 @@ export async function updateVendorBill(id: string, input: VendorBillUpdateInput,
   const tax = input.tax ?? cur.tax;
   if (tax < 0) throw badRequest('Tax cannot be negative');
   const { subtotal, total } = vendorBillTotals(lines, tax);
+  assertBillTotal(total);
+  const billNumber = input.bill_number === undefined ? cur.bill_number : (input.bill_number?.trim() || null);
 
   await withTransaction(async (tx) => {
+    await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [cur.task_id]);
+    await assertBillNumberFree(tx, cur.vendor_id, input.vendor_name?.trim() || cur.vendor_name, billNumber, id);
     if (input.lines) await writeLines(tx, id, lines);
-    await tx.query(
+    const kept = await tx.query(
       `UPDATE vendor_bill
           SET vendor_name = COALESCE($2, vendor_name), bill_number = $3,
               received_on = COALESCE($4::date, received_on), due_on = $5::date,
               tax = $6, subtotal = $7, total = $8, note = $9
-        WHERE id = $1`,
+        WHERE id = $1 AND status IN ('received', 'disputed') RETURNING id`,
       [
         id, input.vendor_name?.trim() || null,
-        input.bill_number === undefined ? cur.bill_number : (input.bill_number?.trim() || null),
+        billNumber,
         input.received_on ?? null,
         input.due_on === undefined ? cur.due_on : input.due_on,
         tax, subtotal, total,
         input.note === undefined ? cur.note : (input.note?.trim() || null),
       ],
     );
+    if (!kept.rows[0]) throw conflict(`This bill was approved while you were editing it, so its figures are fixed`, { code: VENDOR_BILL_LOCKED_CODE });
     await tx.query(
       `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, before, after)
        VALUES ($1, 'task', $2, 'vendor_bill_updated', $3, $4::jsonb, $5::jsonb)`,
@@ -361,10 +431,18 @@ async function move(
     throw conflict(`A bill that is ${cur.status} cannot become ${to}`, { from: cur.status, to });
   }
 
+  let selfApproved = false;
   if (to === 'approved') {
     requireApprove(actor);
+    // D2: whoever recorded the bill does not approve it.
+    const verdict = selfApprovalVerdict(cur.created_by?.id ?? null, actor.id, actor.isSuperAdmin);
+    if (verdict === 'blocked') {
+      throw forbidden(selfApprovalMessage('this vendor bill'), { code: SELF_APPROVAL_CODE, vendor_bill_id: id });
+    }
+    selfApproved = verdict === 'self_approved';
     // Rule 6.2.3: the amount's band may exclude this role.
     await assertTierAllows('vendor_bill', cur.total, actor, 'Approving a vendor bill');
+    await assertBillWithinOwed(cur, actor);
   } else if (to === 'paid') {
     requireProcess(actor);
   } else {
@@ -375,7 +453,8 @@ async function move(
   }
 
   await withTransaction(async (tx) => {
-    await tx.query(
+    // #25: one conditional statement on the status it was read in.
+    const moved = await tx.query(
       `UPDATE vendor_bill
           SET status = $2,
               approved_by = CASE WHEN $2 = 'approved' THEN $3::uuid ELSE approved_by END,
@@ -385,16 +464,20 @@ async function move(
               paid_reference = CASE WHEN $2 = 'paid' THEN $4 ELSE paid_reference END,
               payment_request_id = CASE WHEN $2 = 'paid' THEN COALESCE($5::uuid, payment_request_id) ELSE payment_request_id END,
               dispute_note = CASE WHEN $2 = 'disputed' THEN $6 ELSE dispute_note END
-        WHERE id = $1`,
-      [id, to, actor.id, extra.reference ?? null, extra.payment_request_id ?? null, extra.note ?? null],
+        WHERE id = $1 AND status = $7
+        RETURNING id`,
+      [id, to, actor.id, extra.reference ?? null, extra.payment_request_id ?? null, extra.note ?? null, cur.status],
     );
+    if (!moved.rows[0]) {
+      throw conflict('This bill changed while you were looking at it — reload it', { code: 'VENDOR_BILL_MOVED', from: cur.status, to });
+    }
     await tx.query(
       `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, before, after)
        VALUES ($1, 'task', $2, 'vendor_bill_status_changed', $3, $4::jsonb, $5::jsonb)`,
       [
         actor.id, cur.task_id, `vendor_bill:${id}`,
         JSON.stringify({ status: cur.status }),
-        JSON.stringify({ status: to, vendor: cur.vendor_name, bill_number: cur.bill_number, total: cur.total, ...(extra.note ? { note: extra.note } : {}), ...(cur.tier ? { tier: cur.tier.label } : {}) }),
+        JSON.stringify({ status: to, vendor: cur.vendor_name, bill_number: cur.bill_number, total: cur.total, ...(extra.note ? { note: extra.note } : {}), ...(cur.tier ? { tier: cur.tier.label } : {}), ...(selfApproved ? { self_approved: true } : {}) }),
       ],
     );
     // A dispute is feedback for whoever deals with the vendor: an internal
@@ -413,6 +496,50 @@ async function move(
     }
   });
   return getVendorBill(id, actor);
+}
+
+/**
+ * #20 (D1b): what is still owed to vendors on the work order — the approved
+ * quote's cost side, less the payment requests already paid and the other
+ * live bills — and a bill above it raises a `bill_over_owed` hold that refuses
+ * Approve until a manager decides it. No approved quote cost = no ceiling.
+ */
+async function assertBillWithinOwed(cur: VendorBill, actor: ActingPrincipal): Promise<void> {
+  const open = await openMoneyHold(cur.task_id, 'bill_over_owed');
+  if (open) {
+    throw conflict(`Approving this bill is on hold: ${open.title}. A manager decides it under Approvals first.`, {
+      code: BILL_OVER_OWED_CODE,
+      approval_task_id: open.id,
+    });
+  }
+  const q = await query<{ cost: string | null; tbd: boolean }>(
+    `SELECT total_cost AS cost, is_cost_tbd AS tbd FROM quote
+      WHERE task_id = $1 AND status IN ('approved', 'sent', 'client_approved') LIMIT 1`,
+    [cur.task_id],
+  );
+  const quoteCost = q.rows[0] && !q.rows[0].tbd && q.rows[0].cost !== null ? Number(q.rows[0].cost) : null;
+  if (quoteCost === null) return;
+  const sums = await query<{ paid: string | number; bills: string | number }>(
+    `SELECT
+       (SELECT COALESCE(sum(amount), 0) FROM payment_request
+         WHERE task_id = $1 AND deleted_at IS NULL AND status = 'paid') AS paid,
+       (SELECT COALESCE(sum(total), 0) FROM vendor_bill
+         WHERE task_id = $1 AND id <> $2 AND status IN ('approved', 'paid')) AS bills`,
+    [cur.task_id, cur.id],
+  );
+  const owed = vendorOwed(quoteCost, Number(sums.rows[0]?.paid ?? 0), Number(sums.rows[0]?.bills ?? 0));
+  const cover = await approvedCover(cur.task_id, 'bill_over_owed', cur.id);
+  if (!billOverOwed(cur.total, owed, cover?.covers)) return;
+  const usd = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  await raiseMoneyHold({
+    taskId: cur.task_id,
+    type: 'bill_over_owed',
+    actorId: actor.id,
+    title: `${cur.vendor_name}'s bill${cur.bill_number ? ` ${cur.bill_number}` : ''} for ${usd(cur.total)} is more than the ${usd(Math.max(owed ?? 0, 0))} still owed against the approved quote`,
+    detail: { vendor_bill_id: cur.id, total: cur.total, owed, quote_cost: quoteCost, covers: cur.total },
+    move: 'Approving this bill',
+    code: BILL_OVER_OWED_CODE,
+  });
 }
 
 export const approveVendorBill = (id: string, actor: ActingPrincipal) => move(id, 'approved', actor);

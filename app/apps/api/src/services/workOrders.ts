@@ -23,7 +23,6 @@ import {
   ecotrakTransitionRefused,
   describeEcotrakRefusal,
   isComputedWoColumn,
-  isInvoicedStatusName,
   allowedWoActions,
 } from '@theone/shared';
 import { ApiError } from '../errors.js';
@@ -33,8 +32,7 @@ import { dispatchAutomations, type AutoCtx } from './automations.js';
 import { UUID_RE, CREATED_AT_SQL, getActivityForTask, type ActingPrincipal } from './activity.js';
 import { woScopeSql } from './woScope.js';
 import { computeMoney } from './money.js';
-import { getBindableQuoteTotal, getQuoteTotal } from './quotes.js';
-import { syncInvoicedFromQuote } from './moneySync.js';
+import { getBindableQuoteTotal } from './quotes.js';
 import { assertStatusGate } from './statusGates.js';
 import { intakeMissingFor } from './intakeGate.js';
 import { obligationsReady, worstObligationsByTask, evaluateForTask } from './obligations.js';
@@ -638,12 +636,8 @@ export async function changeStatus(
   if (fired !== null) {
     const f: { taskId: string; change: TaskChange; toName: string } = fired;
     await dispatchAutomations({ taskId: f.taskId, kind: 'changed', changes: [f.change] }, auto);
-    // Invoiced / Invoiced Not Paid: Total Invoiced takes the quote's total
-    // (shared/moneyRules.ts). No quote, no stamp.
-    if (isInvoicedStatusName(f.toName)) {
-      const stamped = await syncInvoicedFromQuote(f.taskId, actorId, await getQuoteTotal(f.taskId));
-      if (stamped.length > 0) await dispatchAutomations({ taskId: f.taskId, kind: 'changed', changes: stamped }, auto);
-    }
+    // 0083 (#10): a move to Invoiced no longer stamps Total Invoiced from the
+    // quote — the figure comes from the invoice when it is sent (invoices.ts).
   }
 
   // Return the fresh detail object (same shape as GET /:id).

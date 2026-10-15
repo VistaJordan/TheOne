@@ -28,6 +28,7 @@ import {
   CICO_SECTION_SLUG,
   SIGNOFF_FIELD_KEY,
   COMPUTED_KEYS,
+  SYSTEM_MONEY_KEYS,
   VISIT_HIDDEN_KEYS,
   VISIT_OWNED_KEYS,
   fieldPermKey,
@@ -68,7 +69,7 @@ const ORDER_PREF_KEY = 'wo.fields.order';
 const VISIT_HIDDEN = new Set(VISIT_HIDDEN_KEYS.map((k) => `fields.${k}`));
 /** Every field the visit log writes — read-only wherever it still shows
     (tech name / phone stay in Technician, mirroring the latest visit). */
-const VISIT_OWNED = new Set([...VISIT_OWNED_KEYS, ...COMPUTED_KEYS].map((k) => `fields.${k}`));
+const VISIT_OWNED = new Set([...VISIT_OWNED_KEYS, ...COMPUTED_KEYS, ...SYSTEM_MONEY_KEYS].map((k) => `fields.${k}`));
 
 type OrderMode = 'default' | 'alpha' | 'manual';
 

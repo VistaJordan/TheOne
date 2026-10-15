@@ -23,6 +23,7 @@
 //   GET    /admin/wo-form-layouts · POST · PATCH /:layoutId · DELETE
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { MONEY_MAX } from '@theone/shared';
 import { z } from 'zod';
 import { notFound, parse } from '../errors.js';
 import { actingPrincipalFromRequest, resolveTaskId } from '../services/activity.js';
@@ -147,7 +148,7 @@ export default async function woRecordRoutes(app: FastifyInstance): Promise<void
 
   app.post('/work-orders/:id/nte-requests', async (req) => {
     const { taskId, actor } = await task(req);
-    const body = parse(z.object({ requested_nte: z.number().positive().max(100_000_000), reason: z.string().max(2000) }).strict(), req.body);
+    const body = parse(z.object({ requested_nte: z.number().positive().max(MONEY_MAX), reason: z.string().max(2000) }).strict(), req.body);
     return requestNteIncrease(taskId, body, actor);
   });
   app.post('/work-orders/:id/nte-requests/:requestId', async (req) => {

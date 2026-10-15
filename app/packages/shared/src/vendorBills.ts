@@ -79,6 +79,9 @@ export interface VendorBill {
   /** Rule 6.2.3: the band this bill's total falls in, and whether the
       viewer's role may approve inside it. */
   tier: { label: string; allowed: boolean } | null;
+  /** 0083 (#20, D1b): an over-what-is-owed hold on this bill waits on a
+      manager, so Approve is refused (409 BILL_OVER_OWED) until it is decided. */
+  money_hold?: string | null;
   /** 0066 · what the invoicing rules say about it (warnings only — nothing
       here blocks), its credit notes, and the total net of the approved ones.
       Absent on an older API. */

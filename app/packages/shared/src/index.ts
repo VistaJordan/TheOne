@@ -983,6 +983,12 @@ export interface QuotePermissions {
   can_approve: boolean;
   /** Record the client's approve / decline on a sent quote. */
   can_client_decide: boolean;
+  /** 0083 (D2): the viewer submitted this quote and is not a super admin, so
+      Approve and Send are theirs to watch, not to press (403 SELF_APPROVAL). */
+  self_approval: boolean;
+  /** 0083 (#23): the quote's total is above the work order's NTE — Send is
+      refused (409 QUOTE_OVER_NTE) until the NTE is raised. */
+  over_nte: boolean;
 }
 
 /** Yoda LaborRate for the WO's (billing entity, FM, trade) combo — null when none. */
@@ -1152,6 +1158,10 @@ export interface PaymentRequest {
   /** Rule 1.5.2: an NTE override is waiting on a manager for this work
       order, so approve / pay are refused (409) until it is decided. */
   nte_override_open: boolean;
+  /** 0083 (#5 / #7, D1b): why approving or paying THIS request is held —
+      it would take Cost past the NTE with no approved override covering it,
+      or an over-the-quote hold waits on a manager. Null = nothing held. */
+  money_hold: string | null;
 }
 
 /** One row of GET /api/payments — the request plus the work order it sits on. */
@@ -1396,7 +1406,15 @@ export interface SnoozeResponse {
  * rules engine can raise any type. open → approved | rejected, or cancelled
  * when the reason went away on its own.
  */
-export type ApprovalTaskType = 'nte_override' | 'manager_review' | 'status_change' | 'wo_acceptance';
+export type ApprovalTaskType =
+  | 'nte_override'
+  | 'manager_review'
+  | 'status_change'
+  | 'wo_acceptance'
+  // UAT round 1, Wave A (0083, D1b): the money holds a payment or a vendor
+  // bill raises when it would go past the approved quote / what is owed.
+  | 'over_quote'
+  | 'bill_over_owed';
 
 export type ApprovalTaskStatus = 'open' | 'approved' | 'rejected' | 'cancelled';
 
@@ -1410,11 +1428,12 @@ export const APPROVALS_PERM_KEY = 'approvals';
  * `view` here — deciding those stays with `quotes:approve` and the payments
  * grant, so the money rules keep one gate.
  */
-export type ApprovalSectionKey = 'intake' | 'nte' | 'status' | 'reviews' | 'quotes' | 'payments';
+export type ApprovalSectionKey = 'intake' | 'nte' | 'money' | 'status' | 'reviews' | 'quotes' | 'payments';
 
 export const APPROVAL_SECTIONS: { key: ApprovalSectionKey; label: string; decides: boolean }[] = [
   { key: 'intake', label: 'Pending acceptance', decides: true },
   { key: 'nte', label: 'NTE increases', decides: true },
+  { key: 'money', label: 'Money holds', decides: true },
   { key: 'status', label: 'Status changes', decides: true },
   { key: 'reviews', label: 'Manager reviews', decides: true },
   { key: 'quotes', label: 'Quotes', decides: false },
@@ -1429,7 +1448,9 @@ export function approvalSectionPermKey(section: ApprovalSectionKey): string {
 export function approvalSectionOf(type: ApprovalTaskType): ApprovalSectionKey {
   return type === 'nte_override'
     ? 'nte'
-    : type === 'status_change'
+    : type === 'over_quote' || type === 'bill_over_owed'
+      ? 'money'
+      : type === 'status_change'
       ? 'status'
       : type === 'wo_acceptance'
         ? 'intake'
@@ -1460,6 +1481,8 @@ export const APPROVAL_TASK_LABEL: Record<ApprovalTaskType, string> = {
   manager_review: 'Manager review',
   status_change: 'Status change',
   wo_acceptance: 'Work order acceptance',
+  over_quote: 'Over the approved quote',
+  bill_over_owed: 'Vendor bill over what is owed',
 };
 
 // ── Pending acceptance (rules 7.1.1 – 7.1.4) ─────────────────────────────────
@@ -1543,7 +1566,7 @@ export interface ApprovalCounts {
     (A status change is asked for by a person, never raised by a rule; an
     acceptance is raised by whatever created the work order.) */
 export const APPROVAL_TASK_TYPES: {
-  code: Exclude<ApprovalTaskType, 'status_change' | 'wo_acceptance'>;
+  code: Exclude<ApprovalTaskType, 'status_change' | 'wo_acceptance' | 'over_quote' | 'bill_over_owed'>;
   label: string;
   hint: string;
 }[] = [
@@ -2016,3 +2039,5 @@ export * from './integrations';
 export * from './docs';
 // Advisory lock keys: the one registry, so no two purposes can ever share an int4.
 export * from './advisoryLocks';
+// UAT round 1, Wave A (0083): maker ≠ checker, bounds, purpose codes, money holds.
+export * from './moneyGuards';

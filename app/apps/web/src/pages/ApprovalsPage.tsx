@@ -118,6 +118,7 @@ const SECTION_LABEL: Record<Section, string> = {
   all: 'All',
   intake: 'Pending acceptance',
   nte: 'NTE increases',
+  money: 'Money holds',
   status: 'Status changes',
   reviews: 'Manager reviews',
   quotes: 'Quotes',
@@ -128,6 +129,7 @@ const SECTION_LABEL: Record<Section, string> = {
 const KIND_CHIP: Record<Kind, string> = {
   intake: 'New work order',
   nte: 'NTE increase',
+  money: 'Money hold',
   status: 'Status change',
   reviews: 'Review',
   quotes: 'Quote',
@@ -464,6 +466,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   const canApproveAnyTask =
     canDecideTask('wo_acceptance') ||
     canDecideTask('nte_override') ||
+    canDecideTask('over_quote') ||
     canDecideTask('status_change') ||
     canDecideTask('manager_review');
   const canSeeQuotes = can('quotes', 'view') && canSeeSection('quotes');
@@ -575,6 +578,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   const sections: Section[] = [
     'all',
     ...(canSeeSection('nte') ? (['nte'] as Section[]) : []),
+    ...(canSeeSection('money') && rows.some((r) => r.section === 'money') ? (['money'] as Section[]) : []),
     ...(canSeeSection('status') || rows.some((r) => r.section === 'status' && r.requester)
       ? (['status'] as Section[])
       : []),
@@ -816,6 +820,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                   row={r}
                   columns={columns}
                   myId={myId}
+                  mySuper={actingAs?.is_super_admin === true}
                   canDecideTask={canDecideTask}
                   canApproveQuotes={canApproveQuotes}
                   canApprovePayments={canApprovePayments}
@@ -1043,6 +1048,8 @@ interface RowProps {
   row: Row;
   columns: ColumnKey[];
   myId: string | null;
+  /** 0083 (D2): a super admin may decide their own request (logged). */
+  mySuper?: boolean;
   /** 0025: per section — approvals/<section>:approve for the task's type. */
   canDecideTask: (type: ApprovalTaskType) => boolean;
   canApproveQuotes: boolean;
@@ -1059,10 +1066,17 @@ function Ask({ row }: { row: Row }) {
     case 'task': {
       // NTE increase: the NTE and Cost columns carry the numbers; the cell
       // says only how far over. Other task kinds keep their title.
+      // 0083: a hold raised before the money moved carries the projected
+      // cost in its detail — the work order's Cost has not moved yet.
+      const nd = d.item.detail as { cost?: unknown; nte?: unknown; projected?: unknown };
       const over =
-        d.item.type === 'nte_override' && row.cost != null && row.nte != null
-          ? row.cost - row.nte
-          : null;
+        d.item.type !== 'nte_override'
+          ? null
+          : nd.projected === true && typeof nd.cost === 'number' && typeof nd.nte === 'number'
+            ? nd.cost - nd.nte
+            : row.cost != null && row.nte != null
+              ? row.cost - row.nte
+              : null;
       // A status change reads From → To (0025); the decision note (the
       // rejection reason) rides in the Status column.
       const move = d.item.type === 'status_change' ? (d.item.detail as Partial<StatusChangeDetail>) : null;
@@ -1271,7 +1285,11 @@ function InboxRow(props: RowProps) {
 
 /** The verbs a row offers at its status. A verb the viewer may not use is
     drawn locked with the reason — the rule is "visible, never hidden". */
-function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayments, busy, onDecide }: RowProps) {
+function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApprovePayments, busy, onDecide }: RowProps) {
+  // 0083 (D2): maker ≠ checker — the person who raised a request does not
+  // approve it (the API answers 403 SELF_APPROVAL); a super admin may.
+  const own = (makerId: string | null | undefined) => !mySuper && !!makerId && makerId === myId;
+  const OWN = 'You raised this — someone else has to approve it (maker ≠ checker)';
   const verb = (
     label: string,
     icon: 'check' | 'x' | 'user' | 'user-plus' | 'check-check' | 'refresh',
@@ -1352,8 +1370,8 @@ function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayme
           {verb(
             accept ? 'Accept' : 'Approve',
             accept ? 'user-plus' : 'check',
-            may && !gated,
-            gated && may ? describeIntakeGate(row.missing.map((label) => ({ label }))) : need,
+            may && !gated && !own(d.item.created_by?.id),
+            !may ? need : gated ? describeIntakeGate(row.missing.map((label) => ({ label }))) : OWN,
             () => onDecide('approve'),
             'primary',
             'approve',
@@ -1382,8 +1400,14 @@ function Decisions({ row, myId, canDecideTask, canApproveQuotes, canApprovePayme
           {verb(
             'Approve',
             'check',
-            canApprovePayments && !row.held,
-            canApprovePayments ? NTE_HOLD : 'Requires payment approval rights',
+            canApprovePayments && !row.held && !own(d.item.requested_by?.id) && !d.item.money_hold,
+            !canApprovePayments
+              ? 'Requires payment approval rights'
+              : own(d.item.requested_by?.id)
+                ? OWN
+                : row.held
+                  ? NTE_HOLD
+                  : (d.item.money_hold ?? NTE_HOLD),
             () => onDecide('approve'),
             'primary',
           )}

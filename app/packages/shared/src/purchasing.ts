@@ -82,6 +82,8 @@ export interface DocTemplateInput {
 export interface FinanceSetup {
   tax_rates: TaxRate[];
   templates: DocTemplate[];
+  /** 0083 (#21): above this, a purchase order with no request needs approval. */
+  po_limit: number;
   can: { edit: boolean };
 }
 
@@ -372,6 +374,11 @@ export interface PurchaseOrder {
   created_at: string;
   /** Things worth a second look before it is issued. Never a block. */
   warnings: string[];
+  /** 0083 (#21): raised without a purchase request and above the PO limit —
+      a second person approves it (Approve over limit) before it is issued. */
+  needs_limit_approval: boolean;
+  limit_approved_by: FeedActor | null;
+  limit_approved_at: string | null;
 }
 
 export interface PurchaseOrderInput {
@@ -390,7 +397,7 @@ export interface PurchaseOrderInput {
   lines?: PurchaseLineInput[];
 }
 
-export type PoAction = 'issue' | 'close' | 'cancel' | 'reopen';
+export type PoAction = 'issue' | 'close' | 'cancel' | 'reopen' | 'approve_limit';
 
 /** The status a purchase order reads as once quantities have arrived. */
 export function poStatusAfterReceipt(lines: { qty: number; received_qty: number }[]): 'issued' | 'partially_received' | 'received' {
@@ -402,6 +409,8 @@ export interface PurchasingMeta {
   cost_centers: { id: string; code: string; name: string }[];
   afes: { id: string; afe_number: string; title: string; cost_center_id: string | null }[];
   tax_rates: TaxRate[];
+  /** 0083 (#21): a purchase order with no request above this needs approval. */
+  po_limit: number;
   can: {
     requests: { view: boolean; create: boolean; edit: boolean; approve: boolean };
     rfqs: { view: boolean; create: boolean; edit: boolean };

@@ -48,8 +48,11 @@ import {
   checkEcotrakTransition,
   describeEcotrakRefusal,
   ecotrakTransitionRefused,
+  SELF_APPROVAL_CODE,
+  selfApprovalMessage,
+  selfApprovalVerdict,
 } from '@theone/shared';
-import { ApiError, badRequest, conflict } from '../errors.js';
+import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
@@ -66,6 +69,9 @@ const TYPES = new Set<string>([
   ...APPROVAL_TASK_TYPES.map((t) => t.code),
   'status_change',
   'wo_acceptance',
+  // 0083 (D1b): raised by a payment or a vendor bill, never by a rule.
+  'over_quote',
+  'bill_over_owed',
 ]);
 const STATUSES: ApprovalTaskStatus[] = ['open', 'approved', 'rejected', 'cancelled'];
 
@@ -354,12 +360,17 @@ export interface RaiseInput {
   toStatusId?: string | null;
   /** For 'wo_acceptance': what created the work order (rule 7.1.1). */
   acceptanceSource?: AcceptanceSource | null;
+  /** 0083 (D1b): a money hold names its own title and numbers — the
+      projected cost it was raised for and `covers`, the figure an approval
+      lets through (raiseMoneyHold). */
+  preset?: { title: string; detail: Record<string, unknown> } | null;
 }
 
 /** The title and detail a type carries, from the work order's current numbers. */
 async function describe(
   input: RaiseInput,
 ): Promise<{ title: string; detail: Record<string, unknown> }> {
+  if (input.preset) return { title: input.preset.title, detail: { ...input.preset.detail } };
   if (input.type === 'status_change') {
     const d = await statusChangeDetail(input.taskId, input.toStatusId ?? null);
     return { title: `Status change requested: ${d.from_status_name} → ${d.to_status_name}`, detail: { ...d } };
@@ -411,6 +422,17 @@ export async function createApprovalTask(
     if (!hit.rows[0]) throw badRequest(`No role is coded "${role}"`, { assign_role: role });
   }
   const { title, detail } = await describe(input);
+
+  // 0083 (#5): a rule raising an NTE override for a cost a manager already
+  // OK'd — the payment that was held, approved and then paid — raises
+  // nothing: the approval covers that cost (detail.covers), and asking the
+  // same question again would hold the money a second time.
+  if (input.type === 'nte_override' && !input.preset && typeof detail.cost === 'number') {
+    const covered = await approvedCover(input.taskId, 'nte_override');
+    if (covered && covered.covers >= (detail.cost as number) && !(await openNteOverride(input.taskId))) {
+      return { item: await getApprovalTask(covered.id), created: false };
+    }
+  }
 
   const open = await query<{ id: string }>(
     `SELECT id::text AS id FROM approval_task
@@ -529,6 +551,20 @@ async function decide(
       status: cur.status,
     });
   }
+  // 0083 (D2, #8): whoever raised the request — the dispatcher asking for a
+  // status, the person whose payment was held — does not approve it. A super
+  // admin may, and the decision row says so (self_approved).
+  let selfApproved = false;
+  if (to === 'approved') {
+    const verdict = selfApprovalVerdict(cur.created_by?.id ?? null, actor.id, actor.isSuperAdmin);
+    if (verdict === 'blocked') {
+      throw forbidden(selfApprovalMessage(`this ${TYPE_LABEL[cur.type].toLowerCase()} request`), {
+        code: SELF_APPROVAL_CODE,
+        approval_task_id: id,
+      });
+    }
+    selfApproved = verdict === 'self_approved';
+  }
   const action = to === 'approved' ? 'approval_task_approved' : 'approval_task_rejected';
   const verb = to === 'approved' ? 'approved' : 'rejected';
 
@@ -600,13 +636,23 @@ async function decide(
   }
 
   await withTransaction(async (tx) => {
-    await tx.query(
+    // 0083 (#25): ONE conditional statement on the status it was read in —
+    // two managers deciding at once, or a reconcile cancelling it meanwhile,
+    // leave exactly one decision; the loser matches no row and gets a 409.
+    const won = await tx.query(
       `UPDATE approval_task
           SET status = $1, decided_by = $2, decided_at = now(), decision_note = $3,
               assigned_to = COALESCE(assigned_to, $2), updated_at = now()
-        WHERE id = $4`,
+        WHERE id = $4 AND status = 'open'
+        RETURNING id`,
       [to, actor.id, note, id],
     );
+    if (!won.rows[0]) {
+      throw conflict('This task was decided or cancelled while you were looking at it — reload it', {
+        code: 'ALREADY_DECIDED',
+        approval_task_id: id,
+      });
+    }
     if (assignee !== null) {
       // The detail carries who was picked, so the inbox's Done lane and the
       // audit trail read it without opening the work order.
@@ -631,6 +677,7 @@ async function decide(
           title: cur.title,
           detail: cur.detail,
           ...(note ? { note } : {}),
+          ...(selfApproved ? { self_approved: true } : {}),
         }),
       ],
     );
@@ -768,6 +815,80 @@ export async function assertNoOpenNteOverride(taskId: string, move: string): Pro
   );
 }
 
+// ── Money holds (0083, D1b) ──────────────────────────────────────────────────
+
+export type MoneyHoldType = 'nte_override' | 'over_quote' | 'bill_over_owed';
+
+/**
+ * The largest figure an APPROVED hold of this type lets through on this work
+ * order (`detail.covers`) — the projected cost for an NTE / over-quote hold,
+ * the bill total for a bill hold. `billId` narrows a bill hold to its bill.
+ */
+export async function approvedCover(
+  taskId: string,
+  type: MoneyHoldType,
+  billId: string | null = null,
+): Promise<{ id: string; covers: number } | null> {
+  const res = await query<{ id: string; covers: string | number }>(
+    `SELECT a.id::text AS id, (a.detail->>'covers')::numeric AS covers
+       FROM approval_task a
+      WHERE a.task_id = $1 AND a.type = $2 AND a.status = 'approved'
+        AND jsonb_typeof(a.detail->'covers') = 'number'
+        AND ($3::text IS NULL OR a.detail->>'vendor_bill_id' = $3::text)
+      ORDER BY (a.detail->>'covers')::numeric DESC LIMIT 1`,
+    [taskId, type, billId],
+  );
+  const r = res.rows[0];
+  return r ? { id: r.id, covers: Number(r.covers) } : null;
+}
+
+/** The open hold of this type on a work order, if any. */
+export async function openMoneyHold(taskId: string, type: MoneyHoldType): Promise<{ id: string; title: string } | null> {
+  const res = await query<{ id: string; title: string }>(
+    `SELECT id::text AS id, title FROM approval_task WHERE task_id = $1 AND type = $2 AND status = 'open' LIMIT 1`,
+    [taskId, type],
+  );
+  return res.rows[0] ?? null;
+}
+
+/** 409 while an open hold of this type waits on a manager (the 1.5.2 pattern). */
+export async function assertNoOpenMoneyHold(taskId: string, type: MoneyHoldType, move: string, code: string): Promise<void> {
+  const open = await openMoneyHold(taskId, type);
+  if (!open) return;
+  throw conflict(`${move} is on hold: ${open.title}. A manager decides it under Approvals first.`, {
+    code,
+    approval_task_id: open.id,
+    approval_task_title: open.title,
+  });
+}
+
+/**
+ * D1b: raise (or refresh) the hold and refuse the move with a 409 that names
+ * it. `detail.covers` is what an approval will let through. Called BEFORE the
+ * money moves, from the pool; the decision itself happens in the inbox.
+ */
+export async function raiseMoneyHold(input: {
+  taskId: string;
+  type: MoneyHoldType;
+  actorId: string;
+  title: string;
+  detail: Record<string, unknown> & { covers: number };
+  move: string;
+  code: string;
+}): Promise<never> {
+  const { item } = await createApprovalTask({
+    taskId: input.taskId,
+    type: input.type,
+    actorId: input.actorId,
+    preset: { title: input.title, detail: input.detail },
+  });
+  throw conflict(`${input.move} is on hold: ${input.title}. A manager decides it under Approvals first.`, {
+    code: input.code,
+    approval_task_id: item.id,
+    approval_task_title: item.title,
+  });
+}
+
 // ── Housekeeping ─────────────────────────────────────────────────────────────
 
 /**
@@ -780,6 +901,7 @@ export async function assertNoOpenNteOverride(taskId: string, move: string): Pro
 export async function reconcileApprovalTasks(taskId: string, actorId: string): Promise<void> {
   try {
     await reconcileNteOverride(taskId, actorId);
+    await reconcileMoneyHolds(taskId, actorId);
     await reconcileStatusChange(taskId, actorId);
     await reconcileAcceptance(taskId, actorId);
   } catch (err) {
@@ -931,8 +1053,8 @@ export async function raiseAcceptanceTasks(
 }
 
 async function reconcileNteOverride(taskId: string, actorId: string): Promise<void> {
-  const open = await query<{ id: string; title: string }>(
-    `SELECT id::text AS id, title FROM approval_task
+  const open = await query<{ id: string; title: string; detail: Record<string, unknown> | null }>(
+    `SELECT id::text AS id, title, detail FROM approval_task
       WHERE task_id = $1 AND type = 'nte_override' AND status = 'open' LIMIT 1`,
     [taskId],
   );
@@ -941,12 +1063,52 @@ async function reconcileNteOverride(taskId: string, actorId: string): Promise<vo
   if (!m) return;
   const stillOver = m.cost !== null && m.nte !== null && m.cost > m.nte;
   if (stillOver) return;
+  // 0083 (#5): a hold raised BEFORE the money moved (a payment that would
+  // take Cost past the NTE) stays while that payment is still waiting and
+  // its projected cost is still over the NTE as it stands now.
+  const d = open.rows[0].detail ?? {};
+  if (typeof d.covers === 'number' && m.nte !== null && d.covers > m.nte && (await holdSubjectLive(d))) return;
 
   const why =
     m.cost === null || m.nte === null
       ? 'Cost or NTE was cleared'
       : `Cost ${money(m.cost)} is back within the NTE ${money(m.nte)}`;
   await cancelTask(taskId, open.rows[0].id, 'nte_override', open.rows[0].title, why, actorId);
+}
+
+/** 0083: is the payment request or vendor bill a money hold was raised for
+    still waiting for the step the hold guards? */
+async function holdSubjectLive(d: Record<string, unknown>): Promise<boolean> {
+  if (typeof d.payment_request_id === 'string') {
+    const r = await query<{ ok: boolean }>(
+      `SELECT true AS ok FROM payment_request
+        WHERE id = $1::uuid AND deleted_at IS NULL AND status IN ('requested', 'approved') LIMIT 1`,
+      [d.payment_request_id],
+    );
+    return Boolean(r.rows[0]);
+  }
+  if (typeof d.vendor_bill_id === 'string') {
+    const r = await query<{ ok: boolean }>(
+      `SELECT true AS ok FROM vendor_bill WHERE id = $1::uuid AND status IN ('received', 'disputed') LIMIT 1`,
+      [d.vendor_bill_id],
+    );
+    return Boolean(r.rows[0]);
+  }
+  return false;
+}
+
+/** 0083: an open over-the-quote or over-what-is-owed hold whose payment or
+    bill is gone (rejected, deleted, voided) has nothing left to decide. */
+async function reconcileMoneyHolds(taskId: string, actorId: string): Promise<void> {
+  const open = await query<{ id: string; type: ApprovalTaskType; title: string; detail: Record<string, unknown> | null }>(
+    `SELECT id::text AS id, type, title, detail FROM approval_task
+      WHERE task_id = $1 AND type IN ('over_quote', 'bill_over_owed') AND status = 'open'`,
+    [taskId],
+  );
+  for (const r of open.rows) {
+    if (await holdSubjectLive(r.detail ?? {})) continue;
+    await cancelTask(taskId, r.id, r.type, r.title, 'The payment or bill it was raised for is no longer waiting', actorId, r.detail);
+  }
 }
 
 /** 0025: an open status-change request whose target the work order now sits
@@ -1124,7 +1286,7 @@ export async function withdrawApprovalTask(id: string, actor: ActingPrincipal): 
  */
 export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalCounts> {
   const allow = allowFor(viewer);
-  const decideTypes = (['wo_acceptance', 'nte_override', 'status_change', 'manager_review'] as ApprovalTaskType[]).filter(
+  const decideTypes = (['wo_acceptance', 'nte_override', 'over_quote', 'bill_over_owed', 'status_change', 'manager_review'] as ApprovalTaskType[]).filter(
     (t) => allow(approvalSectionPermKey(approvalSectionOf(t)), 'approve'),
   );
   const p = new Params();

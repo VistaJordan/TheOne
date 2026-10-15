@@ -1,5 +1,8 @@
 // Cost follows the accepted payment requests; Total Invoiced follows the
 // quote when the work order is invoiced. The pure halves of both rules.
+// 0083 (UAT #10): Total Invoiced now follows the INVOICE when it is sent and
+// the status-move stamp is gone — the helpers below are the pre-0083 rule,
+// kept for their tests; tests/uat-wave-a.test.ts pins the new wiring.
 import { describe, expect, it } from 'vitest';
 import {
   ACCEPTED_PAYMENT_STATUSES,
@@ -53,7 +56,7 @@ describe('what happens to Cost after a payment decision', () => {
   });
 });
 
-describe('when Total Invoiced is stamped, and with what', () => {
+describe('the pre-0083 Total Invoiced stamp helpers (no longer called on a status move)', () => {
   it('on Invoiced and Invoiced Not Paid, whatever the capitals', () => {
     expect(isInvoicedStatusName('Invoiced')).toBe(true);
     expect(isInvoicedStatusName('invoiced not paid')).toBe(true);

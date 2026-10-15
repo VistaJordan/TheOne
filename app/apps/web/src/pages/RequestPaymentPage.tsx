@@ -27,6 +27,7 @@ import {
   postPaymentRequest,
 } from '../api/client';
 import type { PaymentMethod, PaymentRequest, Vendor } from '../api/client';
+import { PAYMENT_PURPOSE_CODES, PAYMENT_PURPOSE_LABEL, nextPurpose, type PaymentPurposeCode } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { CopyButton } from '../components/CopyButton';
 import { Icon } from '../components/Icon';
@@ -108,7 +109,9 @@ export function RequestPaymentPage() {
   const [picked, setPicked] = useState<Vendor | null>(null);
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
-  const [purpose, setPurpose] = useState('');
+  // 0083 (#24): J (Job), M (Materials) or A (Assessment); the server numbers
+  // repeats on the work order (J, J1, J2…).
+  const [purpose, setPurpose] = useState<PaymentPurposeCode | ''>('');
   const [amount, setAmount] = useState('');
   const [amountTouched, setAmountTouched] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>('zelle');
@@ -151,10 +154,9 @@ export function RequestPaymentPage() {
   const parsedAmount = parseMoney(amount);
   const amountValid = !Number.isNaN(parsedAmount);
   const amountError = amountTouched && !amountValid;
-  const purposeValid = purpose.trim().length > 0;
-  const duplicatePurpose = items.some(
-    (p) => p.status !== 'rejected' && p.purpose.trim().toLowerCase() === purpose.trim().toLowerCase(),
-  );
+  const purposeValid = purpose !== '';
+  // What the server will store for it — shown so a repeat is no surprise.
+  const nextCode = purpose === '' ? null : nextPurpose(purpose, items.map((p) => p.purpose));
   const payeeValid =
     mode === 'manual'
       ? manualName.trim().length > 0 && manualPhone.trim().length > 0
@@ -162,7 +164,7 @@ export function RequestPaymentPage() {
   const addrErrs = addressErrors(method, address);
   const addressValid = Object.keys(addrErrs).length === 0;
   const blacklisted = payee?.is_blacklisted === true;
-  const valid = amountValid && purposeValid && !duplicatePurpose && payeeValid && addressValid && !blacklisted && !woBlocked;
+  const valid = amountValid && purposeValid && payeeValid && addressValid && !blacklisted && !woBlocked;
 
   const ytdTotal = ytdQuery.data?.total ?? 0;
   const projected = ytdTotal + (amountValid && method !== 'credit' ? parsedAmount : 0);
@@ -177,12 +179,10 @@ export function RequestPaymentPage() {
           ? 'Add the technician’s phone to submit'
           : 'Name the technician to submit'
         : !purposeValid
-          ? 'Add a purpose to submit'
-          : duplicatePurpose
-            ? 'A payment with this purpose already exists on this WO'
-            : !amountValid
-              ? 'Enter an amount to submit'
-              : 'Complete the payout details to submit';
+          ? 'Pick the purpose to submit'
+          : !amountValid
+            ? 'Enter an amount to submit'
+            : 'Complete the payout details to submit';
 
   const submitMutation = useMutation({
     mutationFn: () =>
@@ -196,7 +196,7 @@ export function RequestPaymentPage() {
               payee_name: payee?.vendor_id ? null : (payee?.name ?? null),
               payee_phone: payee?.vendor_id ? null : (payee?.phone ?? null),
             }),
-        purpose: purpose.trim(),
+        purpose,
         amount: parsedAmount,
         method,
         payment_address: toPaymentAddress(method, address),
@@ -464,31 +464,33 @@ export function RequestPaymentPage() {
                 </div>
 
                 <div className="frow">
-                  <div className={`field${purposeValid && duplicatePurpose ? ' is-error' : ''}`}>
+                  <div className="field">
                     <label className="flabel" htmlFor="purpose">
                       Purpose <span className="req" aria-hidden="true">*</span>
                       <span className="sr">(required)</span>
                     </label>
-                    <input
-                      className="finput"
-                      id="purpose"
-                      type="text"
-                      placeholder="e.g. Assessment trip charge"
-                      value={purpose}
-                      aria-invalid={purposeValid && duplicatePurpose ? true : undefined}
-                      onChange={(e) => setPurpose(e.target.value)}
-                    />
-                    {purposeValid && duplicatePurpose ? (
-                      <p className="ferr">
-                        <Icon name="alert-circle" size={12} />
-                        A payment with this purpose already exists on {woNumber} — make it specific.
-                      </p>
-                    ) : (
-                      <p className="fhelp">
-                        <Icon name="info" size={12} />
-                        Shown to AP and on this work order&rsquo;s payment ledger. One purpose per payment.
-                      </p>
-                    )}
+                    <div className="selwrap">
+                      <select
+                        className="fselect"
+                        id="purpose"
+                        value={purpose}
+                        onChange={(e) => setPurpose(e.target.value as PaymentPurposeCode | '')}
+                      >
+                        <option value="">Pick one…</option>
+                        {PAYMENT_PURPOSE_CODES.map((c) => (
+                          <option key={c} value={c}>
+                            {c} — {PAYMENT_PURPOSE_LABEL[c]}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="sel-chev" aria-hidden="true"><Icon name="chev-d" size={14} /></span>
+                    </div>
+                    <p className="fhelp">
+                      <Icon name="info" size={12} />
+                      {nextCode && nextCode !== purpose
+                        ? `${woNumber} already has a ${PAYMENT_PURPOSE_LABEL[purpose as PaymentPurposeCode].toLowerCase()} payment — this one is filed as ${nextCode}.`
+                        : 'Shown to AP and on this work order’s payment ledger. Repeats are numbered J1, J2…; describe the work in the note.'}
+                    </p>
                   </div>
                   <div className={`field${amountError ? ' is-error' : ''}`}>
                     <label className="flabel" htmlFor="amount">

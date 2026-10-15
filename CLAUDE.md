@@ -130,8 +130,9 @@ approval and payment approve / pay call it first and get a **409 `CONFLICT`**
 while an `nte_override` task is open; rejecting is never blocked. The
 `Quote` payload and each `/api/payments` row carry `nte_override_open` so the
 builder and the Payments tab draw the verb locked before the click. The
-`/approvals` page is a sectioned inbox — All · NTE increases · (Manager
-reviews) · Quotes (`pending_approval`) · Payments (`requested`) — built
+`/approvals` page is a sectioned inbox — All · NTE increases · (Money
+holds, 0083) · (Manager reviews) · Quotes (`pending_approval`) · Payments
+(`requested`) — built
 client-side from `/approvals`, `/quotes` and `/payments`; open rows sort
 oldest first (rule 7.2.2) and every decision is per row (7.2.3).
 
@@ -580,7 +581,8 @@ it.
 last money record to become real: Receivables › Invoicing kept its stages in
 React state and derived "Invoice #" from the work order's id, so a reload
 undid the lot. Decisions (Elise, 2026-09-20): **one invoice per work order**
-(consolidating a month of jobs becomes a join table when it is wanted, not a
+(one LIVE — not void — invoice since 0083, a partial unique index; a repeat
+Create returns it) (consolidating a month of jobs becomes a join table when it is wanted, not a
 rewrite); the amount **starts from the approved quote** — incurred plus every
 option flagged `include_in_summary`, overtime folded into the unit price —
 and stays editable until it is sent; the **number is per billing entity and
@@ -1275,27 +1277,25 @@ Jeff's Yoda rules, Elise 2026-10-13: Pay adds the amount to whatever Cost
 holds, deleting a paid request subtracts it, `moneySync.addToCost`, inside
 the payment's transaction; before 0076 Cost was re-derived as the sum of
 "accepted" requests, `syncCostFromPayments`, now unused); and
-**`Total Invoiced` = the total of the work
-order's quote** (whatever state the quote is in), stamped when the status
-moves to Invoiced or Invoiced Not Paid (`changeStatus` and the bulk status
-move → `syncInvoicedFromQuote`). This is the automation BRD rule 11.3.2
-promised for the final vendor cost. A system write is an ordinary
-`field_updated` row stamped `via: 'payment'` / `via: 'quote'`, re-derives
+**`Total Invoiced` = the total of the INVOICE, set when it is sent**
+(since 0083, UAT #10: `setInvoicedFromInvoice` inside the send's
+transaction, `via: 'invoice'`; before 0083 it was the quote's total stamped on
+a move to Invoiced, `syncInvoicedFromQuote`, now unused). This is the
+automation BRD rule 11.3.2 promised for the final vendor cost. A system write
+is an ordinary `field_updated` row stamped `via: 'payment'` / `via: 'invoice'`, re-derives
 Profit, and is dispatched to the automations after the commit — so an
 paid request that takes Cost past the NTE raises the `nte_override` task
 (1.5.2), which then holds Approve and Pay, and deleting it clears the task.
 Edge cases: a typed Cost is the starting point a payment adds to; Cost never
-goes below zero; no
-quote, or a quote totalling nothing → Total Invoiced is left alone. **The
-lock** (`assertMoneyNotLocked`, called by the field editor and bulk edit
-beside the visit-owned guard; a 400 that names the work orders): a hand edit
-is refused only while the field's LATEST audit row is a system write with a
-value. So a work order with no paid payment still takes a typed Cost (or
+goes below zero. **The lock** (`assertMoneyNotLocked`, called by the field
+editor and bulk edit beside the visit-owned guard; a 400 that names the work
+orders): Total Invoiced is ALWAYS refused (0083, `SYSTEM_MONEY_KEYS`); a
+Cost edit is refused only while the field's LATEST audit row is a system
+write with a value. So a work order with no paid payment still takes a typed Cost (or
 11.3.2 would keep it out of Done), and figures typed before these rules stay
 correctable until the system first writes them. Not covered on purpose:
 vendor bills do not feed Cost, CSV import is not guarded, nothing was
-back-filled, and Total Invoiced does not follow the invoice record yet
-("for now the total of the quote").
+back-filled.
 
 **Quotes & payments at Yoda parity** (migration 0076, Jeff Soren's port of
 the standalone Yoda tool, D1–D16; Elise 2026-10-13: **his rules are the
@@ -1319,11 +1319,13 @@ OT multiplier, quote numbers, document type, bill/ship-to, Print / PDF.
 `Quote.wo_actions`): quoting closes from Done, the client decision still
 records at Done, payment requests run until Invoiced / Cancelled, AP
 processing is never gated; a status the phase map does not know stays live.
-Payments: requested → approved → **paid** (Pay straight from requested is
-allowed); **`sent_to_yoda` is retired** (0076 folded those rows to approved,
+Payments: requested → approved → **paid** (since 0083 Pay only from
+approved, never by the requester — "UAT round 1, Wave A" below);
+**`sent_to_yoda` is retired** (0076 folded those rows to approved,
 the value stays legal in the CHECK). Method codes `zelle|ach|credit|check|
 cashapp` (CHECK) with a per-method `payment_address` (ACH masked unless
-`payments/process:edit`); duplicate purpose 409; blacklisted vendor 409
+`payments/process:edit`); purpose J / M / A numbered J, J1, J2… per work
+order (0083; the duplicate-purpose 409 is gone); blacklisted vendor 409
 (admin override); W9 running total > $599 per vendor + billing entity + year,
 non-credit, alternate recipients excluded (`needs_w9`); soft delete with
 reason, processed rows → `pending_delete` until `payments/process:delete`
@@ -2023,6 +2025,65 @@ the batch added, all under the house `details.code`: `IMPERSONATION_READ_ONLY`,
 3.1.8 / 4.2.2, react-router and react-router-dom 6.30.6) changed only
 `package-lock.json`.
 
+**UAT round 1, Wave A — money integrity** (migration 0083,
+`docs/specs/uat-round-1.md`, `packages/shared/src/moneyGuards.ts`,
+`tests/uat-wave-a.test.ts`). House rule D1: an integrity fault is a hard
+refusal (409 + `details.code`); a business-judgment overage raises an
+`approval_task` that holds the money step until a manager approves it (the
+approval stores `detail.covers`, the figure it lets through, so the same
+click then goes through — `raiseMoneyHold` / `approvedCover` in
+`services/approvals.ts`); the rest warns. **Maker ≠ checker (D2):**
+`selfApprovalVerdict` in shared; 403 `SELF_APPROVAL` when the requester
+approves or pays their own payment request, the recorder approves their
+vendor bill, the submitter (`quote.submitted_by`, else `created_by`)
+approves or sends their quote, the raiser of ANY approval task approves it in
+`decide` (status requests, money holds), the requester approves their
+purchase request, the drafter approves their PO over the limit, the raiser
+sends their invoice; a super admin may, and the decision's audit row carries
+`self_approved: true`; the web locks each button with "(maker ≠ checker)".
+**Payments (#4/#5/#7/#24/#25):** Pay only from `approved` (409
+`PAYMENT_NOT_APPROVED`); every status move — and quote `transition`,
+approvals `decide`, invoice and vendor-bill `move` — is ONE conditional
+`UPDATE … WHERE id = $1 AND status = <read> RETURNING`, the loser gets a 409
+(`PAYMENT_MOVED`, `QUOTE_MOVED`, `ALREADY_DECIDED`, `INVOICE_MOVED`,
+`VENDOR_BILL_MOVED`), so Cost is added once. Before approve AND pay,
+`assertPaymentNotHeld`: Cost + amount past the NTE with no approved override
+covering it raises / refreshes the `nte_override` (detail `projected: true`,
+`payment_request_id`; 409 `NTE_OVERRIDE_REQUIRED`), past the approved
+quote's price or cost side raises `over_quote` (409 `OVER_QUOTE`); a rule
+re-raising an NTE override for a cost already covered raises nothing, and
+reconcile keeps a projected hold while its payment waits. Each payment row
+carries `money_hold` (the lock reason). Purpose is J / M / A, numbered per
+work order under the task lock (`nextPurpose`), free-text rows untouched.
+**Vendor bills (#20):** total > 0, a vendor's bill number once (409
+`VENDOR_BILL_DUPLICATE`, partial unique index), a bill above what is still
+owed (approved quote `total_cost` − paid requests − other approved / paid
+bills) raises `bill_over_owed` (409 `BILL_OVER_OWED`). The two new task
+types live in the inbox section **Money holds** (`approvals/money`, unset
+inherits `approvals`). **Purchasing (#21):** a vendor is a record
+(409 `VENDOR_REQUIRED`, a typed name is refused on requests and orders), one
+live PO per purchase request (409 `PO_EXISTS`, partial unique index, the
+request row locked), a PO with no request above the PO limit
+(`purchasing_setting` key `po_limit`, default `PO_LIMIT_DEFAULT` $5,000, no
+row inserted; Admin › Settings › Purchase order limit, `PUT
+/purchasing/settings`, `admin/settings` edit, logged
+`purchasing_setting_updated`) needs **Approve over limit**
+(`approvePoOverLimit`, `purchase_order.limit_approved_by/_at`, cleared when
+the draft is saved again) before Issue (409 `PO_OVER_LIMIT`). **Quotes
+(#8/#23):** editing a `pending_approval` quote sends it back to draft
+(`quote_returned_to_draft`); a quote above the NTE is not sent (409
+`QUOTE_OVER_NTE`); `Quote.permissions` carries `self_approval` and
+`over_nte`. **Invoices (#2/#10/#26/M7):** raised only in the done group or
+later (`invoiceAllowedForStatus`, 409 `INVOICE_NOT_DONE`), checked again
+under the task lock and backed by `invoice_one_live_per_task` — a repeat
+returns the live one; Send writes Total Invoiced; Mark paid needs
+`{reference, paid_on}` (400 `INVOICE_PAYMENT_DETAILS`, `invoicing` edit).
+**Bounds (M1):** `MONEY_MAX` 9,999,999.99 and `PERCENT_MAX` 999.99 on the
+route schemas, `MONEY_RE` seven whole digits, money custom fields checked in
+`coerceValue`, and the error handler maps Postgres 22003 / 22P02 to 400 with
+`details.code = VALIDATION`. The three 0083 unique indexes are created in DO
+blocks only when the rows on file already satisfy them (a NOTICE otherwise).
+
 ## Verify
 
 ```
@@ -2039,7 +2100,7 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   runs it and `npm test` on every push; it is green only because
   `tests/setup.ts` sets the environment and `config.ts` skips `app/.env` under
   `VITEST`, so never let a test depend on a developer's `.env`.
-- The vitest suite under `app/tests/` (60 files, 957 tests on 2026-10-14) is
+- The vitest suite under `app/tests/` (61 files, 996 tests on 2026-10-15) is
   the regression net: pure functions and source-text pins, no database and no
   network, so a SQL change still needs a seeded local Postgres, curl and
   headless Chromium screenshots of both themes before it is believed.

@@ -22,13 +22,11 @@ import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
-import { assertMoneyNotLocked, syncInvoicedFromQuote } from './moneySync.js';
-import { getQuoteTotal } from './quotes.js';
+import { assertMoneyNotLocked } from './moneySync.js';
 import { doneGateMissingFor, quoteFilledTaskIds } from './statusGates.js';
 import {
   PARTS_REQUIRED_KEY,
   STATUS_GATE_ERROR_CODE,
-  isInvoicedStatusName,
   describeStatusGate,
   partsRequiredFilled,
   statusGateFor,
@@ -324,13 +322,8 @@ export async function bulkUpdate(
   // Automations react per row, after the whole batch has committed.
   for (const r of firedRows) {
     await dispatchAutomations({ taskId: r.id, kind: 'changed', changes: r.log });
-    // A bulk move to Invoiced stamps Total Invoiced from the quote, row by
-    // row, exactly as the single move does (shared/moneyRules.ts).
-    const to = r.log.find((c) => c.field === 'status_id')?.after as { status_name?: string } | undefined;
-    if (isInvoicedStatusName(to?.status_name)) {
-      const stamped = await syncInvoicedFromQuote(r.id, actorId, await getQuoteTotal(r.id));
-      if (stamped.length > 0) await dispatchAutomations({ taskId: r.id, kind: 'changed', changes: stamped });
-    }
+    // 0083 (#10): no Total Invoiced stamp on a bulk move to Invoiced — the
+    // figure comes from the invoice when it is sent.
   }
 
   return { requested: ids.length, updated, skipped };

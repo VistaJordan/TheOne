@@ -123,15 +123,17 @@ Expect "quote_updated audit row carries before/after snapshots (rule 1.2.1)" ($r
 $vendor = (Call GET '/payment-vendors?q=Gulf' $null $matt).items | Select-Object -First 1
 Expect "vendor search" ($null -ne $vendor)
 
-$pay = @{ vendor_id = $vendor.id; purpose = 'Return trip'; amount = 150; method = 'ach';
+$pay = @{ vendor_id = $vendor.id; purpose = 'J'; amount = 150; method = 'ach';
   payment_address = @{ method = 'ach'; bank_name = 'Chase'; routing_number = '021000021'; account_number = '000123456789'; account_type = 'checking' } }
 $p = (Call POST "/work-orders/$WON/payment-requests" $pay $matt).item
 Expect "payment created requested" ($p.status -eq 'requested')
 Expect "ACH masked for requester" ($p.payment_address.account_number -like '••••*')
 Expect "needs_w9 (75+400+150 > 599)" ($p.needs_w9 -eq $true)
 
-$r = Call POST "/work-orders/$WON/payment-requests" $pay $matt
-Expect "duplicate purpose (409)" ($r.__error -and $r.status -eq 409)
+# 0083 (UAT #24): a repeat purpose is numbered, not refused.
+$p2 = (Call POST "/work-orders/$WON/payment-requests" $pay $matt).item
+Expect "repeat purpose numbered (J -> J1)" ($p.purpose -eq 'J' -and $p2.purpose -eq 'J1')
+Call POST "/payment-requests/$($p2.id)/delete" @{ reason = 'Smoke test repeat' } $matt | Out-Null
 
 $r = Call POST "/payment-requests/$($p.id)/pay" @{} $matt
 Expect "senior_om cannot pay (403 payments/process:edit)" ($r.__error -and $r.status -eq 403)
@@ -145,8 +147,14 @@ $queue = Call GET '/payments?status=requested' $null $ap
 Expect "queue lists the request with WO columns" (($queue.items | Where-Object id -eq $p.id).wo_number -eq $WON -and $null -ne $queue.counts)
 
 $before = (Call GET "/work-orders/$WON" $null $matt).money.cost
+# 0083 (UAT #4): pay only from approved; the requester never approves their own.
+$r = Call POST "/payment-requests/$($p.id)/pay" @{} $ap
+Expect "pay from requested refused (409 PAYMENT_NOT_APPROVED)" ($r.__error -and $r.status -eq 409)
+$r = Call POST "/payment-requests/$($p.id)/approve" @{} $matt
+Expect "requester cannot approve their own (403 SELF_APPROVAL or no grant)" ($r.__error -and $r.status -eq 403)
+Call POST "/payment-requests/$($p.id)/approve" @{} $admin | Out-Null
 $p = (Call POST "/payment-requests/$($p.id)/pay" @{} $ap).item
-Expect "paid by AP straight from requested (Yoda Verify)" ($p.status -eq 'paid' -and $p.paid_by.display_name -eq $ap -and $p.approved_by.display_name -eq $ap)
+Expect "paid by AP once approved (Yoda Verify)" ($p.status -eq 'paid' -and $p.paid_by.display_name -eq $ap)
 $after = (Call GET "/work-orders/$WON" $null $matt).money.cost
 Expect "cost rolled up by 150" ([math]::Abs(($after - $before) - 150) -lt 0.01)
 
@@ -168,6 +176,6 @@ $statuses = Call GET '/statuses' $null $admin
 $inv = ($statuses | Where-Object name -eq 'Invoiced').id
 $qr  = ($statuses | Where-Object name -eq 'Quote Ready').id
 Call PATCH "/work-orders/$WON/status" @{ status_id = $inv } $admin | Out-Null
-$r = Call POST "/work-orders/$WON/payment-requests" @{ vendor_id = $vendor.id; purpose = 'Late'; amount = 10; method = 'zelle' } $matt
+$r = Call POST "/work-orders/$WON/payment-requests" @{ vendor_id = $vendor.id; purpose = 'M'; amount = 10; method = 'zelle' } $matt
 Expect "payment request blocked on invoiced (403 WO_STATUS_BLOCKED)" ($r.__error -and $r.status -eq 403 -and $r.body.error.details.code -eq 'WO_STATUS_BLOCKED')
 Call PATCH "/work-orders/$WON/status" @{ status_id = $qr } $admin | Out-Null

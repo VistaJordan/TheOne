@@ -21,6 +21,9 @@ interface QuoteDecisionProps {
   canApprove: boolean;
   /** Rule 1.5.2: an NTE override is waiting on a manager — approve locks. */
   nteHold?: boolean;
+  /** 0083 (D2): why Approve & send is locked for this viewer (they submitted
+      the quote), or null. */
+  lockReason?: string | null;
   /** 'row' draws the compact table buttons; 'card' the card-foot ones. */
   size?: 'row' | 'card';
   onDone?: () => void;
@@ -28,7 +31,7 @@ interface QuoteDecisionProps {
 
 const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
 
-export function QuoteDecision({ woNumber, status, canApprove, nteHold, size = 'card', onDone }: QuoteDecisionProps) {
+export function QuoteDecision({ woNumber, status, canApprove, nteHold, lockReason = null, size = 'card', onDone }: QuoteDecisionProps) {
   const qc = useQueryClient();
   const [declining, setDeclining] = useState(false);
   const [note, setNote] = useState('');
@@ -71,8 +74,8 @@ export function QuoteDecision({ woNumber, status, canApprove, nteHold, size = 'c
       <button
         type="button"
         className={primary}
-        disabled={busy || nteHold}
-        title={nteHold ? NTE_HOLD_TIP : 'Approve the quote and send it to the client CMMS'}
+        disabled={busy || nteHold || !!lockReason}
+        title={lockReason ?? (nteHold ? NTE_HOLD_TIP : 'Approve the quote and send it to the client CMMS')}
         onClick={() => approve.mutate()}
       >
         <Icon name="check" size={12} />

@@ -21,11 +21,28 @@
 // One invoice per work order (Elise, 2026-09-20). Billing several work orders
 // on one invoice is a real request, but it turns every screen invoice-first;
 // when it is wanted it becomes a join table, not a rewrite of this.
+//
+// 0083 (UAT round 1, Wave A): one LIVE invoice per work order — a partial
+// unique index (status <> 'void') backs the check createInvoice makes under
+// the task row lock, and a repeat Create returns the invoice already there
+// (#26); an invoice is raised only once the work order is done (#2); the
+// person who raised it does not send it (D2); sending stamps Total Invoiced
+// with its total — the only way that field is ever written (#10); Mark paid
+// records the payment reference and the date it was paid (M7); every move is
+// one conditional UPDATE on the status it was read in.
 
 import {
   INVOICE_DEFAULT_TERMS_DAYS,
   INVOICE_EXISTS_CODE,
   INVOICE_LOCKED_CODE,
+  INVOICE_NOT_DONE_CODE,
+  INVOICE_PAYMENT_DETAILS_CODE,
+  MONEY_MAX,
+  SELF_APPROVAL_CODE,
+  VALIDATION_CODE,
+  invoiceAllowedForStatus,
+  selfApprovalMessage,
+  selfApprovalVerdict,
   contractBillingLines,
   formatInvoiceNumber,
   invoiceTotals,
@@ -40,7 +57,10 @@ import {
   type QuoteLineType,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
-import { ApiError, badRequest, conflict, notFound } from '../errors.js';
+import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
+import { setInvoicedFromInvoice } from './moneySync.js';
+import { dispatchAutomations } from './automations.js';
+import type { TaskChange } from './woAudit.js';
 import { requirePerm } from './permissions.js';
 import { woScopeSql } from './woScope.js';
 import { Params } from './woFields.js';
@@ -247,7 +267,12 @@ export async function getInvoice(id: string, actor: ActingPrincipal): Promise<In
 /** The invoice on one work order, if it has been raised. */
 export async function getInvoiceForTask(taskId: string, actor: ActingPrincipal): Promise<Invoice | null> {
   requireInvoiceView(actor);
-  const res = await query<Row>(`${SELECT} WHERE i.task_id = $1 LIMIT 1`, [taskId]);
+  // The live one first; a work order whose invoice was voided and raised
+  // again shows the new one (0083).
+  const res = await query<Row>(
+    `${SELECT} WHERE i.task_id = $1 ORDER BY (i.status = 'void'), i.created_at DESC LIMIT 1`,
+    [taskId],
+  );
   const row = res.rows[0];
   if (!row) return null;
   const lines = await linesFor([row.id]);
@@ -470,21 +495,15 @@ export async function createInvoice(
 ): Promise<Invoice> {
   requireInvoiceCreate(actor);
 
-  const already = await query<{ id: string; number: string }>(
-    `SELECT id::text AS id, number FROM invoice WHERE task_id = $1 LIMIT 1`,
-    [taskId],
-  );
-  if (already.rows[0]) {
-    throw conflict(`This work order is already on invoice ${already.rows[0].number}`, {
-      code: INVOICE_EXISTS_CODE,
-      invoice_id: already.rows[0].id,
-      number: already.rows[0].number,
-    });
-  }
+  // #26: a repeat Create (a double click, two people at once) gets the live
+  // invoice that is already there instead of a second one or an error.
+  const already = await liveInvoiceId(taskId);
+  if (already) return getInvoice(already, actor);
 
   const taskRes = await query<TaskMoneyRow>(TASK_MONEY_SQL, [taskId]);
   const task = taskRes.rows[0];
   if (!task) throw notFound('Work order not found');
+  await assertInvoiceable(taskId);
 
   const draft = from ?? (await draftInvoice(taskId, task));
   const lines = draft.lines;
@@ -501,9 +520,23 @@ export async function createInvoice(
     0,
   );
   const cost = Number(task.cost ?? '');
+  assertWithinMoney(subtotal, total, tax);
 
   let invoiceId = '';
+  let existing: string | null = null;
+  try {
   await withTransaction(async (tx) => {
+    // The task row first, then the check again under it: two Creates at the
+    // same moment serialise here, and the second finds the first's invoice.
+    await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [taskId]);
+    const live = await tx.query<{ id: string }>(
+      `SELECT id::text AS id FROM invoice WHERE task_id = $1 AND status <> 'void' LIMIT 1`,
+      [taskId],
+    );
+    if (live.rows[0]) {
+      existing = live.rows[0].id;
+      return;
+    }
     const year = new Date().getUTCFullYear();
     const entity = task.billing_entity;
     const seqKey = (entity ?? '').trim() || 'INV';
@@ -572,8 +605,50 @@ export async function createInvoice(
       ],
     );
   });
+  } catch (err) {
+    // The unique index (0083) is the backstop if the lock was ever bypassed.
+    if ((err as { code?: string }).code === '23505') {
+      existing = await liveInvoiceId(taskId);
+      if (!existing) throw err;
+    } else {
+      throw err;
+    }
+  }
+  if (existing) return getInvoice(existing, actor);
 
   return getInvoice(invoiceId, actor);
+}
+
+/** The work order's live (not void) invoice, if it has one. */
+async function liveInvoiceId(taskId: string): Promise<string | null> {
+  const res = await query<{ id: string }>(
+    `SELECT id::text AS id FROM invoice WHERE task_id = $1 AND status <> 'void' LIMIT 1`,
+    [taskId],
+  );
+  return res.rows[0]?.id ?? null;
+}
+
+/** #2 (money half): 409 unless the work order is in the done group or later. */
+async function assertInvoiceable(taskId: string): Promise<void> {
+  const res = await query<{ name: string; grp: string }>(
+    `SELECT s.name, t.status_group::text AS grp FROM task t JOIN status s ON s.id = t.status_id WHERE t.id = $1`,
+    [taskId],
+  );
+  const r = res.rows[0];
+  if (!r) throw notFound('Work order not found');
+  if (!invoiceAllowedForStatus(r.name, r.grp)) {
+    throw conflict(`The work order is in ${r.name} — an invoice is raised once the job is done`, {
+      code: INVOICE_NOT_DONE_CODE,
+      status: r.name,
+    });
+  }
+}
+
+/** M1: a figure the columns cannot hold is refused before it is written. */
+function assertWithinMoney(...figures: number[]): void {
+  if (figures.some((n) => !Number.isFinite(n) || Math.abs(n) > MONEY_MAX)) {
+    throw badRequest(`An invoice total can be at most ${MONEY_MAX.toLocaleString('en-US')}`, { code: VALIDATION_CODE });
+  }
 }
 
 // ── Editing, while it is still a draft ───────────────────────────────────────
@@ -631,15 +706,21 @@ export async function updateInvoice(
       tax,
       discount,
     );
+    assertWithinMoney(subtotal, total);
 
-    await tx.query(
+    // Only while it is still a draft, in the statement: a send committed
+    // since the read above leaves the figures the client holds alone.
+    const kept = await tx.query(
       `UPDATE invoice
           SET note = COALESCE($2, note),
               tax = $3, discount = $4, subtotal = $5, total = $6,
               due_at = COALESCE($7::date, due_at)
-        WHERE id = $1`,
+        WHERE id = $1 AND status = 'draft' RETURNING id`,
       [id, input.note ?? null, tax, discount, subtotal, total, input.due_at ?? null],
     );
+    if (!kept.rows[0]) {
+      throw conflict(`Invoice ${current.number} has been sent, so its figures are fixed`, { code: INVOICE_LOCKED_CODE });
+    }
   });
 
   const after = await getInvoice(id, actor);
@@ -663,7 +744,7 @@ async function move(
   id: string,
   to: InvoiceStatus,
   actor: ActingPrincipal,
-  extra: { reference?: string | null } = {},
+  extra: { reference?: string | null; paid_on?: string | null } = {},
 ): Promise<Invoice> {
   const current = await loadForWrite(id);
   const from = current.status as InvoiceStatus;
@@ -680,8 +761,15 @@ async function move(
     throw conflict(`An invoice that is ${from} cannot become ${to}`, { from, to });
   }
 
+  let selfApproved = false;
   if (to === 'sent') {
     requireInvoiceSend(actor);
+    // D2: the person who raised the invoice does not send it.
+    const verdict = selfApprovalVerdict(current.created_by_id, actor.id, actor.isSuperAdmin);
+    if (verdict === 'blocked') {
+      throw forbidden(selfApprovalMessage(`invoice ${current.number}`, 'send'), { code: SELF_APPROVAL_CODE });
+    }
+    selfApproved = verdict === 'self_approved';
     // Rule 6.2.3: the amount's band may exclude this role (0047).
     await assertTierAllows('invoice', n(current.total), actor, 'Sending an invoice');
     if (n(current.total) <= 0) {
@@ -690,30 +778,71 @@ async function move(
   } else {
     requireInvoiceEdit(actor);
   }
+  // M7: a payment is recorded with what it was and when it arrived.
+  const reference = (extra.reference ?? '').trim();
+  const paidOn = (extra.paid_on ?? '').trim();
+  if (to === 'paid' && (reference === '' || !/^\d{4}-\d{2}-\d{2}$/.test(paidOn))) {
+    throw badRequest('Say how the client paid (the reference) and the date the payment arrived', {
+      code: INVOICE_PAYMENT_DETAILS_CODE,
+    });
+  }
 
-  await query(
-    `UPDATE invoice
-        SET status = $2,
-            issued_at = CASE WHEN $2 = 'sent' THEN COALESCE(issued_at, now()) ELSE issued_at END,
-            sent_by   = CASE WHEN $2 = 'sent' THEN COALESCE(sent_by, $3) ELSE sent_by END,
-            paid_at   = CASE WHEN $2 = 'paid' THEN now()
-                             WHEN $2 = 'draft' THEN NULL ELSE paid_at END,
-            paid_reference = CASE WHEN $2 = 'paid' THEN $4 ELSE paid_reference END
-      WHERE id = $1`,
-    [id, to, actor.id, extra.reference ?? null],
-  );
-
-  await query(
-    `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, before, after)
-     VALUES ($1, 'task', $2, 'invoice_status_changed', $3, $4::jsonb, $5::jsonb)`,
-    [
-      actor.id,
-      current.task_id,
-      `invoice:${id}`,
-      JSON.stringify({ status: from }),
-      JSON.stringify({ status: to, number: current.number, total: n(current.total) }),
-    ],
-  );
+  let invoicedChanges: TaskChange[] = [];
+  await withTransaction(async (tx) => {
+    // #25: one conditional statement on the status it was read in.
+    const moved = await tx.query(
+      `UPDATE invoice
+          SET status = $2,
+              issued_at = CASE WHEN $2 = 'sent' THEN COALESCE(issued_at, now()) ELSE issued_at END,
+              sent_by   = CASE WHEN $2 = 'sent' THEN COALESCE(sent_by, $3) ELSE sent_by END,
+              paid_at   = CASE WHEN $2 = 'paid' THEN ($6::date)::timestamptz
+                               WHEN $2 = 'draft' THEN NULL ELSE paid_at END,
+              paid_reference = CASE WHEN $2 = 'paid' THEN $4 ELSE paid_reference END
+        WHERE id = $1 AND status = $5
+        RETURNING id`,
+      [id, to, actor.id, reference || null, from, paidOn || null],
+    );
+    if (!moved.rows[0]) {
+      throw conflict(`Invoice ${current.number} changed while you were looking at it — reload it`, {
+        code: 'INVOICE_MOVED',
+        from,
+        to,
+      });
+    }
+    await tx.query(
+      `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, before, after)
+       VALUES ($1, 'task', $2, 'invoice_status_changed', $3, $4::jsonb, $5::jsonb)`,
+      [
+        actor.id,
+        current.task_id,
+        `invoice:${id}`,
+        JSON.stringify({ status: from }),
+        JSON.stringify({
+          status: to,
+          number: current.number,
+          total: n(current.total),
+          ...(to === 'paid' ? { reference, paid_on: paidOn } : {}),
+          ...(selfApproved ? { self_approved: true } : {}),
+        }),
+      ],
+    );
+    // #10: Total Invoiced is what was sent to the client — written here, by
+    // the system, and nowhere else (the field editor and bulk edit refuse it).
+    if (to === 'sent') {
+      invoicedChanges = await setInvoicedFromInvoice(tx, current.task_id, actor.id, n(current.total));
+    }
+  }).catch((err: unknown) => {
+    // Reopening a void invoice while another live one exists (0083 index).
+    if ((err as { code?: string }).code === '23505') {
+      throw conflict('This work order already has a live invoice — void that one before reopening this', {
+        code: INVOICE_EXISTS_CODE,
+      });
+    }
+    throw err;
+  });
+  if (invoicedChanges.length > 0) {
+    await dispatchAutomations({ taskId: current.task_id, kind: 'changed', changes: invoicedChanges });
+  }
 
   return getInvoice(id, actor);
 }
@@ -721,8 +850,12 @@ async function move(
 export const sendInvoice = (id: string, actor: ActingPrincipal) => move(id, 'sent', actor);
 export const voidInvoice = (id: string, actor: ActingPrincipal) => move(id, 'void', actor);
 export const reopenInvoice = (id: string, actor: ActingPrincipal) => move(id, 'draft', actor);
-export const markInvoicePaid = (id: string, actor: ActingPrincipal, reference?: string | null) =>
-  move(id, 'paid', actor, { reference });
+export const markInvoicePaid = (
+  id: string,
+  actor: ActingPrincipal,
+  reference?: string | null,
+  paidOn?: string | null,
+) => move(id, 'paid', actor, { reference, paid_on: paidOn });
 
 /** Deleting is deliberately absent: an invoice that existed is voided, never
     erased. `ApiError` is imported for the typed throws above. */

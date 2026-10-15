@@ -137,6 +137,12 @@ export function QuoteBuilderPage() {
   /** Rule 1.5.2: an NTE override waits on a manager, so approve / send / the
       client's yes are on hold (the API refuses them with a 409) until decided. */
   const nteHold = quote?.nte_override_open ?? false;
+  // 0083 (D2, #23): the person who submitted the quote does not approve or
+  // send it, and a quote above the NTE is not sent until the NTE is raised.
+  const selfApproval = permissions?.self_approval ?? false;
+  const SELF_TIP = 'You submitted this quote — someone else has to approve and send it (maker ≠ checker)';
+  const overNte = permissions?.over_nte ?? false;
+  const OVER_NTE_TIP = 'The quote is above the work order’s NTE — request an NTE increase (record bar › Increase NTE) and have it approved before sending';
   const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
   const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
   /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */
@@ -472,9 +478,13 @@ export function QuoteBuilderPage() {
       ? lockedButton(label, blockedReason(action) ?? 'Not allowed in this work-order status', tipId)
       : nteHold && NTE_HOLD_ACTIONS.has(action)
         ? lockedButton(label, NTE_HOLD_TIP, tipId)
-        : roleOk
-          ? primary(label, icon, run, needsValid)
-          : lockedButton(label, roleTip, tipId);
+        : selfApproval && (action === 'quote.approve' || action === 'quote.send')
+          ? lockedButton(label, SELF_TIP, tipId)
+          : overNte && action === 'quote.send'
+            ? lockedButton(label, OVER_NTE_TIP, tipId)
+            : roleOk
+              ? primary(label, icon, run, needsValid)
+              : lockedButton(label, roleTip, tipId);
 
   const decisionButton = (sectionKey: string | null, compact: boolean) =>
     !allows('quote.client_decide')

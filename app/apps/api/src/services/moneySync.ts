@@ -6,13 +6,16 @@
 //                          (−amount) — the Yoda rule, 0076.
 //   syncCostFromPayments   the pre-0076 rule (Cost = sum of accepted
 //                          requests); no longer called.
-//   syncInvoicedFromQuote  called by workOrders.changeStatus after a move to
-//                          Invoiced / Invoiced Not Paid commits.
+//   setInvoicedFromInvoice called by invoices.ts inside the transaction that
+//                          sends an invoice (0083, #10): Total Invoiced := the
+//                          invoice's total. syncInvoicedFromQuote (the
+//                          pre-0083 stamp from the quote on a move to
+//                          Invoiced) is no longer called.
 //   assertMoneyNotLocked   called by the field editor and bulk edit, beside
 //                          the visit-owned guard.
 //
 // A system write is an ordinary field change: one `field_updated` row stamped
-// `via: 'payment'` or `via: 'quote'`, Profit re-derived, and the automations
+// `via: 'payment'` or `via: 'invoice'`, Profit re-derived, and the automations
 // dispatched after the commit — so a payment that takes Cost past the NTE
 // raises the NTE override exactly as typing the cost does (rule 1.5.2).
 //
@@ -118,7 +121,23 @@ export async function addToCost(
 }
 
 /**
- * Total Invoiced := the quote's total. Called after a status move to an
+ * 0083 (#10): Total Invoiced := the total of the invoice being sent. Runs
+ * INSIDE the send's transaction, so the invoice and the figure it implies
+ * commit together; an ordinary audited field change stamped `via: 'invoice'`.
+ * The caller dispatches automations with the returned changes after it commits.
+ */
+export async function setInvoicedFromInvoice(
+  tx: Queryable,
+  taskId: string,
+  actorId: string,
+  total: number,
+): Promise<TaskChange[]> {
+  if (!Number.isFinite(total) || total <= 0) return [];
+  return writeField(tx, taskId, actorId, TOTAL_INVOICED_FIELD_KEY, Math.round(total * 100) / 100, 'invoice');
+}
+
+/**
+ * Pre-0083 (unused): Total Invoiced := the quote's total. Was called after a status move to an
  * invoiced status has committed; `quoteTotal` is read by the caller (the
  * quote service imports this module's callers, not the other way round).
  * A work order with no quote, or a quote totalling nothing, is left alone.
@@ -137,11 +156,12 @@ export async function syncInvoicedFromQuote(taskId: string, actorId: string, quo
 
 /**
  * 400 when a hand edit (the field editor, bulk edit, an automation's action)
- * names Cost or Total Invoiced on a work order where the SYSTEM put the
+ * names Total Invoiced — always, since 0083 (#10): it comes only from the
+ * invoice that was sent — or Cost on a work order where the SYSTEM put the
  * current figure there: the field's latest change in the audit log is stamped
- * `via: 'payment'` / `via: 'quote'` and holds a value. A figure somebody
- * typed — every work order from before these rules, and any with no accepted
- * payment or no quote — stays correctable by hand until the system writes it.
+ * `via: 'payment'` and holds a value. A typed Cost — every work order from
+ * before these rules, and any with no paid payment — stays correctable by
+ * hand until the system writes it.
  *
  * `q` is the caller's transaction when it already holds the task row FOR NO
  * KEY UPDATE: the latest audit row is then read under that lock, so a system
@@ -150,10 +170,10 @@ export async function syncInvoicedFromQuote(taskId: string, actorId: string, quo
  */
 export async function assertMoneyNotLocked(taskIds: string[], jsonKeys: string[], q: Queryable = { query }): Promise<void> {
   if (taskIds.length === 0) return;
-  const checks: [string, string, string][] = [
-    [COST_FIELD_KEY, 'payment', COST_LOCKED_MESSAGE],
-    [TOTAL_INVOICED_FIELD_KEY, 'quote', INVOICED_LOCKED_MESSAGE],
-  ];
+  if (jsonKeys.includes(TOTAL_INVOICED_FIELD_KEY)) {
+    throw new ApiError('BAD_REQUEST', INVOICED_LOCKED_MESSAGE, { money_locked_field: TOTAL_INVOICED_FIELD_KEY });
+  }
+  const checks: [string, string, string][] = [[COST_FIELD_KEY, 'payment', COST_LOCKED_MESSAGE]];
   for (const [key, via, message] of checks) {
     if (!jsonKeys.includes(key)) continue;
     const res = await q.query<{ wo_number: string }>(

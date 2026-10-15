@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../../auth/AuthProvider';
 import {
   PO_STATUS_LABELS,
   PR_STATUS_LABELS,
@@ -122,6 +123,9 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
   onRfq?: (rfq: Rfq) => void;
 }) {
   const refresh = usePurchasingRefresh();
+  const { actingAs } = useAuth();
+  // 0083 (D2): the requester does not approve their own request.
+  const ownRequest = Boolean(request?.requested_by && request.requested_by.id === actingAs?.id && actingAs?.is_super_admin !== true);
   const can = meta.can.requests;
   const editable = request ? can.edit && (request.status === 'draft' || request.status === 'rejected') : can.create;
   const [d, setD] = useState({
@@ -157,7 +161,15 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
         {request?.status === 'submitted' && can.approve && (
           <>
             <button type="button" className="btn is-danger" disabled={busy} onClick={() => (note.trim() ? act.mutate('reject', fail('Could not reject it.')) : setProblem('Say why the request is rejected, in the note.'))}>Reject</button>
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => act.mutate('approve', fail('Could not approve it.'))}>Approve</button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy || ownRequest}
+              title={ownRequest ? 'You raised this request — someone else has to approve it (maker ≠ checker)' : undefined}
+              onClick={() => act.mutate('approve', fail('Could not approve it.'))}
+            >
+              Approve
+            </button>
           </>
         )}
         {request?.status === 'approved' && meta.can.rfqs.create && request.rfqs.length === 0 && <button type="button" className="btn" disabled={busy} onClick={() => toRfq.mutate(undefined, fail('Could not start the request for quotation.'))}>Ask vendors for quotes</button>}
@@ -175,7 +187,7 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
         <F label="What is being bought" wide><input className="fld" autoFocus={!request} value={d.title} disabled={!editable} onChange={(e) => setD((c) => ({ ...c, title: e.target.value }))} /></F>
         <F label="Work order" hint="Leave empty for stock or anything not tied to one job."><input className="fld mono" value={d.task_ref} disabled={!editable || Boolean(woNumber)} placeholder="WO-…" onChange={(e) => setD((c) => ({ ...c, task_ref: e.target.value }))} /></F>
         <F label="Needed by"><input className="fld" type="date" value={d.needed_by} disabled={!editable} onChange={(e) => setD((c) => ({ ...c, needed_by: e.target.value }))} /></F>
-        <F label="Suggested vendor"><VendorField value={vendor} onChange={setVendor} disabled={!editable} allowTyped /></F>
+        <F label="Suggested vendor" hint="Pick a vendor on file (0083: a typed name is not a vendor)."><VendorField value={vendor} onChange={setVendor} disabled={!editable} /></F>
         {meta.cost_centers.length > 0 && (
           <F label="Cost center">
             <select className="fld" value={d.cost_center_id} disabled={!editable} onChange={(e) => setD((c) => ({ ...c, cost_center_id: e.target.value }))}>
@@ -366,7 +378,13 @@ export function OrderDialog({ order: initial, meta, woNumber, onClose }: { order
   const refresh = usePurchasingRefresh();
   const [order, setOrder] = useState<PurchaseOrder | null>(initial);
   const can = meta.can.orders;
+  const { actingAs } = useAuth();
   const editable = order ? can.edit && order.status === 'draft' : can.create;
+  // 0083 (#21): no request behind it and over the PO limit — a second person
+  // approves it first; the person who drafted it is not that person.
+  const needsLimit = order?.needs_limit_approval === true;
+  const ownOrder = Boolean(order?.created_by && order.created_by.id === actingAs?.id && actingAs?.is_super_admin !== true);
+  const LIMIT_TIP = `Over the ${usd(meta.po_limit)} limit for an order with no purchase request — someone else has to approve it over the limit first`;
   const receivable = Boolean(order && can.edit && ['issued', 'partially_received', 'received'].includes(order.status));
   const [d, setD] = useState({
     task_ref: order?.task?.wo_number ?? woNumber ?? '', expected_on: order?.expected_on ?? '', ship_to: order?.ship_to ?? '', note: order?.note ?? '',
@@ -406,12 +424,25 @@ export function OrderDialog({ order: initial, meta, woNumber, onClose }: { order
         {order?.status === 'closed' && can.edit && <button type="button" className="btn" disabled={busy} onClick={() => act.mutate('reopen', fail('Could not reopen it.'))}>Reopen</button>}
         {receivable && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => receive.mutate(undefined, fail('Could not record what arrived.'))}>Save what arrived</button>}
         {editable && <button type="button" className="btn" disabled={busy} onClick={() => save.mutate(undefined, fail('Could not save the order.'))}>{order ? 'Save' : 'Save as draft'}</button>}
-        {editable && can.approve && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => act.mutate('issue', fail('Could not issue it.'))} title="Makes the order firm. Nothing is emailed: send the printed order to the vendor yourself.">Issue the order</button>}
+        {order?.status === 'draft' && needsLimit && can.approve && (
+          <button
+            type="button"
+            className="btn"
+            disabled={busy || ownOrder}
+            title={ownOrder ? 'You drafted this order — someone else has to approve it over the limit (maker ≠ checker)' : 'Approve this order above the PO limit'}
+            onClick={() => act.mutate('approve_limit', fail('Could not approve it.'))}
+          >
+            Approve over limit
+          </button>
+        )}
+        {editable && can.approve && <button type="button" className="btn btn-primary" disabled={busy || needsLimit} onClick={() => act.mutate('issue', fail('Could not issue it.'))} title={needsLimit ? LIMIT_TIP : 'Makes the order firm. Nothing is emailed: send the printed order to the vendor yourself.'}>Issue the order</button>}
       </>}>
+      {needsLimit && <p className="mt-banner"><Icon name="lock" size={14} />{LIMIT_TIP}.</p>}
+      {order?.limit_approved_by && <p className="mt-banner"><Icon name="check" size={14} />Approved over the limit by {order.limit_approved_by.name}.</p>}
       {(order?.warnings ?? []).map((w, i) => <p key={i} className="mt-banner is-danger"><Icon name="alert" size={14} />{w}</p>)}
       {order && (order.request || order.rfq) && <p className="mt-banner"><Icon name="info" size={14} />Raised from {[order.request?.pr_number, order.rfq?.rfq_number].filter(Boolean).join(' and ')}.</p>}
       <div className="pf-form">
-        <F label="Vendor" wide><VendorField value={vendor} onChange={setVendor} disabled={!editable} allowTyped /></F>
+        <F label="Vendor" wide hint="Pick a vendor on file — an order goes to a vendor record."><VendorField value={vendor} onChange={setVendor} disabled={!editable} /></F>
         <F label="Work order" hint="A purchase order does not change the work order’s Cost."><input className="fld mono" value={d.task_ref} disabled={!editable || Boolean(woNumber)} placeholder="WO-…" onChange={(e) => setD((c) => ({ ...c, task_ref: e.target.value }))} /></F>
         <F label="Expected on"><input className="fld" type="date" value={d.expected_on} disabled={!editable} onChange={(e) => setD((c) => ({ ...c, expected_on: e.target.value }))} /></F>
         {meta.cost_centers.length > 0 && (

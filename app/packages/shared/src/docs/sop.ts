@@ -337,7 +337,7 @@ export const SOP: SopDocument = {
         { kind: 'steps', items: [
           'On the work order\'s **Payables** tab, **Payment requests** card, click **Request payment**. Find the technician in the vendor typeahead (name or phone), or type a name and phone (a new phone creates the technician\'s record); optionally add a **Recipient** (a person or a store); fill **Purpose**, **Amount** (above $0), **Method** (Zelle, ACH, Check, Cash App, Credit card) and its payout details, a note for AP, then submit. Watch the year-to-date line: past $599 with no W9 on file the request is flagged **W9 needed**. Receipts cannot be attached here yet.',
           'An approver opens **Payments › Needs approval** and clicks **Approve**, or **Reject** with a reason for the requester. Approve is locked while an NTE override is open.',
-          'Accounts Payable opens **Payments › To pay** and clicks **Mark paid** (or **Pay now** straight from requested). **Change method** swaps the method and clears the payout details. Paying adds the amount to the work order\'s Cost.',
+          'Accounts Payable opens **Payments › To pay** and clicks **Mark paid** on an approved request (a request is approved by someone other than its requester first). **Change method** swaps the method and clears the payout details. Paying adds the amount to the work order\'s Cost; a payment that would take Cost past the NTE or the approved quote is held for a manager under Approvals first.',
           'To remove a request, click **Delete** with a reason: a requested or rejected one goes at once; an approved or paid one becomes **Pending delete** until an admin clicks **Confirm delete** or **Keep**.',
         ] },
         { kind: 'table', head: ['Rule', 'What happens'], rows: [

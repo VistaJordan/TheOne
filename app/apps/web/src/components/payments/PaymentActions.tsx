@@ -78,6 +78,15 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
   // money out are on hold — the API refuses them with a 409, this says so first.
   const hold = item.nte_override_open;
   const HOLD = 'On hold — the NTE override on this work order has to be decided first (rule 1.5.2)';
+  // 0083 (#5 / #7): this payment would go past the NTE or the approved quote —
+  // the click raises the hold for a manager and is refused (409).
+  const moneyHold = item.money_hold;
+  // 0083 (D2): the requester neither approves nor pays their own request; a
+  // super admin may (the API logs it as self-approved).
+  const ownLock =
+    isOwner && actingAs?.is_super_admin !== true
+      ? 'You requested this payment — someone else has to approve and pay it (maker ≠ checker)'
+      : null;
 
   const btn = (
     label: string,
@@ -129,8 +138,18 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
         </>
       ) : (
         <>
-          {item.status === 'requested' && btn('Approve', 'check', () => approve.mutate(), { locked: approveLock ?? (hold ? HOLD : null) })}
-          {open && btn(item.status === 'requested' ? 'Pay now' : 'Mark paid', 'dollar', () => pay.mutate(), { primary: true, locked: apLock ?? (hold ? HOLD : null), title: 'Yoda “Verify” — stamps the payer and rolls the amount into the WO cost' })}
+          {item.status === 'requested' && btn('Approve', 'check', () => approve.mutate(), { locked: approveLock ?? ownLock ?? (hold ? HOLD : null) ?? moneyHold })}
+          {/* 0083 (#4): Pay only once a second person approved the request. */}
+          {open && btn('Mark paid', 'dollar', () => pay.mutate(), {
+            primary: true,
+            locked:
+              apLock ??
+              (item.status === 'requested' ? 'Approve the request first — paying needs an approved request' : null) ??
+              ownLock ??
+              (hold ? HOLD : null) ??
+              moneyHold,
+            title: 'Yoda “Verify” — stamps the payer and rolls the amount into the WO cost',
+          })}
           {open && btn('Reject', 'x', () => setSheet(sheet === 'reject' ? null : 'reject'), { danger: true, locked: approveLock })}
           {item.status !== 'paid' && btn('Change method', 'swap', () => setSheet(sheet === 'method' ? null : 'method'), { locked: apLock })}
           {btn('Delete', 'trash', () => setSheet(sheet === 'delete' ? null : 'delete'), {

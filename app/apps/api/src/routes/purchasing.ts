@@ -28,12 +28,14 @@
 //   POST   /admin/finance-setup/templates · PATCH /:id · DELETE /:id
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { MONEY_MAX } from '@theone/shared';
 import { z } from 'zod';
 import { DOC_TEMPLATE_KINDS } from '@theone/shared';
 import { notFound, parse } from '../errors.js';
 import { actingPrincipalFromRequest, resolveTaskId } from '../services/activity.js';
 import {
   actOnOrder,
+  savePoLimit,
   actOnRequest,
   actOnRfq,
   awardQuote,
@@ -66,7 +68,7 @@ import {
 const text = (max: number) => z.string().max(max).nullable().optional();
 const day = z.string().max(10).nullable().optional();
 const id = z.string().uuid().nullable().optional();
-const money = z.number().min(0).max(100_000_000);
+const money = z.number().min(0).max(MONEY_MAX);
 const line = z.object({ description: z.string().max(300), qty: z.number().positive().max(1_000_000).optional(), unit: z.string().max(40).optional(), unit_cost: money.nullable().optional() }).strict();
 const lines = z.array(line).max(200).optional();
 const listQuery = z.object({ status: z.string().max(30).optional(), search: z.string().max(120).optional() });
@@ -76,6 +78,11 @@ export default async function purchasingRoutes(app: FastifyInstance): Promise<vo
   const p = (req: FastifyRequest, key = 'id'): string => (parse(z.object({ [key]: z.string().min(1).max(64) }), req.params) as Record<string, string>)[key];
 
   app.get('/purchasing/meta', async (req) => purchasingMeta(actorOf(req)));
+  // 0083 (#21): the PO limit, Admin › Settings (admin/settings edit).
+  app.put('/purchasing/settings', async (req) => {
+    const body = parse(z.object({ po_limit: money }).strict(), req.body);
+    return savePoLimit(body.po_limit, actorOf(req));
+  });
   app.get('/purchasing/vendor-search', async (req) => searchVendors(actorOf(req), parse(z.object({ q: z.string().max(120).default('') }), req.query).q));
   app.get('/tax-rates', async (req) => listTaxRates(actorOf(req)));
   app.get('/print-templates/:kind', async (req) => {
@@ -124,7 +131,7 @@ export default async function purchasingRoutes(app: FastifyInstance): Promise<vo
   app.get('/purchasing/orders/:id', async (req) => ({ order: await getOrder(p(req), actorOf(req)) }));
   app.patch('/purchasing/orders/:id', async (req) => ({ order: await saveOrder(p(req), parse(poBody, req.body), actorOf(req)) }));
   app.post('/purchasing/orders/:id/act', async (req) => {
-    const body = parse(z.object({ action: z.enum(['issue', 'close', 'cancel', 'reopen']) }).strict(), req.body);
+    const body = parse(z.object({ action: z.enum(['issue', 'close', 'cancel', 'reopen', 'approve_limit']) }).strict(), req.body);
     return { order: await actOnOrder(p(req), body.action, actorOf(req)) };
   });
   app.post('/purchasing/orders/:id/receive', async (req) => {

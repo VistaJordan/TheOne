@@ -41,6 +41,7 @@ import {
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
 import { StatCard, money } from './bits';
+import { MarkInvoicePaid } from './MarkInvoicePaid';
 
 export type StageFilter = 'all' | 'ready' | 'proposed' | InvoiceStatus;
 
@@ -87,9 +88,13 @@ export function InvoicingTab({
   const qc = useQueryClient();
   const [filter, setFilter] = useState<StageFilter>('all');
   const [failure, setFailure] = useState<string | null>(null);
-  const { can } = useAuth();
+  const { can, actingAs } = useAuth();
   const canRaise = can('invoicing', 'create');
   const canSend = can('invoicing', 'approve');
+  const canEdit = can('invoicing', 'edit');
+  // 0083 (D2): the person who raised an invoice does not send it.
+  const ownInvoice = (inv: { created_by: { id: string } | null }) =>
+    inv.created_by?.id === actingAs?.id && actingAs?.is_super_admin !== true;
 
   // 0053 · BRD §6.4: invoices a contract proposed on completion, waiting on
   // AR. Confirming files one (it then appears below as a draft); dismissing
@@ -108,7 +113,7 @@ export function InvoicingTab({
   const raise = useMutation({ mutationFn: createInvoice, onSuccess: done, onError: fail });
   const send = useMutation({ mutationFn: sendInvoice, onSuccess: done, onError: fail });
   const pay = useMutation({
-    mutationFn: (id: string) => markInvoicePaid(id),
+    mutationFn: (v: { id: string; reference: string; paidOn: string }) => markInvoicePaid(v.id, v.reference, v.paidOn),
     onSuccess: done,
     onError: fail,
   });
@@ -412,23 +417,27 @@ export function InvoicingTab({
                       <button
                         type="button"
                         className="rcv-btn is-primary"
-                        disabled={!canSend || busy}
-                        title={canSend ? 'Send it to the client' : 'You cannot send invoices'}
+                        disabled={!canSend || busy || ownInvoice(inv)}
+                        title={
+                          !canSend
+                            ? 'You cannot send invoices'
+                            : ownInvoice(inv)
+                              ? 'You raised this invoice — someone else has to send it (maker ≠ checker)'
+                              : 'Send it to the client'
+                        }
                         onClick={() => send.mutate(inv.id)}
                       >
                         <Icon name="send" size={12} />
                         Send
                       </button>
                     ) : inv.status === 'sent' ? (
-                      <button
-                        type="button"
+                      <MarkInvoicePaid
+                        number={inv.number}
+                        busy={busy}
+                        canEdit={canEdit}
                         className="rcv-btn"
-                        disabled={busy}
-                        onClick={() => pay.mutate(inv.id)}
-                      >
-                        <Icon name="check" size={12} />
-                        Mark paid
-                      </button>
+                        onConfirm={(reference, paidOn) => pay.mutate({ id: inv.id, reference, paidOn })}
+                      />
                     ) : inv.status === 'paid' ? (
                       <span className="rcv-paid-mark">
                         <Icon name="check-circle" size={12} />

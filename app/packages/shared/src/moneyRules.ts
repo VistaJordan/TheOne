@@ -11,11 +11,13 @@
 //                     automation planned"; this is that automation. The
 //                     sum-of-requests helpers below (costFromPayments /
 //                     costDecision) are the pre-0076 rule, kept for its tests.
-//   Total Invoiced  = the total of the work order's quote, stamped when the
-//                     status moves to Invoiced or Invoiced Not Paid.
+//   Total Invoiced  = the total of the invoice, stamped when the invoice is
+//                     SENT (0083, UAT #10 — before 0083 it was the quote's
+//                     total, stamped on a move to Invoiced). It is never typed:
+//                     the field editor and bulk edit always refuse it.
 //
-// A field is only locked against hand edits while the figure in it is one the
-// system wrote (its latest audit row is stamped via 'payment' / via 'quote').
+// Cost is only locked against hand edits while the figure in it is one the
+// system wrote (its latest audit row is stamped via 'payment').
 // A work order with no paid payment still takes a typed Cost — or rule
 // 11.3.2 would keep it from ever reaching Done — and figures typed before
 // these rules existed stay correctable until the system first writes them.
@@ -87,4 +89,8 @@ export function invoicedFromQuote(total: number | null | undefined): number | nu
 export const COST_LOCKED_MESSAGE =
   'Cost on this work order is written by the payments — it changes when AP pays a request or a paid request is deleted, and cannot be typed.';
 export const INVOICED_LOCKED_MESSAGE =
-  'Total Invoiced was set from the quote when this work order was invoiced and cannot be typed.';
+  'Total Invoiced comes from the invoice — it is set when the invoice is sent and cannot be typed.';
+
+/** Bag keys only the system writes, refused by the field editor and bulk
+    edit beside COMPUTED_KEYS (0083). */
+export const SYSTEM_MONEY_KEYS: string[] = [TOTAL_INVOICED_FIELD_KEY];

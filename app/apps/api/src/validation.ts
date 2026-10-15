@@ -32,7 +32,9 @@ declare module 'fastify' {
 }
 
 /** A plain, unsigned, ≤2-decimal amount. Anchored — partial matches are rejected. */
-export const MONEY_RE = /^\d{1,10}(?:\.\d{1,2})?$/;
+// 0083 (M1): at most seven whole digits — 9,999,999.99, shared MONEY_MAX —
+// so no amount (or a sum of a few) can overflow a numeric(12,2) column.
+export const MONEY_RE = /^\d{1,7}(?:\.\d{1,2})?$/;
 
 /**
  * Money-bearing keys and their floor. `min: 0.01` means "a real payment" —

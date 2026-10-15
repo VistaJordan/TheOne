@@ -13,9 +13,28 @@
 //     person who cannot see the work order does not see its documents.
 //   · "sent" on a request for quotation is a status somebody sets after
 //     contacting the vendors themselves. Nothing is emailed.
+//
+// 0083 (UAT round 1, Wave A, #21):
+//   · whoever raised a purchase request does not approve it (D2; a super
+//     admin may, logged self_approved);
+//   · one live (not cancelled) purchase order per request — a second is a
+//     409 PO_EXISTS, backed by a partial unique index;
+//   · an order goes to a vendor RECORD (vendor_id), never a typed name
+//     (409 VENDOR_REQUIRED);
+//   · an order raised without a request above the PO limit (setting
+//     `po_limit` in purchasing_setting, default $5,000) is approved by a
+//     second person (Approve over limit) before it can be issued.
 
 import {
+  PO_EXISTS_CODE,
+  PO_LIMIT_DEFAULT,
+  PO_OVER_LIMIT_CODE,
   PURCHASING_PERM,
+  SELF_APPROVAL_CODE,
+  VENDOR_REQUIRED_CODE,
+  poNeedsLimitApproval,
+  selfApprovalMessage,
+  selfApprovalVerdict,
   budgetPosition,
   compareQuotes,
   purchaseLineAmount,
@@ -60,7 +79,7 @@ import type {
   WoPurchasing,
 } from '@theone/shared';
 import { query, withTransaction, type Queryable } from '../db.js';
-import { badRequest, conflict, notFound } from '../errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../errors.js';
 import { resolveTaskId, type ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
 import { notify } from './notices.js';
@@ -168,8 +187,44 @@ export async function purchasingMeta(actor: ActingPrincipal): Promise<Purchasing
     cost_centers: cc.rows,
     afes: afes.rows,
     tax_rates: rates,
+    po_limit: await poLimit(),
     can: { requests: grant(PURCHASING_PERM.requests), rfqs: grant(PURCHASING_PERM.rfqs), orders: grant(PURCHASING_PERM.orders), budgets: { view: seeBudgets, edit: can(actor, PURCHASING_PERM.budgets, 'edit') } },
   };
+}
+
+/** 0083 (#21): the PO limit — a purchase order with no request above it
+ *  needs a second person's approval before it is issued. */
+export async function poLimit(): Promise<number> {
+  try {
+    const r = await query<{ v: unknown }>(`SELECT value->'amount' AS v FROM purchasing_setting WHERE key = 'po_limit'`);
+    const n = Number(r.rows[0]?.v);
+    return r.rows[0] && Number.isFinite(n) && n >= 0 ? n : PO_LIMIT_DEFAULT;
+  } catch (err) {
+    // Before 0083 is applied the table is missing: the default stands.
+    if ((err as { code?: string }).code === '42P01') return PO_LIMIT_DEFAULT;
+    throw err;
+  }
+}
+
+/** Admin › Settings (grant admin/settings edit): change the PO limit. */
+export async function savePoLimit(amount: number, actor: ActingPrincipal): Promise<{ po_limit: number }> {
+  requirePerm(actor, SETTINGS_KEY, 'edit', 'You cannot change the purchasing settings');
+  if (!Number.isFinite(amount) || amount < 0) throw badRequest('The PO limit is an amount of $0.00 or more');
+  const before = await poLimit();
+  await query(
+    `INSERT INTO purchasing_setting (key, value, updated_by, updated_at) VALUES ('po_limit', $1::jsonb, $2, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+    [JSON.stringify({ amount: round2(amount) }), actor.id],
+  );
+  await logAdminEvent({
+    actorId: actor.id,
+    entity: 'purchasing_setting',
+    entityId: 'po_limit',
+    action: 'purchasing_setting_updated',
+    before: { name: 'PO limit', amount: before },
+    after: { name: 'PO limit', amount: round2(amount) },
+  });
+  return { po_limit: round2(amount) };
 }
 
 /** Vendors by name, for the pickers of this module. Anyone who may open
@@ -195,8 +250,8 @@ async function templates(): Promise<DocTemplate[]> {
 
 export async function financeSetup(actor: ActingPrincipal): Promise<FinanceSetup> {
   requirePerm(actor, SETTINGS_KEY, 'view', 'You cannot open Admin › Settings');
-  const [rates, tpl] = await Promise.all([taxRates(false), templates()]);
-  return { tax_rates: rates, templates: tpl, can: { edit: can(actor, SETTINGS_KEY, 'edit') } };
+  const [rates, tpl, limit] = await Promise.all([taxRates(false), templates(), poLimit()]);
+  return { tax_rates: rates, templates: tpl, po_limit: limit, can: { edit: can(actor, SETTINGS_KEY, 'edit') } };
 }
 
 export async function saveTaxRate(id: string | null, input: { name?: string; rate?: number; state?: string | null; is_default?: boolean; is_active?: boolean }, actor: ActingPrincipal): Promise<FinanceSetup> {
@@ -593,7 +648,15 @@ async function vendorRef(q: Queryable, vendorId: string | null | undefined, vend
     if (!v.rows[0]) throw badRequest('That vendor does not exist', { field: 'vendor_id' });
     return { id, name: v.rows[0].name };
   }
-  return { id: null, name: clean(vendorName, 200) };
+  // 0083 (#21): a vendor is a record, never a typed name — pick one from the
+  // vendor list (or add it under Vendors first).
+  if (clean(vendorName, 200)) {
+    throw conflict('Pick the vendor from the vendor list — a typed name is not a vendor on file', {
+      code: VENDOR_REQUIRED_CODE,
+      field: 'vendor_id',
+    });
+  }
+  return { id: null, name: null };
 }
 
 /** The lines of a request, rewritten in full. Runs on the caller's transaction,
@@ -674,8 +737,15 @@ export async function actOnRequest(id: string, action: PrAction, note: string | 
     if (cur.status !== 'submitted') throw conflict('This request is not waiting for a decision');
     const reason = clean(note, 500);
     if (action === 'reject' && !reason) throw badRequest('Say why the request is rejected', { field: 'note' });
+    // D2: the requester does not approve their own request.
+    let selfApproved = false;
+    if (action === 'approve') {
+      const verdict = selfApprovalVerdict(cur.requested_by?.id ?? null, actor.id, actor.isSuperAdmin);
+      if (verdict === 'blocked') throw forbidden(selfApprovalMessage(cur.pr_number), { code: SELF_APPROVAL_CODE });
+      selfApproved = verdict === 'self_approved';
+    }
     await set(action === 'approve' ? 'approved' : 'rejected', 'This request is not waiting for a decision', ', decided_by = $4, decided_at = now(), decision_note = $5', [actor.id, reason]);
-    await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} ${action === 'approve' ? 'approved' : `rejected: ${reason}`}`);
+    await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} ${action === 'approve' ? `approved${selfApproved ? ' (self-approved by a super admin)' : ''}` : `rejected: ${reason}`}`);
     await notify([cur.requested_by?.id], { kind: 'purchasing', title: `${cur.pr_number} was ${action === 'approve' ? 'approved' : 'rejected'}`, body: action === 'approve' ? cur.title : `${cur.title}: ${reason}`, link, actorId: actor.id });
   } else if (action === 'cancel') {
     requirePerm(actor, PURCHASING_PERM.requests, 'edit', 'You cannot cancel purchase requests');
@@ -996,6 +1066,7 @@ export async function awardQuote(rfqId: string, quoteId: string, actor: ActingPr
       : [{ description: `${fresh.rows[0].title} — as quoted${quote.rows[0].quote_ref ? ` (${quote.rows[0].quote_ref})` : ''}`, qty: 1, unit: 'lot', unit_cost: total }];
     await tx.query(`UPDATE vendor_quote SET status = CASE WHEN id = $2 THEN 'selected' ELSE 'rejected' END WHERE rfq_id = $1`, [rfqId, quoteId]);
     await tx.query(`UPDATE rfq SET status = 'awarded', awarded_quote_id = $2, updated_at = now() WHERE id = $1`, [rfqId, quoteId]);
+    if (cur.request) await assertNoLiveOrder(tx, cur.request.id);
     const order = await createOrder(tx, { vendor_id: win.vendor.id, rfq_id: rfqId, request_id: cur.request?.id ?? null, lines, note: quote.rows[0].note }, actor, cur.task?.id ?? null);
     if (cur.request) await tx.query(`UPDATE purchase_request SET status = 'ordered', updated_at = now() WHERE id = $1 AND status = 'approved'`, [cur.request.id]);
     return { ...order, total };
@@ -1014,6 +1085,7 @@ type PoRow = {
   status: PoStatus; order_date: string | null; expected_on: string | null; ship_to: string | null; note: string | null;
   tax_rate_name: string | null; tax_pct: string; subtotal: string; tax: string; total: string;
   created_by: string | null; approved_by: string | null; approved_at: Date | null; created_at: Date;
+  limit_approved_by: string | null; limit_approved_at: Date | null;
 };
 
 const PO_SELECT = `
@@ -1022,7 +1094,8 @@ const PO_SELECT = `
          c.id::text AS cc_id, c.code AS cc_code, c.name AS cc_name, a.id::text AS afe_id, a.afe_number,
          po.status, to_char(po.order_date, 'YYYY-MM-DD') AS order_date, to_char(po.expected_on, 'YYYY-MM-DD') AS expected_on, po.ship_to, po.note,
          po.tax_rate_name, po.tax_pct, po.subtotal, po.tax, po.total,
-         po.created_by::text AS created_by, po.approved_by::text AS approved_by, po.approved_at, po.created_at
+         po.created_by::text AS created_by, po.approved_by::text AS approved_by, po.approved_at, po.created_at,
+         po.limit_approved_by::text AS limit_approved_by, po.limit_approved_at
     FROM purchase_order po
     LEFT JOIN task t ON t.id = po.task_id
     LEFT JOIN vendor v ON v.id = po.vendor_id
@@ -1035,13 +1108,14 @@ async function hydrateOrders(rows: PoRow[]): Promise<PurchaseOrder[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
   const needsAfe = rows.some((r) => r.afe_id);
-  const [lines, people, afes] = await Promise.all([
+  const [lines, people, afes, limit] = await Promise.all([
     query<{ id: string; po_id: string; description: string; qty: string; unit: string; unit_cost: string; received_qty: string }>(
       `SELECT id::text AS id, po_id::text AS po_id, description, qty, unit, unit_cost, received_qty FROM purchase_order_line WHERE po_id = ANY($1::uuid[]) ORDER BY position`,
       [ids],
     ),
-    peopleByIds(rows.flatMap((r) => [r.created_by, r.approved_by])),
+    peopleByIds(rows.flatMap((r) => [r.created_by, r.approved_by, r.limit_approved_by])),
     needsAfe ? afeRows() : Promise.resolve([] as Afe[]),
+    poLimit(),
   ]);
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
   return rows.map((r) => {
@@ -1084,8 +1158,29 @@ async function hydrateOrders(rows: PoRow[]): Promise<PurchaseOrder[]> {
       approved_at: iso(r.approved_at),
       created_at: r.created_at.toISOString(),
       warnings,
+      needs_limit_approval:
+        r.status === 'draft' &&
+        poNeedsLimitApproval({ total, request_id: r.request_id, limit_approved: r.limit_approved_by !== null }, limit),
+      limit_approved_by: r.limit_approved_by ? (people.get(r.limit_approved_by) ?? null) : null,
+      limit_approved_at: iso(r.limit_approved_at),
     };
   });
+}
+
+/** #21: one live order per purchase request. Locks the request row first,
+ *  so two orders drafted from one request at once serialise here. */
+async function assertNoLiveOrder(q: Queryable, requestId: string): Promise<void> {
+  await q.query(`SELECT 1 FROM purchase_request WHERE id = $1 FOR UPDATE`, [requestId]);
+  const live = await q.query<{ po_number: string }>(
+    `SELECT po_number FROM purchase_order WHERE request_id = $1 AND status <> 'cancelled' LIMIT 1`,
+    [requestId],
+  );
+  if (live.rows[0]) {
+    throw conflict(`This request is already on ${live.rows[0].po_number} — cancel that order to raise another`, {
+      code: PO_EXISTS_CODE,
+      po_number: live.rows[0].po_number,
+    });
+  }
 }
 
 export async function listOrders(actor: ActingPrincipal, opts: { status?: string; search?: string }): Promise<PurchasingList<PurchaseOrder>> {
@@ -1141,7 +1236,9 @@ async function taxOf(q: Queryable, rateId: string | null | undefined): Promise<{
  *  uncommitted row. */
 async function createOrder(q: Queryable, input: PurchaseOrderInput, actor: ActingPrincipal, taskId: string | null): Promise<{ id: string; po_number: string; vendorName: string }> {
   const vendor = await vendorRef(q, input.vendor_id, input.vendor_name);
-  if (!vendor.name) throw badRequest('Say who the order goes to', { field: 'vendor_name' });
+  if (!vendor.id || !vendor.name) {
+    throw conflict('Pick the vendor the order goes to from the vendor list', { code: VENDOR_REQUIRED_CODE, field: 'vendor_id' });
+  }
   const tax = await taxOf(q, input.tax_rate_id);
   // A work order's own cost center and AFE carry onto its purchase order.
   const filing = taskId ? await q.query<{ cc: string | null; afe: string | null }>(`SELECT cost_center_id::text AS cc, afe_id::text AS afe FROM task WHERE id = $1`, [taskId]) : null;
@@ -1172,22 +1269,23 @@ export async function saveOrder(id: string | null, input: PurchaseOrderInput, ac
     const taskId = input.task_ref !== undefined ? await taskOf(input.task_ref, actor) : (from?.task?.id ?? null);
     // The order, its lines and the request's move to "ordered" commit together.
     const created = await withTransaction(async (tx) => {
+      if (from) await assertNoLiveOrder(tx, from.id);
       const order = await createOrder(
         tx,
         {
           ...input,
           vendor_id: input.vendor_id ?? from?.vendor?.id ?? null,
-          vendor_name: input.vendor_name ?? from?.vendor?.name ?? null,
+          vendor_name: input.vendor_id || from?.vendor?.id ? null : (input.vendor_name ?? null),
           cost_center_id: input.cost_center_id ?? from?.cost_center?.id ?? null,
           lines: input.lines ?? from?.lines.map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, unit_cost: l.unit_cost })) ?? [],
         },
         actor,
         taskId,
       );
-      // The request moves to ordered only while it is approved (or ordered
-      // already: a second order from the same request), in the statement: a
-      // request cancelled since the read above matches no row, and the order
-      // drafted from it rolls back with the refusal.
+      // The request moves to ordered only while it is approved, in the
+      // statement: a request cancelled since the read above matches no row,
+      // and the order drafted from it rolls back with the refusal. (0083: a
+      // second live order from one request is refused above.)
       if (from) {
         const moved = await tx.query(`UPDATE purchase_request SET status = 'ordered', updated_at = now() WHERE id = $1 AND status IN ('approved', 'ordered') RETURNING id`, [from.id]);
         if (!moved.rows[0]) throw conflict('Only an approved request can be ordered');
@@ -1200,7 +1298,9 @@ export async function saveOrder(id: string | null, input: PurchaseOrderInput, ac
   const before = await getOrder(id, actor);
   if (before.status !== 'draft') throw conflict('Only a draft purchase order can be changed. Cancel it and raise a new one, or record what was received.');
   const vendor = input.vendor_id !== undefined || input.vendor_name !== undefined ? await vendorRef({ query }, input.vendor_id, input.vendor_name) : before.vendor;
-  if (!vendor.name) throw badRequest('Say who the order goes to', { field: 'vendor_name' });
+  if (!vendor.id || !vendor.name) {
+    throw conflict('Pick the vendor the order goes to from the vendor list', { code: VENDOR_REQUIRED_CODE, field: 'vendor_id' });
+  }
   const tax = input.tax_rate_id !== undefined ? await taxOf({ query }, input.tax_rate_id) : { name: before.tax_rate_name, pct: before.tax_pct };
   const taskId = input.task_ref !== undefined ? await taskOf(input.task_ref, actor) : (before.task?.id ?? null);
   const lines = input.lines !== undefined ? cleanLines(input.lines) : before.lines.map((l) => ({ description: l.description, qty: l.qty, unit: l.unit, unit_cost: l.unit_cost }));
@@ -1212,7 +1312,8 @@ export async function saveOrder(id: string | null, input: PurchaseOrderInput, ac
     const kept = await tx.query(
       `UPDATE purchase_order SET task_id = $2, vendor_id = $3, vendor_name = $4,
               cost_center_id = (SELECT c.id FROM cost_center c WHERE c.id = $5::uuid), afe_id = (SELECT a.id FROM afe a WHERE a.id = $6::uuid),
-              order_date = COALESCE($7::date, order_date), expected_on = $8::date, ship_to = $9, note = $10, tax_rate_name = $11, tax_pct = $12, updated_at = now()
+              order_date = COALESCE($7::date, order_date), expected_on = $8::date, ship_to = $9, note = $10, tax_rate_name = $11, tax_pct = $12,
+              limit_approved_by = NULL, limit_approved_at = NULL, updated_at = now()
         WHERE id = $1 AND status = 'draft' RETURNING id`,
       [
         id, taskId, vendor.id, vendor.name,
@@ -1231,7 +1332,31 @@ export async function saveOrder(id: string | null, input: PurchaseOrderInput, ac
   return getOrder(id, actor);
 }
 
+/**
+ * 0083 (#21): the second person's yes on an order raised without a purchase
+ * request above the PO limit. Draft only; the person who drafted it is not
+ * that person (D2, a super admin may — logged). Saving the draft again
+ * clears it, so what was approved is what gets issued.
+ */
+export async function approvePoOverLimit(id: string, actor: ActingPrincipal): Promise<PurchaseOrder> {
+  const cur = await getOrder(id, actor);
+  requirePerm(actor, PURCHASING_PERM.orders, 'approve', 'Approving a purchase order is for people who approve them');
+  if (cur.status !== 'draft') throw conflict('Only a draft order is approved over the limit');
+  if (!cur.needs_limit_approval) throw conflict('This order does not need approval over the limit');
+  const verdict = selfApprovalVerdict(cur.created_by?.id ?? null, actor.id, actor.isSuperAdmin);
+  if (verdict === 'blocked') throw forbidden(selfApprovalMessage(cur.po_number), { code: SELF_APPROVAL_CODE });
+  const done = await query(
+    `UPDATE purchase_order SET limit_approved_by = $2, limit_approved_at = now(), updated_at = now()
+      WHERE id = $1 AND status = 'draft' AND limit_approved_by IS NULL RETURNING id`,
+    [id, actor.id],
+  );
+  if (!done.rows[0]) throw conflict('The order changed while you were looking at it — reload it');
+  await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number} approved over the limit ($${cur.total.toFixed(2)})${verdict === 'self_approved' ? ' (self-approved by a super admin)' : ''}`);
+  return getOrder(id, actor);
+}
+
 export async function actOnOrder(id: string, action: PoAction, actor: ActingPrincipal): Promise<PurchaseOrder> {
+  if (action === 'approve_limit') return approvePoOverLimit(id, actor);
   const cur = await getOrder(id, actor);
   if (action === 'issue') {
     requirePerm(actor, PURCHASING_PERM.orders, 'approve', 'Issuing a purchase order is for people who approve them');
@@ -1245,13 +1370,29 @@ export async function actOnOrder(id: string, action: PoAction, actor: ActingPrin
     // refused, not issued over. The audit row and the notice follow the
     // commit with the figures the locked read found.
     const issued = await withTransaction(async (tx) => {
-      const fresh = await tx.query<{ status: PoStatus; total: string; vendor_name: string }>(`SELECT status, total, vendor_name FROM purchase_order WHERE id = $1 FOR UPDATE`, [id]);
+      const fresh = await tx.query<{ status: PoStatus; total: string; vendor_name: string; vendor_id: string | null; request_id: string | null; limit_approved_by: string | null }>(
+        `SELECT status, total, vendor_name, vendor_id::text AS vendor_id, request_id::text AS request_id, limit_approved_by::text AS limit_approved_by
+           FROM purchase_order WHERE id = $1 FOR UPDATE`,
+        [id],
+      );
       if (!fresh.rows[0]) throw notFound('That purchase order does not exist');
       if (fresh.rows[0].status !== 'draft') throw conflict('Only a draft can be issued');
+      if (!fresh.rows[0].vendor_id) {
+        throw conflict('Pick the vendor the order goes to from the vendor list before issuing it', { code: VENDOR_REQUIRED_CODE });
+      }
       const lines = await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM purchase_order_line WHERE po_id = $1`, [id]);
       if ((lines.rows[0]?.n ?? 0) === 0) throw badRequest('List what is being ordered first.');
       const total = Number(fresh.rows[0].total);
       if (total <= 0) throw badRequest('The order has no value yet: give its lines a price.');
+      // #21: no request behind it and above the limit — a second person
+      // approves it first (Approve over limit).
+      const limit = await poLimit();
+      if (poNeedsLimitApproval({ total, request_id: fresh.rows[0].request_id, limit_approved: fresh.rows[0].limit_approved_by !== null }, limit)) {
+        throw conflict(`This order is over the $${limit.toFixed(2)} limit for an order with no purchase request — it needs Approve over limit from someone else first`, {
+          code: PO_OVER_LIMIT_CODE,
+          limit,
+        });
+      }
       await tx.query(`UPDATE purchase_order SET status = 'issued', approved_by = $2, approved_at = now(), updated_at = now() WHERE id = $1`, [id, actor.id]);
       return { total, vendorName: fresh.rows[0].vendor_name };
     });

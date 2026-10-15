@@ -40,6 +40,7 @@ import {
 import { listLaborRates, upsertLaborRate } from '../services/rates.js';
 import { requirePerm } from '../services/permissions.js';
 import { assertRawMoney, zMoney } from '../validation.js';
+import { PERCENT_MAX } from '@theone/shared';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
 
@@ -55,7 +56,7 @@ const lineSchema = z.object({
   /** 0048 · unit of measure, and the line's own tax and markup percentages. */
   uom: z.string().trim().max(20).nullable().optional(),
   tax_pct: z.number().min(0).max(100).optional(),
-  markup_pct: z.number().min(0).max(1000).optional(),
+  markup_pct: z.number().min(0).max(PERCENT_MAX).optional(),
 });
 
 /** Exported for the AI quote draft (routes/calls.ts), which saves the same shape. */

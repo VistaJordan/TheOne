@@ -187,9 +187,11 @@ export function VendorBillActions({
   busy: boolean;
   onAct: (kind: string, text?: string) => void;
 }) {
-  const { can } = useAuth();
+  const { can, actingAs } = useAuth();
   const canApprove = can('payments', 'approve');
   const canProcess = can('payments/process', 'edit');
+  // 0083 (D2): whoever recorded the bill does not approve it; a super admin may.
+  const ownBill = bill.created_by?.id === actingAs?.id && actingAs?.is_super_admin !== true;
   const canRecord = can('payments', 'create');
   const next = vendorBillNextActions(bill.status);
   const [asking, setAsking] = useState<'dispute' | 'paid' | null>(null);
@@ -207,13 +209,15 @@ export function VendorBillActions({
         <button
           type="button"
           className="rcv-btn is-primary"
-          disabled={!canApprove || tierBlocked || busy}
+          disabled={!canApprove || tierBlocked || ownBill || !!bill.money_hold || busy}
           title={
             !canApprove
               ? 'You cannot approve vendor bills'
               : tierBlocked
                 ? `${bill.tier?.label}: needs a role allowed for this amount (rule 6.2.3)`
-                : 'Agree the bill'
+                : ownBill
+                  ? 'You recorded this bill — someone else has to approve it (maker ≠ checker)'
+                  : (bill.money_hold ?? 'Agree the bill')
           }
           onClick={() => onAct('approve')}
         >

@@ -20,6 +20,7 @@ import { assertMoneyNotLocked } from './moneySync.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import type { ActivityEntry } from '@theone/shared';
+import { MONEY_MAX, VALIDATION_CODE, withinMoneyBound } from '@theone/shared';
 
 // ── Promoted-column mirrors ──────────────────────────────────────────────────
 // The map moved to woMirrors.ts (the automations engine reads it too). The
@@ -45,6 +46,13 @@ function coerceValue(f: ResolvedField, raw: unknown): unknown {
       const digits = typeof raw === 'number' ? String(raw) : String(raw).replace(/[^0-9.-]/g, '');
       if (!/^-?\d*\.?\d+$/.test(digits) || !Number.isFinite(Number(digits))) {
         throw new ApiError('BAD_REQUEST', `"${f.label}" needs a number`);
+      }
+      // 0083 (M1): a figure a column (the NTE mirror is numeric(12,2)) or a
+      // sum of a few could not hold is refused here, not as a 500 later.
+      if (f.type === 'money' && !withinMoneyBound(Number(digits))) {
+        throw new ApiError('BAD_REQUEST', `"${f.label}" can be at most ${MONEY_MAX.toLocaleString('en-US')}`, {
+          code: VALIDATION_CODE,
+        });
       }
       return Number(digits);
     }

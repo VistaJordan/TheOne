@@ -51,6 +51,8 @@ export type AdminEntity =
   | 'vendor'
   // Admin › Vendors & map (0057): settings, lists, preferred vendors.
   | 'vendor_setting'
+  // 0083: the purchasing settings (the PO limit).
+  | 'purchasing_setting'
   | 'preferred_vendor'
   // A site (with its buildings, floors and spaces) or an asset (0060).
   | 'site'
