@@ -3,11 +3,12 @@
    sections with steps / notes / tables, who does what, success metric,
    revision history (the migration ledger) and sign-off. */
 
-import { SOP, docsVersionLine, type DocsSnapshot, type SopBlock } from '@theone/shared';
-import { DocBox, DocTable, Rich, fmtDate } from './DocBits';
+import type { DocsContent, DocsSnapshot, SopBlock } from '@theone/shared';
+import { DocBox, DocTable, Rich, fmtDate, versionLine } from './DocBits';
 import type { TocEntry } from './BrdDoc';
 
-export function sopToc(): TocEntry[] {
+export function sopToc(content: DocsContent): TocEntry[] {
+  const SOP = content.sop;
   const toc: TocEntry[] = [
     { id: 'sop-purpose', label: 'Role Purpose', level: 1 },
     { id: 'sop-scope', label: 'Scope', level: 1 },
@@ -62,14 +63,15 @@ function Block({ b }: { b: SopBlock }) {
   }
 }
 
-export function SopDoc({ snap }: { snap: DocsSnapshot | null }) {
+export function SopDoc({ content, snap }: { content: DocsContent; snap: DocsSnapshot | null }) {
+  const SOP = content.sop;
   return (
     <article className="doc doc-sop">
       <header className="doc-cover">
         <p className="doc-kicker">Standard Operating Procedures</p>
         <h1>{SOP.title.replace(/^The One — /, '')}</h1>
         <p className="doc-sub">{SOP.subtitle}</p>
-        <p className="doc-version">{docsVersionLine(snap)}</p>
+        <p className="doc-version">{versionLine(content.reviewed_on, snap)}</p>
         <DocBox title="Document control">{SOP.control}</DocBox>
       </header>
 

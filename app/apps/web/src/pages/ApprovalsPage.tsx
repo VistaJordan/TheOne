@@ -65,6 +65,7 @@ import type {
   StatusChangeDetail,
 } from '../api/client';
 import { AssigneeSelect } from '../components/wo/AssigneeAvailability';
+import { NteRequestsPanel } from '../components/approvals/NteRequestsPanel';
 import {
   ApiRequestError,
   acknowledgeApprovalTask,
@@ -117,7 +118,9 @@ type Kind = Exclude<Section, 'all'>;
 const SECTION_LABEL: Record<Section, string> = {
   all: 'All',
   intake: 'Pending acceptance',
-  nte: 'NTE increases',
+  // M25 (UAT Wave D): this lane is the cost-over-NTE task (rule 1.5.2); the
+  // manual asks have their own, NTE increase requests (NteRequestsPanel).
+  nte: 'NTE override (cost over NTE)',
   money: 'Money holds',
   status: 'Status changes',
   reviews: 'Manager reviews',
@@ -128,7 +131,7 @@ const SECTION_LABEL: Record<Section, string> = {
 /** The chip in the task cell — what kind of thing the row is. */
 const KIND_CHIP: Record<Kind, string> = {
   intake: 'New work order',
-  nte: 'NTE increase',
+  nte: 'NTE override',
   money: 'Money hold',
   status: 'Status change',
   reviews: 'Review',
@@ -480,6 +483,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   const myRole = actingAs?.role ?? null;
 
   const [section, setSection] = useState<Section>('all');
+  const [nteView, setNteView] = useState(false);
   const [columns, setColumns] = useState<ColumnKey[]>(loadColumns);
   const changeColumns = (next: string[]) => {
     const known = new Set<string>(COLUMN_CHOICES.map((c) => c.key));
@@ -657,12 +661,14 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
     approvalsQuery.error instanceof ApiRequestError && approvalsQuery.error.status === 404;
 
   const switchLane = (l: Lane) => {
+    setNteView(false);
     setLane(l);
     setFilters(NO_FILTERS);
     setOffset(0);
   };
 
   const switchSection = (s: Section) => {
+    setNteView(false);
     setSection(s);
     setFilters(NO_FILTERS);
     setOffset(0);
@@ -674,6 +680,8 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   };
 
   const busy = decide.isPending;
+  // M25: the manual NTE increase requests (0064) are their own lane.
+  const showNteRequests = !intake && canSeeSection('nte');
   const loading = approvalsQuery.isLoading || quotesQuery.isLoading || paymentsQuery.isLoading;
 
   const emptyText = anyFilter
@@ -729,9 +737,19 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
               </button>
             );
           })}
+          {showNteRequests && (
+            <button
+              type="button"
+              className={`seg-btn${nteView ? ' is-on' : ''}`}
+              aria-pressed={nteView}
+              onClick={() => setNteView(true)}
+            >
+              NTE increase requests
+            </button>
+          )}
         </div>
         )}
-        <div className="seg payq-lanes" role="group" aria-label="Approval lanes">
+        {!nteView && <div className="seg payq-lanes" role="group" aria-label="Approval lanes">
           {lanes.map((l) => {
             const n = laneCount(l);
             return (
@@ -749,10 +767,10 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
               </button>
             );
           })}
-        </div>
+        </div>}
       </div>
 
-      {!approvalsQuery.isError && (
+      {!nteView && !approvalsQuery.isError && (
         <div className="apq-filters" role="group" aria-label="Filter the list">
           <FilterSelect label="Entity" value={filters.entity} options={options.entity} onChange={(v) => setFilter('entity', v)} />
           <FilterSelect label="Client" value={filters.client} options={options.client} onChange={(v) => setFilter('client', v)} />
@@ -781,7 +799,9 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
         </p>
       )}
 
-      {approvalsQuery.isError && (
+      {nteView && <NteRequestsPanel />}
+
+      {!nteView && approvalsQuery.isError && (
         <div className="quotes-empty">
           <Icon name="inbox" size={22} />
           <b>{notServed ? (intake ? 'No new work orders to list yet' : 'No approval tasks to list yet') : intake ? 'Could not load the incoming queue' : 'Could not load approval tasks'}</b>
@@ -793,7 +813,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
         </div>
       )}
 
-      {!approvalsQuery.isError && (
+      {!nteView && !approvalsQuery.isError && (
         <div className="table-wrap">
           <table className="ct">
             <thead>
@@ -839,7 +859,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
         </div>
       )}
 
-      {!approvalsQuery.isError && (
+      {!nteView && !approvalsQuery.isError && (
         <ListPagination
           total={loading ? undefined : filtered.length}
           offset={offset}
@@ -1444,12 +1464,11 @@ function AcceptDialog({
   const [assignee, setAssignee] = useState('');
   const [note, setNote] = useState('');
   const people = useQuery({ queryKey: ['principals'], queryFn: getPrincipals, retry: 0 });
-  // Rule 7.1.4 hands the work order to a DISPATCHER, so the dispatcher tiers
-  // (DISPATCHER_ROLE_CODES in shared) come first; everyone else stays
-  // available below (a manager may keep one).
+  // Rule 7.1.4 hands the work order to a DISPATCHER (DISPATCHER_ROLE_CODES in
+  // shared); since Wave D (#22 / M22, D3) nobody else can be picked — the API
+  // refuses anyone else with ASSIGNEE_NOT_DISPATCHER.
   const humans = (people.data?.items ?? []).filter((p) => p.kind === 'human');
   const dispatchers = humans.filter((p) => isDispatcherRole(p.role)).map((p) => p.name);
-  const others = humans.filter((p) => !isDispatcherRole(p.role)).map((p) => p.name);
   const ok = assignee.trim().length > 0;
   const whoId = `apq-assignee-${idKey}`;
   const noteId = `apq-text-${idKey}`;
@@ -1495,13 +1514,6 @@ function AcceptDialog({
               {dispatchers.length > 0 && (
                 <optgroup label="Dispatchers">
                   {dispatchers.map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </optgroup>
-              )}
-              {others.length > 0 && (
-                <optgroup label={dispatchers.length > 0 ? 'Everyone else' : 'People'}>
-                  {others.map((n) => (
                     <option key={n} value={n}>{n}</option>
                   ))}
                 </optgroup>

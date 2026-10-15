@@ -26,13 +26,15 @@ const FULL: Record<string, unknown> = {
   '22. FM': 'Seamless',
   '21. Comp': 'SFM',
   '16. Client NTE 🔴': 0,
+  // UAT Wave D (#22): a draft needs its Client too.
+  Client: 'Walmart',
 };
 
 describe('the form', () => {
-  it('lists the thirteen 11.1.1 fields as required, then the optional ones', () => {
+  it('lists the thirteen 11.1.1 fields as required, then the Client (required since Wave D, #22)', () => {
     const required = INTAKE_FORM_FIELDS.filter((f) => f.required).map((f) => f.key);
-    expect(required).toEqual(INTAKE_REQUIRED_FIELDS.map((f) => f.key));
-    expect(INTAKE_FORM_FIELDS.some((f) => !f.required && f.key === 'Client')).toBe(true);
+    expect(required).toEqual([...INTAKE_REQUIRED_FIELDS.map((f) => f.key), 'Client']);
+    expect(INTAKE_FORM_FIELDS.some((f) => !f.required)).toBe(false);
   });
 
   it('is gated on its own permission path', () => {
@@ -51,7 +53,8 @@ describe('intakeDraftMissing — WO# first, then the intake fields', () => {
       'City',
       'Trade',
     ]);
-    expect(intakeDraftMissing({ wo_number: null, fields: {} })).toHaveLength(1 + INTAKE_REQUIRED_FIELDS.length);
+    expect(intakeDraftMissing({ wo_number: null, fields: {} })).toHaveLength(1 + INTAKE_REQUIRED_FIELDS.length + 1);
+    expect(intakeDraftMissing({ wo_number: 'WOT1', fields: { ...FULL, Client: ' ' } })).toEqual(['Client']);
   });
 });
 

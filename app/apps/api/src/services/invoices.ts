@@ -375,6 +375,8 @@ async function prefillFromQuote(taskId: string): Promise<{ lines: InvoiceLineInp
 async function prefillFromContract(
   taskId: string,
 ): Promise<{ lines: InvoiceLineInput[]; basis: string; contract_id: string; hours: number; visits: number } | null> {
+  // M30 (Wave D): the card and rates in force when the work order was
+  // RECEIVED (contract_rate_version) — a later edit applies forward only.
   const match = await contractForTask(taskId);
   if (!match || match.contract.kind !== 'tm') return null;
   const { hours, visits } = await hoursOnSite(taskId);

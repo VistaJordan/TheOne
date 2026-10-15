@@ -17,6 +17,7 @@ import { Icon } from '../../components/Icon';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { StatusCircle } from '../../components/StatusCircle';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAuth } from '../../auth/AuthProvider';
 import { useReorder } from '../../hooks/useReorder';
 import { defaultOp, isComplete, isMulti, isValueless, opLabel } from '../../lib/woView';
 import { withFieldSections } from '../../lib/woFieldSections';
@@ -81,6 +82,8 @@ import {
   APPROVAL_TIER_KIND_LABELS,
   APPROVAL_TIER_KIND_VERBS,
   describeTierBand,
+  enrolmentSentence,
+  TRASH_RESTORE_REFUSED,
   type ApprovalTier,
   type ApprovalTierKind,
 } from '@theone/shared';
@@ -104,7 +107,8 @@ export function AdminSettingsPage() {
           <SetCard title="Authentication" icon="lock">
             <Row k="Mode" v={s.auth.mode === 'entra' ? 'Microsoft Entra ID' : 'Development bypass'}
               tone={s.auth.mode === 'entra' ? 'ok' : 'warn'} />
-            <Row k="Access" v="Invitation only" />
+            {/* M16 (UAT Wave D): what the sign-in code actually does. */}
+            <Row k="Access" v={enrolmentSentence(s.auth.allowed_domains ?? [], s.auth.auto_enrol_role_label ?? 'OM Under Probation')} />
             <Row k="Directory" v={s.auth.tenant_id ?? 'Not configured'} mono />
             <Row k="Redirect URI" v={s.auth.redirect_uri ?? '—'} mono />
             <Row k="Session length" v={`${s.auth.session_ttl_hours} hours`} />
@@ -2982,6 +2986,9 @@ function ThemeCard({ id, name, note, current, onPick }: {
 
 export function AdminTrashPage() {
   const qc = useQueryClient();
+  // M17 (UAT Wave D): Restore needs work-order delete or Trash edit (the API asks the same).
+  const { can } = useAuth();
+  const canRestore = can('work_orders', 'delete') || can('admin/trash', 'edit');
   const q = useQuery({ queryKey: ['admin-trash'], queryFn: listTrash, retry: 0 });
   const restore = useMutation({
     mutationFn: restoreFromTrash,
@@ -3003,9 +3010,8 @@ export function AdminTrashPage() {
 
       {!q.isLoading && !q.isError && items.length === 0 && (
         <AdminEmpty icon="trash" title="Nothing in the trash">
-          Deleted work orders appear here with a restore button. The app has no delete action yet,
-          so this stays empty until one lands — the soft-delete column it reads has been in the
-          schema since migration 0001.
+          Work orders deleted from the Work Orders list (select them, then Delete) land here.
+          Restore puts one straight back; it needs the right to delete work orders.
         </AdminEmpty>
       )}
 
@@ -3024,7 +3030,8 @@ export function AdminTrashPage() {
                   <td>{t.status}</td>
                   <td>{new Date(t.deleted_at).toLocaleDateString()}</td>
                   <td className="num">
-                    <button type="button" className="linkbtn" disabled={restore.isPending}
+                    <button type="button" className="linkbtn" disabled={restore.isPending || !canRestore}
+                      title={canRestore ? undefined : TRASH_RESTORE_REFUSED}
                       onClick={() => restore.mutate(t.id)}>Restore</button>
                   </td>
                 </tr>

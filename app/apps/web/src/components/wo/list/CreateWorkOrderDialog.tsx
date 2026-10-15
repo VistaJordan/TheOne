@@ -49,6 +49,7 @@ import {
   type WoCreateField,
   type WoCreateTemplate,
   type WoDuplicateHit,
+  isDispatcherRole,
 } from '@theone/shared';
 import {
   ApiRequestError,
@@ -297,7 +298,8 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     const val = values[f.key] ?? '';
 
     if (f.key === ASSIGNEE_KEY) {
-      const humans = (people.data?.items ?? []).filter((p) => p.kind === 'human');
+      // #22 / M22 (Wave D, D3): only dispatchers can hold the seat.
+      const humans = (people.data?.items ?? []).filter((p) => p.kind === 'human' && isDispatcherRole(p.role));
       // The name is still picked from the list; "Who's available?" beside it
       // opens the load view — the people on this work order's client, or every
       // dispatcher, each with ALL their active work orders.

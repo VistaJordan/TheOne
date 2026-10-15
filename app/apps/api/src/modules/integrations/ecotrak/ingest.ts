@@ -16,6 +16,7 @@ import { classifyInbound } from './statusMap.js';
 import { resolveTrade } from './tradeMap.js';
 import { planFolder, stateAbbr } from './sharepointPath.js';
 import { raiseAcceptanceTasks, settleAcceptanceFromClient } from '../../../services/approvals.js';
+import { adoptClientsFromRecords } from '../../../services/dataRules.js';
 import { integrationOnNow, requireIntegration } from '../../../services/integrations.js';
 import { logTaskChanges, type TaskChange } from '../../../services/woAudit.js';
 import { ecotrakSyncActorId } from '../../../services/serviceActors.js';
@@ -228,6 +229,9 @@ export async function ingestEcotrak(opts: { sinceDays?: number; trigger?: Ingest
         res.errors.push(`acceptance queue: ${(e as Error).message}`);
       }
     }
+    // #11 (Wave D): a client Ecotrak names for the first time gets its client
+    // record, after the commits (our database only — nothing goes to Ecotrak).
+    if (res.created > 0 || res.updated > 0) await adoptClientsFromRecords();
     // accepted (or rejected) on Ecotrak = answered here too.
     for (const id of settle.accepted) {
       if (await settleAcceptanceFromClient(id, 'accepted', 'Ecotrak', actorId)) res.accepted++;

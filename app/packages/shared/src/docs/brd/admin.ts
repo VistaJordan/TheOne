@@ -43,7 +43,7 @@ export const ADMIN_PART: DocPart = {
   key: 'admin',
   title: 'Admin console',
   intro:
-    'Users, Roles, Settings, Automations, Custom fields, Themes, Audit log, Trash, Vendors & map, Sites & assets, Integrations and Documentation. Each is its own permission row, read from the person whose view it is (the viewed person while viewing as — D6, Wave B); the locked page says "Ask a super admin — Elise, Jordan, Jeff or Jack".',
+    'Users, Roles, Settings, Automations, Custom fields, Themes, Audit log, Trash, Vendors & map, Sites & assets, Integrations and Documentation. Each is its own permission row, read from the person whose view it is (the viewed person while viewing as — D6, Wave B); the locked page says "Ask a super admin — …" and names the super admins on file at that moment (GET /principals/super-admins, UAT Wave D L4).',
   modules: [
     {
       key: 'admin-users',

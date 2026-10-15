@@ -216,6 +216,67 @@ export function pickContract(
   return best;
 }
 
+// ── M32 (UAT round 1, Wave D): no two cards for the same work ────────────────
+
+/** `details.code` on the 409 an overlapping rate card gets. */
+export const CONTRACT_OVERLAP_CODE = 'CONTRACT_OVERLAP';
+
+export type ContractScope = Pick<
+  Contract,
+  'party' | 'vendor_name' | 'client' | 'billing_entity' | 'sites_covered' | 'trades_covered' | 'starts_on' | 'ends_on' | 'active'
+>;
+
+/** Both lists "all" (empty), or both name something and share a value. A
+    card naming HVAC and one naming everything are different specificities —
+    `pickContract` already prefers the named one, so that is not a clash. */
+function listsClash(a: string[], b: string[]): boolean {
+  if (a.length === 0 && b.length === 0) return true;
+  if (a.length === 0 || b.length === 0) return false;
+  return a.some((x) => b.some((y) => same(x, y)));
+}
+
+/** True when two ACTIVE cards would both be the best match for some work
+    order on some day: same party (and vendor), client, entity, the same
+    specificity of trades and sites with a value in common, and date windows
+    that overlap (no end = open-ended). `pickContract` could only break that
+    tie by start date, which is the silent re-pricing M32 refuses. */
+export function contractsOverlap(a: ContractScope, b: ContractScope): boolean {
+  if (!a.active || !b.active) return false;
+  if ((a.party ?? 'client') !== (b.party ?? 'client')) return false;
+  if ((a.party ?? 'client') === 'vendor' && !same(a.vendor_name, b.vendor_name)) return false;
+  if (!same(a.client, b.client)) return false;
+  if (!same(a.billing_entity, b.billing_entity)) return false;
+  if (!listsClash(a.trades_covered ?? [], b.trades_covered ?? [])) return false;
+  if (!listsClash(a.sites_covered ?? [], b.sites_covered ?? [])) return false;
+  const aEnd = a.ends_on ?? '9999-12-31';
+  const bEnd = b.ends_on ?? '9999-12-31';
+  return a.starts_on <= bEnd && b.starts_on <= aEnd;
+}
+
+// ── M30 (UAT round 1, Wave D): rates as they stood ───────────────────────────
+
+/** One version of a card's rates (`contract_rate_version`, 0086): what
+    applies to a work order RECEIVED on or after `effective_from` (until the
+    next version). The first version of every card reaches back forever. */
+export interface ContractRateVersion {
+  effective_from: string | null;
+  rates: ContractRate[];
+}
+
+/** The version in force for a work order received on `asOf` (YYYY-MM-DD):
+    the latest one that took effect on or before that day. Null when there
+    is none (a card saved before 0086 and never versioned). */
+export function rateVersionAsOf(versions: readonly ContractRateVersion[], asOf: string): ContractRateVersion | null {
+  let best: ContractRateVersion | null = null;
+  for (const v of versions) {
+    const from = v.effective_from ? v.effective_from.slice(0, 10) : '0000-01-01';
+    if (from > asOf) continue;
+    const bestFrom = best?.effective_from ? best.effective_from.slice(0, 10) : '0000-01-01';
+    if (!best || from >= bestFrom) best = v;
+  }
+  return best;
+}
+
 // ── What its rates come to ───────────────────────────────────────────────────
 
 export interface ResolvedRates {

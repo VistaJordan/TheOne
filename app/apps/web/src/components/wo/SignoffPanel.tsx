@@ -83,7 +83,14 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
   if (q.isError || !data) return <>{fallback ?? null}</>;
 
   const s = data.signoff;
-  const canGenerate = data.can.generate && data.storage_ready;
+  // M26 (UAT Wave D): the button shows to anyone with CICO edit; when it
+  // cannot work yet it says why instead of disappearing.
+  const canGenerate = data.can.generate;
+  const generateBlocked = !data.storage_ready
+    ? 'File storage is not connected on this deployment yet'
+    : !data.layout
+      ? 'Set the Comp (billing entity) first — the sheet is drawn in its branding'
+      : null;
   const busy = generate.isPending || claim.isPending || dismiss.isPending;
   const fileName = s ? `Signoff-${s.wo_ref.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf` : null;
   const fileUrl = signoffFileUrl(wo.wo_number);
@@ -143,8 +150,8 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
             Send to tech
           </button>
         )}
-        {!s && canGenerate && data.layout && (
-          <button type="button" className="btn btn-sm" onClick={() => generate.mutate()} disabled={busy}>
+        {!s && canGenerate && (
+          <button type="button" className="btn btn-sm" onClick={() => generate.mutate()} disabled={busy || generateBlocked !== null} title={generateBlocked ?? undefined}>
             <Icon name="file" size={14} />
             {generate.isPending ? 'Drawing…' : 'Generate sheet'}
           </button>
@@ -154,8 +161,8 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
             type="button"
             className="btn btn-sm is-ghost"
             onClick={() => generate.mutate()}
-            disabled={busy}
-            title={s.stale ? 'Redraw the sheet with the current number and address' : 'Redraw the sheet (the old link stops working)'}
+            disabled={busy || !data.storage_ready}
+            title={!data.storage_ready ? 'File storage is not connected on this deployment yet' : s.stale ? 'Redraw the sheet with the current number and address' : 'Redraw the sheet (the old link stops working)'}
           >
             <Icon name="refresh" size={14} />
             {generate.isPending ? 'Drawing…' : s.stale ? 'Redraw with current details' : 'New sheet'}

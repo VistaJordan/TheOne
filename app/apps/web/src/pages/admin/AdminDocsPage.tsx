@@ -1,7 +1,9 @@
 /* Admin › Documentation (0075).
  *
  * Three living documents on one page — BRD, SOP, Lifecycle — drawn from the
- * registry in packages/shared/src/docs and the live snapshot the API answers
+ * registry in packages/shared/src/docs (served by GET /admin/docs/content
+ * since UAT Wave D, L5 — the bundle carries none of it, and this page is
+ * lazy-loaded) and the live snapshot the API answers
  * (statuses, fields, roles, automations, integrations, migrations). A table
  * of contents rides on the left; Print / Save as PDF uses the browser's print
  * dialog with a print stylesheet; Download gives Markdown, Word (BRD, SOP) or
@@ -12,8 +14,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { brdMarkdown, lifecycleMarkdown, sopMarkdown, docsVersionLine, type DocsSnapshot } from '@theone/shared';
-import { getDocsSnapshot } from '../../api/client';
+import type { DocsContent, DocsSnapshot } from '@theone/shared';
+import { getDocsContent, getDocsMarkdown, getDocsSnapshot } from '../../api/client';
+import { versionLine } from '../../components/docs/DocBits';
 import { Icon } from '../../components/Icon';
 import { PageTabs, errText } from '../../components/ui/Sheet';
 import { BrdDoc, brdToc, type TocEntry } from '../../components/docs/BrdDoc';
@@ -36,10 +39,15 @@ export function AdminDocsPage() {
   const tab = (TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') : 'brd') as Tab;
   const q = useQuery({ queryKey: ['admin', 'docs', 'snapshot'], queryFn: getDocsSnapshot, retry: false, staleTime: 60_000 });
   const snap: DocsSnapshot | null = q.data ?? null;
+  const c = useQuery({ queryKey: ['admin', 'docs', 'content'], queryFn: getDocsContent, retry: false, staleTime: 10 * 60_000 });
+  const content: DocsContent | null = c.data ?? null;
   const paperRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const toc = useMemo<TocEntry[]>(() => (tab === 'brd' ? brdToc(snap) : tab === 'sop' ? sopToc() : []), [tab, snap]);
+  const toc = useMemo<TocEntry[]>(
+    () => (!content ? [] : tab === 'brd' ? brdToc(content, snap) : tab === 'sop' ? sopToc(content) : []),
+    [tab, snap, content],
+  );
   const [active, setActive] = useState<string | null>(null);
 
   // Highlight the TOC entry whose heading is nearest the top of the page.
@@ -69,8 +77,7 @@ export function AdminDocsPage() {
   const title = tab === 'brd' ? 'The One — Business Requirements Document' : tab === 'sop' ? 'The One — Standard Operating Procedures' : 'The One — Work-order lifecycle';
 
   const onMarkdown = () => {
-    const md = tab === 'brd' ? brdMarkdown(snap) : tab === 'sop' ? sopMarkdown(snap) : lifecycleMarkdown(snap);
-    downloadText(`${name}-${stamp()}.md`, md);
+    void getDocsMarkdown(tab).then((r) => downloadText(`${name}-${stamp()}.md`, r.markdown));
   };
   const onWord = () => {
     const html = paperRef.current?.innerHTML ?? '';
@@ -93,7 +100,7 @@ export function AdminDocsPage() {
       subtitle={
         <>
           The living BRD, the SOP and the work-order lifecycle, generated from the registry beside the code and from this instance as it is right now.
-          {snap && <> {docsVersionLine(snap)}.</>}
+          {snap && content && <> {versionLine(content.reviewed_on, snap)}.</>}
         </>
       }
       actions={
@@ -125,6 +132,12 @@ export function AdminDocsPage() {
           <span>The live appendix could not be read ({errText(q.error, 'try again in a moment')}). The written sections are shown; the live tables are not.</span>
         </div>
       )}
+      {c.isError && (
+        <div className="callout docs-warn no-print" role="alert">
+          <Icon name="alert-circle" size={14} />
+          <span>The documents could not be read ({errText(c.error, 'try again in a moment')}).</span>
+        </div>
+      )}
       {q.isLoading && (
         <p className="docs-loading no-print">
           <Icon name="refresh" size={12} /> Reading the live instance…
@@ -146,17 +159,18 @@ export function AdminDocsPage() {
           </nav>
         )}
         <div className="docs-paper" ref={paperRef}>
-          {tab === 'brd' && <BrdDoc snap={snap} />}
-          {tab === 'sop' && <SopDoc snap={snap} />}
-          {tab === 'lifecycle' && (
+          {!content && c.isLoading && <p className="docs-loading no-print">Loading the documents…</p>}
+          {content && tab === 'brd' && <BrdDoc content={content} snap={snap} />}
+          {content && tab === 'sop' && <SopDoc content={content} snap={snap} />}
+          {content && tab === 'lifecycle' && (
             <article className="doc doc-lifecycle">
               <header className="doc-cover">
                 <p className="doc-kicker">Work-order lifecycle</p>
                 <h1>From the client&rsquo;s system to a paid invoice</h1>
                 <p className="doc-sub">Every status by phase, every move, every gate, and the processes that run beside the status line. Click a status for its card.</p>
-                <p className="doc-version">{docsVersionLine(snap)}</p>
+                <p className="doc-version">{versionLine(content.reviewed_on, snap)}</p>
               </header>
-              <LifecycleChart snap={snap} svgRef={svgRef} />
+              <LifecycleChart content={content} snap={snap} svgRef={svgRef} />
             </article>
           )}
         </div>

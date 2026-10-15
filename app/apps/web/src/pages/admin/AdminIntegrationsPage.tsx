@@ -12,7 +12,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { INTEGRATION_GROUPS, INTEGRATION_GROUP_LABELS, adminPermKey } from '@theone/shared';
+import { INTEGRATION_GROUPS, INTEGRATION_GROUP_LABELS, adminPermKey, integrationState } from '@theone/shared';
 import type { IntegrationStatus, IntegrationsResponse } from '@theone/shared';
 import { getIntegrations, setIntegrationEnabled } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
@@ -94,12 +94,10 @@ export function AdminIntegrationsPage() {
   );
 }
 
+// M15 (UAT Wave D): the chip says the CONNECTION state — On · set up,
+// On · not set up, Off — from integrationState in shared, not the switch alone.
 function stateOf(it: IntegrationStatus): { label: string; tone: 'ok' | 'warn' | 'off' | 'muted' } {
-  if (it.locked_off) return { label: 'Not connected yet', tone: 'muted' };
-  if (!it.enabled) return { label: 'Off', tone: 'off' };
-  if (!it.built) return { label: 'Connector not built yet', tone: 'muted' };
-  if (it.configured) return { label: 'Connected', tone: 'ok' };
-  return { label: 'On · not set up on the server', tone: 'warn' };
+  return integrationState(it);
 }
 
 const changedText = (iso: string) =>

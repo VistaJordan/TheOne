@@ -130,7 +130,8 @@ approval and payment approve / pay call it first and get a **409 `CONFLICT`**
 while an `nte_override` task is open; rejecting is never blocked. The
 `Quote` payload and each `/api/payments` row carry `nte_override_open` so the
 builder and the Payments tab draw the verb locked before the click. The
-`/approvals` page is a sectioned inbox — All · NTE increases · (Money
+`/approvals` page is a sectioned inbox — All · NTE override (cost over NTE) ·
+NTE increase requests (0064's manual asks, Wave D M25) · (Money
 holds, 0083) · (Manager reviews) · Quotes (`pending_approval`) · Payments
 (`requested`) — built
 client-side from `/approvals`, `/quotes` and `/payments`; open rows sort
@@ -184,8 +185,8 @@ ingest (signed by the `Ecotrak sync` service principal, `services/
 serviceActors.ts`) and the CSV import (after its automations ran, so an
 auto-assign on create needs no acceptance); a row that already has an
 assignee is skipped. Accept = `POST /approval-tasks/:id/approve` with
-`assignee` (a human principal's display name, required, checked against
-`principal`); the decision commits, then the name is written through
+`assignee` (an active DISPATCHER's display name since UAT Wave D, required,
+checked by `assertDispatchers`); the decision commits, then the name is written through
 `updateWorkOrderFields` so it is audited as the manager's edit and the 0032
 scope puts the work order in that dispatcher's list (7.1.4). Reject needs the
 reason and, after the commit, calls `changeStatus` to `Cancelled / Postponed`
@@ -443,7 +444,8 @@ creation path (until now only the CSV import and the Ecotrak ingest created
 rows). A draft is a `wo_intake_draft` row, **not a task**: nothing that
 lists work orders knows it exists, so no query changed. Vocabulary in
 `packages/shared/src/intakeDrafts.ts` (`INTAKE_FORM_FIELDS` = WO# + the 13
-fields of 11.1.1 + optional Client; `intakeDraftMissing` reuses
+fields of 11.1.1 + the Client, required since UAT Wave D (#22, a client
+record's name); `intakeDraftMissing` reuses
 `intakeMissing`; `intakeDraftReady` adds the assignee), rows and the
 submit in `apps/api/src/services/intake.ts`, routes under `/api/intake/
 drafts`. **Submit** (`submitIntakeDraft`) refuses with a 409
@@ -550,7 +552,8 @@ and 11.3.4). Every upload lands `attachment.review_status = 'pending'` and is
 declined file only to a reviewer (`work_orders/attachments` **approve**) and
 to the person who uploaded it — to anyone else it answers like a missing
 file. `POST /work-orders/:id/attachments/:attId/review {decision, kind?,
-file_name?}` approves or declines ONE file (1.3.4); approving needs a `kind`
+file_name?, viewed}` approves or declines ONE file (1.3.4; `viewed: true`
+comes from the full-size viewer, Wave D M14); approving needs a `kind`
 (`before | after | signoff | other`) and may rename the file (1.3.3), and a
 decision can be reversed by deciding again. Logged `attachment_approved|
 declined`. The Photos card draws a "Waiting for approval" list on top with
@@ -615,6 +618,8 @@ everything past it is a record.
 cards: hourly / overtime / double-time / trip charge / markup on parts, for a
 client (or all), an entity (or all), some sites and trades (or all), between
 two dates. `contractForTask(taskId)` picks the most specific card in force
+on the day the work order was RECEIVED, at the rates version in force then
+(`contract_rate_version`, UAT Wave D M30)
 (`pickContract` + `resolveRates` in `packages/shared/src/contracts.ts`, pure
 and tested). Two readers: **the quote builder** snapshots `quote.contract_id`
 + `quote.ot_multiplier` (overtime ÷ standard, else the house ×1.5) when a
@@ -1996,7 +2001,8 @@ and a super admin's Role / Disable controls with the API's sentence.
 **Receivables is
 gated and honest** (`App.tsx`, `pages/ReceivablesPage.tsx`,
 `lib/receivables.ts`, `tests/receivables-no-fake.test.ts`): `/receivables`
-needs `invoicing` view (`RequireCan`), the Audit tab carries a prototype
+needs `invoicing` view (`RequireCan`), the Audit tab (hidden since UAT Wave D,
+M23) carries a prototype
 banner, every fact is read from the list payload (Assignee, CICO status, BFI
 through `columns=`, the quote through `/quotes`) or drawn as "not tracked
 yet" and never counted as a finding, and the three list windows are the
@@ -2260,6 +2266,95 @@ no migration, seed or code creates a check-in automation — `moveOnSite` is
 the one source; the two on the UAT database are an ops item (spec's
 checklist). New error codes: `CANCEL_BILLED`, `CLIENT_APPROVAL_EVIDENCE`.
 
+**UAT round 1, Wave D — data quality and UI** (migration 0086,
+`docs/specs/uat-round-1.md`, `packages/shared/src/dataQuality.ts` (pure),
+`apps/api/src/services/dataRules.ts` (the database half),
+`tests/uat-wave-d.test.ts`). **#11 — one client list:** 0086 (and `seed.ts`
+after it writes its work orders — keep in step) gives every client named on a
+work order, a site or a PM schedule a `client` record (`lower(btrim(name))`,
+the 0062 join), and the Ecotrak ingest calls `adoptClientsFromRecords` after
+its commits (our database only). The Client on a work order is now the name
+of an ACTIVE client record, matched case-insensitively and stored in the
+record's spelling (`canonicalClient` / `checkFieldValue`, 400
+`CLIENT_NOT_ON_FILE`): the field editor, bulk edit (bag key and the core
+`client` column), Add work order and a draft's Submit (`validateBagValues` in
+`woFieldValues.ts`), PM schedules; the CSV import refuses the whole file
+naming the rows and clients (400 `IMPORT_UNKNOWN_CLIENT`, it never creates a
+client). The `fields.Client` catalogue options and the Add work order form's
+Client dropdown read the client records. **#22 / M22 — dispatchers:** a draft
+needs its Client (`INTAKE_DRAFT_EXTRA_REQUIRED`; 11.1.1 itself is unchanged);
+a name ADDED to the Assignee seat (`addedAssignees`) by a person is an active
+human whose role `isDispatcherRole` (`assertDispatchers`, 400
+`ASSIGNEE_NOT_DISPATCHER`) — field editor, bulk edit, Add work order, a
+draft's Submit, Accept, the Assignment Manager, a PM schedule's save. A
+rule's own write (`auto`) and the PM raise (`opts.system`, the schedule was
+checked when saved) are not asked. `/principals/availability`, the
+`fields.Assignee` options and the Add work order / draft / Accept pickers list
+dispatchers only. **M2 — values fit their field:** `checkFieldValue` on every
+written custom value (money not negative, a dropdown one of its options in the
+option's spelling, a State a US code upper-cased, no date before 2000) and
+`assertDateOrder` (Received on ≤ Due date, asked only when the patch touches
+one of them, against the bag as the save leaves it, under the row lock); a new
+WO # is 3–40 letters, digits or dashes (`woNumberProblem`, Add work order and
+a draft's Submit). 400 with `details.code = VALIDATION` and `details.field`.
+Stored values are never re-checked. **M10:** `raiseNext` refuses (409
+`PM_ALREADY_RAISED`) while an occurrence on or after today already has its
+work order — `next_due_on` is "the date after the last one claimed", which is
+why every press used to raise another future date. **M11:** "No visit
+logged" counts open / active / pending work outside Invoiced Not Paid and the
+three Sched statuses (`NO_VISIT_*`). **M14:** Approve / Decline live only in
+`PhotoReviewViewer` (full size, ← / → step, Esc closes); the review POST
+needs `viewed: true` (400 `ATTACHMENT_NOT_VIEWED`); the uploader may approve
+their own photo (no D2 on photos); approved photos show on the Client invoice
+card (`ApprovedPhotosStrip`). **M15:** `integrationState` — On · set up /
+On · not set up / Off. **M16:** Settings › Access reads `config.signIn`
+(`enrolmentSentence`). **M17:** Restore from Trash needs `work_orders` delete
+or `admin/trash` edit (`mayRestoreFromTrash`, 403
+`TRASH_RESTORE_FORBIDDEN`); the empty-state copy no longer says there is no
+delete. **M21:** the header draws Cost only with the Cost field's view, the
+Comp chip with Comp's, the Ecotrak chip for direct status movers, the
+SharePoint chip for attachment creators. **M23:** Receivables opens on
+Invoicing; the Audit tab is hidden (`AUDIT_TAB_ENABLED = false`) and the
+per-person "Elise" tick column is gone. **M25:** Approvals has "NTE override
+(cost over NTE)" (the 1.5.2 task) and "NTE increase requests" (the 0064
+`wo_nte_request` asks across work orders, `GET /api/nte-requests`, scoped by
+`woScopeSql`, `approvals/nte` view; decided through the work order's own
+route). **M26:** Generate sheet needs `work_orders/fields/cico` edit only
+and shows disabled with the reason when storage or the Comp layout is
+missing. **M27:** the printed quote has no Markup column; its unit price is
+the marked-up one. **M30:** `contract_rate_version` (0086, backfilled with
+each card's rates at `-infinity`; an edit that changes the rates adds one at
+now()); `contractForTask` picks the card in force on the work order's
+received day (else its created day, Chicago) and reads the rates version in
+force then, so invoice prefill, completion proposals and the AI draft never
+re-price old work; `getQuote` reads the quote's snapshotted `contract_id`.
+**M32:** `contractsOverlap` — two active cards with the same party / vendor,
+client, entity, the same specificity of trades and sites sharing a value, and
+overlapping dates — 409 `CONTRACT_OVERLAP` on create and edit. **#9:**
+`quoteTotalTerms` lists incurred + the priced option + sales tax at its % +
+line tax (RULE B: the included options + line tax) under the rail and on the
+Client quote card, so the visible terms add to the Grand Total (formula
+unchanged, D7). **L1:** `reportedSentence` drops the "Tech reported that"
+prefix when the narrative already says who reported it. **L2:** Admin › Audit
+times are America/New_York, labelled ET (`auditTimeET`); the CSV has Time
+(ET) before Time (UTC). **L3:** `HISTORY_FIELD_KEYS` (Previous Assignees) is
+refused for everyone by the field editor, bulk edit and the create paths, and
+drawn read-only. **L4:** the locked admin page names the super admins from
+`GET /principals/super-admins`; the docs registry no longer lists them. **L5:**
+the BRD / SOP / lifecycle registry is served by `GET /admin/docs/content`
+(and `/admin/docs/markdown?doc=`) behind `admin/docs` view; the components
+take it as a `content` prop, `AdminDocsPage` is `React.lazy`, and
+`packages/shared/package.json` declares `"sideEffects": false` so Rollup
+drops the registry modules from the main chunk (the test greps a built
+`dist/` when one exists). **L6:** the quote acts read Approve · Send to
+client · Record client decision (— approved / — declined). **Margin:** the
+list's `margin_pct` is the record's own figure (`recordMarginPct`: invoices
+sent, else the quote, over Cost / bills / payment requests), computed for the
+page's rows; ORDER BY still sorts on `MARGIN_PCT_SQL`. New error codes:
+`CLIENT_NOT_ON_FILE`, `IMPORT_UNKNOWN_CLIENT`, `ASSIGNEE_NOT_DISPATCHER`,
+`PM_ALREADY_RAISED`, `ATTACHMENT_NOT_VIEWED`, `TRASH_RESTORE_FORBIDDEN`,
+`CONTRACT_OVERLAP`.
+
 ## Verify
 
 ```
@@ -2276,7 +2371,7 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   runs it and `npm test` on every push; it is green only because
   `tests/setup.ts` sets the environment and `config.ts` skips `app/.env` under
   `VITEST`, so never let a test depend on a developer's `.env`.
-- The vitest suite under `app/tests/` (63 files, 1076 tests on 2026-10-15) is
+- The vitest suite under `app/tests/` (64 files, 1120 tests on 2026-10-15) is
   the regression net: pure functions and source-text pins, no database and no
   network, so a SQL change still needs a seeded local Postgres, curl and
   headless Chromium screenshots of both themes before it is believed.
@@ -2310,7 +2405,8 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   the VR - CRM parity items still open are listed at the end of its paragraphs
   above. Invoicing is live since 0045 (Receivables › Invoicing); vendor bills
   since 0047 (Payments › Vendor bills). Receivables › Audit is a browser-side
-  prototype (W2-1) and says so on the page.
+  prototype (W2-1); since UAT Wave D (M23) it is hidden and Receivables opens
+  on Invoicing.
 - React Router prints v7 future-flag warnings in the console; harmless.
 - `public/brand/logo-the-one-2.png` is an unused leftover of the previous
   logo (committed for safekeeping, referenced nowhere) — safe to delete.

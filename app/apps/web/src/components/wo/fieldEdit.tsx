@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { COMPUTED_KEYS, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
+import { COMPUTED_KEYS, HISTORY_FIELD_KEYS, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
 import {
   ApiRequestError,
   getWoFields,
@@ -31,7 +31,8 @@ const isUrlValue = (s: string) => /^https?:\/\//i.test(s);
 
 /** Catalogue keys the API derives (visit mirrors, Quote Due Date). */
 // 0083 (#10): Total Invoiced comes from the invoice — never typed (SYSTEM_MONEY_KEYS).
-const API_OWNED = new Set([...VISIT_OWNED_KEYS, ...COMPUTED_KEYS, ...SYSTEM_MONEY_KEYS].map((k) => `fields.${k}`));
+// L3 (Wave D): history fields (Previous Assignees) are the system's — read-only for everyone.
+const API_OWNED = new Set([...VISIT_OWNED_KEYS, ...COMPUTED_KEYS, ...SYSTEM_MONEY_KEYS, ...HISTORY_FIELD_KEYS].map((k) => `fields.${k}`));
 
 /** Read-only rendering of one value, typed by its descriptor. */
 export function displayValue(f: WoFieldDescriptor, raw: unknown): ReactNode {

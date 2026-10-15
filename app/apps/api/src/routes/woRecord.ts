@@ -35,6 +35,7 @@ import {
   clearWoCompletion,
   completeWoService,
   decideNteIncrease,
+  listOpenNteRequests,
   getWoRecord,
   listSiteEvents,
   listWoCodes,
@@ -147,6 +148,9 @@ export default async function woRecordRoutes(app: FastifyInstance): Promise<void
     const { tagId } = parse(z.object({ tagId: z.string().min(1).max(64) }).passthrough(), req.params);
     return removeWoTag(taskId, tagId, actor);
   });
+
+  // M25 (UAT Wave D): the open requests across work orders, for Approvals.
+  app.get('/nte-requests', async (req) => ({ items: await listOpenNteRequests(actingPrincipalFromRequest(req)) }));
 
   app.post('/work-orders/:id/nte-requests', async (req) => {
     const { taskId, actor } = await task(req);

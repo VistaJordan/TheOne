@@ -11,7 +11,9 @@
 
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
-import { adminPermKey } from '@theone/shared';
+import { adminPermKey, superAdminAskSentence } from '@theone/shared';
+import { useQuery } from '@tanstack/react-query';
+import { getSuperAdminNames } from '../../api/client';
 import { AppShell } from '../../components/AppShell';
 import { Icon } from '../../components/Icon';
 import type { IconName } from '../../components/Icon';
@@ -40,17 +42,20 @@ export function AdminShell({ title, subtitle, actions, children }: AdminShellPro
   const { actingAs, can } = useAuth();
   const { pathname } = useLocation();
   const section = adminSectionOf(pathname);
+  const locked = !actingAs || !can(adminPermKey(section), 'view');
+  const superAdmins = useQuery({ queryKey: ['super-admin-names'], queryFn: getSuperAdminNames, enabled: locked, retry: 0, staleTime: 5 * 60_000 });
 
   // Locked-with-a-reason rather than a 404: a dispatcher who lands here from a
   // shared link should learn what this is and who to ask, not meet a dead end
   // (quotes-payments.md §3.5).
-  if (!actingAs || !can(adminPermKey(section), 'view')) {
+  if (locked) {
     return (
       <AppShell active="Admin">
         <div className="wo-state">
           <Icon name="lock" size={22} />
           <b>This part of the admin console is not available to you</b>
-          <span>Ask a super admin — Elise, Jordan, Jeff or Jack — if you need access.</span>
+          {/* L4 (UAT Wave D): the names come from the database, not the code. */}
+          <span>{superAdminAskSentence(superAdmins.data?.names ?? [])}</span>
         </div>
       </AppShell>
     );

@@ -9,7 +9,7 @@ import type { WoPdfKind, WoPdfLayoutInput, WoPdfLayoutsResponse } from '@theone/
 // 0074: Admin › Integrations.
 import type { ClickUpOverview, EcotrakOverview, IntegrationsResponse } from '@theone/shared';
 // 0075: Admin › Documentation.
-import type { DocsSnapshot } from '@theone/shared';
+import type { DocsContent, DocsMarkdownKind, DocsSnapshot } from '@theone/shared';
 import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
 // Who is free to take a work order (the Assignee pickers' availability view).
 import type { AssigneeAvailabilityResponse } from '@theone/shared';
@@ -1564,6 +1564,10 @@ export interface AdminSettings {
     redirect_uri: string | null;
     session_ttl_hours: number;
     invite_only: true;
+    /** M16 (UAT Wave D): the real sign-in policy. */
+    allowed_domains?: string[];
+    auto_enrol_role?: string;
+    auto_enrol_role_label?: string;
   };
   server: { node_env: string; web_origin: string; api_port: number; cookie_secure: boolean };
   database: { engine: string; migrations_applied: number; latest_migration: string | null };
@@ -2279,8 +2283,23 @@ export function retryClickUpTask(taskId: string): Promise<ClickUpOverview> {
 
 // ── Admin › Documentation (0075) ─────────────────────────────────────────────
 
+/** L4 (UAT Wave D): the active super admins, by name, for "who to ask". */
+export function getSuperAdminNames(): Promise<{ names: string[] }> {
+  return request('/principals/super-admins');
+}
+
 export function getDocsSnapshot(): Promise<DocsSnapshot> {
   return request('/admin/docs/snapshot');
+}
+
+/** L5 (UAT Wave D): the BRD / SOP / lifecycle registry, served behind
+    `admin/docs` view instead of riding in the bundle. */
+export function getDocsContent(): Promise<DocsContent> {
+  return request('/admin/docs/content');
+}
+
+export function getDocsMarkdown(doc: DocsMarkdownKind): Promise<{ markdown: string }> {
+  return request(`/admin/docs/markdown?doc=${doc}`);
 }
 
 // ── Sign-off sheets (0070) ───────────────────────────────────────────────────
@@ -3412,6 +3431,21 @@ export const removeWoChecklist = (woRef: string, itemId: string) => post<WoRecor
 export const addWoTag = (woRef: string, tag: string, reason?: string | null) => post<WoRecord>(recordPath(woRef, '/tags'), { tag, reason: reason ?? null });
 export const removeWoTag = (woRef: string, tagId: string) => post<WoRecord>(recordPath(woRef, `/tags/${encodeURIComponent(tagId)}`), undefined, 'DELETE');
 export const requestNteIncrease = (woRef: string, requestedNte: number, reason: string) => post<WoRecord>(recordPath(woRef, '/nte-requests'), { requested_nte: requestedNte, reason });
+/** M25 (UAT Wave D): the open manual NTE increase requests across work orders. */
+export interface NteRequestRow {
+  id: string;
+  task_id: string;
+  wo_number: string;
+  client: string | null;
+  trade: string | null;
+  current_nte: number | null;
+  requested_nte: number;
+  reason: string;
+  requested_by: { id: string; name: string } | null;
+  created_at: string;
+  can_decide: boolean;
+}
+export const listNteRequests = (): Promise<{ items: NteRequestRow[] }> => request('/nte-requests');
 export const decideNteIncrease = (woRef: string, requestId: string, decision: 'approve' | 'reject' | 'withdraw', note?: string | null) =>
   post<WoRecord>(recordPath(woRef, `/nte-requests/${encodeURIComponent(requestId)}`), { decision, note: note ?? null });
 export const locateVisit = (woRef: string, visitId: string, at: { lat: number; lng: number } | null) =>

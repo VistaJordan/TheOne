@@ -2,7 +2,8 @@
  *
  * What the client is sent: the entity's name and the document type at the
  * top, the number, the date, bill-to and ship-to, the incurred work and the
- * included options as line tables with UOM / unit price / markup / tax, the
+ * included options as line tables with UOM / unit price (marked up — the
+ * Markup column is not printed for the client, M27) / tax, the
  * totals, the client summary text and the note to customer. Internal
  * things — specs, cost, profit, the NTE meter — are deliberately absent.
  *
@@ -216,7 +217,11 @@ export function QuotePrintPage() {
 
 function LinesBlock({ section, heading, note }: { section: QuoteSection; heading: string; note?: string }) {
   const anyTax = section.lines.some((l) => l.tax > 0);
-  const anyMarkup = section.lines.some((l) => l.markup_pct > 0);
+  // M27 (UAT Wave D): the markup is ours, not the client's — the printed
+  // quote has no Markup column; the unit price is the marked-up price, so
+  // qty × unit price still reads as the amount (before overtime).
+  const clientUnit = (l: { rate: number; markup_pct: number }) =>
+    Math.round(l.rate * (1 + (l.markup_pct > 0 ? l.markup_pct / 100 : 0)) * 100) / 100;
   return (
     <section className="qdoc-lines">
       <h3>
@@ -238,7 +243,6 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
             <th className="num">Qty</th>
             <th>UOM</th>
             <th className="num">Unit price</th>
-            {anyMarkup && <th className="num">Markup</th>}
             {anyTax && <th className="num">Tax</th>}
             <th className="num">Amount</th>
           </tr>
@@ -252,8 +256,7 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
               </td>
               <td className="num">{l.qty}</td>
               <td>{l.uom ?? ''}</td>
-              <td className="num">{usd(l.rate)}</td>
-              {anyMarkup && <td className="num">{l.markup_pct > 0 ? `${l.markup_pct}%` : ''}</td>}
+              <td className="num">{usd(clientUnit(l))}</td>
               {anyTax && <td className="num">{l.tax > 0 ? usd(l.tax) : ''}</td>}
               <td className="num">{usd(l.amount)}</td>
             </tr>
@@ -261,7 +264,7 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
         </tbody>
         <tfoot>
           <tr>
-            <th colSpan={anyMarkup && anyTax ? 6 : anyMarkup || anyTax ? 5 : 4}>Subtotal</th>
+            <th colSpan={anyTax ? 5 : 4}>Subtotal</th>
             <td className="num">{usd(section.subtotal)}</td>
           </tr>
         </tfoot>

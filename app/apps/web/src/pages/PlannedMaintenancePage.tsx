@@ -32,6 +32,7 @@ import {
   updatePmSchedule,
 } from '../api/client';
 import { getJobPlans } from '../api/client';
+import { useWoCatalogue } from '../components/wo/fieldEdit';
 import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
@@ -290,6 +291,8 @@ function ScheduleDialog({
 }) {
   const [name, setName] = useState(schedule?.name ?? '');
   const [client, setClient] = useState(schedule?.client ?? '');
+  const catalogue = useWoCatalogue();
+  const clientOptions = (catalogue.get('fields.Client')?.options ?? []).map((o) => o.value);
   const [entity, setEntity] = useState(schedule?.billing_entity ?? '');
   const [store, setStore] = useState(schedule?.store ?? '');
   const [siteName, setSiteName] = useState(schedule?.site_name ?? '');
@@ -371,7 +374,16 @@ function ScheduleDialog({
             </div>
             <div className="field">
               <label className="lbl" htmlFor="pm-client">Client</label>
-              <input id="pm-client" className="fld" value={client} onChange={(e) => setClient(e.target.value)} />
+              {/* #11 (Wave D): a client record, never free text. */}
+              <select id="pm-client" className="fld" value={client} onChange={(e) => setClient(e.target.value)}>
+                <option value="">—</option>
+                {client && !clientOptions.includes(client) && <option value={client}>{client} (not on file)</option>}
+                {clientOptions.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <label className="lbl" htmlFor="pm-entity">Billing entity</label>

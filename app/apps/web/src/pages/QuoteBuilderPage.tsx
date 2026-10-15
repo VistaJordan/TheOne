@@ -68,6 +68,13 @@ type DecisionSheet =
   | { kind: 'decline'; sectionKey: string | null }
   | null;
 
+
+// L6 (UAT Wave D): one label set for the three quote acts — Approve (the
+// internal yes), Send to client, Record client decision (approved / declined).
+const CLIENT_DECISION_LABEL = 'Record client decision';
+const CLIENT_DECISION_APPROVED = 'Record client decision — approved';
+const CLIENT_DECISION_DECLINED = 'Record client decision — declined';
+
 export function QuoteBuilderPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
   const navigate = useNavigate();
@@ -504,9 +511,9 @@ export function QuoteBuilderPage() {
 
   const decisionButton = (sectionKey: string | null, compact: boolean) =>
     !allows('quote.client_decide')
-      ? lockedButton('Client chose this', blockedReason('quote.client_decide') ?? '', `lockDecide-${sectionKey}`, 'sm')
+      ? lockedButton(CLIENT_DECISION_APPROVED, blockedReason('quote.client_decide') ?? '', `lockDecide-${sectionKey}`, 'sm')
       : nteHold
-        ? lockedButton('Client chose this', NTE_HOLD_TIP, `lockDecide-${sectionKey}`, 'sm')
+        ? lockedButton(CLIENT_DECISION_APPROVED, NTE_HOLD_TIP, `lockDecide-${sectionKey}`, 'sm')
       : canClientDecide
         ? (
           <button
@@ -520,10 +527,10 @@ export function QuoteBuilderPage() {
             }}
           >
             <Icon name="check" size={14} />
-            Client chose this
+            {CLIENT_DECISION_APPROVED}
           </button>
         )
-        : lockedButton('Client chose this', 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', `lockDecide-${sectionKey}`, 'sm');
+        : lockedButton(CLIENT_DECISION_APPROVED, 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', `lockDecide-${sectionKey}`, 'sm');
 
   return shell(
     <>
@@ -651,10 +658,10 @@ export function QuoteBuilderPage() {
                     }}
                   >
                     <Icon name="x" size={14} />
-                    Client declined
+                    {CLIENT_DECISION_DECLINED}
                   </button>
                 ) : (
-                  lockedButton('Client declined', blockedReason('quote.client_decide') ?? 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', 'lockTipDecline')
+                  lockedButton(CLIENT_DECISION_DECLINED, blockedReason('quote.client_decide') ?? 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', 'lockTipDecline')
                 )}
                 {options.length === 1 && decisionButton(options[0].s.key, false)}
                 {options.length > 1 && (
@@ -779,7 +786,7 @@ export function QuoteBuilderPage() {
           <div className="callout" style={{ marginTop: 12, flexDirection: 'column', alignItems: 'stretch' }}>
             <div className="field">
               <span className="lbl">
-                {decision.kind === 'approve' ? 'Record the client’s approval' : 'Record the client’s decline'}
+                {decision.kind === 'approve' ? CLIENT_DECISION_APPROVED : CLIENT_DECISION_DECLINED}
               </span>
               {options.length > 1 && (
                 <div className="radio-list" role="radiogroup" aria-label="Which option">
@@ -869,7 +876,7 @@ export function QuoteBuilderPage() {
                 }}
               >
                 <Icon name={decision.kind === 'approve' ? 'check' : 'x'} size={14} />
-                {decision.kind === 'approve' ? 'Record approval' : 'Record decline'}
+                {CLIENT_DECISION_LABEL}
               </button>
             </div>
           </div>

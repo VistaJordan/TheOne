@@ -1019,6 +1019,9 @@ export async function assignWorkOrders(ids: string[], principalId: string | null
     const who = await query<{ name: string }>(`SELECT display_name AS name FROM principal WHERE id = $1 AND kind = 'human' AND status <> 'disabled'`, [principalId]);
     if (!who.rows[0]) throw badRequest('That person does not exist', { field: 'principal_id' });
     name = who.rows[0].name;
+    // Wave D (M22, D3): the Assignment Manager hands work to dispatchers only.
+    const { assertDispatchers } = await import('./dataRules.js');
+    await assertDispatchers([name], 'principal_id');
   }
   const { updateWorkOrderFields } = await import('./woFieldValues.js');
   const numbers = await query<{ id: string; wo_number: string }>(`SELECT id::text AS id, wo_number FROM task WHERE id = ANY($1::uuid[])`, [list]);

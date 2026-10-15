@@ -10,6 +10,7 @@
 //
 // Read-only on purpose: the log is append-only, and this module never writes.
 
+import { auditTimestampET } from '@theone/shared';
 import { query } from '../db.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { toCsv } from './woBulk.js';
@@ -229,11 +230,13 @@ export async function exportAuditCsv(
 ): Promise<{ csv: string; rows: number }> {
   const page = await listAuditLog({ ...f, limit: AUDIT_EXPORT_CAP, offset: 0 }, allow);
   const csv = toCsv(
-    ['Time (UTC)', 'User', 'Action', 'Entity', 'Name', 'WO #', 'Ext ref', 'Field', 'From', 'To'],
+    // L2 (UAT Wave D): Eastern time, labelled; the UTC instant stays beside it.
+    ['Time (ET)', 'Time (UTC)', 'User', 'Action', 'Entity', 'Name', 'WO #', 'Ext ref', 'Field', 'From', 'To'],
     page.items.map((e) => {
       const admin = e.entity_type !== 'task';
       const diff = admin ? snapshotDiff(e.before, e.after) : null;
       return [
+        auditTimestampET(e.created_at),
         e.created_at,
         e.actor.display_name,
         e.action,

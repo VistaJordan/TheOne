@@ -31,6 +31,7 @@ import {
   type IntakeDraftInput,
   type IntakeFormField,
   type WoFieldDescriptor,
+  isDispatcherRole,
 } from '@theone/shared';
 import {
   ApiRequestError,
@@ -401,7 +402,8 @@ function DraftForm({ id }: { id: string }) {
   }
 
   const v = values ?? valuesOf(draft, catalogue);
-  const humans = (people.data?.items ?? []).filter((p) => p.kind === 'human');
+  // #22 (Wave D, D3): the draft goes to a dispatcher — nobody else is offered.
+  const humans = (people.data?.items ?? []).filter((p) => p.kind === 'human' && isDispatcherRole(p.role));
   const assigneeOptions =
     v.assignee && !humans.some((p) => p.name === v.assignee) ? [{ id: 'current', name: v.assignee }, ...humans] : humans;
 

@@ -48,6 +48,7 @@ import {
   quoteOverNte,
   selfApprovalMessage,
   selfApprovalVerdict,
+  reportedSentence,
 } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -383,7 +384,7 @@ export function buildAutoSummary(
       out.push(
         ...wrap(
           section.kind === 'incurred'
-            ? `Tech reported that ${section.narrative_reported}`
+            ? reportedSentence(section.narrative_reported) // L1 (Wave D): never "Tech reported that Tech found…"
             : section.narrative_reported,
           SUMMARY_WIDTH,
         ),
@@ -880,7 +881,9 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
 
   // 0048 · the multiplier the quote was priced with. A quote raised before
   // the contract existed (ot_multiplier NULL) keeps computing what it did.
-  const match = await contractForTask(taskId);
+  // M30 (Wave D): the rates shown are the SNAPSHOTTED card's (quote.contract_id),
+  // as they stood when the work order was received — never today's pick.
+  const match = await contractForTask(taskId, { contractId: q.contract_id });
   const otMultiplier =
     q.ot_multiplier !== null && q.ot_multiplier > 0
       ? Number(q.ot_multiplier)

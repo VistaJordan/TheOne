@@ -11,7 +11,7 @@ Lanes on the Quotes page: **All**, **Drafts**, **Pending approval**, **Approved*
 - Send it for approval (needs \`quotes\` edit): fix anything the red chip flags, then click **Submit for approval**.
 - Approve (needs \`quotes\` approve): in the builder **Approve**; on the Quotes list **Approve**; in Approvals › **Quotes**, **Approve** then **Approve quote**. Approving is the internal yes only — nothing goes to the client.
 - Send to the client (needs \`quotes\` approve, the quote approved): in the builder **Send to client**. This posts the client-visible "Quote … sent to the client for approval" message and moves the work order to Waiting for Approval (when that status exists and the work order is not further along).
-- Record the client's decision: in the builder, approve the option the client chose (**Record approval** needs a note saying how they approved, or a file on the work order picked under **Client’s approval on file**) or **Record decline** with their reason. Approval moves the work order to Approved; a decline moves it back to Waiting for Quote.
+- Record the client's decision: in the builder, on the option the client chose click **Record client decision — approved** (it needs a note saying how they approved, or a file on the work order picked under **Client’s approval on file**), or **Record client decision — declined** with their reason; confirm with **Record client decision**. The three quote acts are always **Approve** (the internal yes), **Send to client**, **Record client decision**. Approval moves the work order to Approved; a decline moves it back to Waiting for Quote.
 - Send back (needs \`quotes\` approve): **Reject with note** in the builder, or **Decline** on the list; a note is required, and the quote returns to draft.
 - Print: **Print / PDF**, then save as PDF from the print dialog.
 Rule: approving and sending are locked while an NTE increase is open on the work order ("On hold — decide the NTE override under Approvals first"). Rejecting is never locked.
@@ -55,7 +55,7 @@ Rules: a purchase order never changes a work order's Cost. Going over a budget o
 
 ### Approvals (sidebar: Approvals)
 
-Sections: **All**, **NTE increases**, **Status changes**, **Manager reviews**, **Quotes**, **Payments**. Lanes: **For me**, **Open**, **Done**, **My requests**. Needs \`approvals\` view; deciding in a section needs that section's approve (\`approvals/nte\`, \`approvals/status\`, \`approvals/reviews\`), and a quote or a payment also needs \`quotes\` approve or \`payments\` approve.
+Sections: **All**, **NTE override (cost over NTE)** (the cost passed the NTE, rule 1.5.2), **NTE increase requests** (somebody asked for a higher NTE with Increase NTE), **Status changes**, **Manager reviews**, **Quotes**, **Payments**. Lanes: **For me**, **Open**, **Done**, **My requests**. Needs \`approvals\` view; deciding in a section needs that section's approve (\`approvals/nte\`, \`approvals/status\`, \`approvals/reviews\`), and a quote or a payment also needs \`quotes\` approve or \`payments\` approve.
 
 - Decide: on the row click **Approve** (optional **Note**), or **Reject**, say why, **Reject with note**. **Claim** takes a task for yourself. Open rows are oldest first, and each is decided on its own.
 - Your own requests: under **My requests**, **Withdraw** cancels one that is still open; after a decision click **Continue** (approved) or **Understood** (rejected) to clear it.

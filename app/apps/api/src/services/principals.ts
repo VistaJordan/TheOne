@@ -3,7 +3,7 @@
 // identities, never something a person can "view as".
 
 import { query } from '../db.js';
-import { isDispatcherRole, type AssigneeAvailabilityResponse, type AvailabilityPerson, type PrincipalListItem } from '@theone/shared';
+import { DISPATCHER_ROLE_CODES, isDispatcherRole, type AssigneeAvailabilityResponse, type AvailabilityPerson, type PrincipalListItem } from '@theone/shared';
 import { ASSIGNEE_SQL, OPEN_SQL } from './maintenance.js';
 
 interface PrincipalRow {
@@ -73,8 +73,10 @@ export async function assigneeAvailability(clientRaw: string | null | undefined)
          FROM principal p
          LEFT JOIN role r ON r.code = p.role
         WHERE p.kind = 'human' AND p.status <> 'disabled'
+          -- M22 (Wave D, D3): only dispatchers can be picked, so only they are listed.
+          AND p.role = ANY($2::text[])
         ORDER BY lower(p.display_name)`,
-      [client],
+      [client, [...DISPATCHER_ROLE_CODES]],
     ),
     query<AvailabilityLoadRow>(
       `SELECT lower(btrim(asg.n)) AS who, st.name AS status_name, st.status_group::text AS status_group,

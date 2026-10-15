@@ -7,7 +7,9 @@ import {
   PARTS_REQUIRED_KEY,
   VISIT_MIRROR_KEYS,
   ecotrakStatusLabel,
+  fieldPermKey,
 } from '@theone/shared';
+import { useAuth } from '../../auth/AuthProvider';
 import type { ObligationSummary, Phase, WorkOrderDetailV2 } from '../../api/client';
 import { listAttachments } from '../../api/client';
 import { DASH, FIELD, dateVal, daysSince, field, isCostOverNte, isEmergency, isEscalated, money, numericDate, str } from '../../lib/fields';
@@ -98,6 +100,16 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
   // the whole block red once it passes the NTE.
   const m = resolveMoney(wo);
   const overNte = isCostOverNte(m.cost, m.nte);
+  // M21 (UAT Wave D): fewer chips, each drawn only for someone who may see
+  // what it shows — the Cost beside the NTE needs the Cost field's view (the
+  // money roles), the Comp chip the Comp field's, the Ecotrak chip a direct
+  // status mover (request-mode dispatchers see it on their request instead),
+  // the SharePoint chip someone who files to it.
+  const { can } = useAuth();
+  const seesCost = can(fieldPermKey(`fields.${FINAL_COST_KEY}`), 'view');
+  const seesComp = can(fieldPermKey('fields.21. Comp'), 'view');
+  const movesStatus = can('work_orders/status', 'edit');
+  const filesToSharePoint = can('work_orders/attachments', 'create');
   // Rule 2.5.1: the Emergency flag reads red here as in every other view.
   const emergency = isEmergency(f);
   // Rules 7.3.1 / 7.3.3: the Escalated flag reads amber here and everywhere.
@@ -150,7 +162,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
         }
       >
         <WorthCell label="Client NTE" value={m.nte} />
-        <WorthCell label="Cost" value={m.cost} />
+        {seesCost && <WorthCell label="Cost" value={m.cost} />}
       </span>
     </>
   );
@@ -273,10 +285,10 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               {meta.trade}
             </span>
           )}
-          {meta.billingEntity && <span className="chip chip-accent">{meta.billingEntity}</span>}
+          {meta.billingEntity && seesComp && <span className="chip chip-accent">{meta.billingEntity}</span>}
           {/* 0071 · the work order's folder in SharePoint, once it exists. */}
-          <SharePointFolderChip kind="work_order" id={wo.id} />
-          {ecotrakLabel && (
+          {filesToSharePoint && <SharePointFolderChip kind="work_order" id={wo.id} />}
+          {ecotrakLabel && movesStatus && (
             <span
               className="chip chip-ecotrak"
               title="Where this work order sits on Ecotrak, as of the last sync (rules 2.6.3 / 2.7 check status changes against it)"

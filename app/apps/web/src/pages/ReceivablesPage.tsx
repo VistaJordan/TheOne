@@ -59,6 +59,8 @@ import type {
  */
 
 type SubTab = 'audit' | 'invoicing';
+/** M23 (UAT Wave D): the Audit prototype stays in the code, hidden. */
+const AUDIT_TAB_ENABLED = false;
 
 /** The Done group alone, as many as the list route allows. */
 const AUDIT_LIST = { status_group: 'done', limit: WO_LIST_CAP } as const;
@@ -91,7 +93,9 @@ async function loadAuditList(): Promise<AuditList> {
 export function ReceivablesPage() {
   const { tab } = useParams();
   const navigate = useNavigate();
-  const activeTab: SubTab = tab === 'invoicing' ? 'invoicing' : 'audit';
+  // M23 (UAT Wave D): the Audit tab is a prototype and is hidden until it is
+  // finished — Receivables opens on Invoicing. Flip AUDIT_TAB_ENABLED to bring it back.
+  const activeTab: SubTab = AUDIT_TAB_ENABLED && tab !== 'invoicing' ? 'audit' : 'invoicing';
 
   const woQuery = useQuery({
     queryKey: ['work-orders', { ...AUDIT_LIST, columns: [...AUDIT_COLUMNS] }],
@@ -199,14 +203,14 @@ export function ReceivablesPage() {
         </p>
       </div>
 
-      <div className="rcv-proto-banner" role="note">
+      {AUDIT_TAB_ENABLED && activeTab === 'audit' && <div className="rcv-proto-banner" role="note">
         Prototype — this tab is worked out in your browser from the work-order and quote lists. A
         dash means The One does not track that fact yet (SharePoint folder contents, closeout
         numbers, days on Grey); the release ticks are not saved.
-      </div>
+      </div>}
 
       <div className="seg rcv-subtabs" role="tablist" aria-label="Receivables sections">
-        <button
+        {AUDIT_TAB_ENABLED && <button
           type="button"
           role="tab"
           aria-selected={activeTab === 'audit'}
@@ -216,7 +220,7 @@ export function ReceivablesPage() {
           <Icon name="flag" size={12} />
           Audit
           <span className="rcv-tab-count">{woQuery.isLoading ? '—' : audited.length}</span>
-        </button>
+        </button>}
         <button
           type="button"
           role="tab"
@@ -375,7 +379,6 @@ function AuditTab({
               <th className="col-wo">WO #</th>
               <th>Audit</th>
               <th className="rcv-ck-th">GTG</th>
-              <th className="rcv-ck-th">Elise</th>
               <th className="rcv-ck-th">Admin</th>
               <th className="rcv-ck-th">Quote</th>
               <th>CICO</th>
@@ -465,7 +468,8 @@ function AuditRowPair({
         <td>
           <AuditStatusChip status={status} summary={summary} />
         </td>
-        {(['gtg', 'elise', 'admin', 'quote'] as const).map((key) => (
+        {/* M23: the stray per-person "Elise" tick is gone. */}
+        {(['gtg', 'admin', 'quote'] as const).map((key) => (
           <td key={key} className="rcv-ck-td" onClick={(e) => e.stopPropagation()}>
             <CheckToggle
               on={checks[key]}

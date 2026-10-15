@@ -74,7 +74,13 @@ export interface AttachmentReview {
   decision: 'approve' | 'decline';
   kind?: AttachmentKind;
   file_name?: string;
+  /** M14 (UAT Wave D): sent only by the full-size viewer; the API refuses a
+      decision without it (400 `ATTACHMENT_NOT_VIEWED`). */
+  viewed?: boolean;
 }
+
+/** `details.code` when a decision did not come from the viewer (M14). */
+export const ATTACHMENT_NOT_VIEWED_CODE = 'ATTACHMENT_NOT_VIEWED';
 
 /** Bag key of rule 11.3.4's BFI_Checkbox (0061 / seed.ts): the job is billed
     for what was incurred, so there is no finished work to photograph. */

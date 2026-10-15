@@ -22,6 +22,8 @@ import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
+import { assertDateOrder, assertDispatchers, assertNotHistoryField, canonicalClient, clientRecordNames } from './dataRules.js';
+import { checkWriteValue } from './woFieldValues.js';
 import { assertMoneyNotLocked } from './moneySync.js';
 import { assertGateHoldsFields, doneGateMissingFor, quoteFilledTaskIds } from './statusGates.js';
 import {
@@ -34,6 +36,12 @@ import {
   type WorkOrderListItem,
   isComputedWoColumn,
   permAllows,
+  VALIDATION_CODE,
+  CLIENT_FIELD_KEY,
+  IMPORT_UNKNOWN_CLIENT_CODE,
+  assigneeNames,
+  matchClientRecord,
+  normalizeUsState,
 } from '@theone/shared';
 
 /** `$1, $2, …` for a list of values — the id sets below are bound as ordinary scalars. */
@@ -130,6 +138,28 @@ export async function bulkUpdate(
   }
   // The check-in/out fields mirror the visit log (0021): not bulk-editable.
   assertNotVisitOwned(customPatch.map((c) => c.key));
+  // L3 (Wave D): nor a history the system keeps.
+  assertNotHistoryField(customPatch.map((c) => c.key));
+  // M2 / #11 (Wave D): each value checked for its type, the Client a record,
+  // a State a code, a dropdown one of its options (their spelling is kept).
+  for (const c of customPatch) {
+    if (c.value === null || c.value === '') continue;
+    const f = await resolveField(`fields.${c.key}`);
+    c.value = String(await checkWriteValue(f, c.value));
+  }
+  if (patch.client !== undefined && patch.client !== null && patch.client.trim() !== '') {
+    patch = { ...patch, client: await canonicalClient(patch.client, 'client') };
+  }
+  if (patch.state !== undefined && patch.state !== null && patch.state.trim() !== '') {
+    const st = normalizeUsState(patch.state);
+    if (!st) throw new ApiError('BAD_REQUEST', '"State" needs a US state code (for example TX)', { code: VALIDATION_CODE, field: 'state' });
+    patch = { ...patch, state: st };
+  }
+  // #22 / M22 (D3): an Assignee written in bulk names active dispatchers.
+  {
+    const seat = customPatch.find((c) => c.key === 'Assignee');
+    if (seat && seat.value) await assertDispatchers(assigneeNames(seat.value), 'fields.Assignee');
+  }
 
   const rows = await query<{
     id: string;
@@ -313,6 +343,13 @@ export async function bulkUpdate(
             if (c.value === null || c.value === '') delete merged[c.key];
             else merged[c.key] = c.value;
             log.push({ field: `fields.${c.key}`, before: rowFields[c.key] ?? null, after: c.value });
+          }
+          // M2 (Wave D): Received on ≤ Due date on the row as the save leaves it.
+          try {
+            assertDateOrder(merged, changed.map((c) => c.key));
+          } catch (err) {
+            if (err instanceof ApiError) err.message = `${row.wo_number}: ${err.message}`;
+            throw err;
           }
           // Rule 11.1.1: a bulk fill of the Assignee seat on a work order still
           // waiting in Incoming is gated like an accept (against the merged
@@ -732,6 +769,38 @@ export async function importWorkOrders(
     isSuperAdmin: actor.isSuperAdmin,
   });
   if (refusal) throw refusal;
+
+  // #11 (Wave D): a file names clients that are records, or it is refused
+  // whole (the import never creates a client — a typo would fork the list);
+  // the rows that name an unknown one come back so the file can be fixed.
+  // Matching cells are rewritten in the record's own spelling.
+  {
+    const records = await clientRecordNames();
+    const unknownRows: string[] = [];
+    const unknownNames = new Set<string>();
+    rows = rows.map((r, i) => {
+      const out: ImportRow = { ...r };
+      for (const col of ['client', `fields.${CLIENT_FIELD_KEY}`]) {
+        const cell = (r[col] ?? '').toString().trim();
+        if (!cell) continue;
+        const hit = matchClientRecord(cell, records);
+        if (hit) out[col] = hit;
+        else {
+          unknownNames.add(cell);
+          unknownRows.push(importRowName(r, i));
+        }
+      }
+      return out;
+    });
+    if (unknownRows.length > 0) {
+      const names = [...unknownNames];
+      throw new ApiError(
+        'BAD_REQUEST',
+        `Some rows name a client that is not on file (${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}) — add the client under Clients first, or correct the spelling`,
+        { code: IMPORT_UNKNOWN_CLIENT_CODE, wo_numbers: [...new Set(unknownRows)], clients: names },
+      );
+    }
+  }
 
   // New WO numbers continue the existing WO-#### series rather than restarting
   // it, so an imported batch sorts alongside what is already there.

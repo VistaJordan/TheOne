@@ -1527,6 +1527,26 @@ async function main() {
   );
   await query(`INSERT INTO sales_tax_rate (zip, pct, source) VALUES ('77550', 8.25, 'seed')`);
 
+  // ── 0086 (UAT Wave D, #11): one client list ────────────────────────────────
+  // Every client named on a work order, a site or a PM schedule has a client
+  // record — the same INSERT as migrations/0086_uat_data.sql, run here because
+  // the seed writes its work orders after the migrations ran (keep in step).
+  // `client` is not truncated (no FK reaches it), so a re-seed adds nothing new.
+  await query(
+    `INSERT INTO client (name)
+     SELECT DISTINCT ON (lower(btrim(n))) btrim(n)
+       FROM (
+         SELECT client AS n FROM task WHERE deleted_at IS NULL AND btrim(COALESCE(client, '')) <> ''
+         UNION
+         SELECT client FROM site WHERE deleted_at IS NULL AND btrim(COALESCE(client, '')) <> ''
+         UNION
+         SELECT client FROM pm_schedule WHERE btrim(COALESCE(client, '')) <> ''
+       ) x
+      WHERE NOT EXISTS (SELECT 1 FROM client c WHERE c.deleted_at IS NULL AND lower(btrim(c.name)) = lower(btrim(x.n)))
+      ORDER BY lower(btrim(n))
+     ON CONFLICT DO NOTHING`,
+  );
+
   // ── Last: the seed marker (W4-11) ──────────────────────────────────────────
   // app_meta is migration 0082's (`npm run setup` migrates before it seeds) and
   // is NOT on the TRUNCATE list above — no FK reaches it, the row is simply

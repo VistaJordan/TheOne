@@ -21,7 +21,8 @@ import { assertGateHoldsFields } from './statusGates.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import type { ActivityEntry } from '@theone/shared';
-import { MONEY_MAX, VALIDATION_CODE, withinMoneyBound } from '@theone/shared';
+import { MONEY_MAX, VALIDATION_CODE, addedAssignees, withinMoneyBound } from '@theone/shared';
+import { assertDateOrder, assertDispatchers, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 
 // ── Promoted-column mirrors ──────────────────────────────────────────────────
 // The map moved to woMirrors.ts (the automations engine reads it too). The
@@ -83,6 +84,43 @@ function coerceValue(f: ResolvedField, raw: unknown): unknown {
   }
 }
 
+/** Wave D: one raw value checked the way the field editor checks it (type,
+    client record, option, state, sign, date floor); returns the canonical
+    spelling for a client / State / dropdown, else the raw value untouched.
+    Bulk edit writes strings, so only the spelling is swapped. */
+export async function checkWriteValue(f: ResolvedField, raw: unknown): Promise<unknown> {
+  if (raw === null || raw === undefined || raw === '') return raw;
+  const checked = await checkFieldValue(f, coerceValue(f, raw));
+  if (checked !== null && (f.jsonKey === 'Client' || f.jsonKey === 'State' || f.subtype === 'dropdown')) return checked;
+  return raw;
+}
+
+/**
+ * Wave D (M2 / #11 / L3): a whole bag about to be INSERTed (Add work order,
+ * an intake draft's Submit) checked the way the field editor checks one
+ * value. Values keep the shape the form sent — only a client, a State and a
+ * dropdown come back in their canonical spelling — so nothing else about how
+ * a new work order is stored changes. Keys the catalogue does not know are
+ * left alone (the callers only pass keys their form offers).
+ */
+export async function validateBagValues(bag: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = { ...bag };
+  for (const [jsonKey, raw] of Object.entries(bag)) {
+    let f: ResolvedField;
+    try {
+      f = await resolveField(`fields.${jsonKey}`);
+    } catch {
+      continue;
+    }
+    if (!f.custom) continue;
+    assertNotHistoryField([jsonKey], () => f.label);
+    const checked = await checkFieldValue(f, coerceValue(f, raw));
+    if (checked !== null && (jsonKey === 'Client' || jsonKey === 'State' || f.subtype === 'dropdown')) out[jsonKey] = checked;
+  }
+  assertDateOrder(out, Object.keys(out));
+  return out;
+}
+
 /** For the mirror column: the value cast the column expects, from the coerced
     bag value. Bag `null` clears the column too. */
 function mirrorValue(cast: 'text' | 'numeric' | 'date', v: unknown): unknown {
@@ -96,6 +134,9 @@ export async function updateWorkOrderFields(
   values: Record<string, unknown>,
   actorId: string,
   auto?: AutoCtx,
+  /** `system`: a write the system makes on its own schedule (a PM raise) —
+      the assignee it carries was checked when the schedule was saved. */
+  opts: { system?: boolean } = {},
 ) {
   const entries = Object.entries(values);
   if (entries.length === 0) throw new ApiError('BAD_REQUEST', 'Nothing to change');
@@ -114,8 +155,16 @@ export async function updateWorkOrderFields(
     if (subtype === 'attachment') {
       throw new ApiError('BAD_REQUEST', `"${f.label}" holds a file — attachments are not edited here yet`);
     }
-    patch.push({ jsonKey: f.jsonKey as string, value: coerceValue(f, raw), resolved: f });
+    // Wave D (M2 / #11): the value is checked for its type — a client
+    // record, an option, a state code, no negative money, no date before
+    // 2000 — and stored in the record's / option's own spelling.
+    patch.push({ jsonKey: f.jsonKey as string, value: await checkFieldValue(f, coerceValue(f, raw)), resolved: f });
   }
+  // L3 (Wave D): a history the system keeps is never typed, super admins included.
+  assertNotHistoryField(
+    patch.map((p) => p.jsonKey),
+    (k) => patch.find((p) => p.jsonKey === k)?.resolved.label ?? k,
+  );
   // The seven check-in/out fields mirror the visit log (0021) and are not
   // edited by hand any more — the message points at the CICO tab.
   assertNotVisitOwned(
@@ -186,6 +235,16 @@ export async function updateWorkOrderFields(
       if (mirror) mirrorSets.push({ ...mirror, value: mirrorValue(mirror.cast, p.value) });
     }
     if (log.length === 0) return;
+
+    // M2 (Wave D): Received on ≤ Due date, against the bag as this save leaves it.
+    assertDateOrder(merged, log.map((c) => c.field.slice('fields.'.length)));
+    // #22 / M22 (Wave D, D3): a name ADDED to the Assignee seat is an active
+    // dispatcher. A rule's own write (auto) and the system's (opts.system)
+    // are not a person picking — the rule / schedule is checked where it is saved.
+    const seat = log.find((c) => c.field === 'fields.Assignee');
+    if (seat && !auto && !opts.system) {
+      await assertDispatchers(addedAssignees(seat.before, seat.after), 'fields.Assignee', tx);
+    }
 
     // Rule 11.1.1: filling the Assignee seat on a work order still waiting in
     // Incoming is the same act as accepting it, so the intake fields must be

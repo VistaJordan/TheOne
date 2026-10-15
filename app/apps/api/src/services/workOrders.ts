@@ -311,6 +311,20 @@ export async function listWorkOrders(
     };
   });
 
+  // UAT Wave D (margin): the Margin % column is the work order record's own
+  // figure (woRecord.recordMarginPct: revenue = invoices sent, else the
+  // quote), not Total Invoiced — so the list and the record agree. Computed
+  // for the page's rows only; ORDER BY margin_pct still sorts on the SQL
+  // approximation (MARGIN_PCT_SQL).
+  if (actor && (f.columns ?? []).includes('margin_pct') && items.length > 0) {
+    const { recordMarginPct } = await import('./woRecord.js');
+    const margins = await recordMarginPct(items.map((i) => i.id), actor);
+    for (const it of items) {
+      const v = margins.get(it.id) ?? null;
+      it.custom = { ...(it.custom ?? {}), margin_pct: v === null ? null : String(v) };
+    }
+  }
+
   return {
     items,
     total,

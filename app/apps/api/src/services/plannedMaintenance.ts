@@ -31,7 +31,7 @@ import {
   type PmUnit,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
-import { badRequest, notFound } from '../errors.js';
+import { badRequest, conflict, notFound } from '../errors.js';
 import { requirePerm } from './permissions.js';
 import { logAdminEvent } from './adminAudit.js';
 import type { ActingPrincipal } from './activity.js';
@@ -40,6 +40,8 @@ import { stampDateCreated } from './dateCreated.js';
 import { INTAKE_START_STATUS_NAME } from './intake.js';
 import { dispatchAutomations } from './automations.js';
 import { serviceActorId } from './serviceActors.js';
+import { assertDispatchers, canonicalClient } from './dataRules.js';
+import { PM_ALREADY_RAISED_CODE, pmAlreadyRaisedMessage } from '@theone/shared';
 
 export function requirePmView(p: ActingPrincipal): void {
   requirePerm(p, PM_PERM_KEY, 'view', 'You cannot see planned maintenance');
@@ -225,12 +227,15 @@ async function assertAssignee(name: string | null): Promise<void> {
   if (!name) return;
   // The value lands in the Assignee seat, which the 0032 scope matches by
   // display name — a typo would hide every raised work order from everyone.
-  const person = await query<{ id: string }>(
-    `SELECT id::text AS id FROM principal
-      WHERE kind = 'human' AND display_name = $1 AND status <> 'disabled' LIMIT 1`,
-    [name],
-  );
-  if (!person.rows[0]) throw badRequest(`"${name}" is not an active person on file`, { assignee: name });
+  // Wave D (#22 / M22, D3): and it is an active dispatcher, as every
+  // assignment is; checked here, once, because the raise writes it as the system.
+  await assertDispatchers([name], 'assignee');
+}
+
+/** #11 (Wave D): a schedule's client is a client record (its spelling). */
+async function canonicalScheduleClient(input: PmScheduleInput): Promise<PmScheduleInput> {
+  const client = await canonicalClient(input.client ?? null, 'client');
+  return { ...input, client };
 }
 
 function validate(input: PmScheduleInput): void {
@@ -271,9 +276,10 @@ async function setJobPlan(id: string, input: PmScheduleInput): Promise<void> {
   await query(`UPDATE pm_schedule SET job_plan_id = (SELECT jp.id FROM job_plan jp WHERE jp.id = $2::uuid) WHERE id = $1`, [id, input.job_plan_id]);
 }
 
-export async function createSchedule(input: PmScheduleInput, actor: ActingPrincipal): Promise<PmSchedule> {
+export async function createSchedule(rawInput: PmScheduleInput, actor: ActingPrincipal): Promise<PmSchedule> {
   requirePmEdit(actor, 'create');
-  validate(input);
+  validate(rawInput);
+  const input = await canonicalScheduleClient(rawInput);
   await assertAssignee(clean(input.assignee));
   const res = await query<{ id: string }>(
     `INSERT INTO pm_schedule
@@ -299,9 +305,10 @@ export async function createSchedule(input: PmScheduleInput, actor: ActingPrinci
   return mapRow(await rowById(created.id));
 }
 
-export async function updateSchedule(id: string, input: PmScheduleInput, actor: ActingPrincipal): Promise<PmSchedule> {
+export async function updateSchedule(id: string, rawInput: PmScheduleInput, actor: ActingPrincipal): Promise<PmSchedule> {
   requirePmEdit(actor, 'edit');
-  validate(input);
+  validate(rawInput);
+  const input = await canonicalScheduleClient(rawInput);
   await assertAssignee(clean(input.assignee));
   const before = mapRow(await rowById(id));
   await query(
@@ -461,7 +468,7 @@ async function raiseOne(s: PmSchedule, dueOn: string, actorId: string): Promise<
   }
   if (s.assignee) {
     const { updateWorkOrderFields } = await import('./woFieldValues.js');
-    await updateWorkOrderFields(taskId, { 'fields.Assignee': s.assignee }, actorId);
+    await updateWorkOrderFields(taskId, { 'fields.Assignee': s.assignee }, actorId, undefined, { system: true });
   }
   return taskId;
 }
@@ -497,6 +504,25 @@ export async function raiseNext(id: string, actor: ActingPrincipal): Promise<{ s
   requirePmEdit(actor, 'edit');
   const s = mapRow(await rowById(id));
   if (!s.next_due_on) throw badRequest('This schedule has reached its end date');
+  // M10 (Wave D): next_due_on is "the date after the last one claimed", so
+  // every press used to raise ANOTHER future date. The button raises the
+  // upcoming occurrence once: while one on or after today already has its
+  // work order, it refuses and names it.
+  const ahead = await query<{ due_on: string; wo_number: string | null }>(
+    `SELECT to_char(o.due_on, 'YYYY-MM-DD') AS due_on, t.wo_number
+       FROM pm_occurrence o LEFT JOIN task t ON t.id = o.task_id
+      WHERE o.schedule_id = $1 AND o.status = 'raised' AND o.due_on >= $2::date
+      ORDER BY o.due_on ASC LIMIT 1`,
+    [id, today()],
+  );
+  if (ahead.rows[0]) {
+    const a = ahead.rows[0];
+    throw conflict(pmAlreadyRaisedMessage(a.due_on, a.wo_number), {
+      code: PM_ALREADY_RAISED_CODE,
+      due_on: a.due_on,
+      wo_number: a.wo_number,
+    });
+  }
   const taskId = await raiseOne(s, s.next_due_on, actor.id);
   return { schedule: mapRow(await rowById(id)), task_id: taskId };
 }

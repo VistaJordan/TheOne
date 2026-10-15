@@ -373,6 +373,25 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
 
 // ── Money ────────────────────────────────────────────────────────────────────
 
+/** UAT Wave D (margin): the record's Margin % — profit over the record's own
+ *  revenue (invoices sent, else the quote) and job cost (Cost, else vendor
+ *  bills, else payment requests) — for the list's `margin_pct` column, so the
+ *  list and the work order's Cost card print the SAME figure. Read as the
+ *  viewer, like the record (a part they may not open counts as absent). */
+export async function recordMarginPct(taskIds: readonly string[], actor: ActingPrincipal): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>();
+  for (const id of taskIds) {
+    try {
+      const t = await loadTask(id);
+      const m = await loadMoney(id, t, actor);
+      out.set(id, m.summary.margin_pct);
+    } catch {
+      out.set(id, null);
+    }
+  }
+  return out;
+}
+
 /** M13 · keep the NTE, the quote and the Margin %; drop every cost figure. */
 function redactRecordMoney(m: { summary: WoRecord['cost']; breakdown: WoCostBreakdown }): void {
   m.summary.cost = null;
@@ -860,6 +879,61 @@ export async function requestNteIncrease(taskId: string, input: { requested_nte:
     actorId: actor.id,
   });
   return getWoRecord(taskId, actor);
+}
+
+/** M25 (UAT Wave D): the "NTE increase requests" lane of Approvals — every
+    OPEN manual request (0064), across the work orders the viewer may see
+    (woScopeSql), oldest first. Gated like the decision: `approvals/nte` view;
+    deciding still goes through decideNteIncrease on the work order. */
+export async function listOpenNteRequests(actor: ActingPrincipal): Promise<NteRequestRow[]> {
+  requirePerm(actor, 'approvals/nte', 'view', 'You cannot see NTE increase requests');
+  const p = new Params();
+  const scope = woScopeSql(actor, p);
+  const res = await query<{
+    id: string; task_id: string; wo_number: string; client: string | null; trade: string | null;
+    current_nte: string | null; requested_nte: string; reason: string;
+    requested_by: string | null; requested_by_name: string | null; created_at: string;
+  }>(
+    `SELECT r.id::text AS id, t.id::text AS task_id, t.wo_number, t.client, t.trade,
+            r.current_nte::text AS current_nte, r.requested_nte::text AS requested_nte, r.reason,
+            r.requested_by::text AS requested_by, pr.display_name AS requested_by_name,
+            to_char(r.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at
+       FROM wo_nte_request r
+       JOIN task t ON t.id = r.task_id AND t.deleted_at IS NULL
+       LEFT JOIN principal pr ON pr.id = r.requested_by
+      WHERE r.status = 'open' ${scope ? `AND ${scope}` : ''}
+      ORDER BY r.created_at ASC
+      LIMIT 500`,
+    p.values,
+  );
+  const canDecide = allowFor(actor)('approvals/nte', 'approve');
+  return res.rows.map((r) => ({
+    id: r.id,
+    task_id: r.task_id,
+    wo_number: r.wo_number,
+    client: r.client,
+    trade: r.trade,
+    current_nte: r.current_nte === null ? null : Number(r.current_nte),
+    requested_nte: Number(r.requested_nte),
+    reason: r.reason,
+    requested_by: r.requested_by ? { id: r.requested_by, name: r.requested_by_name ?? 'Unknown' } : null,
+    created_at: r.created_at,
+    can_decide: canDecide,
+  }));
+}
+
+export interface NteRequestRow {
+  id: string;
+  task_id: string;
+  wo_number: string;
+  client: string | null;
+  trade: string | null;
+  current_nte: number | null;
+  requested_nte: number;
+  reason: string;
+  requested_by: { id: string; name: string } | null;
+  created_at: string;
+  can_decide: boolean;
 }
 
 export async function decideNteIncrease(taskId: string, requestId: string, decision: 'approve' | 'reject' | 'withdraw', note: string | null, actor: ActingPrincipal): Promise<WoRecord> {

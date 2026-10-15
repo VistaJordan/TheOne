@@ -138,6 +138,10 @@ export interface SettingsResponse {
     redirect_uri: string | null;
     session_ttl_hours: number;
     invite_only: true;
+    /** M16 (UAT Wave D): the real sign-in policy (config.signIn). */
+    allowed_domains: string[];
+    auto_enrol_role: string;
+    auto_enrol_role_label: string;
   };
   server: { node_env: string; web_origin: string; api_port: number; cookie_secure: boolean };
   database: { engine: string; migrations_applied: number; latest_migration: string | null };
@@ -167,8 +171,12 @@ export async function getSettings(): Promise<SettingsResponse> {
             (SELECT COUNT(*)::int FROM field_def)                            AS fields`,
   );
 
+  const enrol = await query<{ label: string }>(`SELECT label FROM role WHERE code = $1`, [config.signIn.autoEnrolRole]);
   return {
     auth: {
+      allowed_domains: [...config.signIn.allowedDomains],
+      auto_enrol_role: config.signIn.autoEnrolRole,
+      auto_enrol_role_label: enrol.rows[0]?.label ?? config.signIn.autoEnrolRole,
       mode: config.authMode,
       tenant_id: config.entra?.tenantId ?? null,
       redirect_uri: config.entra?.redirectUri ?? null,

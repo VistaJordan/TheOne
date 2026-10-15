@@ -11,6 +11,7 @@ import { NTE_WARN_PCT, OT_MULTIPLIER, parsePct, usd, usd0 } from '../../lib/quot
 import type { SalesTaxLookup } from '../../api/client';
 import { TaxRatePicker } from '../../pages/admin/FinanceSetupCards';
 import { Icon } from '../Icon';
+import { QuoteTerms } from './QuoteTerms';
 
 interface MoneyRailProps {
   totals: QuoteTotals;
@@ -208,6 +209,7 @@ export function MoneyRail({
           <dd>{usd(totals.grandTotal)}</dd>
         </div>
 
+
         <div className="kvblock">
           <div className="kvrow">
             <dt>
@@ -236,6 +238,20 @@ export function MoneyRail({
           </div>
         </div>
       </dl>
+
+      {/* #9 (Wave D): every term the Grand Total is made of, so it adds up on screen. */}
+      <QuoteTerms
+        input={{
+          rule: totals.totalRule,
+          incurred: totals.incurredSubtotal,
+          options: totals.options.map((o) => ({ id: o.key, label: o.label, total: o.total, included: o.include_in_summary })),
+          priced_id: totals.pricedKey,
+          sales_tax: totals.salesTax,
+          sales_tax_pct: totals.salesTaxPct,
+          line_tax: totals.lineTax,
+          grand_total: totals.grandTotal,
+        }}
+      />
 
       <p className="money-cap">
         {yoda

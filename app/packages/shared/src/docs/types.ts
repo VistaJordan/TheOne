@@ -249,6 +249,22 @@ export interface DocsSnapshotMigration {
   applied_at: string | null;
 }
 
+/** L5 (UAT Wave D): the registry as `GET /admin/docs/content` serves it — the
+    web bundle no longer carries the BRD, SOP or lifecycle prose; the page
+    reads them behind `admin/docs` view. */
+export interface DocsContent {
+  brd_parts: DocPart[];
+  rules: DocRule[];
+  sop: SopDocument;
+  lifecycle: LifecycleModel;
+  /** DOCS_REVIEWED_ON — the date the prose was last reviewed. */
+  reviewed_on: string;
+}
+
+/** `GET /admin/docs/markdown?doc=` — one document as Markdown, with the live
+    appendix of the person asking. */
+export type DocsMarkdownKind = 'brd' | 'sop' | 'lifecycle';
+
 export interface DocsSnapshot {
   generated_at: string;
   instance: {

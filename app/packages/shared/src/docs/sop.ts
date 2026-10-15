@@ -21,7 +21,7 @@ export const SOP: SopDocument = {
   scope:
     'This SOP covers signing in, the sidebar and top bar, receiving and accepting work orders, drafting them by hand, working the list, running a work order (vendor, visits, status, flags, messages, calls, photos, sign-off), quoting, parts and purchasing, completing the job, paying technicians, auditing and invoicing, the Approvals inbox, vendors and the technician map, sites, assets and clients, planned maintenance, client updates, dashboards and Pulse, the assistant, and every control of the Admin console.',
   whoCanUse:
-    'Only people with a row in Admin › Users can sign in, with their Byblos Vista Microsoft account. A byblosvista.com account that is not on file enrols itself as OM Under Probation on first sign-in and is promoted by a super admin; any other address must be invited first. Super admins (Elise, Jordan Brown, Jeff S, Jack) pass every check.',
+    'Only people with a row in Admin › Users can sign in, with their Byblos Vista Microsoft account. A byblosvista.com account that is not on file enrols itself as OM Under Probation on first sign-in and is promoted by a super admin; any other address must be invited first. Super admins (Admin › Users marks them; the locked admin page names them) pass every check.',
 
   terms: [
     { term: 'Work order (WO)', definition: 'One job for one client at one place. Identified by its WO # (the client\'s number when it came from their system).' },
@@ -388,7 +388,8 @@ export const SOP: SopDocument = {
       needs: ['approvals view', 'approvals/nte, status, reviews approve', 'quotes approve', 'payments approve'],
       blocks: [
         { kind: 'table', head: ['Section', 'What waits there', 'Deciding it does'], rows: [
-          ['NTE increases', 'NTE override tasks raised when Cost passes the NTE ("Cost $X is over the client NTE $Y by $Z"). The manual Increase NTE requests are decided on the work order\'s Cost breakdown tab, not here.', 'Approve releases the quote and the payment; Reject keeps the hold.'],
+          ['NTE override (cost over NTE)', 'NTE override tasks raised when Cost passes the NTE ("Cost $X is over the client NTE $Y by $Z").', 'Approve releases the quote and the payment; Reject keeps the hold.'],
+          ['NTE increase requests', 'The manual Increase NTE asks from the work order\'s record bar, across every work order you may see (also decided on its Cost breakdown tab).', 'Approve writes the new NTE; Reject needs a reason.'],
           ['Status changes', 'Requests from request-mode roles, with from → to, "Requested by <name>", and an Ecotrak tag when Ecotrak would refuse.', 'Approve moves the work order (the gate and the Ecotrak check run again); Reject (reason) sends it back.'],
           ['Manager reviews', 'Review tasks raised by automations (the section appears once one exists).', 'Approve / Reject with a note.'],
           ['Quotes', 'Quotes pending approval.', 'Approve quote (approves only: "Sending it … is a separate step in the quote builder") / Return this quote to draft with a note.'],

@@ -16,6 +16,7 @@ import {
   ecotrakTransitionRefused,
   type EcotrakTransitionVerdict,
   type WoFieldDescriptor,
+  auditTimeET,
 } from '@theone/shared';
 import { AdminShell, AdminEmpty } from './AdminShell';
 import { Icon } from '../../components/Icon';
@@ -177,7 +178,7 @@ export function AdminAuditPage() {
             <table className="ct audit-table">
               <thead>
                 <tr>
-                  <th>Time</th>
+                  <th>Time (ET)</th>
                   <th>User</th>
                   <th>Change</th>
                   <th>Item</th>
@@ -226,7 +227,8 @@ function AuditRow({ e, byKey }: { e: AuditLogEntry; byKey: Map<string, WoFieldDe
   const via = auto ? null : viaLabel(e.after);
   return (
     <tr>
-      <td className="audit-t">{feedTime(e.created_at)}</td>
+      {/* L2 (UAT Wave D): Eastern time, labelled ET, whatever the browser's zone. */}
+      <td className="audit-t">{auditTimeET(e.created_at)}</td>
       <td>
         <span className="audit-who">
           <span className={`audit-av${e.actor.kind === 'service' ? ' is-service' : ''}`} aria-hidden="true">

@@ -18,7 +18,7 @@
 import { AGE_BANDS } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
-import { defaultClientSafe } from '@theone/shared';
+import { CLIENT_FIELD_KEY, DISPATCHER_ROLE_CODES, defaultClientSafe } from '@theone/shared';
 
 export type FieldType = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'boolean';
 
@@ -363,9 +363,29 @@ export async function getFieldCatalogue(): Promise<FieldCatalogue> {
     return { ...rest, options, client_safe: defaultClientSafe(f.key) };
   });
 
-  const customWithOptions = custom.map((f) =>
-    customDistinct[f.key] ? { ...f, options: customDistinct[f.key] } : f,
-  );
+  // Wave D: the Client dropdown reads the client RECORDS (#11) and the
+  // Assignee seat offers only active dispatchers (M22, D3) — the same lists
+  // the API checks a write against (services/dataRules.ts).
+  const [clientRecords, dispatchers] = await Promise.all([
+    query<{ v: string }>(
+      `SELECT name AS v FROM client WHERE deleted_at IS NULL AND is_active ORDER BY lower(name)`,
+    ),
+    query<{ v: string }>(
+      `SELECT display_name AS v FROM principal
+        WHERE kind = 'human' AND status <> 'disabled' AND role = ANY($1::text[])
+        ORDER BY lower(display_name)`,
+      [[...DISPATCHER_ROLE_CODES]],
+    ),
+  ]);
+  const customWithOptions = custom.map((f) => {
+    if (f.key === `fields.${CLIENT_FIELD_KEY}`) {
+      return { ...f, type: 'select' as const, options: clientRecords.rows.map((r) => ({ value: r.v, label: r.v })) };
+    }
+    if (f.key === 'fields.Assignee') {
+      return { ...f, options: dispatchers.rows.map((r) => ({ value: r.v, label: r.v })) };
+    }
+    return customDistinct[f.key] ? { ...f, options: customDistinct[f.key] } : f;
+  });
 
   return { fields: [...core, ...customWithOptions], default_columns: [...DEFAULT_COLUMNS] };
 }
@@ -385,6 +405,11 @@ export interface ResolvedField {
   computed?: boolean;
   /** 0084 (#17) · may go out on a shared Client Update. */
   client_safe: boolean;
+  /** Wave D (M2) · the declared dropdown options of a custom field, when it
+      has any (the write is checked against them). */
+  options?: string[];
+  /** Wave D (M2) · the field_def type (`dropdown`, `users`, `currency`, …). */
+  subtype?: string;
 }
 
 /** Turn a field key from a request into something safe to put in SQL, or throw.
@@ -400,7 +425,16 @@ export async function resolveField(key: string): Promise<ResolvedField> {
     const jsonKey = key.slice('fields.'.length);
     const custom = (await listCustomFields()).find((f) => f.key === key);
     if (custom) {
-      return { key, label: custom.label, type: custom.type, custom: true, jsonKey, client_safe: custom.client_safe !== false };
+      return {
+        key,
+        label: custom.label,
+        type: custom.type,
+        custom: true,
+        jsonKey,
+        client_safe: custom.client_safe !== false,
+        options: custom.options?.map((o) => o.value),
+        subtype: custom.subtype,
+      };
     }
   }
   throw new ApiError('BAD_REQUEST', `Unknown field "${key}"`, { field: key });

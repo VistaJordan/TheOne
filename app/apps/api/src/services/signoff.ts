@@ -225,6 +225,19 @@ function canWrite(actor: ActingPrincipal): boolean {
   return allow('work_orders', 'edit') && allow(SIGNOFF_PERM_KEY, 'edit');
 }
 
+/** M26 (UAT Wave D): drawing a sheet is a check-in / check-out job — anyone
+    with `work_orders/fields/cico` edit may Generate one, whatever their grant
+    on the Sign-Off Link field itself (which only the signed copy writes). */
+const CICO_SECTION_KEY = 'work_orders/fields/cico';
+
+function canGenerate(actor: ActingPrincipal): boolean {
+  return allowFor(actor)(CICO_SECTION_KEY, 'edit');
+}
+
+function requireGenerate(actor: ActingPrincipal): void {
+  requirePerm(actor, CICO_SECTION_KEY, 'edit', 'You cannot edit check-in / check-out');
+}
+
 function requireWrite(actor: ActingPrincipal): void {
   requirePerm(actor, 'work_orders', 'edit', 'You cannot edit work orders');
   requirePerm(actor, SIGNOFF_PERM_KEY, 'edit', 'You cannot manage sign-off sheets');
@@ -241,7 +254,7 @@ export async function getSignoff(taskId: string, actor: ActingPrincipal): Promis
     layout: layoutOf(f),
     technicians: await techniciansOf(taskId, f),
     replies: await openRepliesFor(taskId),
-    can: { generate: writable, share: writable },
+    can: { generate: canGenerate(actor), share: writable },
     storage_ready: storageReady(),
     quo_api_ready: quoApiReady(),
   };
@@ -326,7 +339,7 @@ async function generate(taskId: string, actorId: string, via: 'button' | 'assign
 
 /** The button: a new sheet, or a fresh one when the details changed. */
 export async function generateSignoff(taskId: string, actor: ActingPrincipal): Promise<WoSignoffResponse> {
-  requireWrite(actor);
+  requireGenerate(actor);
   await generate(taskId, actor.id, 'button');
   return getSignoff(taskId, actor);
 }

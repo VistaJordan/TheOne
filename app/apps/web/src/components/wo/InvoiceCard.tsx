@@ -33,6 +33,8 @@ import { invoiceAllowedForStatus } from '@theone/shared';
 import { MarkInvoicePaid } from '../rcv/MarkInvoicePaid';
 import { Icon } from '../Icon';
 import { BillingProposalBlock } from './BillingProposalBlock';
+import { ApprovedPhotosStrip } from './PhotoReviewViewer';
+import { listAttachments } from '../../api/client';
 
 const money = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
@@ -45,6 +47,15 @@ export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
   const canView = can('invoicing', 'view');
   const canRaise = can('invoicing', 'create');
   const canSend = can('invoicing', 'approve');
+
+  // M14 (Wave D): the approved photos ride on the AR side — the same cache
+  // entry the Photos card fills, so an approval shows here at once.
+  const photosQ = useQuery({
+    queryKey: ['wo-attachments', wo.id],
+    queryFn: () => listAttachments(wo.id),
+    enabled: canView,
+    retry: 0,
+  });
 
   const q = useQuery({
     queryKey: ['wo-invoice', wo.id],
@@ -147,6 +158,12 @@ export function InvoiceCard({ wo }: { wo: WorkOrderDetailV2 }) {
               {raise.isPending ? 'Raising…' : 'Raise invoice'}
             </button>
           )}
+        </div>
+      )}
+      {canView && photosQ.data && (
+        <div className="photo-group">
+          <div className="group-label">Approved photos</div>
+          <ApprovedPhotosStrip woId={wo.id} items={photosQ.data.items} />
         </div>
       )}
     </section>

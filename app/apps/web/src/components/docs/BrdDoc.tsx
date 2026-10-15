@@ -1,8 +1,8 @@
 /* 0075 · The BRD, drawn from the registry (packages/shared/src/docs/brd.ts,
    rules.ts, lifecycle.ts) and the live snapshot. */
 
-import { BRD_PARTS, BUSINESS_RULES, LIFECYCLE, docsVersionLine, type DocsSnapshot } from '@theone/shared';
-import { DocBox, DocTable, Rich, fmtDate, fmtMoney, slug } from './DocBits';
+import type { DocsContent, DocsSnapshot } from '@theone/shared';
+import { DocBox, DocTable, Rich, fmtDate, fmtMoney, slug, versionLine } from './DocBits';
 
 export interface TocEntry {
   id: string;
@@ -11,7 +11,8 @@ export interface TocEntry {
 }
 
 /** The table of contents the page draws beside the document. */
-export function brdToc(snap: DocsSnapshot | null): TocEntry[] {
+export function brdToc(content: DocsContent, snap: DocsSnapshot | null): TocEntry[] {
+  const BRD_PARTS = content.brd_parts;
   const toc: TocEntry[] = [
     { id: 'brd-intro', label: '1. Introduction', level: 1 },
     { id: 'brd-context', label: '2. Business context', level: 1 },
@@ -31,14 +32,15 @@ export function brdToc(snap: DocsSnapshot | null): TocEntry[] {
   return toc;
 }
 
-export function BrdDoc({ snap }: { snap: DocsSnapshot | null }) {
+export function BrdDoc({ content, snap }: { content: DocsContent; snap: DocsSnapshot | null }) {
+  const { brd_parts: BRD_PARTS, rules: BUSINESS_RULES, lifecycle: LIFECYCLE } = content;
   return (
     <article className="doc doc-brd">
       <header className="doc-cover">
         <p className="doc-kicker">Business Requirements Document · living</p>
         <h1>The One</h1>
         <p className="doc-sub">Work-order, quote, vendor and payment platform for Seamless FM (Byblos Vista)</p>
-        <p className="doc-version">{docsVersionLine(snap)}</p>
+        <p className="doc-version">{versionLine(content.reviewed_on, snap)}</p>
         <DocBox title="Document control">
           What the system does and why: every module, every feature, the controls on screen, the rules the system enforces, the permission each action needs and the value each feature brings. Sections 1 to 4 are kept beside the code and reviewed against the screens; section 5 is read from the live instance each time this page opens, so statuses, fields, roles, automations, integrations and the revision history always describe the system as it is today.
         </DocBox>

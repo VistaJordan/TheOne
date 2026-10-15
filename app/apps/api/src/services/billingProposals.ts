@@ -335,6 +335,7 @@ export async function proposeBillingOnCompletion(
   const proposed: BillingProposalKind[] = [];
   try {
     // The client side: our invoice, from the contract that prices the client.
+    // M30 (Wave D): rates as they stood when the work order was received.
     const client = await contractForTask(taskId);
     if (client?.contract.auto_invoice) {
       const existing = await query<{ id: string }>(

@@ -47,6 +47,9 @@ import {
   type WoDuplicateHit,
   type WoNumberCheck,
   type WoSubcategoryRow,
+  VALIDATION_CODE,
+  assigneeNames,
+  woNumberProblem,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict } from '../errors.js';
@@ -58,6 +61,7 @@ import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { INTAKE_START_STATUS_NAME } from './intake.js';
 import { dispatchAutomations } from './automations.js';
+import { assertDispatchers } from './dataRules.js';
 
 const PERM_KEY = 'work_orders';
 
@@ -106,6 +110,20 @@ export async function getCreateForm(): Promise<WoCreateForm> {
     mode: r.create_mode === 'required' ? 'required' : 'optional',
     section: SECTION_BY_KEY.get(r.key) ?? 'more',
   }));
+
+  // #11 (Wave D): the Client is picked from the client RECORDS, the list the
+  // API checks it against — not the field's old dropdown vocabulary.
+  {
+    const clients = await query<{ name: string }>(
+      `SELECT name FROM client WHERE deleted_at IS NULL AND is_active ORDER BY lower(name)`,
+    );
+    for (const f of fields) {
+      if (f.key === 'Client') {
+        f.type = 'dropdown';
+        f.options = clients.rows.map((c) => c.name);
+      }
+    }
+  }
 
   // 0063 · the sub-categories each trade offers (Admin › Settings).
   const subs = await query<{ trade: string; name: string }>(
@@ -343,8 +361,9 @@ export async function createWorkOrder(
   requireWoCreate(actor);
 
   const woNumber = String(input.wo_number ?? '').trim();
-  if (woNumber.length === 0) throw badRequest('A work order needs its WO #');
-  if (woNumber.length > 60) throw badRequest('That WO # is too long');
+  // M2 (Wave D): letters, digits and dashes, 3 to 40 characters.
+  const woProblem = woNumberProblem(woNumber);
+  if (woProblem) throw badRequest(woProblem, { code: VALIDATION_CODE, field: 'wo_number' });
 
   // Only keys the form offers are accepted: a field an admin switched off is
   // not quietly written by a stale browser tab.
@@ -364,6 +383,15 @@ export async function createWorkOrder(
     if (typeof s === 'string' && s.length === 0) continue;
     bag[key] = s;
   }
+
+  // Wave D (M2 / #11): every value checked for its type, the Client a record.
+  {
+    const { validateBagValues } = await import('./woFieldValues.js');
+    Object.assign(bag, await validateBagValues(bag));
+  }
+  // #22 / M22 (D3): the assignee is an active dispatcher — asked before the
+  // insert, so a refused pick leaves no work order behind.
+  if (str(bag[ASSIGNEE_KEY])) await assertDispatchers(assigneeNames(bag[ASSIGNEE_KEY]), `fields.${ASSIGNEE_KEY}`);
 
   const missing = woCreateMissing(form, bag, woNumber);
   if (missing.length > 0) {

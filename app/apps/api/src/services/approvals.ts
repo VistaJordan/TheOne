@@ -56,6 +56,7 @@ import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
+import { assertDispatchers } from './dataRules.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
 import { assertStatusGate } from './statusGates.js';
@@ -580,14 +581,8 @@ async function decide(
         approval_task_id: id,
       });
     }
-    const hit = await query<{ id: string }>(
-      `SELECT id::text AS id FROM principal
-        WHERE kind = 'human' AND display_name = $1 AND status <> 'disabled' LIMIT 1`,
-      [assignee],
-    );
-    if (!hit.rows[0]) {
-      throw badRequest(`"${assignee}" is not an active person on file`, { assignee });
-    }
+    // Wave D (#22 / M22, D3): an active dispatcher, in their own spelling.
+    [assignee] = await assertDispatchers([assignee], 'assignee');
     // Rule 11.1.1: accepting IS assigning, so the intake fields must be
     // filled first. Asked before anything is written — a refused accept
     // leaves the task open in Incoming with the list of what to fill.

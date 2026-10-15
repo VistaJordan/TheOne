@@ -2819,3 +2819,66 @@ a.photo-img.is-real img {
 /* 0053 · approve / decline a quote from a card or a list row. */
 .qd { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .qd-err { font-size: 11px; color: var(--danger); }
+
+/* M14 (UAT Wave D) · the full-size photo viewer — Approve / Decline live here. */
+.prv-scrim { padding: 16px; }
+.prv {
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 100%);
+  max-height: 94vh;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.prv-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.prv-count { font-weight: 600; }
+.prv-hint { flex: 1; color: var(--ink-3); font-size: 12px; }
+.prv-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  flex: 1;
+  overflow: auto;
+  background: var(--bg);
+}
+.prv-img { max-width: 100%; max-height: 70vh; object-fit: contain; display: block; }
+.prv-file { display: inline-flex; align-items: center; gap: 8px; padding: 40px; }
+.prv-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: inherit;
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.prv-nav:disabled { opacity: 0.35; cursor: default; }
+.prv-nav.is-prev { left: 10px; }
+.prv-nav.is-next { right: 10px; }
+.prv-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 600px) {
+  .prv-foot { flex-direction: column; align-items: stretch; }
+}

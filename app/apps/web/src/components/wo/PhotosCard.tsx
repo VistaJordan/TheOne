@@ -28,6 +28,7 @@ import { attachmentUrl, deleteAttachment, listAttachments, reviewAttachment } fr
 import { numericDate } from '../../lib/fields';
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
+import { PhotoReviewViewer } from './PhotoReviewViewer';
 
 interface PhotosCardProps {
   wo: WorkOrderDetailV2;
@@ -41,6 +42,8 @@ export function PhotosCard({ wo }: PhotosCardProps) {
   const { can } = useAuth();
   const canRemove = can('work_orders/attachments', 'delete');
   const [error, setError] = useState<string | null>(null);
+  // M14 (Wave D): the full-size viewer, open on one list (waiting / declined).
+  const [viewer, setViewer] = useState<{ list: 'pending' | 'declined'; start: number } | null>(null);
 
   const q = useQuery({
     queryKey: ['wo-attachments', woId],
@@ -77,6 +80,7 @@ export function PhotosCard({ wo }: PhotosCardProps) {
   const files = approved.filter((a) => !before.includes(a) && !after.includes(a));
 
   const onRemove = canRemove ? (id: string) => remove.mutate(id) : undefined;
+  const viewerItems = viewer ? (viewer.list === 'pending' ? pending : declined) : [];
 
   return (
     <section className="card">
@@ -110,14 +114,14 @@ export function PhotosCard({ wo }: PhotosCardProps) {
               : 'Your uploads — hidden from everyone else until a reviewer approves them.'}
           </p>
           <ul className="photo-review-list">
-            {pending.map((a) => (
+            {pending.map((a, i) => (
               <ReviewRow
                 key={a.id}
                 woId={woId}
                 item={a}
                 canReview={canReview}
                 busy={review.isPending}
-                onDecide={(input) => review.mutate({ id: a.id, input })}
+                onOpen={() => setViewer({ list: 'pending', start: i })}
                 onRemove={onRemove}
               />
             ))}
@@ -202,45 +206,55 @@ export function PhotosCard({ wo }: PhotosCardProps) {
             <span className="n">{declined.length}</span>
           </div>
           <ul className="photo-review-list">
-            {declined.map((a) => (
+            {declined.map((a, i) => (
               <ReviewRow
                 key={a.id}
                 woId={woId}
                 item={a}
                 canReview={canReview}
                 busy={review.isPending}
-                onDecide={(input) => review.mutate({ id: a.id, input })}
+                onOpen={() => setViewer({ list: 'declined', start: i })}
                 onRemove={onRemove}
               />
             ))}
           </ul>
         </div>
       )}
+
+      {viewer && canReview && viewerItems.length > 0 && (
+        <PhotoReviewViewer
+          woId={woId}
+          items={viewerItems}
+          start={viewer.start}
+          busy={review.isPending}
+          onDecide={(id, input) => review.mutate({ id, input })}
+          onClose={() => setViewer(null)}
+        />
+      )}
     </section>
   );
 }
 
-/** One quarantined file: its thumbnail, and — for a reviewer — the name, what
-    it is, and the two decisions (rule 1.3.4: Approve / Decline per picture). */
+/** One quarantined file: its thumbnail and name; for a reviewer, Review
+    opens the full-size viewer — the only place Approve / Decline are
+    (M14, rule 1.3.4: one decision per picture). */
 function ReviewRow({
   woId,
   item,
   canReview,
   busy,
-  onDecide,
+  onOpen,
   onRemove,
 }: {
   woId: string;
   item: Attachment;
   canReview: boolean;
   busy: boolean;
-  onDecide: (input: AttachmentReview) => void;
+  onOpen: () => void;
   onRemove?: (id: string) => void;
 }) {
   const image = isImageType(item.content_type);
   const declined = item.review_status === 'declined';
-  const [name, setName] = useState(item.file_name);
-  const [kind, setKind] = useState<AttachmentKind | ''>(item.kind ?? '');
 
   const meta = [
     formatBytes(item.byte_size),
@@ -267,65 +281,20 @@ function ReviewRow({
         )}
       </a>
       <div className="photo-review-body">
-        {canReview ? (
-          <div className="photo-review-fields">
-            <input
-              className="fld sm"
-              aria-label="File name"
-              value={name}
-              maxLength={200}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <select
-              className="fld sm"
-              aria-label="What this file is"
-              value={kind}
-              onChange={(e) => setKind(e.target.value as AttachmentKind | '')}
-            >
-              <option value="">What is it?</option>
-              {ATTACHMENT_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {ATTACHMENT_KIND_LABEL[k]}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <span className="photo-review-name" title={item.file_name}>
-            {item.file_name}
-          </span>
-        )}
+        <span className="photo-review-name" title={item.file_name}>
+          {item.file_name}
+        </span>
         <span className="file-meta">{meta}</span>
       </div>
       <div className="photo-review-actions">
         {canReview ? (
           <>
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={busy || kind === ''}
-              title={kind === '' ? 'Say what this file is first' : undefined}
-              onClick={() =>
-                kind !== '' &&
-                onDecide({ decision: 'approve', kind, file_name: name.trim() || item.file_name })
-              }
-            >
-              Approve
+            <button type="button" className="btn btn-sm" disabled={busy} onClick={onOpen} title="Open it full size to approve or decline">
+              Review
             </button>
-            {declined ? (
-              onRemove && (
-                <button type="button" className="btn btn-sm is-danger" disabled={busy} onClick={() => onRemove(item.id)}>
-                  Remove
-                </button>
-              )
-            ) : (
-              <button
-                type="button"
-                className="btn btn-sm is-ghost"
-                disabled={busy}
-                onClick={() => onDecide({ decision: 'decline' })}
-              >
-                Decline
+            {declined && onRemove && (
+              <button type="button" className="btn btn-sm is-danger" disabled={busy} onClick={() => onRemove(item.id)}>
+                Remove
               </button>
             )}
           </>

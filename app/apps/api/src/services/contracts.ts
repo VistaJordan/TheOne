@@ -16,9 +16,13 @@ import {
   CONTRACT_KINDS,
   CONTRACT_PARTIES,
   RATE_TYPES,
+  CONTRACT_OVERLAP_CODE,
   billableHours,
   contractInForce,
+  contractsOverlap,
   pickContract,
+  rateVersionAsOf,
+  type ContractRateVersion,
   resolveRates,
   type Contract,
   type ContractInput,
@@ -28,7 +32,7 @@ import {
   type ResolvedRates,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
-import { badRequest, notFound } from '../errors.js';
+import { badRequest, conflict, notFound } from '../errors.js';
 import { requirePerm } from './permissions.js';
 import { logAdminEvent } from './adminAudit.js';
 import type { ActingPrincipal } from './activity.js';
@@ -162,6 +166,39 @@ export async function getContract(id: string, actor: ActingPrincipal): Promise<C
 export interface ContractMatch {
   contract: Contract;
   rates: ResolvedRates;
+  /** M30 (Wave D): the day the rates are read as of — the work order's
+      received date (else the day it was created). */
+  as_of?: string;
+}
+
+/** M30: the day a work order is priced as of — when it was RECEIVED (else
+    created, Chicago day); a rate card edited later does not re-price it. */
+async function taskAsOf(taskId: string): Promise<string> {
+  const res = await query<{ d: string | null }>(
+    `SELECT to_char(COALESCE(t.date_received, (t.created_at AT TIME ZONE 'America/Chicago')::date), 'YYYY-MM-DD') AS d
+       FROM task t WHERE t.id = $1`,
+    [taskId],
+  );
+  return res.rows[0]?.d ?? today();
+}
+
+/** M30: the card's rates as they stood on `asOf` (contract_rate_version,
+    0086); a card with no versions yet answers with its current rates. */
+async function versionedContract(c: Contract, asOf: string): Promise<Contract> {
+  const res = await query<{ effective_from: string | null; rates: ContractRate[] }>(
+    `SELECT CASE WHEN effective_from = '-infinity'::timestamptz THEN NULL
+                 ELSE to_char((effective_from AT TIME ZONE 'America/Chicago'), 'YYYY-MM-DD') END AS effective_from,
+            rates
+       FROM contract_rate_version WHERE contract_id = $1
+      ORDER BY effective_from ASC, created_at ASC`,
+    [c.id],
+  );
+  const versions: ContractRateVersion[] = res.rows.map((r) => ({
+    effective_from: r.effective_from,
+    rates: (Array.isArray(r.rates) ? r.rates : []).map((x) => ({ ...x, amount: Number(x.amount) })),
+  }));
+  const hit = rateVersionAsOf(versions, asOf);
+  return hit ? { ...c, rates: hit.rates } : c;
 }
 
 interface SubjectRow {
@@ -178,7 +215,21 @@ interface SubjectRow {
  * the work order's trade — or null when none covers it. Internal: every
  * caller has already resolved the work order through its own scope check.
  */
-export async function contractForTask(taskId: string): Promise<ContractMatch | null> {
+export async function contractForTask(
+  taskId: string,
+  opts: { contractId?: string | null } = {},
+): Promise<ContractMatch | null> {
+  const asOf = await taskAsOf(taskId);
+  // M30: a quote that snapshotted its card keeps reading THAT card (at the
+  // rates in force when the work order was received), never today's pick.
+  if (opts.contractId) {
+    const own = await loadAll(`WHERE c.id = $1`, [opts.contractId]);
+    if (own[0]) {
+      const tradeRow = await query<{ trade: string | null }>(`SELECT trade FROM task WHERE id = $1`, [taskId]);
+      const c = await versionedContract(own[0], asOf);
+      return { contract: c, rates: resolveRates(c.rates, tradeRow.rows[0]?.trade ?? null), as_of: asOf };
+    }
+  }
   const subj = await query<SubjectRow>(
     `SELECT t.client, t.billing_entity, t.trade,
             t.fields->>'Store' AS store,
@@ -202,13 +253,14 @@ export async function contractForTask(taskId: string): Promise<ContractMatch | n
   };
   // A contract naming sites may name them by store number OR by site name;
   // try the store first, then the name, so either spelling on the card works.
-  const contract =
-    pickContract(candidates, subject, today()) ??
+  const picked =
+    pickContract(candidates, subject, asOf) ??
     (s.site_name && subject.site !== s.site_name
-      ? pickContract(candidates, { ...subject, site: s.site_name }, today())
+      ? pickContract(candidates, { ...subject, site: s.site_name }, asOf)
       : null);
-  if (!contract) return null;
-  return { contract, rates: resolveRates(contract.rates, s.trade) };
+  if (!picked) return null;
+  const contract = await versionedContract(picked, asOf);
+  return { contract, rates: resolveRates(contract.rates, s.trade), as_of: asOf };
 }
 
 /**
@@ -254,6 +306,7 @@ export async function vendorContractForTask(taskId: string): Promise<(ContractMa
   if (!s) return null;
   const candidates = await loadAll(`WHERE c.active AND c.party = 'vendor'`);
   if (candidates.length === 0) return null;
+  const asOf = await taskAsOf(taskId);
   const subject = {
     party: 'vendor' as const,
     vendor: vendor.name,
@@ -262,13 +315,14 @@ export async function vendorContractForTask(taskId: string): Promise<(ContractMa
     trade: s.trade,
     site: s.store ?? s.site_store ?? s.site_name,
   };
-  const contract =
-    pickContract(candidates, subject, today()) ??
+  const picked =
+    pickContract(candidates, subject, asOf) ??
     (s.site_name && subject.site !== s.site_name
-      ? pickContract(candidates, { ...subject, site: s.site_name }, today())
+      ? pickContract(candidates, { ...subject, site: s.site_name }, asOf)
       : null);
-  if (!contract) return null;
-  return { contract, rates: resolveRates(contract.rates, s.trade), vendor: vendor.name };
+  if (!picked) return null;
+  const contract = await versionedContract(picked, asOf);
+  return { contract, rates: resolveRates(contract.rates, s.trade), vendor: vendor.name, as_of: asOf };
 }
 
 /** Hours on site across every completed visit on the work order (0021), to
@@ -351,6 +405,42 @@ function snapshot(c: Contract): Record<string, unknown> & { name: string } {
   };
 }
 
+/** M32 (Wave D): an active card whose scope and dates overlap another active
+    card of the same specificity is refused — pickContract could only break
+    the tie by start date, silently re-pricing work orders. */
+async function assertNoOverlap(v: ReturnType<typeof cleanInput>, selfId: string | null): Promise<void> {
+  if (!v.active) return;
+  const others = await loadAll(`WHERE c.active ${selfId ? 'AND c.id <> $1' : ''}`, selfId ? [selfId] : []);
+  const clash = others.find((o) => contractsOverlap(v, o));
+  if (clash) {
+    throw conflict(
+      `This rate card overlaps "${clash.name}" — same client, entity, trades and sites in the same dates. End one before the other starts, or narrow its trades or sites.`,
+      { code: CONTRACT_OVERLAP_CODE, contract_id: clash.id, contract_name: clash.name },
+    );
+  }
+}
+
+/** M30 (Wave D): a new version of the rates. The first one reaches back
+    forever ('-infinity'); a later edit applies to work orders received from
+    now on — what was received before keeps the rates it had. */
+async function writeRateVersion(
+  tx: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
+  id: string,
+  rates: ContractRateInput[],
+  actorId: string,
+  first: boolean,
+): Promise<void> {
+  const body = rates.map((r, position) => ({ rate_type: r.rate_type, trade: r.trade ?? null, amount: r.amount, position }));
+  await tx.query(
+    `INSERT INTO contract_rate_version (contract_id, effective_from, rates, created_by)
+     VALUES ($1, ${first ? `'-infinity'::timestamptz` : 'now()'}, $2::jsonb, $3)`,
+    [id, JSON.stringify(body), actorId],
+  );
+}
+
+const rateKey = (rates: { rate_type: string; trade?: string | null; amount: number }[]) =>
+  JSON.stringify(rates.map((r) => [r.rate_type, r.trade ?? null, Number(r.amount)]));
+
 async function writeRates(tx: { query: (sql: string, params?: unknown[]) => Promise<unknown> }, id: string, rates: ContractRateInput[]) {
   await tx.query(`DELETE FROM contract_rate WHERE contract_id = $1`, [id]);
   let position = 0;
@@ -365,6 +455,7 @@ async function writeRates(tx: { query: (sql: string, params?: unknown[]) => Prom
 export async function createContract(input: ContractInput, actor: ActingPrincipal): Promise<Contract> {
   requireContractEdit(actor, 'create');
   const v = cleanInput(input);
+  await assertNoOverlap(v, null);
   let id = '';
   await withTransaction(async (tx) => {
     const ins = await tx.query<{ id: string }>(
@@ -381,6 +472,7 @@ export async function createContract(input: ContractInput, actor: ActingPrincipa
     );
     id = ins.rows[0].id;
     await writeRates(tx, id, v.rates);
+    await writeRateVersion(tx, id, v.rates, actor.id, true);
   });
   const created = await getContract(id, actor);
   await logAdminEvent({ actorId: actor.id, entity: 'contract', entityId: id, action: 'contract_created', after: snapshot(created) });
@@ -391,7 +483,11 @@ export async function updateContract(id: string, input: ContractInput, actor: Ac
   requireContractEdit(actor, 'edit');
   const before = await getContract(id, actor);
   const v = cleanInput({ ...before, ...input, rates: input.rates ?? before.rates });
+  await assertNoOverlap(v, id);
   await withTransaction(async (tx) => {
+    // The card's row is locked so two edits cannot both decide "the rates
+    // changed" against the same before.
+    await tx.query(`SELECT id FROM contract WHERE id = $1 FOR UPDATE`, [id]);
     await tx.query(
       `UPDATE contract
           SET name = $2, client = $3, billing_entity = $4, kind = $5, account_code = $6,
@@ -406,6 +502,13 @@ export async function updateContract(id: string, input: ContractInput, actor: Ac
       ],
     );
     await writeRates(tx, id, v.rates);
+    // M30: changed rates are a new version, in force for work orders
+    // received from now on; unchanged rates write nothing.
+    if (rateKey(v.rates) !== rateKey(before.rates)) {
+      const has = (await tx.query(`SELECT 1 FROM contract_rate_version WHERE contract_id = $1 LIMIT 1`, [id])) as { rows: unknown[] };
+      if (has.rows.length === 0) await writeRateVersion(tx, id, before.rates, actor.id, true);
+      await writeRateVersion(tx, id, v.rates, actor.id, false);
+    }
   });
   const after = await getContract(id, actor);
   await logAdminEvent({

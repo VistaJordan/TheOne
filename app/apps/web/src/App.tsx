@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { Suspense, lazy, type ReactNode } from 'react';
 import { ThemeProvider } from './theme/ThemeProvider';
 import { INTAKE_PERM_KEY } from '@theone/shared';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
@@ -33,7 +33,8 @@ import { ClientDetailPage, ClientsPage } from './pages/ClientsPage';
 import { AdminPortfolioPage } from './pages/admin/AdminPortfolioPage';
 import { AdminVendorsPage } from './pages/admin/AdminVendorsPage';
 import { AdminIntegrationsPage } from './pages/admin/AdminIntegrationsPage';
-import { AdminDocsPage } from './pages/admin/AdminDocsPage';
+// L5 (UAT Wave D): its own chunk — only someone who opens Documentation downloads it.
+const AdminDocsPage = lazy(() => import('./pages/admin/AdminDocsPage').then((m) => ({ default: m.AdminDocsPage })));
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
@@ -297,7 +298,7 @@ export function App() {
               {/* 0074 · every connector with its on / off switch. */}
               <Route path="/admin/integrations" element={<RequireAuth><AdminIntegrationsPage /></RequireAuth>} />
               {/* 0075 — the living BRD, SOP and work-order lifecycle. */}
-              <Route path="/admin/docs" element={<RequireAuth><AdminDocsPage /></RequireAuth>} />
+              <Route path="/admin/docs" element={<RequireAuth><Suspense fallback={null}><AdminDocsPage /></Suspense></RequireAuth>} />
             </Routes>
           </AuthProvider>
         </BrowserRouter>

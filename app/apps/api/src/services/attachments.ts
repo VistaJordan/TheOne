@@ -19,6 +19,7 @@ import {
   ATTACHMENT_KINDS,
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_STORAGE_MISSING,
+  ATTACHMENT_NOT_VIEWED_CODE,
   type Attachment,
   type AttachmentKind,
   type AttachmentReview,
@@ -364,6 +365,12 @@ export async function reviewAttachment(
 ): Promise<Attachment> {
   requireView(actor);
   requirePerm(actor,'work_orders/attachments', 'approve', 'You cannot approve or decline files');
+  // M14 (Wave D): a decision is made with the file open full size — the
+  // viewer sends `viewed: true` (soft: it pins where the click came from).
+  // No maker ≠ checker here: the uploader may approve their own photo.
+  if (input.viewed !== true) {
+    throw badRequest('Open the file in the viewer (Review) to approve or decline it', { code: ATTACHMENT_NOT_VIEWED_CODE });
+  }
 
   const res = await query<Row>(`${SELECT} WHERE a.id = $1 AND a.task_id = $2`, [attachmentId, taskId]);
   const row = res.rows[0];

@@ -28,9 +28,14 @@ export const INTAKE_PERM_KEY = 'intake';
 /** The bag key of the Assignee seat (the same one 0032 scopes by). */
 export const INTAKE_ASSIGNEE_KEY = 'Assignee';
 
-/** Optional bag keys the form also offers — a work order without its
-    Client reads badly everywhere, but 11.1.1 does not require it. */
-export const INTAKE_OPTIONAL_FIELDS: readonly IntakeField[] = [{ key: 'Client', label: 'Client' }];
+/** UAT round 1, Wave D (#22): the Client is required on a draft too —
+    11.1.1 does not ask for it (so the Accept gate does not), but a manual
+    work order without its client reads badly everywhere and falls outside
+    every client list. It must be a client RECORD's name (#11). */
+export const INTAKE_DRAFT_EXTRA_REQUIRED: readonly IntakeField[] = [{ key: 'Client', label: 'Client' }];
+
+/** Optional bag keys the form also offers (none since Wave D). */
+export const INTAKE_OPTIONAL_FIELDS: readonly IntakeField[] = [];
 
 /** One line of the manual entry form, in the rule's order. WO# leads
     (task.wo_number, typed by hand for a manual entry), then the 13 intake
@@ -41,6 +46,7 @@ export interface IntakeFormField extends IntakeField {
 
 export const INTAKE_FORM_FIELDS: readonly IntakeFormField[] = [
   ...INTAKE_REQUIRED_FIELDS.map((f) => ({ ...f, required: true })),
+  ...INTAKE_DRAFT_EXTRA_REQUIRED.map((f) => ({ ...f, required: true })),
   ...INTAKE_OPTIONAL_FIELDS.map((f) => ({ ...f, required: false })),
 ];
 
@@ -99,6 +105,7 @@ export function intakeDraftMissing(draft: Pick<IntakeDraft, 'wo_number' | 'field
   const out: string[] = [];
   if (!intakeValueFilled(draft.wo_number)) out.push('WO#');
   for (const f of intakeMissing({ fields: draft.fields })) out.push(f.label);
+  for (const f of INTAKE_DRAFT_EXTRA_REQUIRED) if (!intakeValueFilled(draft.fields?.[f.key])) out.push(f.label);
   return out;
 }
 

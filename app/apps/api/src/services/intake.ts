@@ -32,8 +32,11 @@ import {
   type IntakeDraftInput,
   type IntakeDraftsResponse,
   type IntakeSubmitResponse,
+  VALIDATION_CODE,
+  woNumberProblem,
 } from '@theone/shared';
 import type { ActingPrincipal } from './activity.js';
+import { assertDispatchers } from './dataRules.js';
 import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
@@ -337,17 +340,15 @@ export async function submitIntakeDraft(id: string, actor: ActingPrincipal): Pro
     });
   }
   const woNumber = (cur.wo_number as string).trim();
-  const assignee = (cur.assignee as string).trim();
+  // M2 (Wave D): the WO # format Add work order asks for.
+  const woProblem = woNumberProblem(woNumber);
+  if (woProblem) throw badRequest(woProblem, { code: VALIDATION_CODE, field: 'wo_number' });
 
   // The assignee must be a person on file — the value lands in the Assignee
   // seat, which the 0032 scope matches by display name (the same check the
   // manager's Accept runs), so a typo would hide the work order from everyone.
-  const person = await query<{ id: string }>(
-    `SELECT id::text AS id FROM principal
-      WHERE kind = 'human' AND display_name = $1 AND status <> 'disabled' LIMIT 1`,
-    [assignee],
-  );
-  if (!person.rows[0]) throw badRequest(`"${assignee}" is not an active person on file`, { assignee });
+  // Wave D (#22, D3): and an active dispatcher.
+  const [assignee] = await assertDispatchers([(cur.assignee as string).trim()], 'assignee');
 
   // WO# is the work order's identity: one per number, trash included.
   const dup = await query<{ id: string }>(`SELECT id::text AS id FROM task WHERE wo_number = $1 LIMIT 1`, [woNumber]);
@@ -373,8 +374,12 @@ export async function submitIntakeDraft(id: string, actor: ActingPrincipal): Pro
   // The bag the work order carries: what was typed, minus the Assignee (it
   // is written through the field path below so it is audited and mirrored
   // like any assignment), plus the profit formula the import applies.
-  const bag: Record<string, unknown> = { ...cur.fields };
-  delete bag[INTAKE_ASSIGNEE_KEY];
+  const typed: Record<string, unknown> = { ...cur.fields };
+  delete typed[INTAKE_ASSIGNEE_KEY];
+  // Wave D (M2 / #11): every value checked for its type; the Client is a
+  // client record (its spelling), as on every other path.
+  const { validateBagValues } = await import('./woFieldValues.js');
+  const bag = await validateBagValues(typed);
   applyProfitFormula(bag);
   // The work order is born on Submit, not when the draft was started.
   stampDateCreated(bag);

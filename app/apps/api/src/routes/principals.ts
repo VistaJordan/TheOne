@@ -18,6 +18,7 @@ import { parse } from '../errors.js';
 import { actingPrincipalFromRequest } from '../services/activity.js';
 import { requirePerm } from '../services/permissions.js';
 import { assigneeAvailability, listPrincipals } from '../services/principals.js';
+import { query } from '../db.js';
 
 const availabilityQuery = z.object({
   client: z.string().trim().max(300).optional(),
@@ -27,6 +28,17 @@ export default async function principalsRoutes(app: FastifyInstance): Promise<vo
   app.get('/principals', async (): Promise<PrincipalsResponse> => ({
     items: await listPrincipals(),
   }));
+
+  // L4 (UAT Wave D): who to ask — the active super admins on file, by name
+  // only, for the locked admin page. Any signed-in person may read it.
+  app.get('/principals/super-admins', async (): Promise<{ names: string[] }> => {
+    const res = await query<{ name: string }>(
+      `SELECT display_name AS name FROM principal
+        WHERE kind = 'human' AND is_super_admin AND status <> 'disabled'
+        ORDER BY lower(display_name)`,
+    );
+    return { names: res.rows.map((r) => r.name) };
+  });
 
   app.get('/principals/availability', async (req: FastifyRequest): Promise<AssigneeAvailabilityResponse> => {
     const actor = actingPrincipalFromRequest(req);

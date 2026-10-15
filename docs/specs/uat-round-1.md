@@ -161,53 +161,56 @@ than one file only by taking the next free number after the reserved ones.
 - **#11 One client list.** Migration creates a client record for every client
   name on a work order; the Ecotrak sync creates the record for a new name;
   Client on work orders, PM and intake picks a client record only (server
-  refuses free text). Status: open
+  refuses free text). Status: done (Wave D commit, migration 0086) — import refuses unknown clients (IMPORT_UNKNOWN_CLIENT) rather than creating them
 - **#22 Intake without a client.** Client required; assignee must be a
-  dispatcher (D3). Status: open
-- **M22 Assignee picker.** Active dispatchers only (D3). Status: open
+  dispatcher (D3). Status: done (Wave D commit, migration 0086)
+- **M22 Assignee picker.** Active dispatchers only (D3). Status: done (Wave D commit, migration 0086)
 - **M2 Invalid field values.** Server-side type / option / state / date-order
-  validation on field writes; WO # format check. Status: open
+  validation on field writes; WO # format check. Status: done (Wave D commit, migration 0086)
 - **M10 PM Raise now duplicates.** One work order per occurrence; Raise now
-  refuses while the next occurrence is already raised. Status: open
+  refuses while the next occurrence is already raised. Status: done (Wave D commit, migration 0086)
 - **M11 Dashboard miscount.** "No visit logged" counts active work orders only.
-  Status: open
+  Status: done (Wave D commit, migration 0086) — "future-scheduled" read as the three Sched statuses (the filter language has no OR on a date)
 - **M14 Photo approval.** Approve / Decline only inside the full-size viewer
   (arrow keys between waiting photos); approved photos show on the AR side.
-  Status: open
+  Status: done (Wave D commit, migration 0086) — AR side = the work order's Client invoice card (not the Receivables › Invoicing rows)
 - **M15 Integrations show On.** Show the real connection state (on + configured
-  vs on but not set up). Status: open
+  vs on but not set up). Status: done (Wave D commit, migration 0086)
 - **M16 Enrolment copy.** Settings says what the code does (byblosvista.com
-  self-enrols as OM Under Probation). Status: open
+  self-enrols as OM Under Probation). Status: done (Wave D commit, migration 0086)
 - **M17 Trash / Restore.** Fix the copy; Restore needs `work_orders` delete (or
-  admin/trash edit). Status: open
+  admin/trash edit). Status: done (Wave D commit, migration 0086)
 - **M21 Header titles per role.** Fewer header chips, each limited by the
-  viewer's rights. Status: open
+  viewer's rights. Status: done (Wave D commit, migration 0086) — Cost, Comp, Ecotrak and SharePoint chips gated; nothing else removed
 - **M23 Receivables prototype.** Hide the Audit tab (and the stray "ELISE"
-  column) until it is finished. Status: open
+  column) until it is finished. Status: done (Wave D commit, migration 0086)
 - **M25 "NTE increases" overloaded.** Split into "NTE override (cost over NTE)"
-  and "NTE increase requests". Status: open
+  and "NTE increase requests". Status: done (Wave D commit, migration 0086)
 - **M26 Generate sheet hidden.** Show to anyone with `work_orders/fields/cico`
-  edit. Status: open
+  edit. Status: done (Wave D commit, migration 0086)
 - **M27 Markup on the printed quote.** Hidden on the client document.
-  Status: open
+  Status: done (Wave D commit, migration 0086)
 - **M30 Contract edit re-prices.** Invoice prefill and completion proposals use
   the rates snapshotted when the quote / work order was priced; new rates
-  apply forward only. Status: open
+  apply forward only. Status: done (Wave D commit, migration 0086) — rate versions (contract_rate_version) + the card in force on the received day
 - **M32 Overlapping rate cards.** Refuse an overlapping card for the same
-  party / client / entity / site / trade window. Status: open
+  party / client / entity / site / trade window. Status: done (Wave D commit, migration 0086)
 - **#9 Quote summary adds up.** The on-screen summary shows every term the
   total is made of (incurred, option, tax %, line tax) so the sum is visible.
-  Status: open
-- **L1** Summary wording "Tech reported that Tech found…". Status: open
-- **L2** Audit times in America/New_York, labelled ET. Status: open
+  Status: done (Wave D commit, migration 0086)
+- **L1** Summary wording "Tech reported that Tech found…". Status: done (Wave D commit, migration 0086)
+- **L2** Audit times in America/New_York, labelled ET. Status: done (Wave D commit, migration 0086)
 - **L3** History fields (Previous Assignees) read-only for everyone.
-  Status: open
+  Status: done (Wave D commit, migration 0086)
 - **L4** Lock message names the current super admins from the API, not a
-  hard-coded list. Status: open
+  hard-coded list. Status: done (Wave D commit, migration 0086)
 - **L5** BRD / SOP registry served from the API behind `admin/docs`, not bundled.
-  Status: open
+  Status: done (Wave D commit, migration 0086)
 - **L6** One label set: Approve · Send to client · Record client decision.
-  Status: open
+  Status: done (Wave D commit, migration 0086)
+- **Margin (extra)** The list's Margin % uses the work-order record's formula
+  (revenue = invoices sent, else the quote). Status: done (Wave D commit, migration 0086) — the column's
+  sort still uses the SQL approximation
 
 ## Ops checklist (not code)
 

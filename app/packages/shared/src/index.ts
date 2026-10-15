@@ -2059,3 +2059,5 @@ export * from './moneyGuards';
 export * from './access';
 // UAT round 1, Wave C (0085): request mode, quote-driven status, visit stamps, cancel / reopen.
 export * from './workflow';
+// UAT round 1, Wave D (0086): one client list, dispatcher assignees, field validation, history fields.
+export * from './dataQuality';

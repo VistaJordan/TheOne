@@ -6,7 +6,7 @@
 import { createElement, createRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, it, expect } from 'vitest';
-import type { DocsSnapshot } from '../packages/shared/src/docs';
+import { docsContent, type DocsSnapshot } from '../packages/shared/src/docs';
 import { BrdDoc, brdToc } from '../apps/web/src/components/docs/BrdDoc';
 import { SopDoc, sopToc } from '../apps/web/src/components/docs/SopDoc';
 import { LifecycleChart } from '../apps/web/src/components/docs/LifecycleChart';
@@ -43,33 +43,37 @@ const snap: DocsSnapshot = {
   migrations: [{ n: 75, filename: '0075_documentation.sql', title: 'documentation', applied_at: '2026-10-06T10:00:00.000Z' }],
 };
 
+// L5 (UAT Wave D): the components take the registry as a prop — the page
+// reads it from GET /admin/docs/content; here it is the same payload.
+const content = docsContent();
+
 describe('the documents render', () => {
   it('BRD with and without the live appendix', () => {
-    const bare = renderToStaticMarkup(createElement(BrdDoc, { snap: null }));
+    const bare = renderToStaticMarkup(createElement(BrdDoc, { content, snap: null }));
     expect(bare).toContain('Business rules register');
     expect(bare).toContain('could not be read');
-    const full = renderToStaticMarkup(createElement(BrdDoc, { snap }));
+    const full = renderToStaticMarkup(createElement(BrdDoc, { content, snap }));
     expect(full).toContain('0075_documentation.sql');
     expect(full).toContain('OM (dispatcher)');
     expect(full).toContain('Christmas Day');
-    expect(brdToc(snap).length).toBeGreaterThan(brdToc(null).length);
+    expect(brdToc(content, snap).length).toBeGreaterThan(brdToc(content, null).length);
   });
   it('SOP with and without the ledger', () => {
-    const bare = renderToStaticMarkup(createElement(SopDoc, { snap: null }));
+    const bare = renderToStaticMarkup(createElement(SopDoc, { content, snap: null }));
     expect(bare).toContain('SOP 1: Signing In');
     expect(bare).toContain('Document Sign-Off');
-    const full = renderToStaticMarkup(createElement(SopDoc, { snap }));
+    const full = renderToStaticMarkup(createElement(SopDoc, { content, snap }));
     expect(full).toContain('documentation');
-    expect(sopToc().some((t) => t.id === 'sop-20')).toBe(true);
+    expect(sopToc(content).some((t) => t.id === 'sop-20')).toBe(true);
   });
   it('the lifecycle chart draws every status and the live counts', () => {
     const svgRef = createRef<SVGSVGElement>();
-    const html = renderToStaticMarkup(createElement(LifecycleChart, { snap, svgRef }));
+    const html = renderToStaticMarkup(createElement(LifecycleChart, { content, snap, svgRef }));
     expect(html).toContain('Waiting for Quote');
     expect(html).toContain('Cancelled / Postponed');
     expect(html).toContain('>12<'); // Open's live count
     expect(html).toContain('What runs beside the statuses');
-    const bare = renderToStaticMarkup(createElement(LifecycleChart, { snap: null, svgRef }));
+    const bare = renderToStaticMarkup(createElement(LifecycleChart, { content, snap: null, svgRef }));
     expect(bare).toContain('lc-svg');
   });
 });

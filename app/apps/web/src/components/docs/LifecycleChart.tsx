@@ -12,11 +12,12 @@
 import { useMemo, useState, type RefObject } from 'react';
 import {
   ECOTRAK_PUSH_BY_STATUS_NAME,
-  LIFECYCLE,
   PHASE_BY_STATUS_NAME,
   PHASE_ORDER,
   describeStatusGate,
+  type DocsContent,
   type DocsSnapshot,
+  type LifecycleModel,
   type LifecycleEdgeKind,
   type LifecycleNode,
 } from '@theone/shared';
@@ -46,7 +47,7 @@ interface Placed {
   y: number;
 }
 
-function layout(): { cols: string[]; placed: Placed[]; width: number; height: number } {
+function layout(LIFECYCLE: LifecycleModel): { cols: string[]; placed: Placed[]; width: number; height: number } {
   const cols = [...PHASE_ORDER, OFFRAMP];
   const rowsPerCol = new Map<number, number>();
   const placed: Placed[] = LIFECYCLE.nodes.map((node) => {
@@ -87,8 +88,9 @@ function shortLabel(s: string): string {
   return s.length > 24 ? `${s.slice(0, 23)}…` : s;
 }
 
-export function LifecycleChart({ snap, svgRef }: { snap: DocsSnapshot | null; svgRef: RefObject<SVGSVGElement> }) {
-  const { cols, placed, width, height } = useMemo(layout, []);
+export function LifecycleChart({ content, snap, svgRef }: { content: DocsContent; snap: DocsSnapshot | null; svgRef: RefObject<SVGSVGElement> }) {
+  const LIFECYCLE = content.lifecycle;
+  const { cols, placed, width, height } = useMemo(() => layout(LIFECYCLE), [LIFECYCLE]);
   const byStatus = useMemo(() => new Map(placed.map((p) => [p.node.status, p])), [placed]);
   const live = useMemo(() => new Map((snap?.statuses ?? []).map((s) => [s.name, s])), [snap]);
   const [picked, setPicked] = useState<string | null>(null);

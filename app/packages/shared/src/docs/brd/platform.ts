@@ -43,7 +43,7 @@ export const PLATFORM_PART: DocPart = {
         },
         {
           name: 'Super admins',
-          what: 'Four named people (Elise, Jordan Brown, Jeff S, Jack) hold the super-admin flag, which passes every permission check and alone unlocks per-person permission adjustments.',
+          what: 'A few named people (the Users list marks them; the live appendix names them) hold the super-admin flag, which passes every permission check and alone unlocks per-person permission adjustments.',
           value: 'A small, named group can always recover access and settle disputes; the flag is separate from the Admin role so administering the system is not confused with working a work order.',
           rules: ['Nobody can change their own super-admin flag or disable themselves; the last active super admin cannot be demoted or disabled.', 'Only a super admin can grant or remove the flag, or change a super admin\'s role, name or status: anyone else gets 403 SUPER_ADMIN_ONLY, checked against the person really signed in, never the one viewed as; the last-super-admin count and the change run in one transaction under a database lock, so two demotions cannot both pass.', 'A super admin is never scoped: site restrictions and client lists are cleared for them when the session loads.'],
           since: '0004',
@@ -114,7 +114,7 @@ export const PLATFORM_PART: DocPart = {
         },
         {
           name: 'Locked with a reason',
-          what: 'A page or button a person may not use is shown locked with a sentence saying why and who to ask (the admin console says "Ask a super admin — Elise, Jordan, Jeff or Jack"), instead of a dead end or a silent failure.',
+          what: 'A page or button a person may not use is shown locked with a sentence saying why and who to ask (the admin console says "Ask a super admin — …" with the super admins on file named from the database), instead of a dead end or a silent failure.',
           value: 'People learn the rules from the screen; fewer "it does not work" messages.',
         },
       ],
@@ -140,14 +140,15 @@ export const PLATFORM_PART: DocPart = {
             'A permission map is capped at 2,000 entries and keys at 400 characters; non-boolean values are dropped on the way in.',
             'The role matrix lives in migrations (UAT D4). 0084: Exec guest holds exactly OM Under Probation\'s grants; Ops Coordinator holds them too, minus the technician list and map, Clients and rates, on its own work orders and in request mode; VR Officer and Operations Admin request status changes and see every work order (they source and intake for all of them and are never the Assignee); HR (new) holds Admin › Users and Roles only; invoicing is full for Admin and AR and view for TL, ATL and AM.',
             'UAT Wave C (0085): the four dispatchers (Ops Coordinator, OM Under Probation, OM, Senior OM) request every status change; the new row "Cancel, pause and complete" (work_orders/lifecycle) is off for every role that requests status changes; the NTE, the SLA dates and the AR section are view-only for the dispatchers and the VR Officer.',
-            'Dispatchers (D3) are OM Under Probation and Ops Coordinator (under probation), OM, Senior OM — one list, DISPATCHER_ROLE_CODES in shared/access.ts.',
+            'Dispatchers (D3) are OM Under Probation and Ops Coordinator (under probation), OM, Senior OM — one list, DISPATCHER_ROLE_CODES in shared/access.ts. Since UAT Wave D (#22 / M22) only an active dispatcher can be put in the Assignee seat by a person (the field editor, bulk edit, Add work order, a draft\'s Submit, Accept, the Assignment Manager, a PM schedule); 400 ASSIGNEE_NOT_DISPATCHER.',
+            'UAT Wave D (M17): Restore in Admin › Trash needs the right to delete work orders (or Admin › Trash edit), 403 otherwise. (L4) The locked admin page names the super admins on file, read from GET /principals/super-admins. (L2) Admin › Audit shows times in Eastern time, labelled ET; the CSV carries Time (ET) beside Time (UTC). (M16) Admin › Settings › Access says what sign-in does: the allowed domains enrol themselves in the auto-enrol role, everyone else by invitation.',
           ],
           audit: ['role_created', 'role_updated', 'role_deleted'],
           since: '0021',
         },
         {
           name: 'What the tree contains',
-          what: 'Dashboard (view, create = build and share; Which dashboards per board with Which work orders it counts), Work orders (create = import and Add work order, delete = move to Trash; Which work orders; Status changes; Messages with Message the client; Calls (Quo); Photos and files with approve; Export to CSV; Save as PDF; Field history; Detail tabs, one row per tab; every field by section), Quotes (approve covers reject and send), Payments with Process (pay, change method, delete; delete = confirm or keep a pending delete), Approvals with Pending acceptance / NTE increases / Status changes / Manager reviews / Quotes / Payments, WO Intake, Vendors (Which vendors: Everything / Only theirs; Notes and blacklist; Review queue; Documents; Import; Export; Saved lists; Portal; Dispatch), Technician map (Which technicians: All / Only theirs; VR vendors; Statewide; Nationwide; Subcontractors; Add a technician; hire), Sites, Assets with Requests, Clients, Planned maintenance, Maintenance sub-rows, Purchasing sub-rows, Invoicing, Contracts and rates, Client updates with Share with clients, Assistant, and the Admin console with one row per section (Themes, Audit log and Documentation view-only).',
+          what: 'Dashboard (view, create = build and share; Which dashboards per board with Which work orders it counts), Work orders (create = import and Add work order, delete = move to Trash; Which work orders; Status changes; Messages with Message the client; Calls (Quo); Photos and files with approve; Export to CSV; Save as PDF; Field history; Detail tabs, one row per tab; every field by section), Quotes (approve covers reject and send), Payments with Process (pay, change method, delete; delete = confirm or keep a pending delete), Approvals with Pending acceptance / NTE override and NTE increase requests (both approvals/nte) / Status changes / Manager reviews / Quotes / Payments, WO Intake, Vendors (Which vendors: Everything / Only theirs; Notes and blacklist; Review queue; Documents; Import; Export; Saved lists; Portal; Dispatch), Technician map (Which technicians: All / Only theirs; VR vendors; Statewide; Nationwide; Subcontractors; Add a technician; hire), Sites, Assets with Requests, Clients, Planned maintenance, Maintenance sub-rows, Purchasing sub-rows, Invoicing, Contracts and rates, Client updates with Share with clients, Assistant, and the Admin console with one row per section (Themes, Audit log and Documentation view-only).',
           value: 'The whole application is one checklist.',
         },
         {

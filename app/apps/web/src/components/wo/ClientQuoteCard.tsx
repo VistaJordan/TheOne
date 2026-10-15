@@ -8,6 +8,8 @@ import { ImportTranscriptButton } from '../quote/ImportTranscriptButton';
 import { Icon } from '../Icon';
 import { useAuth } from '../../auth/AuthProvider';
 import { InlineField } from './fieldEdit';
+import { QuoteTerms } from '../quote/QuoteTerms';
+import { quoteTermsFromTotals } from '@theone/shared';
 
 interface ClientQuoteCardProps {
   wo: WorkOrderDetailV2;
@@ -46,6 +48,8 @@ export function ClientQuoteCard({ wo, quoteStatus, quote }: ClientQuoteCardProps
             ? <p className="quote-card-text">{clientQuote}</p>
             : <span className="quote-card-none">No client quote text on this work order yet.</span>}
         </InlineField>
+        {/* #9 (Wave D): the quote's total, every term on screen. */}
+        {quote?.totals && <QuoteTerms input={quoteTermsFromTotals(quote.totals)} className="quote-card-terms" />}
       </div>
 
       {showEntry && (

@@ -68,7 +68,7 @@ import {
   listApprovalTiers,
   updateApprovalTier,
 } from '../services/approvalTiers.js';
-import { APPROVAL_TIER_KINDS } from '@theone/shared';
+import { APPROVAL_TIER_KINDS, TRASH_RESTORE_REFUSED, mayRestoreFromTrash } from '@theone/shared';
 import { logAdminEvent, logExport } from '../services/adminAudit.js';
 import {
   createAutomation,
@@ -522,7 +522,14 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/admin/trash/:id/restore', async (req) => {
-    const actorId = requireAdmin(req, 'trash', 'edit');
+    // M17 (UAT Wave D): restoring undoes a delete, so it needs the right to
+    // delete work orders — or Admin › Trash edit; anyone else gets a 403.
+    if (!req.auth) throw unauthorized();
+    const subject = permissionSubject(req);
+    if (!mayRestoreFromTrash(subject.perms, subject.isSuperAdmin)) {
+      throw new ApiError('FORBIDDEN', TRASH_RESTORE_REFUSED, { code: 'TRASH_RESTORE_FORBIDDEN', required_permission: 'work_orders:delete' });
+    }
+    const actorId = req.auth.user.id;
     const { id } = parse(idParams, req.params);
     return { item: await restoreTask(id, actorId) };
   });
