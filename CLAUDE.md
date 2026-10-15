@@ -1091,8 +1091,9 @@ Tests: `tests/portfolio.test.ts`.
   cannot be renamed (only re-capitalised) or removed (mark it inactive), and
   `adoptNewClients` inserts a record for any new name each time the list is
   read. `/clients`, `/clients/:id`; permission `clients`.
-- **A person restricted to a list of sites** (`principal_site`; nobody listed
-  = no restriction; super admins never). The session loader sets
+- **A person restricted to a list of sites** (`principal_site`; since 0084 the
+  switch is `principal.site_restricted` — on with nobody listed = no sites,
+  off = no restriction; super admins never). The session loader sets
   `siteRestricted` (auth.ts → `ActingPrincipal`), and `woScopeSql` ANDs
   `t.site_id IN (their sites)` onto whatever the role scope says — so the
   list, the queues, the badge and every per-work-order route follow it, and a
@@ -1409,8 +1410,8 @@ fails until the guide follows. The guide rides in the cached static block
 (`STATIC_INSTRUCTIONS` = briefing + guide, about 10k tokens). Every question
 carries "What this person may do": `describeAbilities` resolves the
 permission tree (`buildPermissionTree([])`, two levels) for the asker, one row
-per line, with the `admin/*` rows read from the person SIGNED IN and the rest
-from who they act as — the same split `requireAdmin` makes. So "how do I add
+per line, every row — the `admin/*` ones included since Wave B (D6) — read
+from who they act as, as `requireAdmin` reads it. So "how do I add
 an automation" gets the steps for someone with `admin/automations` edit and
 "you are not allowed to add automations" for anyone else. Anything outside The
 One (general knowledge, other software, writing unrelated to a record) is
@@ -1435,8 +1436,9 @@ every bar stays visible), drill chips, "Client view" (shared columns and
 charts only), and the list from the ordinary `/work-orders` endpoint with
 `trackerFilters()` — `andFilters()` distributes a drill over an "any of"
 filter's OR groups. Our page follows the viewer's rule-8.5 scope; everything
-the CLIENT gets (link, email, client CSV) is the whole tracker, shared
-columns only, via `buildView` with no viewer. Five **computed columns**
+the CLIENT gets (link, email, client CSV) is built by `buildView` as the
+tracker's OWNER sees it since Wave B (#17): the owner's scope ∩ the client,
+shared columns that are client-safe and visible to the owner. Five **computed columns**
 joined the field catalogue for every list (`COMPUTED_WO_COLUMNS`; SQL in
 `woFields.ts`, projected into a row's `custom` map only when asked):
 `location` (City, ST), `completed_on` (first move into done/closed after the
@@ -1661,7 +1663,8 @@ outgoing email, the escalation-mailbox webhook (communications); Claude
 connector is code), the switch is a row per key in `integration_setting`;
 **no row = on**, so a connector added later is on until someone turns it
 off. Its own admin section `admin/integrations` (view / edit; 0074 grants
-it to the admin role; routes read the REAL user like `routes/admin.ts`).
+it to the admin role; since Wave B (D6) the routes answer from the person
+being viewed while viewing as them, like `routes/admin.ts`).
 `integrationOn(key)` is **synchronous** — `storageReady` and `quoApiReady`
 are called inside handlers that never awaited for it — answering from an
 in-memory copy refreshed in the background every 20 s and at once after a
@@ -1825,7 +1828,7 @@ definitions, SOP 1–20 as typed blocks, who-does-what matrix, success
 metric), `lifecycle.ts` (`LIFECYCLE`: stages, one node per
 `PHASE_BY_STATUS_NAME` status, edges by kind, gated statuses, side
 processes). **The live half** is `GET /admin/docs/snapshot` (gate
-`admin/docs` view on the REAL user; 0075 grants it to admin / tl / atl /
+`admin/docs` view on `actingAs` — the viewed person while viewing as, D6; 0075 grants it to admin / tl / atl /
 am): statuses with counts, fields with section / options / create_mode,
 roles with their level-one grants + scope + status mode, automations,
 integrations (read with a super-admin bearer on purpose — the page is
@@ -1855,8 +1858,9 @@ log a row under the acting principal are refused too
 (`IMPERSONATION_GET_DENYLIST_ROUTES`: the work-order and vendor CSV exports,
 Save as PDF, the technician map, the client-updates CSV), matched on the
 Fastify route pattern and on the decoded path, while
-`GET /api/admin/audit/export` stays open because `requireAdmin` reads the real
-user; the ActorSwitcher shows a Read-only chip, and the five download links
+`GET /api/admin/audit/export` stays open because its row is logged under the
+real user (since Wave B it is GATED on the viewed person, D6, and marked
+`viewing_as`); the ActorSwitcher shows a Read-only chip, and the five download links
 (Work Orders › Export, Client Updates › CSV, Vendors › Export CSV, the two
 Save as PDF items) go through `downloadLinkProps` (`lib/actor.ts`): while
 viewing as someone they have no href and no `download`, are `aria-disabled`
@@ -2084,6 +2088,98 @@ route schemas, `MONEY_RE` seven whole digits, money custom fields checked in
 `details.code = VALIDATION`. The three 0083 unique indexes are created in DO
 blocks only when the rows on file already satisfy them (a NOTICE otherwise).
 
+**UAT round 1, Wave B — access and scope** (migration 0084,
+`docs/specs/uat-round-1.md`, `packages/shared/src/access.ts`,
+`services/recordScope.ts`, `tests/uat-wave-b.test.ts`). **D3:** the
+dispatchers are ONE list, `DISPATCHER_ROLE_CODES` / `isDispatcherRole` /
+`dispatcherTier` in shared `access.ts` (ops_coord and om_probation =
+probation, om, senior_om = senior; `assigneeAvailability.ts` no longer keeps
+its own copy). **D4 / #12 / #14 / M13 / M20 — the role matrix is 0084**
+(a session-only `pg_temp.wb_grant(code, path, grant)` merges a grant into one
+path; role is not truncated by the seed, so only the field_def flags have a
+seed twin): invoicing full for admin and ar, view for tl / atl / am (0021's
+blanket view had made 0045 skip them); every system role but
+`MONEY_ROLE_CODES` (admin, tl, atl, am, ar, ap) and service loses view and
+edit on Cost, Profit, Total Invoiced and Discount
+(`MONEY_HIDDEN_FIELD_KEYS`) and invoicing altogether; the Margin % stays — the
+new computed column `margin_pct` (`MARGIN_PCT_SQL` in `woFields.ts`, a header
+path nobody narrows), `money.marginPct` on the detail (`redactWorkOrder` now
+nulls cost / invoiced / profit one by one) and `margin_pct` in the record's
+Cost card (`redactRecordMoney` in `woRecord.ts`). exec_guest and ops_coord
+are copies of om_probation (after the M13 pass); ops_coord then loses
+vendors, vendor_map, clients and contracts, and is on Only theirs in request
+mode; vr_officer and oa are request mode with `work_orders/scope` view true
+(they source / intake for every work order and are never its Assignee); new
+system role `hr` holds `admin/users` + `admin/roles` view / edit only.
+**#13 — a record opened by its own id follows its work order:**
+`assertRecordInScope(kind, id, actor)` (`RECORD_TASK_SQL`: payment_request,
+invoice, vendor_bill, billing_proposal, vendor_credit_note, approval_task,
+wo_visit) runs at the top of every `/payment-requests/:pid…`,
+`/invoices/:id…` (the print page reads it), `/vendor-bills/:id…`, billing
+proposal confirm / dismiss, credit notes, approval-task approve / reject /
+claim (acknowledge / withdraw are the requester's own) and `/visits/:id…`
+route; POST `/invoices` and `/vendor-bills` run `assertTaskInScope` on the
+body's `task_id`; a trashed work order is still checked. Quotes (and the
+quote print page), attachments, calls, AI drafts and purchasing were already
+scoped (`resolveTaskId` + `task_id = $2`, `scopeOr`); the test pins all of it.
+**#17 — client-safe:** `field_def.client_safe` (0084; off for the Finances,
+Payments, Invoicing and AR sections and the money figures,
+`clientUnsafeDefaultBagKeys()`, which seed.ts re-applies — keep in step; the
+core columns follow `defaultClientSafe`, Margin % off), a **Client-safe**
+column in Admin › Custom fields (audited in `field_def_updated`), carried on
+the catalogue and `resolveField`. A tracker's link, email and client CSV are
+built AS ITS OWNER (`trackerOwner`: `created_by` through
+`loadPrincipalById`; a disabled owner shares nothing): rows =
+`listWorkOrders(…, owner)` ∩ `trackerFilters` (the client), columns and
+charts = ticked shared AND client-safe AND `canViewField` for the owner;
+saving a shared non-client-safe column or chart is 400
+`CLIENT_UNSAFE_COLUMNS` naming them (the Tracker dialog locks the switch).
+**#18 — nobody raises their own rights:** `assertNotSelfEdit` /
+`assertNoSelfRightsChange` (403 `SELF_EDIT`, super admins included, on the
+pool read and again on the locked row) cover role, status, super-admin flag,
+client list and overrides (Adjust and the Share dialog's per-person tick) —
+they replace the two old 400s for removing one's own super admin and
+disabling oneself; a name change passes. `grantsExceeding` (shared, pure) +
+`assertGrantWithinOwn` / `assertRoleGrantWithinOwn` refuse a non-super-admin
+handing out, by invite, role change or role edit, an action they do not
+hold — including a grant above their own explicit refusal (403
+`GRANT_EXCEEDS_OWN`, `details.exceeds`; a role edit is compared with what
+the role already granted). Role DEFINITIONS (POST / PATCH / DELETE
+`/admin/roles`) also need `mayEditRoleDefinitions`: a super admin or the
+Admin role (403 `ROLE_EDIT_RESTRICTED`; the Roles page reads it and says
+"Only a super admin or someone in the Admin role can change roles."). The
+dashboards Share dialog calls `updateRole` without an editor (it writes only
+the sharer's own board). As specified, `hr` can therefore invite people only
+into roles within its own grants and cannot edit role definitions — see the
+spec's open question. **D6 / M12 — viewing as = their rights everywhere:**
+`permissionSubject(req)` (`services/activity.ts`, `actingAs`, which is the
+user when not viewing as) is what `requireAdmin`, `requireSuperAdmin`, GET
+`/admin/roles`, `/admin/permission-fields`, `routes/adminDocs.ts`,
+`routes/adminIntegrations.ts` and `routes/integrations.ts` check; the ids they
+return for logging stay the real user's, and the user-writing routes still
+read `isRealSuperAdmin` (writes never run while viewing as — the guard
+refuses them first). Starting and stopping a view reads `req.auth.user`
+(routes/auth.ts) and the ActorSwitcher keys on `user`, so a super admin can
+always stop. The audit export is gated on the viewed person and logged under
+the real user with `viewing_as`. The web reads `actingAs` throughout
+(AdminUsersPage's ring now too). **M28:** `activityFieldKey` (shared) names
+the catalogue field an audit row is about; `redactActivityValues` keeps an
+Admin › Audit row (and its CSV line) on a field the reader cannot see but
+nulls before / after (`redacted: true`); `/activity` and the detail's
+`recent_activity` drop such rows; `widgetFieldsVisible` (dashboards.ts)
+answers a card or a preview whose `widgetNamedFields` (value, group, time,
+filter and duration-leg fields) include one the VIEWER cannot see with
+`{error: 'not available'}`. Free-text audit search over before / after is
+not narrowed (a hidden value can still match a row it then withholds).
+**M29:** `principal.site_restricted` (0084, backfilled from principal_site)
+is what the session reads; on with an empty list = no sites and no work
+orders; `setSiteAccess(id, sites, actor, restricted)` writes the flag and the
+list under the person's row lock (`FOR NO KEY UPDATE`), PUT takes
+`restricted` (omitted = list non-empty), Admin › Sites & assets lists every
+flagged person with a **Restrict to sites** switch. New error codes:
+`SELF_EDIT`, `GRANT_EXCEEDS_OWN`, `ROLE_EDIT_RESTRICTED`,
+`CLIENT_UNSAFE_COLUMNS`.
+
 ## Verify
 
 ```
@@ -2100,7 +2196,7 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   runs it and `npm test` on every push; it is green only because
   `tests/setup.ts` sets the environment and `config.ts` skips `app/.env` under
   `VITEST`, so never let a test depend on a developer's `.env`.
-- The vitest suite under `app/tests/` (61 files, 996 tests on 2026-10-15) is
+- The vitest suite under `app/tests/` (62 files, 1046 tests on 2026-10-15) is
   the regression net: pure functions and source-text pins, no database and no
   network, so a SQL change still needs a seeded local Postgres, curl and
   headless Chromium screenshots of both themes before it is believed.

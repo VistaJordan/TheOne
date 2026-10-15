@@ -200,17 +200,25 @@ describe('GETs that write a row under the acting principal are refused too', () 
     }
   });
 
-  it("does not list Admin › Audit's export: routes/admin.ts logs it under the REAL user", () => {
+  // UAT round 1, Wave B (D6): the audit export is gated on the person being
+  // viewed (permissionSubject — an OM viewed-as gets the OM's 403) and the
+  // export row is still the REAL user's, marked `viewing_as`, so it stays off
+  // the denylist: it writes no row under the acting principal.
+  it("does not list Admin › Audit's export: gated on the viewed person, logged under the REAL user", () => {
     expect(impersonationWriteBlocked('GET', '/api/admin/audit/export')).toBe(false);
     const admin = apiSrc('routes', 'admin.ts');
     const at = admin.indexOf('function requireAdmin(');
     expect(at).toBeGreaterThan(-1);
     const requireAdmin = admin.slice(at, admin.indexOf('\n}', at));
-    expect(requireAdmin).toMatch(/requirePerm\(\s*req\.auth\.user,/);
+    expect(requireAdmin).toMatch(/requirePerm\(\s*permissionSubject\(req\),/);
+    expect(requireAdmin).not.toMatch(/requirePerm\(\s*req\.auth\.user,/);
     expect(requireAdmin).toMatch(/return req\.auth\.user\.id;/);
     const exportAt = admin.indexOf("app.get('/admin/audit/export'");
     expect(exportAt).toBeGreaterThan(-1);
-    expect(admin.slice(exportAt, exportAt + 400)).toMatch(/const actorId = requireAdmin\(req, 'audit'\)/);
+    const exportBlock = admin.slice(exportAt, exportAt + 1200);
+    expect(exportBlock).toMatch(/const actorId = requireAdmin\(req, 'audit'\)/);
+    expect(exportBlock).toMatch(/viewing_as: req\.auth\.actingAs\.id/);
+    expect(apiSrc('services', 'activity.ts')).toMatch(/export function permissionSubject\([^)]*\)[^{]*\{[^}]*return req\.auth\.actingAs;/);
   });
 
   it('every denylisted path is a route that exists, and each really writes under the actor', () => {

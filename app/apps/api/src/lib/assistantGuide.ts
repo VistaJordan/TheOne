@@ -32,12 +32,13 @@ Afterwards each automation is a card with a switch (on, or paused), its run log 
 
 **Users** (Admin › Users; needs \`admin/users\` edit)
 - Invite someone: click **Invite a user**, fill **Work email** and **Full name**, pick a **Role**, click **Send invitation**. The **Super admin** tick on the invitation is drawn for super admins only, and not while viewing as someone. The email must match their Microsoft account exactly. A byblosvista.com account needs no invitation: it enrols itself as OM Under Probation the first time it signs in.
-- Change a role: pick from the **Role** dropdown in the person's row; it saves at once.
+- Change a role: pick from the **Role** dropdown in the person's row; it saves at once. Nobody can change their own role, status, clients or permissions, super admins included ("You cannot change your own role, status, clients or permissions — ask another administrator."); someone who is not a super admin cannot pick a role that grants more than they hold (it reads "— grants more than you hold").
 - Make or unmake a super admin (super admins only, judged on the person really signed in): the **Super admin** switch in the row. It is off for anyone else ("Only a super admin can change this") and off while viewing as someone; the API refuses with "Only a super admin can grant or remove super-admin access". Nobody can change their own, and the last super admin cannot be demoted.
 - Block or restore sign-in: **Disable** (ends their sessions immediately) or **Re-enable**. Nobody can disable themselves or the last super admin. A super admin's **Role**, **Disable** and **Re-enable** are locked for anyone who is not a super admin ("Only a super admin can change a super admin's account").
 - Change one person's permissions without changing their role (super admins only): click **Adjust** in the **Permissions** column, click a cell to set it for that person (faded cells come from the role), then **Save adjustments**. **Remove all adjustments** clears them.
 
 **Roles** (Admin › Roles; needs \`admin/roles\` edit)
+- Only super admins and people in the Admin role change roles; anyone else with the grant sees them read-only ("Only a super admin or someone in the Admin role can change roles."). Nobody but a super admin can add a permission they do not hold themselves.
 - Create a role: **New role**, fill **Name**, optionally **Start from** a copy of another role, set the cells, **Create role**.
 - Change what a role can do: click the role's card, find the row (**Find a section or field…**), click a cell under View, Create, Edit, Delete or Approve, then **Save role**. An unset cell follows the row above it. Granting a write also grants View on that row.
 - Which work orders a role sees: open the role, expand **Work orders**, row **Which work orders**: **Everything** or **Only theirs**; under Only theirs, tick **Entity · <Comp>** rows to add whole billing entities. **Save role**.
@@ -51,6 +52,7 @@ Afterwards each automation is a card with a switch (on, or paused), its run log 
 - Rename a field: the pencil beside its name, then **Save**. Change its type: the **Type** dropdown in its row. Reorder: drag the handle at the left of the row.
 - Edit a dropdown's values: in the **Options** column click the values count, remove with × or add with **Add**, then **Save values**. Removing a value never changes work orders that already hold it.
 - Put a field on the Add work order form: the **Add work order** column: **Not on the form**, **On the form** or **Required**.
+- Let a field go out to clients on a shared Client Update: the **Client-safe** column (a tick; money, AP, AR and invoicing fields start off). A field that is not client-safe can still be a team-only column on a tracker.
 - Statuses live on the same page under **Statuses**. Add one: in its phase's card type in **Add a status to …**, pick a colour, click **Add**. Rename with the pencil; delete with the trash icon then **Delete status**. A status that work orders are sitting in cannot be deleted; move them first.
 - Phases (status groups): **New phase**, **Name**, **Create phase**; it becomes a tab on the work-orders list. Only an empty phase that is not built in can be deleted.
 - Check-in method by FM: fill **FM company**, **Method** and optional **Detail**, click **Add**. It pre-fills the method of a new visit.
@@ -84,7 +86,7 @@ Who sees which technicians on the map is set in Admin › Roles under **Technici
 
 **Sites & assets** (Admin › Sites & assets; needs \`admin/portfolio\` edit)
 - Site types and asset categories: type in **Add a value…**, click **Add**; **Rename** or **Switch off** per row.
-- Restrict a person to certain sites (super admins only): under **Site access**, **Choose a person…**, pick their first site, then add more on their row. **Lift the restriction** removes it. A restricted person sees only those sites, their assets and their work orders.`;
+- Restrict a person to certain sites (super admins only): under **Site access**, **Choose a person…**, pick their first site, then add more on their row. **Restrict to sites** on their row is the switch: on with no sites left means they see no site at all (never every site); turn it off to lift the restriction. A restricted person sees only those sites, their assets and their work orders.`;
 
 export const APP_GUIDE = `## Guide to the app's screens
 
@@ -92,7 +94,7 @@ Each task says what it needs: a permission row and an action, as in \`admin/auto
 
 The sidebar: Dashboard, Pulse, Work Orders, Vendors, Sites, Assets, Clients, Quotes, Payments, Incoming Work Orders, Planned Maintenance, Maintenance, Approvals, Receivables, Contracts, Purchasing, Client Updates, and Admin with its sections. A person only sees the items their role includes. The top bar has the search box, **Viewing as** (super admins), this assistant, the notifications bell and the theme switch.
 
-**Viewing as** (super admins only): pick a person in the top-bar select to see the app exactly as they do; **Myself** ends it. It is read-only: every change answers "Viewing as another user is read-only. Stop viewing as them to make changes." (403 IMPERSONATION_READ_ONLY), and so do the work-order and vendor CSV exports, **Save as PDF**, the technician map and the client-updates CSV; the top bar shows a **Read-only** chip while it is on. The admin console still reads the person really signed in.
+**Viewing as** (super admins only): pick a person in the top-bar select to see the app exactly as they do; **Myself** ends it. It is read-only: every change answers "Viewing as another user is read-only. Stop viewing as them to make changes." (403 IMPERSONATION_READ_ONLY), and so do the work-order and vendor CSV exports, **Save as PDF**, the technician map and the client-updates CSV; the top bar shows a **Read-only** chip while it is on. The admin console shows what they would see too (an OM gets the OM's console).
 
 ${GUIDE_WORK_ORDERS}
 

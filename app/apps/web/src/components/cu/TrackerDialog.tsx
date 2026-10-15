@@ -65,6 +65,10 @@ export function TrackerDialog({ tracker, busy, error, onSave, onDelete, onClose 
 
   const clientOptions = byKey.get('client')?.options ?? [];
   const labelOf = (key: string) => byKey.get(key)?.label ?? key.replace(/^fields\./, '');
+  // #17 (0084) · a field that is not client-safe can be on our page but never
+  // ticked "Client sees it" (the save is refused with the list of them).
+  const unsafe = (key: string) => byKey.get(key)?.client_safe === false;
+  const UNSAFE_HINT = 'Not client-safe — set in Admin › Custom fields';
   const noteChoices = fields.filter(
     (f) => f.key.startsWith('fields.') && f.type === 'text' && !['formula', 'attachment', 'url'].includes(f.subtype ?? ''),
   );
@@ -293,10 +297,15 @@ export function TrackerDialog({ tracker, busy, error, onSave, onDelete, onClose 
                     />
                     <small>{byKey.has(c.key) ? labelOf(c.key) : `${labelOf(c.key)} (not available)`}</small>
                   </div>
-                  <label className="sw cu-share-sw">
-                    <input type="checkbox" checked={c.shared} onChange={(e) => patchCol(i, { shared: e.target.checked })} />
+                  <label className="sw cu-share-sw" title={unsafe(c.key) ? UNSAFE_HINT : undefined}>
+                    <input
+                      type="checkbox"
+                      checked={c.shared}
+                      disabled={unsafe(c.key) && !c.shared}
+                      onChange={(e) => patchCol(i, { shared: e.target.checked })}
+                    />
                     <span className="sw-track" />
-                    {c.shared ? 'Client sees it' : 'Team only'}
+                    {c.shared ? 'Client sees it' : unsafe(c.key) ? 'Team only · not client-safe' : 'Team only'}
                   </label>
                   <button
                     type="button"
@@ -361,10 +370,15 @@ export function TrackerDialog({ tracker, busy, error, onSave, onDelete, onClose 
                       <option value="bar">Bars</option>
                       <option value="donut">Donut</option>
                     </select>
-                    <label className="sw cu-share-sw">
-                      <input type="checkbox" checked={c.shared} onChange={(e) => patchChart(i, { shared: e.target.checked })} />
+                    <label className="sw cu-share-sw" title={unsafe(c.field) ? UNSAFE_HINT : undefined}>
+                      <input
+                        type="checkbox"
+                        checked={c.shared}
+                        disabled={unsafe(c.field) && !c.shared}
+                        onChange={(e) => patchChart(i, { shared: e.target.checked })}
+                      />
                       <span className="sw-track" />
-                      {c.shared ? 'Client sees it' : 'Team only'}
+                      {c.shared ? 'Client sees it' : unsafe(c.field) ? 'Team only · not client-safe' : 'Team only'}
                     </label>
                     <button
                       type="button"

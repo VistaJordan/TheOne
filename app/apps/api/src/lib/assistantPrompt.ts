@@ -234,18 +234,20 @@ export interface AbilityBearer {
 }
 
 /**
- * `user` is the person signed in and `acting` who they are viewing as. The
- * Admin console is gated on the person signed in (viewing as an admin must
- * not make one), everything else on who they act as — the same split the API
- * makes.
+ * `user` is the person signed in and `acting` who they are viewing as. Since
+ * UAT Wave B (D6) every row — the Admin console included — is the acting
+ * person's, as the API gates it (`permissionSubject`): viewing as an OM, the
+ * assistant describes what the OM may do. Only a super admin can view as
+ * anyone, so this never widens.
  */
 export function describeAbilities(user: AbilityBearer, acting: AbilityBearer): string {
   const lines: string[] = [];
-  if (acting.isSuperAdmin && user.isSuperAdmin) {
+  void user;
+  if (acting.isSuperAdmin) {
     lines.push('Super admin: may do everything in the app, including every Admin section and the per-person permission adjustments.');
     return lines.join('\n');
   }
-  const bearerFor = (key: string) => (key === 'admin' || key.startsWith('admin/') ? user : acting);
+  const bearerFor = (_key: string) => acting;
   const row = (n: PermNode, depth: number): void => {
     const b = bearerFor(n.key);
     if (n.key === WO_SCOPE_PERM_KEY) {

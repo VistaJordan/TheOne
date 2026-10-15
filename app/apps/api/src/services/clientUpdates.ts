@@ -12,10 +12,17 @@
 //                             "Which work orders" scope (rule 8.5), like every
 //                             other list.
 //   the client             — the link, the email and the client CSV carry the
-//                             WHOLE tracker (it is the client's book, not one
-//                             dispatcher's), and only the columns ticked
-//                             "shared". Only people with client_updates/share
-//                             can send or open that door.
+//                             tracker as its OWNER (`created_by`) may see it
+//                             (#17, UAT round 1 Wave B): rows = the owner's
+//                             rule-8.5 scope ∩ the tracker's client, columns =
+//                             the ones ticked "shared" that are client-safe
+//                             (field_def.client_safe) AND visible to the
+//                             owner. Before 0084 it was the whole tracker with
+//                             no viewer at all, so a dispatcher's tracker could
+//                             mail out work orders and money they never saw.
+//                             Only people with client_updates/share can send
+//                             or open that door; a tracker whose owner is gone
+//                             or disabled shares nothing.
 
 import { randomBytes } from 'node:crypto';
 import {
@@ -76,6 +83,10 @@ import { Params, compileFilters, resolveField, type FilterSet } from './woFields
 import { metricBreakdown } from './woMetrics.js';
 import { woScopeSql } from './woScope.js';
 import { listWorkOrders } from './workOrders.js';
+import { CLIENT_UNSAFE_COLUMNS_CODE } from '@theone/shared';
+import { loadPrincipalById } from './auth.js';
+import { actingFromPrincipal } from './activity.js';
+import { allowFor, canViewField } from './permissions.js';
 
 // ── Gates ────────────────────────────────────────────────────────────────────
 
@@ -258,10 +269,13 @@ async function clean(input: ClientUpdateInput, prev: ClientUpdate | null): Promi
   if (columns.length > MAX_TRACKER_COLUMNS) throw badRequest(`At most ${MAX_TRACKER_COLUMNS} columns`);
   const seenCols = new Set<string>();
   const cleanCols: ClientUpdateColumn[] = [];
+  // #17 · a column marked shared must be client-safe (Admin › Custom fields).
+  const unsafe: string[] = [];
   for (const c of columns) {
     if (seenCols.has(c.key)) continue;
     seenCols.add(c.key);
-    await resolveField(c.key);
+    const f = await resolveField(c.key);
+    if (c.shared && !f.client_safe) unsafe.push(f.label);
     cleanCols.push({ key: c.key, label: c.label?.trim() ? c.label.trim().slice(0, 80) : null, shared: Boolean(c.shared) });
   }
 
@@ -269,9 +283,17 @@ async function clean(input: ClientUpdateInput, prev: ClientUpdate | null): Promi
   if (charts.length > MAX_TRACKER_CHARTS) throw badRequest(`At most ${MAX_TRACKER_CHARTS} charts`);
   const cleanCharts: ClientUpdateChart[] = [];
   for (const ch of charts) {
-    await resolveField(ch.field);
+    const cf = await resolveField(ch.field);
+    if (ch.shared && !cf.client_safe) unsafe.push(`${cf.label} (chart)`);
     const kind = (CLIENT_UPDATE_CHART_KINDS as readonly string[]).includes(ch.kind) ? ch.kind : 'bar';
     cleanCharts.push({ field: ch.field, kind, shared: Boolean(ch.shared) });
+  }
+
+  if (unsafe.length > 0) {
+    throw badRequest(
+      `These fields are not client-safe and cannot be shared with the client: ${[...new Set(unsafe)].join(', ')}. Untick "shared" on them, or mark the field client-safe in Admin › Custom fields.`,
+      { code: CLIENT_UNSAFE_COLUMNS_CODE, fields: [...new Set(unsafe)] },
+    );
   }
 
   const sort = input.sort !== undefined ? input.sort : prev?.sort ?? null;
@@ -574,15 +596,34 @@ interface BuiltView extends ClientUpdatePublicView {
   types: string[];
 }
 
+/** #17 · the person a tracker is shared AS: its owner, as they stand now. */
+async function trackerOwner(r: Row): Promise<ActingPrincipal> {
+  const owner = await loadPrincipalById(r.created_by_id);
+  if (!owner || owner.kind !== 'human') {
+    throw notFound('This client update is no longer shared — the person who made it is no longer active');
+  }
+  return actingFromPrincipal(owner);
+}
+
 /**
- * The client's view of a tracker: the WHOLE tracker (no viewer scope), only
- * the shared columns, the shared charts' facets, capped at SHARE_ROW_CAP.
+ * The client's view of a tracker, as its OWNER may see it (#17): rows = the
+ * owner's scope ∩ the tracker's client (trackerFilters), only the shared
+ * columns that are client-safe and visible to the owner, the shared charts on
+ * such fields, capped at SHARE_ROW_CAP.
  */
 async function buildView(r: Row): Promise<BuiltView> {
   const t = mapRow(r, false);
-  const cols = sharedColumns(t.columns);
+  const owner = await trackerOwner(r);
+  const ownerAllow = allowFor(owner);
+  const shareable = async (key: string) => {
+    const f = await resolveField(key).catch(() => null);
+    return f !== null && f.client_safe && canViewField(ownerAllow, key);
+  };
+  const cols: ClientUpdateColumn[] = [];
+  for (const c of sharedColumns(t.columns)) if (await shareable(c.key)) cols.push(c);
   const described = await Promise.all(cols.map(async (c) => ({ c, f: await resolveField(c.key) })));
-  const sharedCharts = t.share.charts ? t.charts.filter((c) => c.shared) : [];
+  const sharedCharts: ClientUpdateChart[] = [];
+  for (const c of t.share.charts ? t.charts.filter((ch) => ch.shared) : []) if (await shareable(c.field)) sharedCharts.push(c);
   const facetKeys = [...new Set(sharedCharts.map((c) => c.field))];
   const filters = trackerFilters(t);
   // Section by the tracker's group field only when the client can see it.
@@ -595,11 +636,11 @@ async function buildView(r: Row): Promise<BuiltView> {
     group_by: groupBy,
     limit: SHARE_ROW_CAP,
     offset: 0,
-  });
+  }, owner);
 
   const [summary, charts] = await Promise.all([
-    t.share.summary ? summarize(filters) : Promise.resolve(null),
-    sharedCharts.length ? chartsFor(sharedCharts, filters) : Promise.resolve([]),
+    t.share.summary ? summarize(filters, owner) : Promise.resolve(null),
+    sharedCharts.length ? chartsFor(sharedCharts, filters, owner) : Promise.resolve([]),
   ]);
 
   return {

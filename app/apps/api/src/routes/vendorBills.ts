@@ -30,6 +30,7 @@ import {
   updateVendorBill,
   voidVendorBill,
 } from '../services/vendorBills.js';
+import { assertRecordInScope, assertTaskInScope } from '../services/recordScope.js';
 
 const idParams = z.object({ id: z.string().uuid() });
 const woParams = z.object({ id: z.string().min(1) });
@@ -82,6 +83,7 @@ export default async function vendorBillRoutes(app: FastifyInstance): Promise<vo
 
   app.get('/vendor-bills/:id', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('vendor_bill', id, actingPrincipalFromRequest(req)); // #13
     return { bill: await getVendorBill(id, actingPrincipalFromRequest(req)) };
   });
 
@@ -95,40 +97,47 @@ export default async function vendorBillRoutes(app: FastifyInstance): Promise<vo
 
   app.post('/vendor-bills', async (req, reply) => {
     const body = parse(createSchema, req.body);
+    await assertTaskInScope(body.task_id, actingPrincipalFromRequest(req)); // #13
     const bill = await createVendorBill(body, actingPrincipalFromRequest(req));
     return reply.status(201).send({ bill });
   });
 
   app.patch('/vendor-bills/:id', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('vendor_bill', id, actingPrincipalFromRequest(req)); // #13
     const body = parse(updateSchema, req.body);
     return { bill: await updateVendorBill(id, body, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/vendor-bills/:id/approve', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('vendor_bill', id, actingPrincipalFromRequest(req)); // #13
     return { bill: await approveVendorBill(id, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/vendor-bills/:id/paid', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('vendor_bill', id, actingPrincipalFromRequest(req)); // #13
     const { reference, payment_request_id } = parse(paidSchema, req.body ?? {});
     return { bill: await markVendorBillPaid(id, actingPrincipalFromRequest(req), reference, payment_request_id) };
   });
 
   app.post('/vendor-bills/:id/dispute', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('vendor_bill', id, actingPrincipalFromRequest(req)); // #13
     const { note } = parse(noteSchema, req.body);
     return { bill: await disputeVendorBill(id, note, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/vendor-bills/:id/resolve', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('vendor_bill', id, actingPrincipalFromRequest(req)); // #13
     return { bill: await resolveVendorBill(id, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/vendor-bills/:id/void', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('vendor_bill', id, actingPrincipalFromRequest(req)); // #13
     return { bill: await voidVendorBill(id, actingPrincipalFromRequest(req)) };
   });
 }

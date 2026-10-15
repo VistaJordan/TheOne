@@ -13,6 +13,7 @@
 import { query } from '../db.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { toCsv } from './woBulk.js';
+import { redactActivityValues, type Allow } from './permissions.js';
 
 export interface AuditLogFilters {
   /** Inclusive start / end days, 'YYYY-MM-DD'. */
@@ -43,6 +44,8 @@ export interface AuditLogEntryRow {
   ext_name: string | null;
   actor: { id: string; display_name: string; kind: 'human' | 'service' };
   created_at: string;
+  /** M28 · the values were withheld: the row names a field the reader cannot see. */
+  redacted?: boolean;
 }
 
 interface Row {
@@ -109,7 +112,13 @@ export interface AuditLogPage {
   };
 }
 
-export async function listAuditLog(f: AuditLogFilters): Promise<AuditLogPage> {
+export async function listAuditLog(
+  f: AuditLogFilters,
+  /** M28 · the reader's grants: a row on a field they cannot see keeps its
+      who / when / what but loses its before and after. Required, so no
+      caller can forget it. */
+  allow: Allow,
+): Promise<AuditLogPage> {
   const { sql: whereSql, params } = buildWhere(f);
 
   const rows = await query<Row>(
@@ -142,7 +151,7 @@ export async function listAuditLog(f: AuditLogFilters): Promise<AuditLogPage> {
   );
 
   return {
-    items: rows.rows.map(mapRow),
+    items: rows.rows.map(mapRow).map((e) => redactActivityValues(allow, e)),
     total: Number(count.rows[0]?.n ?? 0),
     facets: { actors: actors.rows, actions: actions.rows.map((r) => r.action) },
   };
@@ -216,8 +225,9 @@ function snapshotDiff(before: unknown, after: unknown): { from: string; to: stri
 
 export async function exportAuditCsv(
   f: Omit<AuditLogFilters, 'limit' | 'offset'>,
+  allow: Allow,
 ): Promise<{ csv: string; rows: number }> {
-  const page = await listAuditLog({ ...f, limit: AUDIT_EXPORT_CAP, offset: 0 });
+  const page = await listAuditLog({ ...f, limit: AUDIT_EXPORT_CAP, offset: 0 }, allow);
   const csv = toCsv(
     ['Time (UTC)', 'User', 'Action', 'Entity', 'Name', 'WO #', 'Ext ref', 'Field', 'From', 'To'],
     page.items.map((e) => {

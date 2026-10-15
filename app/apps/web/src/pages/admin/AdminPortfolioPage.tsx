@@ -124,7 +124,9 @@ function SiteAccessCard({ data }: { data: AdminPortfolioResponse }) {
   const [error, setError] = useState<string | null>(null);
   const restricted = data.site_access ?? [];
   const save = useMutation({
-    mutationFn: (x: { id: string; sites: string[] }) => setSiteAccess(x.id, x.sites),
+    // M29 · every save names the switch; removing the last site keeps the
+    // person restricted (to nothing) until "Restrict to sites" is turned off.
+    mutationFn: (x: { id: string; sites: string[]; restricted?: boolean }) => setSiteAccess(x.id, x.sites, x.restricted ?? true),
     onSuccess: (res) => { qc.setQueryData(KEY, res); setError(null); },
     onError: (e) => setError(errText(e, 'Could not save.')),
   });
@@ -136,8 +138,19 @@ function SiteAccessCard({ data }: { data: AdminPortfolioResponse }) {
       <div className="pfa-head">
         <b>{r.principal.name}</b>
         <span className="pf-muted">{r.role_label ?? ''}</span>
-        <button type="button" className="link-btn push" disabled={save.isPending} onClick={() => save.mutate({ id: r.principal.id, sites: [] })}>Lift the restriction</button>
+        <label className="sw sm push" title="On: sees only the sites listed — none at all while the list is empty. Off: every site.">
+          <input
+            type="checkbox"
+            checked={r.restricted}
+            disabled={save.isPending}
+            aria-label={`Restrict ${r.principal.name} to sites`}
+            onChange={(e) => save.mutate({ id: r.principal.id, sites: e.target.checked ? r.sites.map((x) => x.id) : [], restricted: e.target.checked })}
+          />
+          <span className="sw-track" aria-hidden="true" />
+          <span>Restrict to sites</span>
+        </label>
       </div>
+      {r.sites.length === 0 && <p className="pf-muted">No sites yet — {r.principal.name} sees no site and no work order until one is added.</p>}
       <div className="pfa-sites">
         {r.sites.map((s) => (
           <span className="pf-picked" key={s.id}>
@@ -160,7 +173,7 @@ function SiteAccessCard({ data }: { data: AdminPortfolioResponse }) {
       </div>
       <p className="adm-sub" style={{ padding: '0 14px 8px' }}>
         A person listed here sees only these sites, the assets in them, and the work orders at them — on top of what their role already limits.
-        A work order with no site record is at none of them. Nobody listed means nobody is restricted. Super admins cannot be restricted.
+        A work order with no site record is at none of them. "Restrict to sites" is the switch: on with no sites listed means no sites at all, never every site; turn it off to lift the restriction. Super admins cannot be restricted.
       </p>
       {error && <p className="snooze-err" role="alert" style={{ margin: '0 14px 8px' }}><Icon name="alert-circle" size={12} />{error}</p>}
       <ul className="pfa-list">{restricted.map(row)}</ul>

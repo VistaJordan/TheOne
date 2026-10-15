@@ -68,6 +68,7 @@ import {
   portalView,
   revokePortalLink,
 } from '../services/vendorPortal.js';
+import { assertRecordInScope } from '../services/recordScope.js';
 
 const idParams = z.object({ id: z.string().min(1).max(64) });
 const text = (max: number) => z.string().max(max).nullable().optional();
@@ -117,10 +118,12 @@ export default async function vendorExtraRoutes(app: FastifyInstance): Promise<v
   // ── Credit notes ───────────────────────────────────────────────────────────
   app.post('/vendor-bills/:id/credit-notes', async (req) => {
     const body = parse(z.object({ amount: z.number().positive().max(10_000_000), reason: z.string().min(1).max(500), vendor_ref: text(80) }).strict(), req.body);
+    await assertRecordInScope('vendor_bill', p(req, 'id'), actorOf(req)); // #13
     return addCreditNote(p(req, 'id'), body, actorOf(req));
   });
   app.post('/vendor-credit-notes/:id', async (req) => {
     const body = parse(z.object({ decision: z.enum(['approve', 'void']), note: text(500) }).strict(), req.body);
+    await assertRecordInScope('vendor_credit_note', p(req, 'id'), actorOf(req)); // #13
     return decideCreditNote(p(req, 'id'), body.decision, body.note ?? null, actorOf(req));
   });
 

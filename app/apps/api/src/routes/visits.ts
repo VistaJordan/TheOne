@@ -27,6 +27,7 @@ import {
   updateVisit,
 } from '../services/visits.js';
 import { linkVisitVendor } from '../services/vendorMap.js';
+import { assertRecordInScope } from '../services/recordScope.js';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
 const uuidParamsSchema = z.object({ id: z.string().uuid() });
@@ -73,6 +74,7 @@ export default async function visitRoutes(app: FastifyInstance): Promise<void> {
   app.patch('/visits/:id', async (req) => {
     const actor = actingPrincipalFromRequest(req);
     const { id } = parse(uuidParamsSchema, req.params);
+    await assertRecordInScope('wo_visit', id, actingPrincipalFromRequest(req)); // #13
     if (!(await taskIdOfVisit(id))) throw notFound('Visit not found');
     const { vendor_id, ...body } = parse(visitBodySchema, req.body ?? {});
     // Only the record behind the same name changed: nothing for the visit
@@ -91,6 +93,7 @@ export default async function visitRoutes(app: FastifyInstance): Promise<void> {
   app.delete('/visits/:id', async (req) => {
     const actor = actingPrincipalFromRequest(req);
     const { id } = parse(uuidParamsSchema, req.params);
+    await assertRecordInScope('wo_visit', id, actingPrincipalFromRequest(req)); // #13
     if (!(await taskIdOfVisit(id))) throw notFound('Visit not found');
     return deleteVisit(id, actor);
   });
@@ -100,6 +103,7 @@ export default async function visitRoutes(app: FastifyInstance): Promise<void> {
     requireVisitView(actor);
     requirePerm(actor, 'work_orders/history', 'view', 'You cannot view field history');
     const { id } = parse(uuidParamsSchema, req.params);
+    await assertRecordInScope('wo_visit', id, actingPrincipalFromRequest(req)); // #13
     if (!(await taskIdOfVisit(id))) throw notFound('Visit not found');
     return { items: await getVisitHistory(id) };
   });

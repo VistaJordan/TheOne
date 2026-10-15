@@ -1718,6 +1718,8 @@ export interface AdminFieldItem {
   /** 0041 · what "Add work order" does with this field: 'off' (not on the
       form), 'optional' (on it) or 'required'. Set in Admin › Custom fields. */
   create_mode: WoCreateMode;
+  /** 0084 (#17) · may go out on a shared Client Update. */
+  client_safe: boolean;
 }
 
 export function listAdminFields(): Promise<{ items: AdminFieldItem[] }> {
@@ -1732,6 +1734,8 @@ export interface AdminFieldInput {
   options?: string[];
   /** 0041 · move the field on or off the create form. */
   create_mode?: WoCreateMode;
+  /** 0084 (#17) · the "Client-safe" switch. */
+  client_safe?: boolean;
 }
 
 export function createAdminField(
@@ -3337,8 +3341,12 @@ export function updatePortfolioListValue(list: PortfolioListName, value: string,
   return request(`/admin/portfolio/lists/${list}`, { method: 'PATCH', body: JSON.stringify({ value, ...patch }) });
 }
 
-export function setSiteAccess(principalId: string, siteIds: string[]): Promise<AdminPortfolioResponse> {
-  return request(`/admin/portfolio/site-access/${encodeURIComponent(principalId)}`, { method: 'PUT', body: JSON.stringify({ site_ids: siteIds }) });
+/** M29 (0084) · `restricted` is the switch: on with no sites = no sites at all. */
+export function setSiteAccess(principalId: string, siteIds: string[], restricted: boolean): Promise<AdminPortfolioResponse> {
+  return request(`/admin/portfolio/site-access/${encodeURIComponent(principalId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ site_ids: siteIds, restricted }),
+  });
 }
 
 // ── 0063 — the create form's templates and sub-categories ────────────────────

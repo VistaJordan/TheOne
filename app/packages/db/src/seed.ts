@@ -15,7 +15,7 @@ import { seedAllowed } from './seedGuard.js';
 import { describeSeedUnpooledMismatch } from './migrateLedger.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, type StatusGroup } from '@theone/shared';
+import { STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, clientUnsafeDefaultBagKeys, type StatusGroup } from '@theone/shared';
 // S5 · the demo-state anchors below are computed with the SAME business-time
 // arithmetic the obligation engine evaluates with, so the seeded tiers are
 // exact rather than approximated by calendar offsets — a 4-business-hour clock
@@ -951,6 +951,11 @@ async function main() {
   await query(`UPDATE field_def SET create_mode = 'optional' WHERE key = ANY($1::text[])`, [
     [...WO_CREATE_DEFAULT_KEYS],
   ]);
+
+  // 0084 · #17 — the fields that may not go out on a shared Client Update
+  // (Finances / Payments / Invoicing / AR and the money figures). Kept in step
+  // with migrations/0084_uat_access.sql through shared clientUnsafeDefaultBagKeys.
+  await query(`UPDATE field_def SET client_safe = false WHERE key = ANY($1::text[])`, [clientUnsafeDefaultBagKeys()]);
 
   // ── 5. Tasks (§4.4) + memberships (§4.5) + created activity (§4.9) ──────────
   let taskCount = 0;

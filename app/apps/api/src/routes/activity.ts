@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse, notFound } from '../errors.js';
 import { resolveTaskId, getActivityForTask, actingPrincipalFromRequest } from '../services/activity.js';
-import { requirePerm } from '../services/permissions.js';
+import { activityValuesVisible, allowFor, requirePerm } from '../services/permissions.js';
 
 const activityQuerySchema = z.object({
   wo: z.string().min(1),
@@ -19,6 +19,8 @@ export default async function activityRoutes(app: FastifyInstance): Promise<void
     requirePerm(viewer, 'work_orders', 'view', 'You cannot view work orders');
     const taskId = await resolveTaskId(wo, viewer);
     if (!taskId) throw notFound('Work order not found');
-    return getActivityForTask(taskId, limit);
+    // M28 · rows on a field this viewer cannot see are left out.
+    const allow = allowFor(viewer);
+    return (await getActivityForTask(taskId, limit)).filter((e) => activityValuesVisible(allow, e.field));
   });
 }

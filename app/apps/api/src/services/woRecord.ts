@@ -39,7 +39,7 @@ import { query, withTransaction } from '../db.js';
 import { badRequest, conflict, forbidden, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { notify } from './notices.js';
-import { requirePerm } from './permissions.js';
+import { allowFor, canViewField, requirePerm } from './permissions.js';
 import { logTaskChanges } from './woAudit.js';
 import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
@@ -230,6 +230,9 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
 
   // ── Money ───────────────────────────────────────────────────────────────────
   const money = seeMoney ? await loadMoney(taskId, t, actor) : emptyMoney(t);
+  // M13 (0084) · below TL the tab still opens (quotes live on it) but Cost,
+  // Profit and the totals built from them do not: the Margin % stays.
+  if (seeMoney && !canViewField(allowFor(actor), 'fields.34. Cost')) redactRecordMoney(money);
 
   const related = await loadRelated(taskId, t, actor, nteRows.rows.length);
 
@@ -312,6 +315,23 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
 }
 
 // ── Money ────────────────────────────────────────────────────────────────────
+
+/** M13 · keep the NTE, the quote and the Margin %; drop every cost figure. */
+function redactRecordMoney(m: { summary: WoRecord['cost']; breakdown: WoCostBreakdown }): void {
+  m.summary.cost = null;
+  m.summary.profit = null;
+  m.summary.invoiced = null;
+  m.summary.payables_requested = null;
+  m.summary.payables_paid = null;
+  m.summary.vendor_bills = null;
+  m.breakdown.cost = null;
+  m.breakdown.revenue = null;
+  m.breakdown.payables = [];
+  m.breakdown.vendor_bills = [];
+  m.breakdown.invoices = [];
+  m.breakdown.cost_basis = 'Not shown for your role';
+  m.breakdown.revenue_basis = 'Not shown for your role';
+}
 
 function emptyMoney(t: TaskRow): { summary: WoRecord['cost']; breakdown: WoCostBreakdown } {
   void t;

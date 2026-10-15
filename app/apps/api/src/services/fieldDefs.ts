@@ -33,7 +33,7 @@ import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 /** What the audit log keeps of a definition: enough to read a rename, a type
     change or an options edit back without the row. */
 function snapshot(f: FieldDefItem): Snapshot {
-  return { name: f.label, key: f.key, type: f.type, options: f.options, create_mode: f.create_mode };
+  return { name: f.label, key: f.key, type: f.type, options: f.options, create_mode: f.create_mode, client_safe: f.client_safe };
 }
 
 /** Everything the field_type enum accepts (0001 + phone from 0007 + datetime
@@ -146,6 +146,8 @@ export interface FieldDefPatch {
   options?: string[];
   /** 0041 · 'off' | 'optional' | 'required' — the create form's setting. */
   create_mode?: string;
+  /** 0084 (#17) · Admin › Custom fields' "Client-safe" switch. */
+  client_safe?: boolean;
 }
 
 export async function updateFieldDef(
@@ -179,9 +181,10 @@ export async function updateFieldDef(
         SET label = COALESCE($2, label),
             type = $3,
             type_config = $4::jsonb,
-            create_mode = $5
+            create_mode = $5,
+            client_safe = $6
       WHERE id = $1`,
-    [id, label ?? null, type, JSON.stringify(typeConfigFor(type, options)), createMode],
+    [id, label ?? null, type, JSON.stringify(typeConfigFor(type, options)), createMode, patch.client_safe ?? current.client_safe],
   );
 
   invalidateFieldCache();

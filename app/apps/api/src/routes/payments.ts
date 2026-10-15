@@ -38,6 +38,7 @@ import {
 import { searchPaymentVendors, getPaymentVendor } from '../services/paymentVendors.js';
 import { requirePerm } from '../services/permissions.js';
 import { assertRawMoney, zMoney } from '../validation.js';
+import { assertRecordInScope } from '../services/recordScope.js';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
 const pidParamsSchema = z.object({ pid: z.string().uuid() });
@@ -173,6 +174,7 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
 
   app.get('/payment-requests/:pid', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     const actor = actingPrincipalFromRequest(req);
     requirePerm(actor, 'payments', 'view', 'You cannot view payment requests');
     return { item: await getPaymentRequest(pid, actor) };
@@ -180,6 +182,7 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
 
   app.patch('/payment-requests/:pid', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     assertRawMoney(req.rawBody);
     const input = parse(editSchema, req.body);
     return { item: await updatePaymentRequest(pid, input, actingPrincipalFromRequest(req)) };
@@ -188,28 +191,33 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   app.post('/payment-requests/:pid/approve', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     return { item: await approvePaymentRequest(pid, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/payment-requests/:pid/pay', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     return { item: await payPaymentRequest(pid, actingPrincipalFromRequest(req)) };
   });
 
   // 0016's verb for the same move; kept so the Payments tab's older callers keep working.
   app.post('/payment-requests/:pid/mark-paid', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     return { item: await payPaymentRequest(pid, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/payment-requests/:pid/reject', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     const { reason } = parse(reasonSchema, req.body);
     return { item: await rejectPaymentRequest(pid, reason, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/payment-requests/:pid/convert-method', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     const { method } = parse(convertSchema, req.body);
     return { item: await convertPaymentMethod(pid, method, actingPrincipalFromRequest(req)) };
   });
@@ -217,6 +225,7 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
   // ── Delete (soft, two-person on processed rows) ────────────────────────────
   app.post('/payment-requests/:pid/delete', async (req, reply) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     const { reason } = parse(reasonSchema, req.body);
     const item = await deletePaymentRequest(pid, reason, actingPrincipalFromRequest(req));
     if (item === null) return reply.status(200).send({ item: null, deleted: true });
@@ -225,12 +234,14 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
 
   app.post('/payment-requests/:pid/confirm-delete', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     await confirmDeletePaymentRequest(pid, actingPrincipalFromRequest(req));
     return { item: null, deleted: true };
   });
 
   app.post('/payment-requests/:pid/reject-delete', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     return { item: await rejectDeletePaymentRequest(pid, actingPrincipalFromRequest(req)) };
   });
 

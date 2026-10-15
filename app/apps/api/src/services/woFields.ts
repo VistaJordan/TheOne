@@ -18,6 +18,7 @@
 import { AGE_BANDS } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
+import { defaultClientSafe } from '@theone/shared';
 
 export type FieldType = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'boolean';
 
@@ -47,6 +48,9 @@ export interface FieldDescriptor {
   /** 0055 · derived at read time (never stored, never editable). Projected into
       a list row's `custom` map only when a view asks for the column. */
   computed?: boolean;
+  /** 0084 (#17) · may go out on a shared Client Update (field_def.client_safe
+      for custom fields; `defaultClientSafe` for the core columns). */
+  client_safe?: boolean;
 }
 
 // ── Core (promoted column) fields ────────────────────────────────────────────
@@ -105,6 +109,16 @@ const AGE_BAND_SQL = `(CASE
     WHEN (now()::date - t.date_received) <= 60 THEN '${AGE_BANDS[3]}'
     ELSE '${AGE_BANDS[4]}' END)`;
 
+/** M13 (0084) · Margin % = (Total Invoiced − Cost) / Total Invoiced, to one
+    decimal, as computeMoney (services/money.ts) works it out: NULL with no
+    invoiced figure or a zero one, Cost read as 0 when unset. A value that is
+    not a plain number reads as unset, so one odd bag never fails a list. */
+const NUM_RE = `'^-?[0-9]+(\\.[0-9]+)?$'`;
+const bagNum = (key: string) =>
+  `(CASE WHEN (t.fields->>'${key}') ~ ${NUM_RE} THEN (t.fields->>'${key}')::numeric END)`;
+const MARGIN_PCT_SQL = `(CASE WHEN COALESCE(${bagNum('Total Invoiced')}, 0) <> 0
+    THEN round(((${bagNum('Total Invoiced')} - COALESCE(${bagNum('34. Cost')}, 0)) / ${bagNum('Total Invoiced')}) * 100, 1) END)`;
+
 /** The newest client-visible message on the work order (ours or theirs). */
 const LAST_CLIENT_MESSAGE_SQL = `(SELECT c.body FROM comment c
     WHERE c.task_id = t.id AND c.client_visible
@@ -144,6 +158,8 @@ const CORE_FIELDS: CoreField[] = [
   { key: 'last_client_message',    label: 'Last client message',    type: 'text', group: 'Messages', sql: LAST_CLIENT_MESSAGE_SQL,    sortable: false, computed: true },
   { key: 'last_client_message_at', label: 'Last client message on', type: 'date', group: 'Messages', sql: LAST_CLIENT_MESSAGE_AT_SQL, sortable: true,  computed: true },
   { key: 'last_sent_to_client',    label: 'Last sent to client',    type: 'date', group: 'Messages', sql: LAST_SENT_TO_CLIENT_SQL,    sortable: true,  computed: true },
+  // 0084 (M13) · the money figure every role sees; Cost and Profit are hidden below TL.
+  { key: 'margin_pct',     label: 'Margin %',       type: 'number', group: 'Money',      sql: MARGIN_PCT_SQL,     sortable: true, numeric: true, computed: true },
 ];
 
 const CORE_BY_KEY = new Map(CORE_FIELDS.map((f) => [f.key, f]));
@@ -188,6 +204,7 @@ interface FieldDefRow {
   label: string;
   type: string;
   type_config: { options?: unknown } | null;
+  client_safe: boolean | null;
 }
 
 let customCache: { at: number; fields: FieldDescriptor[] } | null = null;
@@ -211,7 +228,7 @@ export async function listCustomFields(): Promise<FieldDescriptor[]> {
   if (customCache && now - customCache.at < CUSTOM_TTL_MS) return customCache.fields;
 
   const res = await query<FieldDefRow>(
-    `SELECT key, label, type::text AS type, type_config
+    `SELECT key, label, type::text AS type, type_config, client_safe
        FROM field_def
       ORDER BY position NULLS LAST, key ASC`,
   );
@@ -239,6 +256,7 @@ export async function listCustomFields(): Promise<FieldDescriptor[]> {
       sortable: true,
       numeric: type === 'number' || type === 'money',
       subtype: r.type,
+      client_safe: r.client_safe !== false,
     });
     if (type === 'select' && !options) distinctCustomKeys.push(r.key);
   }
@@ -342,7 +360,7 @@ export async function getFieldCatalogue(): Promise<FieldCatalogue> {
         : f.key === 'status_group'
           ? groups.rows.map((g) => ({ value: g.code, label: g.label }))
           : (distinct[f.key] ?? f.options);
-    return { ...rest, options };
+    return { ...rest, options, client_safe: defaultClientSafe(f.key) };
   });
 
   const customWithOptions = custom.map((f) =>
@@ -365,6 +383,8 @@ export interface ResolvedField {
   sql?: string;
   /** 0055 · a computed core column (see COMPUTED_WO_COLUMNS). */
   computed?: boolean;
+  /** 0084 (#17) · may go out on a shared Client Update. */
+  client_safe: boolean;
 }
 
 /** Turn a field key from a request into something safe to put in SQL, or throw.
@@ -374,13 +394,13 @@ export interface ResolvedField {
 export async function resolveField(key: string): Promise<ResolvedField> {
   const core = CORE_BY_KEY.get(key);
   if (core) {
-    return { key, label: core.label, type: core.type, custom: false, sql: core.sql, computed: core.computed };
+    return { key, label: core.label, type: core.type, custom: false, sql: core.sql, computed: core.computed, client_safe: defaultClientSafe(key) };
   }
   if (key.startsWith('fields.')) {
     const jsonKey = key.slice('fields.'.length);
     const custom = (await listCustomFields()).find((f) => f.key === key);
     if (custom) {
-      return { key, label: custom.label, type: custom.type, custom: true, jsonKey };
+      return { key, label: custom.label, type: custom.type, custom: true, jsonKey, client_safe: custom.client_safe !== false };
     }
   }
   throw new ApiError('BAD_REQUEST', `Unknown field "${key}"`, { field: key });

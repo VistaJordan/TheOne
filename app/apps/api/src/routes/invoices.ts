@@ -29,6 +29,7 @@ import {
   updateInvoice,
   voidInvoice,
 } from '../services/invoices.js';
+import { assertRecordInScope, assertTaskInScope } from '../services/recordScope.js';
 
 const idParams = z.object({ id: z.string().uuid() });
 const woParams = z.object({ id: z.string().min(1) });
@@ -65,6 +66,7 @@ export default async function invoiceRoutes(app: FastifyInstance): Promise<void>
 
   app.get('/invoices/:id', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('invoice', id, actingPrincipalFromRequest(req)); // #13
     return { invoice: await getInvoice(id, actingPrincipalFromRequest(req)) };
   });
 
@@ -81,34 +83,40 @@ export default async function invoiceRoutes(app: FastifyInstance): Promise<void>
   app.post('/invoices', async (req, reply) => {
     const actor = actingPrincipalFromRequest(req);
     const { task_id } = parse(createSchema, req.body);
+    await assertTaskInScope(task_id, actor); // #13
     const invoice = await createInvoice(task_id, actor);
     return reply.status(201).send({ invoice });
   });
 
   app.patch('/invoices/:id', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('invoice', id, actingPrincipalFromRequest(req)); // #13
     const body = parse(updateSchema, req.body);
     return { invoice: await updateInvoice(id, body, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/invoices/:id/send', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('invoice', id, actingPrincipalFromRequest(req)); // #13
     return { invoice: await sendInvoice(id, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/invoices/:id/paid', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('invoice', id, actingPrincipalFromRequest(req)); // #13
     const { reference, paid_on } = parse(paidSchema, req.body ?? {});
     return { invoice: await markInvoicePaid(id, actingPrincipalFromRequest(req), reference, paid_on) };
   });
 
   app.post('/invoices/:id/void', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('invoice', id, actingPrincipalFromRequest(req)); // #13
     return { invoice: await voidInvoice(id, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/invoices/:id/reopen', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('invoice', id, actingPrincipalFromRequest(req)); // #13
     return { invoice: await reopenInvoice(id, actingPrincipalFromRequest(req)) };
   });
 }

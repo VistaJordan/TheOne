@@ -19,7 +19,16 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { WO_CREATE_MODES, adminPermKey, permAllows, type PermAction } from '@theone/shared';
+import {
+  ROLE_EDIT_MESSAGE,
+  ROLE_EDIT_RESTRICTED_CODE,
+  WO_CREATE_MODES,
+  adminPermKey,
+  mayEditRoleDefinitions,
+  permAllows,
+  type PermAction,
+  type PermissionSet,
+} from '@theone/shared';
 import { ApiError, parse } from '../errors.js';
 import { unauthorized } from '../services/auth.js';
 import {
@@ -34,7 +43,7 @@ import {
   updateUser,
 } from '../services/users.js';
 import { createRole, deleteRole, listRoles, updateRole } from '../services/roles.js';
-import { requirePerm } from '../services/permissions.js';
+import { allowFor, requirePerm } from '../services/permissions.js';
 import { getFieldCatalogue } from '../services/woFields.js';
 import { listDashboardPermInfo } from '../services/dashboards.js';
 import { listFieldDefs, listWorkflow, listTrash, restoreTask, getSettings } from '../services/adminMeta.js';
@@ -51,7 +60,7 @@ import {
 import { listAuditLog, exportAuditCsv } from '../services/auditLog.js';
 import { deleteCicoMethod, listCicoMethods, setCicoMethod } from '../services/visits.js';
 import { deleteHoliday, listHolidays, setHoliday } from '../services/holidays.js';
-import { actingPrincipalFromRequest } from '../services/activity.js';
+import { actingPrincipalFromRequest, permissionSubject } from '../services/activity.js';
 import { retrySharePoint, saveSharePointSettings, sharePointOverview, testSharePoint } from '../services/sharepoint.js';
 import {
   createApprovalTier,
@@ -82,10 +91,15 @@ type AdminSection =
 
 function requireAdmin(req: FastifyRequest, section: AdminSection, action: PermAction = 'view'): string {
   if (!req.auth) throw unauthorized();
-  // The REAL user, never `actingAs`: impersonating an admin must not hand the
-  // impersonator the ability to edit users and roles as them.
+  // D6 (UAT round 1, Wave B): viewing as someone shows their rights here too —
+  // the gate reads the person being viewed (`permissionSubject`), so a super
+  // admin viewing as an OM sees the console the OM sees. It never widens: a
+  // view-as session is read-only (plugins/authGuard.ts refuses every write),
+  // so the edit gates below only ever run for the signed-in user themselves.
+  // The id returned is the REAL user's: whatever this request logs (the audit
+  // export) is attributed to the human at the keyboard.
   requirePerm(
-    req.auth.user,
+    permissionSubject(req),
     adminPermKey(section),
     action,
     action === 'view'
@@ -96,10 +110,11 @@ function requireAdmin(req: FastifyRequest, section: AdminSection, action: PermAc
 }
 
 /** The per-user override editor is the one thing a plain admin-console grant
-    does not unlock — it is super admins only, as asked. */
+    does not unlock — it is super admins only, as asked. D6: while viewing as
+    someone it is THEIR flag that counts. */
 function requireSuperAdmin(req: FastifyRequest): string {
   if (!req.auth) throw unauthorized();
-  if (!req.auth.user.isSuperAdmin) {
+  if (!permissionSubject(req).isSuperAdmin) {
     throw new ApiError('FORBIDDEN', 'Only a super admin can adjust one person’s permissions', {
       required: 'is_super_admin',
     });
@@ -107,14 +122,33 @@ function requireSuperAdmin(req: FastifyRequest): string {
   return req.auth.user.id;
 }
 
-/** W4-1 · whether the REAL signed-in user is a super admin — never `actingAs`,
-    consistent with requireAdmin. Granting or removing `is_super_admin` on
-    POST/PATCH /admin/users needs it (`assertMaySetSuperAdmin` refuses
-    otherwise), and so does any change to a super admin's row — PATCH and
-    the disable route hand the flag to the service, which checks the target. */
+/** W4-1 · whether the REAL signed-in user is a super admin. Granting or
+    removing `is_super_admin` on POST/PATCH /admin/users needs it
+    (`assertMaySetSuperAdmin` refuses otherwise), and so does any change to a
+    super admin's row — PATCH and the disable route hand the flag to the
+    service, which checks the target. Only writes read it, and a write never
+    runs while viewing as someone (the guard refuses it first), so the real
+    user here IS the person whose rights count (D6). */
 function isRealSuperAdmin(req: FastifyRequest): boolean {
   if (!req.auth) throw unauthorized();
   return req.auth.user.isSuperAdmin;
+}
+
+/** #18 · the signed-in user as the rights checks of a write read them: their
+    own tree, flag and role. Writes never run while viewing as (see above). */
+function writer(req: FastifyRequest): { id: string; isSuperAdmin: boolean; role: string | null; perms: PermissionSet } {
+  if (!req.auth) throw unauthorized();
+  const u = req.auth.user;
+  return { id: u.id, isSuperAdmin: u.isSuperAdmin, role: u.role, perms: u.perms };
+}
+
+/** #18 · Admin › Roles writes: super admins and the Admin role only, on top
+    of `admin/roles` edit — and never a grant the editor does not hold. */
+function requireRoleEditor(req: FastifyRequest): void {
+  const w = writer(req);
+  if (!mayEditRoleDefinitions(w)) {
+    throw new ApiError('FORBIDDEN', ROLE_EDIT_MESSAGE, { code: ROLE_EDIT_RESTRICTED_CODE });
+  }
 }
 
 const idParams = z.object({ id: z.string().uuid() });
@@ -189,7 +223,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     const body = parse(inviteSchema, req.body);
     const realSuper = isRealSuperAdmin(req);
     assertMaySetSuperAdmin(body, realSuper);
-    const user = await inviteUser(body, actorId, realSuper);
+    const user = await inviteUser(body, actorId, realSuper, writer(req).perms);
     return reply.status(201).send({ user });
   });
 
@@ -199,13 +233,13 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     const body = parse(updateUserSchema, req.body);
     const realSuper = isRealSuperAdmin(req);
     assertMaySetSuperAdmin(body, realSuper);
-    return { user: await updateUser(id, body, actorId, realSuper) };
+    return { user: await updateUser(id, body, actorId, realSuper, writer(req).perms) };
   });
 
   app.post('/admin/users/:id/disable', async (req) => {
     const actorId = requireAdmin(req, 'users', 'edit');
     const { id } = parse(idParams, req.params);
-    return { user: await disableUser(id, actorId, isRealSuperAdmin(req)) };
+    return { user: await disableUser(id, actorId, isRealSuperAdmin(req), writer(req).perms) };
   });
 
   // Per-user overrides (0015) — super admins only, both ways.
@@ -247,7 +281,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get('/admin/roles', async (req) => {
     // Users needs the role list for its <select>s, so either grant will do.
     if (!req.auth) throw unauthorized();
-    const u = req.auth.user;
+    const u = permissionSubject(req); // D6
     const ok =
       permAllows(u.perms, adminPermKey('roles'), 'view', u.isSuperAdmin) ||
       permAllows(u.perms, adminPermKey('users'), 'view', u.isSuperAdmin);
@@ -257,18 +291,21 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/admin/roles', async (req, reply) => {
     const actorId = requireAdmin(req, 'roles', 'edit');
-    const role = await createRole(parse(createRoleSchema, req.body), actorId);
+    requireRoleEditor(req);
+    const role = await createRole(parse(createRoleSchema, req.body), actorId, writer(req));
     return reply.status(201).send({ role });
   });
 
   app.patch('/admin/roles/:id', async (req) => {
     const actorId = requireAdmin(req, 'roles', 'edit');
+    requireRoleEditor(req);
     const { id } = parse(idParams, req.params);
-    return { role: await updateRole(id, parse(updateRoleSchema, req.body), actorId) };
+    return { role: await updateRole(id, parse(updateRoleSchema, req.body), actorId, writer(req)) };
   });
 
   app.delete('/admin/roles/:id', async (req) => {
     const actorId = requireAdmin(req, 'roles', 'edit');
+    requireRoleEditor(req);
     const { id } = parse(idParams, req.params);
     await deleteRole(id, actorId);
     return { ok: true };
@@ -278,7 +315,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   // own role hides from /wo-fields — you cannot grant what you cannot list.
   app.get('/admin/permission-fields', async (req) => {
     if (!req.auth) throw unauthorized();
-    if (!req.auth.user.isSuperAdmin) requireAdmin(req, 'roles');
+    if (!permissionSubject(req).isSuperAdmin) requireAdmin(req, 'roles'); // D6
     const cat = await getFieldCatalogue();
     // 0026: the billing entities (Comp) the "Which work orders" row can grant —
     // the dropdown's defined options plus whatever the data already holds.
@@ -309,7 +346,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   // 0041 · the create-form setting rides the same PATCH as a rename.
   const updateFieldSchema = createFieldSchema
     .partial()
-    .extend({ create_mode: z.enum(WO_CREATE_MODES).optional() })
+    .extend({ create_mode: z.enum(WO_CREATE_MODES).optional(), client_safe: z.boolean().optional() })
     .strict();
   const reorderFieldsSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(500) });
 
@@ -509,19 +546,25 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/admin/audit', async (req) => {
     requireAdmin(req, 'audit');
-    return listAuditLog(parse(auditQuerySchema, req.query));
+    // M28 · a field the reader cannot see keeps its row but not its values.
+    return listAuditLog(parse(auditQuerySchema, req.query), allowFor(permissionSubject(req)));
   });
 
   app.get('/admin/audit/export', async (req, reply) => {
+    // D6 · gated on the person being viewed while viewing as them (an OM
+    // gets the 403 they would get); the export row is the REAL user's, with
+    // `viewing_as` saying whose view it was — a download changes no record,
+    // so it is not one of the denylisted GETs (plugins/authGuard.ts).
     const actorId = requireAdmin(req, 'audit');
     const { limit: _l, offset: _o, ...filters } = parse(auditQuerySchema, req.query);
-    const { csv, rows } = await exportAuditCsv(filters);
+    const { csv, rows } = await exportAuditCsv(filters, allowFor(permissionSubject(req)));
     const stamp = new Date().toISOString().slice(0, 10);
     // Rule 1.2.1: the audit log records its own export, like any other button.
     await logExport(actorId, 'audit_log_exported', {
       name: `audit-log-${stamp}.csv`,
       rows,
       filters: filters as Record<string, unknown>,
+      ...(req.auth?.isImpersonating ? { viewing_as: req.auth.actingAs.id } : {}),
     });
     return reply
       .header('Content-Type', 'text/csv; charset=utf-8')

@@ -11,7 +11,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { buildPermissionTree, type PermMap, type PermNode } from '@theone/shared';
+import {
+  ROLE_EDIT_MESSAGE,
+  SELF_EDIT_MESSAGE,
+  buildPermissionTree,
+  grantsExceeding,
+  mayEditRoleDefinitions,
+  type PermissionSet,
+  type PermMap,
+  type PermNode,
+} from '@theone/shared';
 import { AdminShell } from './AdminShell';
 import { Icon } from '../../components/Icon';
 import { PermissionMatrix } from '../../components/admin/PermissionMatrix';
@@ -83,14 +92,13 @@ const same = (a: PermMap, b: PermMap) => JSON.stringify(a) === JSON.stringify(b)
 // ── Admin › Users ────────────────────────────────────────────────────────────
 
 export function AdminUsersPage() {
-  // The ACTING principal throughout: viewing as someone shows the page as they
-  // would see it ("You" on their row, Adjust only if they are a super admin).
-  // The one exception is the super-admin ring (W4-1): the API accepts
-  // `is_super_admin`, and any change to a super admin's row, from the REAL
-  // signed-in user only (`req.auth.user`), so those controls read `user`, not
-  // `actingAs`. And viewing as someone is read-only (every write is refused),
-  // so the Super admin switch is off then too rather than enabled-but-refused.
-  const { user, actingAs, isImpersonating, can } = useAuth();
+  // The ACTING principal throughout (D6, UAT round 1 Wave B): viewing as
+  // someone shows the page exactly as they would see it ("You" on their row,
+  // the super-admin ring and Adjust only if they are a super admin) — the API
+  // answers from the same person now. Viewing as someone is read-only (every
+  // write is refused), so the switches are off then rather than
+  // enabled-but-refused.
+  const { actingAs, isImpersonating, can } = useAuth();
   const { fail, done, strip } = useAdminFeedback();
   const [inviteOpen, setInviteOpen] = useState(false);
   // The user whose adjustments are open, if any (super admins only).
@@ -101,7 +109,8 @@ export function AdminUsersPage() {
   const allowed = can('admin/users', 'view');
   const canEdit = can('admin/users', 'edit');
   const isSuperAdmin = Boolean(actingAs?.is_super_admin);
-  const editorIsSuperAdmin = Boolean(user?.is_super_admin);
+  const editorIsSuperAdmin = Boolean(actingAs?.is_super_admin);
+  const editorPerms: PermissionSet = actingAs?.perms ?? { role: {}, overrides: {} };
   const canGrantSuper = editorIsSuperAdmin && !isImpersonating;
 
   const usersQuery = useQuery({ queryKey: ['admin-users'], queryFn: listAdminUsers, enabled: allowed, retry: 0 });
@@ -156,6 +165,7 @@ export function AdminUsersPage() {
         roles={roles}
         selfId={actingAs?.id}
         editorIsSuperAdmin={editorIsSuperAdmin}
+        editorPerms={editorPerms}
         viewingAs={isImpersonating}
         loading={usersQuery.isLoading}
         error={usersQuery.isError}
@@ -182,12 +192,16 @@ export function AdminUsersPage() {
 // ── Admin › Roles ────────────────────────────────────────────────────────────
 
 export function AdminRolesPage() {
-  const { can } = useAuth();
+  const { can, actingAs } = useAuth();
   const { fail, done, strip } = useAdminFeedback();
   const [newRoleOpen, setNewRoleOpen] = useState(false);
 
   const allowed = can('admin/roles', 'view');
-  const canEdit = can('admin/roles', 'edit');
+  // #18 · role definitions are changed by super admins and the Admin role
+  // only, on top of the grant; anyone else with the grant reads them.
+  const roleEditor = mayEditRoleDefinitions({ isSuperAdmin: Boolean(actingAs?.is_super_admin), role: actingAs?.role });
+  const canEdit = can('admin/roles', 'edit') && roleEditor;
+  const editLockedByRole = can('admin/roles', 'edit') && !roleEditor;
   const rolesQuery = useQuery({ queryKey: ['admin-roles'], queryFn: listRoles, enabled: allowed, retry: 0 });
   const roles = rolesQuery.data?.items ?? [];
   const tree = usePermissionTree(allowed);
@@ -214,6 +228,8 @@ export function AdminRolesPage() {
       subtitle={`${roles.length} role${roles.length === 1 ? '' : 's'} · open a role to set what it may see and do — a whole section at once, or field by field`}
     >
       {strip}
+
+      {editLockedByRole && <div className="adm-empty" role="note"><b>{ROLE_EDIT_MESSAGE}</b></div>}
 
       {canEdit && (
         <div className="toolbar">
@@ -257,7 +273,7 @@ export function AdminRolesPage() {
 // ── Users table ──────────────────────────────────────────────────────────────
 
 function UsersTable({
-  items, roles, selfId, editorIsSuperAdmin, viewingAs, loading, error, busy, canAdjust, adjusting, onAdjust,
+  items, roles, selfId, editorIsSuperAdmin, editorPerms, viewingAs, loading, error, busy, canAdjust, adjusting, onAdjust,
   canAssignClients, clientsFor, onClients, tree, onChange,
 }: {
   items: AdminUserItem[];
@@ -267,6 +283,8 @@ function UsersTable({
       only them flip the Super admin switch or change a super admin's row at
       all (role, status), so both key on `user`, never `actingAs`. */
   editorIsSuperAdmin: boolean;
+  /** #18 · the editor's own tree: a role granting more than it is drawn locked. */
+  editorPerms: PermissionSet;
   /** Viewing as someone is read-only — the switch is off rather than
       enabled-but-refused. */
   viewingAs: boolean;
@@ -318,6 +336,10 @@ function UsersTable({
             const ringLock = u.is_super_admin && !editorIsSuperAdmin
               ? "Only a super admin can change a super admin's account"
               : null;
+            // #18 · nobody changes their own role, status, clients or
+            // permissions (the API answers 403 SELF_EDIT).
+            const selfLock = isSelf ? SELF_EDIT_MESSAGE : null;
+            const rowLock = selfLock ?? ringLock;
             return (
               <UserRows key={u.id} open={open || clientsOpen}>
                 <tr className={off ? 'is-dim' : undefined}>
@@ -332,10 +354,19 @@ function UsersTable({
                     </div>
                   </td>
                   <td>
-                    <select className="fld sm" value={u.role ?? ''} disabled={busy || off || ringLock !== null}
-                      title={ringLock ?? undefined}
+                    <select className="fld sm" value={u.role ?? ''} disabled={busy || off || rowLock !== null}
+                      title={rowLock ?? undefined}
                       aria-label={`Role for ${u.name}`} onChange={(e) => onChange(u.id, { role: e.target.value })}>
-                      {roles.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+                      {roles.map((r) => {
+                        // #18 · a role that grants more than the editor holds
+                        // cannot be handed out (403 GRANT_EXCEEDS_OWN).
+                        const over = r.code !== u.role && grantsExceeding(editorPerms, editorIsSuperAdmin, r.permissions).length > 0;
+                        return (
+                          <option key={r.code} value={r.code} disabled={over}>
+                            {r.label}{over ? ' — grants more than you hold' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </td>
                   <td><span className={`pill pill-${status.tone}`} title={status.hint}>{status.label}</span></td>
@@ -346,7 +377,7 @@ function UsersTable({
                         only produce an error. */}
                     <label
                       className="sw sm"
-                      title={isSelf ? 'You cannot change your own super-admin access' : superLock ?? undefined}
+                      title={isSelf ? SELF_EDIT_MESSAGE : superLock ?? undefined}
                     >
                       <input type="checkbox" checked={u.is_super_admin} disabled={busy || isSelf || off || superLock !== null}
                         onChange={(e) => onChange(u.id, { is_super_admin: e.target.checked })} />
@@ -375,9 +406,9 @@ function UsersTable({
                           <button
                             type="button"
                             className="linkbtn"
-                            disabled={off}
+                            disabled={off || selfLock !== null}
                             aria-expanded={clientsOpen}
-                            title="Pick the clients whose work orders count as this person's"
+                            title={selfLock ?? "Pick the clients whose work orders count as this person's"}
                             onClick={() => onClients(u.id)}
                           >
                             <Icon name="briefcase" size={12} />
@@ -396,9 +427,9 @@ function UsersTable({
                           <button
                             type="button"
                             className="linkbtn"
-                            disabled={off}
+                            disabled={off || selfLock !== null}
                             aria-expanded={open}
-                            title="Allow or deny things for this person specifically, on top of their role"
+                            title={selfLock ?? 'Allow or deny things for this person specifically, on top of their role'}
                             onClick={() => onAdjust(u.id)}
                           >
                             <Icon name="user-cog" size={12} />
@@ -415,12 +446,12 @@ function UsersTable({
                   )}
                   <td className="num">
                     {off ? (
-                      <button type="button" className="linkbtn" disabled={busy || ringLock !== null}
-                        title={ringLock ?? undefined}
+                      <button type="button" className="linkbtn" disabled={busy || rowLock !== null}
+                        title={rowLock ?? undefined}
                         onClick={() => onChange(u.id, { status: 'invited' })}>Re-enable</button>
                     ) : (
-                      <button type="button" className="linkbtn is-danger" disabled={busy || isSelf || ringLock !== null}
-                        title={isSelf ? 'You cannot disable your own account' : ringLock ?? 'Blocks sign-in and ends every live session'}
+                      <button type="button" className="linkbtn is-danger" disabled={busy || rowLock !== null}
+                        title={rowLock ?? 'Blocks sign-in and ends every live session'}
                         onClick={() => onChange(u.id, { status: 'disabled' })}>Disable</button>
                     )}
                   </td>

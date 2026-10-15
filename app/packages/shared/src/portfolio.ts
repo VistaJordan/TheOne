@@ -639,13 +639,17 @@ export interface PortfolioListItem {
 export interface SiteAccessPerson {
   principal: FeedActor;
   role_label: string | null;
+  /** M29 (0084) · the flag. On with no sites = this person sees no site and no
+      work order; it never falls back to "everything". */
+  restricted: boolean;
   sites: { id: string; name: string; city: string | null; state: string | null }[];
 }
 
 export interface AdminPortfolioResponse {
   site_types: PortfolioListItem[];
   asset_categories: PortfolioListItem[];
-  /** People restricted to a list of sites. Only super admins receive (and set) this. */
+  /** People restricted to a list of sites (the flag is on, the list may be
+      empty). Only super admins receive (and set) this. */
   site_access: SiteAccessPerson[] | null;
   people: (FeedActor & { role_label: string | null; is_super_admin: boolean })[];
 }

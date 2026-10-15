@@ -18,6 +18,7 @@ import {
   listPendingProposals,
   proposalsForTask,
 } from '../services/billingProposals.js';
+import { assertRecordInScope } from '../services/recordScope.js';
 
 const idParams = z.object({ id: z.string().uuid() });
 const woParams = z.object({ id: z.string().min(1) });
@@ -38,12 +39,14 @@ export default async function billingProposalRoutes(app: FastifyInstance): Promi
 
   app.post('/billing-proposals/:id/confirm', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('billing_proposal', id, actingPrincipalFromRequest(req)); // #13
     const { note } = parse(noteSchema, req.body ?? {});
     return confirmProposal(id, actingPrincipalFromRequest(req), note);
   });
 
   app.post('/billing-proposals/:id/dismiss', async (req) => {
     const { id } = parse(idParams, req.params);
+    await assertRecordInScope('billing_proposal', id, actingPrincipalFromRequest(req)); // #13
     const { note } = parse(noteSchema, req.body ?? {});
     return { proposal: await dismissProposal(id, actingPrincipalFromRequest(req), note) };
   });

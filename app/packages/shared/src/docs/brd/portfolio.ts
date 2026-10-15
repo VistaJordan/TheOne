@@ -54,7 +54,7 @@ export const PORTFOLIO_PART: DocPart = {
         },
         {
           name: 'A person restricted to sites',
-          what: 'Admin › Sites & assets › Site access (super admins only): Restrict another person, Choose a person…, pick the first site, add or remove sites, Lift the restriction. Nobody listed = no restriction; a super admin cannot be restricted. The scope predicate ANDs the list onto every work-order list and route; "A work order with no site record is at none of them."',
+          what: 'Admin › Sites & assets › Site access (super admins only): Restrict another person, Choose a person…, pick the first site, add or remove sites, Restrict to sites (the switch: on with no sites = no sites at all, never every site — M29, principal.site_restricted since 0084; off lifts it). A super admin cannot be restricted. The scope predicate ANDs the list onto every work-order list and route; "A work order with no site record is at none of them."',
           value: 'A store manager\'s account sees its own stores and nothing else.',
           permissions: ['super admin only'],
           audit: ['user_site_access_changed'],

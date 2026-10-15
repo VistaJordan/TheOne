@@ -8,6 +8,8 @@
 // work-order payloads, which are trimmed to the fields the caller may see.
 
 import {
+  REDACTABLE_CORE_KEYS,
+  activityFieldKey,
   fieldPermKey,
   normalizePermMap,
   permAllows,
@@ -86,18 +88,30 @@ export function assertFieldWrites(allow: Allow, catalogueKeys: string[]): void {
 
 // The promoted columns a work-order payload can go without. Identity (id,
 // wo_number, title, status) always ships — a row you cannot name is not a row.
-const REDACTABLE_CORE = [
-  'ext_name',
-  'description',
-  'client',
-  'city',
-  'state',
-  'trade',
-  'billing_entity',
-  'nte',
-  'priority',
-  'date_received',
-] as const;
+// The list is shared (REDACTABLE_CORE_KEYS) so the audit redaction agrees.
+const REDACTABLE_CORE = REDACTABLE_CORE_KEYS;
+
+// ── M28 · audit rows on hidden fields ────────────────────────────────────────
+
+/** May this reader see an audit row's values? Rows that name no catalogue
+    field (status moves, visits, money records, sign-ins) always may. */
+export function activityValuesVisible(allow: Allow, field: string | null | undefined): boolean {
+  const key = activityFieldKey(field);
+  return key === null || canViewField(allow, key);
+}
+
+/** Keep the row (who did what, when, to which field) but withhold the
+    values when the field is hidden from the reader. Mutates and returns. */
+export function redactActivityValues<T extends { field: string | null; before: unknown; after: unknown; redacted?: boolean }>(
+  allow: Allow,
+  row: T,
+): T {
+  if (activityValuesVisible(allow, row.field)) return row;
+  row.before = null;
+  row.after = null;
+  row.redacted = true;
+  return row;
+}
 
 /**
  * Trim a work-order payload (list item or detail) to what the caller may see:
@@ -129,5 +143,22 @@ export function redactWorkOrder<
   // The derived money block is built from Cost / Total Invoiced / NTE; when
   // NTE is hidden the whole block is, since every number in it leans on it.
   if (wo.money && !canViewField(allow, 'nte')) rec.money = null;
+  // M13 (0084) · a role below TL does not see Cost / Total Invoiced / Profit:
+  // those figures leave the block, the Margin % stays (MARGIN_PCT_KEY is a
+  // header path nobody narrows).
+  if (rec.money && typeof rec.money === 'object') {
+    const m = rec.money as Record<string, unknown>;
+    const cost = canViewField(allow, 'fields.34. Cost');
+    const invoiced = canViewField(allow, 'fields.Total Invoiced');
+    if (!cost) m.cost = null;
+    if (!invoiced) m.invoiced = null;
+    if (!cost || !invoiced || !canViewField(allow, 'fields.Profit')) m.profit = null;
+    if (!canViewField(allow, 'margin_pct')) m.marginPct = null;
+  }
+  // M28 · the detail's recent activity drops the rows on hidden fields.
+  const recent = rec.recent_activity;
+  if (Array.isArray(recent)) {
+    rec.recent_activity = recent.filter((e: { field?: string | null }) => activityValuesVisible(allow, e?.field));
+  }
   return wo;
 }

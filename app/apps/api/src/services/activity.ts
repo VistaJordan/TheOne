@@ -13,7 +13,7 @@
 
 import type { FastifyRequest } from 'fastify';
 import { query } from '../db.js';
-import { unauthorized, type Capabilities } from './auth.js';
+import { unauthorized, type Capabilities, type SessionPrincipal } from './auth.js';
 import { Params } from './woFields.js';
 import { outOfScope, woScopeSql } from './woScope.js';
 import type { ActivityEntry, FeedActor, PermissionSet } from '@theone/shared';
@@ -74,7 +74,11 @@ export interface ActingPrincipal {
 
 export function actingPrincipalFromRequest(req: FastifyRequest): ActingPrincipal {
   if (!req.auth) throw unauthorized();
-  const p = req.auth.actingAs;
+  return actingFromPrincipal(req.auth.actingAs);
+}
+
+/** The same shape from a loaded principal (services/auth.ts loadPrincipalById). */
+export function actingFromPrincipal(p: SessionPrincipal): ActingPrincipal {
   return {
     id: p.id,
     name: p.name,
@@ -87,6 +91,21 @@ export function actingPrincipalFromRequest(req: FastifyRequest): ActingPrincipal
     perms: p.perms,
     can: p.can,
   };
+}
+
+/**
+ * D6 (UAT round 1, Wave B) · whose rights a gate reads. While a super admin
+ * is viewing as someone it is that person — the Admin console, the admin
+ * routes and the audit export answer as they would answer them — and
+ * otherwise the signed-in user (`actingAs` is the user then). It can never
+ * widen anything: a view-as session is read-only (plugins/authGuard.ts), and
+ * only a super admin can view as anyone. The one thing it does NOT decide is
+ * starting and stopping a view (routes/auth.ts reads `req.auth.user`), so a
+ * super admin can always stop viewing as.
+ */
+export function permissionSubject(req: FastifyRequest): SessionPrincipal {
+  if (!req.auth) throw unauthorized();
+  return req.auth.actingAs;
 }
 
 /** Sign-in, sign-out and impersonation, written to the same log as everything else. */

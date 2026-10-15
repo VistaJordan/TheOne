@@ -50,13 +50,13 @@ export const PLATFORM_PART: DocPart = {
         },
         {
           name: 'Viewing as (impersonation)',
-          what: 'A super admin picks a person in the top bar\'s Viewing as select (Myself clears it) and sees exactly what they see; the admin console, the override editor and the integration switches still read the real signed-in user. Viewing as is read-only: every write under /api answers 403 IMPERSONATION_READ_ONLY ("Viewing as another user is read-only. Stop viewing as them to make changes."), and so do the five reads that log a row under the viewed person (the work-order, vendor and client-update CSV exports, Save as PDF, the technician map); ending or switching the view and signing out are the only writes allowed. Impersonation stops the moment the impersonator stops being a super admin.',
+          what: 'A super admin picks a person in the top bar\'s Viewing as select (Myself clears it) and sees exactly what they see — since UAT Wave B (D6, 0084) the admin console, the admin routes, the audit export, the override editor and the integration switches included: every gate answers from the viewed person, so viewing as an OM shows the console the OM gets. Viewing as is read-only: every write under /api answers 403 IMPERSONATION_READ_ONLY ("Viewing as another user is read-only. Stop viewing as them to make changes."), and so do the five reads that log a row under the viewed person (the work-order, vendor and client-update CSV exports, Save as PDF, the technician map); ending or switching the view and signing out are the only writes allowed. Impersonation stops the moment the impersonator stops being a super admin.',
           value: 'Support questions ("why can I not see this work order?") are answered by looking, not guessing, without handing the impersonator the admin switches, and the audit log never names the viewed person as the author of something the super admin did.',
           controls: [
             { label: 'Viewing as … / Myself', does: 'Starts or ends acting as another person; while viewing, the control says "Viewing as someone is read-only. Switch back to Myself to make changes.", otherwise "Impersonation is recorded in the activity log".' },
             { label: 'Read-only', does: 'The chip beside the select while viewing as someone, carrying the same sentence.' },
           ],
-          rules: ['Writes while viewing as someone are refused, not logged under the viewed person (W4-2, 2026-10-14); the Super admin switch in Admin › Users is off meanwhile.'],
+          rules: ['Writes while viewing as someone are refused, not logged under the viewed person (W4-2, 2026-10-14); the Super admin switch in Admin › Users is off meanwhile.', 'The view itself is started and stopped on the person really signed in, so a super admin can always switch back to Myself. Admin › Audit\'s CSV export, while viewing as someone, is gated on their audit grant and logged under the real user with viewing_as.'],
           permissions: ['super admin only'],
           audit: ['impersonation_started', 'impersonation_ended'],
         },
@@ -136,7 +136,11 @@ export const PLATFORM_PART: DocPart = {
             { label: 'View / Create / Edit / Delete / Approve cells', does: 'Click to set; faded cells are inherited; × returns a cell to inherited; a section button removes every setting under it.' },
             { label: 'Save role', does: 'Writes the tree; logged with before/after snapshots.' },
           ],
-          rules: ['A permission map is capped at 2,000 entries and keys at 400 characters; non-boolean values are dropped on the way in.'],
+          rules: [
+            'A permission map is capped at 2,000 entries and keys at 400 characters; non-boolean values are dropped on the way in.',
+            'The role matrix lives in migrations (UAT D4). 0084: Exec guest holds exactly OM Under Probation\'s grants; Ops Coordinator holds them too, minus the technician list and map, Clients and rates, on its own work orders and in request mode; VR Officer and Operations Admin request status changes and see every work order (they source and intake for all of them and are never the Assignee); HR (new) holds Admin › Users and Roles only; invoicing is full for Admin and AR and view for TL, ATL and AM.',
+            'Dispatchers (D3) are OM Under Probation and Ops Coordinator (under probation), OM, Senior OM — one list, DISPATCHER_ROLE_CODES in shared/access.ts.',
+          ],
           audit: ['role_created', 'role_updated', 'role_deleted'],
           since: '0021',
         },
@@ -156,6 +160,10 @@ export const PLATFORM_PART: DocPart = {
           name: 'Field-level visibility and redaction',
           what: 'Every work-order field is a row under its section (Overview, Finances, Dates, People, CICO, Payables, Invoicing, AR, QC, Integrations, …; the promoted columns under "Work order header", unknown custom fields under "More fields"). A field a role cannot view is removed from every payload the API sends (promoted columns nulled, hidden keys stripped, the whole money block hidden when the NTE is hidden; identity, number, title and status always ship); editing a field needs view and edit; a hidden field is absent from the catalogue the list, the filters and the exports offer.',
           value: 'Cost, profit and client NTE can be kept from roles that should not see them, including in exports and the assistant.',
+          rules: [
+            'UAT M13 (0084): every role but Admin, TL, ATL, AM, AR and AP has Cost, Profit, Total Invoiced and Discount hidden and no invoicing view; the computed Margin % column (and the margin on the money block and the Cost breakdown tab) stays visible.',
+            'UAT M28: Admin › Audit keeps a row on a hidden field but withholds its values (the CSV too); the work-order feed leaves such rows out; a dashboard card that totals, groups, runs along or filters on a hidden field answers "not available".',
+          ],
         },
         {
           name: 'Status-change mode',

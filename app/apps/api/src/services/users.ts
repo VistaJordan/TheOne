@@ -6,8 +6,15 @@
 // trust boundary in one place (services/auth.ts) instead of splitting it across
 // an invite-token scheme we would then have to secure separately.
 
-import type { PermMap, UserClient } from '@theone/shared';
-import { ADVISORY_LOCKS } from '@theone/shared';
+import type { PermMap, PermissionSet, UserClient } from '@theone/shared';
+import {
+  ADVISORY_LOCKS,
+  GRANT_EXCEEDS_OWN_CODE,
+  SELF_EDIT_CODE,
+  SELF_EDIT_MESSAGE,
+  describeGrants,
+  grantsExceeding,
+} from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { ApiError } from '../errors.js';
 import { destroySessionsFor } from './auth.js';
@@ -137,9 +144,12 @@ export async function inviteUser(
       security check. A caller with no session in hand passes false; the
       route is the first check, this the second. */
   actorIsSuperAdmin: boolean,
+  /** #18 · the inviter's own tree: the role handed out may not grant more. */
+  actorPerms: PermissionSet,
 ): Promise<AdminUser> {
   assertMaySetSuperAdmin(input, actorIsSuperAdmin);
   await assertRole(input.role);
+  assertGrantWithinOwn(actorPerms, actorIsSuperAdmin, await getRolePermissionsByCode(input.role));
   const email = input.email.trim().toLowerCase();
 
   const clash = await query<{ id: string; status: string }>(
@@ -199,6 +209,46 @@ export function assertMayEditSuperAdmin(target: { is_super_admin: boolean }, act
   });
 }
 
+/** #18 (UAT round 1, Wave B) · nobody — super admins included — changes
+    their own role, status, super-admin flag, client list or permission
+    overrides: 403 SELF_EDIT. A name change is not a right and passes. */
+export function assertNotSelfEdit(targetId: string, actorId: string, what: string): void {
+  if (targetId !== actorId) return;
+  throw new ApiError('FORBIDDEN', SELF_EDIT_MESSAGE, { code: SELF_EDIT_CODE, field: what });
+}
+
+/** #18 · a non-super-admin cannot hand out (through a role) an action they
+    do not hold themselves: 403 GRANT_EXCEEDS_OWN naming the first few. */
+export function assertGrantWithinOwn(
+  actorPerms: PermissionSet,
+  actorIsSuperAdmin: boolean,
+  granted: PermMap,
+  previous: PermMap = {},
+): void {
+  const over = grantsExceeding(actorPerms, actorIsSuperAdmin, granted, previous);
+  if (over.length === 0) return;
+  throw new ApiError(
+    'FORBIDDEN',
+    `You cannot grant permissions you do not hold yourself (${describeGrants(over)})`,
+    { code: GRANT_EXCEEDS_OWN_CODE, exceeds: over },
+  );
+}
+
+/** #18 · the three rights on an account row, compared with the row as it
+    stands: only a CHANGE to one's own is refused. */
+export function assertNoSelfRightsChange(
+  id: string,
+  actorId: string,
+  input: UpdateUserInput,
+  row: { role: string | null; status: string; is_super_admin: boolean },
+): void {
+  if (input.role !== undefined && input.role !== row.role) assertNotSelfEdit(id, actorId, 'role');
+  if (input.status !== undefined && input.status !== row.status) assertNotSelfEdit(id, actorId, 'status');
+  if (input.is_super_admin !== undefined && input.is_super_admin !== row.is_super_admin) {
+    assertNotSelfEdit(id, actorId, 'is_super_admin');
+  }
+}
+
 /** Transaction-level advisory lock taken by every change that could leave the
     app with no super admin (its key is the registry's, ADVISORY_LOCKS in
     @theone/shared, never a literal here): the "last super admin" count and
@@ -216,6 +266,8 @@ export async function updateUser(
       security check. A caller with no session in hand passes false; the
       route is the first check, this the second. */
   actorIsSuperAdmin: boolean,
+  /** #18 · the editor's own tree: a role handed out may not grant more. */
+  actorPerms: PermissionSet,
 ): Promise<AdminUser> {
   assertMaySetSuperAdmin(input, actorIsSuperAdmin);
   if (input.role) await assertRole(input.role);
@@ -225,15 +277,16 @@ export async function updateUser(
   // locked row inside the transaction below.
   assertMayEditSuperAdmin(current, actorIsSuperAdmin);
 
-  // ── Two guards against locking everyone out ─────────────────────────────
-  // You cannot remove your own super-admin rights or disable yourself: both
-  // are one click away from an app nobody can administer, and both are far
-  // more likely to be a misclick than an intention.
-  if (id === actorId && input.is_super_admin === false) {
-    throw new ApiError('BAD_REQUEST', 'You cannot remove your own super-admin access');
-  }
-  if (id === actorId && input.status === 'disabled') {
-    throw new ApiError('BAD_REQUEST', 'You cannot disable your own account');
+  // ── #18 · nobody changes their own rights ───────────────────────────────
+  // Role, status and the super-admin flag on one's own row are refused for
+  // everyone, super admins included (403 SELF_EDIT). Before 0084 only
+  // removing one's own super-admin access and disabling oneself were (two
+  // 400s), which left promoting oneself to the Admin role one click away.
+  // A value equal to the one on file is not a change (the row editor sends
+  // the whole row back) and passes.
+  assertNoSelfRightsChange(id, actorId, input, current);
+  if (input.role !== undefined && input.role !== current.role) {
+    assertGrantWithinOwn(actorPerms, actorIsSuperAdmin, await getRolePermissionsByCode(input.role));
   }
 
   // And never let the last super admin be demoted or disabled. The count and
@@ -256,6 +309,8 @@ export async function updateUser(
     // promotion committed between it and this lock would otherwise let a
     // non-super-admin change a super admin's row.
     assertMayEditSuperAdmin(locked.rows[0], actorIsSuperAdmin);
+    // #18 again on the locked row: the pool read above may be stale.
+    assertNoSelfRightsChange(id, actorId, input, locked.rows[0]);
     const losingSuper =
       (input.is_super_admin === false || input.status === 'disabled') && locked.rows[0].is_super_admin;
     if (losingSuper) {
@@ -315,9 +370,15 @@ export async function updateUser(
  * Users are never deleted — activity_log rows reference them, and an audit
  * trail with dangling actors is worse than a disabled row. Disable instead.
  */
-export async function disableUser(id: string, actorId: string, actorIsSuperAdmin: boolean): Promise<AdminUser> {
-  // The flag rides through: disabling a super admin needs a super admin (W4-1).
-  return updateUser(id, { status: 'disabled' }, actorId, actorIsSuperAdmin);
+export async function disableUser(
+  id: string,
+  actorId: string,
+  actorIsSuperAdmin: boolean,
+  actorPerms: PermissionSet,
+): Promise<AdminUser> {
+  // The flag rides through: disabling a super admin needs a super admin (W4-1),
+  // and disabling oneself is a SELF_EDIT (#18).
+  return updateUser(id, { status: 'disabled' }, actorId, actorIsSuperAdmin, actorPerms);
 }
 
 // ── Per-user overrides (0015) ────────────────────────────────────────────────
@@ -350,6 +411,8 @@ export async function setUserPermissions(
   raw: unknown,
   actorId: string,
 ): Promise<UserPermissions> {
+  // #18 · not on oneself, super admins included.
+  assertNotSelfEdit(id, actorId, 'permission_overrides');
   const current = await getUserPermissions(id);
   const overrides = parsePermMap(raw);
   await query(`UPDATE principal SET permission_overrides = $2::jsonb WHERE id = $1`, [
@@ -389,6 +452,8 @@ export async function setUserOverrideView(
       than the signed-in user's: only a super admin can act as someone else. */
   actorIsSuperAdmin: boolean,
 ): Promise<void> {
+  // #18 · ticking oneself in the Share dialog is still an override on oneself.
+  assertNotSelfEdit(id, actorId, 'permission_overrides');
   const current = await getUserPermissions(id);
   assertMayEditSuperAdmin(current.user, actorIsSuperAdmin);
   const overrides: PermMap = { ...current.overrides };
@@ -448,6 +513,8 @@ export async function setUserClients(
       it). Required, never defaulted (F1). */
   actorIsSuperAdmin: boolean,
 ): Promise<UserClientsResult> {
+  // #18 · a client list widens what "Only theirs" counts: not on oneself.
+  assertNotSelfEdit(id, actorId, 'clients');
   const current = await getUser(id);
   // The early answer, on a pool read; the check that counts runs again on the
   // locked row inside the transaction below.

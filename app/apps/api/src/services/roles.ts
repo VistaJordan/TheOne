@@ -10,7 +10,14 @@
 // The five legacy booleans stay on the row and are kept in step with the tree
 // on every write so older readers of the table keep making sense.
 
-import { permAllows, type PermMap } from '@theone/shared';
+import {
+  GRANT_EXCEEDS_OWN_CODE,
+  describeGrants,
+  grantsExceeding,
+  permAllows,
+  type PermissionSet,
+  type PermMap,
+} from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { parsePermMap } from './permissions.js';
@@ -118,6 +125,27 @@ function foldLegacy(base: PermMap, input: RoleInput): PermMap {
   return out;
 }
 
+/** #18 (UAT round 1, Wave B) · who is editing a role, for the "no grant
+    beyond your own" check. Routes pass the signed-in user; the Share dialog
+    (dashboards.ts) passes none — it writes only a dashboard the sharer owns. */
+export interface RoleEditor {
+  isSuperAdmin: boolean;
+  perms: PermissionSet;
+}
+
+/** 403 GRANT_EXCEEDS_OWN when `next` grants anything the editor does not hold
+    that `prev` did not already grant at the same path. */
+export function assertRoleGrantWithinOwn(editor: RoleEditor | undefined, next: PermMap, prev: PermMap = {}): void {
+  if (!editor) return;
+  const over = grantsExceeding(editor.perms, editor.isSuperAdmin, next, prev);
+  if (over.length === 0) return;
+  throw new ApiError(
+    'FORBIDDEN',
+    `You cannot grant permissions you do not hold yourself (${describeGrants(over)})`,
+    { code: GRANT_EXCEEDS_OWN_CODE, exceeds: over },
+  );
+}
+
 export interface RoleInput {
   code?: string;
   label: string;
@@ -131,7 +159,7 @@ export interface RoleInput {
   can_view_field_history?: boolean;
 }
 
-export async function createRole(input: RoleInput, actorId: string): Promise<RoleRecord> {
+export async function createRole(input: RoleInput, actorId: string, editor?: RoleEditor): Promise<RoleRecord> {
   // Derive the code from the label when none is supplied — "Regional Manager"
   // becomes `regional_manager`, which is what an operator expects and saves
   // them inventing an identifier they will never see again.
@@ -143,6 +171,7 @@ export async function createRole(input: RoleInput, actorId: string): Promise<Rol
   }
 
   const permissions = foldLegacy(parsePermMap(input.permissions ?? {}), input);
+  assertRoleGrantWithinOwn(editor, permissions);
   const flags = legacyFlags(permissions);
 
   const res = await query<{ id: string }>(
@@ -179,6 +208,7 @@ export async function updateRole(
   id: string,
   input: Partial<RoleInput>,
   actorId: string,
+  editor?: RoleEditor,
 ): Promise<RoleRecord> {
   const current = await getRole(id);
 
@@ -209,6 +239,7 @@ export async function updateRole(
         { label: current.label, ...input },
       )
     : current.permissions;
+  assertRoleGrantWithinOwn(editor, permissions, current.permissions);
   const flags = legacyFlags(permissions);
 
   // Never let the last user-managing role lose that capability: it is the only

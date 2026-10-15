@@ -231,14 +231,14 @@ describe('knowing whether the person can follow the steps', () => {
     expect(rows).toContain('Payments [payments]: none');
   });
 
-  it('reads the Admin console from the person signed in, not who they are viewing as', () => {
+  // UAT Wave B (D6): viewing as someone = their rights everywhere, the Admin
+  // console included — as the API now gates it (permissionSubject).
+  it('reads every row, the Admin console included, from who they are viewing as', () => {
     expect(lines(describeAbilities(admin, admin))).toContain('  Automations [admin/automations]: view, edit');
-    // A super admin viewing as an OM still holds the console; the rest is the OM's.
     const viewingAs = lines(describeAbilities(superAdmin, om));
-    expect(viewingAs).toContain('  Automations [admin/automations]: view, edit');
+    expect(viewingAs[0]).not.toMatch(/^Super admin/);
+    expect(viewingAs).toContain('  Automations [admin/automations]: none');
     expect(viewingAs).toContain('Payments [payments]: none');
-    // Acting as an admin does not lend an OM the console.
-    expect(lines(describeAbilities(om, admin))).toContain('  Automations [admin/automations]: none');
   });
 
   it('says a super admin may do everything', () => {

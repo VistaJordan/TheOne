@@ -2350,7 +2350,7 @@ export function AdminFieldsPage() {
         'manual create form offers, and which it refuses to save without — WO # is always required ' +
         'and is not listed, because it is the work order\'s identity. Assignment is stricter than ' +
         'creation: rule 11.1.1 still holds a work order back from a dispatcher until its 13 intake ' +
-        'fields are in, whatever is set here.'
+        'fields are in, whatever is set here. "Client-safe" decides whether a field may go out to a client on a shared Client Update.'
       }
       actions={
         <button type="button" className="btn btn-primary" onClick={() => setAdding((v) => !v)}>
@@ -2388,6 +2388,8 @@ export function AdminFieldsPage() {
                 <th>Options</th>
                 {/* 0041 · what "Add work order" does with this field. */}
                 <th>Add work order</th>
+                {/* 0084 (#17) · may it go out on a shared Client Update? */}
+                <th>Client-safe</th>
                 <th className="num">Used by</th>
               </tr>
             </thead>
@@ -2413,6 +2415,7 @@ export function AdminFieldsPage() {
                   onToggleOptions={() => setOptionsFor(optionsFor === f.id ? null : f.id)}
                   onOptions={(options) => update.mutate({ id: f.id, input: { options } })}
                   onCreateMode={(create_mode) => update.mutate({ id: f.id, input: { create_mode } })}
+                  onClientSafe={(client_safe) => update.mutate({ id: f.id, input: { client_safe } })}
                   reorder={reorder}
                 />
               ))}
@@ -2636,7 +2639,7 @@ function CicoMethodsCard() {
 
 function FieldRow({
   field: f, index, busy, renaming, renameDraft, onRenameDraft, onStartRename,
-  onCancelRename, onCommitRename, onType, optionsOpen, onToggleOptions, onOptions, onCreateMode, reorder,
+  onCancelRename, onCommitRename, onType, optionsOpen, onToggleOptions, onOptions, onCreateMode, onClientSafe, reorder,
 }: {
   field: AdminFieldItem;
   index: number;
@@ -2652,6 +2655,7 @@ function FieldRow({
   onToggleOptions: () => void;
   onOptions: (options: string[]) => void;
   onCreateMode: (mode: WoCreateMode) => void;
+  onClientSafe: (safe: boolean) => void;
   reorder: ReturnType<typeof useReorder>;
 }) {
   const isDropdown = f.type === 'dropdown';
@@ -2736,12 +2740,26 @@ function FieldRow({
             ))}
           </select>
         </td>
+        {/* 0084 (#17) · off = a Client Update can show it to our team but never
+            sends it to the client (link, email, CSV). Saved on change, audited. */}
+        <td>
+          <label className="ck" title="Off: never sent to a client on a shared Client Update">
+            <input
+              type="checkbox"
+              checked={f.client_safe}
+              disabled={busy}
+              aria-label={`${f.label} may be shared with clients`}
+              onChange={(e) => onClientSafe(e.target.checked)}
+            />
+            <span>{f.client_safe ? 'Yes' : 'No'}</span>
+          </label>
+        </td>
         <td className="num">{f.used_by || '—'}</td>
       </tr>
       {isDropdown && optionsOpen && (
         <tr className="foptions-row">
           <td />
-          <td colSpan={5}>
+          <td colSpan={6}>
             <OptionsEditor
               label={f.label}
               options={f.options}

@@ -31,6 +31,7 @@ import {
   withdrawApprovalTask,
 } from '../services/approvals.js';
 import { requirePerm } from '../services/permissions.js';
+import { assertRecordInScope } from '../services/recordScope.js';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
 const uuidParamsSchema = z.object({ id: z.string().uuid() });
@@ -67,6 +68,7 @@ export default async function approvalRoutes(app: FastifyInstance): Promise<void
 
   app.post('/approval-tasks/:id/approve', async (req) => {
     const { id } = parse(uuidParamsSchema, req.params);
+    await assertRecordInScope('approval_task', id, actingPrincipalFromRequest(req)); // #13
     const { note, assignee } = parse(approveSchema, req.body ?? {});
     const actor = actingPrincipalFromRequest(req);
     return { item: await approveApprovalTask(id, note?.trim() || null, actor, { assignee: assignee ?? null }) };
@@ -74,6 +76,7 @@ export default async function approvalRoutes(app: FastifyInstance): Promise<void
 
   app.post('/approval-tasks/:id/reject', async (req) => {
     const { id } = parse(uuidParamsSchema, req.params);
+    await assertRecordInScope('approval_task', id, actingPrincipalFromRequest(req)); // #13
     const { note } = parse(rejectSchema, req.body);
     const actor = actingPrincipalFromRequest(req);
     return { item: await rejectApprovalTask(id, note, actor) };
@@ -81,6 +84,7 @@ export default async function approvalRoutes(app: FastifyInstance): Promise<void
 
   app.post('/approval-tasks/:id/claim', async (req) => {
     const { id } = parse(uuidParamsSchema, req.params);
+    await assertRecordInScope('approval_task', id, actingPrincipalFromRequest(req)); // #13
     const actor = actingPrincipalFromRequest(req);
     return { item: await claimApprovalTask(id, actor) };
   });

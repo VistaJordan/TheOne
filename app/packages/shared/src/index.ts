@@ -203,6 +203,9 @@ export interface WoFieldDescriptor {
   /** 0055 · derived at read time (location, completed_on, …): never editable,
       and delivered in a list row's `custom` map under its own key. */
   computed?: boolean;
+  /** 0084 (#17) · may go out on a shared Client Update (Admin › Custom
+      fields' "Client-safe"; the core columns follow `defaultClientSafe`). */
+  client_safe?: boolean;
 }
 
 export interface WoFieldCatalogue {
@@ -2041,3 +2044,5 @@ export * from './docs';
 export * from './advisoryLocks';
 // UAT round 1, Wave A (0083): maker ≠ checker, bounds, purpose codes, money holds.
 export * from './moneyGuards';
+// UAT round 1, Wave B (0084): dispatchers, money roles, client-safe columns, rights.
+export * from './access';

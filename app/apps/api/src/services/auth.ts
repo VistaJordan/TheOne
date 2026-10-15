@@ -45,7 +45,9 @@ export interface SessionPrincipal {
   kind: 'human' | 'service';
   isSuperAdmin: boolean;
   status: 'invited' | 'active' | 'disabled';
-  /** 0062 · has a list of sites they are restricted to (`principal_site`). */
+  /** 0062 · restricted to the sites listed in `principal_site`. Since 0084
+      (M29) it is the `principal.site_restricted` flag, not "has rows": on
+      with an empty list means no sites at all. */
   siteRestricted: boolean;
   /** 0072 · the clients assigned to them (`principal_client`), by name. Their
       work orders count as theirs when "Which work orders" is Only theirs. */
@@ -74,7 +76,7 @@ const PRINCIPAL_COLUMNS = `
   r.label AS role_label,
   COALESCE(r.permissions, '{}'::jsonb)          AS role_permissions,
   COALESCE(p.permission_overrides, '{}'::jsonb) AS permission_overrides,
-  EXISTS (SELECT 1 FROM principal_site ps WHERE ps.principal_id = p.id) AS site_restricted,
+  p.site_restricted AS site_restricted,
   (SELECT COALESCE(array_agg(c.name ORDER BY lower(c.name)), '{}'::text[])
      FROM principal_client pc JOIN client c ON c.id = pc.client_id AND c.deleted_at IS NULL
     WHERE pc.principal_id = p.id) AS client_names`;
@@ -129,6 +131,18 @@ function toPrincipal(r: PrincipalRow): SessionPrincipal {
       viewFieldHistory: allow('work_orders/history', 'view'),
     },
   };
+}
+
+/** #17 (Wave B) · one principal as a session would load them — role tree,
+    overrides, flags — for a check made on someone's behalf outside a request
+    (a Client Update sent as its owner). Null when unknown or disabled. */
+export async function loadPrincipalById(id: string | null | undefined): Promise<SessionPrincipal | null> {
+  if (!id) return null;
+  const res = await query<PrincipalRow>(
+    `SELECT ${PRINCIPAL_COLUMNS} ${PRINCIPAL_FROM} WHERE p.id = $1 AND p.status <> 'disabled' LIMIT 1`,
+    [id],
+  );
+  return res.rows[0] ? toPrincipal(res.rows[0]) : null;
 }
 
 // ── 1 · Sign-in policy ───────────────────────────────────────────────────────

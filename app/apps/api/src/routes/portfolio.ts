@@ -376,7 +376,12 @@ export default async function portfolioRoutes(app: FastifyInstance): Promise<voi
   });
   app.put('/admin/portfolio/site-access/:id', async (req) => {
     const { id } = parse(idParams, req.params);
-    const { site_ids } = parse(z.object({ site_ids: z.array(uuid).max(2000) }).strict(), req.body);
-    return setSiteAccess(id, site_ids, actingPrincipalFromRequest(req));
+    // M29 · `restricted` is the switch; left out, a list means restricted and
+    // an empty list means not (the pre-0084 meaning, for older callers).
+    const { site_ids, restricted } = parse(
+      z.object({ site_ids: z.array(uuid).max(2000), restricted: z.boolean().optional() }).strict(),
+      req.body,
+    );
+    return setSiteAccess(id, site_ids, actingPrincipalFromRequest(req), restricted ?? site_ids.length > 0);
   });
 }

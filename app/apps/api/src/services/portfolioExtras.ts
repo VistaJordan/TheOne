@@ -624,19 +624,22 @@ export async function adminPortfolio(actor: ActingPrincipal): Promise<AdminPortf
   ]);
   let access: SiteAccessPerson[] | null = null;
   if (actor.isSuperAdmin) {
-    const rows = await query<{ p_id: string; p_name: string; p_kind: 'human' | 'service'; role_label: string | null; s_id: string; s_name: string | null; city: string | null; state: string | null }>(
+    // M29 · everyone whose flag is on, sites or none (a LEFT JOIN, so a
+    // restriction to nothing still lists the person).
+    const rows = await query<{ p_id: string; p_name: string; p_kind: 'human' | 'service'; role_label: string | null; s_id: string | null; s_name: string | null; city: string | null; state: string | null }>(
       `SELECT p.id::text AS p_id, p.display_name AS p_name, p.kind AS p_kind, r.label AS role_label,
               s.id::text AS s_id, COALESCE(s.name, s.client) AS s_name, s.city, s.state
-         FROM principal_site ps
-         JOIN principal p ON p.id = ps.principal_id
+         FROM principal p
          LEFT JOIN role r ON r.code = p.role
-         JOIN site s ON s.id = ps.site_id AND s.deleted_at IS NULL
+         LEFT JOIN principal_site ps ON ps.principal_id = p.id
+         LEFT JOIN site s ON s.id = ps.site_id AND s.deleted_at IS NULL
+        WHERE p.site_restricted AND NOT p.is_super_admin
         ORDER BY lower(p.display_name), lower(COALESCE(s.name, s.client))`,
     );
     const by = new Map<string, SiteAccessPerson>();
     for (const r of rows.rows) {
-      const cur = by.get(r.p_id) ?? { principal: { id: r.p_id, name: r.p_name, kind: r.p_kind }, role_label: r.role_label, sites: [] };
-      cur.sites.push({ id: r.s_id, name: r.s_name ?? 'Site', city: r.city, state: r.state });
+      const cur = by.get(r.p_id) ?? { principal: { id: r.p_id, name: r.p_name, kind: r.p_kind }, role_label: r.role_label, restricted: true, sites: [] };
+      if (r.s_id) cur.sites.push({ id: r.s_id, name: r.s_name ?? 'Site', city: r.city, state: r.state });
       by.set(r.p_id, cur);
     }
     access = [...by.values()];
@@ -691,22 +694,44 @@ export async function updateListValue(list: PortfolioListName, name: string, pat
   return adminPortfolio(actor);
 }
 
-/** Replace one person's site list. Empty = no restriction. Super admins only,
- *  like the per-person permission overrides. */
-export async function setSiteAccess(principalId: string, siteIds: string[], actor: ActingPrincipal): Promise<AdminPortfolioResponse> {
+/** Replace one person's site list and set the restriction flag (M29, 0084):
+ *  restricted with an empty list = no sites at all; not restricted = every
+ *  site, and the list is cleared. Super admins only, like the per-person
+ *  permission overrides. */
+export async function setSiteAccess(
+  principalId: string,
+  siteIds: string[],
+  actor: ActingPrincipal,
+  restricted: boolean,
+): Promise<AdminPortfolioResponse> {
   if (!actor.isSuperAdmin) throw forbidden('Only a super admin can restrict a person to a list of sites');
   if (!UUID_RE.test(principalId)) throw notFound('Person not found');
   const who = await query<{ name: string; is_super_admin: boolean }>(`SELECT display_name AS name, is_super_admin FROM principal WHERE id = $1`, [principalId]);
   if (!who.rows[0]) throw notFound('Person not found');
   const ids = [...new Set(siteIds.filter((s) => UUID_RE.test(s)))];
-  if (ids.length > 0 && who.rows[0].is_super_admin) throw badRequest('A super admin sees everything and cannot be restricted');
+  if ((ids.length > 0 || restricted) && who.rows[0].is_super_admin) {
+    throw badRequest('A super admin sees everything and cannot be restricted');
+  }
   const before = await query<{ name: string }>(
     `SELECT COALESCE(s.name, s.client, 'Site') AS name FROM principal_site ps JOIN site s ON s.id = ps.site_id WHERE ps.principal_id = $1 ORDER BY 1`,
     [principalId],
   );
+  const wasRestricted = await query<{ site_restricted: boolean }>(`SELECT site_restricted FROM principal WHERE id = $1`, [principalId]);
   await withTransaction(async (tx) => {
+    // The person's row first, locked, so two replacements of one list
+    // serialise (CLAUDE.md "Guards added 2026-10-14"); NO KEY: no path
+    // changes principal.id. The super-admin check runs again on it.
+    const locked = await tx.query<{ is_super_admin: boolean }>(
+      `SELECT is_super_admin FROM principal WHERE id = $1 FOR NO KEY UPDATE`,
+      [principalId],
+    );
+    if (!locked.rows[0]) throw notFound('Person not found');
+    if ((ids.length > 0 || restricted) && locked.rows[0].is_super_admin) {
+      throw badRequest('A super admin sees everything and cannot be restricted');
+    }
+    await tx.query(`UPDATE principal SET site_restricted = $2 WHERE id = $1`, [principalId, restricted]);
     await tx.query(`DELETE FROM principal_site WHERE principal_id = $1`, [principalId]);
-    if (ids.length > 0) {
+    if (restricted && ids.length > 0) {
       await tx.query(
         `INSERT INTO principal_site (principal_id, site_id, granted_by)
          SELECT $1, s.id, $3 FROM site s WHERE s.id = ANY($2::uuid[]) AND s.deleted_at IS NULL`,
@@ -723,8 +748,8 @@ export async function setSiteAccess(principalId: string, siteIds: string[], acto
     entity: 'principal',
     entityId: principalId,
     action: 'user_site_access_changed',
-    before: { name: who.rows[0].name, sites: before.rows.map((r) => r.name) },
-    after: { name: who.rows[0].name, sites: after.rows.map((r) => r.name) },
+    before: { name: who.rows[0].name, restricted: Boolean(wasRestricted.rows[0]?.site_restricted), sites: before.rows.map((r) => r.name) },
+    after: { name: who.rows[0].name, restricted, sites: after.rows.map((r) => r.name) },
   });
   return adminPortfolio(actor);
 }

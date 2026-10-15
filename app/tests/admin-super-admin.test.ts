@@ -217,7 +217,8 @@ describe('services/users.ts checks again, on the row, inside one locked transact
   });
 
   it('disableUser passes the flag through to updateUser', () => {
-    expect(disable).toMatch(/updateUser\(\s*id,\s*\{\s*status:\s*'disabled'\s*\},\s*actorId,\s*\w+\s*\)/);
+    // UAT Wave B (#18) added the editor's own tree as a fifth argument.
+    expect(disable).toMatch(/updateUser\(\s*id,\s*\{\s*status:\s*'disabled'\s*\},\s*actorId,\s*\w+(?:,\s*\w+)?\s*\)/);
   });
 
   it('the last-super-admin count and the UPDATE run in one transaction, on the row locked FOR NO KEY UPDATE, under the ring lock', () => {

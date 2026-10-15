@@ -94,36 +94,36 @@ than one file only by taking the next free number after the reserved ones.
 
 - **#12 Only super admins can invoice.** Migration grants invoicing in full to
   `ar` (+ admin), view to the rest per matrix; fix 0045's skipped grant.
-  Status: open
+  Status: done (Wave B commit, migration 0084) — invoicing view is also OFF for every role below the money roles (M13)
 - **#13 Records by link ignore scope.** Payment, invoice, vendor bill, quote
   print, invoice print and every per-record route tied to a work order
   resolves the work order through `resolveTaskId(id, actor)` (403 outside
-  scope). Status: open
+  scope). Status: done (Wave B commit) — services/recordScope.ts; also approval tasks, visits, credit notes and POST /invoices, /vendor-bills
 - **#14 Roles vs BRD.** One matrix migration: ops_coord = om_probation's grants
   + no technician list, no Clients, no rates, own work orders only; vr_officer
   and oa get request-mode status and the scope their job needs; Michael K is
   not a super admin (DB fix on the UAT database, listed in the recap if it is
-  data only). Status: open
+  data only). Status: done (Wave B commit, migration 0084) — vr_officer and oa see every work order (scope view true); Michael K is not a super admin locally, check the UAT database (recap)
 - **#17 Client Updates sharing.** `field_def.client_safe` flag (off for
   Finances / AP / AR sections and Cost / Profit / Margin, on elsewhere,
   editable in Admin › Custom fields); a shared tracker sends only columns that
   are client-safe AND visible to the sender, rows = sender's scope ∩ the
-  tracker's client. Status: open
+  tracker's client. Status: done (Wave B commit, migration 0084) — "sender" = the tracker's owner (created_by); shared charts on unsafe fields refused too
 - **#18 Raising your own rights.** Nobody (super admins included) changes their
   own role or overrides; a non-super-admin cannot grant a permission they do
   not hold; only super admins and the admin role edit roles; new empty `hr`
-  role with `admin/users` + `admin/roles` edit. Status: open
+  role with `admin/users` + `admin/roles` edit. Status: done (Wave B commit, migration 0084) — open question: as specified, hr can only invite into roles within its own grants and cannot edit role definitions
 - **M12 / D6 Viewing as.** Admin console and the audit export resolve from the
-  viewed person while viewing as them (still read-only). Status: open
+  viewed person while viewing as them (still read-only). Status: done (Wave B commit) — the assistant's "What this person may do" follows too
 - **M13 / M20 Finance visibility.** TL and above see money; below TL Cost,
   Profit and money totals hidden, Margin % shown; Exec guest = om_probation's
-  grants. Status: open
+  grants. Status: done (Wave B commit, migration 0084) — Margin % = new computed column margin_pct; NTE stays visible
 - **M28 Hidden fields leak.** Field visibility applied to the audit log rows
   and dashboard cards (a card on a field the viewer cannot see answers "not
-  available"). Status: open
+  available"). Status: done (Wave B commit) — Admin › Audit withholds the values, the work-order feed drops the row
 - **M29 Site restriction flips to all.** A per-person `site_restricted` flag
   stored on the principal; an empty list with the flag on = no sites.
-  Status: open
+  Status: done (Wave B commit, migration 0084)
 
 ## Wave C — workflow
 

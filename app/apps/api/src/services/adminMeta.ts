@@ -28,11 +28,13 @@ export interface FieldDefItem {
       form), 'optional' (on it) or 'required' (on it, and Create refuses
       while it is empty). */
   create_mode: string;
+  /** 0084 (#17) · may this field go out on a shared Client Update? */
+  client_safe: boolean;
 }
 
 export async function listFieldDefs(): Promise<FieldDefItem[]> {
   const res = await query<Omit<FieldDefItem, 'options'> & { options: unknown }>(
-    `SELECT f.id, f.key, f.label, f.type::text AS type, f.position, f.create_mode,
+    `SELECT f.id, f.key, f.label, f.type::text AS type, f.position, f.create_mode, f.client_safe,
             c.name AS container,
             COALESCE(jsonb_array_length(
               CASE WHEN jsonb_typeof(f.type_config->'options') = 'array'

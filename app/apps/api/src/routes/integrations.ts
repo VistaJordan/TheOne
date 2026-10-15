@@ -22,7 +22,8 @@ import { requirePerm } from '../services/permissions.js';
 
 function realUser(req: FastifyRequest) {
   if (!req.auth) throw new ApiError('UNAUTHORIZED', 'Sign in to continue');
-  return req.auth.user;
+  // D6 (Wave B): the person being viewed while viewing as them; else the user.
+  return req.auth.actingAs;
 }
 
 export default async function integrationRoutes(app: FastifyInstance): Promise<void> {

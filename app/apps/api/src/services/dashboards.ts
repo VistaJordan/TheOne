@@ -56,6 +56,8 @@ import type { ActingPrincipal } from './activity.js';
 import { metricWidget } from './woMetrics.js';
 import { updateRole } from './roles.js';
 import { setUserOverrideView } from './users.js';
+import { WIDGET_NOT_AVAILABLE, widgetNamedFields } from '@theone/shared';
+import { allowFor, canViewField } from './permissions.js';
 
 const PERM_KEY = 'dashboard';
 
@@ -352,6 +354,15 @@ async function rowById(id: string): Promise<DashRow> {
   return row;
 }
 
+/** M28 (UAT round 1, Wave B) · every work-order field a card's question
+    reads must be one the VIEWER may see (their own grants, not the board's
+    scope swap): a card on Cost is "not available" to a role that hides Cost,
+    rather than a total of figures the rest of the app keeps from them. */
+export function widgetFieldsVisible(config: WidgetConfig, viewer: ActingPrincipal): boolean {
+  const allow = allowFor(viewer);
+  return widgetNamedFields(config).every((k) => canViewField(allow, k));
+}
+
 /** Every widget's answer for one dashboard, each evaluated for THIS viewer. */
 export async function readDashboardData(
   id: string,
@@ -381,6 +392,10 @@ export async function readDashboardData(
       // 0049 · text, a picture or a button asks nothing of the records.
       if (!widgetAsksQuestion(widget.kind)) {
         return { widget_id: widget.id, total: 0, buckets: [], other: 0 };
+      }
+      // M28 · a card on a field this viewer cannot see answers nothing.
+      if (!widgetFieldsVisible(widget.config, viewer)) {
+        return { widget_id: widget.id, total: 0, buckets: [], other: 0, error: WIDGET_NOT_AVAILABLE };
       }
       try {
         const out = await metricWidget(widget.config, counted, period, page);
@@ -415,6 +430,9 @@ export async function previewWidget(
     const row = await rowById(dashboardId);
     if (!canSee(row, viewer)) throw notFound('No such dashboard');
     counted = boardViewer(viewer, refOf(row));
+  }
+  if (!widgetFieldsVisible(config, viewer)) {
+    return { widget_id: 'preview', total: 0, buckets: [], other: 0, error: WIDGET_NOT_AVAILABLE };
   }
   const out = await metricWidget(config, counted, period, page);
   return { widget_id: 'preview', ...out };

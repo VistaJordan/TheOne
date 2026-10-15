@@ -125,7 +125,8 @@ export const COMMUNICATION_PART: DocPart = {
         {
           name: 'What the client sees',
           what: 'A page with no sign-in ("Read-only view shared by Seamless FM…"), "Live as of <date> CT", the work-order count, Download spreadsheet, the intro text, the shared tiles and charts (recounted in the browser), search, chips, Show everything, sortable headers, sections only when the grouping column is shared, the first 2,000 rows, refreshed every five minutes; a dead link reads "This link is not available. It may have been turned off or replaced…" without saying why. Responses are private, no-store and not indexed; tokens are 32 url-safe characters.',
-          value: 'Exactly the shared columns, the whole tracker, nothing else.',
+          value: 'Exactly the shared columns, nothing else.',
+          rules: ['UAT #17 (0084): the link, the email and the client CSV are built as the tracker\'s owner (its creator) sees it — rows = the owner\'s Which work orders ∩ the tracker\'s client; columns and charts = the ones ticked Client sees it that are client-safe (Admin › Custom fields) AND visible to the owner. Saving a tracker with a non-client-safe column or chart ticked Client sees it is refused (400 CLIENT_UNSAFE_COLUMNS, naming the fields). A tracker whose owner is disabled shares nothing.'],
         },
       ],
     },

@@ -22,15 +22,10 @@
 // the two lists, the sort and the "everyone else" fold are pure functions here
 // so the panel and a test agree.
 
-/** The role codes rule 7.1.4 hands a new work order to — the dispatcher
-    tiers. Ops Coordinator dispatches too (0031 leaves it on direct status
-    changes). A person outside these can still be picked; they are just not
-    in the first list. */
-export const DISPATCHER_ROLE_CODES: readonly string[] = ['om', 'senior_om', 'om_probation', 'ops_coord'];
-
-export function isDispatcherRole(code: string | null | undefined): boolean {
-  return code != null && DISPATCHER_ROLE_CODES.includes(code);
-}
+// The role codes rule 7.1.4 hands a new work order to — the dispatcher
+// tiers — are D3's one list (UAT round 1, Wave B): DISPATCHER_ROLE_CODES and
+// isDispatcherRole live in ./access and are exported from the package root.
+// A person outside them can still be picked; they are just not in the first list.
 
 /** One status a person holds active work orders in, pipeline order. */
 export interface AvailabilityStatusCount {

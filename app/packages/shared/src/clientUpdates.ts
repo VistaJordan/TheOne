@@ -35,6 +35,9 @@ export const COMPUTED_WO_COLUMNS = [
   'last_client_message_at',
   'last_sent_to_client',
   'age_band',
+  // UAT round 1, Wave B (M13): Profit over Total Invoiced, the one money
+  // figure every role sees. Not client-safe (#17).
+  'margin_pct',
 ] as const;
 export type ComputedWoColumn = (typeof COMPUTED_WO_COLUMNS)[number];
 

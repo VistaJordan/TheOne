@@ -4,9 +4,10 @@
 //   GET  /admin/integrations            the list, each with enabled + configured
 //   PUT  /admin/integrations/:key       { enabled: boolean }
 //
-// Gated on the REAL signed-in user (admin/integrations view / edit), never
-// on who they are viewing as — the same rule as routes/admin.ts: impersonating
-// an administrator must not hand the impersonator the switches.
+// Gated on admin/integrations view / edit of the person whose rights count
+// (D6, Wave B): the person being viewed while viewing as them, else the user.
+// Viewing as someone never flips a switch — the session is read-only
+// (plugins/authGuard.ts) — it only shows the page as they would see it.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -40,7 +41,8 @@ const body = z.object({ enabled: z.boolean() }).strict();
 
 function realUser(req: FastifyRequest) {
   if (!req.auth) throw new ApiError('UNAUTHORIZED', 'Sign in to continue');
-  return req.auth.user;
+  // D6 (Wave B): the person being viewed while viewing as them; else the user.
+  return req.auth.actingAs;
 }
 
 export default async function adminIntegrationRoutes(app: FastifyInstance): Promise<void> {
