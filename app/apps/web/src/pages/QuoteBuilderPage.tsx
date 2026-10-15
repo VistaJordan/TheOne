@@ -28,6 +28,7 @@ import {
   getQuoteSalesTax,
   getWorkOrder,
   getWorkOrderQuote,
+  listAttachments,
   putWorkOrderQuote,
   rejectQuote,
   sendQuote,
@@ -107,6 +108,11 @@ export function QuoteBuilderPage() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  // UAT Wave C (M5): Send and the client's decision move the work order's
+  // status too; the reply says where it went, or why it stayed.
+  const [statusNote, setStatusNote] = useState<string | null>(null);
+  // M6: the file that records the client's approval, when there is no note.
+  const [decisionFile, setDecisionFile] = useState('');
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
   const [decision, setDecision] = useState<DecisionSheet>(null);
@@ -202,6 +208,10 @@ export function QuoteBuilderPage() {
     setActionError(null);
     return fn()
       .then((res) => {
+        const m = res.quote.status_move;
+        setStatusNote(
+          m ? (m.moved ? `The work order moved to ${m.status}.` : m.reason ? `The work order stayed where it was (not moved to ${m.status}): ${m.reason}` : null) : null,
+        );
         queryClient.setQueryData(quoteKey, { quote: res.quote, permissions });
         // A transition changes status (and reject bumps rev) → the effect above
         // re-seeds the form from the returned quote.
@@ -230,14 +240,10 @@ export function QuoteBuilderPage() {
 
   const submitMutation = useMutation({ mutationFn: () => flushThen(() => submitQuote(woNumber)) });
   const approveMutation = useMutation({
-    // The comp's single "Approve & Send" CTA is two server transitions: approve
-    // fills money.quote, send stamps sent_at and posts the client-visible feed
-    // update. Approve first — if send fails the quote is still approved and the
-    // CTA becomes "Send to client".
-    mutationFn: async () => {
-      await flushThen(() => approveQuote(woNumber));
-      await runAction(() => sendQuote(woNumber));
-    },
+    // UAT Wave C (M4): approving is the manager's internal yes and nothing
+    // more. Sending — the client-visible message, the status move to the
+    // "quote sent" status — is its own deliberate click, "Send to client".
+    mutationFn: () => flushThen(() => approveQuote(woNumber)),
   });
   const sendMutation = useMutation({ mutationFn: () => runAction(() => sendQuote(woNumber)) });
   const cancelMutation = useMutation({ mutationFn: () => runAction(() => cancelQuoteSubmission(woNumber)) });
@@ -260,6 +266,7 @@ export function QuoteBuilderPage() {
             section_id: section.id as string,
             note: decisionNote.trim() || null,
             on_site: decisionOnSite,
+            attachment_id: decisionFile || null,
           }),
         );
       } else {
@@ -272,8 +279,17 @@ export function QuoteBuilderPage() {
       setDecision(null);
       setDecisionNote('');
       setDecisionOnSite(false);
+      setDecisionFile('');
     },
   });
+  // M6: the work order's files, offered as the client's approval on record.
+  const filesQuery = useQuery({
+    queryKey: ['wo-attachments', woQuery.data?.id ?? ''],
+    queryFn: () => listAttachments(woQuery.data!.id),
+    enabled: Boolean(decision?.kind === 'approve' && woQuery.data?.id),
+    retry: 0,
+  });
+  const decisionFiles = (filesQuery.data?.items ?? []).filter((f) => f.review_status !== 'declined');
   const createMutation = useMutation({
     mutationFn: () => createWorkOrderQuote(woNumber),
     onSuccess: (res) => queryClient.setQueryData(quoteKey, { quote: res.quote, permissions }),
@@ -597,7 +613,7 @@ export function QuoteBuilderPage() {
 
             {status === 'draft' && (
               <>
-                {!canApprove && lockedButton('Approve & Send', 'Needs the quote-approve permission', 'lockTipApprove')}
+                {!canApprove && lockedButton('Approve', 'Needs the quote-approve permission', 'lockTipApprove')}
                 {gated('Submit for approval', 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')}
               </>
             )}
@@ -610,7 +626,7 @@ export function QuoteBuilderPage() {
                     Reject with note
                   </button>
                 )}
-                {gated('Approve & Send', 'check', canApprove, 'Needs the quote-approve permission', 'quote.approve', () => approveMutation.mutate(), 'lockTipApprove')}
+                {gated('Approve', 'check', canApprove, 'Needs the quote-approve permission', 'quote.approve', () => approveMutation.mutate(), 'lockTipApprove')}
               </>
             )}
 
@@ -676,6 +692,12 @@ export function QuoteBuilderPage() {
           <div className="callout" style={{ marginTop: 12 }}>
             <Icon name="alert" size={14} />
             <span>{actionError}</span>
+          </div>
+        )}
+        {statusNote && !actionError && (
+          <div className="callout" style={{ marginTop: 12 }} role="status">
+            <Icon name="info" size={14} />
+            <span>{statusNote}</span>
           </div>
         )}
 
@@ -791,8 +813,8 @@ export function QuoteBuilderPage() {
             </div>
             <div className="field">
               <label className="lbl" htmlFor="decision-note">
-                {decision.kind === 'approve' ? 'Reference / note' : 'Client’s reason'}{' '}
-                {decision.kind === 'approve' ? <span className="opt">optional</span> : <span className="req" aria-hidden="true">*</span>}
+                {decision.kind === 'approve' ? 'How the client approved' : 'Client’s reason'}{' '}
+                {decision.kind === 'approve' ? <span className="opt">a note or a file</span> : <span className="req" aria-hidden="true">*</span>}
               </label>
               <textarea
                 className="fld"
@@ -809,6 +831,18 @@ export function QuoteBuilderPage() {
               </span>
             </div>
             {decision.kind === 'approve' && (
+              <div className="field">
+                <label className="lbl" htmlFor="decision-file">Client’s approval on file</label>
+                <select id="decision-file" className="fld" value={decisionFile} onChange={(e) => setDecisionFile(e.target.value)}>
+                  <option value="">{decisionFiles.length === 0 ? 'No files on this work order' : 'None — the note says how'}</option>
+                  {decisionFiles.map((f) => (
+                    <option key={f.id} value={f.id}>{f.file_name}</option>
+                  ))}
+                </select>
+                <span className="hint">The client’s email or signed quote, uploaded on the work order’s Photos card. A note or a file is required.</span>
+              </div>
+            )}
+            {decision.kind === 'approve' && (
               <label className="ck">
                 <input type="checkbox" checked={decisionOnSite} onChange={(e) => setDecisionOnSite(e.target.checked)} />
                 <span>Approved on site (not through the client&rsquo;s CMMS)</span>
@@ -821,6 +855,7 @@ export function QuoteBuilderPage() {
                 className={`btn ${decision.kind === 'approve' ? 'btn-primary' : 'btn-danger'}${decisionMutation.isPending ? ' is-busy' : ''}`}
                 aria-disabled={
                   (decision.kind === 'approve' && !decision.sectionKey) ||
+                  (decision.kind === 'approve' && decisionNote.trim() === '' && !decisionFile) ||
                   (decision.kind === 'decline' && decisionNote.trim() === '') ||
                   decisionMutation.isPending
                     ? true
@@ -828,6 +863,7 @@ export function QuoteBuilderPage() {
                 }
                 onClick={() => {
                   if (decision.kind === 'approve' && !decision.sectionKey) return;
+                  if (decision.kind === 'approve' && decisionNote.trim() === '' && !decisionFile) return;
                   if (decision.kind === 'decline' && decisionNote.trim() === '') return;
                   decisionMutation.mutate();
                 }}

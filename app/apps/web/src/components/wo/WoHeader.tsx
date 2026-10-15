@@ -316,7 +316,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
         </div>
       </div>
 
-      <PhaseBar current={phase} statusName={wo.status.name} />
+      <PhaseBar current={phase} statusName={wo.status.name} visited={wo.phases_visited} />
         </>
       )}
     </section>

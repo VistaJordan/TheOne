@@ -23,6 +23,7 @@ import { ADMIN_PERM_SECTIONS, WO_TABS } from '../packages/shared/src/permissions
 import { PHASE_BY_STATUS_NAME, PHASE_ORDER } from '../packages/shared/src/index';
 import { ECOTRAK_PUSH_BY_STATUS_NAME } from '../packages/shared/src/ecotrak';
 import { INTEGRATIONS } from '../packages/shared/src/integrations';
+import { statusGateFor } from '../packages/shared/src/statusGates';
 
 const brdText = JSON.stringify(BRD_PARTS);
 const sopText = JSON.stringify(SOP);
@@ -85,7 +86,9 @@ describe('the lifecycle model', () => {
   });
   it('marks exactly the gated statuses', () => {
     const gated = LIFECYCLE.nodes.filter((n) => n.gate).map((n) => n.status).sort();
-    expect(gated).toEqual(['Done / Incurred', 'Please Order Parts', 'Quote Ready', 'Waiting for Parts']);
+    // UAT Wave C (#2): the three billing statuses ask the Done gate too.
+    expect(gated).toEqual(['Done / Incurred', 'Invoiced', 'Invoiced Not Paid', 'Please Order Parts', 'Quote Ready', 'Ready to Invoice', 'Waiting for Parts']);
+    for (const n of LIFECYCLE.nodes) expect(n.gate ?? null, n.status).toBe(statusGateFor(n.status));
   });
 });
 

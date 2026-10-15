@@ -99,6 +99,8 @@ const clientApproveSchema = z.object({
   section_id: z.string().uuid(),
   note: z.string().trim().max(2000).nullable().optional(),
   on_site: z.boolean().optional(),
+  // M6 (0085): a note or a file on the work order is required (checked in the service).
+  attachment_id: z.string().uuid().nullable().optional(),
 });
 const clientDeclineSchema = z.object({
   note: z.string().trim().min(1).max(2000),

@@ -50,15 +50,87 @@ export const DONE_GATE_CHECKS: readonly DoneGateCheck[] = ['visit', 'cost', 'quo
 /** `details.code` on the 409 a refused move returns; `details.gate` says which. */
 export const STATUS_GATE_ERROR_CODE = 'STATUS_GATE';
 
+/** UAT round 1, Wave C (#2): the billing statuses past Done. Each is
+    entered only with the Done gate satisfied — unless the work order already
+    sits in Done or later (it passed the gate on the way in, or was loaded
+    there before the gate existed; M3 keeps the Cost from being cleared
+    while it stays). */
+export const INVOICING_GATED_STATUS_NAMES: readonly string[] = ['Ready to Invoice', 'Invoiced Not Paid', 'Invoiced'];
+
+/** The statuses of the Done and Invoiced phases (PHASE_BY_STATUS_NAME):
+    "done or later". Listed here, not read from the phase map, so this file
+    keeps no import of the barrel; tests/uat-wave-c.test.ts pins the two
+    together. */
+export const DONE_OR_LATER_STATUS_NAMES: readonly string[] = [
+  'Ready to Invoice',
+  'Done / Incurred',
+  'Invoiced Not Paid',
+  'Invoiced',
+];
+
+const lowerIn = (list: readonly string[], name: string | null | undefined): boolean => {
+  if (!name) return false;
+  const n = name.trim().toLowerCase();
+  return list.some((s) => s.toLowerCase() === n);
+};
+
+/** Is this status in the done group or later (Done / Invoiced phases)? */
+export function isDoneOrLaterStatus(statusName: string | null | undefined): boolean {
+  return lowerIn(DONE_OR_LATER_STATUS_NAMES, statusName);
+}
+
 /** Which gate, if any, stands in front of a status. Names compare
-    case-insensitively so a re-capitalised status keeps its rule. */
-export function statusGateFor(targetStatusName: string | null | undefined): StatusGate | null {
+    case-insensitively so a re-capitalised status keeps its rule.
+    `currentStatusName` (when the caller knows it) exempts a move between
+    the billing statuses from inside Done or later (#2); without it the
+    billing statuses are always gated. */
+export function statusGateFor(
+  targetStatusName: string | null | undefined,
+  currentStatusName?: string | null,
+): StatusGate | null {
   if (!targetStatusName) return null;
   const n = targetStatusName.trim().toLowerCase();
   if (n === QUOTE_READY_STATUS_NAME.toLowerCase()) return 'quote';
   if (PARTS_GATED_STATUS_NAMES.some((s) => s.toLowerCase() === n)) return 'parts';
   if (n === DONE_STATUS_NAME.toLowerCase()) return 'done';
+  if (lowerIn(INVOICING_GATED_STATUS_NAMES, n)) {
+    return isDoneOrLaterStatus(currentStatusName) ? null : 'done';
+  }
   return null;
+}
+
+// ── M3 · a gated status holds its field ──────────────────────────────────────
+// The gates above are checked on ENTRY. While the work order stays in the
+// gated status, emptying what the gate asked for would leave it somewhere it
+// could not have entered: Parts Required while it waits for parts, the Cost
+// while it is done or billed, the quote while it is Quote Ready or done.
+
+/** The gate that holds `jsonKey` while the work order sits in
+    `currentStatusName`, when `nextValue` would empty it; null = the write is
+    fine. Bag json keys (no `fields.` prefix). */
+export function gateHoldingField(
+  currentStatusName: string | null | undefined,
+  jsonKey: string,
+  nextValue: unknown,
+): StatusGate | null {
+  if (jsonKey === PARTS_REQUIRED_KEY && lowerIn(PARTS_GATED_STATUS_NAMES, currentStatusName)) {
+    return partsRequiredFilled(nextValue) ? null : 'parts';
+  }
+  if (jsonKey === FINAL_COST_KEY && isDoneOrLaterStatus(currentStatusName)) {
+    return costFilled(nextValue) ? null : 'done';
+  }
+  return null;
+}
+
+/** Does this status require the quote to keep its data (11.2.1 / 11.3.3)? */
+export function statusHoldsQuote(currentStatusName: string | null | undefined): boolean {
+  if (!currentStatusName) return false;
+  return currentStatusName.trim().toLowerCase() === QUOTE_READY_STATUS_NAME.toLowerCase() || isDoneOrLaterStatus(currentStatusName);
+}
+
+/** The sentence for a refused clear (409 STATUS_GATE, `details.held: true`). */
+export function describeGateHold(what: string, statusName: string): string {
+  return `${what} cannot be emptied while the work order is in ${statusName} — move it out of ${statusName} first.`;
 }
 
 /** "NOT NULL" for the cost (11.3.2): a number, or text that reads as one —

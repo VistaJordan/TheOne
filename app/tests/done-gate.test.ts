@@ -24,9 +24,18 @@ describe('statusGateFor — Done / Incurred opens the Done gate', () => {
   });
 
   it('leaves the neighbouring statuses alone', () => {
-    expect(statusGateFor('Ready to Invoice')).toBeNull();
-    expect(statusGateFor('Invoiced')).toBeNull();
     expect(statusGateFor('Done')).toBeNull();
+    expect(statusGateFor('Job Sched')).toBeNull();
+  });
+
+  // UAT Wave C (#2): the billing statuses ask the Done gate too, unless the
+  // work order is already done or later (then it passed the gate on entry).
+  it('gates the billing statuses unless the work order is already done or later', () => {
+    expect(statusGateFor('Ready to Invoice')).toBe('done');
+    expect(statusGateFor('Invoiced', 'On Site (Job)')).toBe('done');
+    expect(statusGateFor('Invoiced Not Paid', 'Approved')).toBe('done');
+    expect(statusGateFor('Invoiced', 'Done / Incurred')).toBeNull();
+    expect(statusGateFor('Invoiced', 'Ready to Invoice')).toBeNull();
   });
 });
 

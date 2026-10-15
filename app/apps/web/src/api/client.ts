@@ -1190,7 +1190,7 @@ export function cancelQuoteSubmission(idOrNumber: string): Promise<QuoteResponse
 /** POST …/quote/client-approve — the client chose ONE option (Yoda Approval). */
 export function clientApproveQuote(
   idOrNumber: string,
-  input: { section_id: string; note: string | null; on_site: boolean },
+  input: { section_id: string; note: string | null; on_site: boolean; attachment_id?: string | null },
 ): Promise<QuoteResponse> {
   return request<QuoteResponse>(quotePath(idOrNumber, '/client-approve'), {
     method: 'POST',
@@ -3402,7 +3402,7 @@ export const pauseWo = (woRef: string, reason: string) => post<WoRecord>(recordP
 export const resumeWo = (woRef: string) => post<WoRecord>(recordPath(woRef, '/resume'));
 export const setWoEta = (woRef: string, etaAt: string | null, note?: string | null) => post<WoRecord>(recordPath(woRef, '/eta'), { eta_at: etaAt, note: note ?? null }, 'PUT');
 export const cancelWo = (woRef: string, reason: string) => post<WoRecord>(recordPath(woRef, '/cancel'), { reason });
-export const reopenWo = (woRef: string) => post<WoRecord>(recordPath(woRef, '/reopen'));
+export const reopenWo = (woRef: string, reason: string) => post<WoRecord>(recordPath(woRef, '/reopen'), { reason });
 export const completeWoService = (woRef: string, input: WoCompleteInput) => post<WoRecord>(recordPath(woRef, '/complete-service'), input);
 export const clearWoCompletion = (woRef: string) => post<WoRecord>(recordPath(woRef, '/complete-service'), undefined, 'DELETE');
 export const addWoChecklist = (woRef: string, titles: string[]) => post<WoRecord>(recordPath(woRef, '/checklist'), { titles });

@@ -17,12 +17,23 @@
 //   · money is read through the existing services, each with its own gate; a
 //     viewer without quotes / payments / invoicing sees those parts empty.
 
-import { approvalSectionPermKey, geofenceCheck, minutesBetween, permAllows, siteEventPhase } from '@theone/shared';
+import {
+  CANCEL_BILLED_CODE,
+  LIFECYCLE_PERM_KEY,
+  approvalSectionPermKey,
+  cancelBlockedReason,
+  geofenceCheck,
+  minutesBetween,
+  permAllows,
+  siteEventPhase,
+  statusBeforeCancel,
+} from '@theone/shared';
 import type {
   FeedActor,
   PermAction,
   SiteEvent,
   SiteEventKind,
+  VisitStatusMove,
   WoChecklistItem,
   WoCode,
   WoCompleteInput,
@@ -65,6 +76,42 @@ function requireEdit(a: ActingPrincipal): void {
   requirePerm(a, 'work_orders', 'edit', 'You cannot edit work orders');
 }
 
+/** #15 (0085): cancel, reopen, pause, resume and complete are not a side door
+    around a status request — `work_orders/lifecycle` edit, off for the roles
+    that must request status changes. */
+function requireLifecycle(a: ActingPrincipal): void {
+  requireEdit(a);
+  requirePerm(
+    a,
+    LIFECYCLE_PERM_KEY,
+    'edit',
+    'You request status changes, so cancelling, pausing or completing a work order is a manager’s job — ask one, or use Request status change',
+  );
+}
+
+/** M9: an invoice sent or paid, or a vendor payment paid, means money moved —
+    the work order is past cancelling. */
+async function cancelBlocked(taskId: string): Promise<string | null> {
+  const res = await query<{ invoice_statuses: string[] | null; paid: number }>(
+    `SELECT ARRAY(SELECT i.status FROM invoice i WHERE i.task_id = $1 AND i.status IN ('sent', 'paid')) AS invoice_statuses,
+            (SELECT count(*)::int FROM payment_request p WHERE p.task_id = $1 AND p.status = 'paid' AND p.deleted_at IS NULL) AS paid`,
+    [taskId],
+  );
+  const r = res.rows[0];
+  return cancelBlockedReason({ invoiceStatuses: r?.invoice_statuses ?? [], paidPayments: Number(r?.paid ?? 0) });
+}
+
+/** A status move run for a record-bar act: what happened, never a throw. */
+async function moveStatus(taskId: string, statusId: string, statusName: string, actor: ActingPrincipal): Promise<VisitStatusMove> {
+  try {
+    const { changeStatus } = await import('./workOrders.js');
+    await changeStatus(taskId, statusId, actor.id);
+    return { status: statusName, moved: true, reason: null };
+  } catch (err) {
+    return { status: statusName, moved: false, reason: err instanceof Error ? err.message : 'The status could not be moved' };
+  }
+}
+
 /** People by id, for the plain-uuid stamp columns. */
 async function peopleByIds(ids: (string | null | undefined)[]): Promise<Map<string, FeedActor>> {
   const want = [...new Set(ids.filter((x): x is string => Boolean(x) && UUID_RE.test(x!)))];
@@ -78,6 +125,7 @@ async function peopleByIds(ids: (string | null | undefined)[]): Promise<Map<stri
 type TaskRow = {
   id: string;
   wo_number: string;
+  status_id: string;
   status_name: string;
   site_id: string | null;
   asset_id: string | null;
@@ -95,6 +143,7 @@ type TaskRow = {
   cancelled_at: Date | null;
   cancelled_by: string | null;
   cancel_reason: string | null;
+  cancelled_from_status_id: string | null;
   completion_note: string | null;
   fault_code: string | null;
   action_code: string | null;
@@ -105,10 +154,11 @@ type TaskRow = {
 
 async function loadTask(taskId: string): Promise<TaskRow> {
   const res = await query<TaskRow>(
-    `SELECT t.id::text AS id, t.wo_number, st.name AS status_name, t.site_id::text AS site_id, t.asset_id::text AS asset_id,
+    `SELECT t.id::text AS id, t.wo_number, t.status_id::text AS status_id, st.name AS status_name, t.site_id::text AS site_id, t.asset_id::text AS asset_id,
             t.vendor_id::text AS vendor_id, t.nte, t.fields, to_char(t.date_received, 'YYYY-MM-DD') AS date_received, t.created_at,
             t.paused_at, t.paused_by::text AS paused_by, t.pause_reason, t.eta_at, t.eta_note, t.eta_by::text AS eta_by,
-            t.cancelled_at, t.cancelled_by::text AS cancelled_by, t.cancel_reason, t.completion_note, t.fault_code,
+            t.cancelled_at, t.cancelled_by::text AS cancelled_by, t.cancel_reason,
+            t.cancelled_from_status_id::text AS cancelled_from_status_id, t.completion_note, t.fault_code,
             t.action_code, t.temporary_fix, t.service_completed_at, t.service_completed_by::text AS service_completed_by
        FROM task t JOIN status st ON st.id = t.status_id
       WHERE t.id = $1`,
@@ -310,7 +360,14 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
     related,
     site_events: events,
     codes,
-    can: { edit: can(actor, 'work_orders', 'edit'), decide_nte: can(actor, NTE_APPROVAL_KEY, 'approve'), see_money: seeMoney, see_vendors: seeVendors },
+    can: {
+      edit: can(actor, 'work_orders', 'edit'),
+      decide_nte: can(actor, NTE_APPROVAL_KEY, 'approve'),
+      see_money: seeMoney,
+      see_vendors: seeVendors,
+      lifecycle: can(actor, 'work_orders', 'edit') && can(actor, LIFECYCLE_PERM_KEY, 'edit'),
+      cancel_blocked: t.cancelled_at ? null : await cancelBlocked(taskId),
+    },
   };
 }
 
@@ -522,7 +579,7 @@ export async function setWoVendor(taskId: string, vendorId: string | null, actor
 }
 
 export async function pauseWo(taskId: string, reason: string | null, actor: ActingPrincipal): Promise<WoRecord> {
-  requireEdit(actor);
+  requireLifecycle(actor);
   const t = await loadTask(taskId);
   if (t.paused_at) throw conflict('This work order is already paused');
   if (t.cancelled_at) throw conflict('A cancelled work order cannot be paused');
@@ -537,7 +594,7 @@ export async function pauseWo(taskId: string, reason: string | null, actor: Acti
 }
 
 export async function resumeWo(taskId: string, actor: ActingPrincipal): Promise<WoRecord> {
-  requireEdit(actor);
+  requireLifecycle(actor);
   const t = await loadTask(taskId);
   if (!t.paused_at) throw conflict('This work order is not paused');
   await withTransaction(async (tx) => {
@@ -563,40 +620,91 @@ export async function setWoEta(taskId: string, input: { eta_at: string | null; n
 
 /** Cancel: a reason, a stamp, and — when the workflow has a status whose name
  *  says cancelled — a move to it through the ordinary status change, so the
- *  gates, the audit row and the automations all run. */
+ *  gates, the audit row and the automations all run. M9: refused once the
+ *  work order is billed or paid. M31: the status it left is kept on the row,
+ *  so Reopen can put it back. */
 export async function cancelWo(taskId: string, reason: string | null, actor: ActingPrincipal): Promise<WoRecord> {
-  requireEdit(actor);
+  requireLifecycle(actor);
   const t = await loadTask(taskId);
   if (t.cancelled_at) throw conflict('This work order is already cancelled');
   const why = clean(reason);
   if (!why) throw badRequest('Say why it is cancelled', { field: 'reason' });
+  const blocked = await cancelBlocked(taskId);
+  if (blocked) throw conflict(blocked, { code: CANCEL_BILLED_CODE });
   await withTransaction(async (tx) => {
-    await tx.query(`UPDATE task SET cancelled_at = now(), cancelled_by = $2, cancel_reason = $3, paused_at = NULL, paused_by = NULL, pause_reason = NULL WHERE id = $1`, [taskId, actor.id, why]);
+    // Conditional on "not cancelled": two clicks at once leave one cancel.
+    const won = await tx.query(
+      `UPDATE task SET cancelled_at = now(), cancelled_by = $2, cancel_reason = $3, cancelled_from_status_id = status_id,
+              paused_at = NULL, paused_by = NULL, pause_reason = NULL
+        WHERE id = $1 AND cancelled_at IS NULL RETURNING id`,
+      [taskId, actor.id, why],
+    );
+    if (!won.rows[0]) throw conflict('This work order is already cancelled');
     await tx.query(`UPDATE wo_pause SET resumed_at = now(), resumed_by = $2 WHERE task_id = $1 AND resumed_at IS NULL`, [taskId, actor.id]);
     await logTaskChanges(tx, actor.id, taskId, [{ field: 'Cancelled', before: null, after: why }]);
   });
   const st = await query<{ id: string; name: string }>(
     `SELECT id::text AS id, name FROM status WHERE name ~* '^cancel' ORDER BY position LIMIT 1`,
   );
+  let status_move: VisitStatusMove | null = null;
   if (st.rows[0] && st.rows[0].name !== t.status_name) {
-    const { changeStatus } = await import('./workOrders.js');
     // The stamp stands even if a gate refuses the move; the person is told.
-    await changeStatus(taskId, st.rows[0].id, actor.id).catch(() => undefined);
+    status_move = await moveStatus(taskId, st.rows[0].id, st.rows[0].name, actor);
   }
-  return getWoRecord(taskId, actor);
+  return { ...(await getWoRecord(taskId, actor)), status_move };
 }
 
-export async function reopenWo(taskId: string, actor: ActingPrincipal): Promise<WoRecord> {
-  requireEdit(actor);
+/** M31: Reopen needs a reason and puts the status back where the cancel found
+ *  it — the status kept on the row at cancel time, else the one the cancel's
+ *  `status_changed` audit row moved it out of — through changeStatus. */
+export async function reopenWo(taskId: string, reason: string | null, actor: ActingPrincipal): Promise<WoRecord> {
+  requireLifecycle(actor);
   const t = await loadTask(taskId);
   if (!t.cancelled_at) throw conflict('This work order is not cancelled');
-  await query(`UPDATE task SET cancelled_at = NULL, cancelled_by = NULL, cancel_reason = NULL WHERE id = $1`, [taskId]);
-  await logChange(taskId, actor, 'Cancelled', t.cancel_reason, null);
-  return getWoRecord(taskId, actor);
+  const why = clean(reason);
+  if (!why) throw badRequest('Say why it is reopened', { field: 'reason' });
+
+  let back: { status_id: string; status_name: string | null } | null = null;
+  if (t.cancelled_from_status_id) {
+    back = { status_id: t.cancelled_from_status_id, status_name: null };
+  } else {
+    // Cancelled before 0085: the newest move into a Cancel… status says where from.
+    const rows = await query<{ before: { status_id?: string; status_name?: string } | null; after: { status_name?: string } | null }>(
+      `SELECT a.before, a.after FROM activity_log a
+        WHERE a.entity_type = 'task' AND a.entity_id = $1::text AND a.action = 'status_changed'
+        ORDER BY a.created_at DESC, a.id DESC LIMIT 50`,
+      [taskId],
+    );
+    back = statusBeforeCancel(rows.rows);
+  }
+
+  await withTransaction(async (tx) => {
+    const won = await tx.query(
+      `UPDATE task SET cancelled_at = NULL, cancelled_by = NULL, cancel_reason = NULL, cancelled_from_status_id = NULL
+        WHERE id = $1 AND cancelled_at IS NOT NULL RETURNING id`,
+      [taskId],
+    );
+    if (!won.rows[0]) throw conflict('This work order is not cancelled');
+    await logTaskChanges(tx, actor.id, taskId, [
+      { field: 'Cancelled', before: t.cancel_reason, after: null },
+      { field: 'Reopened', before: null, after: why },
+    ]);
+  });
+
+  let status_move: VisitStatusMove | null = null;
+  // Only while it still sits in a Cancel… status: a work order somebody moved
+  // on by hand since is left where they put it.
+  if (back && back.status_id !== t.status_id && /^cancel/i.test(t.status_name.trim())) {
+    const st = await query<{ id: string; name: string }>(`SELECT id::text AS id, name FROM status WHERE id = $1`, [back.status_id]);
+    status_move = st.rows[0]
+      ? await moveStatus(taskId, st.rows[0].id, st.rows[0].name, actor)
+      : { status: back.status_name ?? 'the earlier status', moved: false, reason: 'The status it had before the cancel no longer exists — set the status by hand' };
+  }
+  return { ...(await getWoRecord(taskId, actor)), status_move };
 }
 
 export async function completeWoService(taskId: string, input: WoCompleteInput, actor: ActingPrincipal): Promise<WoRecord> {
-  requireEdit(actor);
+  requireLifecycle(actor);
   const t = await loadTask(taskId);
   if (t.cancelled_at) throw conflict('A cancelled work order cannot be completed');
   const codes = await loadCodes();
@@ -623,7 +731,7 @@ export async function completeWoService(taskId: string, input: WoCompleteInput, 
 }
 
 export async function clearWoCompletion(taskId: string, actor: ActingPrincipal): Promise<WoRecord> {
-  requireEdit(actor);
+  requireLifecycle(actor);
   const t = await loadTask(taskId);
   if (!t.service_completed_at) throw conflict('The service is not marked complete');
   await query(`UPDATE task SET completion_note = NULL, fault_code = NULL, action_code = NULL, temporary_fix = NULL, service_completed_at = NULL, service_completed_by = NULL WHERE id = $1`, [taskId]);

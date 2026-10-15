@@ -139,6 +139,7 @@ export const PLATFORM_PART: DocPart = {
           rules: [
             'A permission map is capped at 2,000 entries and keys at 400 characters; non-boolean values are dropped on the way in.',
             'The role matrix lives in migrations (UAT D4). 0084: Exec guest holds exactly OM Under Probation\'s grants; Ops Coordinator holds them too, minus the technician list and map, Clients and rates, on its own work orders and in request mode; VR Officer and Operations Admin request status changes and see every work order (they source and intake for all of them and are never the Assignee); HR (new) holds Admin › Users and Roles only; invoicing is full for Admin and AR and view for TL, ATL and AM.',
+            'UAT Wave C (0085): the four dispatchers (Ops Coordinator, OM Under Probation, OM, Senior OM) request every status change; the new row "Cancel, pause and complete" (work_orders/lifecycle) is off for every role that requests status changes; the NTE, the SLA dates and the AR section are view-only for the dispatchers and the VR Officer.',
             'Dispatchers (D3) are OM Under Probation and Ops Coordinator (under probation), OM, Senior OM — one list, DISPATCHER_ROLE_CODES in shared/access.ts.',
           ],
           audit: ['role_created', 'role_updated', 'role_deleted'],

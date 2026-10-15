@@ -6,12 +6,15 @@ interface PhaseBarProps {
   /** null → the WO sits outside the pipeline (Cancelled / Postponed): inert bar. */
   current: Phase | null;
   statusName: string;
+  /** UAT Wave C (M9): the phases the work order has really been in. A phase
+      before the current one that is not here was skipped and gets no tick. */
+  visited?: readonly Phase[];
 }
 
 /** The nine-stage pipeline strip from the comp. `Parts` is conditional: it
     renders as a dashed track + dashed "if parts" badge unless it IS the
     current phase, and is never marked complete. */
-export function PhaseBar({ current, statusName }: PhaseBarProps) {
+export function PhaseBar({ current, statusName, visited }: PhaseBarProps) {
   const inert = current === null;
   const currentIndex = current ? PHASE_ORDER.indexOf(current) : -1;
 
@@ -24,16 +27,19 @@ export function PhaseBar({ current, statusName }: PhaseBarProps) {
         {PHASE_ORDER.map((phase, i) => {
           const isCurrent = !inert && i === currentIndex;
           const isConditional = phase === CONDITIONAL_PHASE && !isCurrent;
-          const isDone = !inert && !isConditional && i < currentIndex;
+          const before = !inert && !isConditional && i < currentIndex;
+          const isDone = before && (!visited || visited.includes(phase));
+          const isSkipped = before && !isDone;
           const cls = [
             'phase',
             isDone ? 'is-done' : '',
+            isSkipped ? 'is-skipped' : '',
             isCurrent ? 'is-current' : '',
             isConditional ? 'is-cond' : '',
           ].filter(Boolean).join(' ');
 
           return (
-            <li key={phase} className={cls} aria-current={isCurrent ? 'step' : undefined}>
+            <li key={phase} className={cls} aria-current={isCurrent ? 'step' : undefined} title={isSkipped ? `${phase}: never in this phase` : undefined}>
               <span className="phase-track" />
               <span className="phase-lbl">
                 {isConditional ? (

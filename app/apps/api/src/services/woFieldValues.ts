@@ -17,6 +17,7 @@ import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { assertNotVisitOwned } from './visits.js';
 import { assertMoneyNotLocked } from './moneySync.js';
+import { assertGateHoldsFields } from './statusGates.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import type { ActivityEntry } from '@theone/shared';
@@ -155,6 +156,18 @@ export async function updateWorkOrderFields(
     // there — asked under the row lock, so a payment or quote write that
     // lands between the pool reads above and this lock is seen (W3-3).
     await assertMoneyNotLocked([task.id], patch.map((p) => p.jsonKey), tx);
+    // M3 (Wave C): while the work order sits in a gated status, what the gate
+    // asked for is not emptied (Parts Required in a parts status, the Cost
+    // done or later). Read under the row lock, so the status cannot move.
+    const st = await tx.query<{ name: string }>(
+      `SELECT s.name FROM task t JOIN status s ON s.id = t.status_id WHERE t.id = $1`,
+      [task.id],
+    );
+    assertGateHoldsFields(
+      st.rows[0]?.name ?? null,
+      patch,
+      (k) => patch.find((p) => p.jsonKey === k)?.resolved.label ?? k,
+    );
     // THE locked read: before / after and the merged bag come from this row,
     // never from an earlier read, so a key another connection wrote in the
     // meantime is kept, not overwritten (W3-3).

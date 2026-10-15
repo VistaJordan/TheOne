@@ -404,13 +404,20 @@ visit. Deferred with the subsystems they need: the After-photo / BFI check
 work order to **On Site (Assessment)** for an Assessment visit and **On Site
 (Job)** for a Job *or a Return trip* (`onSiteStatusNameForVisitType` in
 `packages/shared/src/visitStatus.ts`; an unknown visit type moves nothing).
-`moveOnSite` in `services/visits.ts` runs after the visit's transaction
-through the ordinary `changeStatus` with source `'visit'` (the audit row
-reads `via: 'visit'`), does **not** ask the status permission (a request-mode
-dispatcher checking a tech in still moves it — a system consequence, not a
-pick), and still runs the gates and the Ecotrak check. A refusal never
+`moveOnSite` in `services/visits.ts` runs after the visit's transaction and
+decides by WHO checked in (UAT Wave C, #15): a person in request mode
+(`isStatusRequestMode`: `work_orders/status` create without edit — the
+dispatchers) raises a status-change request to the On Site status through
+`requestStatusChange` (the reply's `status_move` reads `requested: true` with
+the `approval_task_id`, the CICO card says a request went to a manager, and
+the approval moves it); a manager, anyone else allowed to log visits, or the
+system moves it directly through the ordinary `changeStatus` with source
+`'visit'` (the audit row reads `via: 'visit'`), without asking the status
+permission. Both still run the gates and the Ecotrak check. A refusal never
 undoes the check-in: the reply's `status_move` carries the reason and the
-CICO card prints it. Correcting a stamp or checking out moves nothing.
+CICO card prints it. Correcting a stamp or checking out moves nothing; since
+M8 typing a check-in time on a planned visit IS a check-in (the status is
+read off the stamps, `nextVisitStamps`).
 
 **Reassignment lock** (rule 8.5.4, migration 0039) is one permission, not
 code: OM / OM Under Probation / Senior OM are view-only on
@@ -644,8 +651,9 @@ note. Drawn on the Finances card (Confirm invoice), the Payables card
 line), `vendor_name` / `vendor_contact` and `contract_id` when raised
 (BRD "invoice contents"); a vendor bill keeps its `contract_id`. Quotes can
 be approved / declined from the Finances card and from the Quotes list rows
-(`QuoteDecision`: approve then send, like the builder's CTA; decline needs a
-note), gated by `quote.permissions.can_approve` / `quotes:approve`.
+(`QuoteDecision`: **Approve** only since UAT Wave C (M4) — sending is the
+builder's own **Send to client**; decline needs a note), gated by
+`quote.permissions.can_approve` / `quotes:approve`.
 
 **Vendor bills** (migration 0047, `services/vendorBills.ts`, Payments ›
 Vendor bills lane and the `VendorBillsCard` on the Payables tab) are the AP
@@ -2180,6 +2188,78 @@ flagged person with a **Restrict to sites** switch. New error codes:
 `SELF_EDIT`, `GRANT_EXCEEDS_OWN`, `ROLE_EDIT_RESTRICTED`,
 `CLIENT_UNSAFE_COLUMNS`.
 
+**UAT round 1, Wave C — workflow** (migration 0085,
+`docs/specs/uat-round-1.md`, `packages/shared/src/workflow.ts` + the gate half
+in `statusGates.ts`, `tests/uat-wave-c.test.ts`). **#2 — the billing
+statuses ask the Done gate:** `statusGateFor(target, current)` answers
+`done` for Ready to Invoice, Invoiced Not Paid and Invoiced
+(`INVOICING_GATED_STATUS_NAMES`) unless the work order is already done or
+later (`DONE_OR_LATER_STATUS_NAMES` = the Done and Invoiced phases, pinned to
+`PHASE_BY_STATUS_NAME` by the test) — it passed the gate on the way in, or was
+loaded there before the gate existed. `statusGateBlocker` reads the current
+status itself when a caller does not pass it, so changeStatus (passes it),
+bulkUpdate (asks per row), requestStatusChange and decide are all covered; the
+status menu passes `current.name`. The lifecycle marks the three nodes gated.
+**M3 — a gated status holds its field:** `gateHoldingField` /
+`assertGateHoldsFields` (409 `STATUS_GATE`, `details.held = true`,
+`details.field`) refuse emptying Parts Required in the two parts statuses and
+the Cost from Done / Incurred on, in `updateWorkOrderFields` (status read
+after the `FOR NO KEY UPDATE`) and in `bulkUpdate` (whole selection, against
+the status the row will have; again under the row lock); `assertQuoteHeld`
+runs on `updateQuote`'s transaction when sections are rewritten and rolls the
+rewrite back while the work order is in Quote Ready or done or later
+(`statusHoldsQuote`) — the builder's autosave then shows the 409.
+**#15 / #16 — no side doors:** 0085 sets `work_orders/status` to request
+(edit false, create true) outright for the four dispatchers
+(`REQUEST_MODE_DISPATCHER_ROLES`, = D3's list); a new permission path
+**`work_orders/lifecycle`** (edit; "Cancel, pause and complete" under Work
+orders in Roles; unset follows `work_orders` edit) gates Cancel, Reopen,
+Pause, Resume, Complete service and clearing the completion
+(`requireLifecycle` in `woRecord.ts`, 403), and 0085 turns it off for every
+request-mode system role (`LIFECYCLE_LOCKED_ROLES`: the dispatchers,
+vr_officer, oa); the record's `can.lifecycle` hides the buttons. The NTE (the
+header `nte` path and `16. Client NTE 🔴`), the SLA dates (Due Date, SLA Due
+Date, SLA Requested, SLA Updated) and the AR section are edit false for the
+dispatchers and vr_officer (`DISPATCHER_LOCKED_FIELD_PATHS`,
+`FIELD_LOCKED_ROLES`; oa keeps them, it types them at intake and on Add work
+order; Cost was already hidden by 0084). Check-ins: see "Check-in moves On
+Site". An approved status request still moves the status at once and pushes
+nothing (D5). **M5 — the status follows the quote:** after Send, the client's
+approval and the client's decline commit, `followQuoteEvent` (quotes.ts)
+moves the work order through `changeStatus` with source `'quote'` to
+`QUOTE_EVENT_STATUS_NAME` — Waiting for Approval, Approved, Waiting for Quote
+(Yoda: a decline is re-quoted in a new round) — only from the statuses before
+it (`quoteEventStatusName`; a work order further along, or a status that does
+not exist, is left alone); a refusal never undoes the quote act and rides on
+the reply as `Quote.status_move`, which the builder prints. **M6:**
+`clientApproveQuote` needs a note or an `attachment_id` (a file on the work
+order, not declined; 400 `CLIENT_APPROVAL_EVIDENCE`), stored in
+`quote.client_decision_attachment_id` (0085) and named in the client-visible
+comment; the builder's sheet has a "Client’s approval on file" select.
+**M4:** the ONE client-visible quote message is Send's ("Quote for $X sent to
+the client for approval — …"); submit and approve post nothing for the
+client, and the builder's and the list's chained "Approve & Send" became
+**Approve** — **Send to client** is its own click. **M8:**
+`nextVisitStamps` (shared) is how createVisit / updateVisit build a visit:
+typed stamps first, a status move fills only an EMPTY stamp (moving back to
+checked in keeps the typed check-in and clears the check-out; planned clears
+both), and the status is read off the stamps; `checked_in_by/out_by` follow
+the stamp. **M9:** `WorkOrderDetail.phases_visited` (every phase the status
+history and the current status name) feeds the PhaseBar: a phase before the
+current one that was never visited draws `is-skipped` (dashed, no tick).
+Cancel is refused (409 `CANCEL_BILLED`, `cancelBlockedReason`) and not drawn
+(`can.cancel_blocked`) once an invoice is sent or paid or a payment request
+is paid. **M31:** Cancel stores `task.cancelled_from_status_id` (0085,
+backfilled from the cancel's `status_changed` row) and is conditional on
+`cancelled_at IS NULL`; Reopen needs a reason (400; logged as a `Reopened`
+field row beside `Cancelled`) and, while the work order still sits in a
+Cancel… status, moves it back through `changeStatus` (the reply's
+`status_move` says where, or why not — shown on the record bar; Cancel's
+own move is reported the same way now instead of being swallowed). **M18:**
+no migration, seed or code creates a check-in automation — `moveOnSite` is
+the one source; the two on the UAT database are an ops item (spec's
+checklist). New error codes: `CANCEL_BILLED`, `CLIENT_APPROVAL_EVIDENCE`.
+
 ## Verify
 
 ```
@@ -2196,7 +2276,7 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   runs it and `npm test` on every push; it is green only because
   `tests/setup.ts` sets the environment and `config.ts` skips `app/.env` under
   `VITEST`, so never let a test depend on a developer's `.env`.
-- The vitest suite under `app/tests/` (62 files, 1046 tests on 2026-10-15) is
+- The vitest suite under `app/tests/` (63 files, 1076 tests on 2026-10-15) is
   the regression net: pure functions and source-text pins, no database and no
   network, so a SQL change still needs a seeded local Postgres, curl and
   headless Chromium screenshots of both themes before it is believed.

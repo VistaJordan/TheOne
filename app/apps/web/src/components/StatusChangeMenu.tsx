@@ -251,7 +251,7 @@ export function StatusChangeMenu({
                   const refusal = verdict && ecotrakTransitionRefused(verdict) ? describeEcotrakRefusal(verdict) : null;
                   // Rules 11.2.1 / 11.2.2: tag the pick when the caller's
                   // hints say the gate would refuse it.
-                  const gate = active ? null : statusGateFor(s.name);
+                  const gate = active ? null : statusGateFor(s.name, current.name);
                   const gateHit = gate && gateHints ? hintedBlock(gate, gateHints) : null;
                   const gateNote = gate && gateHit ? describeStatusGate(gate, s.name, gateHit.missing) : null;
                   return (

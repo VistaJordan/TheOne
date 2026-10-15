@@ -387,6 +387,21 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
 
   const recent = await getActivityForTask(r.id, 50);
 
+  // UAT Wave C (M9): the phase bar ticks only the phases the work order has
+  // really been in — read from every status move (before and after), plus
+  // where it is now — so a job moved straight to Invoiced never reads "Done ✓".
+  const moves = await query<{ before_name: string | null; after_name: string | null }>(
+    `SELECT a.before->>'status_name' AS before_name, a.after->>'status_name' AS after_name
+       FROM activity_log a
+      WHERE a.entity_type = 'task' AND a.entity_id = $1::text AND a.action = 'status_changed'`,
+    [r.id],
+  );
+  const visited = new Set<Phase>();
+  for (const name of [r.status_name, ...moves.rows.flatMap((m) => [m.before_name, m.after_name])]) {
+    const ph = name ? phaseFor(name) : null;
+    if (ph) visited.add(ph);
+  }
+
   // S4 · a real quote outranks the (absent) ClickUp field. Only an APPROVED or
   // SENT quote counts — a draft is not a price the NTE meter may bind to
   // (product/quotes-payments.md §1) — so `quote` stays null until then.
@@ -424,6 +439,7 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
     fields: fieldsOut,
     money,
     actions: allowedWoActions(r.status_name, phaseFor(r.status_name)),
+    phases_visited: [...visited],
     memberships: memRes.rows.map((m) => ({
       list_id: m.list_id,
       list_name: m.list_name,
@@ -595,7 +611,9 @@ export async function changeStatus(
     // Parts / Please Order Parts need the Parts Required list. A 409 here
     // covers the single move, an approved request and an automation's status
     // action alike (the engine records the refusal as an errored run).
-    await assertStatusGate(tx, task_id, newStatusName);
+    // #2 (Wave C): the billing statuses ask the Done gate too, unless the
+    // work order is already done or later — hence the current status.
+    await assertStatusGate(tx, task_id, newStatusName, undefined, currentStatusName);
 
     // Rules 2.6.3 / 2.7: would Ecotrak accept the transition this move implies?
     // Only a work order the adapter has stamped with an Ecotrak status is

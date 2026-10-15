@@ -85,7 +85,7 @@ export function useRecordWrite<T>(woId: string, woNumber: string, fn: (arg: T) =
 
 // ═══ The bar under the header ════════════════════════════════════════════════
 
-type Dialog = 'vendor' | 'pause' | 'eta' | 'cancel' | 'complete' | 'nte' | 'tag' | null;
+type Dialog = 'vendor' | 'pause' | 'eta' | 'cancel' | 'reopen' | 'complete' | 'nte' | 'tag' | null;
 
 export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: string; record: WoRecord | undefined }) {
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -93,13 +93,22 @@ export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: 
   const close = () => setDialog(null);
   const fail = (fallback: string) => (e: unknown) => setError(errText(e, fallback));
   const resume = useRecordWrite(woId, woNumber, () => resumeWo(woId));
-  const reopen = useRecordWrite(woId, woNumber, () => reopenWo(woId));
+  // M31 · Cancel and Reopen move the status too; a refused move is said here.
+  const [moveNote, setMoveNote] = useState<string | null>(null);
+  const report = (r: WoRecord): WoRecord => {
+    const m = r.status_move;
+    setMoveNote(m && !m.moved && m.reason ? `Status not moved to ${m.status}: ${m.reason}` : null);
+    return r;
+  };
   const dropTag = useRecordWrite(woId, woNumber, (id: string) => removeWoTag(woId, id));
   // 0073 · Save as PDF is for readers too: its own permission, not edit.
   const canPdf = useCan()(WO_PDF_PERM_KEY, 'view');
   if (!record) return null;
   const s = record.state;
   const edit = record.can.edit;
+  // #15 (0085): Cancel / Reopen, Pause / Resume and Complete service are not
+  // offered to someone who must request status changes.
+  const lifecycle = record.can.lifecycle;
   const openNte = record.nte_requests.find((n) => n.status === 'open');
 
   return (
@@ -155,7 +164,7 @@ export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: 
               <Icon name="briefcase" size={12} /> {record.responsibility.vendor ? 'Re-assign vendor' : 'Assign vendor'}
             </button>
           )}
-          {!s.cancelled && (s.paused ? (
+          {lifecycle && !s.cancelled && (s.paused ? (
             <button type="button" className="btn btn-sm" disabled={resume.isPending} onClick={() => resume.mutate(undefined, { onError: fail('Could not resume.') })}>Resume</button>
           ) : (
             <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('pause')}><Icon name="clock" size={12} /> Pause</button>
@@ -165,21 +174,25 @@ export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: 
           {record.can.see_money && !openNte && (
             <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('nte')}><Icon name="dollar" size={12} /> Increase NTE</button>
           )}
-          {!s.cancelled && (
+          {lifecycle && !s.cancelled && (
             <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('complete')}>
               <Icon name="check-circle" size={12} /> {s.completion ? 'Edit completion' : 'Complete service'}
             </button>
           )}
-          {s.cancelled ? (
-            <button type="button" className="btn btn-sm" disabled={reopen.isPending} onClick={() => reopen.mutate(undefined, { onError: fail('Could not reopen.') })}>Reopen</button>
+          {lifecycle && (s.cancelled ? (
+            <button type="button" className="btn btn-sm" onClick={() => setDialog('reopen')}>Reopen</button>
           ) : (
-            <button type="button" className="btn btn-sm is-danger" onClick={() => setDialog('cancel')}>Cancel work order</button>
-          )}
+            // M9: once an invoice is sent or paid, or a payment paid, Cancel is gone.
+            !record.can.cancel_blocked && (
+              <button type="button" className="btn btn-sm is-danger" onClick={() => setDialog('cancel')}>Cancel work order</button>
+            )
+          ))}
           </>)}
           {canPdf && <PdfMenu woNumber={woNumber} />}
         </div>
       )}
       {error && <p className="snooze-err rec-err" role="alert"><Icon name="alert-circle" size={12} />{error}</p>}
+      {moveNote && <p className="snooze-err rec-err" role="status"><Icon name="alert-circle" size={12} />{moveNote}</p>}
 
       {dialog === 'vendor' && <VendorDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}
       {dialog === 'pause' && (
@@ -189,7 +202,12 @@ export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: 
       {dialog === 'cancel' && (
         <ReasonDialog title="Cancel this work order" icon="x" label="Why is it cancelled?" confirm="Cancel the work order" danger
           hint="It stays on file with its history, marked cancelled. If your workflow has a Cancelled status it is moved there. It can be reopened."
-          woId={woId} woNumber={woNumber} run={(reason) => cancelWo(woId, reason)} onClose={close} />
+          woId={woId} woNumber={woNumber} run={async (reason) => report(await cancelWo(woId, reason))} onClose={close} />
+      )}
+      {dialog === 'reopen' && (
+        <ReasonDialog title="Reopen this work order" icon="clock" label="Why is it reopened?" confirm="Reopen"
+          hint="It goes back to the status it had before it was cancelled. The reason is kept on its history."
+          woId={woId} woNumber={woNumber} run={async (reason) => report(await reopenWo(woId, reason))} onClose={close} />
       )}
       {dialog === 'eta' && <EtaDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}
       {dialog === 'tag' && <TagDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}

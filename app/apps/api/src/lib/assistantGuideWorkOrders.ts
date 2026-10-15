@@ -53,22 +53,25 @@ Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view):
   - Quote Ready needs a quote with at least one line or scope item.
   - Waiting for Parts and Please Order Parts need the **Parts Required** field filled.
   - Done / Incurred needs a visit that was checked in and out, the final **Cost**, a quote with data and an approved after photo (for a Bill For Incurred job: an approved before photo and a sign-off instead).
+  - Ready to Invoice, Invoiced Not Paid and Invoiced need the same as Done / Incurred, unless the work order is already in Done / Incurred or another of those three.
+  - While the work order sits in one of those statuses, what it needed cannot be emptied: **Parts Required** in the parts statuses, the **Cost** from Done / Incurred on, the quote's lines in Quote Ready and from Done / Incurred on.
+  - The quote moves the status too: **Send to client** moves it to Waiting for Approval, the client's approval to Approved, the client's decline back to Waiting for Quote (only from the quote and approval statuses; a work order further along stays put).
   - A move Ecotrak would refuse is tagged **Ecotrak**; it is a warning unless the site is set to block.
 
-The action bar under the header (all need \`work_orders\` edit):
+The action bar under the header (all need \`work_orders\` edit; Pause, Complete service, Cancel and Reopen also need \`work_orders/lifecycle\` edit, which people who must request status changes do not have, so they do not see those buttons):
 - **Assign vendor** / **Re-assign vendor**: search under **Find a vendor** and click one. Blacklisted vendors cannot be picked.
 - **Pause**: type why, click **Pause**; **Resume** ends it. A pause is a marker: it does not stop any clock.
 - **Add ETA**: set **Expected on site**, **Save ETA**.
 - **Tag**: type a **Tag** and a **Reason**, **Add the tag**.
 - **Increase NTE**: type the **New NTE** and why, **Send the request**. A manager decides it on the **Cost breakdown** tab under **NTE increases** (needs \`approvals/nte\` approve).
 - **Complete service**: fill the **Completion note**, fault code and action code, click **Complete service**. It records the completion and does not change the status.
-- **Cancel work order**: type why, **Cancel the work order**; **Reopen** undoes it.
+- **Cancel work order**: type why, **Cancel the work order**. The button is gone once the client invoice is sent or paid, or a vendor payment is paid. **Reopen** undoes it: type why, click **Reopen**; the work order goes back to the status it had before the cancel.
 
 Visits (the **CICO** tab; needs \`work_orders\` edit and \`work_orders/fields/cico\` edit):
 1. Click **New visit**.
 2. Pick the **Visit type** (required), and the **Technician**, **Phone** and **Method**.
 3. Click **Log visit**.
-Check a technician in or out by changing the status dropdown on the visit row (**Not checked in**, **Checked in**, **Checked out**, **Checked out · return trip needed**); the time is stamped by itself. A check-in moves the work order to On Site. Checking out of an Assessment visit sets the Quote Due Date. Correct times with the pencil (**Save visit**); delete with the trash icon.
+Check a technician in or out by changing the status dropdown on the visit row (**Not checked in**, **Checked in**, **Checked out**, **Checked out · return trip needed**); the time is stamped by itself, and a time someone typed is never replaced. Typing a check-in or check-out time sets the visit's status to match. A check-in moves the work order to On Site; when the person checking in must request status changes, it sends a request to move it to On Site instead, which a manager approves in Approvals. Checking out of an Assessment visit sets the Quote Due Date. Correct times with the pencil (**Save visit**); delete with the trash icon.
 
 Messages (the **Messages** tab): choose **Internal** or **Client-visible**, type, then **Post internally** or **Send to client**. Needs \`work_orders/comments\` create; a client-visible message also needs \`work_orders/comments/client\` create. A message sent to the client cannot be edited afterwards.
 

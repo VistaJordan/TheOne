@@ -129,32 +129,32 @@ than one file only by taking the next free number after the reserved ones.
 
 - **#2 Done gate skipped (status half).** Ready to Invoice / Invoiced /
   Invoiced Not Paid can only be entered from a status in the done group or
-  later (or with the Done gate satisfied). Status: open
+  later (or with the Done gate satisfied). Status: done (Wave C commit, migration 0085) — both halves: the Done gate's checks, waived when the work order is already in Done / Incurred or later
 - **#15 OM side doors.** For request-mode users: Cancel, Pause, Complete
   service, and edits to Cost, NTE, SLA dates and AR fields are refused; they
   may log visits, but their check-in raises a status-change request to On
-  Site instead of moving it. Status: open
+  Site instead of moving it. Status: done (Wave C commit, migration 0085) — new permission path work_orders/lifecycle (off for every request-mode role incl. vr_officer and oa); NTE / SLA / AR fields view-only for the dispatchers and vr_officer, not oa (intake types them)
 - **#16 Dispatcher status changes.** Request mode for all dispatchers (D3);
-  approval moves the status at once (D5). Status: open
+  approval moves the status at once (D5). Status: done (Wave C commit, migration 0085)
 - **M3 Gates only on entry.** While a work order sits in a gated status, the
   field its gate depends on cannot be cleared (409 `STATUS_GATE`).
-  Status: open
+  Status: done (Wave C commit, migration 0085) — Parts Required, Cost (done or later), the quote (Quote Ready or done or later)
 - **M5 Status follows quote events.** Send moves the WO to the sent-quote
   status, client approval / decline to their statuses (by name, skipped when
-  absent), through `changeStatus` with source `quote`. Status: open
+  absent), through `changeStatus` with source `quote`. Status: done (Wave C commit, migration 0085) — Send → Waiting for Approval, client approval → Approved, client decline → Waiting for Quote (re-quote), forward only
 - **M6 Client approval evidence.** Recording client approval needs a note or an
-  attachment. Status: open
+  attachment. Status: done (Wave C commit, migration 0085)
 - **M4 Client message too early.** The client-visible quote message is posted
-  on send, not on submit. Status: open
+  on send, not on submit. Status: done (Wave C commit, migration 0085) — no submit path posted it; the chained Approve & Send CTA became Approve, Send to client is its own click, and the message reads "sent to the client for approval"
 - **M8 Visit times vs status.** Visit status derives from the stamps; a typed
-  time is never overwritten. Status: open
+  time is never overwritten. Status: done (Wave C commit, migration 0085)
 - **M9 Misleading UI.** Progress bar reflects the real status; Cancel hidden
-  once billed or paid. Status: open
+  once billed or paid. Status: done (Wave C commit, migration 0085) — un-visited phases draw as skipped; Cancel refused (409 CANCEL_BILLED) and hidden once an invoice is sent / paid or a payment is paid
 - **M18 Check-in logic duplicated.** Code is the single source; the two
   automations exist only on the UAT database (none in migrations / seed) →
-  disable them there (recap). Status: open
+  disable them there (recap). Status: done (Wave C commit) — code side: nothing in migrations, seed or code creates one; disabling the two on the UAT database stays on the ops checklist
 - **M31 Reopen.** Reopen needs a reason and moves the status back to the one
-  before the cancel. Status: open
+  before the cancel. Status: done (Wave C commit, migration 0085)
 
 ## Wave D — data quality and UI
 

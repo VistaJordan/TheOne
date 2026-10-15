@@ -19,6 +19,8 @@
 // a pool read and their writes do not repeat the check.
 
 import { query, withTransaction } from '../db.js';
+import { assertQuoteHeld } from './statusGates.js';
+import { CLIENT_APPROVAL_EVIDENCE_CODE, quoteEventStatusName, type QuoteEvent, type VisitStatusMove } from '@theone/shared';
 import type { Queryable } from '../db.js';
 import type {
   Quote,
@@ -1335,6 +1337,11 @@ export async function updateQuote(
       }
     }
 
+    // M3 (Wave C): a work order in Quote Ready (or done or later) entered on
+    // the strength of this quote's data; emptying it there is refused, on
+    // this transaction so the rewrite above rolls back with the 409.
+    if (input.sections !== undefined) await assertQuoteHeld(tx, taskId);
+
     // The builder autosaves the whole form, so most PUTs change nothing; an
     // identical snapshot logs no row rather than a "revised" that revised nothing.
     const after = await snapshotQuote(tx, cur.id);
@@ -1660,6 +1667,46 @@ async function transition(
   return quote;
 }
 
+/**
+ * UAT Wave C (M5): the work order's status follows the quote. After the quote
+ * transition has committed, Send moves it to the "quote sent" status, the
+ * client's approval and decline to theirs (quoteEventStatusName; a status that
+ * does not exist, or a work order already further along, is left alone),
+ * through changeStatus with source 'quote' — so the gates, the Ecotrak check,
+ * the audit row (`via: 'quote'`) and the automations all run. Nothing is
+ * pushed to the client system (D5). A refusal never undoes the quote action:
+ * it comes back on the reply as `status_move`.
+ */
+async function followQuoteEvent(taskId: string, event: QuoteEvent, actor: ActingPrincipal): Promise<VisitStatusMove | null> {
+  const cur = await query<{ name: string }>(
+    `SELECT s.name FROM task t JOIN status s ON s.id = t.status_id WHERE t.id = $1 LIMIT 1`,
+    [taskId],
+  );
+  const target = quoteEventStatusName(event, cur.rows[0]?.name ?? null);
+  if (!target) return null;
+  const st = await query<{ id: string; name: string }>(
+    `SELECT id::text AS id, name FROM status WHERE lower(name) = lower($1) LIMIT 1`,
+    [target],
+  );
+  if (!st.rows[0]) return null;
+  try {
+    const { changeStatus } = await import('./workOrders.js');
+    await changeStatus(taskId, st.rows[0].id, actor.id, undefined, 'quote');
+    return { status: st.rows[0].name, moved: true, reason: null };
+  } catch (err) {
+    if (err instanceof ApiError) return { status: st.rows[0].name, moved: false, reason: err.message };
+    throw err;
+  }
+}
+
+/** The quote action's reply with the status move on it (re-read when the
+    status moved, since the quote's wo_actions follow the work order). */
+async function withStatusMove(taskId: string, quote: Quote, event: QuoteEvent, actor: ActingPrincipal): Promise<Quote> {
+  const status_move = await followQuoteEvent(taskId, event, actor);
+  const fresh = status_move?.moved ? ((await getQuote(taskId, actor)) ?? quote) : quote;
+  return { ...fresh, status_move };
+}
+
 /** draft → pending_approval (senior_om+). */
 export async function submitQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanEdit(actor);
@@ -1713,9 +1760,12 @@ export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise
   }
   const summaryText = pre.summary.pinned ?? pre.summary.auto;
   const firstLine = summaryText.split('\n').find((l) => l.trim().length > 0) ?? pre.wo_number;
-  const body = `Quote for ${money(pre.totals.grand_total)} submitted for approval — ${firstLine.trim()}`;
+  // M4 (Wave C): this is THE client-visible quote message, posted when the
+  // quote goes to the client — nothing client-visible is posted on submit or
+  // on the internal approval. Worded as the send it is.
+  const body = `Quote for ${money(pre.totals.grand_total)} sent to the client for approval — ${firstLine.trim()}`;
 
-  return transition(
+  const sent = await transition(
     taskId,
     ['approved'],
     'sent',
@@ -1735,6 +1785,7 @@ export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise
     [actor.id],
     selfApproved,
   );
+  return withStatusMove(taskId, sent, 'sent', actor);
 }
 
 /**
@@ -1790,6 +1841,9 @@ export interface ClientApproveInput {
   note?: string | null;
   /** Yoda SubmitOnSite path: the approval was given on site, not through the CMMS. */
   on_site?: boolean;
+  /** M6 (Wave C): a file on this work order that records the approval (the
+      client's email, a signed quote). A note or this is required. */
+  attachment_id?: string | null;
 }
 
 /**
@@ -1822,12 +1876,33 @@ export async function clientApproveQuote(
       options: pre.sections.filter((s) => s.kind === 'option' && s.round === pre.current_round).map((s) => s.id),
     });
   }
+  // M6 (Wave C): the client's yes is recorded with its evidence — a note
+  // (who approved, the PO number, how) or a file on this work order — like a
+  // decline needs its reason.
+  const evidenceNote = input.note?.trim() || null;
+  let evidenceFile: { id: string; file_name: string } | null = null;
+  if (input.attachment_id) {
+    const f = await query<{ id: string; file_name: string }>(
+      `SELECT id::text AS id, file_name FROM attachment
+        WHERE id = $1 AND task_id = $2 AND review_status <> 'declined' LIMIT 1`,
+      [input.attachment_id, taskId],
+    );
+    if (!f.rows[0]) {
+      throw badRequest('That file is not on this work order', { code: CLIENT_APPROVAL_EVIDENCE_CODE, attachment_id: input.attachment_id });
+    }
+    evidenceFile = f.rows[0];
+  }
+  if (!evidenceNote && !evidenceFile) {
+    throw badRequest('Say how the client approved (a note) or attach their approval before recording it', {
+      code: CLIENT_APPROVAL_EVIDENCE_CODE,
+    });
+  }
   const priced = pre.totals.option_totals.find((o) => o.section_id === option.id);
   const amount = priced ? priced.grand_total : pre.totals.grand_total;
-  const noteText = input.note?.trim() ? ` — ${input.note.trim()}` : '';
+  const noteText = `${evidenceNote ? ` — ${evidenceNote}` : ''}${evidenceFile ? ` (approval on file: ${evidenceFile.file_name})` : ''}`;
   const body = `Client approved ${option.label}${option.name ? ` (${option.name})` : ''} for ${money(amount)}${input.on_site ? ' (on site)' : ''}${noteText}`;
 
-  return transition(
+  const approved = await transition(
     taskId,
     ['sent'],
     'client_approved',
@@ -1848,7 +1923,11 @@ export async function clientApproveQuote(
           WHERE quote_id = $1 AND round = $2 AND kind = 'option' AND id <> $3 AND approved_at IS NULL AND deleted_at IS NULL`,
         [quoteId, pre.current_round, option.id],
       );
-      await addComment(tx, actor.id, taskId, body, true, { quote_id: quoteId, section_id: option.id });
+      await addComment(tx, actor.id, taskId, body, true, {
+        quote_id: quoteId,
+        section_id: option.id,
+        ...(evidenceFile ? { attachment_id: evidenceFile.id } : {}),
+      });
       await snapshot(tx, pre, 'client_approved', actor.id);
       await enqueueOutbox(tx, 'quote.client_approved', 'quote', quoteId, {
         task_id: taskId,
@@ -1859,9 +1938,10 @@ export async function clientApproveQuote(
         on_site: input.on_site === true,
       });
     },
-    'approved_section_id = $3, client_decided_at = now(), client_decided_by = $4, client_decision_note = $5, client_approved_on_site = $6',
-    [option.id, actor.id, input.note?.trim() || null, input.on_site === true],
+    'approved_section_id = $3, client_decided_at = now(), client_decided_by = $4, client_decision_note = $5, client_approved_on_site = $6, client_decision_attachment_id = $7',
+    [option.id, actor.id, evidenceNote, input.on_site === true, evidenceFile?.id ?? null],
   );
+  return withStatusMove(taskId, approved, 'client_approved', actor);
 }
 
 export interface ClientDeclineInput {
@@ -1897,7 +1977,7 @@ export async function clientDeclineQuote(
     ? `Client declined ${target.label}${target.name ? ` (${target.name})` : ''} — ${note}`
     : `Client declined the quote — ${note}`;
 
-  return transition(
+  const declined = await transition(
     taskId,
     ['sent'],
     'client_declined',
@@ -1927,6 +2007,7 @@ export async function clientDeclineQuote(
     'client_decided_at = now(), client_decided_by = $3, client_decision_note = $4',
     [actor.id, note],
   );
+  return withStatusMove(taskId, declined, 'client_declined', actor);
 }
 
 /**
@@ -1954,6 +2035,6 @@ export async function startNewRound(taskId: string, actor: ActingPrincipal): Pro
         [quoteId, round + 1],
       );
     },
-    'rev = rev + 1, approved_by = NULL, sent_by = NULL, sent_at = NULL, approved_section_id = NULL, client_decided_at = NULL, client_decided_by = NULL, client_decision_note = NULL, client_approved_on_site = false',
+    'rev = rev + 1, approved_by = NULL, sent_by = NULL, sent_at = NULL, approved_section_id = NULL, client_decided_at = NULL, client_decided_by = NULL, client_decision_note = NULL, client_approved_on_site = false, client_decision_attachment_id = NULL',
   );
 }

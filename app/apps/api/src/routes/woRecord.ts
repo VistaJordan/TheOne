@@ -5,7 +5,7 @@
 //   PUT    /work-orders/:id/vendor                    { vendor_id | null } — the responsible vendor
 //   POST   /work-orders/:id/pause · /resume           { reason }
 //   PUT    /work-orders/:id/eta                       { eta_at | null, note }
-//   POST   /work-orders/:id/cancel · /reopen          { reason }
+//   POST   /work-orders/:id/cancel · /reopen          { reason }  (both need it, 0085)
 //   POST   /work-orders/:id/complete-service          { note, fault_code, action_code, temporary_fix }
 //   DELETE /work-orders/:id/complete-service
 //   POST   /work-orders/:id/checklist                 { titles: [] }
@@ -102,7 +102,9 @@ export default async function woRecordRoutes(app: FastifyInstance): Promise<void
   });
   app.post('/work-orders/:id/reopen', async (req) => {
     const { taskId, actor } = await task(req);
-    return reopenWo(taskId, actor);
+    // M31 (0085): a reopen says why, like the cancel it undoes.
+    const { reason } = parse(z.object({ reason: text(500) }).strict(), req.body ?? {});
+    return reopenWo(taskId, reason ?? null, actor);
   });
 
   app.post('/work-orders/:id/complete-service', async (req) => {

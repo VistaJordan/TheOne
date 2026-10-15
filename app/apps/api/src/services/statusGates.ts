@@ -13,10 +13,14 @@
 import {
   BFI_KEY,
   FINAL_COST_KEY,
+  INVOICING_GATED_STATUS_NAMES,
   PARTS_REQUIRED_KEY,
   STATUS_GATE_ERROR_CODE,
+  describeGateHold,
   describeStatusGate,
   doneGateMissing,
+  gateHoldingField,
+  statusHoldsQuote,
   partsRequiredFilled,
   statusGateFor,
   type DoneGateCheck,
@@ -98,8 +102,20 @@ export async function statusGateBlocker(
   taskId: string,
   targetStatusName: string,
   partsValue?: unknown,
+  currentStatusName?: string | null,
 ): Promise<{ gate: StatusGate; message: string; missing?: DoneGateCheck[] } | null> {
-  const gate = statusGateFor(targetStatusName);
+  // #2 (Wave C): a billing status is gated unless the work order is already
+  // done or later, so the current status is read when the caller did not say.
+  let current = currentStatusName;
+  const n = targetStatusName.trim().toLowerCase();
+  if (current === undefined && INVOICING_GATED_STATUS_NAMES.some((s) => s.toLowerCase() === n)) {
+    const res = await q.query<{ name: string }>(
+      `SELECT s.name FROM task t JOIN status s ON s.id = t.status_id WHERE t.id = $1 LIMIT 1`,
+      [taskId],
+    );
+    current = res.rows[0]?.name ?? null;
+  }
+  const gate = statusGateFor(targetStatusName, current);
   if (!gate) return null;
   if (gate === 'done') {
     const missing = await doneGateMissingFor(q, taskId);
@@ -129,8 +145,9 @@ export async function assertStatusGate(
   taskId: string,
   targetStatusName: string,
   partsValue?: unknown,
+  currentStatusName?: string | null,
 ): Promise<void> {
-  const blocked = await statusGateBlocker(q, taskId, targetStatusName, partsValue);
+  const blocked = await statusGateBlocker(q, taskId, targetStatusName, partsValue, currentStatusName);
   if (blocked) {
     throw new ApiError('CONFLICT', blocked.message, {
       code: STATUS_GATE_ERROR_CODE,
@@ -139,4 +156,49 @@ export async function assertStatusGate(
       ...(blocked.missing ? { missing: blocked.missing } : {}),
     });
   }
+}
+
+// ── M3 (Wave C) · a gated status holds its field ─────────────────────────────
+
+/** 409 STATUS_GATE (`details.held = true`) when the write would empty what
+    the work order's current status was gated on. `labelOf` names the field
+    as the person called it. */
+export function assertGateHoldsFields(
+  currentStatusName: string | null | undefined,
+  patch: readonly { jsonKey: string; value: unknown }[],
+  labelOf: (jsonKey: string) => string = (k) => k,
+  woNumber?: string,
+): void {
+  for (const p of patch) {
+    const gate = gateHoldingField(currentStatusName, p.jsonKey, p.value);
+    if (!gate) continue;
+    const status = currentStatusName ?? '';
+    throw new ApiError('CONFLICT', `${woNumber ? `${woNumber}: ` : ''}${describeGateHold(`"${labelOf(p.jsonKey)}"`, status)}`, {
+      code: STATUS_GATE_ERROR_CODE,
+      gate,
+      status,
+      held: true,
+      field: p.jsonKey,
+      ...(woNumber ? { wo_numbers: [woNumber] } : {}),
+    });
+  }
+}
+
+/** M3 for the quote: 409 when a quote write leaves the quote without data
+    while the work order sits in Quote Ready or done-or-later. Asked on the
+    quote's own transaction after the write, so a refusal rolls it back. */
+export async function assertQuoteHeld(q: Queryable, taskId: string): Promise<void> {
+  const res = await q.query<{ name: string }>(
+    `SELECT s.name FROM task t JOIN status s ON s.id = t.status_id WHERE t.id = $1 LIMIT 1`,
+    [taskId],
+  );
+  const status = res.rows[0]?.name ?? null;
+  if (!statusHoldsQuote(status)) return;
+  if ((await quoteFilledTaskIds(q, [taskId])).has(taskId)) return;
+  throw new ApiError('CONFLICT', describeGateHold('The quote', status ?? ''), {
+    code: STATUS_GATE_ERROR_CODE,
+    gate: 'quote',
+    status,
+    held: true,
+  });
 }

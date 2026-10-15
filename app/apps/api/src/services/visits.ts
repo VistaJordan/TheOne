@@ -31,7 +31,14 @@
 // Rule 2.2.2: a CHECK-IN moves the work order On Site — (Assessment) for an
 // assessment visit, (Job) for a job or a return trip (moveOnSite, after the
 // visit's own transaction). The reply carries `status_move` so the card can
-// say when the move was refused; the check-in itself always stands.
+// say when the move was refused; the check-in itself always stands. UAT
+// Wave C (#15): when the person checking in must REQUEST status changes, the
+// check-in raises that request instead of moving the status.
+//
+// M8 (Wave C): the visit's status is read off its stamps (nextVisitStamps in
+// shared workflow.ts) — a check-out stamp is checked out, a check-in stamp
+// alone is checked in — and a status move fills only an EMPTY stamp, so a
+// time somebody typed is never overwritten.
 
 import { query, withTransaction } from '../db.js';
 import { ApiError } from '../errors.js';
@@ -46,6 +53,8 @@ import {
   VISIT_METHODS,
   VISIT_MIRROR_KEYS,
   VISIT_OWNED_KEYS,
+  isStatusRequestMode,
+  nextVisitStamps,
   onSiteStatusNameForVisitType,
   type ActivityActor,
   type ActivityEntry,
@@ -464,14 +473,19 @@ async function logVisitEvent(
 /**
  * After a visit is checked in: move the work order to On Site (Assessment)
  * or On Site (Job) by the visit's type. Runs OUTSIDE the visit's transaction
- * (changeStatus opens its own and dispatches automations after it) and as a
- * system consequence of the check-in, so the status permission is not asked
- * — a dispatcher who may only REQUEST a status change still checks techs in
- * — while the status gates and the Ecotrak check still apply. A refusal
- * never undoes the check-in: it comes back as the reason. The audit row
- * reads `via: 'visit'`, like the mirrored keys.
+ * (changeStatus opens its own and dispatches automations after it), while the
+ * status gates and the Ecotrak check still apply. A refusal never undoes the
+ * check-in: it comes back as the reason. The audit row reads `via: 'visit'`,
+ * like the mirrored keys.
+ *
+ * Who checked in decides how (UAT Wave C, #15): a person in request mode
+ * (work_orders/status create without edit — the dispatchers) raises a
+ * status-change request to the On Site status, which a manager approves like
+ * any other; a manager, anyone else allowed to log visits, or the system
+ * moves it directly, without asking the status permission.
  */
-async function moveOnSite(taskId: string, visitType: string, actorId: string): Promise<VisitStatusMove | null> {
+async function moveOnSite(taskId: string, visitType: string, actor: ActingPrincipal): Promise<VisitStatusMove | null> {
+  const actorId = actor.id;
   const name = onSiteStatusNameForVisitType(visitType);
   if (!name) return null;
   const res = await query<{ current: string; target: string | null }>(
@@ -486,6 +500,16 @@ async function moveOnSite(taskId: string, visitType: string, actorId: string): P
   if (!row) return null;
   if (!row.target) return { status: name, moved: false, reason: `There is no "${name}" status` };
   if (row.current === row.target) return { status: name, moved: false, reason: null };
+  if (isStatusRequestMode(actor.perms, actor.isSuperAdmin)) {
+    try {
+      const { requestStatusChange } = await import('./approvals.js');
+      const { item } = await requestStatusChange(taskId, row.target, actor);
+      return { status: name, moved: false, reason: null, requested: true, approval_task_id: item.id };
+    } catch (err) {
+      if (err instanceof ApiError) return { status: name, moved: false, reason: err.message };
+      throw err;
+    }
+  }
   try {
     // Dynamic: workOrders.ts sits above this module in the import graph.
     const { changeStatus } = await import('./workOrders.js');
@@ -520,14 +544,20 @@ export async function createVisit(
     if (detail === undefined) detail = entry && entry.method === method ? entry.detail : null;
   }
 
-  const status: VisitStatus = c.status ?? 'planned';
   const now = nowStamp();
-  // A visit logged straight as checked-in stamps now; one logged straight as
-  // checked-out (recorded after the fact) stamps only the check-out unless the
-  // caller supplied the check-in time too.
-  const checkedIn =
-    status === 'planned' ? null : (c.checked_in_at ?? (status === 'checked_in' ? now : null));
-  const checkedOut = status === 'checked_out' ? (c.checked_out_at ?? now) : null;
+  // M8: the status follows the stamps. A visit logged straight as checked-in
+  // stamps now; one logged straight as checked-out (recorded after the fact)
+  // stamps only the check-out unless the caller supplied the check-in time
+  // too; a typed time is kept as typed, and a typed stamp with no status
+  // sets the status it implies.
+  const stamps = nextVisitStamps(
+    { status: 'planned', checked_in_at: null, checked_out_at: null },
+    { status: c.status, checked_in_at: c.checked_in_at, checked_out_at: c.checked_out_at },
+    now,
+  );
+  const status: VisitStatus = stamps.status;
+  const checkedIn = stamps.checked_in_at;
+  const checkedOut = stamps.checked_out_at;
   const rtn = status === 'checked_out' ? Boolean(c.return_trip_needed) : false;
 
   let created: WoVisit | null = null;
@@ -577,7 +607,7 @@ export async function createVisit(
   // fire after the commit, exactly as a hand edit of the old field did.
   await dispatchAutomations({ taskId, kind: 'changed', changes: mirror });
   // Rule 2.2.2: a visit logged straight as checked in is a check-in.
-  const status_move = status === 'checked_in' ? await moveOnSite(taskId, c.visit_type!, actor.id) : null;
+  const status_move = status === 'checked_in' ? await moveOnSite(taskId, c.visit_type!, actor) : null;
   return { item: created!, items, status_move };
 }
 
@@ -603,32 +633,26 @@ export async function updateVisit(
   if (c.method_detail !== undefined) next.method_detail = c.method_detail;
 
   const now = nowStamp();
+  // M8: typed stamps first, a status move fills only an empty stamp, and the
+  // status is then read off the stamps (nextVisitStamps).
+  const stamps = nextVisitStamps(
+    { status: cur.status, checked_in_at: cur.checked_in_at, checked_out_at: cur.checked_out_at },
+    { status: c.status, checked_in_at: c.checked_in_at, checked_out_at: c.checked_out_at },
+    now,
+  );
+  next.status = stamps.status;
+  next.checked_in_at = stamps.checked_in_at;
+  next.checked_out_at = stamps.checked_out_at;
+  // Who stamped: kept while the stamp is the one already there, the actor
+  // when the stamp is new or changed, nobody once it is cleared.
   let inBy = cur.checked_in_by?.id ?? null;
   let outBy = cur.checked_out_by?.id ?? null;
-  if (c.status !== undefined && c.status !== cur.status) {
-    next.status = c.status;
-    if (c.status === 'planned') {
-      next.checked_in_at = null; next.checked_out_at = null; next.return_trip_needed = false;
-      inBy = null; outBy = null;
-    } else if (c.status === 'checked_in') {
-      next.checked_in_at = c.checked_in_at ?? now; inBy = actor.id;
-      next.checked_out_at = null; outBy = null;
-      next.return_trip_needed = false;
-    } else {
-      next.checked_out_at = c.checked_out_at ?? now; outBy = actor.id;
-    }
-  }
-  if (c.checked_in_at !== undefined) {
-    next.checked_in_at = c.checked_in_at;
-    if (c.checked_in_at && !inBy) inBy = actor.id;
-    if (!c.checked_in_at) inBy = null;
-  }
-  if (c.checked_out_at !== undefined) {
-    next.checked_out_at = c.checked_out_at;
-    if (c.checked_out_at && !outBy) outBy = actor.id;
-    if (!c.checked_out_at) outBy = null;
-  }
-  if (c.return_trip_needed !== undefined) next.return_trip_needed = c.return_trip_needed;
+  if (!next.checked_in_at) inBy = null;
+  else if (next.checked_in_at !== cur.checked_in_at || !inBy) inBy = actor.id;
+  if (!next.checked_out_at) outBy = null;
+  else if (next.checked_out_at !== cur.checked_out_at || !outBy) outBy = actor.id;
+  if (next.status !== 'checked_out') next.return_trip_needed = false;
+  if (c.return_trip_needed !== undefined && next.status === 'checked_out') next.return_trip_needed = c.return_trip_needed;
 
   let updated: WoVisit | null = null;
   let items: WoVisit[] = [];
@@ -664,9 +688,10 @@ export async function updateVisit(
   });
   await dispatchAutomations({ taskId: cur.task_id, kind: 'changed', changes: mirror });
   // Rule 2.2.2: only the move INTO checked_in is a check-in — correcting a
-  // stamp on a visit that is already in, or checking out, moves nothing.
-  const checkedInNow = c.status === 'checked_in' && cur.status !== 'checked_in';
-  const status_move = checkedInNow ? await moveOnSite(cur.task_id, next.visit_type, actor.id) : null;
+  // stamp on a visit that is already in, or checking out, moves nothing. M8:
+  // typing the check-in time on a planned visit is that move too.
+  const checkedInNow = next.status === 'checked_in' && cur.status !== 'checked_in';
+  const status_move = checkedInNow ? await moveOnSite(cur.task_id, next.visit_type, actor) : null;
   return { item: updated!, items, status_move };
 }
 

@@ -9,7 +9,7 @@
 // form uses, what a distance means against a boundary, when an event is
 // running, how minutes read.
 
-import type { FeedActor } from './index';
+import type { FeedActor, VisitStatusMove } from './index';
 import type { WoCreateField, WoCreateForm, WoCreateMode } from './woCreate';
 import type { SiteLocation } from './portfolio';
 
@@ -244,7 +244,16 @@ export interface WoRecord {
     decide_nte: boolean;
     see_money: boolean;
     see_vendors: boolean;
+    /** 0085 (#15): Cancel / Reopen, Pause / Resume, Complete service —
+        `work_orders/lifecycle` edit, off for request-mode roles. */
+    lifecycle: boolean;
+    /** M9: why Cancel is refused (an invoice sent or paid, a payment
+        paid), or null when it may be cancelled. */
+    cancel_blocked: string | null;
   };
+  /** M31: the reply to Cancel / Reopen — the status move it made, or why the
+      move was refused (the stamp stands either way). */
+  status_move?: VisitStatusMove | null;
 }
 
 export interface WoCompleteInput {

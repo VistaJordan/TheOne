@@ -342,6 +342,13 @@ function VisitLog({
   const [moveNote, setMoveNote] = useState<string | null>(null);
   const noteMove = (res: WoVisitResponse) => {
     const m = res.status_move;
+    // UAT Wave C (#15): someone who requests status changes raises a request
+    // to On Site on check-in; the card says so, and the manager decides.
+    if (m?.requested) {
+      setMoveNote(`Checked in. A request to move the work order to ${m.status} was sent to a manager.`);
+      void qc.invalidateQueries({ queryKey: ['approval-counts'] });
+      return;
+    }
     setMoveNote(m && !m.moved && m.reason ? `Checked in, but the status stayed put: ${m.reason}` : null);
   };
 

@@ -634,6 +634,15 @@ export function buildPermissionTree(
           choices: STATUS_MODE_CHOICES,
         },
         {
+          // 0085 (#15) · the record bar's Cancel / Reopen, Pause / Resume and
+          // Complete service. Unset follows work_orders edit; 0085 turns it
+          // off for the roles that must request status changes.
+          key: 'work_orders/lifecycle',
+          label: 'Cancel, pause and complete',
+          actions: ['edit'],
+          note: 'Cancel or reopen a work order, pause or resume it, mark the service complete. Off for people who must request status changes, so these are not a side door around the request.',
+        },
+        {
           // 0052 · the Messages tab. Create = post at all; edit = change one's
           // own message while no client system has accepted it. The child is
           // whether a client-visible message may be posted (unset inherits).

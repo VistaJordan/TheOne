@@ -23,7 +23,7 @@ import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
 import { assertMoneyNotLocked } from './moneySync.js';
-import { doneGateMissingFor, quoteFilledTaskIds } from './statusGates.js';
+import { assertGateHoldsFields, doneGateMissingFor, quoteFilledTaskIds } from './statusGates.js';
 import {
   PARTS_REQUIRED_KEY,
   STATUS_GATE_ERROR_CODE,
@@ -175,24 +175,29 @@ export async function bulkUpdate(
   // edit never half-applies. A Parts Required value in the same patch counts
   // for every row it lands on.
   if (targetStatus) {
-    const gate = statusGateFor(targetStatus.name);
-    if (gate) {
-      const target = targetStatus;
-      const moving = rows.rows.filter((r) => r.status_id !== target.id);
+    const target = targetStatus;
+    // #2 (Wave C): the gate depends on where each row sits — a billing
+    // status is open to a row already done or later — so it is asked per row.
+    const moving = rows.rows.filter((r) => r.status_id !== target.id);
+    const gated = moving.map((r) => ({ r, gate: statusGateFor(target.name, r.status_name) })).filter((x) => x.gate !== null);
+    if (gated.length > 0) {
+      const gate = gated[0].gate as NonNullable<ReturnType<typeof statusGateFor>>;
       const partsPatch = customPatch.find((c) => c.key === PARTS_REQUIRED_KEY);
-      const quoteOk = gate === 'quote' ? await quoteFilledTaskIds({ query }, moving.map((r) => r.id)) : null;
+      const quoteOk = gate === 'quote' ? await quoteFilledTaskIds({ query }, gated.map((x) => x.r.id)) : null;
       // Rules 11.3.1–11.3.3: the Done gate reads visits, cost and quote per row.
       const doneMissing = new Map<string, DoneGateCheck[]>();
       if (gate === 'done') {
-        for (const r of moving) doneMissing.set(r.id, await doneGateMissingFor({ query }, r.id));
+        for (const { r } of gated) doneMissing.set(r.id, await doneGateMissingFor({ query }, r.id));
       }
-      const blocked = moving.filter((r) =>
-        gate === 'quote'
-          ? !(quoteOk as Set<string>).has(r.id)
-          : gate === 'done'
-            ? (doneMissing.get(r.id)?.length ?? 0) > 0
-            : !partsRequiredFilled(partsPatch ? partsPatch.value : r.fields?.[PARTS_REQUIRED_KEY]),
-      );
+      const blocked = gated
+        .map((x) => x.r)
+        .filter((r) =>
+          gate === 'quote'
+            ? !(quoteOk as Set<string>).has(r.id)
+            : gate === 'done'
+              ? (doneMissing.get(r.id)?.length ?? 0) > 0
+              : !partsRequiredFilled(partsPatch ? partsPatch.value : r.fields?.[PARTS_REQUIRED_KEY]),
+        );
       if (blocked.length > 0) {
         const names = blocked.map((r) => r.wo_number);
         const who =
@@ -206,6 +211,20 @@ export async function bulkUpdate(
           wo_numbers: names,
         });
       }
+    }
+  }
+
+  // M3 (Wave C): a row that stays in (or moves to) a gated status keeps what
+  // the gate asked for — the whole selection is refused, like the gate above.
+  if (customPatch.length > 0) {
+    for (const r of rows.rows) {
+      const statusAfter = targetStatus ? targetStatus.name : r.status_name;
+      assertGateHoldsFields(
+        statusAfter,
+        customPatch.map((c) => ({ jsonKey: c.key, value: c.value })),
+        (k) => k,
+        r.wo_number,
+      );
     }
   }
 
@@ -234,6 +253,14 @@ export async function bulkUpdate(
       // Re-asked under the lock: the pool check above named every row in the
       // way up front; this one catches a system write that landed since (W3-3).
       await assertMoneyNotLocked([row.id], customPatch.map((c) => c.key), tx);
+      // M3, re-asked under the lock: the status cannot move while we hold it.
+      if (customPatch.length > 0 && !targetStatus) {
+        const st = await tx.query<{ name: string }>(
+          `SELECT s.name FROM task t JOIN status s ON s.id = t.status_id WHERE t.id = $1`,
+          [row.id],
+        );
+        assertGateHoldsFields(st.rows[0]?.name ?? null, customPatch.map((c) => ({ jsonKey: c.key, value: c.value })), (k) => k, row.wo_number);
+      }
       const sets: string[] = [];
       const params: unknown[] = [];
       // One activity row per entry, written after the UPDATE (see woAudit.ts).

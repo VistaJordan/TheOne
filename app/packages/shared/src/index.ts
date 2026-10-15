@@ -428,6 +428,9 @@ export interface WorkOrderDetail {
   acceptance: AcceptanceState | null;
   /** Which quote / payment actions this WO's status allows (allowedWoActions). */
   actions: WoActionMap;
+  /** UAT Wave C (M9): every phase the work order has been in (its status
+      history plus now). The phase bar ticks only these. Absent = unknown. */
+  phases_visited?: Phase[];
 }
 
 // ── Money (S2) ───────────────────────────────────────────────────────────────
@@ -1060,6 +1063,10 @@ export interface Quote {
   /** The WO-status gate, same shape as WorkOrderDetail.actions. */
   wo_actions: WoActionMap;
   labor_rate: LaborRate | null;
+  /** UAT Wave C (M5): on the reply to Send / client approve / client
+      decline — the work-order status the event moved to, or why it did not
+      (the quote action stands either way). Absent on every other read. */
+  status_move?: VisitStatusMove | null;
 }
 
 /** GET/POST/PUT /api/work-orders/:id/quote and every lifecycle POST. */
@@ -1952,6 +1959,10 @@ export interface VisitStatusMove {
   status: string;
   moved: boolean;
   reason: string | null;
+  /** UAT Wave C (#15): the person who checked in must request status
+      changes, so a request to this status was raised instead of the move. */
+  requested?: boolean;
+  approval_task_id?: string;
 }
 
 /** POST / PATCH replies: the visit touched plus the fresh list. `status_move`
@@ -2046,3 +2057,5 @@ export * from './advisoryLocks';
 export * from './moneyGuards';
 // UAT round 1, Wave B (0084): dispatchers, money roles, client-safe columns, rights.
 export * from './access';
+// UAT round 1, Wave C (0085): request mode, quote-driven status, visit stamps, cancel / reopen.
+export * from './workflow';

@@ -527,6 +527,9 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .phase.is-done .phase-name { color: var(--ink-2); }
 .phase.is-done .phase-mark { color: var(--accent-text); }
 .phase.is-current .phase-track { background: var(--accent); }
+/* UAT Wave C (M9): a phase the work order went past without ever being in. */
+.phase.is-skipped .phase-track { background: repeating-linear-gradient(90deg, var(--border-strong) 0 4px, transparent 4px 8px); }
+.phase.is-skipped .phase-name { color: var(--ink-3); }
 
 :root[data-theme="night"] .phase.is-current .phase-track {
   box-shadow: 0 0 12px rgba(53, 184, 243, 0.55);
