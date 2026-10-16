@@ -904,6 +904,15 @@ input {
 }
 
 /* ── "Viewing as" switcher (wears the bar's own --topbar-* palette) ───────── */
+/* UAT T1 · signed in with a role's test account. Amber (the warn tokens),
+   so it reads as "not a real person's session" in both themes. */
+.chip-test-account {
+  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  font-weight: 600;
+  white-space: nowrap;
+}
 .topbar-actor {
   display: inline-flex;
   align-items: center;

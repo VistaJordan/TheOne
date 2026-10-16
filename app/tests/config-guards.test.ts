@@ -172,6 +172,10 @@ describe('W4-11 · DEMO_MODE_SECRET_VARS keeps up with what the API reads (drift
       'not us to an external system; holding it pulls no real data into the demo — where every cron ' +
       'route answers 403 before it looks at the secret — unlike the two webhook secrets, which let ' +
       'Quo and the email tool deliver real events here',
+    TEST_ACCOUNTS_PASSWORD:
+      'UAT T1: the shared password of the in-app test sign-in accounts (services/testAccounts.ts) — it ' +
+      'lets a person in TO US as a non-super-admin test principal, reaches nothing outside The One, and ' +
+      'adds nothing to the demo, where every account already signs in without a password',
   };
 
   /** Every environment variable `src` reads by literal name: str('X'),

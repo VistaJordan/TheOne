@@ -66,6 +66,7 @@ import {
   nextPurpose,
   overNte,
   overQuoteReason,
+  paymentLockReason,
   permAllows,
   projectedCost,
   purposeBase,
@@ -151,6 +152,8 @@ interface PaymentRow {
   /** 0083: the largest cost an approved NTE override lets through. */
   nte_covers: number | string | null;
   over_quote_open: boolean;
+  /** UAT T5: the largest cost an approved over-quote hold lets through. */
+  quote_covers: number | string | null;
 }
 
 const SELECT_SQL = `
@@ -199,7 +202,11 @@ const SELECT_SQL = `
                             AS nte_covers,
          EXISTS (SELECT 1 FROM approval_task a
                   WHERE a.task_id = pr.task_id AND a.type = 'over_quote' AND a.status = 'open')
-                            AS over_quote_open
+                            AS over_quote_open,
+         (SELECT max((a.detail->>'covers')::numeric) FROM approval_task a
+           WHERE a.task_id = pr.task_id AND a.type = 'over_quote' AND a.status = 'approved'
+             AND jsonb_typeof(a.detail->'covers') = 'number')
+                            AS quote_covers
     FROM payment_request pr
     JOIN task t            ON t.id = pr.task_id
     LEFT JOIN vendor v     ON v.id = pr.vendor_id
@@ -274,7 +281,29 @@ function assertCanAdmin(actor: ActingPrincipal): void {
  * is the source of truth — "Auto-filled from vendor record" in the comp); a
  * manual one shows what the dispatcher typed.
  */
-function mapPayment(r: PaymentRow, opts: { fullAddress: boolean } = { fullAddress: false }): PaymentRequest {
+/** UAT T5: the approved quote's figures per work order, read in one batch
+    (quotes.bindableQuoteFiguresFor) for the rows a lock could apply to. */
+type QuoteFigures = Map<string, { total: number | null; cost: number | null }>;
+
+async function quoteFiguresFor(rows: PaymentRow[]): Promise<QuoteFigures> {
+  const waiting = rows.filter((r) => r.status === 'requested' || r.status === 'approved').map((r) => r.task_id);
+  if (waiting.length === 0) return new Map();
+  const { bindableQuoteFiguresFor } = await import('./quotes.js');
+  return bindableQuoteFiguresFor(waiting);
+}
+
+/** One request as the API returns it — read, created, edited or moved —
+    with the same lock the queues draw: its work order's quote figures read
+    through the same batched reader (one work order, one call). */
+async function mapOne(r: PaymentRow, opts: { fullAddress: boolean }): Promise<PaymentRequest> {
+  return mapPayment(r, opts, await quoteFiguresFor([r]));
+}
+
+function mapPayment(
+  r: PaymentRow,
+  opts: { fullAddress: boolean } = { fullAddress: false },
+  quotes?: QuoteFigures,
+): PaymentRequest {
   const address = parseAddress(r.payment_address);
   return {
     id: r.id,
@@ -316,29 +345,34 @@ function mapPayment(r: PaymentRow, opts: { fullAddress: boolean } = { fullAddres
     paid_by: actorOf(r.paid_by_id, r.paid_by_name, r.paid_by_kind),
     paid_at: r.paid_at,
     nte_override_open: Boolean(r.nte_override_open),
-    money_hold: moneyHoldOf(r),
+    money_hold: moneyHoldOf(r, quotes),
   };
 }
 
 /**
- * 0083 (#5 / #7): what holds approving or paying this request, for the
- * button's lock — the API asks the same questions (assertPaymentNotHeld) and
- * raises the hold when the click comes. Only a waiting request is held.
+ * 0083 (#5 / #7), UAT T5: what holds approving or paying this request, for
+ * the button's lock — the API asks the same questions (assertPaymentNotHeld)
+ * and raises the hold when the click comes. `quotes` carries the approved
+ * quote's figures when the caller read them (the queues do, in one batch);
+ * without them only the open holds and the NTE projection are drawn.
  */
-function moneyHoldOf(r: PaymentRow): string | null {
-  if (r.status !== 'requested' && r.status !== 'approved') return null;
-  if (r.over_quote_open) return 'On hold — paying more than the approved quote waits on a manager (Approvals › Money holds)';
-  const projected = projectedCost(moneyNum(r.wo_cost), Number(r.amount ?? 0));
-  const nte = moneyNum(r.wo_nte);
-  if (!r.nte_override_open && overNte(projected, nte, moneyNum(r.nte_covers))) {
-    return `Paying this takes Cost to ${money(projected)}, over the client NTE ${money(nte ?? 0)} — the click raises an NTE override for a manager`;
-  }
-  return null;
+function moneyHoldOf(r: PaymentRow, quotes?: QuoteFigures): string | null {
+  return paymentLockReason({
+    status: r.status,
+    overQuoteOpen: Boolean(r.over_quote_open),
+    nteOverrideOpen: Boolean(r.nte_override_open),
+    cost: moneyNum(r.wo_cost),
+    amount: Number(r.amount ?? 0),
+    nte: moneyNum(r.wo_nte),
+    nteCovers: moneyNum(r.nte_covers),
+    quote: quotes?.get(r.task_id) ?? null,
+    quoteCovers: moneyNum(r.quote_covers),
+  });
 }
 
-function mapListItem(r: PaymentRow, opts?: { fullAddress: boolean }): PaymentListItem {
+function mapListItem(r: PaymentRow, opts?: { fullAddress: boolean }, quotes?: QuoteFigures): PaymentListItem {
   return {
-    ...mapPayment(r, opts),
+    ...mapPayment(r, opts, quotes),
     title: r.title,
     client: r.client,
     wo_due: r.wo_due,
@@ -387,7 +421,8 @@ export async function listPaymentRequests(taskId: string): Promise<PaymentReques
     `${SELECT_SQL} WHERE pr.task_id = $1 AND pr.deleted_at IS NULL ORDER BY pr.created_at DESC, pr.id DESC`,
     [taskId],
   );
-  const items = res.rows.map((r) => mapPayment(r));
+  const quotes = await quoteFiguresFor(res.rows);
+  const items = res.rows.map((r) => mapPayment(r, undefined, quotes));
   return {
     items,
     total: items.length,
@@ -402,7 +437,7 @@ export async function listPaymentRequests(taskId: string): Promise<PaymentReques
 export async function getPaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
   const res = await query<PaymentRow>(`${SELECT_SQL} WHERE pr.id = $1 AND pr.deleted_at IS NULL`, [id]);
   if (res.rows.length === 0) throw notFound('Payment request not found');
-  return mapPayment(res.rows[0], { fullAddress: canProcessPayments(actor) });
+  return mapOne(res.rows[0], { fullAddress: canProcessPayments(actor) });
 }
 
 const STATUSES: PaymentRequestStatus[] = ['requested', 'approved', 'sent_to_yoda', 'paid', 'rejected'];
@@ -472,8 +507,9 @@ export async function listAllPaymentRequests(f: QueueFilters, viewer: ActingPrin
       LIMIT ${p.add(f.page_size)} OFFSET ${p.add((f.page - 1) * f.page_size)}`,
     p.values,
   );
+  const quotes = await quoteFiguresFor(rows.rows);
   return {
-    items: rows.rows.map((r) => mapListItem(r)),
+    items: rows.rows.map((r) => mapListItem(r, undefined, quotes)),
     total: Number(total.rows[0]?.n ?? 0),
     counts,
     page: f.page,
@@ -776,7 +812,7 @@ export async function createPaymentRequest(
   // (2 business days), owed by AP until a decision lands.
   await evaluateForTask(taskId);
 
-  return mapPayment(await loadRow(createdId), { fullAddress: canProcessPayments(actor) });
+  return mapOne(await loadRow(createdId), { fullAddress: canProcessPayments(actor) });
 }
 
 export interface PaymentEditInput {
@@ -850,7 +886,7 @@ export async function updatePaymentRequest(
       fields: Object.keys(input),
     });
   });
-  return mapPayment(await loadRow(id), { fullAddress: canProcessPayments(actor) });
+  return mapOne(await loadRow(id), { fullAddress: canProcessPayments(actor) });
 }
 
 const LABEL: Record<PaymentRequestStatus, string> = {
@@ -912,7 +948,7 @@ async function setStatus(
     });
   });
   await afterCost(row.task_id, costChanges);
-  return mapPayment(await loadRow(row.id), { fullAddress: canProcessPayments(actor) });
+  return mapOne(await loadRow(row.id), { fullAddress: canProcessPayments(actor) });
 }
 
 /** D2: 403 SELF_APPROVAL when the requester decides their own request;
@@ -1082,7 +1118,7 @@ export async function convertPaymentMethod(id: string, method: PaymentMethod, ac
       method,
     });
   });
-  return mapPayment(await loadRow(id), { fullAddress: true });
+  return mapOne(await loadRow(id), { fullAddress: true });
 }
 
 async function hardDelete(tx: Queryable, row: PaymentRow, reason: string, actor: ActingPrincipal): Promise<TaskChange[]> {
@@ -1148,7 +1184,7 @@ export async function deletePaymentRequest(id: string, reason: string, actor: Ac
     });
     await enqueueOutbox(tx, 'payment.delete_requested', 'payment_request', id, { task_id: row.task_id, reason: trimmed });
   });
-  return mapPayment(await loadRow(id), { fullAddress: canProcessPayments(actor) });
+  return mapOne(await loadRow(id), { fullAddress: canProcessPayments(actor) });
 }
 
 /** Admin confirms a pending delete (second person). */
@@ -1171,5 +1207,5 @@ export async function rejectDeletePaymentRequest(id: string, actor: ActingPrinci
     );
     await logPayment(tx, actor.id, row.task_id, 'payment_delete_rejected', null, { payment_request_id: id });
   });
-  return mapPayment(await loadRow(id), { fullAddress: true });
+  return mapOne(await loadRow(id), { fullAddress: true });
 }

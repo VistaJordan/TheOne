@@ -104,6 +104,9 @@ export async function listSignInCandidates(): Promise<
     `SELECT id, display_name AS name, email, role, is_super_admin
        FROM principal
       WHERE kind = 'human' AND status <> 'disabled'
+        -- UAT T1: test accounts sign in through the test form only (a session
+        -- without its password fingerprint is signed out by loadSession).
+        AND NOT (lower(COALESCE(email, '')) LIKE 'test+%@test.theone.local')
       ORDER BY is_super_admin DESC, display_name ASC`,
   );
   return res.rows;

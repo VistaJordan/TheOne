@@ -471,6 +471,16 @@ export function WorkOrdersPage() {
                   {scopeExtras.length > 0 ? `Yours + ${scopeExtras.join(', ')}` : 'Yours only'}
                 </span>
               )}
+              {/* UAT T4: a Margin % sort over too many rows used the quick
+                  approximation, not the figure in the column — say so. */}
+              {woQuery.data?.margin_sort === 'sql' && (
+                <span
+                  className="chip chip-outline"
+                  title="This list is longer than 500 work orders, so the Margin % sort uses Total Invoiced minus Cost. Filter the list down to sort on the margin shown in the column."
+                >
+                  Margin % sort approximate
+                </span>
+              )}
               {/* The comp's accent CTA leads the cluster (0041). Which fields
                   the form offers is configured in Admin › Custom fields. */}
               {can('work_orders', 'create') && (

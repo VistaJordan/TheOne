@@ -345,6 +345,12 @@ export function AppShell({
             none of the three there is nothing for it to find. */}
         {(can('work_orders', 'view') || can('quotes', 'view') || can('admin', 'view')) && <GlobalSearch />}
         <div className="topbar-actions">
+          {/* UAT T1 · signed in with a role's test account (never a super admin). */}
+          {user?.is_test_account && (
+            <span className="chip chip-sm chip-test-account" title="Signed in with a test account: the role's real rights, minus users and roles">
+              Test account
+            </span>
+          )}
           <ActorSwitcher />
           {/* 0068 — ask anything; answers are looked up as the person asking. */}
           {can(ASSISTANT_PERM_KEY, 'view') && <AssistantButton />}

@@ -218,7 +218,86 @@ than one file only by taking the next free number after the reserved ones.
   deployment (token is set). Status: open
 - **M18** Disable the two check-in automations on the UAT database.
 - **Michael K** Clear `is_super_admin` on the UAT database if set there.
-- Create one UAT test account per role (D6).
+- Create one UAT test account per role (D6) — now ticket **T1** below.
+
+Deployed 2026-10-16: `main` fast-forwarded to `0342e9f`, migrations 0083–0086
+applied to the UAT Neon database, production deployed from `app/` with the
+Vercel CLI (the-one-sandy.vercel.app, health ok).
+
+## Follow-up tickets (after deploy)
+
+Each ticket: what, why, acceptance, status. Work them top to bottom.
+
+- **T1 — Test sign-in accounts per role (replaces testing through Viewing as).**
+  Why: Viewing as stays read-only (D6), so UAT needs real sessions per role;
+  a real session gets the same scope, gates and audit as the role.
+  Build: a username + password form on the sign-in page (below "Sign in with
+  Microsoft"), one `principal` per role, username = role code (`atl`, `tl`,
+  `am`, `om`, `om_probation`, `senior_om`, `ops_coord`, `oa`, `ar`, `ap`,
+  `vr_officer`, `sales`, `hr`, the Exec guest code), display name "Test ATL"
+  etc., one shared password.
+  Guards: `TEST_ACCOUNTS_ENABLED=true` env turns the form and
+  `POST /api/auth/test-login` on (unset = form hidden, endpoint 404); never a
+  super admin; cannot change users or roles whatever the role says; 5 bad
+  tries per minute per IP; every sign-in logged `test_sign_in`; orange
+  "Test account" chip in the header; password stored as a hash, never in the
+  repo; accounts created by a migration or an admin script that the seed keeps
+  in step.
+  Open: password = "testing" (as asked) or a generated one (recommended);
+  include an `admin` test account or not (recommended: not).
+  Acceptance: signing in as `om` shows only the OM's work orders and refuses a
+  direct status change; signing in as `ap` can pay an approved request; with
+  the env unset the form is gone and the endpoint 404s; tests pin all guards.
+  Status: done (follow-up batch, uncommitted) — both choices made configuration: the
+  password is env `TEST_ACCOUNTS_PASSWORD` (set it to "testing" or a generated one; never
+  in the repo, compared in constant time over a sha256), admin only with
+  `TEST_ACCOUNTS_INCLUDE_ADMIN=true` (default off); the accounts are created on the
+  first successful test sign-in (no migration, no seed row — the email domain
+  `test.theone.local` marks them), so "created by a migration or an admin script" became
+  "created on the first sign-in" (audited `test_account_created`; an existing row's role
+  and status are never rewritten, a disabled one is refused); the Service account role
+  never has one. Each test session carries a fingerprint of its password (migration 0087,
+  `session.test_password_fp`): switching the feature off or rotating the password signs
+  every test session out
+- **T2 — Vercel Root Directory = `app`.** Why: every GitHub-triggered build
+  fails in ~7 s ("No workspaces found: --workspace=@theone/web"); production
+  only deploys from the CLI. Acceptance: a push to `main` builds and deploys
+  on its own. Status: open (Vercel project setting, Jordan)
+- **T3 — HR and "can't grant more than you hold".** Why: under #18 the empty
+  `hr` role cannot place a new hire on OM. Recommended: HR is exempt from
+  `GRANT_EXCEEDS_OWN` when assigning a role, never from `ROLE_EDIT_RESTRICTED`.
+  Status: open (decision)
+- **T4 — Margin % sort.** The list column shows the record's formula but sorts
+  by the SQL approximation. Acceptance: sorting matches the shown values.
+  Status: done (follow-up batch, uncommitted) — sorted in the API with the record's
+  figure over the whole filtered set (up to 500 rows, priced in one batched pass;
+  past that the sort falls back to the SQL figure and the page shows "Margin % sort
+  approximate"); select-all orders the same way; filters / group-by / dashboard cards
+  on Margin % still read the SQL figure
+- **T5 — Lock before the click.** The over-quote check on Payments and quote
+  rows in the Quotes list are refused only when clicked. Acceptance: both
+  draw the button locked with the reason. Status: done (follow-up batch, uncommitted) —
+  payment rows (queue and Payables tab) carry the over-quote projection, quotes batched;
+  Quotes list rows and the Approvals Quotes lane lock Approve for the submitter
+- **T6 — Audit search on hidden fields.** Free-text search still matches inside
+  values the viewer cannot see (the row comes back blanked). Acceptance: a
+  search never returns a row only because of a hidden value. Status: done (follow-up
+  batch, uncommitted)
+- **T7 — Browser pass, both themes.** Screenshot and fix: photo viewer, phase
+  bar, record bar, quote approval sheet, Client-safe column, Restrict to sites
+  switch, user-row locks, NTE increase requests tab, header chips, lazy Docs
+  page. Status: open
+- **T8 — End-to-end runs (live API, seeded local DB, then UAT with T1
+  accounts).** Quote approve / send by the submitter, client decision moving
+  the status, approval evidence, invoice send / Mark paid / Total Invoiced,
+  over-quote / bill-over-owed / PO-limit holds, GRANT_EXCEEDS_OWN and
+  ROLE_EDIT_RESTRICTED, intake submit and Accept, bulk edit, CSV import
+  refusal, Ecotrak adopting a client, Parts Required hold. Status: open
+- **T9 — "No visit logged" future work.** M11 treats only the three Sched
+  statuses as future; count by Scheduled Date when the filter language allows
+  "empty or before today". Status: done (follow-up batch, uncommitted) — no new
+  operator: (no visit ∧ live ∧ Scheduled Date empty) OR (… ∧ Scheduled Date ≤ today);
+  the three Sched statuses are no longer excluded
 
 ## Skipped (needs input from outside this session)
 

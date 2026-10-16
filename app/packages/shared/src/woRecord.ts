@@ -442,3 +442,68 @@ export interface SpaceViewerResponse {
   /** Assets at the site that have not been placed anywhere. */
   unplaced: SpaceView['asset_list'];
 }
+
+// ── UAT T4 · the list sorts Margin % on the figure it shows ──────────────────
+
+/** One row of a Margin % sort: `rank` is the order the SQL leaders give it
+    (the group, then the breach toggle — 1 for every row when neither is on),
+    `margin` the work-order record's own Margin % (null = nothing to measure). */
+export interface MarginSortRow {
+  id: string;
+  rank: number;
+  margin: number | null;
+}
+
+/** The ids in list order: rank first, then the margin in `dir` with empty
+    cells last either way (compileSort's NULLS LAST), ties in the order they
+    came (the SQL tie-breaker, WO #). Pure; the API sorts the whole filtered
+    set with it so page one is the true top of the list. */
+export function orderByMargin(rows: readonly MarginSortRow[], dir: 'asc' | 'desc'): string[] {
+  const sign = dir === 'asc' ? 1 : -1;
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => {
+      if (a.r.rank !== b.r.rank) return a.r.rank - b.r.rank;
+      const am = a.r.margin;
+      const bm = b.r.margin;
+      if (am === null || bm === null) {
+        if (am === null && bm === null) return a.i - b.i;
+        return am === null ? 1 : -1;
+      }
+      if (am !== bm) return (am - bm) * sign;
+      return a.i - b.i;
+    })
+    .map(({ r }) => r.id);
+}
+
+/** The record's money inputs, as the Cost card reads them (a part the viewer
+    may not open is null). */
+export interface RecordMarginInput {
+  /** Sum of the invoices sent or paid; null when there are none. */
+  invoiced: number | null;
+  /** The quote's grand total, whatever its status; null with no quote. */
+  quoteTotal: number | null;
+  /** The work order's own Cost field. */
+  cost: number | null;
+  /** Sum of the vendor bills that are not void; null when there are none. */
+  billsTotal: number | null;
+  /** Sum of the payment requests not rejected (soft-deleted ones excluded). */
+  paymentsRequested: number | null;
+}
+
+/** UAT T4 · THE record's margin formula, shared by the Cost card (woRecord
+    loadMoney) and the list's Margin % column and sort (recordMarginPct):
+    revenue = invoices sent, else the quote; job cost = Cost, else vendor
+    bills, else payment requests; margin = profit / revenue, one decimal. */
+export function recordMarginFrom(m: RecordMarginInput): {
+  revenue: number | null;
+  jobCost: number | null;
+  profit: number | null;
+  margin_pct: number | null;
+} {
+  const revenue = m.invoiced ?? m.quoteTotal;
+  const jobCost = m.cost ?? m.billsTotal ?? (m.paymentsRequested !== null && m.paymentsRequested > 0 ? m.paymentsRequested : null);
+  const profit = revenue !== null && jobCost !== null ? Math.round((revenue - jobCost) * 100) / 100 : null;
+  const margin_pct = profit !== null && revenue ? Math.round((profit / revenue) * 1000) / 10 : null;
+  return { revenue, jobCost, profit, margin_pct };
+}

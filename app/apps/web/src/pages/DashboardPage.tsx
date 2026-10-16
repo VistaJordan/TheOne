@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { NO_VISIT_EXCLUDED_STATUSES, NO_VISIT_STATUS_GROUPS, dashboardPermKey, type WoFilterSet } from '@theone/shared';
+import { dashboardPermKey, noVisitLoggedFilter, type WoFilterSet } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
 import { KpiRow } from '../components/KpiRow';
@@ -18,7 +18,6 @@ import {
 } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { filterUrl } from '../lib/woView';
-import { VISIT_TYPE_FIELD_KEY } from '../lib/woFieldSections';
 
 /** The at-a-glance page, in two views: Needs Attention (the default — the
     work-order hygiene problems worth fixing today, each card a link into the
@@ -35,16 +34,10 @@ type DashTab = 'attention' | 'main' | (string & {});
     hands to the list, so the card and the landing page can never disagree.
     'Visit Type' mirrors the latest visit (0021), so "not set" means no visit
     has been logged on the work order yet. */
-// M11 (UAT Wave D): only LIVE work is owed a visit — not done, invoiced,
-// closed or cancelled, and not booked for later (NO_VISIT_EXCLUDED_STATUSES).
-const VISIT_TYPE_UNSET: WoFilterSet = {
-  match: 'all',
-  rules: [
-    { field: VISIT_TYPE_FIELD_KEY, op: 'is_not_set' },
-    { field: 'status_group', op: 'in', value: [...NO_VISIT_STATUS_GROUPS] },
-    { field: 'status', op: 'not_in', value: [...NO_VISIT_EXCLUDED_STATUSES] },
-  ],
-};
+// M11 (UAT Wave D) / T9: only LIVE work is owed a visit — not done, invoiced,
+// closed or cancelled — and not one booked for a later day: the Scheduled
+// Date is empty or on / before today (noVisitLoggedFilter in shared).
+const VISIT_TYPE_UNSET: WoFilterSet = noVisitLoggedFilter();
 
 export function DashboardPage() {
   const { can } = useAuth();

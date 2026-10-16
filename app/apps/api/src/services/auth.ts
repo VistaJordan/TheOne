@@ -13,8 +13,10 @@ import { query } from '../db.js';
 import { config } from '../config.js';
 import { ApiError } from '../errors.js';
 import type { EntraIdentity } from '../auth/entra.js';
+import { testSessionAllowed } from '../lib/testAccountAuth.js';
 import { logAdminEvent } from './adminAudit.js';
 import {
+  isTestAccountEmail,
   normalizePermMap,
   permAllows,
   type PermAction,
@@ -44,6 +46,9 @@ export interface SessionPrincipal {
   roleLabel: string | null;
   kind: 'human' | 'service';
   isSuperAdmin: boolean;
+  /** UAT T1 · a test sign-in account (its email is on the test domain). Never
+      a super admin, and refused on every user or role write. */
+  isTestAccount: boolean;
   status: 'invited' | 'active' | 'disabled';
   /** 0062 · restricted to the sites listed in `principal_site`. Since 0084
       (M29) it is the `principal.site_restricted` flag, not "has rows": on
@@ -71,7 +76,7 @@ export interface AuthContext {
 // LEFT JOIN, not INNER: a principal with a NULL role must still resolve to a
 // session — it simply has no capabilities. An inner join would make such a row
 // unable to sign in at all, which is a confusing way to express "no role yet".
-const PRINCIPAL_COLUMNS = `
+export const PRINCIPAL_COLUMNS = `
   p.id, p.display_name, p.email, p.role, p.kind, p.is_super_admin, p.status,
   r.label AS role_label,
   COALESCE(r.permissions, '{}'::jsonb)          AS role_permissions,
@@ -81,9 +86,9 @@ const PRINCIPAL_COLUMNS = `
      FROM principal_client pc JOIN client c ON c.id = pc.client_id AND c.deleted_at IS NULL
     WHERE pc.principal_id = p.id) AS client_names`;
 
-const PRINCIPAL_FROM = `FROM principal p LEFT JOIN role r ON r.code = p.role`;
+export const PRINCIPAL_FROM = `FROM principal p LEFT JOIN role r ON r.code = p.role`;
 
-interface PrincipalRow {
+export interface PrincipalRow {
   id: string;
   display_name: string;
   email: string | null;
@@ -98,7 +103,12 @@ interface PrincipalRow {
   client_names: string[] | null;
 }
 
-function toPrincipal(r: PrincipalRow): SessionPrincipal {
+export function toPrincipal(r: PrincipalRow): SessionPrincipal {
+  // UAT T1: a test account is never a super admin, whatever its row says —
+  // the test sign-in writes false on every login, and this holds it in
+  // between (an admin flipping the switch on one changes nothing).
+  const isTest = isTestAccountEmail(r.email);
+  const superAdmin = r.is_super_admin && !isTest;
   // Normalised on the way in so a hand-edited or half-written JSON value can
   // never make a gate throw — a malformed grant is simply not a grant.
   const perms: PermissionSet = {
@@ -108,7 +118,7 @@ function toPrincipal(r: PrincipalRow): SessionPrincipal {
   // A super admin holds every permission regardless of role — the two grants
   // are orthogonal (see 0005) — which `permAllows` bakes in via the last arg.
   const allow = (key: string, action: PermAction) =>
-    permAllows(perms, key, action, r.is_super_admin);
+    permAllows(perms, key, action, superAdmin);
   return {
     id: r.id,
     name: r.display_name,
@@ -116,12 +126,13 @@ function toPrincipal(r: PrincipalRow): SessionPrincipal {
     role: r.role,
     kind: r.kind,
     roleLabel: r.role_label,
-    isSuperAdmin: r.is_super_admin,
+    isSuperAdmin: r.is_super_admin && !isTest,
+    isTestAccount: isTest,
     status: r.status,
     // 0062 · a super admin is never restricted, whatever the table says.
-    siteRestricted: Boolean(r.site_restricted) && !r.is_super_admin,
+    siteRestricted: Boolean(r.site_restricted) && !superAdmin,
     // 0072 · a super admin sees everything already; the list is noise for them.
-    clients: r.is_super_admin ? [] : (r.client_names ?? []),
+    clients: superAdmin ? [] : (r.client_names ?? []),
     perms,
     can: {
       quoteEdit: allow('quotes', 'edit'),
@@ -293,15 +304,17 @@ async function enrolNewPrincipal(identity: EntraIdentity): Promise<SessionPrinci
 
 export async function createSession(
   principalId: string,
-  meta: { userAgent?: string; ip?: string },
+  meta: { userAgent?: string; ip?: string; testPasswordFp?: string | null },
 ): Promise<{ id: string; expiresAt: Date }> {
   const id = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + config.sessionTtlHours * 3600_000);
 
+  // UAT T1: a test-account session carries the fingerprint of the password it
+  // was issued under (migration 0087); every other session leaves it NULL.
   await query(
-    `INSERT INTO session (id, principal_id, expires_at, user_agent, ip)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [id, principalId, expiresAt.toISOString(), meta.userAgent ?? null, meta.ip ?? null],
+    `INSERT INTO session (id, principal_id, expires_at, user_agent, ip, test_password_fp)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [id, principalId, expiresAt.toISOString(), meta.userAgent ?? null, meta.ip ?? null, meta.testPasswordFp ?? null],
   );
 
   return { id, expiresAt };
@@ -310,6 +323,7 @@ export async function createSession(
 interface SessionRow extends PrincipalRow {
   session_id: string;
   impersonating_id: string | null;
+  test_password_fp: string | null;
 }
 
 /**
@@ -325,7 +339,7 @@ export async function loadSession(sessionId: string | undefined): Promise<AuthCo
   if (!sessionId) return null;
 
   const res = await query<SessionRow>(
-    `SELECT s.id AS session_id, s.impersonating_id, ${PRINCIPAL_COLUMNS}
+    `SELECT s.id AS session_id, s.impersonating_id, s.test_password_fp, ${PRINCIPAL_COLUMNS}
        FROM session s
        JOIN principal p ON p.id = s.principal_id
        LEFT JOIN role r ON r.code = p.role
@@ -340,6 +354,12 @@ export async function loadSession(sessionId: string | undefined): Promise<AuthCo
   if (!row) return null;
 
   const user = toPrincipal(row);
+  // UAT T1: a test account's session stands only while the feature is on and
+  // TEST_ACCOUNTS_PASSWORD is still the one it signed in with — switching the
+  // feature off or rotating the password signs every test session out. A
+  // test account reached any other way (the dev picker) has no fingerprint
+  // and is signed out too.
+  if (!testSessionAllowed(user.isTestAccount, row.test_password_fp, config.testAccounts?.password ?? null)) return null;
   let actingAs = user;
 
   if (row.impersonating_id) {

@@ -4,7 +4,10 @@
      entra   → the button starts the real Microsoft round trip
      bypass  → the button signs in as DEV_DEFAULT_EMAIL with no password; a
                footnote says so and can reveal the full account picker for
-               testing other roles */
+               testing other roles
+   UAT T1: in either mode, when the server has test accounts switched on
+   (/auth/me `test_accounts`), a small "Test account" form under the button
+   signs in as a role's test account (username = role code). */
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -12,7 +15,7 @@ import { useSearchParams } from 'react-router-dom';
 import { LOGO } from '../lib/brand';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon, IconSprite, type IconName } from '../components/Icon';
-import { devSignIn, listDevCandidates, startMicrosoftSignIn } from '../api/client';
+import { devSignIn, listDevCandidates, startMicrosoftSignIn, testSignIn } from '../api/client';
 import { initialsOf, roleLabel } from '../lib/actor';
 
 /** Who the Microsoft button signs in as under the dev bypass. Falls back to the
@@ -33,7 +36,7 @@ function landingFrom(params: URLSearchParams): string {
 }
 
 export function SignInPage() {
-  const { authMode, refresh, loading } = useAuth();
+  const { authMode, refresh, loading, testAccounts } = useAuth();
   const [params] = useSearchParams();
   const [busy, setBusy] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -178,6 +181,24 @@ export function SignInPage() {
           </>
         )}
 
+        {!loading && testAccounts && (
+          <TestAccountForm
+            busy={busy !== null}
+            onSignIn={async (username, password) => {
+              setBusy('test');
+              setLocalError(null);
+              try {
+                await testSignIn(username, password);
+                await refresh();
+                window.location.replace(landingFrom(params));
+              } catch (err) {
+                setLocalError((err as Error).message || 'Could not sign in with that test account.');
+                setBusy(null);
+              }
+            }}
+          />
+        )}
+
         {!loading && authMode === 'bypass' && (
           <>
             {/* Local bypass only: the account picker toggle. Nothing is said
@@ -231,6 +252,52 @@ export function SignInPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/** UAT T1 · the test-account sign-in: a role code and the shared test
+    password. Drawn only while the server says the feature is on. */
+function TestAccountForm({
+  busy,
+  onSignIn,
+}: {
+  busy: boolean;
+  onSignIn: (username: string, password: string) => void;
+}) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  return (
+    <form
+      className="signin-test"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (username.trim() && password) onSignIn(username.trim(), password);
+      }}
+    >
+      <span className="signin-test-title">Test account</span>
+      <input
+        className="signin-test-input"
+        aria-label="Test account username (a role code, such as om)"
+        placeholder="Username (role code, e.g. om)"
+        autoComplete="username"
+        autoCapitalize="none"
+        spellCheck={false}
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+      />
+      <input
+        className="signin-test-input"
+        type="password"
+        aria-label="Test account password"
+        placeholder="Password"
+        autoComplete="current-password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <button type="submit" className="signin-test-go" disabled={busy || !username.trim() || !password}>
+        {busy ? 'Signing in…' : 'Sign in with a test account'}
+      </button>
+    </form>
   );
 }
 

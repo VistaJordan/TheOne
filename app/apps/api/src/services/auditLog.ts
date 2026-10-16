@@ -10,11 +10,11 @@
 //
 // Read-only on purpose: the log is append-only, and this module never writes.
 
-import { auditTimestampET } from '@theone/shared';
+import { REDACTABLE_CORE_KEYS, auditTimestampET } from '@theone/shared';
 import { query } from '../db.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { toCsv } from './woBulk.js';
-import { redactActivityValues, type Allow } from './permissions.js';
+import { activityValuesVisible, redactActivityValues, type Allow } from './permissions.js';
 
 export interface AuditLogFilters {
   /** Inclusive start / end days, 'YYYY-MM-DD'. */
@@ -66,7 +66,21 @@ interface Row {
   created_at: string;
 }
 
-function buildWhere(f: Omit<AuditLogFilters, 'limit' | 'offset'>): { sql: string; params: unknown[] } {
+/**
+ * The WHERE clause of the audit list and its export. UAT T6: the free-text
+ * search may match a row by its WO #, field name or entity, but its before /
+ * after VALUES only on a row about no field, about something that is not a
+ * catalogue field (status moves, visits, money records — activityFieldKey
+ * names no field for them), or about a field on `visibleFields`, the reader's
+ * allow-list. An allow-list, not a deny-list: a `fields.*` key nobody defined
+ * (a deleted field_def) or a promoted core column the reader may not see is
+ * never on it, so its values are never searched. Pure (exported for the
+ * tests): it only builds SQL text and parameters.
+ */
+export function buildAuditWhere(
+  f: Omit<AuditLogFilters, 'limit' | 'offset'>,
+  visibleFields: readonly string[],
+): { sql: string; params: unknown[] } {
   const where: string[] = ['TRUE'];
   const params: unknown[] = [];
   const add = (v: unknown) => {
@@ -80,13 +94,31 @@ function buildWhere(f: Omit<AuditLogFilters, 'limit' | 'offset'>): { sql: string
   if (f.field) where.push(`a.field = ${add(f.field)}`);
   if (f.q) {
     const h = add(`%${f.q}%`);
+    const visible = add([...visibleFields]);
+    const core = add([...REDACTABLE_CORE_KEYS]);
+    // 'fields.%' has no LIKE wildcard but the %: the dot and the word are literal.
+    const valueSearchable = `(a.field IS NULL OR a.field = ANY(${visible}::text[]) OR (a.field NOT LIKE 'fields.%' AND NOT (a.field = ANY(${core}::text[]))))`;
     where.push(
       `(t.wo_number ILIKE ${h} OR t.ext_name ILIKE ${h} OR COALESCE(a.field, '') ILIKE ${h}
         OR a.entity_type ILIKE ${h}
-        OR COALESCE(a.before::text, '') ILIKE ${h} OR COALESCE(a.after::text, '') ILIKE ${h})`,
+        OR (${valueSearchable} AND (COALESCE(a.before::text, '') ILIKE ${h} OR COALESCE(a.after::text, '') ILIKE ${h})))`,
     );
   }
   return { sql: `WHERE ${where.join(' AND ')}`, params };
+}
+
+/** UAT T6 · the field spellings among `candidates` this reader may see
+    (`visible` is activityValuesVisible bound to their grants). Pure. */
+export function visibleAuditFields(candidates: readonly string[], visible: (key: string) => boolean): string[] {
+  return candidates.filter((k) => visible(k));
+}
+
+/** Every catalogue field an audit row can name: the custom fields on file and
+    the promoted core columns M28 redacts. A `fields.*` key with no field_def
+    is not here, so the search never reads its values. */
+async function auditFieldCandidates(): Promise<string[]> {
+  const defs = await query<{ key: string }>(`SELECT DISTINCT key FROM field_def`);
+  return [...defs.rows.map((r) => `fields.${r.key}`), ...REDACTABLE_CORE_KEYS];
 }
 
 // entity_id is text since 0023 (phase groups are keyed by code), hence the cast.
@@ -120,7 +152,11 @@ export async function listAuditLog(
       caller can forget it. */
   allow: Allow,
 ): Promise<AuditLogPage> {
-  const { sql: whereSql, params } = buildWhere(f);
+  // T6: the allow-list is only needed when there is text to search.
+  const visible = f.q
+    ? visibleAuditFields(await auditFieldCandidates(), (k) => activityValuesVisible(allow, k))
+    : [];
+  const { sql: whereSql, params } = buildAuditWhere(f, visible);
 
   const rows = await query<Row>(
     `SELECT a.id, a.action, a.field, a.before, a.after, a.entity_type, a.entity_id,

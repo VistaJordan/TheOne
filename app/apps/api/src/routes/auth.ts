@@ -3,6 +3,7 @@
 //   GET  /auth/login          → 302 to Microsoft (or the dev picker)
 //   GET  /auth/callback       ← Microsoft returns here with ?code & ?state
 //   POST /auth/dev-login      dev bypass only; refuses in every other mode
+//   POST /auth/test-login     UAT T1 test accounts; 404 unless switched on
 //   GET  /auth/me             who am I, who am I acting as, what can I do
 //   POST /auth/logout
 //   POST /auth/impersonate    super admin only — the "Viewing as" switcher
@@ -39,6 +40,7 @@ import {
   type SessionPrincipal,
 } from '../services/auth.js';
 import { listSignInCandidates } from '../services/users.js';
+import { testAccountSignIn, testAccountsEnabled, testSessionFingerprint } from '../services/testAccounts.js';
 import { recordAuthEvent } from '../services/activity.js';
 
 /** Only ever redirect somewhere inside our own app — never to a supplied URL. */
@@ -59,6 +61,19 @@ function setSessionCookie(reply: FastifyReply, id: string, expiresAt: Date): voi
   });
 }
 
+/** The caller's address for the test sign-in's attempt limit. On Vercel the
+    socket is the platform's, and the first x-forwarded-for entry is the one
+    its edge wrote (a client-sent value does not survive it); anywhere else
+    the socket address, so a local caller cannot dodge the limit with a header. */
+function clientIp(req: FastifyRequest): string {
+  if (config.onVercel) {
+    const xff = req.headers['x-forwarded-for'];
+    const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.ip;
+}
+
 function publicPrincipal(p: SessionPrincipal) {
   return {
     id: p.id,
@@ -66,6 +81,8 @@ function publicPrincipal(p: SessionPrincipal) {
     email: p.email,
     role: p.role,
     is_super_admin: p.isSuperAdmin,
+    // UAT T1 · the header's amber "Test account" chip.
+    is_test_account: p.isTestAccount,
     status: p.status,
     // The resolved capability set (0005/0007), so the web can gate UI on the
     // same booleans the server enforces instead of guessing from the role code.
@@ -175,17 +192,41 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     return { user: publicPrincipal(principal) };
   });
 
+  // ── UAT T1 · test accounts ────────────────────────────────────────────────
+  // Works in either auth mode (that is the point: UAT on the Entra deployment
+  // needs one real session per role). services/testAccounts.ts holds the
+  // guards; the session and cookie are the ones every sign-in gets.
+  app.post('/auth/test-login', async (req, reply) => {
+    // Off = the route does not exist, whatever the body says.
+    if (!testAccountsEnabled()) throw new ApiError('NOT_FOUND', 'Route not found');
+    const { username, password } = parse(
+      z.object({ username: z.string().max(64), password: z.string().max(256) }),
+      req.body,
+    );
+    const principal = await testAccountSignIn({ username, password, ip: clientIp(req) });
+    // Bound to this password: rotating it, or switching the feature off,
+    // signs the session out (services/auth.ts loadSession, migration 0087).
+    const { id, expiresAt } = await createSession(principal.id, {
+      userAgent: req.headers['user-agent'],
+      ip: req.ip,
+      testPasswordFp: testSessionFingerprint(),
+    });
+    setSessionCookie(reply, id, expiresAt);
+    return { user: publicPrincipal(principal) };
+  });
+
   // ── Identity ──────────────────────────────────────────────────────────────
   // The one authenticated-ish route the guard lets through unguarded: the web
   // app calls it on boot to decide between the app and the sign-in screen, so
   // "not signed in" has to be an answer rather than an error.
   app.get('/auth/me', async (req: FastifyRequest) => {
     if (!req.auth) {
-      return { authenticated: false, auth_mode: config.authMode, user: null, acting_as: null };
+      return { authenticated: false, auth_mode: config.authMode, test_accounts: testAccountsEnabled(), user: null, acting_as: null };
     }
     return {
       authenticated: true,
       auth_mode: config.authMode,
+      test_accounts: testAccountsEnabled(),
       user: publicPrincipal(req.auth.user),
       acting_as: publicPrincipal(req.auth.actingAs),
       is_impersonating: req.auth.isImpersonating,

@@ -66,6 +66,9 @@ export interface ActingPrincipal {
       their work orders count as theirs under "Only theirs". Optional for the
       same reason as `siteRestricted`. */
   hasClients?: boolean;
+  /** UAT T1 · a test sign-in account: refused on user and role writes
+      (the Share dialog's role grants and per-person ticks included). */
+  isTestAccount?: boolean;
   /** The permission tree (0015) — what every gate resolves against. */
   perms: PermissionSet;
   /** Resolved from the `role` table, not from a hardcoded list (0005). */
@@ -88,6 +91,7 @@ export function actingFromPrincipal(p: SessionPrincipal): ActingPrincipal {
     isSuperAdmin: p.isSuperAdmin,
     siteRestricted: p.siteRestricted,
     hasClients: p.clients.length > 0,
+    isTestAccount: p.isTestAccount,
     perms: p.perms,
     can: p.can,
   };

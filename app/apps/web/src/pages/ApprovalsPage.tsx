@@ -1406,8 +1406,13 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
           {verb(
             'Approve',
             'check',
-            canApproveQuotes && !row.held,
-            canApproveQuotes ? NTE_HOLD : 'Requires quote approval rights',
+            // UAT T5b (D2): the submitter's Approve is locked before the click.
+            canApproveQuotes && !row.held && !own(d.item.submitted_by),
+            !canApproveQuotes
+              ? 'Requires quote approval rights'
+              : own(d.item.submitted_by)
+                ? 'You submitted this quote — someone else has to approve it (maker ≠ checker)'
+                : NTE_HOLD,
             () => onDecide('approve'),
             'primary',
           )}

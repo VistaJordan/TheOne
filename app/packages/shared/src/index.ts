@@ -1775,6 +1775,7 @@ export type ApiErrorCode =
   | 'FORBIDDEN'
   | 'CONFLICT'       // 409 — the state refuses the move
   | 'NOT_FOUND'
+  | 'TOO_MANY_REQUESTS' // 429 — too many failed tries (UAT T1 test sign-in)
   | 'INTERNAL';
 
 export interface ApiError {
@@ -2061,3 +2062,5 @@ export * from './access';
 export * from './workflow';
 // UAT round 1, Wave D (0086): one client list, dispatcher assignees, field validation, history fields.
 export * from './dataQuality';
+// UAT follow-up T1: test sign-in accounts, one per role.
+export * from './testAccounts';

@@ -56,6 +56,7 @@ import type { ActingPrincipal } from './activity.js';
 import { metricWidget } from './woMetrics.js';
 import { updateRole } from './roles.js';
 import { setUserOverrideView } from './users.js';
+import { testAccountAdminRefusal } from './testAccounts.js';
 import { WIDGET_NOT_AVAILABLE, widgetNamedFields } from '@theone/shared';
 import { allowFor, canViewField } from './permissions.js';
 
@@ -185,6 +186,9 @@ async function applySharing(
 ): Promise<void> {
   const rolesAsked = input.shared_roles !== undefined || input.shared_all !== undefined;
   if (!rolesAsked && input.shared_people === undefined) return;
+  // UAT T1: sharing writes role grants and per-person overrides — a user /
+  // role change a test account never makes, whatever its role grants.
+  if (viewer.isTestAccount) throw testAccountAdminRefusal();
   const ref = refOf(row);
   const key = dashboardPermKey(ref);
   const roles = await rolePerms();

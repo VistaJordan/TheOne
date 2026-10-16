@@ -2183,8 +2183,8 @@ nulls before / after (`redacted: true`); `/activity` and the detail's
 `recent_activity` drop such rows; `widgetFieldsVisible` (dashboards.ts)
 answers a card or a preview whose `widgetNamedFields` (value, group, time,
 filter and duration-leg fields) include one the VIEWER cannot see with
-`{error: 'not available'}`. Free-text audit search over before / after is
-not narrowed (a hidden value can still match a row it then withholds).
+`{error: 'not available'}`. Free-text audit search over before / after
+skips rows on a field the reader cannot see (UAT T6, below).
 **M29:** `principal.site_restricted` (0084, backfilled from principal_site)
 is what the session reads; on with an empty list = no sites and no work
 orders; `setSiteAccess(id, sites, actor, restricted)` writes the flag and the
@@ -2301,8 +2301,8 @@ Stored values are never re-checked. **M10:** `raiseNext` refuses (409
 `PM_ALREADY_RAISED`) while an occurrence on or after today already has its
 work order — `next_due_on` is "the date after the last one claimed", which is
 why every press used to raise another future date. **M11:** "No visit
-logged" counts open / active / pending work outside Invoiced Not Paid and the
-three Sched statuses (`NO_VISIT_*`). **M14:** Approve / Decline live only in
+logged" counts open / active / pending work outside Invoiced Not Paid
+(`NO_VISIT_*`; future work is read off the Scheduled Date since T9, below). **M14:** Approve / Decline live only in
 `PhotoReviewViewer` (full size, ← / → step, Esc closes); the review POST
 needs `viewed: true` (400 `ATTACHMENT_NOT_VIEWED`); the uploader may approve
 their own photo (no D2 on photos); approved photos show on the Client invoice
@@ -2350,10 +2350,103 @@ drops the registry modules from the main chunk (the test greps a built
 client · Record client decision (— approved / — declined). **Margin:** the
 list's `margin_pct` is the record's own figure (`recordMarginPct`: invoices
 sent, else the quote, over Cost / bills / payment requests), computed for the
-page's rows; ORDER BY still sorts on `MARGIN_PCT_SQL`. New error codes:
+page's rows; a Margin % sort uses the same figure since T4 (below). New error codes:
 `CLIENT_NOT_ON_FILE`, `IMPORT_UNKNOWN_CLIENT`, `ASSIGNEE_NOT_DISPATCHER`,
 `PM_ALREADY_RAISED`, `ATTACHMENT_NOT_VIEWED`, `TRASH_RESTORE_FORBIDDEN`,
 `CONTRACT_OVERLAP`.
+
+**UAT follow-ups (T1, T4–T6, T9)** (migration 0087, `docs/specs/uat-round-1.md`
+"Follow-up tickets", `tests/uat-followups.test.ts`). **T1 — test sign-in
+accounts per role:** env `TEST_ACCOUNTS_ENABLED=true` AND a non-blank
+`TEST_ACCOUNTS_PASSWORD` (never in the repo; `testAccountsFromEnv` in
+`config.ts`, `config.testAccounts`) switch on `POST /api/auth/test-login
+{username, password}` (public in `authGuard`) and `/auth/me`'s
+`test_accounts: true`, which draws a small **Test account** form under Sign in
+with Microsoft (`TestAccountForm` in `SignInPage.tsx`); either unset = no form
+and a 404. Works in entra and bypass alike, independent of DEMO_MODE
+(`TEST_ACCOUNTS_PASSWORD` sits in config-guards' `PUBLIC_OR_INTERNAL` with its
+reason, not in `DEMO_MODE_SECRET_VARS`). Username = a role code: every `role`
+row except `admin` (unless `TEST_ACCOUNTS_INCLUDE_ADMIN=true`) and `service`
+(`testAccountRoleAllowed`, shared `testAccounts.ts`). The password is compared
+in constant time over a sha256 of each side (`lib/testAccountAuth.ts`). In
+DEMO_MODE `assertDemoSeeded` is asked first, as the dev sign-in does. The FIRST
+success creates the principal (INSERT … ON CONFLICT DO NOTHING by email
+`test+<code>@test.theone.local` — `TEST_ACCOUNT_EMAIL_DOMAIN`, the address IS
+the marker, no principal column, no seed row), display name "Test <role
+label>", that role, active, `is_super_admin = false`, audited
+`test_account_created` (entity principal); after that the row is the admins'
+like any other — a later sign-in touches only `last_login_at`, never role or
+status, and a disabled one is refused with the same sentence
+(`test_sign_in_failed`, reason `disabled`). Then the ordinary `session` row +
+httpOnly cookie (`services/testAccounts.ts`), with **0087's
+`session.test_password_fp`** = `testPasswordFingerprint` (16 hex of a sha256)
+of the password it was issued under: `loadSession` signs a test account's
+session out (`testSessionAllowed`) when the feature is off, when the
+password has been rotated, or when the session has no fingerprint (the dev
+picker no longer lists test accounts for that reason). Guards: `toPrincipal` (services/auth.ts) reads
+`isTestAccount` off the email and forces `isSuperAdmin` false whatever the row
+says; `testAccountAdminWriteBlocked` in `authGuard` refuses every non-GET
+under `/api/admin/users`, `/api/admin/roles` and `/api/admin/portfolio/
+site-access` for a signed-in test account (`req.auth.user`) with 403
+`TEST_ACCOUNT_READ_ONLY_ADMIN` (`testAccountAdminRefusal()`, the one
+builder of that 403), and `applySharing` (dashboards Share dialog:
+role grants + per-person overrides) does the same; five failed tries per
+minute per IP (`AttemptLimiter`, in memory — per Vercel instance, the comment
+says so; the IP is the first x-forwarded-for on Vercel, `config.onVercel`,
+else the socket) then 429 `TOO_MANY_REQUESTS` (new `ApiErrorCode`,
+`details.code = TEST_LOGIN_RATE_LIMITED`); one refusal sentence for every
+wrong part ("Wrong test username or password", 401); every success logged
+`test_sign_in` (by the test principal, entity principal) and every failure
+`test_sign_in_failed` (by the 'Test sign-in' service principal, entity
+`test_sign_in`, keyed by the username as typed, with the reason) — no password
+anywhere. `/auth/me` carries `is_test_account`; the top bar draws an amber
+**Test account** chip (`.chip-test-account`, `--warn` tokens). The
+impersonation rules are untouched (a test account is never a super admin, so
+it cannot view as anyone). Caveats, on purpose: test principals are real
+principals, so they appear in the assignee pickers (OM and the other
+dispatcher tiers are dispatchers) and in notice fan-outs — that is how UAT
+exercises scope; their names start "Test ". The attempt limit is per server
+instance and per IP (on Vercel each warm instance counts alone), so on a
+public deployment the shared password must not be a dictionary word.
+**T4:** the record's margin is ONE formula, `recordMarginFrom` (shared
+`woRecord.ts`: revenue = invoices sent, else the quote; cost = Cost, else
+vendor bills, else payment requests), used by the Cost card (`loadMoney`)
+and by `recordMarginPct`, now batched — one read each of tasks, quotes
+(`quotes.quoteTotalsFor`, which prices like `getQuote`, contract multiplier
+included), payment requests, vendor bills and invoices for all the ids,
+gated by the viewer's grants as the record is. A sort on `margin_pct` up to
+`MARGIN_SORT_MAX` (500) rows runs on that figure (`marginOrderedIds`: the
+SQL ranks the leaders — group, breach — with `dense_rank()`,
+`orderByMargin` orders, NULLs last, ties by WO #; the page is read by id)
+and the reply says `margin_sort: 'record'`; past it the sort falls back to
+`MARGIN_PCT_SQL` and says `margin_sort: 'sql'`, which the Work Orders page
+shows as a "Margin % sort approximate" chip. `listMatchingIds` (select all,
+bulk) now orders exactly as the list (`listOrderSql` / `marginOrderedIds`;
+it used to be created-at), and the export goes through `listWorkOrders`.
+Filters, group-by and dashboard cards on Margin % still read
+`MARGIN_PCT_SQL`. **T5:** each
+payment row's `money_hold` is `paymentLockReason` (shared `moneyGuards.ts`):
+an open hold, the NTE projection, and now the over-quote projection against
+the approved quote's price and cost side less an approved over-quote
+`covers` (`quote_covers` in the row SQL); the queue and the work order's
+Payables read the quotes in one batch (`bindableQuoteFiguresFor` →
+`loadSectionsFor`, three queries per page; `listQuotes` uses the same batch
+now), and so does every single request the API returns — read, created,
+edited, approved, paid (`mapOne`). The quote SELECT is `QUOTE_BASE_SQL` +
+`quoteSql(where, tail)`; nothing edits the SQL text any more. `QuoteListItem.submitted_by` (the maker, `COALESCE(submitted_by,
+created_by)`) lets the Quotes list (`quoteSelfApprovalLock`) and the
+Approvals Quotes lane draw Approve locked for the submitter. **T6:**
+`buildAuditWhere(f, visibleFields)` (pure) matches the search text against
+before / after only on a row with no field, a non-catalogue field, or a field
+on the reader's ALLOW-list (`visibleAuditFields` over every `field_def` key
+and `REDACTABLE_CORE_KEYS`, `activityValuesVisible`) — a `fields.*` key with
+no field_def is never on it; WO #, field name and entity still match. **T9:**
+"No visit logged" is `noVisitLoggedFilter()` (shared `dataQuality.ts`): live
+groups, not Invoiced Not Paid (`NO_VISIT_EXCLUDED_STATUSES` lost the three
+Sched statuses), no Visit Type, and Scheduled Date empty OR on / before
+`today` — written distributed, (A ∧ empty) ∨ (A ∧ ≤ today), because the
+filter language has no brackets; no new operator. `is_not_set` on a custom
+field of any type now also counts `''` as blank (`compileRule`).
 
 ## Verify
 
@@ -2371,7 +2464,7 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   runs it and `npm test` on every push; it is green only because
   `tests/setup.ts` sets the environment and `config.ts` skips `app/.env` under
   `VITEST`, so never let a test depend on a developer's `.env`.
-- The vitest suite under `app/tests/` (64 files, 1120 tests on 2026-10-15) is
+- The vitest suite under `app/tests/` (65 files, 1168 tests on 2026-10-16) is
   the regression net: pure functions and source-text pins, no database and no
   network, so a SQL change still needs a seeded local Postgres, curl and
   headless Chromium screenshots of both themes before it is believed.

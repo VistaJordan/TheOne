@@ -19,6 +19,7 @@ import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ApiError } from '../errors.js';
 import { loadSession, SESSION_COOKIE, unauthorized, type AuthContext } from '../services/auth.js';
+import { testAccountAdminRefusal } from '../services/testAccounts.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -36,6 +37,9 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/logout',
   '/api/auth/dev-login',
   '/api/auth/dev-candidates',
+  // UAT T1: the test-account sign-in. 404 unless TEST_ACCOUNTS_ENABLED=true
+  // and TEST_ACCOUNTS_PASSWORD is set; services/testAccounts.ts guards it.
+  '/api/auth/test-login',
   // Rule 7.3.2: the email tool has no session; routes/webhooks.ts checks its
   // shared secret instead. Nothing else under /api/webhooks is public.
   '/api/webhooks/email-escalation',
@@ -132,6 +136,23 @@ export function impersonationWriteBlocked(method: string, path: string, routeUrl
   return !IMPERSONATION_WRITE_ALLOWLIST.has(`${m} ${path}`);
 }
 
+// UAT T1: a test account holds a real role, but changing who may do what is
+// never part of a test — whatever its role grants, every write to users and
+// roles is refused (the Share dialog's role grants and per-person ticks are
+// refused in services/dashboards.ts applySharing, which this path list cannot
+// see). Read through `req.auth.user`, the person signed in.
+const TEST_ACCOUNT_ADMIN_WRITE_PATHS: RegExp[] = [
+  /^\/api\/admin\/users(\/.*)?$/,
+  /^\/api\/admin\/roles(\/.*)?$/,
+  /^\/api\/admin\/portfolio\/site-access(\/.*)?$/,
+];
+/** Pure: is this request a user / role write a test account may not make? */
+export function testAccountAdminWriteBlocked(method: string, path: string): boolean {
+  if (READ_METHODS.has(method.toUpperCase())) return false;
+  const p = decodedPath(path);
+  return TEST_ACCOUNT_ADMIN_WRITE_PATHS.some((re) => re.test(p));
+}
+
 /** The PATH only — a query string must never widen (or narrow) an allowlist. */
 function pathOf(req: FastifyRequest): string {
   return req.url.split('?')[0].replace(/\/+$/, '') || '/';
@@ -156,6 +177,9 @@ export default fp(async function authGuard(app: FastifyInstance) {
     if (!auth) throw unauthorized();
     if (auth.isImpersonating && impersonationWriteBlocked(req.method, path, req.routeOptions?.url)) {
       throw new ApiError('FORBIDDEN', IMPERSONATION_READ_ONLY_MESSAGE, { code: 'IMPERSONATION_READ_ONLY' });
+    }
+    if (auth.user.isTestAccount && testAccountAdminWriteBlocked(req.method, path)) {
+      throw testAccountAdminRefusal();
     }
   });
 });

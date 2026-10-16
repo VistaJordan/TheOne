@@ -604,8 +604,10 @@ function compileRule(f: ResolvedField, rule: FilterRule, p: Params): string {
   // blank cells, and does not care whether the export wrote NULL or ''.
   if (rule.op === 'is_set' || rule.op === 'is_not_set') {
     const e = exprFor(f, p, f.custom);
+    // A custom field of any type is text in the bag, so '' is a blank there
+    // too (UAT T9: an emptied Scheduled Date is "not set", not "not a date").
     const blank =
-      f.type === 'text' || f.type === 'select' ? `${e} IS NULL OR ${e} = ''` : `${e} IS NULL`;
+      f.type === 'text' || f.type === 'select' || f.custom ? `${e} IS NULL OR ${e} = ''` : `${e} IS NULL`;
     return rule.op === 'is_set' ? `NOT (${blank})` : `(${blank})`;
   }
 

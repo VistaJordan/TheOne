@@ -170,12 +170,11 @@ describe('M10 — Raise now raises the upcoming occurrence once', () => {
 // ── M11 · No visit logged ─────────────────────────────────────────────────────
 
 describe('M11 — "No visit logged" counts live work only', () => {
-  it('excludes done / closed groups, the billing status filed as active and the scheduled ones', () => {
+  it('excludes done / closed groups and the billing status filed as active (T9: future work by Scheduled Date, tests/uat-followups.test.ts)', () => {
     expect(NO_VISIT_STATUS_GROUPS).toEqual(['open', 'active', 'pending']);
     expect(NO_VISIT_EXCLUDED_STATUSES).toContain('Invoiced Not Paid');
-    expect(NO_VISIT_EXCLUDED_STATUSES).toContain('Job Sched');
     const dash = read('apps', 'web', 'src', 'pages', 'DashboardPage.tsx');
-    expect(dash).toContain("{ field: 'status_group', op: 'in', value: [...NO_VISIT_STATUS_GROUPS] }");
+    expect(dash).toContain('noVisitLoggedFilter()');
   });
 });
 
@@ -426,7 +425,7 @@ describe('L5 — the BRD / SOP registry is served, not bundled', () => {
     if (!existsSync(dist)) return;
     const main = readdirSync(dist).filter((n) => /^index-.*\.js$/.test(n));
     // A sentence that lives only in the registry (docs/brd/insight.ts).
-    const sentence = 'work orders whose Visit Type is not set';
+    const sentence = 'whose Visit Type is not set and whose Scheduled Date is empty';
     expect(JSON.stringify(docsContent())).toContain(sentence);
     for (const n of main) expect(readFileSync(join(dist, n), 'utf8').includes(sentence), n).toBe(false);
   });

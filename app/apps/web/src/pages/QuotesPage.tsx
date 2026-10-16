@@ -11,7 +11,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import type { QuoteStatus } from '@theone/shared';
+import { quoteSelfApprovalLock, type QuoteStatus } from '@theone/shared';
 import { ApiRequestError, listQuotes } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
@@ -41,7 +41,7 @@ export function QuotesPage() {
   const navigate = useNavigate();
   const quotesQuery = useQuery({ queryKey: ['quotes'], queryFn: listQuotes, retry: 0 });
   // 0053 · BRD §6.4: approve or decline from the sidebar list, not only the builder.
-  const { can } = useAuth();
+  const { can, actingAs } = useAuth();
   const canApprove = can('quotes', 'approve');
 
   const items = useMemo(() => quotesQuery.data?.items ?? [], [quotesQuery.data]);
@@ -182,7 +182,14 @@ export function QuotesPage() {
                     <td className="col-nte num">{q.grand_total == null ? '—' : usd(q.grand_total)}</td>
                     <td className="col-date">{numericDate(q.updated_at) ?? '—'}</td>
                     <td className="rcv-action-td">
-                      <QuoteDecision woNumber={q.wo_number} status={q.status} canApprove={canApprove} size="row" />
+                      <QuoteDecision
+                        woNumber={q.wo_number}
+                        status={q.status}
+                        canApprove={canApprove}
+                        // UAT T5b (D2): the submitter sees Approve locked with the reason.
+                        lockReason={quoteSelfApprovalLock(q.submitted_by, actingAs?.id, actingAs?.is_super_admin ?? false)}
+                        size="row"
+                      />
                       <Link
                         className="rcv-btn"
                         to={`${href}/print`}

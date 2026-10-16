@@ -79,6 +79,25 @@ export function demoModeConflict(env: Record<string, string | undefined>): strin
   return null;
 }
 
+/** UAT follow-up T1 — the test sign-in accounts (services/testAccounts.ts).
+    On only with TEST_ACCOUNTS_ENABLED=true AND a non-blank
+    TEST_ACCOUNTS_PASSWORD: the password lives in the environment, never in
+    the repo, so an enabled switch with no password is still off. Admin is
+    left out unless TEST_ACCOUNTS_INCLUDE_ADMIN=true. Independent of
+    DEMO_MODE on purpose (the demo already signs anyone in without a
+    password). Pure — reads the snapshot it is handed. */
+export function testAccountsFromEnv(env: Record<string, string | undefined>): TestAccountsConfig | null {
+  const on = (env.TEST_ACCOUNTS_ENABLED ?? '').trim().toLowerCase() === 'true';
+  const password = (env.TEST_ACCOUNTS_PASSWORD ?? '').trim();
+  if (!on || password === '') return null;
+  return { password, includeAdmin: (env.TEST_ACCOUNTS_INCLUDE_ADMIN ?? '').trim().toLowerCase() === 'true' };
+}
+
+export interface TestAccountsConfig {
+  password: string;
+  includeAdmin: boolean;
+}
+
 const NODE_ENV = str('NODE_ENV') ?? 'development';
 const IS_PRODUCTION = NODE_ENV === 'production';
 
@@ -164,6 +183,12 @@ export interface Config {
       Sites.Selected (or Files.ReadWrite.All) application permission. Null =
       no credentials; the Settings card says so. */
   sharepoint: { tenantId: string; clientId: string; clientSecret: string } | null;
+  /** UAT T1: the test sign-in accounts, or null when switched off (the
+      endpoint 404s and the sign-in page draws no form). Never logged. */
+  testAccounts: TestAccountsConfig | null;
+  /** Running on Vercel (VERCEL is set by the platform): the caller's IP is
+      the first x-forwarded-for entry, which Vercel's edge writes itself. */
+  onVercel: boolean;
 }
 
 export interface MailConfig {
@@ -322,6 +347,12 @@ function build(): Config {
     assistant: buildAssistant(),
     mail: buildMail(entra, demoMode),
     sharepoint: buildSharePoint(entra),
+    testAccounts: testAccountsFromEnv({
+      TEST_ACCOUNTS_ENABLED: process.env.TEST_ACCOUNTS_ENABLED,
+      TEST_ACCOUNTS_PASSWORD: process.env.TEST_ACCOUNTS_PASSWORD,
+      TEST_ACCOUNTS_INCLUDE_ADMIN: process.env.TEST_ACCOUNTS_INCLUDE_ADMIN,
+    }),
+    onVercel: str('VERCEL') !== undefined,
   };
 }
 

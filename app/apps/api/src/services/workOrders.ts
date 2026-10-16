@@ -24,6 +24,7 @@ import {
   describeEcotrakRefusal,
   isComputedWoColumn,
   allowedWoActions,
+  orderByMargin,
 } from '@theone/shared';
 import { ApiError } from '../errors.js';
 import { config } from '../config.js';
@@ -56,6 +57,10 @@ function phaseFor(statusName: string): Phase | null {
   return PHASE_BY_STATUS_NAME[statusName] ?? null;
 }
 
+/** UAT T4 · the most rows a Margin % sort prices with the record's figure;
+    past it the list falls back to the SQL approximation and says so. */
+export const MARGIN_SORT_MAX = 500;
+
 export interface ListFilters {
   status_group?: string;
   status_id?: string;
@@ -87,6 +92,9 @@ export interface WorkOrderListItemS5 extends WorkOrderListItem {
 
 export interface WorkOrderListResponseS5 extends Omit<WorkOrderListResponse, 'items'> {
   items: WorkOrderListItemS5[];
+  /** UAT T4 · on a Margin % sort: 'record' (the record's own figure) or
+      'sql' (too many rows — the Total Invoiced − Cost approximation). */
+  margin_sort?: 'record' | 'sql';
 }
 
 interface WoRow {
@@ -275,17 +283,39 @@ export async function listWorkOrders(
        ) ob ON true`
     : '';
 
-  // A grouped list has to sort by its group key first, or the buckets interleave.
-  const groupOrder = f.group_by ? `${await compileGroupExpr(f.group_by, p)} ASC NULLS LAST, ` : '';
-  const breachOrder = breachSort ? `(ob.tier IS NULL) ASC, ob.tier DESC, ob.due_at ASC, ` : '';
-  const orderSql = groupOrder + breachOrder + (await compileSort(f.sort ?? null, p));
-
-  const rows = await query<WoRow>(
-    `SELECT ${WO_SELECT}${selectSql} ${WO_FROM} ${breachJoin} ${whereSql}
-      ORDER BY ${orderSql}
-      LIMIT ${p.add(f.limit)} OFFSET ${p.add(f.offset)}`,
-    p.values,
-  );
+  // UAT T4: Margin % is the work-order record's own figure (recordMarginPct,
+  // the formula the Cost card uses), which SQL cannot compute — so up to
+  // MARGIN_SORT_MAX rows a Margin % sort is done HERE over the whole filtered
+  // set with that same figure (marginOrderedIds). Past it, the sort falls back
+  // to the SQL approximation (MARGIN_PCT_SQL: Total Invoiced − Cost) and the
+  // reply says so (`margin_sort: 'sql'`) for the page to show.
+  const marginSort = !!actor && f.sort?.field === 'margin_pct';
+  let rows: { rows: WoRow[] };
+  let pageMargins: Map<string, number | null> | null = null;
+  let marginSortMode: 'record' | 'sql' | undefined;
+  const ranked = marginSort && total <= MARGIN_SORT_MAX
+    ? await marginOrderedIds(f, actor as ActingPrincipal, whereSql, whereParams, breachSort ? breachJoin : null)
+    : null;
+  if (ranked) {
+    marginSortMode = 'record';
+    const pageIds = ranked.ids.slice(f.offset, f.offset + f.limit);
+    const got = await query<WoRow>(
+      `SELECT ${WO_SELECT}${selectSql} ${WO_FROM} ${breachJoin} ${whereSql} AND t.id = ANY(${p.add(pageIds)}::uuid[])`,
+      p.values,
+    );
+    const at = new Map(pageIds.map((id, i) => [id, i]));
+    rows = { rows: got.rows.sort((a, b) => (at.get(a.id) ?? 0) - (at.get(b.id) ?? 0)) };
+    pageMargins = ranked.margins;
+  } else {
+    if (marginSort) marginSortMode = 'sql';
+    const orderSql = await listOrderSql(f, p, breachSort);
+    rows = await query<WoRow>(
+      `SELECT ${WO_SELECT}${selectSql} ${WO_FROM} ${breachJoin} ${whereSql}
+        ORDER BY ${orderSql}
+        LIMIT ${p.add(f.limit)} OFFSET ${p.add(f.offset)}`,
+      p.values,
+    );
+  }
 
   // The Clock column is decorated with a SECOND, small query rather than folded
   // into the projection above: one `IN (…)` over the page's ids is cheaper than
@@ -313,12 +343,11 @@ export async function listWorkOrders(
 
   // UAT Wave D (margin): the Margin % column is the work order record's own
   // figure (woRecord.recordMarginPct: revenue = invoices sent, else the
-  // quote), not Total Invoiced — so the list and the record agree. Computed
-  // for the page's rows only; ORDER BY margin_pct still sorts on the SQL
-  // approximation (MARGIN_PCT_SQL).
+  // quote), not Total Invoiced — so the list and the record agree. A Margin %
+  // sort (T4, above) already priced every row; otherwise the page's rows.
   if (actor && (f.columns ?? []).includes('margin_pct') && items.length > 0) {
     const { recordMarginPct } = await import('./woRecord.js');
-    const margins = await recordMarginPct(items.map((i) => i.id), actor);
+    const margins = pageMargins ?? (await recordMarginPct(items.map((i) => i.id), actor));
     for (const it of items) {
       const v = margins.get(it.id) ?? null;
       it.custom = { ...(it.custom ?? {}), margin_pct: v === null ? null : String(v) };
@@ -331,7 +360,54 @@ export async function listWorkOrders(
     limit: f.limit,
     offset: f.offset,
     groups: f.group_by ? await groupCounts(f, whereSql, whereParams) : undefined,
+    // T4: present on a Margin % sort only — 'record' when it ran on the
+    // record's figure, 'sql' when the list was too long and it fell back.
+    ...(marginSortMode === 'sql' ? { margin_sort: 'sql' as const } : {}),
+    ...(marginSortMode === 'record' ? { margin_sort: 'record' as const } : {}),
   };
+}
+
+/** ORDER BY for a list read: the group key first (or the buckets
+    interleave), the breach toggle, then the requested sort. Shared by the
+    list and "select every row that matches" so both read in one order. */
+async function listOrderSql(f: Omit<ListFilters, 'limit' | 'offset'>, p: Params, breachSort: boolean): Promise<string> {
+  const groupOrder = f.group_by ? `${await compileGroupExpr(f.group_by, p)} ASC NULLS LAST, ` : '';
+  const breachOrder = breachSort ? `(ob.tier IS NULL) ASC, ob.tier DESC, ob.due_at ASC, ` : '';
+  return groupOrder + breachOrder + (await compileSort(f.sort ?? null, p));
+}
+
+/**
+ * T4 · every matching id in Margin % order on the record's own figure: the
+ * SQL ranks each row by the leaders (group, breach) with dense_rank, the
+ * margins come from one batched recordMarginPct, orderByMargin (shared)
+ * orders them (empty last, ties by WO #). The caller decides whether the set
+ * is small enough (MARGIN_SORT_MAX).
+ */
+async function marginOrderedIds(
+  f: Omit<ListFilters, 'limit' | 'offset'>,
+  actor: ActingPrincipal,
+  whereSql: string,
+  whereParams: unknown[],
+  breachJoin: string | null,
+): Promise<{ ids: string[]; margins: Map<string, number | null> }> {
+  const rp = new Params();
+  for (const v of whereParams) rp.add(v);
+  const leaders: string[] = [];
+  if (f.group_by) leaders.push(`${await compileGroupExpr(f.group_by, rp)} ASC NULLS LAST`);
+  if (breachJoin) leaders.push('(ob.tier IS NULL) ASC', 'ob.tier DESC', 'ob.due_at ASC');
+  const rankSql = leaders.length ? `dense_rank() OVER (ORDER BY ${leaders.join(', ')})` : '1';
+  const rankRes = await query<{ id: string; rank: number | string }>(
+    `SELECT t.id, ${rankSql} AS rank ${WO_FROM} ${breachJoin ?? ''} ${whereSql} ORDER BY t.wo_number ASC`,
+    rp.values,
+  );
+  const ranked = rankRes.rows.map((r) => ({ id: r.id, rank: Number(r.rank) }));
+  const { recordMarginPct } = await import('./woRecord.js');
+  const margins = await recordMarginPct(ranked.map((r) => r.id), actor);
+  const ids = orderByMargin(
+    ranked.map((r) => ({ ...r, margin: margins.get(r.id) ?? null })),
+    f.sort?.dir === 'asc' ? 'asc' : 'desc',
+  );
+  return { ids, margins };
 }
 
 /** SELECT fragment + alias→key map for the custom fields among `columns`. */
@@ -365,8 +441,20 @@ export async function listMatchingIds(
   actor?: ActingPrincipal,
 ): Promise<string[]> {
   const { sql: whereSql, p } = await buildListWhere(f, actor);
+  // T4 review: the same order as the list for the same view, so "select all"
+  // and what is built from it read the rows the way the table shows them —
+  // a Margin % sort on the record's figure while it is small enough, else
+  // the SQL order the list itself falls back to.
+  if (actor && f.sort?.field === 'margin_pct') {
+    const whereParams = [...p.values];
+    const n = await query<{ total: number | string }>(`SELECT COUNT(*)::int AS total ${WO_FROM} ${whereSql}`, whereParams);
+    if (Number(n.rows[0].total) <= MARGIN_SORT_MAX) {
+      return (await marginOrderedIds(f, actor, whereSql, whereParams, null)).ids.slice(0, BULK_SELECTION_CAP);
+    }
+  }
+  const orderSql = await listOrderSql(f, p, false);
   const res = await query<{ id: string }>(
-    `SELECT t.id ${WO_FROM} ${whereSql} ORDER BY t.created_at DESC LIMIT ${p.add(BULK_SELECTION_CAP)}`,
+    `SELECT t.id ${WO_FROM} ${whereSql} ORDER BY ${orderSql} LIMIT ${p.add(BULK_SELECTION_CAP)}`,
     p.values,
   );
   return res.rows.map((r) => r.id);

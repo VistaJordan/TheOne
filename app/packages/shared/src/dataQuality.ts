@@ -12,6 +12,7 @@
 import { VALIDATION_CODE } from './moneyGuards';
 import { US_STATE_CODES } from './vendors';
 import { permAllows, type PermissionSet } from './permissions';
+import type { WoFilterRule, WoFilterSet } from './index';
 
 // ── #11 · one client list ────────────────────────────────────────────────────
 
@@ -137,21 +138,51 @@ export function pmAlreadyRaisedMessage(dueOn: string, woNumber: string | null): 
   return `The next occurrence (${dueOn}) is already raised${woNumber ? ` as ${woNumber}` : ''} — Raise now makes the upcoming work order once; the one after it goes out when it comes due`;
 }
 
-// ── M11 · "No visit logged" counts work that is live ─────────────────────────
+// ── M11 / T9 · "No visit logged" counts work that is owed a visit now ────────
 
 /** The statuses a work order can sit in and still be owed a visit is every
-    open / active / pending one EXCEPT these: the billing status filed under
-    active (Invoiced Not Paid), and the scheduled ones — a visit booked for
-    later is not a visit missing (the "future-scheduled" of M11). */
-export const NO_VISIT_EXCLUDED_STATUSES: readonly string[] = [
-  'Invoiced Not Paid',
-  'Assessment Sched',
-  'Job Sched',
-  'PM Sched',
-];
+    open / active / pending one EXCEPT the billing status filed under active
+    (Invoiced Not Paid). Since UAT follow-up T9 the Sched statuses are no
+    longer dropped wholesale: whether the visit is for later is the work
+    order's own Scheduled Date (`noVisitLoggedFilter`). */
+export const NO_VISIT_EXCLUDED_STATUSES: readonly string[] = ['Invoiced Not Paid'];
 
 /** The groups that are live work (not done, closed or cancelled). */
 export const NO_VISIT_STATUS_GROUPS: readonly string[] = ['open', 'active', 'pending'];
+
+/** The catalogue keys the card reads: the latest visit's type (0021 mirror —
+    unset = no visit logged yet) and the hand-typed Scheduled Date (0030). */
+export const NO_VISIT_VISIT_TYPE_FIELD = 'fields.Visit Type';
+export const NO_VISIT_SCHEDULED_FIELD = 'fields.Scheduled Date';
+
+/**
+ * T9 · the rows behind "No visit logged": live work with no visit, whose
+ * Scheduled Date is empty or on / before today — a visit booked for a later
+ * day is not a visit missing. The filter language has no grouping brackets,
+ * only AND binding tighter than OR, so "A and (empty or ≤ today)" is written
+ * distributed: (A and empty) OR (A and ≤ today). `today` is resolved in SQL
+ * on the database's clock (compileRule, 0049), so the count and the list it
+ * opens agree on the day.
+ */
+export function noVisitLoggedFilter(): WoFilterSet {
+  const live = (): WoFilterRule[] => [
+    { field: NO_VISIT_VISIT_TYPE_FIELD, op: 'is_not_set' },
+    { field: 'status_group', op: 'in', value: [...NO_VISIT_STATUS_GROUPS] },
+    { field: 'status', op: 'not_in', value: [...NO_VISIT_EXCLUDED_STATUSES] },
+  ];
+  const [first, ...rest] = live();
+  return {
+    match: 'all',
+    rules: [
+      first,
+      ...rest.map((r) => ({ ...r, join: 'and' as const })),
+      { field: NO_VISIT_SCHEDULED_FIELD, op: 'is_not_set', join: 'and' },
+      { ...live()[0], join: 'or' },
+      ...live().slice(1).map((r) => ({ ...r, join: 'and' as const })),
+      { field: NO_VISIT_SCHEDULED_FIELD, op: 'lte', value: 'today', join: 'and' },
+    ],
+  };
+}
 
 // ── M15 · what an integration's chip says ────────────────────────────────────
 

@@ -159,12 +159,33 @@ export const PLATFORM_PART: DocPart = {
           audit: ['user_permissions_set'],
         },
         {
+          name: 'Test accounts (UAT)',
+          what: 'For acceptance testing with real sessions per role (Viewing as stays read-only): when the server sets TEST_ACCOUNTS_ENABLED=true and TEST_ACCOUNTS_PASSWORD, the sign-in page shows a small Test account form under Sign in with Microsoft. The username is a role code (om, atl, ap, …) and the password the shared one; the role’s test person ("Test <role>", test+<code>@test.theone.local) is created or refreshed on the spot and gets an ordinary session, so its scope, gates and audit are the role’s. The header shows an amber Test account chip.',
+          value: 'Every role’s screens and refusals can be tried for real, writes included, without a Microsoft account per role.',
+          controls: [
+            { label: 'Sign in with a test account', does: 'Signs in as the test account of the role code typed.' },
+            { label: 'Test account', does: 'The header chip while signed in with one.' },
+          ],
+          rules: [
+            'Off (either variable unset) the form is not drawn and POST /api/auth/test-login answers 404. The password is never in the repository and never logged.',
+            'A test account is never a super admin (whatever its row says) and cannot change users or roles — Admin › Users, Admin › Roles, site access and the dashboard Share dialog answer 403 TEST_ACCOUNT_READ_ONLY_ADMIN — whatever its role grants.',
+            'Admin is left out unless TEST_ACCOUNTS_INCLUDE_ADMIN=true; the Service account role never has one.',
+            'The test person is created on the first sign-in (logged test_account_created); after that it is an ordinary row in Admin › Users — a later sign-in never changes its role or status, and a disabled one cannot sign in.',
+            'Each test session remembers which password it was issued under: switching test accounts off, or changing TEST_ACCOUNTS_PASSWORD, signs every test session out.',
+            'Five failed tries per minute from one IP, then every try is refused (429) until the minute is up; the count is per server instance.',
+          ],
+          audit: ['test_sign_in', 'test_sign_in_failed', 'test_account_created'],
+          brd: ['UAT-T1'],
+          since: 'UAT T1',
+        },
+        {
           name: 'Field-level visibility and redaction',
           what: 'Every work-order field is a row under its section (Overview, Finances, Dates, People, CICO, Payables, Invoicing, AR, QC, Integrations, …; the promoted columns under "Work order header", unknown custom fields under "More fields"). A field a role cannot view is removed from every payload the API sends (promoted columns nulled, hidden keys stripped, the whole money block hidden when the NTE is hidden; identity, number, title and status always ship); editing a field needs view and edit; a hidden field is absent from the catalogue the list, the filters and the exports offer.',
           value: 'Cost, profit and client NTE can be kept from roles that should not see them, including in exports and the assistant.',
           rules: [
             'UAT M13 (0084): every role but Admin, TL, ATL, AM, AR and AP has Cost, Profit, Total Invoiced and Discount hidden and no invoicing view; the computed Margin % column (and the margin on the money block and the Cost breakdown tab) stays visible.',
             'UAT M28: Admin › Audit keeps a row on a hidden field but withholds its values (the CSV too); the work-order feed leaves such rows out; a dashboard card that totals, groups, runs along or filters on a hidden field answers "not available".',
+            'UAT T6: the Admin › Audit search box never matches a hidden field’s before / after value, so a search cannot reveal that a hidden value exists.',
           ],
         },
         {

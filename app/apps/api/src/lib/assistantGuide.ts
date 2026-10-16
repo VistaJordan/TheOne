@@ -96,6 +96,8 @@ The sidebar: Dashboard, Pulse, Work Orders, Vendors, Sites, Assets, Clients, Quo
 
 **Viewing as** (super admins only): pick a person in the top-bar select to see the app exactly as they do; **Myself** ends it. It is read-only: every change answers "Viewing as another user is read-only. Stop viewing as them to make changes." (403 IMPERSONATION_READ_ONLY), and so do the work-order and vendor CSV exports, **Save as PDF**, the technician map and the client-updates CSV; the top bar shows a **Read-only** chip while it is on. The admin console shows what they would see too (an OM gets the OM's console).
 
+Test accounts (only when the server has them switched on, for acceptance testing): under **Sign in with Microsoft** the sign-in page shows a **Test account** form; the username is a role code (om, atl, ap, …) and the password is the shared test password the administrator gave out. It signs in as that role's test person with a real session, so everything behaves as for that role; the top bar shows an amber **Test account** chip. A test account is never a super admin and cannot change users or roles ("Test accounts cannot change users or roles, whatever their role allows."); after five wrong tries in a minute the form refuses until the minute is up.
+
 ${GUIDE_WORK_ORDERS}
 
 ${GUIDE_MODULES}

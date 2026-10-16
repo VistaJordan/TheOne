@@ -143,6 +143,50 @@ export function overQuoteReason(
   return null;
 }
 
+/** UAT T5 (lock before the click): what holds approving or paying one
+    payment request, for the button's lock — the same questions the API asks
+    at the click (assertPaymentNotHeld), answered from the row: an open hold
+    first, then the NTE projection, then the over-quote projection against
+    the approved quote's price and cost side (`quote`, null when there is no
+    approved quote) less what a manager already covered. Only a waiting
+    request (requested / approved) is ever held. */
+export interface PaymentLockInput {
+  status: string;
+  overQuoteOpen: boolean;
+  nteOverrideOpen: boolean;
+  cost: number | null;
+  amount: number;
+  nte: number | null;
+  nteCovers: number | null;
+  quote: { total: number | null; cost: number | null } | null;
+  quoteCovers: number | null;
+}
+
+export function paymentLockReason(r: PaymentLockInput): string | null {
+  if (r.status !== 'requested' && r.status !== 'approved') return null;
+  if (r.overQuoteOpen) return 'On hold — paying more than the approved quote waits on a manager (Approvals › Money holds)';
+  const projected = projectedCost(r.cost, r.amount);
+  if (!r.nteOverrideOpen && overNte(projected, r.nte, r.nteCovers)) {
+    return `Paying this takes Cost to ${usd(projected)}, over the client NTE ${usd(r.nte ?? 0)} — the click raises an NTE override for a manager`;
+  }
+  const over = overQuoteReason(projected, r.quote, r.quoteCovers);
+  if (over) return `${over} — the click raises an over-quote hold for a manager`;
+  return null;
+}
+
+/** UAT T5b: why Approve is locked on a quote row for this viewer — they
+    submitted it (D2) — or null. A super admin may decide their own. */
+export function quoteSelfApprovalLock(
+  makerId: string | null | undefined,
+  viewerId: string | null | undefined,
+  viewerIsSuperAdmin: boolean,
+): string | null {
+  if (!viewerId) return null;
+  return selfApprovalVerdict(makerId, viewerId, viewerIsSuperAdmin) === 'blocked'
+    ? 'You submitted this quote — someone else has to approve it (maker ≠ checker)'
+    : null;
+}
+
 /**
  * #20: what is still owed to vendors on a work order — the approved quote's
  * cost side less what already went out (paid payment requests) and the other

@@ -38,6 +38,8 @@ interface AuthState {
   loading: boolean;
   authenticated: boolean;
   authMode: AuthMode;
+  /** UAT T1 · the test-account form is switched on on this server. */
+  testAccounts: boolean;
   /** The human who signed in. Only the "Viewing as" switcher keys off this. */
   user: SessionUser | null;
   /** Who the app behaves as — differs from `user` only while impersonating. */
@@ -100,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       authenticated: me.authenticated,
       authMode: me.auth_mode,
+      testAccounts: Boolean(me.test_accounts),
       user: me.user,
       actingAs,
       isImpersonating: Boolean(me.is_impersonating),

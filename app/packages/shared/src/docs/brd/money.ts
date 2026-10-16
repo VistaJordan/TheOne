@@ -67,8 +67,9 @@ export const MONEY_PART: DocPart = {
         },
         {
           name: 'Quotes queue',
-          what: 'Lanes All · Drafts · Pending approval · Approved · Sent (status label "Sent to CMMS") · Client approved · Client declined; chips "Awaiting approval $…" / "Approved or sent $…"; columns Quote #, WO #, Client · Title, Quote status, Grand total, Updated, Document (Print / PDF); Approve & send and Decline (note required) on the row.',
+          what: 'Lanes All · Drafts · Pending approval · Approved · Sent (status label "Sent to CMMS") · Client approved · Client declined; chips "Awaiting approval $…" / "Approved or sent $…"; columns Quote #, WO #, Client · Title, Quote status, Grand total, Updated, Document (Print / PDF); Approve and Decline (note required) on the row.',
           value: 'Managers approve from the list; the quote-review obligation (4 business hours) is measured on this queue.',
+          rules: ['Maker ≠ checker, before the click (UAT T5): each row carries who submitted the quote, so the submitter sees Approve locked with "You submitted this quote — someone else has to approve it (maker ≠ checker)"; a super admin may approve their own. The Approvals inbox’s Quotes lane does the same.'],
           permissions: ['quotes view', 'quotes approve'],
         },
         {
@@ -138,6 +139,7 @@ export const MONEY_PART: DocPart = {
             'Every move is one conditional update on the status it was read in: two clicks on Mark paid leave one payment and add the amount to Cost once; the loser gets 409 PAYMENT_MOVED (UAT #25).',
             'Before Approve and Pay write anything (UAT #5 / #7): if Cost plus this amount would pass the NTE with no approved NTE override covering that cost, an NTE override is raised (or refreshed) and the click refused (409 NTE_OVERRIDE_REQUIRED); if it would pass the approved quote\'s price (a negative margin) or its cost side, an Over the approved quote hold is raised under Approvals › Money holds (409 OVER_QUOTE). The manager\'s approval covers that projected cost and the same click then goes through.',
             'Approve and Pay are held by an open NTE override or Money hold (409); Reject is not.',
+            'Lock before the click (UAT T5): each queue row carries the approved quote’s price and cost side (one batched read per page), so a payment that would pass the approved quote is drawn locked with the reason before anyone clicks, as the NTE projection already was; the click still raises the hold.',
             'Payment requests are not limited by approval tiers — the bands apply to vendor bills and client invoices.',
             'A request can be edited only while requested, by its requester or AP; a paid request cannot change method.',
             'Delete: a requested or rejected row is deleted at once by its requester or AP; an approved or paid row becomes "Pending delete" until an admin confirms (a second person) or keeps it; an admin deletes at once. Deleting is soft — the row and its reason stay in the audit trail.',

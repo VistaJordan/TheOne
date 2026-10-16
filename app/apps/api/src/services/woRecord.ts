@@ -25,6 +25,7 @@ import {
   geofenceCheck,
   minutesBetween,
   permAllows,
+  recordMarginFrom,
   siteEventPhase,
   statusBeforeCancel,
 } from '@theone/shared';
@@ -373,21 +374,59 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
 
 // ── Money ────────────────────────────────────────────────────────────────────
 
-/** UAT Wave D (margin): the record's Margin % — profit over the record's own
- *  revenue (invoices sent, else the quote) and job cost (Cost, else vendor
- *  bills, else payment requests) — for the list's `margin_pct` column, so the
- *  list and the work order's Cost card print the SAME figure. Read as the
- *  viewer, like the record (a part they may not open counts as absent). */
+/** UAT Wave D (margin) / T4: the record's Margin % — recordMarginFrom, the
+ *  one formula the work order's Cost card uses — for the list's `margin_pct`
+ *  column and its sort, so the list and the record print (and order by) the
+ *  SAME figure. Batched: one read per kind of money record for all the ids
+ *  (quotes through quotes.quoteTotalsFor, three queries), not a record load
+ *  per row. Read as the viewer, like the record: a part their grants do not
+ *  open (quotes, payments + vendor bills, invoicing) counts as absent. */
 export async function recordMarginPct(taskIds: readonly string[], actor: ActingPrincipal): Promise<Map<string, number | null>> {
+  const ids = [...new Set(taskIds)];
   const out = new Map<string, number | null>();
-  for (const id of taskIds) {
-    try {
-      const t = await loadTask(id);
-      const m = await loadMoney(id, t, actor);
-      out.set(id, m.summary.margin_pct);
-    } catch {
-      out.set(id, null);
-    }
+  if (ids.length === 0) return out;
+  const sumBy = (rows: { task_id: string; n: number | string | null; c: number | string }[]) =>
+    new Map(rows.filter((r) => Number(r.c) > 0).map((r) => [r.task_id, Number(r.n ?? 0)]));
+  const { quoteTotalsFor } = await import('./quotes.js');
+  const [tasks, quotes, payments, bills, invoices] = await Promise.all([
+    query<{ id: string; cost: unknown }>(`SELECT id::text AS id, fields->>$2 AS cost FROM task WHERE id = ANY($1::uuid[])`, [ids, COST_KEY]),
+    can(actor, 'quotes', 'view') ? quoteTotalsFor(ids) : Promise.resolve(new Map<string, number>()),
+    can(actor, 'payments', 'view')
+      ? query<{ task_id: string; n: string | null; c: string }>(
+          `SELECT pr.task_id::text AS task_id, sum(pr.amount) FILTER (WHERE pr.status <> 'rejected') AS n, count(*) AS c
+             FROM payment_request pr WHERE pr.task_id = ANY($1::uuid[]) AND pr.deleted_at IS NULL GROUP BY 1`,
+          [ids],
+        ).then((r) => sumBy(r.rows))
+      : Promise.resolve(new Map<string, number>()),
+    can(actor, 'payments', 'view')
+      ? query<{ task_id: string; n: string | null; c: string }>(
+          `SELECT b.task_id::text AS task_id, sum(b.total) FILTER (WHERE b.status <> 'void') AS n,
+                  count(*) FILTER (WHERE b.status <> 'void') AS c
+             FROM vendor_bill b WHERE b.task_id = ANY($1::uuid[]) GROUP BY 1`,
+          [ids],
+        ).then((r) => sumBy(r.rows))
+      : Promise.resolve(new Map<string, number>()),
+    can(actor, 'invoicing', 'view')
+      ? query<{ task_id: string; n: string | null; c: string }>(
+          `SELECT i.task_id::text AS task_id, sum(i.total) FILTER (WHERE i.status IN ('sent', 'paid')) AS n,
+                  count(*) FILTER (WHERE i.status IN ('sent', 'paid')) AS c
+             FROM invoice i WHERE i.task_id = ANY($1::uuid[]) GROUP BY 1`,
+          [ids],
+        ).then((r) => sumBy(r.rows))
+      : Promise.resolve(new Map<string, number>()),
+  ]);
+  const costOf = new Map(tasks.rows.map((t) => [t.id, num(t.cost)]));
+  for (const id of ids) {
+    out.set(
+      id,
+      recordMarginFrom({
+        invoiced: invoices.get(id) ?? null,
+        quoteTotal: quotes.get(id) ?? null,
+        cost: costOf.get(id) ?? null,
+        billsTotal: bills.get(id) ?? null,
+        paymentsRequested: payments.get(id) ?? null,
+      }).margin_pct,
+    );
   }
   return out;
 }
@@ -457,11 +496,15 @@ async function loadMoney(taskId: string, t: TaskRow, actor: ActingPrincipal): Pr
   // Revenue: what was actually billed, else what was quoted. Cost: the work
   // order's own Cost (rule: the final vendor cost), else the vendor bills,
   // else what has been asked to be paid out.
-  const revenue = invoiced ?? quoteTotal;
+  const { revenue, jobCost, profit, margin_pct } = recordMarginFrom({
+    invoiced,
+    quoteTotal,
+    cost,
+    billsTotal,
+    paymentsRequested: payments ? payments.total_requested : null,
+  });
   const revenueBasis = invoiced !== null ? 'Invoices sent to the client' : quoteTotal !== null ? 'The quote (nothing invoiced yet)' : 'Nothing quoted or invoiced yet';
-  const jobCost = cost ?? billsTotal ?? (payments && payments.total_requested > 0 ? payments.total_requested : null);
   const costBasis = cost !== null ? 'The work order’s Cost field' : billsTotal !== null ? 'Vendor bills (no Cost entered yet)' : jobCost !== null ? 'Payment requests (no Cost or bill yet)' : 'No cost recorded yet';
-  const profit = revenue !== null && jobCost !== null ? Math.round((revenue - jobCost) * 100) / 100 : null;
 
   const byType = new Map<string, { count: number; amount: number }>();
   if (quote) {
@@ -487,7 +530,7 @@ async function loadMoney(taskId: string, t: TaskRow, actor: ActingPrincipal): Pr
       payables_paid: payments ? payments.total_paid : null,
       vendor_bills: billsTotal,
       profit,
-      margin_pct: profit !== null && revenue ? Math.round((profit / revenue) * 1000) / 10 : null,
+      margin_pct,
       over_nte: nte !== null && cost !== null && cost > nte,
     },
     breakdown: {

@@ -448,6 +448,9 @@ export interface QuoteListItem {
   wo_emergency: boolean;
   /** Rules 7.3.x: the work order is flagged Escalated. */
   wo_escalated: boolean;
+  /** UAT T5b (D2): who submitted it (else who created it) — their Approve is
+      drawn locked (quoteSelfApprovalLock). */
+  submitted_by: string | null;
 }
 
 export interface QuoteListResponse {
@@ -918,6 +921,9 @@ export interface WorkOrderListItemV2 extends WorkOrderListItem {
 
 export interface WorkOrderListResponseV2 extends Omit<WorkOrderListResponse, 'items'> {
   items: WorkOrderListItemV2[];
+  /** UAT T4 · on a Margin % sort: 'record' = sorted on the figure shown;
+      'sql' = the list was too long and the sort used Total Invoiced − Cost. */
+  margin_sort?: 'record' | 'sql';
 }
 
 /** One bell entry. A notification is a TIER TRANSITION that was pinged once. */
@@ -1328,6 +1334,8 @@ export interface SessionUser {
   role: string | null;
   is_super_admin: boolean;
   status: UserStatus;
+  /** UAT T1 · a test sign-in account (the header's "Test account" chip). */
+  is_test_account?: boolean;
   /** Optional so the dev-candidates list (which has no session) still types. */
   can?: SessionCapabilities;
   /** The permission tree (0015): the role's grants + this person's overrides.
@@ -1341,6 +1349,8 @@ export interface SessionUser {
 export interface MeResponse {
   authenticated: boolean;
   auth_mode: AuthMode;
+  /** UAT T1 · the test-account form is switched on (TEST_ACCOUNTS_ENABLED + a password). */
+  test_accounts?: boolean;
   user: SessionUser | null;
   acting_as: SessionUser | null;
   is_impersonating?: boolean;
@@ -1439,6 +1449,14 @@ export function devSignIn(principalId: string): Promise<{ user: SessionUser }> {
   return request<{ user: SessionUser }>('/auth/dev-login', {
     method: 'POST',
     body: JSON.stringify({ principal_id: principalId }),
+  });
+}
+
+/** UAT T1 · sign in as a role's test account (404 while the feature is off). */
+export function testSignIn(username: string, password: string): Promise<{ user: SessionUser }> {
+  return request<{ user: SessionUser }>('/auth/test-login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
   });
 }
 

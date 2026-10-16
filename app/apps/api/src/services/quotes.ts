@@ -602,7 +602,10 @@ interface QuoteRow {
   maker_id: string | null;
 }
 
-const QUOTE_SQL = `
+/** The quote SELECT without a WHERE — every reader adds its own through
+    quoteSql, never by editing this text (UAT review: a string replace on the
+    SQL breaks silently the day the text it looks for moves). */
+export const QUOTE_BASE_SQL = `
   SELECT q.id::text                       AS id,
          q.task_id::text                  AS task_id,
          q.status, q.rev,
@@ -639,9 +642,19 @@ const QUOTE_SQL = `
     LEFT JOIN principal cb ON cb.id = q.created_by
     LEFT JOIN principal ab ON ab.id = q.approved_by
     LEFT JOIN principal sb ON sb.id = q.sent_by
-   WHERE q.task_id = $1
-   LIMIT 1
 `;
+
+/** QUOTE_BASE_SQL + `WHERE <where>` + an optional tail (ORDER BY / LIMIT).
+    `where` is SQL the caller wrote with `$n` placeholders — values always
+    travel as parameters. */
+export function quoteSql(where: string, tail = ''): string {
+  return `${QUOTE_BASE_SQL}   WHERE ${where}${tail ? `\n   ${tail}` : ''}\n`;
+}
+
+/** One work order's quote. */
+const QUOTE_BY_TASK_SQL = quoteSql('q.task_id = $1', 'LIMIT 1');
+/** The statuses a quote's price binds in (the NTE meter, the over-quote hold). */
+const BINDABLE_STATUS_SQL = "q.status IN ('approved','sent','client_approved')";
 
 interface SectionRow {
   id: string;
@@ -724,28 +737,42 @@ function toStringArray(v: unknown): string[] {
  * letters restart per round so "Option A" in round 2 is round 2's first option.
  */
 async function loadSections(quoteId: string, otMultiplier: number = OT_MULTIPLIER): Promise<QuoteSection[]> {
-  const secRes = await query<SectionRow>(
-    `SELECT s.id::text AS id, s.kind, s.name, s.narrative_reported, s.scope_lines,
+  const many = await loadSectionsFor([quoteId], new Map([[quoteId, otMultiplier]]));
+  return many.get(quoteId) ?? [];
+}
+
+/** UAT T5 · the same read for several quotes at once — two queries, however
+    many quotes — so a queue can price every row's quote without a round trip
+    per row. Keyed by quote id; a quote with no live section maps to []. */
+async function loadSectionsFor(
+  quoteIds: readonly string[],
+  multByQuote: Map<string, number>,
+): Promise<Map<string, QuoteSection[]>> {
+  const out = new Map<string, QuoteSection[]>();
+  if (quoteIds.length === 0) return out;
+  const secRes = await query<SectionRow & { quote_id: string }>(
+    `SELECT s.quote_id::text AS quote_id, s.id::text AS id, s.kind, s.name, s.narrative_reported, s.scope_lines,
             s.include_in_summary, s.position, s.round, s.locked, s.rejection_note,
             ${ISO('s.approved_at')} AS approved_at,
             ab.id::text AS approved_by_id, ab.display_name AS approved_by_name, ab.kind::text AS approved_by_kind
        FROM quote_section s
        LEFT JOIN principal ab ON ab.id = s.approved_by
-      WHERE s.quote_id = $1 AND s.deleted_at IS NULL
+      WHERE s.quote_id = ANY($1::uuid[]) AND s.deleted_at IS NULL
       ORDER BY CASE s.kind WHEN 'incurred' THEN 0 ELSE 1 END, s.round ASC, s.position ASC, s.id ASC`,
-    [quoteId],
+    [quoteIds],
   );
-  const lineRes = await query<LineRow>(
-    `SELECT ${LINE_COLUMNS}
+  const lineRes = await query<LineRow & { quote_id: string }>(
+    `SELECT s.quote_id::text AS quote_id, ${LINE_COLUMNS}
        FROM quote_line l
        JOIN quote_section s ON s.id = l.section_id
-      WHERE s.quote_id = $1 AND s.deleted_at IS NULL
+      WHERE s.quote_id = ANY($1::uuid[]) AND s.deleted_at IS NULL
       ORDER BY l.position ASC, l.id ASC`,
-    [quoteId],
+    [quoteIds],
   );
 
   const linesBySection = new Map<string, QuoteLine[]>();
   for (const l of lineRes.rows) {
+    const otMultiplier = multByQuote.get(l.quote_id) ?? OT_MULTIPLIER;
     const math: TotalsLineInput = {
       qty: Number(l.qty ?? 0),
       rate: Number(l.rate ?? 0),
@@ -775,17 +802,20 @@ async function loadSections(quoteId: string, otMultiplier: number = OT_MULTIPLIE
     else linesBySection.set(l.section_id, [line]);
   }
 
-  const optionIndexByRound = new Map<number, number>();
-  return secRes.rows.map((s) => {
+  // Option letters restart per quote and per round.
+  const optionIndex = new Map<string, number>();
+  for (const id of quoteIds) out.set(id, []);
+  for (const s of secRes.rows) {
     const lines = linesBySection.get(s.id) ?? [];
     const round = Number(s.round ?? 1);
     let label = 'Incurred';
     if (s.kind === 'option') {
-      const idx = optionIndexByRound.get(round) ?? 0;
-      optionIndexByRound.set(round, idx + 1);
+      const k = `${s.quote_id}:${round}`;
+      const idx = optionIndex.get(k) ?? 0;
+      optionIndex.set(k, idx + 1);
       label = `Option ${optionLetter(idx)}`;
     }
-    return {
+    out.get(s.quote_id)!.push({
       id: s.id,
       kind: s.kind,
       label,
@@ -801,8 +831,9 @@ async function loadSections(quoteId: string, otMultiplier: number = OT_MULTIPLIE
       rejection_note: s.rejection_note,
       lines,
       subtotal: Math.round(lines.reduce((sum, l) => sum + l.amount, 0) * 100) / 100,
-    };
-  });
+    });
+  }
+  return out;
 }
 
 /** The round being built / decided = the highest live round (1 when none). */
@@ -875,7 +906,7 @@ async function assertNotOwnQuote(taskId: string, actor: ActingPrincipal, verb: s
 
 /** The full quote payload for a work order, or null when none exists. */
 export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<Quote | null> {
-  const res = await query<QuoteRow>(QUOTE_SQL, [taskId]);
+  const res = await query<QuoteRow>(QUOTE_BY_TASK_SQL, [taskId]);
   if (res.rows.length === 0) return null;
   const q = res.rows[0];
 
@@ -983,7 +1014,7 @@ export async function quoteSalesTax(taskId: string): Promise<SalesTaxLookup> {
  */
 export async function getBindableQuoteTotal(taskId: string): Promise<number | null> {
   const res = await query<QuoteRow>(
-    `${QUOTE_SQL.replace('WHERE q.task_id = $1', "WHERE q.task_id = $1 AND q.status IN ('approved','sent','client_approved')")}`,
+    quoteSql(`q.task_id = $1 AND ${BINDABLE_STATUS_SQL}`, 'LIMIT 1'),
     [taskId],
   );
   if (res.rows.length === 0) return null;
@@ -998,10 +1029,65 @@ export async function getBindableQuoteTotal(taskId: string): Promise<number | nu
  * price (incurred + option + tax). Null when there is no quote.
  */
 export async function getQuoteTotal(taskId: string): Promise<number | null> {
-  const res = await query<QuoteRow>(QUOTE_SQL, [taskId]);
+  const res = await query<QuoteRow>(QUOTE_BY_TASK_SQL, [taskId]);
   if (res.rows.length === 0) return null;
   const sections = await loadSections(res.rows[0].id, multOf(res.rows[0]));
   return totalsFor(res.rows[0], sections).grand_total;
+}
+
+/**
+ * UAT T5 · the quote's price (grand total) and cost side for many work orders
+ * at once. Three queries whatever the count (the quotes, their sections,
+ * their lines), totalled by the same totalsFor as everything else.
+ * `bindableOnly` keeps the approved / sent / client-approved quotes (the
+ * Payments locks, as getBindableQuoteTotal); otherwise every quote, priced
+ * the way getQuote prices it — a quote with no snapshotted overtime
+ * multiplier takes its contract's, as getQuote does (one contract read per
+ * such quote only). A work order without one is absent from the map.
+ */
+async function quoteFiguresFor(
+  taskIds: readonly string[],
+  opts: { bindableOnly: boolean },
+): Promise<Map<string, { total: number | null; cost: number | null }>> {
+  const out = new Map<string, { total: number | null; cost: number | null }>();
+  const ids = [...new Set(taskIds)];
+  if (ids.length === 0) return out;
+  const res = await query<QuoteRow>(
+    quoteSql(opts.bindableOnly ? `q.task_id = ANY($1::uuid[]) AND ${BINDABLE_STATUS_SQL}` : 'q.task_id = ANY($1::uuid[])'),
+    [ids],
+  );
+  const mult = new Map<string, number>();
+  for (const r of res.rows) {
+    if (!opts.bindableOnly && !(r.ot_multiplier !== null && Number(r.ot_multiplier) > 0)) {
+      const match = await contractForTask(r.task_id, { contractId: r.contract_id });
+      mult.set(r.id, match?.rates.ot_multiplier ?? OT_MULTIPLIER);
+    } else {
+      mult.set(r.id, multOf(r));
+    }
+  }
+  const sections = await loadSectionsFor(res.rows.map((r) => r.id), mult);
+  for (const r of res.rows) {
+    const total = totalsFor({ ...r, ot_multiplier: mult.get(r.id) ?? multOf(r) }, sections.get(r.id) ?? []).grand_total;
+    const cost = !r.is_cost_tbd && r.total_cost !== null ? Number(r.total_cost) : null;
+    out.set(r.task_id, { total, cost });
+  }
+  return out;
+}
+
+/** The approved / sent / client-approved quote's figures per work order (T5). */
+export function bindableQuoteFiguresFor(
+  taskIds: readonly string[],
+): Promise<Map<string, { total: number | null; cost: number | null }>> {
+  return quoteFiguresFor(taskIds, { bindableOnly: true });
+}
+
+/** UAT T4 · every work order's quote grand total, whatever its status, as the
+    record's Cost card reads it (getQuote) — for the list's Margin %. */
+export async function quoteTotalsFor(taskIds: readonly string[]): Promise<Map<string, number>> {
+  const figures = await quoteFiguresFor(taskIds, { bindableOnly: false });
+  const out = new Map<string, number>();
+  for (const [id, f] of figures) if (f.total !== null) out.set(id, f.total);
+  return out;
 }
 
 /** One row of the sidebar "Quotes" list page (GET /api/quotes). */
@@ -1026,6 +1112,9 @@ export interface QuoteListItem {
   wo_emergency: boolean;
   /** Rules 7.3.x: the work order is flagged Escalated. */
   wo_escalated: boolean;
+  /** UAT T5b (D2): who sent it for approval, else who created it — the one
+      person whose Approve is drawn locked (quoteSelfApprovalLock). */
+  submitted_by: string | null;
 }
 
 /** A bag/column value as a finite number ("$1,610" → 1610), else null. */
@@ -1050,16 +1139,18 @@ export async function listQuotes(
   const p = new Params();
   const scope = viewer ? woScopeSql(viewer, p) : null;
   const res = await query<QuoteRow>(
-    QUOTE_SQL.replace(
-      'WHERE q.task_id = $1\n   LIMIT 1',
-      `WHERE t.deleted_at IS NULL ${scope ? `AND ${scope}` : ''}\n   ORDER BY q.updated_at DESC LIMIT ${p.add(limit)}`,
-    ),
+    quoteSql(`t.deleted_at IS NULL${scope ? ` AND ${scope}` : ''}`, `ORDER BY q.updated_at DESC LIMIT ${p.add(limit)}`),
     p.values,
   );
 
+  // One batched read of every row's sections (UAT T5), not one per row.
+  const sectionsByQuote = await loadSectionsFor(
+    res.rows.map((r) => r.id),
+    new Map(res.rows.map((r) => [r.id, multOf(r)])),
+  );
   const items: QuoteListItem[] = [];
   for (const r of res.rows) {
-    const sections = await loadSections(r.id, multOf(r));
+    const sections = sectionsByQuote.get(r.id) ?? [];
     const totals = totalsFor(r, sections);
     items.push({
       id: r.id,
@@ -1078,6 +1169,7 @@ export async function listQuotes(
       wo_cost: moneyNum(r.wo_cost),
       wo_emergency: Boolean(r.wo_emergency),
       wo_escalated: Boolean(r.wo_escalated),
+      submitted_by: r.maker_id,
     });
   }
   return { items, total: items.length };
