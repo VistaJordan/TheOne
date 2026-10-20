@@ -9,12 +9,13 @@
    different job from finding a thing anywhere. */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { listAdminUsers, listQuotes, listWorkOrders } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { useDebounced } from '../hooks/useDebounced';
 import { ADMIN_SECTIONS } from '../lib/adminSections';
+import { useLinkNav } from '../lib/linkNav';
+import type { Clickish } from '../lib/linkNav';
 import { Icon } from './Icon';
 import type { IconName } from './Icon';
 import { EmergencyBadge } from './EmergencyBadge';
@@ -79,7 +80,7 @@ function matches(q: string, ...fields: (string | null | undefined)[]): boolean {
 }
 
 export function GlobalSearch() {
-  const navigate = useNavigate();
+  const { go: openLink } = useLinkNav();
   // The acting principal: viewing as a dispatcher hides the admin pages here too.
   const { actingAs, can } = useAuth();
   const isAdmin = !!actingAs?.is_super_admin;
@@ -204,11 +205,13 @@ export function GlobalSearch() {
     return () => document.removeEventListener('mousedown', onDown);
   }, []);
 
-  const go = (hit: Hit) => {
+  // A middle-click or Ctrl / Cmd-click (or Ctrl / Cmd-Enter) opens the hit
+  // in a new tab (lib/linkNav.ts).
+  const go = (hit: Hit, e?: Clickish) => {
     setOpen(false);
     setQ('');
     inputRef.current?.blur();
-    navigate(hit.to);
+    openLink(hit.to, e);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -228,7 +231,7 @@ export function GlobalSearch() {
     }
     if (e.key === 'Enter' && hits[active]) {
       e.preventDefault();
-      go(hits[active]);
+      go(hits[active], e);
     }
   };
 
@@ -303,7 +306,15 @@ export function GlobalSearch() {
                         key={hit.key}
                         className={`gs-hit${i === active ? ' is-active' : ''}`}
                         onMouseEnter={() => setActive(i)}
-                        onClick={() => go(hit)}
+                        onClick={(e) => go(hit, e)}
+                        onAuxClick={(e) => {
+                          if (e.button !== 1) return;
+                          e.preventDefault();
+                          go(hit, e);
+                        }}
+                        onMouseDown={(e) => {
+                          if (e.button === 1) e.preventDefault();
+                        }}
                       >
                         <span className="gs-hit-icon" aria-hidden="true">
                           <Icon name={hit.icon} size={14} />

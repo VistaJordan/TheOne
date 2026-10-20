@@ -15,7 +15,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiRequestError,
@@ -58,7 +59,7 @@ const W9_THRESHOLD = 599;
 
 export function RequestPaymentPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
-  const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   const queryClient = useQueryClient();
   const invalidateObligations = useInvalidateObligations();
 
@@ -233,7 +234,7 @@ export function RequestPaymentPage() {
   const woHref = `/work-orders/${encodeURIComponent(woNumber)}`;
   const breadcrumb = (
     <nav className="crumbs" aria-label="Breadcrumb">
-      <button type="button" className="crumb-back" aria-label={`Back to ${woNumber}`} onClick={() => navigate(woHref)}>
+      <button type="button" className="crumb-back" aria-label={`Back to ${woNumber}`} {...linkTo(woHref)}>
         <Icon name="arrow-l" size={14} />
       </button>
       <Link className="crumb" to="/">Work Orders</Link>

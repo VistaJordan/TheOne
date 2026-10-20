@@ -21,7 +21,9 @@
  */
 
 import { Suspense, lazy, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { useLinkNav } from '../../lib/linkNav';
+import type { Clickish } from '../../lib/linkNav';
 import type { WidgetConfig, WidgetResult, DashboardWidget, WoFilterSet } from '@theone/shared';
 import { SOURCE_DRILL_PATH, WIDGET_SOURCE_NOUNS, formatBucket, widgetSubtitle } from '@theone/shared';
 import { Icon } from '../Icon';
@@ -92,7 +94,7 @@ function drillUrl(config: WidgetConfig, bucket?: { raw: string | null }): string
 }
 
 export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRemove }: WidgetCardProps) {
-  const navigate = useNavigate();
+  const { go } = useLinkNav();
   const { can } = useAuth();
   const fmt = useMemo(() => formatter(widget.config), [widget.config]);
   // 0072 · a work-order card opens the list; without the list there is
@@ -125,11 +127,11 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
     return rows;
   }, [result, overTime, widget.config.bucket]);
 
-  const pick = (d: ChartDatum) => {
+  const pick = (d: ChartDatum, e?: Clickish) => {
     if (!drillable) return;
     // "Everything else" has no single value to filter on, so it opens the
     // card's own list rather than pretending to be a bucket.
-    navigate(d.name === EVERYTHING_ELSE ? drillUrl(widget.config) : drillUrl(widget.config, d));
+    go(d.name === EVERYTHING_ELSE ? drillUrl(widget.config) : drillUrl(widget.config, d), e);
   };
 
   const tools = (onEdit || onRemove) && (
@@ -255,7 +257,7 @@ export function WidgetCard({ widget, result, loading, boardMax = 0, onEdit, onRe
           {widget.kind === 'bar' ? (
             <Charts.Bars data={data} fmt={fmt} onPick={pick} />
           ) : widget.kind === 'line' ? (
-            <Charts.Line data={data} fmt={fmt} onPick={() => drillable && navigate(drillUrl(widget.config))} />
+            <Charts.Line data={data} fmt={fmt} onPick={(_d, e) => drillable && go(drillUrl(widget.config), e)} />
           ) : (
             <Charts.Donut data={data} fmt={fmt} onPick={pick} />
           )}

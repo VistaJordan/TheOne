@@ -13,7 +13,7 @@
    page simply IS that queue. The counts come from the same queries the
    pages themselves run (shared keys), so a tab never costs a second call. */
 
-import { useNavigate } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { useQuery } from '@tanstack/react-query';
 import { INTAKE_PERM_KEY, approvalSectionPermKey } from '@theone/shared';
 import { getApprovalCounts, listIntakeDrafts } from '../api/client';
@@ -25,7 +25,7 @@ export type IncomingTab = 'accept' | 'drafts';
 export const INCOMING_ACCEPT_PERM = approvalSectionPermKey('intake');
 
 export function IncomingTabs({ tab }: { tab: IncomingTab }) {
-  const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   const { can, actingAs } = useAuth();
   const showAccept = can(INCOMING_ACCEPT_PERM, 'view');
   const showDrafts = can(INTAKE_PERM_KEY, 'view');
@@ -57,7 +57,7 @@ export function IncomingTabs({ tab }: { tab: IncomingTab }) {
         role="tab"
         aria-selected={tab === 'accept'}
         className={`seg-btn${tab === 'accept' ? ' is-on' : ''}`}
-        onClick={() => navigate('/incoming')}
+        {...linkTo('/incoming')}
       >
         <Icon name="download" size={12} />
         To accept
@@ -70,7 +70,7 @@ export function IncomingTabs({ tab }: { tab: IncomingTab }) {
         role="tab"
         aria-selected={tab === 'drafts'}
         className={`seg-btn${tab === 'drafts' ? ' is-on' : ''}`}
-        onClick={() => navigate('/incoming/drafts')}
+        {...linkTo('/incoming/drafts')}
       >
         <Icon name="pencil" size={12} />
         Drafts

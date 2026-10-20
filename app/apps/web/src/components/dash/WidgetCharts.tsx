@@ -52,6 +52,14 @@ function CardTooltip({ active, payload, fmt }: TooltipProps & { fmt: (n: number)
     </div>
   );
 }
+/** Which button and keys a pick was made with: a middle-click or Ctrl / Cmd-click
+    opens the drill-down in a new tab (lib/linkNav.ts). */
+export type PickEvent = { button?: number; ctrlKey?: boolean; metaKey?: boolean };
+
+function datumOf(d: unknown): ChartDatum {
+  return (d as { payload: ChartDatum }).payload ?? (d as ChartDatum);
+}
+
 
 export function WidgetBars({
   data,
@@ -60,7 +68,7 @@ export function WidgetBars({
 }: {
   data: ChartDatum[];
   fmt: (n: number) => string;
-  onPick?: (d: ChartDatum) => void;
+  onPick?: (d: ChartDatum, e?: PickEvent) => void;
 }) {
   // Enough height for every bar to keep a readable row, and a floor so a
   // one-bar card does not collapse.
@@ -85,7 +93,9 @@ export function WidgetBars({
           dataKey="value"
           radius={[0, 4, 4, 0]}
           isAnimationActive={false}
-          onClick={(d: unknown) => onPick?.((d as { payload: ChartDatum }).payload ?? (d as ChartDatum))}
+          onClick={(d: unknown, _i: number, e?: PickEvent) => onPick?.(datumOf(d), e)}
+          // A middle-click opens the drill-down in a new tab (it fires no click).
+          onMouseUp={(d: unknown, _i: number, e?: PickEvent) => e?.button === 1 && onPick?.(datumOf(d), e)}
           label={{
             position: 'right',
             fill: 'var(--ink-2)',
@@ -109,7 +119,7 @@ export function WidgetDonut({
 }: {
   data: ChartDatum[];
   fmt: (n: number) => string;
-  onPick?: (d: ChartDatum) => void;
+  onPick?: (d: ChartDatum, e?: PickEvent) => void;
 }) {
   const total = data.reduce((n, d) => n + d.value, 0);
   return (
@@ -127,7 +137,9 @@ export function WidgetDonut({
             stroke="var(--chart-gap)"
             strokeWidth={2}
             isAnimationActive={false}
-            onClick={(d: unknown) => onPick?.((d as { payload: ChartDatum }).payload ?? (d as ChartDatum))}
+            onClick={(d: unknown, _i: number, e?: PickEvent) => onPick?.(datumOf(d), e)}
+            // A middle-click opens the drill-down in a new tab (it fires no click).
+            onMouseUp={(d: unknown, _i: number, e?: PickEvent) => e?.button === 1 && onPick?.(datumOf(d), e)}
           >
             {data.map((d) => (
               <Cell key={d.name} fill={d.color} cursor={onPick ? 'pointer' : 'default'} />
@@ -169,7 +181,7 @@ export function WidgetLine({
 }: {
   data: ChartDatum[];
   fmt: (n: number) => string;
-  onPick?: (d: ChartDatum) => void;
+  onPick?: (d: ChartDatum, e?: PickEvent) => void;
 }) {
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -205,7 +217,9 @@ export function WidgetLine({
           isAnimationActive={false}
           activeDot={{ r: 5, cursor: onPick ? 'pointer' : 'default' }}
           dot={{ r: 3, fill: 'var(--chart-1)', strokeWidth: 0 }}
-          onClick={(d: unknown) => onPick?.((d as { payload: ChartDatum }).payload ?? (d as ChartDatum))}
+          onClick={(d: unknown, e?: PickEvent) => onPick?.(datumOf(d), e)}
+          // A middle-click opens the drill-down in a new tab (it fires no click).
+          onMouseUp={(d: unknown, e?: PickEvent) => e?.button === 1 && onPick?.(datumOf(d), e)}
         />
       </AreaChart>
     </ResponsiveContainer>

@@ -293,6 +293,15 @@ input {
   transition: background 0.12s, color 0.12s;
 }
 
+/* The sidebar entries are real links (so a middle-click or Ctrl-click opens
+   a new tab); they keep the look they had as buttons. */
+a.side-item,
+a.side-subitem,
+a.side-flyout-item {
+  text-decoration: none;
+  cursor: pointer;
+}
+
 .side-subitem:hover {
   background: var(--chip);
   color: var(--ink);

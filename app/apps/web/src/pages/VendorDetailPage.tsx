@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   COMPLIANCE_STATUS_LABELS,
@@ -311,6 +312,7 @@ export function VendorDetailPage() {
   const [sp] = useSearchParams();
   const isNew = id === 'new';
   const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   const qc = useQueryClient();
 
   const meta = useQuery({ queryKey: ['vendors-meta'], queryFn: getVendorsMeta });
@@ -387,7 +389,7 @@ export function VendorDetailPage() {
 
   const crumbs = (
     <nav className="crumbs" aria-label="Breadcrumb">
-      <button type="button" className="crumb-back" aria-label="Back to Vendors" onClick={() => navigate('/vendors')}>
+      <button type="button" className="crumb-back" aria-label="Back to Vendors" {...linkTo('/vendors')}>
         <Icon name="arrow-l" size={14} />
       </button>
       <Link className="crumb" to="/vendors">Vendors</Link>
