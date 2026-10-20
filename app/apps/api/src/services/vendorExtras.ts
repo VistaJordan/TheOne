@@ -379,7 +379,7 @@ async function offerNext(taskId: string, settings: DispatchSettings, startedBy: 
       kind: 'dispatch',
       title: `No vendor took ${wo.rows[0]?.wo_number ?? 'the work order'}`,
       body: 'Every preferred vendor declined or did not answer. Assign one by hand.',
-      link: wo.rows[0] ? `/work-orders/${encodeURIComponent(wo.rows[0].wo_number)}?tab=people` : null,
+      link: wo.rows[0] ? `/work-orders/${encodeURIComponent(wo.rows[0].wo_number)}?tab=technicians` : null,
     });
     return null;
   }
@@ -440,7 +440,7 @@ export async function answerOffer(
   if (!o) throw notFound('That offer does not exist');
   if (o.status !== 'offered') throw conflict('That offer is no longer open');
   const settings = await getDispatchSettings();
-  const link = `/work-orders/${encodeURIComponent(o.wo_number)}?tab=people`;
+  const link = `/work-orders/${encodeURIComponent(o.wo_number)}?tab=technicians`;
   if (answer === 'accept') {
     if (o.blacklisted) throw conflict(`${o.vendor_name} is blacklisted and cannot take a work order`);
     if (o.current_vendor && o.current_vendor !== o.vendor_id) throw conflict('Another vendor was assigned to this work order in the meantime');

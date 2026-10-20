@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -24,19 +24,18 @@ import { ClientQuoteCard } from '../components/wo/ClientQuoteCard';
 import { InvoiceCard } from '../components/wo/InvoiceCard';
 import { VendorBillsCard } from '../components/wo/VendorBillsCard';
 import { PayablesFieldsCard, PaymentHistoryCard } from '../components/wo/PayablesCard';
-import { PeopleCard } from '../components/wo/PeopleCard';
+import { AssignmentHistoryCard, PeopleCard } from '../components/wo/PeopleCard';
 import { SuggestedVendorsCard } from '../components/wo/tech/SuggestedVendorsCard';
 import { TechniciansCard } from '../components/wo/tech/TechniciansCard';
 import { SiteCard } from '../components/wo/SiteCard';
 import { DatesCard } from '../components/wo/DatesCard';
 import { CicoCard } from '../components/wo/CicoCard';
 import { PartsCard } from '../components/wo/PartsCard';
-import { FlagsRow } from '../components/wo/FlagsRow';
 import { AllFieldsPanel } from '../components/wo/AllFieldsPanel';
 import { AuditTrail } from '../components/wo/AuditTrail';
 import { MessagesPanel } from '../components/wo/messages/MessagesPanel';
 import { CallsCard } from '../components/wo/calls/CallsCard';
-import { RecordBar, RecordRail, useWoRecord } from '../components/wo/record/RecordParts';
+import { EtaCard, RecordActions, RecordBar, RecordRail, ResponsibleVendorCard, useWoRecord } from '../components/wo/record/RecordParts';
 import { ChecklistTab, CostBreakdownTab, RelatedTab, TimelogTab } from '../components/wo/record/RecordTabs';
 import { JobPlanServicesCard, PermitsCard, TimeCard } from '../components/wo/maint/WoMaintCards';
 import { ConsumablesCard, DispatchCard } from '../components/wo/maint/WoVendorCards';
@@ -53,9 +52,11 @@ import { useAuth } from '../auth/AuthProvider';
 import { quoteSectionsHaveData, tabPermKey } from '@theone/shared';
 
 const TAB_IDS = [
-  'fields', 'money', 'payables', 'people', 'site', 'dates', 'cico', 'parts',
-  'flags', 'overview', 'messages', 'audit',
-  // 0064 · the record's own tabs.
+  'fields', 'money', 'payables', 'people', 'technicians', 'site', 'dates', 'cico', 'parts',
+  'overview', 'messages', 'audit',
+  // 0064 · the record's own tabs. Checklist (tasks) and Related have no button
+  // on the strip since 2026-10-20; a link to them (Maintenance › Work permits,
+  // a vendor's consumables) still opens them.
   'tasks', 'costs', 'timelog', 'related',
 ] as const;
 
@@ -65,6 +66,26 @@ const TAB_IDS = [
 const RAIL_TABS: readonly string[] = ['overview', 'tasks', 'costs', 'timelog', 'related'];
 
 type Tab = (typeof TAB_IDS)[number];
+
+/** 2026-10-20 · strip buttons that stand for a group of sub-tabs: Finances =
+    Finances · Payables · Cost breakdown, People = Our team · Technicians. Each
+    sub-tab keeps its own id, so ?tab= links and each tab's permission stay as
+    they were. */
+const TAB_GROUPS: { id: string; label: string; tabs: { id: Tab; label: string }[] }[] = [
+  { id: 'money', label: 'Finances', tabs: [
+    { id: 'money', label: 'Finances' },
+    { id: 'payables', label: 'Payables' },
+    { id: 'costs', label: 'Cost breakdown' },
+  ] },
+  { id: 'people', label: 'People', tabs: [
+    { id: 'people', label: 'Our team' },
+    { id: 'technicians', label: 'Technicians' },
+  ] },
+];
+
+/** The permission a tab is shown under: Technicians was part of People and
+    keeps People's grant. */
+const tabPerm = (t: Tab): string => tabPermKey(t === 'technicians' ? 'people' : t);
 
 const isTab = (v: string | null): v is Tab => TAB_IDS.includes(v as Tab);
 
@@ -79,13 +100,19 @@ export function WorkOrderDetailPage() {
   // 0015 · each tab is its own permission; a tab the acting principal may not
   // view is not drawn, and a link to it lands on the first one they may.
   const { can } = useAuth();
-  const visibleTabs = TAB_IDS.filter((t) => can(tabPermKey(t), 'view'));
+  const visibleTabs = TAB_IDS.filter((t) => can(tabPerm(t), 'view'));
   const show = (t: Tab) => visibleTabs.includes(t);
   const rawTab = searchParams.get('tab');
   const wanted: Tab = isTab(rawTab) ? rawTab : 'fields';
   const tab: Tab = show(wanted) ? wanted : (visibleTabs[0] ?? 'fields');
   const setTab = (t: Tab) =>
     setSearchParams(t === 'fields' ? {} : { tab: t }, { replace: true });
+  // A group's button lands on the first sub-tab the person may see, and reads
+  // as on while any of its sub-tabs is open.
+  const groupTabs = (id: string) => (TAB_GROUPS.find((g) => g.id === id)?.tabs ?? []).filter((x) => show(x.id));
+  const activeGroup = TAB_GROUPS.find((g) => g.tabs.some((x) => x.id === tab)) ?? null;
+  // What Cancel / Reopen / Resume could not do, said under the header.
+  const [recordNote, setRecordNote] = useState<string | null>(null);
 
   const woQuery = useQuery({
     queryKey: ['work-orders', 'detail', woNumber],
@@ -283,33 +310,26 @@ export function WorkOrderDetailPage() {
           obligations={obligations}
           onClockClick={revealObligations}
           quoteFilled={quoteQuery.data ? quoteSectionsHaveData(quoteQuery.data.quote?.sections) : null}
+          actions={<RecordActions woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} onNote={setRecordNote} />}
         />
 
-        {/* 0064 · what state the job is in, and what can be done to it. */}
-        <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+        {/* 0064 · what state the job is in. */}
+        <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} note={recordNote} />
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
           {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
-          {show('money') && <TabButton id="money" tab={tab} onSelect={setTab}>Finances</TabButton>}
+          {groupTabs('money').length > 0 && (
+            <GroupButton on={activeGroup?.id === 'money'} onSelect={() => setTab(groupTabs('money')[0].id)}>Finances</GroupButton>
+          )}
           {show('dates') && <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>}
           {show('cico') && <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>}
-          {show('people') && <TabButton id="people" tab={tab} onSelect={setTab}>People</TabButton>}
-          {show('payables') && <TabButton id="payables" tab={tab} onSelect={setTab}>Payables</TabButton>}
+          {groupTabs('people').length > 0 && (
+            <GroupButton on={activeGroup?.id === 'people'} onSelect={() => setTab(groupTabs('people')[0].id)}>People</GroupButton>
+          )}
           {show('site') && <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>}
           {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
-          {show('flags') && <TabButton id="flags" tab={tab} onSelect={setTab}>Flags</TabButton>}
           {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
-          {show('tasks') && (
-            <TabButton id="tasks" tab={tab} onSelect={setTab}>
-              Checklist
-              {recordQuery.data && recordQuery.data.checklist.length > 0 && (
-                <span className="seg-count">{recordQuery.data.checklist.filter((i) => i.done).length}/{recordQuery.data.checklist.length}</span>
-              )}
-            </TabButton>
-          )}
-          {show('costs') && <TabButton id="costs" tab={tab} onSelect={setTab}>Cost breakdown</TabButton>}
           {show('timelog') && <TabButton id="timelog" tab={tab} onSelect={setTab}>Timelog</TabButton>}
-          {show('related') && <TabButton id="related" tab={tab} onSelect={setTab}>Related</TabButton>}
           {show('messages') && (
             <TabButton id="messages" tab={tab} onSelect={setTab}>
               <Icon name="msg" size={12} />
@@ -327,6 +347,14 @@ export function WorkOrderDetailPage() {
         }`}
       >
         <div className="col-main">
+          {activeGroup && groupTabs(activeGroup.id).length > 1 && (
+            <div className="seg tabs wo-subtabs" role="tablist" aria-label={`${activeGroup.label} sections`}>
+              {groupTabs(activeGroup.id).map((x) => (
+                <TabButton key={x.id} id={x.id} tab={tab} onSelect={setTab}>{x.label}</TabButton>
+              ))}
+            </div>
+          )}
+
           {tab === 'overview' && (
             <div role="tabpanel" aria-label="Overview">
               {/* S5 — what is owed leads the panel: activity is context, a
@@ -435,8 +463,17 @@ export function WorkOrderDetailPage() {
           )}
 
           {tab === 'people' && (
-            <div role="tabpanel" aria-label="People">
+            <div role="tabpanel" aria-label="Our team">
               <PeopleCard wo={wo} />
+              {/* Every change of the Assignee: who made it and when. */}
+              <AssignmentHistoryCard wo={wo} />
+            </div>
+          )}
+
+          {tab === 'technicians' && (
+            <div role="tabpanel" aria-label="Technicians">
+              {/* 0064 · the one vendor answering for the job (was Assign vendor on the bar). */}
+              <ResponsibleVendorCard woId={wo.id} woNumber={wo.wo_number} />
               {/* 0057 · who has been hired onto the work order, and the map. */}
               <TechniciansCard wo={wo} />
               {/* 0069 · the top few vendors for this trade, location and client. */}
@@ -455,15 +492,15 @@ export function WorkOrderDetailPage() {
           )}
 
           {tab === 'cico' && (
-            <div role="tabpanel" aria-label="Check-in / check-out"><CicoCard wo={wo} /></div>
+            <div role="tabpanel" aria-label="Check-in / check-out">
+              {/* 0064 · when the technician is expected (was Add ETA on the bar). */}
+              <EtaCard woId={wo.id} woNumber={wo.wo_number} />
+              <CicoCard wo={wo} />
+            </div>
           )}
 
           {tab === 'parts' && (
             <div role="tabpanel" aria-label="Parts"><PartsCard wo={wo} /></div>
-          )}
-
-          {tab === 'flags' && (
-            <div role="tabpanel" aria-label="Flags"><FlagsRow wo={wo} /></div>
           )}
 
           {/* 0064 · the four tabs that read the record. */}
@@ -515,6 +552,15 @@ interface TabButtonProps {
   tab: Tab;
   onSelect: (t: Tab) => void;
   children: ReactNode;
+}
+
+/** A strip button that stands for a group of sub-tabs. */
+function GroupButton({ on, onSelect, children }: { on: boolean; onSelect: () => void; children: ReactNode }) {
+  return (
+    <button type="button" role="tab" aria-selected={on} className={`seg-btn${on ? ' is-on' : ''}`} onClick={onSelect}>
+      {children}
+    </button>
+  );
 }
 
 function TabButton({ id, tab, onSelect, children }: TabButtonProps) {

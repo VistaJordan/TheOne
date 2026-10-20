@@ -5,7 +5,11 @@
  *                   record and replaces it.
  *   RecordBar       under the header: what state the job is in (paused,
  *                   cancelled, an ETA, service completed, its tags, a site
- *                   event running) and the things a person can do to it.
+ *                   event running).
+ *   RecordActions   in the header: More (Pause, Tag, Complete service,
+ *                   Cancel / Reopen) and Save as PDF.
+ *   ResponsibleVendorCard, EtaCard   Assign vendor on People ›
+ *                   Technicians, Add ETA on CICO.
  *   RecordRail      the right rail: Responsibility · Location · Time · Cost.
  *   VisitLocation   on a visit: where the check-in happened, against the
  *                   site's boundary.
@@ -41,13 +45,11 @@ import {
   pauseWo,
   removeWoTag,
   reopenWo,
-  requestNteIncrease,
   resumeWo,
   setWoEta,
   setWoVendor,
   workOrderPdfUrl,
 } from '../../../api/client';
-import { downloadLinkProps } from '../../../lib/actor';
 import { feedTime } from '../../../lib/fields';
 import { useEscape } from '../../../lib/useEscape';
 import { Icon } from '../../Icon';
@@ -84,31 +86,18 @@ export function useRecordWrite<T>(woId: string, woNumber: string, fn: (arg: T) =
 }
 
 // ═══ The bar under the header ════════════════════════════════════════════════
+// The bar is the job's state chips only. Its buttons moved (2026-10-20): Pause,
+// Tag, Complete service and Cancel / Reopen into the header's More menu
+// (RecordActions), Save as PDF beside it, Assign vendor onto People ›
+// Technicians (ResponsibleVendorCard), Add ETA onto CICO (EtaCard). Increase NTE
+// was removed; requests already open are still decided on Cost breakdown and
+// in Approvals.
 
-type Dialog = 'vendor' | 'pause' | 'eta' | 'cancel' | 'reopen' | 'complete' | 'nte' | 'tag' | null;
-
-export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: string; record: WoRecord | undefined }) {
-  const [dialog, setDialog] = useState<Dialog>(null);
-  const [error, setError] = useState<string | null>(null);
-  const close = () => setDialog(null);
-  const fail = (fallback: string) => (e: unknown) => setError(errText(e, fallback));
-  const resume = useRecordWrite(woId, woNumber, () => resumeWo(woId));
-  // M31 · Cancel and Reopen move the status too; a refused move is said here.
-  const [moveNote, setMoveNote] = useState<string | null>(null);
-  const report = (r: WoRecord): WoRecord => {
-    const m = r.status_move;
-    setMoveNote(m && !m.moved && m.reason ? `Status not moved to ${m.status}: ${m.reason}` : null);
-    return r;
-  };
+export function RecordBar({ woId, woNumber, record, note }: { woId: string; woNumber: string; record: WoRecord | undefined; note?: string | null }) {
   const dropTag = useRecordWrite(woId, woNumber, (id: string) => removeWoTag(woId, id));
-  // 0073 · Save as PDF is for readers too: its own permission, not edit.
-  const canPdf = useCan()(WO_PDF_PERM_KEY, 'view');
   if (!record) return null;
   const s = record.state;
   const edit = record.can.edit;
-  // #15 (0085): Cancel / Reopen, Pause / Resume and Complete service are not
-  // offered to someone who must request status changes.
-  const lifecycle = record.can.lifecycle;
   const openNte = record.nte_requests.find((n) => n.status === 'open');
 
   return (
@@ -156,45 +145,108 @@ export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: 
           </span>
         ))}
       </div>
-      {(edit || canPdf) && (
-        <div className="rec-actions">
-          {edit && (<>
-          {record.can.see_vendors && (
-            <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('vendor')}>
-              <Icon name="briefcase" size={12} /> {record.responsibility.vendor ? 'Re-assign vendor' : 'Assign vendor'}
-            </button>
+      {note && <p className="snooze-err rec-err" role="status"><Icon name="alert-circle" size={12} />{note}</p>}
+    </div>
+  );
+}
+
+type Dialog = 'pause' | 'cancel' | 'reopen' | 'complete' | 'tag' | null;
+
+/** The header's More menu (Pause / Resume, Tag, Complete service, Cancel /
+    Reopen) and Save as PDF. What a click could not do — a refused status move
+    on Cancel or Reopen, a failed Resume — goes back to the page through
+    `onNote`, which the bar under the header prints. */
+export function RecordActions({ woId, woNumber, record, onNote }: { woId: string; woNumber: string; record: WoRecord | undefined; onNote: (note: string | null) => void }) {
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [menu, setMenu] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const close = () => setDialog(null);
+  const fail = (fallback: string) => (e: unknown) => onNote(errText(e, fallback));
+  const resume = useRecordWrite(woId, woNumber, () => resumeWo(woId));
+  // M31 · Cancel and Reopen move the status too; a refused move is said here.
+  const report = (r: WoRecord): WoRecord => {
+    const m = r.status_move;
+    onNote(m && !m.moved && m.reason ? `Status not moved to ${m.status}: ${m.reason}` : null);
+    return r;
+  };
+  // 0073 · Save as PDF is for readers too: its own permission, not edit.
+  const canPdf = useCan()(WO_PDF_PERM_KEY, 'view');
+  useEscape(() => setMenu(false));
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setMenu(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [menu]);
+  if (!record) return null;
+  const s = record.state;
+  const edit = record.can.edit;
+  // #15 (0085): Cancel / Reopen, Pause / Resume and Complete service are not
+  // offered to someone who must request status changes.
+  const lifecycle = record.can.lifecycle;
+  const pick = (d: Exclude<Dialog, null>) => () => {
+    setMenu(false);
+    onNote(null);
+    setDialog(d);
+  };
+
+  if (!edit && !canPdf) return null;
+  return (
+    <>
+      {edit && (
+        <div className="rec-pdf rec-more" ref={ref}>
+          <button type="button" className="btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((o) => !o)}>
+            More <span className="pill-caret">▾</span>
+          </button>
+          {menu && (
+            <div className="rec-pdf-pop" role="menu" aria-label="More actions">
+              {lifecycle && !s.cancelled && (s.paused ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="rec-pdf-item"
+                  disabled={resume.isPending}
+                  onClick={() => {
+                    setMenu(false);
+                    onNote(null);
+                    resume.mutate(undefined, { onError: fail('Could not resume.') });
+                  }}
+                >
+                  <Icon name="clock" size={14} /><span><b>Resume</b><small>Clear the pause marker</small></span>
+                </button>
+              ) : (
+                <button type="button" role="menuitem" className="rec-pdf-item" onClick={pick('pause')}>
+                  <Icon name="clock" size={14} /><span><b>Pause</b><small>A marker everyone sees; no clock stops</small></span>
+                </button>
+              ))}
+              <button type="button" role="menuitem" className="rec-pdf-item" onClick={pick('tag')}>
+                <Icon name="tag" size={14} /><span><b>Tag</b><small>A short label and why it applies</small></span>
+              </button>
+              {lifecycle && !s.cancelled && (
+                <button type="button" role="menuitem" className="rec-pdf-item" onClick={pick('complete')}>
+                  <Icon name="check-circle" size={14} /><span><b>{s.completion ? 'Edit completion' : 'Complete service'}</b><small>What was found and what was done</small></span>
+                </button>
+              )}
+              {lifecycle && (s.cancelled ? (
+                <button type="button" role="menuitem" className="rec-pdf-item" onClick={pick('reopen')}>
+                  <Icon name="clock" size={14} /><span><b>Reopen</b><small>Back to the status it had before</small></span>
+                </button>
+              ) : (
+                // M9: once an invoice is sent or paid, or a payment paid, Cancel is gone.
+                !record.can.cancel_blocked && (
+                  <button type="button" role="menuitem" className="rec-pdf-item is-danger" onClick={pick('cancel')}>
+                    <Icon name="x" size={14} /><span><b>Cancel work order</b><small>Kept on file, marked cancelled</small></span>
+                  </button>
+                )
+              ))}
+            </div>
           )}
-          {lifecycle && !s.cancelled && (s.paused ? (
-            <button type="button" className="btn btn-sm" disabled={resume.isPending} onClick={() => resume.mutate(undefined, { onError: fail('Could not resume.') })}>Resume</button>
-          ) : (
-            <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('pause')}><Icon name="clock" size={12} /> Pause</button>
-          ))}
-          <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('eta')}><Icon name="truck" size={12} /> {s.eta ? 'Change ETA' : 'Add ETA'}</button>
-          <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('tag')}><Icon name="tag" size={12} /> Tag</button>
-          {record.can.see_money && !openNte && (
-            <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('nte')}><Icon name="dollar" size={12} /> Increase NTE</button>
-          )}
-          {lifecycle && !s.cancelled && (
-            <button type="button" className="btn btn-sm is-ghost" onClick={() => setDialog('complete')}>
-              <Icon name="check-circle" size={12} /> {s.completion ? 'Edit completion' : 'Complete service'}
-            </button>
-          )}
-          {lifecycle && (s.cancelled ? (
-            <button type="button" className="btn btn-sm" onClick={() => setDialog('reopen')}>Reopen</button>
-          ) : (
-            // M9: once an invoice is sent or paid, or a payment paid, Cancel is gone.
-            !record.can.cancel_blocked && (
-              <button type="button" className="btn btn-sm is-danger" onClick={() => setDialog('cancel')}>Cancel work order</button>
-            )
-          ))}
-          </>)}
-          {canPdf && <PdfMenu woNumber={woNumber} />}
         </div>
       )}
-      {error && <p className="snooze-err rec-err" role="alert"><Icon name="alert-circle" size={12} />{error}</p>}
-      {moveNote && <p className="snooze-err rec-err" role="status"><Icon name="alert-circle" size={12} />{moveNote}</p>}
+      {canPdf && <PdfMenu woNumber={woNumber} />}
 
-      {dialog === 'vendor' && <VendorDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}
       {dialog === 'pause' && (
         <ReasonDialog title="Pause this work order" icon="clock" label="Why is it paused?" confirm="Pause" hint="A pause is a marker everyone sees. It does not stop the Pulse clocks or the SLA."
           woId={woId} woNumber={woNumber} run={(reason) => pauseWo(woId, reason)} onClose={close} />
@@ -209,11 +261,73 @@ export function RecordBar({ woId, woNumber, record }: { woId: string; woNumber: 
           hint="It goes back to the status it had before it was cancelled. The reason is kept on its history."
           woId={woId} woNumber={woNumber} run={async (reason) => report(await reopenWo(woId, reason))} onClose={close} />
       )}
-      {dialog === 'eta' && <EtaDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}
       {dialog === 'tag' && <TagDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}
-      {dialog === 'nte' && <NteDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}
       {dialog === 'complete' && <CompleteDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}
-    </div>
+    </>
+  );
+}
+
+/** People › Technicians: the one vendor answering for the job (was Assign
+    vendor on the bar under the header). */
+export function ResponsibleVendorCard({ woId, woNumber }: { woId: string; woNumber: string }) {
+  const record = useWoRecord(woId).data;
+  const [open, setOpen] = useState(false);
+  if (!record || !record.can.see_vendors) return null;
+  const v = record.responsibility.vendor;
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2 className="card-title grow">Responsible vendor</h2>
+        {record.can.edit && (
+          <button type="button" className="btn btn-sm is-ghost" onClick={() => setOpen(true)}>
+            <Icon name="briefcase" size={12} /> {v ? 'Re-assign vendor' : 'Assign vendor'}
+          </button>
+        )}
+      </div>
+      <div className="rec-rows">
+        <Row label="Vendor">
+          {v ? (
+            <>
+              <Link to={`/vendors/${v.id}`}>{v.name}</Link>
+              <small>{[v.primary_trade, v.phone].filter(Boolean).join(' · ')}</small>
+            </>
+          ) : <span className="pf-muted">Nobody assigned</span>}
+        </Row>
+      </div>
+      {open && <VendorDialog woId={woId} woNumber={woNumber} record={record} onClose={() => setOpen(false)} />}
+    </section>
+  );
+}
+
+/** CICO: when the technician is expected on site (was Add ETA on the bar
+    under the header). */
+export function EtaCard({ woId, woNumber }: { woId: string; woNumber: string }) {
+  const record = useWoRecord(woId).data;
+  const [open, setOpen] = useState(false);
+  if (!record) return null;
+  const eta = record.state.eta;
+  return (
+    <section className="card rec-eta">
+      <div className="card-head">
+        <h2 className="card-title grow">ETA</h2>
+        {record.can.edit && (
+          <button type="button" className="btn btn-sm is-ghost" onClick={() => setOpen(true)}>
+            <Icon name="truck" size={12} /> {eta ? 'Change ETA' : 'Add ETA'}
+          </button>
+        )}
+      </div>
+      <div className="rec-rows">
+        <Row label="Expected on site">
+          {eta ? (
+            <>
+              {dayTime(eta.eta_at)}
+              {eta.note && <small>{eta.note}</small>}
+            </>
+          ) : <span className="pf-muted">No ETA set</span>}
+        </Row>
+      </div>
+      {open && <EtaDialog woId={woId} woNumber={woNumber} record={record} onClose={() => setOpen(false)} />}
+    </section>
   );
 }
 
@@ -315,34 +429,6 @@ function TagDialog({ woId, woNumber, record, onClose }: DialogProps) {
       <div className="sheet-f">
         <button type="button" className="btn" onClick={onClose}>Back</button>
         <button type="button" className="btn btn-primary" disabled={tag.trim() === '' || add.isPending} onClick={() => add.mutate(undefined)}>Add the tag</button>
-      </div>
-    </Sheet>
-  );
-}
-
-function NteDialog({ woId, woNumber, record, onClose }: DialogProps) {
-  const [amount, setAmount] = useState('');
-  const [reason, setReason] = useState('');
-  const n = Number(amount.replace(/[^0-9.]/g, ''));
-  const ask = useRecordWrite(woId, woNumber, () => requestNteIncrease(woId, n, reason.trim()), onClose);
-  const current = record.cost.nte;
-  return (
-    <Sheet title="Ask for a higher NTE" icon="dollar" onClose={onClose}>
-      <p className="sheet-b">
-        The NTE is {current === null ? 'not set' : usd(current)}. A manager decides; approving writes the new NTE on the work order.
-      </p>
-      <div className="vend-form">
-        <label className="field"><span className="lbl">New NTE</span>
-          <input className="fld mono" inputMode="decimal" autoFocus value={amount} placeholder="e.g. 4500" onChange={(e) => setAmount(e.target.value)} />
-        </label>
-        <label className="field"><span className="lbl">Why more is needed</span>
-          <textarea className="fld" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
-        </label>
-      </div>
-      {ask.isError && <p className="snooze-err" role="alert"><Icon name="alert-circle" size={12} />{errText(ask.error, 'Could not send the request.')}</p>}
-      <div className="sheet-f">
-        <button type="button" className="btn" onClick={onClose}>Back</button>
-        <button type="button" className="btn btn-primary" disabled={!(n > 0) || reason.trim() === '' || ask.isPending} onClick={() => ask.mutate(undefined)}>Send the request</button>
       </div>
     </Sheet>
   );
@@ -477,10 +563,6 @@ const PDF_MENU_HINTS: Record<WoPdfKind, string> = {
 function PdfMenu({ woNumber }: { woNumber: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  // W4-2 · the PDF route logs under the acting principal, so the API refuses
-  // it while viewing as someone; the items go inert (and the menu stays open
-  // on the hint) rather than save the 403's body as the file.
-  const { isImpersonating } = useAuth();
   useEscape(() => setOpen(false));
   useEffect(() => {
     if (!open) return;
@@ -498,7 +580,7 @@ function PdfMenu({ woNumber }: { woNumber: string }) {
       {open && (
         <div className="rec-pdf-pop" role="menu" aria-label="Save as PDF">
           {WO_PDF_KINDS.map((k) => (
-            <a key={k} className="rec-pdf-item" {...downloadLinkProps(isImpersonating, workOrderPdfUrl(woNumber, k), { download: true })} role="menuitem" onClick={isImpersonating ? (e) => e.preventDefault() : () => setOpen(false)}>
+            <a key={k} className="rec-pdf-item" href={workOrderPdfUrl(woNumber, k)} download role="menuitem" onClick={() => setOpen(false)}>
               <Icon name="file" size={14} />
               <span>
                 <b>{WO_PDF_KIND_LABELS[k]}</b>

@@ -19,16 +19,16 @@ import {
 import { SPAN_END_FIELD } from './dashboards';
 
 // ── D3 · who is a dispatcher ─────────────────────────────────────────────────
-// Ops Coordinator and OM Under Probation are dispatchers under probation, OM
-// is a dispatcher, Senior OM a senior dispatcher. ONE list, so the assignee
+// OM Under Probation is the dispatcher under probation (the Ops Coordinator
+// position: one role since migration 0088 merged ops_coord into it), OM is a
+// dispatcher, Senior OM a senior dispatcher. ONE list, so the assignee
 // picker, intake submit, Accept and Add work order (Wave D) all agree.
 
-export const DISPATCHER_ROLE_CODES = ['ops_coord', 'om_probation', 'om', 'senior_om'] as const;
+export const DISPATCHER_ROLE_CODES = ['om_probation', 'om', 'senior_om'] as const;
 export type DispatcherRoleCode = (typeof DISPATCHER_ROLE_CODES)[number];
 export type DispatcherTier = 'probation' | 'dispatcher' | 'senior';
 
 export const DISPATCHER_TIER_BY_ROLE: Record<DispatcherRoleCode, DispatcherTier> = {
-  ops_coord: 'probation',
   om_probation: 'probation',
   om: 'dispatcher',
   senior_om: 'senior',

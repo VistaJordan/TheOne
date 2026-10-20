@@ -155,7 +155,7 @@ export function QuoteBuilderPage() {
   const selfApproval = permissions?.self_approval ?? false;
   const SELF_TIP = 'You submitted this quote — someone else has to approve and send it (maker ≠ checker)';
   const overNte = permissions?.over_nte ?? false;
-  const OVER_NTE_TIP = 'The quote is above the work order’s NTE — request an NTE increase (record bar › Increase NTE) and have it approved before sending';
+  const OVER_NTE_TIP = 'The quote is above the work order’s NTE — have the work order’s Client NTE raised before sending';
   const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
   const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
   /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */

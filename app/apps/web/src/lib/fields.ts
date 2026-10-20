@@ -53,7 +53,7 @@ export const FIELD = {
   escalated: 'Escalated',
 } as const;
 
-/** The checkboxes rendered by FlagsRow: Emergency (rule 2.5.1) first, then
+/** The flag checkboxes (edited in All fields): Emergency (rule 2.5.1) first, then
     the four penalty-exposure flags. */
 export const FLAG_FIELDS = [
   'Emergency',

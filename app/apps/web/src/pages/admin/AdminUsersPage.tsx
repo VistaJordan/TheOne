@@ -95,10 +95,9 @@ export function AdminUsersPage() {
   // The ACTING principal throughout (D6, UAT round 1 Wave B): viewing as
   // someone shows the page exactly as they would see it ("You" on their row,
   // the super-admin ring and Adjust only if they are a super admin) — the API
-  // answers from the same person now. Viewing as someone is read-only (every
-  // write is refused), so the switches are off then rather than
-  // enabled-but-refused.
-  const { actingAs, isImpersonating, can } = useAuth();
+  // answers from the same person now, writes included (0088): what they could
+  // not change, the switches below lock for the same reasons.
+  const { actingAs, can } = useAuth();
   const { fail, done, strip } = useAdminFeedback();
   const [inviteOpen, setInviteOpen] = useState(false);
   // The user whose adjustments are open, if any (super admins only).
@@ -111,7 +110,7 @@ export function AdminUsersPage() {
   const isSuperAdmin = Boolean(actingAs?.is_super_admin);
   const editorIsSuperAdmin = Boolean(actingAs?.is_super_admin);
   const editorPerms: PermissionSet = actingAs?.perms ?? { role: {}, overrides: {} };
-  const canGrantSuper = editorIsSuperAdmin && !isImpersonating;
+  const canGrantSuper = editorIsSuperAdmin;
 
   const usersQuery = useQuery({ queryKey: ['admin-users'], queryFn: listAdminUsers, enabled: allowed, retry: 0 });
   // Roles feed the role <select> on every row and in the invite form.
@@ -166,7 +165,6 @@ export function AdminUsersPage() {
         selfId={actingAs?.id}
         editorIsSuperAdmin={editorIsSuperAdmin}
         editorPerms={editorPerms}
-        viewingAs={isImpersonating}
         loading={usersQuery.isLoading}
         error={usersQuery.isError}
         busy={patchUser.isPending || !canEdit}
@@ -273,7 +271,7 @@ export function AdminRolesPage() {
 // ── Users table ──────────────────────────────────────────────────────────────
 
 function UsersTable({
-  items, roles, selfId, editorIsSuperAdmin, editorPerms, viewingAs, loading, error, busy, canAdjust, adjusting, onAdjust,
+  items, roles, selfId, editorIsSuperAdmin, editorPerms, loading, error, busy, canAdjust, adjusting, onAdjust,
   canAssignClients, clientsFor, onClients, tree, onChange,
 }: {
   items: AdminUserItem[];
@@ -285,9 +283,6 @@ function UsersTable({
   editorIsSuperAdmin: boolean;
   /** #18 · the editor's own tree: a role granting more than it is drawn locked. */
   editorPerms: PermissionSet;
-  /** Viewing as someone is read-only — the switch is off rather than
-      enabled-but-refused. */
-  viewingAs: boolean;
   loading: boolean;
   error: boolean;
   busy: boolean;
@@ -302,11 +297,7 @@ function UsersTable({
   onChange: (id: string, input: { role?: string; is_super_admin?: boolean; status?: UserStatus }) => void;
 }) {
   // Why the Super admin switch is off on every row of this page, if it is.
-  const superLock = viewingAs
-    ? 'Viewing as another user is read-only'
-    : !editorIsSuperAdmin
-      ? 'Only a super admin can change this'
-      : null;
+  const superLock = !editorIsSuperAdmin ? 'Only a super admin can change this' : null;
   const cols = canAdjust ? 8 : 7;
   return (
     <div className="table-wrap">
@@ -371,10 +362,9 @@ function UsersTable({
                   </td>
                   <td><span className={`pill pill-${status.tone}`} title={status.hint}>{status.label}</span></td>
                   <td>
-                    {/* Off for yourself, while viewing as someone, and for
-                        anyone who is not a super admin themselves (W4-1): the
-                        server refuses all three, so a live checkbox here would
-                        only produce an error. */}
+                    {/* Off for yourself and for anyone who is not a super
+                        admin themselves (W4-1): the server refuses both, so a
+                        live checkbox here would only produce an error. */}
                     <label
                       className="sw sm"
                       title={isSelf ? SELF_EDIT_MESSAGE : superLock ?? undefined}

@@ -9,18 +9,18 @@
      · the SESSION still belongs to the real human; only the effective role
        changes, never who is signed in.
      · starting and stopping are written to activity_log as their own events.
-     · viewing as someone is READ-ONLY (W4-2): the API refuses every write made
-       while viewing as (403 IMPERSONATION_READ_ONLY) — and the CSV exports,
-       Save as PDF and the technician map, which log under the actor — so the
-       activity log never names the wrong author: a write would be attributed
-       to the impersonated person. Switch back to Myself to make changes. */
+     · viewing as someone acts as them (0088, replacing W4-2's read-only
+       rule): their rights, their scope, their name on what they create — and
+       every audit row is signed by the real person with `viewing_as_id`
+       naming whom they were viewing as (migration 0088's trigger), so the
+       activity log never names the wrong author. */
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { getPrincipals } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon } from './Icon';
-import { READ_ONLY_HINT, roleLabel } from '../lib/actor';
+import { VIEWING_AS_HINT, roleLabel } from '../lib/actor';
 
 export function ActorSwitcher() {
   const { user, actingAs, isImpersonating, impersonate, stopImpersonating } = useAuth();
@@ -77,14 +77,14 @@ function ImpersonationPicker({
         Viewing as
       </span>
       {isImpersonating && (
-        <span className="chip chip-sm" title={READ_ONLY_HINT}>
-          Read-only
+        <span className="chip chip-sm" title={VIEWING_AS_HINT}>
+          Changes logged as you
         </span>
       )}
       <select
         className="topbar-actor-select"
         aria-label="View as another user (super admin)"
-        title={isImpersonating ? READ_ONLY_HINT : 'Impersonation is recorded in the activity log'}
+        title={isImpersonating ? VIEWING_AS_HINT : 'Impersonation is recorded in the activity log'}
         value={actingId}
         disabled={busy || principals.isLoading}
         onChange={(e) => onPick(e.target.value)}

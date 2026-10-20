@@ -68,6 +68,7 @@ import {
 } from '@theone/shared';
 import type { ActingPrincipal } from './activity.js';
 import { CREATED_AT_SQL } from './activity.js';
+import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import { requirePerm } from './permissions.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
@@ -730,7 +731,7 @@ export async function getVisitHistory(visitId: string, limit = 100): Promise<Act
     created_at: string;
   }>(
     `SELECT a.id, a.action, a.field, a.before, a.after,
-            p.id AS actor_id, p.display_name AS actor_name, p.kind AS actor_kind,
+            p.id AS actor_id, ${ACTOR_NAME_SQL} AS actor_name, p.kind AS actor_kind,
             ${CREATED_AT_SQL} AS created_at
        FROM activity_log a
        JOIN principal p ON p.id = a.actor_principal_id

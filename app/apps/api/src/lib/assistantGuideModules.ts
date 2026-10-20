@@ -55,7 +55,7 @@ Rules: a purchase order never changes a work order's Cost. Going over a budget o
 
 ### Approvals (sidebar: Approvals)
 
-Sections: **All**, **NTE override (cost over NTE)** (the cost passed the NTE, rule 1.5.2), **NTE increase requests** (somebody asked for a higher NTE with Increase NTE), **Status changes**, **Manager reviews**, **Quotes**, **Payments**. Lanes: **For me**, **Open**, **Done**, **My requests**. Needs \`approvals\` view; deciding in a section needs that section's approve (\`approvals/nte\`, \`approvals/status\`, \`approvals/reviews\`), and a quote or a payment also needs \`quotes\` approve or \`payments\` approve.
+Sections: **All**, **NTE override (cost over NTE)** (the cost passed the NTE, rule 1.5.2), **NTE increase requests** (manual asks for a higher NTE still open; the button that raised them was removed), **Status changes**, **Manager reviews**, **Quotes**, **Payments**. Lanes: **For me**, **Open**, **Done**, **My requests**. Needs \`approvals\` view; deciding in a section needs that section's approve (\`approvals/nte\`, \`approvals/status\`, \`approvals/reviews\`), and a quote or a payment also needs \`quotes\` approve or \`payments\` approve.
 
 - Decide: on the row click **Approve** (optional **Note**), or **Reject**, say why, **Reject with note**. **Claim** takes a task for yourself. Open rows are oldest first, and each is decided on its own.
 - Your own requests: under **My requests**, **Withdraw** cancels one that is still open; after a decision click **Continue** (approved) or **Understood** (rejected) to clear it.
@@ -70,9 +70,9 @@ Recurring jobs that raise their own work orders. **New schedule**, fill **What i
 Tabs: **Assignment**, **Job plans**, **Services**, **Time tracker**, **Work permits**; each needs its own view permission.
 
 - Assign work orders in bulk (needs \`maintenance/assignment\` edit): on **Assignment** pick **Unassigned**, **Everything open** or a person, tick work orders, choose in **Assign to…**, click **Assign**.
-- Job plan (needs \`maintenance/job_plans\` create): **New job plan**, **Name**, **Steps** one per line, **Add job plan**. A plan is applied from a work order's Checklist tab or by a planned-maintenance schedule.
+- Job plan (needs \`maintenance/job_plans\` create): **New job plan**, **Name**, **Steps** one per line, **Add job plan**. A plan is applied from a work order's Checklist (no tab button; reached from a link) or by a planned-maintenance schedule.
 - Service (needs \`maintenance/services\` create): **New service**, **Name**, **Unit**, **Price per unit**, **Cost per unit**, **Add service**.
-- **Time tracker** and **Work permits** are lists here. Time is logged on a work order's Timelog tab (\`maintenance/time\` create); a permit is written on a work order's Related tab (\`maintenance/permits\` create) and decided by someone with \`maintenance/permits\` approve.
+- **Time tracker** and **Work permits** are lists here. Time is logged on a work order's Timelog tab (\`maintenance/time\` create); a permit is written on a work order's Related view, opened from the permit's work-order link (\`maintenance/permits\` create) and decided by someone with \`maintenance/permits\` approve.
 
 ### Vendors (sidebar: Vendors)
 

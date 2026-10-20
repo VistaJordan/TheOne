@@ -312,11 +312,12 @@ export const WO_TABS: { id: string; label: string }[] = [
   { id: 'payables', label: 'Payables' },
   { id: 'site', label: 'Site' },
   { id: 'parts', label: 'Parts' },
-  { id: 'flags', label: 'Flags' },
   { id: 'overview', label: 'Overview' },
   { id: 'messages', label: 'Messages' },
   { id: 'audit', label: 'Audit trail' },
-  // 0064 · the record's own tabs.
+  // 0064 · the record's own tabs. Since 2026-10-20 Checklist and Related have
+  // no button on the work-order page (a link to them still opens them), and
+  // People › Technicians is shown under the People row.
   { id: 'tasks', label: 'Checklist' },
   { id: 'costs', label: 'Cost breakdown' },
   { id: 'timelog', label: 'Timelog & metrics' },

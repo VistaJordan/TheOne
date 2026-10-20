@@ -9,6 +9,7 @@
 // Anyone else is refused. There is no other registration path.
 
 import { randomBytes } from 'node:crypto';
+import type { FastifyReply } from 'fastify';
 import { query } from '../db.js';
 import { config } from '../config.js';
 import { ApiError } from '../errors.js';
@@ -71,6 +72,9 @@ export interface AuthContext {
   /** Who they are viewing as, when a super admin is impersonating. */
   actingAs: SessionPrincipal;
   isImpersonating: boolean;
+  /** "Keep me signed in" (0088): set when this load pushed a remembered
+      session's expiry out, so the guard re-sends the cookie with it. */
+  renewedExpiresAt?: Date;
 }
 
 // LEFT JOIN, not INNER: a principal with a NULL role must still resolve to a
@@ -302,26 +306,58 @@ async function enrolNewPrincipal(identity: EntraIdentity): Promise<SessionPrinci
 
 // ── 2 · Sessions ─────────────────────────────────────────────────────────────
 
+/** How long a session lasts from now: SESSION_TTL_HOURS, or REMEMBER_ME_DAYS
+    when the person ticked "Keep me signed in". */
+export function sessionLifetimeMs(remember: boolean): number {
+  return remember ? config.rememberMeDays * 86_400_000 : config.sessionTtlHours * 3_600_000;
+}
+
+/** A remembered session is pushed out to a full REMEMBER_ME_DAYS once it has
+    run this long since it was last pushed — once a day, not on every request. */
+export const REMEMBER_RENEW_AFTER_MS = 86_400_000;
+
+/** Pure: should a remembered session expiring at `expiresAt` be pushed out now? */
+export function rememberDue(remember: boolean, expiresAt: Date, now: number = Date.now()): boolean {
+  return remember && expiresAt.getTime() < now + sessionLifetimeMs(true) - REMEMBER_RENEW_AFTER_MS;
+}
+
 export async function createSession(
   principalId: string,
-  meta: { userAgent?: string; ip?: string; testPasswordFp?: string | null },
-): Promise<{ id: string; expiresAt: Date }> {
+  meta: { userAgent?: string; ip?: string; testPasswordFp?: string | null; remember?: boolean },
+): Promise<{ id: string; expiresAt: Date; remember: boolean }> {
   const id = randomBytes(32).toString('base64url');
-  const expiresAt = new Date(Date.now() + config.sessionTtlHours * 3600_000);
+  const remember = meta.remember === true;
+  const expiresAt = new Date(Date.now() + sessionLifetimeMs(remember));
 
   // UAT T1: a test-account session carries the fingerprint of the password it
   // was issued under (migration 0087); every other session leaves it NULL.
   await query(
-    `INSERT INTO session (id, principal_id, expires_at, user_agent, ip, test_password_fp)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [id, principalId, expiresAt.toISOString(), meta.userAgent ?? null, meta.ip ?? null, meta.testPasswordFp ?? null],
+    `INSERT INTO session (id, principal_id, expires_at, user_agent, ip, test_password_fp, remember)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [id, principalId, expiresAt.toISOString(), meta.userAgent ?? null, meta.ip ?? null, meta.testPasswordFp ?? null, remember],
   );
 
-  return { id, expiresAt };
+  return { id, expiresAt, remember };
+}
+
+/** The session cookie. A remembered session's cookie outlives the browser
+    window (it carries the expiry); any other is a browser-session cookie,
+    dropped when the browser closes, and the row's expires_at still ends it
+    after SESSION_TTL_HOURS, whichever comes first. */
+export function setSessionCookie(reply: FastifyReply, id: string, expiresAt: Date, remember: boolean): void {
+  reply.setCookie(SESSION_COOKIE, id, {
+    path: '/',
+    httpOnly: true, // unreadable from JS — an XSS bug cannot lift the session
+    sameSite: 'lax', // survives the top-level redirect back from Microsoft
+    secure: config.cookieSecure,
+    ...(remember ? { expires: expiresAt } : {}),
+  });
 }
 
 interface SessionRow extends PrincipalRow {
   session_id: string;
+  remember: boolean;
+  expires_at: Date;
   impersonating_id: string | null;
   test_password_fp: string | null;
 }
@@ -339,7 +375,8 @@ export async function loadSession(sessionId: string | undefined): Promise<AuthCo
   if (!sessionId) return null;
 
   const res = await query<SessionRow>(
-    `SELECT s.id AS session_id, s.impersonating_id, s.test_password_fp, ${PRINCIPAL_COLUMNS}
+    `SELECT s.id AS session_id, s.impersonating_id, s.test_password_fp, s.remember, s.expires_at,
+            ${PRINCIPAL_COLUMNS}
        FROM session s
        JOIN principal p ON p.id = s.principal_id
        LEFT JOIN role r ON r.code = p.role
@@ -373,13 +410,26 @@ export async function loadSession(sessionId: string | undefined): Promise<AuthCo
   }
 
   // Cheap liveness for the admin session list; not on the hot path for auth.
-  await query(`UPDATE session SET last_seen_at = now() WHERE id = $1`, [row.session_id]);
+  // "Keep me signed in": a remembered session that has run a day since it was
+  // last pushed out is pushed out to a full REMEMBER_ME_DAYS again, so it ends
+  // only after that long unused (or on sign-out, or when the user is disabled).
+  let renewedExpiresAt: Date | undefined;
+  if (rememberDue(row.remember === true, new Date(row.expires_at))) {
+    renewedExpiresAt = new Date(Date.now() + sessionLifetimeMs(true));
+    await query(`UPDATE session SET last_seen_at = now(), expires_at = $2 WHERE id = $1`, [
+      row.session_id,
+      renewedExpiresAt.toISOString(),
+    ]);
+  } else {
+    await query(`UPDATE session SET last_seen_at = now() WHERE id = $1`, [row.session_id]);
+  }
 
   return {
     sessionId: row.session_id,
     user,
     actingAs,
     isImpersonating: actingAs.id !== user.id,
+    ...(renewedExpiresAt ? { renewedExpiresAt } : {}),
   };
 }
 
@@ -406,11 +456,12 @@ export async function storeAuthTransaction(tx: {
   codeVerifier: string;
   nonce: string;
   redirectTo?: string;
+  remember?: boolean;
 }): Promise<void> {
   await query(
-    `INSERT INTO auth_transaction (state, code_verifier, nonce, redirect_to, expires_at)
-     VALUES ($1, $2, $3, $4, now() + interval '10 minutes')`,
-    [tx.state, tx.codeVerifier, tx.nonce, tx.redirectTo ?? null],
+    `INSERT INTO auth_transaction (state, code_verifier, nonce, redirect_to, remember, expires_at)
+     VALUES ($1, $2, $3, $4, $5, now() + interval '10 minutes')`,
+    [tx.state, tx.codeVerifier, tx.nonce, tx.redirectTo ?? null, tx.remember === true],
   );
   // Opportunistic sweep — no scheduler in the prototype, and the table is tiny.
   await query(`DELETE FROM auth_transaction WHERE expires_at < now()`);
@@ -420,19 +471,25 @@ export interface AuthTransaction {
   codeVerifier: string;
   nonce: string;
   redirectTo: string | null;
+  remember: boolean;
 }
 
 /** Single-use by construction: the DELETE ... RETURNING is the consumption. */
 export async function consumeAuthTransaction(state: string): Promise<AuthTransaction | null> {
-  const res = await query<{ code_verifier: string; nonce: string; redirect_to: string | null }>(
+  const res = await query<{ code_verifier: string; nonce: string; redirect_to: string | null; remember: boolean }>(
     `DELETE FROM auth_transaction
       WHERE state = $1 AND expires_at > now()
-      RETURNING code_verifier, nonce, redirect_to`,
+      RETURNING code_verifier, nonce, redirect_to, remember`,
     [state],
   );
   const row = res.rows[0];
   if (!row) return null;
-  return { codeVerifier: row.code_verifier, nonce: row.nonce, redirectTo: row.redirect_to };
+  return {
+    codeVerifier: row.code_verifier,
+    nonce: row.nonce,
+    redirectTo: row.redirect_to,
+    remember: row.remember === true,
+  };
 }
 
 // ── 4 · Dev bypass ───────────────────────────────────────────────────────────

@@ -158,6 +158,22 @@
 .signin-ms:hover { border-color: var(--accent); background: var(--tab-on-bg); }
 .signin-ms:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* 0088 · "Keep me signed in", right under the button it applies to. */
+.signin-remember {
+  display: inline-flex; align-items: center; gap: 8px;
+  align-self: flex-start;
+  margin-top: -4px;
+  font-size: 13px; color: var(--ink-2);
+  cursor: pointer;
+}
+.signin-remember input {
+  width: 16px; height: 16px; margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.signin-remember input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.signin-remember input:disabled, .signin-remember input:disabled + span { cursor: default; opacity: .6; }
+
 /* UAT T1 · the test-account form under "Sign in with Microsoft". Small and
    secondary on purpose: a UAT door, not the way people sign in. */
 .signin-test {
