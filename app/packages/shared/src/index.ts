@@ -1788,6 +1788,7 @@ export interface ApiError {
 
 // ── Permissions (0015) ───────────────────────────────────────────────────────
 export * from './permissions';
+export * from './permDiff';
 export * from './messaging';
 export * from './mentions';
 import type { ClientSystem, WoMessage } from './messaging';

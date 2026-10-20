@@ -3,6 +3,7 @@
    in both places. Row shapes are documented in api/services/woAudit.ts. */
 
 import type { WoFieldDescriptor } from '@theone/shared';
+import { PERM_ACTION_LABELS, PERM_SNAPSHOT_KEYS, permGrantWord, permMapChanges } from '@theone/shared';
 import { DASH, fieldValueToString, money } from './fields';
 
 /** New rows carry `{ value }`; rows written before woAudit.ts hold the bare
@@ -600,6 +601,19 @@ export function snapshotChanges(before: unknown, after: unknown): SnapshotChange
   const out: SnapshotChange[] = [];
   for (const key of keys) {
     if (JSON.stringify(b[key]) === JSON.stringify(a[key])) continue;
+    // A role's permissions or a person's overrides: one line per action that
+    // moved, named as on the Roles screen, instead of "84 entries → 84 entries".
+    if (PERM_SNAPSHOT_KEYS.includes(key)) {
+      for (const c of permMapChanges(b[key], a[key])) {
+        out.push({
+          key: `${key}:${c.path}:${c.action}`,
+          label: `${c.label} · ${PERM_ACTION_LABELS[c.action]}`,
+          from: permGrantWord(c.from),
+          to: permGrantWord(c.to),
+        });
+      }
+      continue;
+    }
     out.push({
       key,
       label: SNAPSHOT_KEYS[key] ?? key.replace(/_/g, ' '),
