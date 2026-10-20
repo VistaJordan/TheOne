@@ -93,11 +93,10 @@ function requireAdmin(req: FastifyRequest, section: AdminSection, action: PermAc
   if (!req.auth) throw unauthorized();
   // D6 (UAT round 1, Wave B): viewing as someone shows their rights here too —
   // the gate reads the person being viewed (`permissionSubject`), so a super
-  // admin viewing as an OM sees the console the OM sees. It never widens: a
-  // view-as session is read-only (plugins/authGuard.ts refuses every write),
-  // so the edit gates below only ever run for the signed-in user themselves.
-  // The id returned is the REAL user's: whatever this request logs (the audit
-  // export) is attributed to the human at the keyboard.
+  // admin viewing as an OM sees the console the OM sees, and since 0088 makes
+  // the changes the OM could make, no more. The id returned is the person
+  // being acted as (D6); whatever the request logs is re-signed to the human
+  // at the keyboard, with viewing_as_id, by migration 0088's trigger.
   requirePerm(
     permissionSubject(req),
     adminPermKey(section),
@@ -106,7 +105,7 @@ function requireAdmin(req: FastifyRequest, section: AdminSection, action: PermAc
       ? `Admin › ${section} is not available to you`
       : `You cannot make changes in Admin › ${section}`,
   );
-  return req.auth.user.id;
+  return permissionSubject(req).id;
 }
 
 /** The per-user override editor is the one thing a plain admin-console grant
@@ -119,26 +118,28 @@ function requireSuperAdmin(req: FastifyRequest): string {
       required: 'is_super_admin',
     });
   }
-  return req.auth.user.id;
+  return permissionSubject(req).id;
 }
 
-/** W4-1 · whether the REAL signed-in user is a super admin. Granting or
-    removing `is_super_admin` on POST/PATCH /admin/users needs it
+/** W4-1 · whether the person acting is a super admin. Granting or removing
+    `is_super_admin` on POST/PATCH /admin/users needs it
     (`assertMaySetSuperAdmin` refuses otherwise), and so does any change to a
     super admin's row — PATCH and the disable route hand the flag to the
-    service, which checks the target. Only writes read it, and a write never
-    runs while viewing as someone (the guard refuses it first), so the real
-    user here IS the person whose rights count (D6). */
-function isRealSuperAdmin(req: FastifyRequest): boolean {
+    service, which checks the target. While viewing as someone it is THEIR
+    flag (D6, 0088): viewing as an HR person grants what HR may grant, never
+    the super admin's own ring. Only a super admin can view as anyone, so this
+    is never wider than the person signed in. */
+function isActingSuperAdmin(req: FastifyRequest): boolean {
   if (!req.auth) throw unauthorized();
-  return req.auth.user.isSuperAdmin;
+  return permissionSubject(req).isSuperAdmin;
 }
 
-/** #18 · the signed-in user as the rights checks of a write read them: their
-    own tree, flag and role. Writes never run while viewing as (see above). */
+/** #18 · the person acting as the rights checks of a write read them: their
+    own tree, flag and role — the viewed person's while viewing as (D6), so
+    "nobody raises their own rights" holds for them too. */
 function writer(req: FastifyRequest): { id: string; isSuperAdmin: boolean; role: string | null; perms: PermissionSet } {
   if (!req.auth) throw unauthorized();
-  const u = req.auth.user;
+  const u = permissionSubject(req);
   return { id: u.id, isSuperAdmin: u.isSuperAdmin, role: u.role, perms: u.perms };
 }
 
@@ -216,12 +217,12 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { items: await listUsers() };
   });
 
-  // W4-1 · `is_super_admin` is accepted from a super admin only — the REAL
-  // user (`req.auth.user`), never `actingAs`, consistent with requireAdmin.
+  // W4-1 · `is_super_admin` is accepted from a super admin only — the person
+  // acting (the viewed person while viewing as), consistent with requireAdmin.
   app.post('/admin/users', async (req, reply) => {
     const actorId = requireAdmin(req, 'users', 'edit');
     const body = parse(inviteSchema, req.body);
-    const realSuper = isRealSuperAdmin(req);
+    const realSuper = isActingSuperAdmin(req);
     assertMaySetSuperAdmin(body, realSuper);
     const user = await inviteUser(body, actorId, realSuper, writer(req).perms);
     return reply.status(201).send({ user });
@@ -231,7 +232,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     const actorId = requireAdmin(req, 'users', 'edit');
     const { id } = parse(idParams, req.params);
     const body = parse(updateUserSchema, req.body);
-    const realSuper = isRealSuperAdmin(req);
+    const realSuper = isActingSuperAdmin(req);
     assertMaySetSuperAdmin(body, realSuper);
     return { user: await updateUser(id, body, actorId, realSuper, writer(req).perms) };
   });
@@ -239,7 +240,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.post('/admin/users/:id/disable', async (req) => {
     const actorId = requireAdmin(req, 'users', 'edit');
     const { id } = parse(idParams, req.params);
-    return { user: await disableUser(id, actorId, isRealSuperAdmin(req), writer(req).perms) };
+    return { user: await disableUser(id, actorId, isActingSuperAdmin(req), writer(req).perms) };
   });
 
   // Per-user overrides (0015) — super admins only, both ways.
@@ -274,7 +275,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       z.object({ client_ids: z.array(z.string().uuid()).max(2000) }).strict(),
       req.body,
     );
-    return setUserClients(id, client_ids, actorId, isRealSuperAdmin(req));
+    return setUserClients(id, client_ids, actorId, isActingSuperAdmin(req));
   });
 
   // ── Roles ──────────────────────────────────────────────────────────────────
@@ -529,7 +530,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!mayRestoreFromTrash(subject.perms, subject.isSuperAdmin)) {
       throw new ApiError('FORBIDDEN', TRASH_RESTORE_REFUSED, { code: 'TRASH_RESTORE_FORBIDDEN', required_permission: 'work_orders:delete' });
     }
-    const actorId = req.auth.user.id;
+    const actorId = subject.id;
     const { id } = parse(idParams, req.params);
     return { item: await restoreTask(id, actorId) };
   });
@@ -559,9 +560,8 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/admin/audit/export', async (req, reply) => {
     // D6 · gated on the person being viewed while viewing as them (an OM
-    // gets the 403 they would get); the export row is the REAL user's, with
-    // `viewing_as` saying whose view it was — a download changes no record,
-    // so it is not one of the denylisted GETs (plugins/authGuard.ts).
+    // gets the 403 they would get); the export row is re-signed to the real
+    // user with viewing_as_id by migration 0088's trigger.
     const actorId = requireAdmin(req, 'audit');
     const { limit: _l, offset: _o, ...filters } = parse(auditQuerySchema, req.query);
     const { csv, rows } = await exportAuditCsv(filters, allowFor(permissionSubject(req)));
@@ -571,7 +571,6 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       name: `audit-log-${stamp}.csv`,
       rows,
       filters: filters as Record<string, unknown>,
-      ...(req.auth?.isImpersonating ? { viewing_as: req.auth.actingAs.id } : {}),
     });
     return reply
       .header('Content-Type', 'text/csv; charset=utf-8')

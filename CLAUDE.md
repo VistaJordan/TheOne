@@ -70,6 +70,9 @@ Two mutually exclusive modes, chosen by env (`app/.env`, template in `.env.examp
 
 - Sessions are **server-side rows** (`session` table) sent as an httpOnly
   cookie — not JWTs — so sign-out and "disable user" revoke immediately.
+  **Keep me signed in** (0088) on the sign-in page: ticked, the session lasts
+  `REMEMBER_ME_DAYS` (30) as a dated cookie, pushed out once a day while used;
+  unticked, a browser-session cookie that also ends after `SESSION_TTL_HOURS`.
 - `plugins/authGuard.ts` 401s every `/api/*` route except the allowlist at its top.
 - Sign-in policy (rule 5.1.1): the callback looks the principal up by verified
   email. Nobody on file and the address is on `AUTH_ALLOWED_DOMAINS` (default
@@ -1861,25 +1864,10 @@ documents to static markup with and without a snapshot instead.
 
 **Guards added 2026-10-14** (the audit batch, AUDIT.md Must-fix 1 to 12; the
 operator half, secrets, Neon branches, the repository and `main`, is
-FIX-RUNBOOK.md at the repo root). **Viewing as is read-only**:
-`plugins/authGuard.ts` refuses every non-GET/HEAD/OPTIONS call under `/api`
-while `req.auth.isImpersonating` with 403 `FORBIDDEN`, `details.code =
-IMPERSONATION_READ_ONLY` ("Viewing as another user is read-only. Stop viewing
-as them to make changes."), except `IMPERSONATION_WRITE_ALLOWLIST` (POST and
-DELETE `/api/auth/impersonate`, POST `/api/auth/logout`); the five GETs that
-log a row under the acting principal are refused too
-(`IMPERSONATION_GET_DENYLIST_ROUTES`: the work-order and vendor CSV exports,
-Save as PDF, the technician map, the client-updates CSV), matched on the
-Fastify route pattern and on the decoded path, while
-`GET /api/admin/audit/export` stays open because its row is logged under the
-real user (since Wave B it is GATED on the viewed person, D6, and marked
-`viewing_as`); the ActorSwitcher shows a Read-only chip, and the five download links
-(Work Orders › Export, Client Updates › CSV, Vendors › Export CSV, the two
-Save as PDF items) go through `downloadLinkProps` (`lib/actor.ts`): while
-viewing as someone they have no href and no `download`, are `aria-disabled`
-with `role="link"`, keep a tab stop, swallow the click and carry
-`READ_ONLY_HINT` as their title, so the browser never saves the 403 body as
-the file (`tests/impersonation-readonly.test.ts`). **DEMO_MODE guards**
+FIX-RUNBOOK.md at the repo root). (The batch's "Viewing as is read-only"
+rule, IMPERSONATION_READ_ONLY and its allow / deny lists, was replaced on
+2026-10-20 by migration 0088: viewing as can write and the audit row names
+the real person — see "Viewing as writes" below.) **DEMO_MODE guards**
 (`config.ts`, `services/auth.ts`, `routes/auth.ts`, migration 0082): the API
 refuses to boot while `DEMO_MODE=true` if any of the 14 credentials in
 `DEMO_MODE_SECRET_VARS` is set (`demoModeConflict`, pure; `SALES_TAX_API_KEY`
@@ -2106,8 +2094,8 @@ blocks only when the rows on file already satisfy them (a NOTICE otherwise).
 `docs/specs/uat-round-1.md`, `packages/shared/src/access.ts`,
 `services/recordScope.ts`, `tests/uat-wave-b.test.ts`). **D3:** the
 dispatchers are ONE list, `DISPATCHER_ROLE_CODES` / `isDispatcherRole` /
-`dispatcherTier` in shared `access.ts` (ops_coord and om_probation =
-probation, om, senior_om = senior; `assigneeAvailability.ts` no longer keeps
+`dispatcherTier` in shared `access.ts` (om_probation = probation — ops_coord
+was the same position and 0088 merged it in —, om, senior_om = senior; `assigneeAvailability.ts` no longer keeps
 its own copy). **D4 / #12 / #14 / M13 / M20 — the role matrix is 0084**
 (a session-only `pg_temp.wb_grant(code, path, grant)` merges a grant into one
 path; role is not truncated by the seed, so only the field_def flags have a
@@ -2122,7 +2110,8 @@ nulls cost / invoiced / profit one by one) and `margin_pct` in the record's
 Cost card (`redactRecordMoney` in `woRecord.ts`). exec_guest and ops_coord
 are copies of om_probation (after the M13 pass); ops_coord then loses
 vendors, vendor_map, clients and contracts, and is on Only theirs in request
-mode; vr_officer and oa are request mode with `work_orders/scope` view true
+mode (ops_coord no longer exists: 0088 moved its people to om_probation,
+whose grants stand); vr_officer and oa are request mode with `work_orders/scope` view true
 (they source / intake for every work order and are never its Assignee); new
 system role `hr` holds `admin/users` + `admin/roles` view / edit only.
 **#13 — a record opened by its own id follows its work order:**
@@ -2170,9 +2159,10 @@ spec's open question. **D6 / M12 — viewing as = their rights everywhere:**
 user when not viewing as) is what `requireAdmin`, `requireSuperAdmin`, GET
 `/admin/roles`, `/admin/permission-fields`, `routes/adminDocs.ts`,
 `routes/adminIntegrations.ts` and `routes/integrations.ts` check; the ids they
-return for logging stay the real user's, and the user-writing routes still
-read `isRealSuperAdmin` (writes never run while viewing as — the guard
-refuses them first). Starting and stopping a view reads `req.auth.user`
+return are the viewed person's since 0088 (the audit row is re-signed to
+the real user), and the user-writing routes read `isActingSuperAdmin` /
+`writer` — the viewed person too, never wider than the super admin signed
+in. Starting and stopping a view reads `req.auth.user`
 (routes/auth.ts) and the ActorSwitcher keys on `user`, so a super admin can
 always stop. The audit export is gated on the viewed person and logged under
 the real user with `viewing_as`. The web reads `actingAs` throughout
@@ -2448,6 +2438,47 @@ Sched statuses), no Visit Type, and Scheduled Date empty OR on / before
 filter language has no brackets; no new operator. `is_not_set` on a custom
 field of any type now also counts `''` as blank (`compileRule`).
 
+**Viewing as writes, Keep me signed in, one probation role** (migration
+0088, Jordan 2026-10-20; `tests/viewing-as.test.ts`). **Viewing as can make
+changes**: the app acts as the viewed person (their rights, scope and name on
+the records they create — a payment request, a quote, a comment carry THEM as
+author) and the audit log names the super admin. Mechanism, so none of the
+~60 `INSERT INTO activity_log` sites changed: `plugins/authGuard.ts` wraps
+every route handler (`onRoute`) in `runWithAuditContext({realActorId,
+viewingAsId})` while `req.auth.isImpersonating`; `packages/db/src/client.ts`
+sets the transaction-local settings `theone.real_actor_id` /
+`theone.viewing_as_id` right after BEGIN in every `withTransaction`, and runs
+a pool `query` whose SQL names activity_log (`ACTIVITY_LOG_RE`) inside its
+own transaction so it gets them too; the BEFORE INSERT trigger
+`activity_log_viewing_as` re-signs a row whose actor is the viewed person to
+the real one and sets the new `activity_log.viewing_as_id` (a row the real
+person signed only gains `viewing_as_id`; a service principal's row is left
+alone; no settings = untouched, so the worker, the seed and every ordinary
+request are as before). Work started after the response (the ClickUp
+`onResponse` kick) is outside the context. Read side: `lib/actorName.ts`
+`ACTOR_NAME_SQL` prints "Name (viewing as Other)" in the audit trail, the
+Updates feed, field and visit history and the site / asset / client / vendor
+histories; Admin › Audit carries `viewing_as` (drawn under the name) and a
+"Viewing as" CSV column. Not re-signed: per-person counters outside
+activity_log (`vendor_map_log.principal_id` counts the map open against the
+viewed person). The read-only lists, `downloadLinkProps` and
+`READ_ONLY_HINT` are gone; the switcher's chip reads **Changes logged as
+you** (`VIEWING_AS_HINT`). **Keep me signed in**: `session.remember`,
+`auth_transaction.remember` (carries the tick through the Microsoft round
+trip; `/auth/login?remember=1`, `remember: true` on dev-login and
+test-login); `createSession` / `sessionLifetimeMs` / `setSessionCookie` in
+`services/auth.ts`; `loadSession` pushes a remembered session out to a full
+`REMEMBER_ME_DAYS` once it is a day short (`rememberDue`) and the guard
+re-sends the cookie (`renewedExpiresAt`); the choice is remembered per
+browser (`theone.signin.remember` in localStorage). **OM Under Probation =
+Ops Coordinator**: 0088 moves every ops_coord principal to om_probation
+(whose grants stand — the ex-Ops Coordinators gain its technician list,
+map, Clients and contracts view), disables the `test+ops_coord` test
+account, retargets open approval tasks, automation `assign_role`s and
+approval-tier role lists, drops the code from dashboards' `shared_roles`,
+and deletes the role. `DISPATCHER_ROLE_CODES` / `REQUEST_MODE_DISPATCHER_ROLES`
+are the three codes; `canClientDecide` (quotes.ts) uses `isDispatcherRole`.
+
 ## Verify
 
 ```
@@ -2464,7 +2495,7 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   runs it and `npm test` on every push; it is green only because
   `tests/setup.ts` sets the environment and `config.ts` skips `app/.env` under
   `VITEST`, so never let a test depend on a developer's `.env`.
-- The vitest suite under `app/tests/` (65 files, 1168 tests on 2026-10-16) is
+- The vitest suite under `app/tests/` (65 files, 1171 tests, 6 skipped, on 2026-10-20) is
   the regression net: pure functions and source-text pins, no database and no
   network, so a SQL change still needs a seeded local Postgres, curl and
   headless Chromium screenshots of both themes before it is believed.

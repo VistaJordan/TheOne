@@ -13,6 +13,7 @@
 import { REDACTABLE_CORE_KEYS, auditTimestampET } from '@theone/shared';
 import { query } from '../db.js';
 import { CREATED_AT_SQL } from './activity.js';
+import { VIEWING_AS_NAME_SQL } from '../lib/actorName.js';
 import { toCsv } from './woBulk.js';
 import { activityValuesVisible, redactActivityValues, type Allow } from './permissions.js';
 
@@ -44,6 +45,8 @@ export interface AuditLogEntryRow {
   wo_number: string | null;
   ext_name: string | null;
   actor: { id: string; display_name: string; kind: 'human' | 'service' };
+  /** 0088 · the person the actor was viewing as when they made the change. */
+  viewing_as: { id: string; display_name: string } | null;
   created_at: string;
   /** M28 · the values were withheld: the row names a field the reader cannot see. */
   redacted?: boolean;
@@ -63,6 +66,8 @@ interface Row {
   actor_id: string;
   actor_name: string;
   actor_kind: 'human' | 'service';
+  viewing_as_id: string | null;
+  viewing_as_name: string | null;
   created_at: string;
 }
 
@@ -163,6 +168,7 @@ export async function listAuditLog(
             ${ENTITY_NAME_SQL} AS entity_name,
             t.wo_number, t.ext_name,
             p.id AS actor_id, p.display_name AS actor_name, p.kind AS actor_kind,
+            a.viewing_as_id, ${VIEWING_AS_NAME_SQL} AS viewing_as_name,
             ${CREATED_AT_SQL} AS created_at
        ${FROM_SQL}
        ${whereSql}
@@ -207,6 +213,7 @@ function mapRow(r: Row): AuditLogEntryRow {
     wo_number: r.wo_number,
     ext_name: r.ext_name,
     actor: { id: r.actor_id, display_name: r.actor_name, kind: r.actor_kind },
+    viewing_as: r.viewing_as_id ? { id: r.viewing_as_id, display_name: r.viewing_as_name ?? 'Unknown' } : null,
     created_at: r.created_at,
   };
 }
@@ -267,7 +274,7 @@ export async function exportAuditCsv(
   const page = await listAuditLog({ ...f, limit: AUDIT_EXPORT_CAP, offset: 0 }, allow);
   const csv = toCsv(
     // L2 (UAT Wave D): Eastern time, labelled; the UTC instant stays beside it.
-    ['Time (ET)', 'Time (UTC)', 'User', 'Action', 'Entity', 'Name', 'WO #', 'Ext ref', 'Field', 'From', 'To'],
+    ['Time (ET)', 'Time (UTC)', 'User', 'Viewing as', 'Action', 'Entity', 'Name', 'WO #', 'Ext ref', 'Field', 'From', 'To'],
     page.items.map((e) => {
       const admin = e.entity_type !== 'task';
       const diff = admin ? snapshotDiff(e.before, e.after) : null;
@@ -275,6 +282,7 @@ export async function exportAuditCsv(
         auditTimestampET(e.created_at),
         e.created_at,
         e.actor.display_name,
+        e.viewing_as?.display_name ?? '',
         e.action,
         ENTITY_LABELS[e.entity_type] ?? e.entity_type,
         e.entity_name ?? '',

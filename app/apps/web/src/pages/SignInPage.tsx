@@ -7,7 +7,11 @@
                testing other roles
    UAT T1: in either mode, when the server has test accounts switched on
    (/auth/me `test_accounts`), a small "Test account" form under the button
-   signs in as a role's test account (username = role code). */
+   signs in as a role's test account (username = role code).
+   0088: "Keep me signed in" under the button applies to every way in: the
+   session then lasts REMEMBER_ME_DAYS and renews as it is used; unticked, it
+   ends when the browser closes (or after SESSION_TTL_HOURS). The last choice
+   is remembered on this device. */
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -25,6 +29,24 @@ const DEV_DEFAULT_EMAIL = 'eliseam@byblosvista.com';
 /** Where a sign-in lands when nothing more specific was asked for. */
 const HOME = '/dashboard';
 
+/** This device's last "Keep me signed in" choice — a per-browser convenience,
+    so it lives in localStorage and a blocked store simply means unticked. */
+const REMEMBER_KEY = 'theone.signin.remember';
+function readRemember(): boolean {
+  try {
+    return window.localStorage.getItem(REMEMBER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeRemember(on: boolean): void {
+  try {
+    window.localStorage.setItem(REMEMBER_KEY, on ? '1' : '0');
+  } catch {
+    /* storage blocked: the choice still applies to this sign-in */
+  }
+}
+
 /** The page to return to after sign-in: the ?redirect_to RequireAuth set when
     it bounced someone here, if it is a same-origin path — never an absolute
     URL, so the parameter cannot be abused to send people off-site. A bare "/"
@@ -41,6 +63,7 @@ export function SignInPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [remember, setRemember] = useState(readRemember);
 
   // The route's stops follow the pointer a little (see .signin-stop). Two
   // unitless numbers in -1..1 on the page element; CSS turns them into a
@@ -91,7 +114,7 @@ export function SignInPage() {
     setBusy(id);
     setLocalError(null);
     try {
-      await devSignIn(id);
+      await devSignIn(id, remember);
       await refresh();
       window.location.replace(landingFrom(params));
     } catch (err) {
@@ -171,7 +194,7 @@ export function SignInPage() {
               disabled={busy !== null || (authMode === 'bypass' && !devDefault)}
               onClick={() =>
                 authMode === 'entra'
-                  ? startMicrosoftSignIn(landingFrom(params))
+                  ? startMicrosoftSignIn(landingFrom(params), remember)
                   : devDefault && pick(devDefault.id)
               }
             >
@@ -181,6 +204,21 @@ export function SignInPage() {
           </>
         )}
 
+        {!loading && (authMode === 'entra' || authMode === 'bypass' || testAccounts) && (
+          <label className="signin-remember">
+            <input
+              type="checkbox"
+              checked={remember}
+              disabled={busy !== null}
+              onChange={(e) => {
+                setRemember(e.target.checked);
+                writeRemember(e.target.checked);
+              }}
+            />
+            <span>Keep me signed in</span>
+          </label>
+        )}
+
         {!loading && testAccounts && (
           <TestAccountForm
             busy={busy !== null}
@@ -188,7 +226,7 @@ export function SignInPage() {
               setBusy('test');
               setLocalError(null);
               try {
-                await testSignIn(username, password);
+                await testSignIn(username, password, remember);
                 await refresh();
                 window.location.replace(landingFrom(params));
               } catch (err) {

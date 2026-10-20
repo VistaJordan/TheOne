@@ -23,10 +23,11 @@ export const PLATFORM_PART: DocPart = {
           value: 'Single sign-on with the accounts IT already manages; no password resets, no shared logins.',
           controls: [
             { label: 'Sign in with Microsoft', does: 'Starts the Microsoft sign-in; returns to the page that was asked for.' },
+            { label: 'Keep me signed in', does: 'Ticked, the session lasts REMEMBER_ME_DAYS (30 by default) and renews itself as it is used; unticked, it ends when the browser closes or after SESSION_TTL_HOURS. Applies to the test-account and dev sign-ins too; the last choice is remembered on the device.' },
             { label: 'Sign out', does: 'Ends the server-side session and Microsoft\'s session too (the logout URL is followed).' },
           ],
           rules: [
-            'Sessions are rows in the database sent as the httpOnly cookie theone.sid (SameSite=Lax, Secure when the site is https), a 32-byte random id, 12 hours by default (SESSION_TTL_HOURS), last-seen stamped on every request; the join excludes disabled users, so disabling someone ends their sessions at once.',
+            'Sessions are rows in the database sent as the httpOnly cookie theone.sid (SameSite=Lax, Secure when the site is https), a 32-byte random id, 12 hours by default (SESSION_TTL_HOURS) as a browser-session cookie, or with Keep me signed in (0088) REMEMBER_ME_DAYS (30) as a dated cookie pushed out again once a day while it is used, last-seen stamped on every request; the join excludes disabled users, so disabling someone ends their sessions at once.',
             'A disabled account is refused with "This account has been disabled".',
             'The server refuses to boot with no authentication configured.',
           ],
@@ -50,13 +51,13 @@ export const PLATFORM_PART: DocPart = {
         },
         {
           name: 'Viewing as (impersonation)',
-          what: 'A super admin picks a person in the top bar\'s Viewing as select (Myself clears it) and sees exactly what they see — since UAT Wave B (D6, 0084) the admin console, the admin routes, the audit export, the override editor and the integration switches included: every gate answers from the viewed person, so viewing as an OM shows the console the OM gets. Viewing as is read-only: every write under /api answers 403 IMPERSONATION_READ_ONLY ("Viewing as another user is read-only. Stop viewing as them to make changes."), and so do the five reads that log a row under the viewed person (the work-order, vendor and client-update CSV exports, Save as PDF, the technician map); ending or switching the view and signing out are the only writes allowed. Impersonation stops the moment the impersonator stops being a super admin.',
-          value: 'Support questions ("why can I not see this work order?") are answered by looking, not guessing, without handing the impersonator the admin switches, and the audit log never names the viewed person as the author of something the super admin did.',
+          what: 'A super admin picks a person in the top bar\'s Viewing as select (Myself clears it) and sees exactly what they see — since UAT Wave B (D6, 0084) the admin console, the admin routes, the audit export, the override editor and the integration switches included: every gate answers from the viewed person, so viewing as an OM shows the console the OM gets. Since 0088 viewing as can make changes, as the viewed person would make them (their rights, their scope, their name on the records they create), and the audit log signs every change with the super admin’s own name and the person they were viewing as (activity_log.viewing_as_id): the histories read "Jordan Brown (viewing as Dana Fox)", Admin › Audit shows "viewing as …" under the name and has a Viewing as column in its CSV. Impersonation stops the moment the impersonator stops being a super admin.',
+          value: 'Support questions ("why can I not see this work order?") are answered by looking, not guessing, and fixed on the spot as that person, while the audit log never names the viewed person as the author of something the super admin did.',
           controls: [
-            { label: 'Viewing as … / Myself', does: 'Starts or ends acting as another person; while viewing, the control says "Viewing as someone is read-only. Switch back to Myself to make changes.", otherwise "Impersonation is recorded in the activity log".' },
-            { label: 'Read-only', does: 'The chip beside the select while viewing as someone, carrying the same sentence.' },
+            { label: 'Viewing as … / Myself', does: 'Starts or ends acting as another person; while viewing, the control says what the chip says, otherwise "Impersonation is recorded in the activity log".' },
+            { label: 'Changes logged as you', does: 'The chip beside the select while viewing as someone: you see and change what they can, and every change is logged under your name, marked "viewing as".' },
           ],
-          rules: ['Writes while viewing as someone are refused, not logged under the viewed person (W4-2, 2026-10-14); the Super admin switch in Admin › Users is off meanwhile.', 'The view itself is started and stopped on the person really signed in, so a super admin can always switch back to Myself. Admin › Audit\'s CSV export, while viewing as someone, is gated on their audit grant and logged under the real user with viewing_as.'],
+          rules: ['Writes while viewing as someone are gated as the viewed person (D6) and logged under the real user with viewing_as_id (0088; W4-2\'s read-only rule of 2026-10-14 is gone): plugins/authGuard.ts runs each request in the audit context, the database layer passes the two ids to every transaction, and a BEFORE INSERT trigger on activity_log re-signs the row. Records a change creates (a payment request, a quote, a comment) carry the viewed person as their author, as if they had made it.', 'The view itself is started and stopped on the person really signed in, so a super admin can always switch back to Myself. The Super admin switch in Admin › Users follows the viewed person: it is off unless they are a super admin.'],
           permissions: ['super admin only'],
           audit: ['impersonation_started', 'impersonation_ended'],
         },
@@ -138,9 +139,9 @@ export const PLATFORM_PART: DocPart = {
           ],
           rules: [
             'A permission map is capped at 2,000 entries and keys at 400 characters; non-boolean values are dropped on the way in.',
-            'The role matrix lives in migrations (UAT D4). 0084: Exec guest holds exactly OM Under Probation\'s grants; Ops Coordinator holds them too, minus the technician list and map, Clients and rates, on its own work orders and in request mode; VR Officer and Operations Admin request status changes and see every work order (they source and intake for all of them and are never the Assignee); HR (new) holds Admin › Users and Roles only; invoicing is full for Admin and AR and view for TL, ATL and AM.',
-            'UAT Wave C (0085): the four dispatchers (Ops Coordinator, OM Under Probation, OM, Senior OM) request every status change; the new row "Cancel, pause and complete" (work_orders/lifecycle) is off for every role that requests status changes; the NTE, the SLA dates and the AR section are view-only for the dispatchers and the VR Officer.',
-            'Dispatchers (D3) are OM Under Probation and Ops Coordinator (under probation), OM, Senior OM — one list, DISPATCHER_ROLE_CODES in shared/access.ts. Since UAT Wave D (#22 / M22) only an active dispatcher can be put in the Assignee seat by a person (the field editor, bulk edit, Add work order, a draft\'s Submit, Accept, the Assignment Manager, a PM schedule); 400 ASSIGNEE_NOT_DISPATCHER.',
+            'The role matrix lives in migrations (UAT D4). 0084: Exec guest holds exactly OM Under Probation\'s grants (0088 merged Ops Coordinator into OM Under Probation: one position, the om_probation role and its grants, its people moved over); VR Officer and Operations Admin request status changes and see every work order (they source and intake for all of them and are never the Assignee); HR (new) holds Admin › Users and Roles only; invoicing is full for Admin and AR and view for TL, ATL and AM.',
+            'UAT Wave C (0085): the dispatchers (OM Under Probation, OM, Senior OM) request every status change; the new row "Cancel, pause and complete" (work_orders/lifecycle) is off for every role that requests status changes; the NTE, the SLA dates and the AR section are view-only for the dispatchers and the VR Officer.',
+            'Dispatchers (D3) are OM Under Probation (under probation — the Ops Coordinator position, one role since 0088), OM, Senior OM — one list, DISPATCHER_ROLE_CODES in shared/access.ts. Since UAT Wave D (#22 / M22) only an active dispatcher can be put in the Assignee seat by a person (the field editor, bulk edit, Add work order, a draft\'s Submit, Accept, the Assignment Manager, a PM schedule); 400 ASSIGNEE_NOT_DISPATCHER.',
             'UAT Wave D (M17): Restore in Admin › Trash needs the right to delete work orders (or Admin › Trash edit), 403 otherwise. (L4) The locked admin page names the super admins on file, read from GET /principals/super-admins. (L2) Admin › Audit shows times in Eastern time, labelled ET; the CSV carries Time (ET) beside Time (UTC). (M16) Admin › Settings › Access says what sign-in does: the allowed domains enrol themselves in the auto-enrol role, everyone else by invitation.',
           ],
           audit: ['role_created', 'role_updated', 'role_deleted'],
@@ -160,7 +161,7 @@ export const PLATFORM_PART: DocPart = {
         },
         {
           name: 'Test accounts (UAT)',
-          what: 'For acceptance testing with real sessions per role (Viewing as stays read-only): when the server sets TEST_ACCOUNTS_ENABLED=true and TEST_ACCOUNTS_PASSWORD, the sign-in page shows a small Test account form under Sign in with Microsoft. The username is a role code (om, atl, ap, …) and the password the shared one; the role’s test person ("Test <role>", test+<code>@test.theone.local) is created or refreshed on the spot and gets an ordinary session, so its scope, gates and audit are the role’s. The header shows an amber Test account chip.',
+          what: 'For acceptance testing with real sessions per role: when the server sets TEST_ACCOUNTS_ENABLED=true and TEST_ACCOUNTS_PASSWORD, the sign-in page shows a small Test account form under Sign in with Microsoft. The username is a role code (om, atl, ap, …) and the password the shared one; the role’s test person ("Test <role>", test+<code>@test.theone.local) is created or refreshed on the spot and gets an ordinary session, so its scope, gates and audit are the role’s. The header shows an amber Test account chip.',
           value: 'Every role’s screens and refusals can be tried for real, writes included, without a Microsoft account per role.',
           controls: [
             { label: 'Sign in with a test account', does: 'Signs in as the test account of the role code typed.' },
@@ -233,7 +234,7 @@ export const PLATFORM_PART: DocPart = {
           name: 'One log for everything',
           what: 'Work-order edits, status changes (with how: direct, request, visit, automation, webhook, payment, quote, sign-off, bulk, import), creation (source manual, import, intake, planned_maintenance, ecotrak), deletion and restore, visits, attachments, messages, calls, quotes (whole snapshots), payments, invoices, admin changes (fields, statuses, roles, users, automations, holidays, tiers, SharePoint, PDF layouts, integrations, portfolio lists, codes, layouts, templates, tax rates), saved views, exports, sign-ins and impersonation, assistant questions. Admin entities carry a name and before/after snapshots; thirty-five entity types are known.',
           value: 'There is no second place to look.',
-          rules: ['The actor on a row is always the person who acted: a write while viewing as someone is refused (403 IMPERSONATION_READ_ONLY) rather than logged under the viewed person.'],
+          rules: ['The actor on a row is always the person who acted: a write made while viewing as someone is signed by the super admin, with viewing_as_id naming the person they were viewing as (0088).'],
           audit: ['field_updated', 'status_changed', 'created', 'deleted', 'restored', 'visit_created', 'comment_added', 'quote_updated', 'role_updated', 'user_updated', 'work_orders_exported', '…'],
           brd: ['1.2.1'],
         },

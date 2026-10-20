@@ -6,19 +6,17 @@
 // controlled. From here on the actor comes from a server-side session and
 // NOTHING ELSE. The header is ignored.
 //
-// Second rule, W4-2 (D1): a session that is "viewing as" somebody else is
-// READ-ONLY. The acting principal while impersonating is the impersonated
-// person, so a write made in that state would be logged under their name;
-// until an on_behalf_of column records the real author, every non-GET under
-// /api is refused with 403 IMPERSONATION_READ_ONLY — except the two acts that
-// end or switch the view, and signing out (`IMPERSONATION_WRITE_ALLOWLIST`) —
-// and so is the handful of GETs that write a row under the acting principal
-// (the CSV exports, Save as PDF, the technician map: `IMPERSONATION_GET_DENYLIST`).
+// Viewing as (2026-10-20, replacing W4-2's read-only rule): a super admin
+// viewing as somebody acts as them — their rights, their scope, their name on
+// the records they create — and every audit row says who really acted. Each
+// route handler runs inside `runWithAuditContext` while the session is viewing
+// as someone; migration 0088's trigger re-signs the activity_log rows the
+// viewed person would have signed to the real one, with `viewing_as_id` set.
 
 import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { ApiError } from '../errors.js';
-import { loadSession, SESSION_COOKIE, unauthorized, type AuthContext } from '../services/auth.js';
+import { runWithAuditContext } from '../db.js';
+import { loadSession, SESSION_COOKIE, setSessionCookie, unauthorized, type AuthContext } from '../services/auth.js';
 import { testAccountAdminRefusal } from '../services/testAccounts.js';
 
 declare module 'fastify' {
@@ -73,67 +71,16 @@ const PUBLIC_PATTERNS: RegExp[] = [
   /^\/api\/public\/vendor-portal\/[A-Za-z0-9_-]{32}(\/onboarding|\/offers\/[0-9a-fA-F-]{36}|\/jobs\/[0-9a-fA-F-]{36}\/(eta|notes))?$/,
 ];
 
-// W4-2 (D1): viewing as someone is READ-ONLY. A write made while impersonating
-// would be logged as the impersonated person (actorFromRequest returns actingAs),
-// so until an on_behalf_of column exists the guard refuses every non-GET under
-// /api except the two acts that end or switch the view and signing out.
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-export const IMPERSONATION_WRITE_ALLOWLIST = new Set([
-  'POST /api/auth/impersonate',
-  'DELETE /api/auth/impersonate',
-  'POST /api/auth/logout',
-]);
-export const IMPERSONATION_READ_ONLY_MESSAGE =
-  'Viewing as another user is read-only. Stop viewing as them to make changes.';
-// The method rule alone would leave five GETs that write a row under the acting
-// principal — a CSV download is a logged button (rule 1.2.1), Save as PDF logs
-// `work_order_pdf_saved`, the technician map counts its opens per person — so
-// viewing as someone would still put their name on a row. Those paths are
-// refused whatever the method (Fastify answers HEAD with the GET handler), and
-// the query string is never read: `?opened=0` cannot let the map through. The
-// match is on the ROUTE PATTERN Fastify resolved (`req.routeOptions.url`), with
-// the percent-decoded path as the fallback, so an encoded spelling such as
-// `/api/work-orders/%65xport` cannot slip past. A write to a path no route
-// serves answers 403 here rather than 404 while viewing as (this hook runs
-// before the not-found handler) — harmless, and noted so nobody chases it.
-// NOT here on purpose: Admin › Audit's export — routes/admin.ts logs it under
-// the REAL user (`requireAdmin`), as every admin route reads the real user.
-export const IMPERSONATION_GET_DENYLIST: RegExp[] = [
-  /^\/api\/work-orders\/export$/, // work_orders_exported (routes/workOrders.ts)
-  /^\/api\/vendors\/export$/, // vendors_exported (services/vendorWork.ts exportCsv)
-  /^\/api\/work-orders\/[^/]+\/pdf$/, // work_order_pdf_saved (services/woPdf.ts)
-  /^\/api\/work-orders\/[^/]+\/tech-map$/, // vendor_map_log.principal_id (services/vendorMap.ts)
-  /^\/api\/client-updates\/[^/]+\/csv$/, // client_update_exported (services/clientUpdates.ts clientCsv)
-];
-/** The same five as Fastify registers them (the routes file's `app.get` string
-    with the '/api' prefix) — matched on `req.routeOptions.url`, which no URL
-    encoding can alter. Keep in step with IMPERSONATION_GET_DENYLIST. */
-export const IMPERSONATION_GET_DENYLIST_ROUTES: ReadonlySet<string> = new Set([
-  '/api/work-orders/export', // routes/workOrders.ts
-  '/api/vendors/export', // routes/vendorWork.ts
-  '/api/work-orders/:id/pdf', // routes/woPdf.ts
-  '/api/work-orders/:id/tech-map', // routes/vendors.ts
-  '/api/client-updates/:id/csv', // routes/clientUpdates.ts
-]);
-/** The denylist regexes run over the decoded path: `%65xport` is `export`. A
-    path that does not decode is matched as it came. Only the denylist uses
-    it — PUBLIC_PATHS and the allowlist keep the raw path. */
+
+/** The test-account path regexes run over the decoded path: `%75sers` is
+    `users`. A path that does not decode is matched as it came. */
 function decodedPath(path: string): string {
   try {
     return decodeURIComponent(path);
   } catch {
     return path;
   }
-}
-/** Pure: is this request refused for an impersonating session? `path` is the
-    query-stripped path (`pathOf`) — a query string is never part of the key;
-    `routeUrl` is the matched route's pattern (undefined when no route matched). */
-export function impersonationWriteBlocked(method: string, path: string, routeUrl?: string): boolean {
-  if (routeUrl && IMPERSONATION_GET_DENYLIST_ROUTES.has(routeUrl)) return true;
-  if (IMPERSONATION_GET_DENYLIST.some((re) => re.test(decodedPath(path)))) return true;
-  const m = method.toUpperCase();
-  if (READ_METHODS.has(m)) return false;
-  return !IMPERSONATION_WRITE_ALLOWLIST.has(`${m} ${path}`);
 }
 
 // UAT T1: a test account holds a real role, but changing who may do what is
@@ -163,21 +110,36 @@ function isPublic(path: string): boolean {
 }
 
 export default fp(async function authGuard(app: FastifyInstance) {
-  app.addHook('preHandler', async (req) => {
+  // Viewing as: every handler registered after the guard (all of them — the
+  // guard is registered first) runs in the audit context while the session is
+  // viewing as someone, so whatever it writes to activity_log, however deep,
+  // names the real person and whom they were viewing as.
+  app.addHook('onRoute', (route) => {
+    const handler = route.handler;
+    route.handler = function viewingAsAware(this: unknown, req, reply) {
+      const auth = req.auth;
+      if (!auth?.isImpersonating) return handler.call(this as never, req, reply);
+      return runWithAuditContext({ realActorId: auth.user.id, viewingAsId: auth.actingAs.id }, () =>
+        handler.call(this as never, req, reply),
+      );
+    } as typeof handler;
+  });
+
+  app.addHook('preHandler', async (req, reply) => {
     const cookie = req.cookies?.[SESSION_COOKIE];
     // Always attempt the load, even on public paths: /auth/me needs to be able
     // to answer "yes, and here is who" without being guarded itself.
     const auth = await loadSession(cookie);
-    if (auth) req.auth = auth;
+    if (auth) {
+      req.auth = auth;
+      // "Keep me signed in": a remembered session that loadSession pushed out
+      // gets its cookie pushed out with it.
+      if (auth.renewedExpiresAt) setSessionCookie(reply, auth.sessionId, auth.renewedExpiresAt, true);
+    }
 
     const path = pathOf(req);
-    // Public paths return here, so /api/auth/logout passes the read-only rule
-    // below naturally.
     if (isPublic(path)) return;
     if (!auth) throw unauthorized();
-    if (auth.isImpersonating && impersonationWriteBlocked(req.method, path, req.routeOptions?.url)) {
-      throw new ApiError('FORBIDDEN', IMPERSONATION_READ_ONLY_MESSAGE, { code: 'IMPERSONATION_READ_ONLY' });
-    }
     if (auth.user.isTestAccount && testAccountAdminWriteBlocked(req.method, path)) {
       throw testAccountAdminRefusal();
     }

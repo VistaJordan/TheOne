@@ -65,9 +65,9 @@ function routeBlock(file: string, marker: string): string {
 // ── D3 · dispatchers ─────────────────────────────────────────────────────────
 
 describe('D3 · one list of dispatchers', () => {
-  it('is the four role codes, with their tiers', () => {
-    expect([...DISPATCHER_ROLE_CODES].sort()).toEqual(['om', 'om_probation', 'ops_coord', 'senior_om']);
-    expect(dispatcherTier('ops_coord')).toBe('probation');
+  it('is the three role codes, with their tiers (0088 merged ops_coord into om_probation)', () => {
+    expect([...DISPATCHER_ROLE_CODES].sort()).toEqual(['om', 'om_probation', 'senior_om']);
+    expect(isDispatcherRole('ops_coord')).toBe(false);
     expect(dispatcherTier('om_probation')).toBe('probation');
     expect(dispatcherTier('om')).toBe('dispatcher');
     expect(dispatcherTier('senior_om')).toBe('senior');
@@ -317,10 +317,10 @@ describe('#18 · self-edit and grants beyond one’s own', () => {
 describe('D6 · the admin gates read the person being viewed', () => {
   const admin = src('apps/api/src/routes/admin.ts');
 
-  it('requireAdmin and requireSuperAdmin check permissionSubject; the logged id is the real user', () => {
+  it('requireAdmin and requireSuperAdmin check permissionSubject and return its id (0088: the row is re-signed to the real user)', () => {
     const ra = admin.slice(admin.indexOf('function requireAdmin('), admin.indexOf('\n}', admin.indexOf('function requireAdmin(')));
     expect(ra).toMatch(/requirePerm\(\s*permissionSubject\(req\),/);
-    expect(ra).toMatch(/return req\.auth\.user\.id;/);
+    expect(ra).toMatch(/return permissionSubject\(req\)\.id;/);
     const rs = admin.slice(admin.indexOf('function requireSuperAdmin('), admin.indexOf('\n}', admin.indexOf('function requireSuperAdmin(')));
     expect(rs).toMatch(/permissionSubject\(req\)\.isSuperAdmin/);
     expect(routeBlock(admin, "app.get('/admin/roles'")).toMatch(/const u = permissionSubject\(req\);/);

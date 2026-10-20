@@ -236,6 +236,11 @@ function AuditRow({ e, byKey }: { e: AuditLogEntry; byKey: Map<string, WoFieldDe
           </span>
           {e.actor.display_name}
         </span>
+        {e.viewing_as && (
+          <span className="audit-via" title="Made while viewing the app as this person">
+            viewing as {e.viewing_as.display_name}
+          </span>
+        )}
       </td>
       <td>
         <span className="audit-kind">{actionLabel(e.action)}</span>

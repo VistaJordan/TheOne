@@ -13,7 +13,7 @@
 // names the ones reachable without a session in its PUBLIC_PATHS; the rest
 // need a session like every other /api route.
 
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { ApiError, parse } from '../errors.js';
@@ -35,6 +35,7 @@ import {
   devBypassSignIn,
   resolvePrincipalForSignIn,
   setImpersonation,
+  setSessionCookie,
   storeAuthTransaction,
   unauthorized,
   type SessionPrincipal,
@@ -51,14 +52,10 @@ function safeRedirect(raw: string | undefined): string {
   return raw;
 }
 
-function setSessionCookie(reply: FastifyReply, id: string, expiresAt: Date): void {
-  reply.setCookie(SESSION_COOKIE, id, {
-    path: '/',
-    httpOnly: true, // unreadable from JS — an XSS bug cannot lift the session
-    sameSite: 'lax', // survives the top-level redirect back from Microsoft
-    secure: config.cookieSecure,
-    expires: expiresAt,
-  });
+/** "Keep me signed in" travels as `remember=1` on the login link and as
+    `remember: true` in the two JSON sign-ins. */
+function rememberFlag(raw: unknown): boolean {
+  return raw === true || raw === '1' || raw === 'true';
 }
 
 /** The caller's address for the test sign-in's attempt limit. On Vercel the
@@ -105,7 +102,9 @@ function publicPrincipal(p: SessionPrincipal) {
 export default async function authRoutes(app: FastifyInstance): Promise<void> {
   // ── Where the sign-in button goes ─────────────────────────────────────────
   app.get('/auth/login', async (req, reply) => {
-    const redirectTo = safeRedirect((req.query as { redirect_to?: string }).redirect_to);
+    const q = req.query as { redirect_to?: string; remember?: string };
+    const redirectTo = safeRedirect(q.redirect_to);
+    const remember = rememberFlag(q.remember);
 
     if (config.authMode === 'bypass') {
       // No Microsoft to bounce off — the web app renders a user picker instead.
@@ -115,7 +114,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     const { verifier, challenge } = createPkce();
     const state = randomToken();
     const nonce = randomToken();
-    await storeAuthTransaction({ state, codeVerifier: verifier, nonce, redirectTo });
+    await storeAuthTransaction({ state, codeVerifier: verifier, nonce, redirectTo, remember });
 
     return reply.redirect(buildAuthorizeUrl({ state, challenge, nonce }));
   });
@@ -146,12 +145,13 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       const identity = await verifyIdToken(idToken, tx.nonce);
       const principal = await resolvePrincipalForSignIn(identity);
 
-      const { id, expiresAt } = await createSession(principal.id, {
+      const { id, expiresAt, remember } = await createSession(principal.id, {
         userAgent: req.headers['user-agent'],
         ip: req.ip,
+        remember: tx.remember,
       });
-      setSessionCookie(reply, id, expiresAt);
-      await recordAuthEvent(principal.id, 'signed_in', { method: 'entra' });
+      setSessionCookie(reply, id, expiresAt, remember);
+      await recordAuthEvent(principal.id, 'signed_in', { method: 'entra', remember });
 
       return reply.redirect(`${config.webOrigin}${safeRedirect(tx.redirectTo ?? undefined)}`);
     } catch (err) {
@@ -179,15 +179,19 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/auth/dev-login', async (req, reply) => {
     if (config.authMode !== 'bypass') throw new ApiError('NOT_FOUND', 'Route not found');
-    const { principal_id } = parse(z.object({ principal_id: z.string().uuid() }), req.body);
+    const body = parse(
+      z.object({ principal_id: z.string().uuid(), remember: z.boolean().optional() }),
+      req.body,
+    );
 
-    const principal = await devBypassSignIn(principal_id);
-    const { id, expiresAt } = await createSession(principal.id, {
+    const principal = await devBypassSignIn(body.principal_id);
+    const { id, expiresAt, remember } = await createSession(principal.id, {
       userAgent: req.headers['user-agent'],
       ip: req.ip,
+      remember: rememberFlag(body.remember),
     });
-    setSessionCookie(reply, id, expiresAt);
-    await recordAuthEvent(principal.id, 'signed_in', { method: 'dev_bypass' });
+    setSessionCookie(reply, id, expiresAt, remember);
+    await recordAuthEvent(principal.id, 'signed_in', { method: 'dev_bypass', remember });
 
     return { user: publicPrincipal(principal) };
   });
@@ -199,19 +203,20 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/auth/test-login', async (req, reply) => {
     // Off = the route does not exist, whatever the body says.
     if (!testAccountsEnabled()) throw new ApiError('NOT_FOUND', 'Route not found');
-    const { username, password } = parse(
-      z.object({ username: z.string().max(64), password: z.string().max(256) }),
+    const { username, password, remember: rememberRaw } = parse(
+      z.object({ username: z.string().max(64), password: z.string().max(256), remember: z.boolean().optional() }),
       req.body,
     );
     const principal = await testAccountSignIn({ username, password, ip: clientIp(req) });
     // Bound to this password: rotating it, or switching the feature off,
     // signs the session out (services/auth.ts loadSession, migration 0087).
-    const { id, expiresAt } = await createSession(principal.id, {
+    const { id, expiresAt, remember } = await createSession(principal.id, {
       userAgent: req.headers['user-agent'],
       ip: req.ip,
       testPasswordFp: testSessionFingerprint(),
+      remember: rememberFlag(rememberRaw),
     });
-    setSessionCookie(reply, id, expiresAt);
+    setSessionCookie(reply, id, expiresAt, remember);
     return { user: publicPrincipal(principal) };
   });
 

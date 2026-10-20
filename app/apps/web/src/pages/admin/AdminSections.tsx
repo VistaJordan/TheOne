@@ -111,7 +111,7 @@ export function AdminSettingsPage() {
             <Row k="Access" v={enrolmentSentence(s.auth.allowed_domains ?? [], s.auth.auto_enrol_role_label ?? 'OM Under Probation')} />
             <Row k="Directory" v={s.auth.tenant_id ?? 'Not configured'} mono />
             <Row k="Redirect URI" v={s.auth.redirect_uri ?? '—'} mono />
-            <Row k="Session length" v={`${s.auth.session_ttl_hours} hours`} />
+            <Row k="Session length" v={`${s.auth.session_ttl_hours} hours · ${s.auth.remember_me_days ?? 30} days with Keep me signed in`} />
             {s.auth.mode === 'bypass' && (
               <p className="set-note">
                 <Icon name="alert" size={12} />

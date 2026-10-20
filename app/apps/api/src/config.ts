@@ -119,6 +119,9 @@ export interface Config {
   authMode: 'entra' | 'bypass';
   entra: EntraConfig | null;
   sessionTtlHours: number;
+  /** "Keep me signed in" (0088): how long a remembered session lasts, pushed
+      out again as it is used. REMEMBER_ME_DAYS, 30 by default. */
+  rememberMeDays: number;
   /** Cookies go Secure only over HTTPS; localhost is plain http in dev. */
   cookieSecure: boolean;
   /**
@@ -332,6 +335,7 @@ function build(): Config {
     authMode,
     entra,
     sessionTtlHours: Number(str('SESSION_TTL_HOURS') ?? 12),
+    rememberMeDays: Number(str('REMEMBER_ME_DAYS') ?? 30),
     cookieSecure: webOrigin.startsWith('https://'),
     demoMode,
     signIn: buildSignIn(),

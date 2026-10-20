@@ -6,13 +6,17 @@
 // permissions. The actor is now taken from the session the auth guard attached
 // to the request (plugins/authGuard.ts) and the header is ignored entirely.
 //
-// Impersonation note: when a super admin is viewing as somebody else, writes are
-// attributed to `actingAs` so the app behaves as that role — but the session
-// still records the real human, and impersonation start/stop are their own
-// activity_log events. Nothing is anonymous.
+// Impersonation note: when a super admin is viewing as somebody else, the app
+// acts as `actingAs` — their rights, their scope, their name on the records
+// they create — and every activity_log row the request writes is re-signed to
+// the real human with `viewing_as_id` naming whom they were viewing as
+// (plugins/authGuard.ts runs the request in the audit context, migration
+// 0088's trigger does the re-signing). Start / stop are their own events.
+// Nothing is anonymous.
 
 import type { FastifyRequest } from 'fastify';
 import { query } from '../db.js';
+import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import { unauthorized, type Capabilities, type SessionPrincipal } from './auth.js';
 import { Params } from './woFields.js';
 import { outOfScope, woScopeSql } from './woScope.js';
@@ -102,8 +106,9 @@ export function actingFromPrincipal(p: SessionPrincipal): ActingPrincipal {
  * is viewing as someone it is that person — the Admin console, the admin
  * routes and the audit export answer as they would answer them — and
  * otherwise the signed-in user (`actingAs` is the user then). It can never
- * widen anything: a view-as session is read-only (plugins/authGuard.ts), and
- * only a super admin can view as anyone. The one thing it does NOT decide is
+ * widen anything: only a super admin can view as anyone, and since 0088 what
+ * they change while viewing as is gated as the viewed person and logged under
+ * themselves (viewing_as_id). The one thing it does NOT decide is
  * starting and stopping a view (routes/auth.ts reads `req.auth.user`), so a
  * super admin can always stop viewing as.
  */
@@ -176,7 +181,7 @@ export async function resolveTaskId(idOrWo: string, actor?: ActingPrincipal): Pr
 export async function getActivityForTask(taskId: string, limit: number): Promise<ActivityEntry[]> {
   const res = await query<ActivityRow>(
     `SELECT a.id, a.action, a.field, a.before, a.after,
-            p.id AS actor_id, p.display_name AS actor_name, p.kind AS actor_kind,
+            p.id AS actor_id, ${ACTOR_NAME_SQL} AS actor_name, p.kind AS actor_kind,
             ${CREATED_AT_SQL} AS created_at
        FROM activity_log a
        JOIN principal p ON p.id = a.actor_principal_id

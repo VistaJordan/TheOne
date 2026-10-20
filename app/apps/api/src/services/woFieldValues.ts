@@ -20,6 +20,7 @@ import { assertMoneyNotLocked } from './moneySync.js';
 import { assertGateHoldsFields } from './statusGates.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
+import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { ActivityEntry } from '@theone/shared';
 import { MONEY_MAX, VALIDATION_CODE, addedAssignees, withinMoneyBound } from '@theone/shared';
 import { assertDateOrder, assertDispatchers, assertNotHistoryField, checkFieldValue } from './dataRules.js';
@@ -326,7 +327,7 @@ export async function getFieldHistory(
     created_at: string;
   }>(
     `SELECT a.id, a.action, a.field, a.before, a.after,
-            p.id AS actor_id, p.display_name AS actor_name, p.kind AS actor_kind,
+            p.id AS actor_id, ${ACTOR_NAME_SQL} AS actor_name, p.kind AS actor_kind,
             ${CREATED_AT_SQL} AS created_at
        FROM activity_log a
        JOIN principal p ON p.id = a.actor_principal_id

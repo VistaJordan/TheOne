@@ -70,6 +70,7 @@ import { query, withTransaction } from '../db.js';
 import type { Queryable } from '../db.js';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
+import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import { logAdminEvent } from './adminAudit.js';
 import { geoLookup } from './geo.js';
 import { notify } from './notices.js';
@@ -621,7 +622,7 @@ export async function loadExpiries(vendorIds: string[]): Promise<Map<string, Ven
 
 export async function loadNotes(vendorId: string): Promise<VendorNote[]> {
   const res = await query<{ id: string; kind: VendorNote['kind']; body: string; a_id: string | null; a_name: string | null; a_kind: 'human' | 'service' | null; wo_number: string | null; created_at: Date }>(
-    `SELECT n.id::text AS id, n.kind, n.body, p.id::text AS a_id, p.display_name AS a_name, p.kind AS a_kind,
+    `SELECT n.id::text AS id, n.kind, n.body, p.id::text AS a_id, ${ACTOR_NAME_SQL} AS a_name, p.kind AS a_kind,
             t.wo_number, n.created_at
        FROM vendor_note n
        LEFT JOIN principal p ON p.id = n.author_id

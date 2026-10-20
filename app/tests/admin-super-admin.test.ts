@@ -79,7 +79,7 @@ function fnBody(name: string): string {
 }
 
 /** A read of the REAL signed-in user's flag: the helper, or an inline read. */
-const REAL_FLAG = /isRealSuperAdmin\(req\)|req\.auth!?\.user\.isSuperAdmin/;
+const REAL_FLAG = /isActingSuperAdmin\(req\)/;
 
 /** The argument list of `call(...)` inside `block` — one nested paren level allowed. */
 function argsOf(block: string, call: string): string {
@@ -92,7 +92,7 @@ function argsOf(block: string, call: string): string {
 function callGetsRealFlag(block: string, call: string): boolean {
   const args = argsOf(block, call);
   if (REAL_FLAG.test(args)) return true;
-  const assigned = block.match(/const (\w+) = (?:isRealSuperAdmin\(req\)|req\.auth!?\.user\.isSuperAdmin)/);
+  const assigned = block.match(/const (\w+) = isActingSuperAdmin\(req\)/);
   return assigned !== null && new RegExp(`\\b${assigned[1]}\\b`).test(args);
 }
 
@@ -140,7 +140,7 @@ describe('assertMayEditSuperAdmin (W4-1, the other half of the ring)', () => {
   });
 });
 
-describe('routes/admin.ts wires the three user-writing routes to the REAL signed-in user', () => {
+describe('routes/admin.ts wires the three user-writing routes to the acting person (D6, 0088)', () => {
   const post = routeBlock("app.post('/admin/users'");
   const patch = routeBlock("app.patch('/admin/users/:id'");
   const disable = routeBlock("app.post('/admin/users/:id/disable'");
@@ -152,17 +152,14 @@ describe('routes/admin.ts wires the three user-writing routes to the REAL signed
     expect(ROUTES.match(/assertMaySetSuperAdmin\(/g)?.length).toBe(2);
   });
 
-  it('decides on req.auth.user.isSuperAdmin — the helper, when there is one, reads it and never actingAs', () => {
-    const helperStart = ROUTES.indexOf('function isRealSuperAdmin(');
-    if (helperStart > -1) {
-      const helper = ROUTES.slice(helperStart, ROUTES.indexOf('\n}', helperStart));
-      expect(helper).toMatch(/req\.auth!?\.user\.isSuperAdmin/);
-      expect(helper).not.toContain('actingAs');
-    }
+  it('decides on the acting person\'s flag — permissionSubject, which only a super admin can make anyone else', () => {
+    const helperStart = ROUTES.indexOf('function isActingSuperAdmin(');
+    expect(helperStart).toBeGreaterThan(-1);
+    const helper = ROUTES.slice(helperStart, ROUTES.indexOf('\n}', helperStart));
+    expect(helper).toMatch(/permissionSubject\(req\)\.isSuperAdmin/);
     for (const block of [post, patch, disable]) {
       expect(block).toMatch(REAL_FLAG);
-      expect(block).not.toContain('actingAs');
-      expect(block).not.toContain('actingPrincipalFromRequest');
+      expect(block).not.toMatch(/req\.auth!?\.user\.isSuperAdmin/);
     }
   });
 

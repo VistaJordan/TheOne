@@ -24,8 +24,9 @@ export function isStatusRequestMode(perms: PermissionSet, isSuperAdmin = false):
     request-mode system role, so Admin › Roles can loosen it per role. */
 export const LIFECYCLE_PERM_KEY = 'work_orders/lifecycle';
 
-/** The roles 0085 puts in request mode (#16, D3) — the four dispatchers. */
-export const REQUEST_MODE_DISPATCHER_ROLES = ['ops_coord', 'om_probation', 'om', 'senior_om'] as const;
+/** The roles 0085 puts in request mode (#16, D3) — the dispatchers (0085
+    named ops_coord too; 0088 merged it into om_probation). */
+export const REQUEST_MODE_DISPATCHER_ROLES = ['om_probation', 'om', 'senior_om'] as const;
 
 /** The request-mode roles 0085 takes the record-bar lifecycle actions from:
     the dispatchers plus the two roles 0084 put in request mode. */

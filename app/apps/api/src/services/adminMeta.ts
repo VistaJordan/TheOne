@@ -137,6 +137,7 @@ export interface SettingsResponse {
     tenant_id: string | null;
     redirect_uri: string | null;
     session_ttl_hours: number;
+    remember_me_days: number;
     invite_only: true;
     /** M16 (UAT Wave D): the real sign-in policy (config.signIn). */
     allowed_domains: string[];
@@ -181,6 +182,7 @@ export async function getSettings(): Promise<SettingsResponse> {
       tenant_id: config.entra?.tenantId ?? null,
       redirect_uri: config.entra?.redirectUri ?? null,
       session_ttl_hours: config.sessionTtlHours,
+      remember_me_days: config.rememberMeDays,
       invite_only: true,
     },
     server: {

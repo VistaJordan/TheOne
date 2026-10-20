@@ -55,8 +55,8 @@ export const ASSIGNEE_NOT_DISPATCHER_CODE = 'ASSIGNEE_NOT_DISPATCHER';
 export function assigneeNotDispatcherMessage(names: readonly string[]): string {
   const list = names.map((n) => `"${n}"`).join(', ');
   return names.length === 1
-    ? `${list} is not an active dispatcher — a work order is assigned to an Ops Coordinator, OM Under Probation, OM or Senior OM`
-    : `${list} are not active dispatchers — a work order is assigned to an Ops Coordinator, OM Under Probation, OM or Senior OM`;
+    ? `${list} is not an active dispatcher — a work order is assigned to an OM Under Probation, OM or Senior OM`
+    : `${list} are not active dispatchers — a work order is assigned to an OM Under Probation, OM or Senior OM`;
 }
 
 /** Names in a comma-joined `users` value, trimmed, blanks dropped. */
