@@ -1179,8 +1179,10 @@ Cost breakdown (`costs`), Timelog & metrics (`timelog`) and Related. Since
 Finances = money · payables · costs, People = people (Our team, with
 Assignment history) · technicians (permission: People's); each sub-tab keeps
 its `?tab=` id. Flags is gone (checkboxes in All fields); Checklist and
-Related have no button but a link still opens them; the header always opens
-unfolded. The new
+Related have no button but a link still opens them; Timelog is no tab, its
+two cards (Technician time, Timelog and metrics) sit on CICO under the visits
+behind the Timelog permission and ?tab=timelog opens CICO; the header always
+opens unfolded. The new
 state is plain columns on `task`: `vendor_id` (ONE responsible vendor;
 assigning a blacklisted one is refused), `paused_*` with a `wo_pause` history
 (a pause is a **marker only** — rule 2.4.4 stands, no timer stops), `eta_*`,

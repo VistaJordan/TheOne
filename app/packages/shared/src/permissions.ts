@@ -317,7 +317,8 @@ export const WO_TABS: { id: string; label: string }[] = [
   { id: 'audit', label: 'Audit trail' },
   // 0064 · the record's own tabs. Since 2026-10-20 Checklist and Related have
   // no button on the work-order page (a link to them still opens them), and
-  // People › Technicians is shown under the People row.
+  // People › Technicians is shown under the People row; Timelog is no tab of
+  // its own, its row decides whether its cards show on CICO.
   { id: 'tasks', label: 'Checklist' },
   { id: 'costs', label: 'Cost breakdown' },
   { id: 'timelog', label: 'Timelog & metrics' },

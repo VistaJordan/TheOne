@@ -225,7 +225,7 @@ export const SOP: SopDocument = {
         { kind: 'sub', title: 'E. The other record tabs' },
         { kind: 'bullets', items: [
           '**Cost breakdown** (under **Finances**): revenue and cost bases, margin, **Open the quote**, NTE increase requests already open (the button that raised them was removed).',
-          '**Timelog**: open time, response time, time on site, time in each status, the visits with their locations, pauses; **Start a timer** / **Stop** / **Log time** for technician time.',
+          '**Timelog** (on the **CICO** tab, under the visits): open time, response time, time on site, time in each status, the visits with their locations, pauses; **Start a timer** / **Stop** / **Log time** for technician time.',
           '**Site**: the **Site record** block — **Link** / **Change** / **Unlink** a site, choose the asset; access notes under "Getting in".',
         ] },
       ],
@@ -464,7 +464,7 @@ export const SOP: SopDocument = {
           '**Maintenance › Assignment**: pick **Unassigned**, **Everything open** or a person (each with open, emergency and past-SLA counts), tick work orders, choose in **Assign to…** (or **Nobody (unassign)**), **Assign**. Needs the assignment right and the work-order edit right; the selection must be in your scope.',
           '**Job plans**: **New job plan**, Name, Trade, Estimated minutes, Steps one per line, Services with quantities, **Active**; applied once from a work order\'s Checklist (reached from a link; the tab has no button since 2026-10-20) or by a schedule.',
           '**Services**: **New service**, Name, Code, Trade, Unit, Price per unit, Cost per unit. Services never feed Cost.',
-          '**Time tracker**: time entries logged on a work order\'s Timelog tab (**Start a timer** — one running per technician — **Stop**, **Log time**; Labor / Travel / Waiting), summed by technician for a date range.',
+          '**Time tracker**: time entries logged on a work order\'s CICO tab (the Timelog cards) (**Start a timer** — one running per technician — **Stop**, **Log time**; Labor / Travel / Waiting), summed by technician for a date range.',
           '**Work permits**: written on a work order\'s Related tab (opened from the permit\'s work-order link; the tab has no button since 2026-10-20) (**Write a work permit**: kind with pre-filled precautions, holder, first and last day, hazards; **Save as draft**, **Send for approval**); decided by someone with the approve right (**Approve** / **Reject** with a note); **Close the permit** when done; **Back to draft** after a rejection. Once requested only the precaution ticks move.',
         ] },
       ],

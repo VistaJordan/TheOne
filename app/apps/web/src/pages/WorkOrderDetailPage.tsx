@@ -103,7 +103,9 @@ export function WorkOrderDetailPage() {
   const visibleTabs = TAB_IDS.filter((t) => can(tabPerm(t), 'view'));
   const show = (t: Tab) => visibleTabs.includes(t);
   const rawTab = searchParams.get('tab');
-  const wanted: Tab = isTab(rawTab) ? rawTab : 'fields';
+  // 2026-10-20 · Timelog lives on CICO now: an old ?tab=timelog link opens
+  // CICO (the Timelog view itself only for someone who cannot see CICO).
+  const wanted: Tab = rawTab === 'timelog' && show('cico') ? 'cico' : isTab(rawTab) ? rawTab : 'fields';
   const tab: Tab = show(wanted) ? wanted : (visibleTabs[0] ?? 'fields');
   const setTab = (t: Tab) =>
     setSearchParams(t === 'fields' ? {} : { tab: t }, { replace: true });
@@ -329,7 +331,6 @@ export function WorkOrderDetailPage() {
           {show('site') && <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>}
           {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
           {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
-          {show('timelog') && <TabButton id="timelog" tab={tab} onSelect={setTab}>Timelog</TabButton>}
           {show('messages') && (
             <TabButton id="messages" tab={tab} onSelect={setTab}>
               <Icon name="msg" size={12} />
@@ -496,6 +497,15 @@ export function WorkOrderDetailPage() {
               {/* 0064 · when the technician is expected (was Add ETA on the bar). */}
               <EtaCard woId={wo.id} woNumber={wo.wo_number} />
               <CicoCard wo={wo} />
+              {/* 2026-10-20 · the Timelog tab, merged in under the visits; still
+                  behind the Timelog tab's own permission. */}
+              {show('timelog') && (
+                <div className="cico-timelog">
+                  {/* 0065 · who worked on it, from when to when. */}
+                  <TimeCard woId={wo.id} />
+                  {recordQuery.data && <TimelogTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />}
+                </div>
+              )}
             </div>
           )}
 

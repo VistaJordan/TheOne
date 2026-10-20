@@ -72,7 +72,7 @@ Tabs: **Assignment**, **Job plans**, **Services**, **Time tracker**, **Work perm
 - Assign work orders in bulk (needs \`maintenance/assignment\` edit): on **Assignment** pick **Unassigned**, **Everything open** or a person, tick work orders, choose in **Assign to…**, click **Assign**.
 - Job plan (needs \`maintenance/job_plans\` create): **New job plan**, **Name**, **Steps** one per line, **Add job plan**. A plan is applied from a work order's Checklist (no tab button; reached from a link) or by a planned-maintenance schedule.
 - Service (needs \`maintenance/services\` create): **New service**, **Name**, **Unit**, **Price per unit**, **Cost per unit**, **Add service**.
-- **Time tracker** and **Work permits** are lists here. Time is logged on a work order's Timelog tab (\`maintenance/time\` create); a permit is written on a work order's Related view, opened from the permit's work-order link (\`maintenance/permits\` create) and decided by someone with \`maintenance/permits\` approve.
+- **Time tracker** and **Work permits** are lists here. Time is logged on a work order's **CICO** tab, in the **Technician time** card under the visits (\`maintenance/time\` create); a permit is written on a work order's Related view, opened from the permit's work-order link (\`maintenance/permits\` create) and decided by someone with \`maintenance/permits\` approve.
 
 ### Vendors (sidebar: Vendors)
 
