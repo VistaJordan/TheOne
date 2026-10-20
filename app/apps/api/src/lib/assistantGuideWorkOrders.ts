@@ -39,7 +39,7 @@ Needs \`work_orders\` view. A person limited to their own work orders sees a "Yo
 
 ### The work-order page
 
-Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view): **All fields**, **Finances** (money, client quote, invoice), **Dates**, **CICO** (the visit log), **People** (people, technicians, dispatch), **Payables** (vendor bills, purchasing, payment history), **Site**, **Parts**, **Flags**, **Overview** (deadlines, updates and activity, photos), **Checklist**, **Cost breakdown**, **Timelog**, **Related**, **Messages**, **Audit trail**.
+Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view): **All fields**, **Finances** (sub-tabs **Finances**: money, client quote, invoice; **Payables**: vendor bills, purchasing, payment history; **Cost breakdown**), **Dates**, **CICO** (the ETA and the visit log), **People** (sub-tabs **Our team**: our people and the **Assignment history**; **Technicians**: the responsible vendor, technicians, suggested vendors, dispatch), **Site**, **Parts**, **Overview** (deadlines, updates and activity, photos), **Timelog**, **Messages**, **Audit trail**. There is no Flags tab (the flags are checkboxes in All fields). Checklist and Related have no tab button; a link to them (for example from Maintenance › Work permits) still opens them. The header opens unfolded on every work order.
 
 - Edit a field: on **All fields**, click the value, change it, click the tick. **Search fields…** finds a field. Needs \`work_orders\` edit and edit on that field.
   - The visit fields (Visit Type, Check-in/out Status, Checked-in At, Checked-out At, Tech Name, Tech Phone Number, CICO Method) cannot be typed: they follow the latest visit, so edit the visit on the CICO tab.
@@ -58,14 +58,16 @@ Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view):
   - The quote moves the status too: **Send to client** moves it to Waiting for Approval, the client's approval to Approved, the client's decline back to Waiting for Quote (only from the quote and approval statuses; a work order further along stays put).
   - A move Ecotrak would refuse is tagged **Ecotrak**; it is a warning unless the site is set to block.
 
-The action bar under the header (all need \`work_orders\` edit; Pause, Complete service, Cancel and Reopen also need \`work_orders/lifecycle\` edit, which people who must request status changes do not have, so they do not see those buttons):
-- **Assign vendor** / **Re-assign vendor**: search under **Find a vendor** and click one. Blacklisted vendors cannot be picked.
+The **More** menu in the header, beside **Save as PDF** (all need \`work_orders\` edit; Pause, Complete service, Cancel and Reopen also need \`work_orders/lifecycle\` edit, which people who must request status changes do not have, so they do not see those items):
 - **Pause**: type why, click **Pause**; **Resume** ends it. A pause is a marker: it does not stop any clock.
-- **Add ETA**: set **Expected on site**, **Save ETA**.
 - **Tag**: type a **Tag** and a **Reason**, **Add the tag**.
-- **Increase NTE**: type the **New NTE** and why, **Send the request**. A manager decides it on the **Cost breakdown** tab under **NTE increases** (needs \`approvals/nte\` approve).
 - **Complete service**: fill the **Completion note**, fault code and action code, click **Complete service**. It records the completion and does not change the status.
 - **Cancel work order**: type why, **Cancel the work order**. The button is gone once the client invoice is sent or paid, or a vendor payment is paid. **Reopen** undoes it: type why, click **Reopen**; the work order goes back to the status it had before the cancel.
+
+Elsewhere on the page (need \`work_orders\` edit):
+- **Assign vendor** / **Re-assign vendor**: **People** tab, **Technicians**, the **Responsible vendor** card; search under **Find a vendor** and click one. Blacklisted vendors cannot be picked.
+- **Add ETA** / **Change ETA**: **CICO** tab, the **ETA** card; set **Expected on site**, **Save ETA**.
+- There is no button to ask for a higher NTE any more. Requests already open are decided on **Finances** › **Cost breakdown** under **NTE increases** or in Approvals (needs \`approvals/nte\` approve).
 
 Visits (the **CICO** tab; needs \`work_orders\` edit and \`work_orders/fields/cico\` edit):
 1. Click **New visit**.
@@ -81,9 +83,9 @@ Calls: **Call** in the header, pick who under **Who**, pick **Just call** or **C
 
 Flags: **Mark as Escalated** in the header (it then appears on the Escalation Tracker); the **Emergency** checkbox is on All fields. Both need \`work_orders\` edit and edit on the field.
 
-Technicians (the **People** tab, **Technicians** card): **Find a technician** opens the map (needs \`vendor_map\` view); filter by **Trade**, **Availability** and **Show**, pick one and click **Hire for <WO#>** (needs \`vendor_map\` create).
+Technicians (the **People** tab, **Technicians**, the **Technicians** card): **Find a technician** opens the map (needs \`vendor_map\` view); filter by **Trade**, **Availability** and **Show**, pick one and click **Hire for <WO#>** (needs \`vendor_map\` create).
 
-Checklist (the **Checklist** tab): type a step in the add box, or paste several one per line, click **Add**; tick steps as they are done.
+Checklist (no tab button; opened from a link to the work order's checklist): type a step in the add box, or paste several one per line, click **Add**; tick steps as they are done.
 
 ### Incoming Work Orders (sidebar: Incoming Work Orders)
 

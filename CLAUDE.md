@@ -1163,11 +1163,21 @@ Tests: `tests/wo-create-extras.test.ts`.
 **The work-order record** (migration 0064, Facilio parity; `shared/woRecord.ts`,
 `services/woRecord.ts`, `routes/woRecord.ts`, `components/wo/record/`). One
 read, `GET /work-orders/:id/record`, feeds everything new on the page: the
-action bar under the header (`RecordBar` — kept out of `WoHeader.tsx` on
-purpose, another session edits that file), the right rail (`RecordRail`:
+state chips under the header (`RecordBar`; since 2026-10-20 its buttons
+moved: Pause / Tag / Complete service / Cancel / Reopen into the header's
+**More** menu and Save as PDF beside it, both `RecordActions` passed to
+`WoHeader` as its `actions` slot; Assign vendor to People › Technicians,
+`ResponsibleVendorCard`; Add ETA to CICO, `EtaCard`; Increase NTE was
+removed, open `wo_nte_request` rows are still decided), the right rail (`RecordRail`:
 Responsibility, Location, Time with a live timer, Cost; drawn only on
 Overview and the four new tabs, `RAIL_TABS`) and the tabs Checklist (`tasks`),
-Cost breakdown (`costs`), Timelog & metrics (`timelog`) and Related. The new
+Cost breakdown (`costs`), Timelog & metrics (`timelog`) and Related. Since
+2026-10-20 the strip in `WorkOrderDetailPage.tsx` groups tabs (`TAB_GROUPS`):
+Finances = money · payables · costs, People = people (Our team, with
+Assignment history) · technicians (permission: People's); each sub-tab keeps
+its `?tab=` id. Flags is gone (checkboxes in All fields); Checklist and
+Related have no button but a link still opens them; the header always opens
+unfolded. The new
 state is plain columns on `task`: `vendor_id` (ONE responsible vendor;
 assigning a blacklisted one is refused), `paused_*` with a `wo_pause` history
 (a pause is a **marker only** — rule 2.4.4 stands, no timer stops), `eta_*`,

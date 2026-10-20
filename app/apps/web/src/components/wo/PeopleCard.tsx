@@ -1,7 +1,8 @@
 import type { WorkOrderDetailV2 } from '../../api/client';
-import { initials } from '../../lib/fields';
+import { FIELD, initials } from '../../lib/fields';
 import { derivePeople, type PersonSlot } from '../../lib/woDerive';
-import { InlineField } from './fieldEdit';
+import { InlineField, useWoCatalogue } from './fieldEdit';
+import { FieldHistory, useCanViewHistory } from './FieldHistory';
 
 interface PeopleCardProps {
   wo: WorkOrderDetailV2;
@@ -43,6 +44,22 @@ export function PeopleCard({ wo }: PeopleCardProps) {
           </div>
         </>
       )}
+    </section>
+  );
+}
+
+/** People › Our team: every recorded change of the Assignee — who made it and
+    when — read from the same field history as the clock button in All
+    fields. Drawn only for someone with the history grant. */
+export function AssignmentHistoryCard({ wo }: PeopleCardProps) {
+  const byKey = useWoCatalogue();
+  const canHistory = useCanViewHistory();
+  const field = byKey.get(`fields.${FIELD.assignee}`);
+  if (!canHistory || !field) return null;
+  return (
+    <section className="card">
+      <div className="card-head"><h2 className="card-title">Assignment history</h2></div>
+      <FieldHistory woId={wo.id} field={field} />
     </section>
   );
 }
