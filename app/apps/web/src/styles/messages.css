@@ -587,3 +587,73 @@ a.btn[aria-disabled="true"] { opacity: 0.55; pointer-events: none; }
 @media (max-width: 520px) {
   .call-other { grid-template-columns: 1fr; }
 }
+
+/* ── 0089 · @mentions ─────────────────────────────────────────────────────
+   The @ list opens ABOVE the textarea: the composer sits at the foot of the
+   thread, so below would run off the page. */
+.mention-wrap { position: relative; }
+.mention-list {
+  position: absolute;
+  left: 8px;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 32px));
+  max-height: 264px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.mention-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.mention-opt.is-active { background: var(--side-active-bg); color: var(--side-active-ink); }
+.mention-av {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 600;
+}
+.mention-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mention-role { flex: none; font-size: 11px; color: var(--ink-3); }
+
+/* A mention inside a message; the reader's own name stands out. */
+.mention {
+  padding: 0 3px;
+  border-radius: var(--radius-sm);
+  background: var(--tab-on-bg);
+  color: var(--tab-on-ink);
+  font-weight: 600;
+}
+.mention.is-me { background: var(--accent); color: var(--on-accent); }
+
+.composer-mentions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.composer-mentions-warn { color: var(--ink-3); }
+
+/* Opened from a mention notice. */
+.msg.is-highlighted .bubble { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -247,6 +247,7 @@ export const SOP: SopDocument = {
         { kind: 'steps', items: [
           'On the **Messages** tab choose **Internal** ("the team only, never the client") or **Client-visible** (what the client\'s system will receive, once one is linked).',
           'Type (up to 4,000 characters) and click **Post internally** or **Send to client**. A client-visible message queues for the client\'s CMMS and the bubble says "Queued …" until it is sent.',
+          'To bring someone in, type **@** and the start of their name, then pick them from the list (only people who can open this work order are offered). They get a notice in the bell that opens the message.',
           'Edit your own message with the pencil only until it is sent (the lock reads "Sent to the client — it can no longer be edited"); editing may change its visibility. A note the client wrote in their system is never editable.',
           '**Technician texts** (the Quo thread) sit on the same tab: **Send text** sends from your claimed Quo line; the rail shows the technician and the conversation.',
         ] },

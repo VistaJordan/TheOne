@@ -81,7 +81,7 @@ import type {
 import { query, withTransaction, type Queryable } from '../db.js';
 import { badRequest, conflict, forbidden, notFound } from '../errors.js';
 import { resolveTaskId, type ActingPrincipal } from './activity.js';
-import { logAdminEvent } from './adminAudit.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 import { notify } from './notices.js';
 import { requirePerm } from './permissions.js';
 import { logTaskChanges } from './woAudit.js';
@@ -119,6 +119,122 @@ async function peopleByIds(ids: (string | null | undefined)[]): Promise<Map<stri
 async function logWo(taskId: string | null, actor: ActingPrincipal, field: string, after: string): Promise<void> {
   if (!taskId) return;
   await logTaskChanges({ query: (sql, params) => query(sql, params) }, actor.id, taskId, [{ field, before: null, after }]);
+}
+
+// Rule 1.2.1 ("every button"), audit gaps closed 2026-10-20. logWo above
+// writes a line in the WORK ORDER's history and says nothing when a document
+// has no work order — so a purchase request, an RFQ or an order raised on its
+// own left no trace at all. Every act on one now also writes an admin row on
+// the DOCUMENT (entity purchase_request | rfq | purchase_order, entity_id =
+// its id, `name` = its number), whether or not a work order is linked: the
+// work-order line stays as it was (that history is unchanged), the document
+// row is the record of the document itself, with whole before / after
+// snapshots. Like logWo it runs on the pool once the write has committed.
+
+type PurchasingEntity = 'purchase_request' | 'rfq' | 'purchase_order';
+
+/** What a line list says, one string per line — so changing a description
+ *  shows in the diff even when the count and the total stay the same. */
+const lineItems = (lines: PurchaseLine[]): string[] =>
+  lines.map((l) => `${l.qty} ${l.unit} ${l.description}${l.unit_cost === null || l.unit_cost === undefined ? '' : ` @ ${l.unit_cost}`}`);
+
+function requestSnapshot(r: PurchaseRequest): Snapshot {
+  return {
+    name: r.pr_number,
+    title: r.title,
+    status: r.status,
+    work_order: r.task?.wo_number ?? null,
+    vendor: r.vendor?.name ?? null,
+    cost_center: r.cost_center?.code ?? null,
+    needed_by: r.needed_by,
+    reason: r.reason,
+    lines: r.lines.length,
+    estimate: r.estimate,
+    items: lineItems(r.lines),
+    decision_note: r.decision_note,
+  };
+}
+
+function rfqSnapshot(r: Rfq): Snapshot {
+  return {
+    name: r.rfq_number,
+    title: r.title,
+    status: r.status,
+    work_order: r.task?.wo_number ?? null,
+    request: r.request?.pr_number ?? null,
+    due_on: r.due_on,
+    description: r.description,
+    lines: r.lines.length,
+    items: lineItems(r.lines),
+    vendors: r.vendors.map((v) => v.name),
+    quotes: r.quotes.length,
+    order: r.order?.po_number ?? null,
+  };
+}
+
+function orderSnapshot(o: PurchaseOrder): Snapshot {
+  return {
+    name: o.po_number,
+    status: o.status,
+    work_order: o.task?.wo_number ?? null,
+    vendor: o.vendor.name,
+    request: o.request?.pr_number ?? null,
+    rfq: o.rfq?.rfq_number ?? null,
+    cost_center: o.cost_center?.code ?? null,
+    afe: o.afe?.afe_number ?? null,
+    order_date: o.order_date,
+    expected_on: o.expected_on,
+    ship_to: o.ship_to,
+    note: o.note,
+    tax_rate_name: o.tax_rate_name,
+    tax_pct: o.tax_pct,
+    lines: o.lines.length,
+    items: lineItems(o.lines),
+    subtotal: o.subtotal,
+    tax: o.tax,
+    total: o.total,
+    received_value: o.received_value,
+    limit_approved: o.limit_approved_by !== null,
+  };
+}
+
+/** One vendor quote on an RFQ, named by the RFQ's number. */
+function vendorQuoteSnapshot(rfqNumber: string, q: VendorQuote): Snapshot {
+  return {
+    name: rfqNumber,
+    vendor: q.vendor.name,
+    quote_ref: q.quote_ref,
+    total: q.total,
+    lead_days: q.lead_days,
+    valid_until: q.valid_until,
+    note: q.note,
+    status: q.status,
+    prices: q.prices,
+  };
+}
+
+/** The document's own audit row. Both snapshots present and equal = a save
+ *  that changed nothing, which logs nothing. */
+async function logDoc(
+  actor: ActingPrincipal,
+  entity: PurchasingEntity,
+  entityId: string,
+  action: string,
+  before: Snapshot | null,
+  after: Snapshot | null,
+  field: string | null = null,
+): Promise<void> {
+  if (before && after && !snapshotsDiffer(before, after)) return;
+  await logAdminEvent({ actorId: actor.id, entity, entityId, action, field, before, after });
+}
+
+/** A request moved by another document's act (ordered by a PO or an award,
+ *  back to approved when that PO is cancelled): read by id, unscoped — the
+ *  caller already passed the scope check on the document that moved it. */
+async function logRequestSideMove(actor: ActingPrincipal, requestId: string, from: PrStatus, action: string): Promise<void> {
+  const r = await query<{ pr_number: string; status: PrStatus }>(`SELECT pr_number, status FROM purchase_request WHERE id = $1`, [requestId]);
+  if (!r.rows[0] || r.rows[0].status === from) return;
+  await logDoc(actor, 'purchase_request', requestId, action, { name: r.rows[0].pr_number, status: from }, { name: r.rows[0].pr_number, status: r.rows[0].status });
 }
 
 async function holders(key: string, action: PermAction): Promise<string[]> {
@@ -710,12 +826,15 @@ export async function saveRequest(id: string | null, input: PurchaseRequestInput
     return { rowId: rowId!, pr_number: prNumber };
   });
   if (saved.pr_number) await logWo(taskId, actor, 'Purchase request', `${saved.pr_number} raised: ${title}`);
-  return loadRequest(saved.rowId, actor);
+  const after = await loadRequest(saved.rowId, actor);
+  await logDoc(actor, 'purchase_request', after.id, before ? 'purchase_request_updated' : 'purchase_request_created', before ? requestSnapshot(before) : null, requestSnapshot(after));
+  return after;
 }
 
 export async function actOnRequest(id: string, action: PrAction, note: string | null, actor: ActingPrincipal): Promise<PurchaseRequest> {
   const cur = await loadRequest(id, actor);
   const link = '/purchasing?tab=requests';
+  let selfApproved = false;
   // Every move is ONE conditional statement on the status the request was
   // read in: a move another save committed since (a cancel under an approve,
   // an order under a cancel) matches no row and is refused (409), never
@@ -738,7 +857,6 @@ export async function actOnRequest(id: string, action: PrAction, note: string | 
     const reason = clean(note, 500);
     if (action === 'reject' && !reason) throw badRequest('Say why the request is rejected', { field: 'note' });
     // D2: the requester does not approve their own request.
-    let selfApproved = false;
     if (action === 'approve') {
       const verdict = selfApprovalVerdict(cur.requested_by?.id ?? null, actor.id, actor.isSuperAdmin);
       if (verdict === 'blocked') throw forbidden(selfApprovalMessage(cur.pr_number), { code: SELF_APPROVAL_CODE });
@@ -758,7 +876,12 @@ export async function actOnRequest(id: string, action: PrAction, note: string | 
     await set('draft', 'Only a rejected or a cancelled request can go back to draft');
     await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} back to draft`);
   }
-  return loadRequest(id, actor);
+  // The request's own row for every move above (each threw before here if
+  // its conditional statement matched nothing).
+  const after = await loadRequest(id, actor);
+  const verb = action === 'submit' ? 'submitted' : action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'cancel' ? 'cancelled' : 'returned_to_draft';
+  await logDoc(actor, 'purchase_request', id, `purchase_request_${verb}`, requestSnapshot(cur), { ...requestSnapshot(after), ...(selfApproved ? { self_approved: true } : {}) });
+  return after;
 }
 
 // ═══ Requests for quotation and vendor quotes ════════════════════════════════
@@ -921,7 +1044,9 @@ export async function saveRfq(id: string | null, input: RfqInput, actor: ActingP
     return { rowId: rowId!, rfq_number: rfqNumber };
   });
   if (saved.rfq_number) await logWo(taskId, actor, 'Request for quotation', `${saved.rfq_number} raised: ${title}`);
-  return loadRfq(saved.rowId, actor);
+  const after = await loadRfq(saved.rowId, actor);
+  await logDoc(actor, 'rfq', after.id, before ? 'rfq_updated' : 'rfq_created', before ? rfqSnapshot(before) : null, rfqSnapshot(after));
+  return after;
 }
 
 export async function actOnRfq(id: string, action: RfqAction, actor: ActingPrincipal): Promise<Rfq> {
@@ -959,7 +1084,10 @@ export async function actOnRfq(id: string, action: RfqAction, actor: ActingPrinc
     if (!done.rows[0]) throw conflict('It was awarded: cancel the purchase order instead');
     await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number} cancelled`);
   }
-  return loadRfq(id, actor);
+  const after = await loadRfq(id, actor);
+  const verb = action === 'send' ? 'sent' : action === 'close' ? 'closed' : action === 'reopen' ? 'reopened' : 'cancelled';
+  await logDoc(actor, 'rfq', id, `rfq_${verb}`, rfqSnapshot(cur), rfqSnapshot(after));
+  return after;
 }
 
 export async function saveVendorQuote(rfqId: string, input: VendorQuoteInput, actor: ActingPrincipal): Promise<Rfq> {
@@ -1006,7 +1134,15 @@ export async function saveVendorQuote(rfqId: string, input: VendorQuoteInput, ac
     return quoted;
   });
   await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number}: ${v.rows[0].name} quoted $${total.toFixed(2)}`);
-  return loadRfq(rfqId, actor);
+  // One quote per vendor per RFQ (the upsert's key), so the vendor finds it
+  // on both sides; re-entering the same figures logs nothing.
+  const after = await loadRfq(rfqId, actor);
+  const was = cur.quotes.find((q) => q.vendor.id === input.vendor_id) ?? null;
+  const now = after.quotes.find((q) => q.vendor.id === input.vendor_id) ?? null;
+  if (now) {
+    await logDoc(actor, 'rfq', rfqId, was ? 'rfq_quote_updated' : 'rfq_quote_recorded', was ? vendorQuoteSnapshot(cur.rfq_number, was) : null, vendorQuoteSnapshot(after.rfq_number, now), `vendor_quote:${now.id}`);
+  }
+  return after;
 }
 
 export async function deleteVendorQuote(rfqId: string, quoteId: string, actor: ActingPrincipal): Promise<Rfq> {
@@ -1024,6 +1160,10 @@ export async function deleteVendorQuote(rfqId: string, quoteId: string, actor: A
     const res = await tx.query(`DELETE FROM vendor_quote WHERE id = $1 AND rfq_id = $2 RETURNING id`, [quoteId, rfqId]);
     if (!res.rows[0]) throw notFound('That quote does not exist');
   });
+  // The quote as it was read before the delete; it no longer exists to re-read.
+  const gone = cur.quotes.find((q) => q.id === quoteId);
+  await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number}: ${gone?.vendor.name ?? 'a vendor'}’s quote removed`);
+  await logDoc(actor, 'rfq', rfqId, 'rfq_quote_deleted', gone ? vendorQuoteSnapshot(cur.rfq_number, gone) : { name: cur.rfq_number, quote_id: quoteId }, null, `vendor_quote:${quoteId}`);
   return loadRfq(rfqId, actor);
 }
 
@@ -1068,12 +1208,20 @@ export async function awardQuote(rfqId: string, quoteId: string, actor: ActingPr
     await tx.query(`UPDATE rfq SET status = 'awarded', awarded_quote_id = $2, updated_at = now() WHERE id = $1`, [rfqId, quoteId]);
     if (cur.request) await assertNoLiveOrder(tx, cur.request.id);
     const order = await createOrder(tx, { vendor_id: win.vendor.id, rfq_id: rfqId, request_id: cur.request?.id ?? null, lines, note: quote.rows[0].note }, actor, cur.task?.id ?? null);
+    // The request's status is read under its lock (assertNoLiveOrder took it),
+    // so the audit row after the commit says what it moved from.
+    const requestFrom = cur.request ? ((await tx.query<{ status: PrStatus }>(`SELECT status FROM purchase_request WHERE id = $1`, [cur.request.id])).rows[0]?.status ?? null) : null;
     if (cur.request) await tx.query(`UPDATE purchase_request SET status = 'ordered', updated_at = now() WHERE id = $1 AND status = 'approved'`, [cur.request.id]);
-    return { ...order, total };
+    return { ...order, total, requestFrom };
   });
   await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${won.po_number} drafted for ${won.vendorName}`);
   await logWo(cur.task?.id ?? null, actor, 'Request for quotation', `${cur.rfq_number} awarded to ${win.vendor.name} for $${won.total.toFixed(2)} → ${won.po_number}`);
-  return { rfq: await loadRfq(rfqId, actor), order: await getOrder(won.id, actor) };
+  const rfq = await loadRfq(rfqId, actor);
+  const order = await getOrder(won.id, actor);
+  await logDoc(actor, 'rfq', rfqId, 'rfq_awarded', rfqSnapshot(cur), { ...rfqSnapshot(rfq), awarded_to: win.vendor.name, awarded_total: won.total });
+  await logDoc(actor, 'purchase_order', order.id, 'purchase_order_created', null, { ...orderSnapshot(order), source: 'award' });
+  if (cur.request && won.requestFrom) await logRequestSideMove(actor, cur.request.id, won.requestFrom, 'purchase_request_ordered');
+  return { rfq, order };
 }
 
 // ═══ Purchase orders ═════════════════════════════════════════════════════════
@@ -1293,7 +1441,10 @@ export async function saveOrder(id: string | null, input: PurchaseOrderInput, ac
       return order;
     });
     await logWo(taskId, actor, 'Purchase order', `${created.po_number} drafted for ${created.vendorName}`);
-    return getOrder(created.id, actor);
+    const order = await getOrder(created.id, actor);
+    await logDoc(actor, 'purchase_order', order.id, 'purchase_order_created', null, orderSnapshot(order));
+    if (from) await logRequestSideMove(actor, from.id, from.status, 'purchase_request_ordered');
+    return order;
   }
   const before = await getOrder(id, actor);
   if (before.status !== 'draft') throw conflict('Only a draft purchase order can be changed. Cancel it and raise a new one, or record what was received.');
@@ -1329,7 +1480,9 @@ export async function saveOrder(id: string | null, input: PurchaseOrderInput, ac
     if (!kept.rows[0]) throw conflict('Only a draft purchase order can be changed. Cancel it and raise a new one, or record what was received.');
     await writeOrderLines(tx, id, lines, tax.pct);
   });
-  return getOrder(id, actor);
+  const after = await getOrder(id, actor);
+  await logDoc(actor, 'purchase_order', id, 'purchase_order_updated', orderSnapshot(before), orderSnapshot(after));
+  return after;
 }
 
 /**
@@ -1352,12 +1505,16 @@ export async function approvePoOverLimit(id: string, actor: ActingPrincipal): Pr
   );
   if (!done.rows[0]) throw conflict('The order changed while you were looking at it — reload it');
   await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number} approved over the limit ($${cur.total.toFixed(2)})${verdict === 'self_approved' ? ' (self-approved by a super admin)' : ''}`);
-  return getOrder(id, actor);
+  const after = await getOrder(id, actor);
+  await logDoc(actor, 'purchase_order', id, 'purchase_order_limit_approved', orderSnapshot(cur), { ...orderSnapshot(after), ...(verdict === 'self_approved' ? { self_approved: true } : {}) });
+  return after;
 }
 
 export async function actOnOrder(id: string, action: PoAction, actor: ActingPrincipal): Promise<PurchaseOrder> {
   if (action === 'approve_limit') return approvePoOverLimit(id, actor);
   const cur = await getOrder(id, actor);
+  // A cancel frees the request the order came from; true when it did.
+  let freed = false;
   if (action === 'issue') {
     requirePerm(actor, PURCHASING_PERM.orders, 'approve', 'Issuing a purchase order is for people who approve them');
     if (cur.status !== 'draft') throw conflict('Only a draft can be issued');
@@ -1416,7 +1573,7 @@ export async function actOnOrder(id: string, action: PoAction, actor: ActingPrin
     // receipt committed since the read above is refused, not cancelled over.
     // The order and the request it came from move together; the audit row
     // follows the commit.
-    await withTransaction(async (tx) => {
+    freed = await withTransaction(async (tx) => {
       const fresh = await tx.query<{ status: PoStatus }>(`SELECT status FROM purchase_order WHERE id = $1 FOR UPDATE`, [id]);
       if (!fresh.rows[0]) throw notFound('That purchase order does not exist');
       const status = fresh.rows[0].status;
@@ -1426,7 +1583,8 @@ export async function actOnOrder(id: string, action: PoAction, actor: ActingPrin
       if (Number(got.rows[0]?.received ?? 0) > 0) throw conflict('Something was already received against it: close it instead');
       await tx.query(`UPDATE purchase_order SET status = 'cancelled', updated_at = now() WHERE id = $1`, [id]);
       // The request it came from can be ordered again.
-      if (cur.request) await tx.query(`UPDATE purchase_request SET status = 'approved', updated_at = now() WHERE id = $1 AND status = 'ordered'`, [cur.request.id]);
+      const back = cur.request ? await tx.query(`UPDATE purchase_request SET status = 'approved', updated_at = now() WHERE id = $1 AND status = 'ordered' RETURNING id`, [cur.request.id]) : null;
+      return Boolean(back?.rows[0]);
     });
     await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number} cancelled`);
   } else {
@@ -1441,7 +1599,13 @@ export async function actOnOrder(id: string, action: PoAction, actor: ActingPrin
     if (!done.rows[0]) throw conflict('Only a closed order can be reopened');
     await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number} reopened`);
   }
-  return getOrder(id, actor);
+  const after = await getOrder(id, actor);
+  const verb = action === 'issue' ? 'issued' : action === 'close' ? 'closed' : action === 'cancel' ? 'cancelled' : 'reopened';
+  await logDoc(actor, 'purchase_order', id, `purchase_order_${verb}`, orderSnapshot(cur), orderSnapshot(after));
+  if (freed && cur.request) {
+    await logDoc(actor, 'purchase_request', cur.request.id, 'purchase_request_order_cancelled', { name: cur.request.pr_number, status: 'ordered', order: cur.po_number }, { name: cur.request.pr_number, status: 'approved', order: null });
+  }
+  return after;
 }
 
 /** Record what arrived: the TOTAL received so far, per line. */
@@ -1471,7 +1635,9 @@ export async function receiveOrder(id: string, received: { line_id: string; rece
     return next;
   });
   await logWo(cur.task?.id ?? null, actor, 'Purchase order', `${cur.po_number}: ${status === 'received' ? 'everything received' : status === 'partially_received' ? 'partly received' : 'nothing received'}`);
-  return getOrder(id, actor);
+  const after = await getOrder(id, actor);
+  await logDoc(actor, 'purchase_order', id, 'purchase_order_received', orderSnapshot(cur), orderSnapshot(after));
+  return after;
 }
 
 // ═══ Everything purchasing on one work order ═════════════════════════════════

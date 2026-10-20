@@ -107,7 +107,14 @@ updated|deleted`, entity `saved_view`), CSV downloads (`work_orders_exported`,
 revisions (`quote_updated` carries whole-quote snapshots from `snapshotQuote`
 in `services/quotes.ts`; an autosave that changed nothing logs nothing).
 Deliberately not logged: per-user prefs (column widths, collapsed cards) and
-pure UI clicks (tabs, folds, filters) — they change no record. Since migration
+pure UI clicks (tabs, folds, filters) — they change no record. A sweep of every
+write route on 2026-10-20 closed the last gaps (labor rates, purchasing
+documents with no work order, dashboards and their cards, vendor tasks /
+targets / saved lists / skill and induction edits, the technician on a visit,
+ClickUp / Ecotrak / SharePoint buttons, automation enrol, assistant thumbs,
+reviews and deletes; pinned by `tests/audit-gaps-*.test.ts`); a new write
+needs its row. A role or Adjust row lists its permission changes path by path
+(`permMapChanges`, shared `permDiff.ts`) on the screen and in the CSV. Since migration
 0029 the table is **append-only at the database**:
 a `BEFORE UPDATE OR DELETE` trigger raises (rule 1.2.2), so a correction is a
 new row, never an edit; TRUNCATE still works for the local seed. `entity_id`
@@ -792,6 +799,27 @@ and visibility), `client_message_sent|failed|received`. The obligations
 engine counts only a `staff` client-visible message as a chase. Inbound
 (`receiveClientMessage`) is the function an adapter calls; no route yet.
 Deferred: email as a delivery target, and the adapters themselves.
+
+**@mentions in messages** (migration 0089, `packages/shared/src/mentions.ts`
+pure, `services/woMessages.ts`, `components/wo/messages/MentionTextarea.tsx`,
+`tests/wo-mentions.test.ts`). Typing @ in the Messages composer (or the edit
+box of one's own message) opens the people who can open THIS work order —
+`GET /work-orders/:id/mention-candidates` (`work_orders/comments` create):
+active humans with `work_orders` view and the Messages tab, the work order
+inside each one's OWN `woScopeSql` (one statement, one predicate per person).
+The body stays plain text ("@Display Name", it may go to a client CMMS); who
+an @Name is travels beside it as `mentions: uuid[]` on POST / PATCH (max
+`MENTION_MAX` 20) and lives in `comment_mention` (both keys ON DELETE
+CASCADE, so the seed's TRUNCATE needs nothing). An id that is not a
+candidate is 400 `MENTION_NOT_ALLOWED`; only ids whose @Name is still in the
+body are kept (`mentionsInBody`), so deleting the name drops the mention; a
+PATCH without `mentions` keeps the old ones still named. The rows commit with
+the message; after the commit `notify()` raises an `app_notice` of kind
+`wo_mention` ("<who> mentioned you on <WO #>", link
+`/work-orders/<WO #>?tab=messages&msg=<id>`) — an edit tells only the people
+it ADDED. `WoMessage.mentions` drives the highlight (`splitMentions`, the
+reader's own name in accent) and `WoThread` scrolls to and outlines `?msg=`.
+`comment_added` / `message_edited` carry the mentions (id + name).
 
 **Calls through Quo and the AI quote draft** (migration 0054,
 `services/woCalls.ts`, `services/aiQuote.ts`, `lib/aiQuotePrompt.ts`,

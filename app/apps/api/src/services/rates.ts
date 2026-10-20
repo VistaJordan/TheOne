@@ -6,6 +6,7 @@
 import { query } from '../db.js';
 import type { LaborRate } from '@theone/shared';
 import { ApiError } from '../errors.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 
 interface RateRow {
   id: string;
@@ -76,9 +77,33 @@ export interface LaborRateInput {
   is_sales_tax_required?: boolean;
 }
 
-/** Upsert on the (billing entity, FM, trade) combo — Yoda's unique index. */
-export async function upsertLaborRate(input: LaborRateInput): Promise<LaborRate> {
+/** What the audit log calls a rate: its key, a blank part read as "All". */
+function rateName(r: { billing_entity: string | null; fm: string | null; trade: string | null }): string {
+  const part = (v: string | null) => (v && v.trim() ? v.trim() : 'All');
+  return `${part(r.billing_entity)} · ${part(r.fm)} · ${part(r.trade)}`;
+}
 
+function rateSnapshot(r: LaborRate): Snapshot {
+  const { id: _id, ...rest } = r;
+  return { name: rateName(r), ...rest };
+}
+
+/**
+ * Upsert on the (billing entity, FM, trade) combo — Yoda's unique index.
+ * Rule 1.2.1: the row on that key is read first, so the audit row says
+ * whether the save created the rate or changed it, with whole before / after
+ * snapshots; a save that changed nothing logs nothing. Logged after the write,
+ * on the pool, like every admin row (adminAudit.ts).
+ */
+export async function upsertLaborRate(input: LaborRateInput, actorId: string): Promise<LaborRate> {
+  const prior = await query<RateRow>(
+    `${RATE_SQL}
+      WHERE COALESCE(billing_entity,'') = COALESCE($1,'')
+        AND COALESCE(fm,'') = COALESCE($2,'')
+        AND COALESCE(trade,'') = COALESCE($3,'')`,
+    [input.billing_entity ?? null, input.fm ?? null, input.trade ?? null],
+  );
+  const before = prior.rows[0] ? rateSnapshot(mapRate(prior.rows[0])) : null;
   const res = await query<{ id: string }>(
     `INSERT INTO labor_rate
        (billing_entity, fm, trade, tech_rate, helper_rate, trip_rate, afterhours_rate, holiday_rate, is_sales_tax_required)
@@ -102,5 +127,17 @@ export async function upsertLaborRate(input: LaborRateInput): Promise<LaborRate>
   );
   const row = await query<RateRow>(`${RATE_SQL} WHERE id = $1`, [res.rows[0].id]);
   if (row.rows.length === 0) throw new ApiError('INTERNAL', 'Labor rate vanished after upsert');
-  return mapRate(row.rows[0]);
+  const saved = mapRate(row.rows[0]);
+  const after = rateSnapshot(saved);
+  if (!before || snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId,
+      entity: 'labor_rate',
+      entityId: saved.id,
+      action: before ? 'labor_rate_updated' : 'labor_rate_created',
+      before,
+      after,
+    });
+  }
+  return saved;
 }

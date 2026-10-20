@@ -147,7 +147,7 @@ export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
     requirePerm(actor, 'admin/settings', 'edit', 'Editing labor rates requires the settings grant');
     assertRawMoney(req.rawBody);
     const input = parse(rateSchema, req.body);
-    return { item: await upsertLaborRate(input) };
+    return { item: await upsertLaborRate(input, actor.id) };
   });
 
   app.get('/work-orders/:id/quote', async (req) => {

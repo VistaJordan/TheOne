@@ -9,6 +9,7 @@
 // SQL and the adapters live under apps/api.
 
 import type { FeedActor } from './index';
+import type { MessageMention } from './mentions';
 
 export type ClientMessageTarget = 'ecotrak' | 'corrigo' | 'servicechannel';
 
@@ -67,6 +68,8 @@ export interface WoMessage {
   sent: boolean;
   /** May the ACTING principal edit it right now (their own, unsent, permitted). */
   editable: boolean;
+  /** 0089 · the people it @mentions (each "@Name" in the body is one of these). */
+  mentions: MessageMention[];
 }
 
 /** The client system a work order is linked to, as the Messages tab draws it. */

@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ATTACHMENT_ALLOWED_TYPES, ATTACHMENT_MAX_BYTES, WO_MESSAGE_MAX, formatBytes } from '@theone/shared';
-import type { ClientSystem, WoMessagesResponse } from '../../../api/client';
+import { ATTACHMENT_ALLOWED_TYPES, ATTACHMENT_MAX_BYTES, WO_MESSAGE_MAX, formatBytes, mentionsInBody } from '@theone/shared';
+import type { ClientSystem, MentionCandidate, WoMessagesResponse } from '../../../api/client';
 import { listAttachments, postWorkOrderMessage, uploadAttachment } from '../../../api/client';
 import { useInvalidateObligations } from '../../../hooks/useObligations';
 import { useAuth } from '../../../auth/AuthProvider';
 import { prepareFile } from '../../../lib/upload';
 import { Icon } from '../../Icon';
+import { MentionTextarea, useMentionCandidates } from './MentionTextarea';
 
 interface MessageComposerProps {
   woId: string;
@@ -30,10 +31,22 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
   const { can } = useAuth();
   const canMessageClient = can('work_orders/comments/client', 'create');
 
+  // 0089 · @mentions: the people picked from the list; only those whose
+  // "@Name" is still in the text are sent.
+  const candidates = useMentionCandidates(woId, can('work_orders/comments', 'create'));
+  const [picked, setPicked] = useState<MentionCandidate[]>([]);
+  const mentioned = mentionsInBody(body, picked);
+
   const mutation = useMutation({
-    mutationFn: () => postWorkOrderMessage(woId, { body: body.trim(), client_visible: clientVisible }),
+    mutationFn: () =>
+      postWorkOrderMessage(woId, {
+        body: body.trim(),
+        client_visible: clientVisible,
+        ...(mentioned.length > 0 ? { mentions: mentioned.map((m) => m.id) } : {}),
+      }),
     onSuccess: (res) => {
       setBody('');
+      setPicked([]);
       setClientVisible(false);
       qc.setQueryData<WoMessagesResponse>(queryKey, (curr) =>
         curr ? { ...curr, items: [...curr.items, res.item] } : curr,
@@ -125,14 +138,27 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
         </span>
       </div>
 
-      <textarea
+      <MentionTextarea
         className="composer-input"
-        placeholder={clientVisible ? `Message the client about ${woNumber}…` : `Add an internal message on ${woNumber}…`}
+        placeholder={
+          clientVisible
+            ? `Message the client about ${woNumber}…`
+            : `Add an internal message on ${woNumber}… Type @ to mention someone`
+        }
         aria-label="Message text"
         maxLength={WO_MESSAGE_MAX}
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={setBody}
+        candidates={candidates}
+        onMention={(person) => setPicked((curr) => (curr.some((c) => c.id === person.id) ? curr : [...curr, person]))}
       />
+      {mentioned.length > 0 && (
+        <div className="composer-mentions">
+          <Icon name="bell" size={12} />
+          {mentioned.length === 1 ? `${mentioned[0].name} will be notified` : `${mentioned.map((m) => m.name).join(', ')} will be notified`}
+          {clientVisible && <span className="composer-mentions-warn"> · the client sees the @names too</span>}
+        </div>
+      )}
 
       <div className="composer-foot">
         <div className="composer-tools">

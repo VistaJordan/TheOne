@@ -528,17 +528,21 @@ export async function searchTechs(taskId: string, q: string): Promise<TechSearch
 /** A visit named a technician from the records: remember which one, and link
     them to whoever logged it. `vendorId` null = the name was typed by hand. */
 export async function linkVisitVendor(visitId: string, vendorId: string | null, actor: ActingPrincipal): Promise<void> {
-  if (vendorId === null) {
-    await query(`UPDATE wo_visit SET vendor_id = NULL WHERE id = $1`, [visitId]);
-    return;
-  }
-  await liveVendor(vendorId);
-  const visit = await query<{ task_id: string; was: string | null }>(
-    `SELECT task_id::text AS task_id, vendor_id::text AS was FROM wo_visit WHERE id = $1`,
+  if (vendorId !== null) await liveVendor(vendorId);
+  const visit = await query<{ task_id: string; was: string | null; was_name: string | null }>(
+    `SELECT w.task_id::text AS task_id, w.vendor_id::text AS was, v.name AS was_name
+       FROM wo_visit w LEFT JOIN vendor v ON v.id = w.vendor_id
+      WHERE w.id = $1`,
     [visitId],
   );
   if (!visit.rows[0]) return;
   if (visit.rows[0].was === vendorId) return;
+  const before = visit.rows[0].was ? { vendor_id: visit.rows[0].was, name: visit.rows[0].was_name ?? 'Unknown' } : null;
+  if (vendorId === null) {
+    await query(`UPDATE wo_visit SET vendor_id = NULL WHERE id = $1`, [visitId]);
+    await logVisitVendorLink(actor.id, visit.rows[0].task_id, visitId, before, null);
+    return;
+  }
   // First visit of this technician on this work order → one more job to their name.
   const first = await query<{ n: number }>(
     `SELECT count(*)::int AS n FROM wo_visit WHERE task_id = $1 AND vendor_id = $2`,
@@ -548,7 +552,28 @@ export async function linkVisitVendor(visitId: string, vendorId: string | null, 
   if ((first.rows[0]?.n ?? 0) === 0) {
     await query(`UPDATE vendor SET work_orders_count = work_orders_count + 1 WHERE id = $1`, [vendorId]);
   }
+  const name = await query<{ name: string }>(`SELECT name FROM vendor WHERE id = $1`, [vendorId]);
+  await logVisitVendorLink(actor.id, visit.rows[0].task_id, visitId, before, { vendor_id: vendorId, name: name.rows[0]?.name ?? 'Unknown' });
   await linkDispatcher(vendorId, actor.id, 'visit');
+}
+
+/** Rule 1.2.1: which technician RECORD stands behind a visit is logged on the
+    WORK ORDER, under the visit's own field (`visit:<id>`, as visits.ts logs
+    visit_created / _updated), before / after = {vendor_id, name}, null = typed
+    by hand. Only called when the record actually changed. */
+async function logVisitVendorLink(
+  actorId: string,
+  taskId: string,
+  visitId: string,
+  before: { vendor_id: string; name: string } | null,
+  after: { vendor_id: string; name: string } | null,
+): Promise<void> {
+  await query(
+    `INSERT INTO activity_log
+       (actor_principal_id, entity_type, entity_id, action, field, before, after)
+     VALUES ($1, 'task', $2, 'visit_vendor_linked', $3, $4::jsonb, $5::jsonb)`,
+    [actorId, taskId, `visit:${visitId}`, before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null],
+  );
 }
 
 export interface AddTechResult extends WoTechniciansResponse {

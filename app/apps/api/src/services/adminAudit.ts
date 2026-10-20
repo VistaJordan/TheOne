@@ -85,7 +85,18 @@ export type AdminEntity =
   // 0073: the field list of a work-order PDF (Admin › Settings), keyed by kind.
   | 'wo_pdf_layout'
   // 0074: a connector's on / off switch (Admin › Integrations), keyed by its key.
-  | 'integration';
+  | 'integration'
+  // Audit gaps closed 2026-10-20 (every button, rule 1.2.1): a labor rate
+  // (Yoda /QuoteRate), purchasing documents with or without a work order,
+  // dashboards and their cards, vendor tasks, daily targets and saved lists.
+  | 'labor_rate'
+  | 'purchase_request'
+  | 'rfq'
+  | 'purchase_order'
+  | 'dashboard'
+  | 'vendor_task'
+  | 'vendor_target'
+  | 'vendor_saved_view';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 
