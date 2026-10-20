@@ -1,17 +1,20 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { WO_MESSAGE_MAX } from '@theone/shared';
-import type { ClientSystem, MessageDelivery, WoMessage, WoMessagesResponse } from '../../../api/client';
+import { WO_MESSAGE_MAX, mentionsInBody, splitMentions } from '@theone/shared';
+import type { ClientSystem, MentionCandidate, MessageDelivery, WoMessage, WoMessagesResponse } from '../../../api/client';
 import { patchWorkOrderMessage } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthProvider';
 import { Icon } from '../../Icon';
 import { feedTime, initials } from '../../../lib/fields';
+import { MentionTextarea, useMentionCandidates } from './MentionTextarea';
 
 interface WoMessageBubbleProps {
   message: WoMessage;
   woId: string;
   queryKey: readonly unknown[];
   clientSystem: ClientSystem | null;
+  /** 0089 · opened from a mention notice (?msg=<id>): drawn highlighted. */
+  highlighted?: boolean;
 }
 
 type IconName = Parameters<typeof Icon>[0]['name'];
@@ -64,27 +67,37 @@ function footFor(m: WoMessage, clientSystem: ClientSystem | null): Foot[] {
     client-visible ones accent-tinted, internal ones dashed and neutral. A
     message that came in from the client's CMMS sits on the left. The author
     may edit their own message until a client system has accepted it. */
-export function WoMessageBubble({ message: m, woId, queryKey, clientSystem }: WoMessageBubbleProps) {
+export function WoMessageBubble({ message: m, woId, queryKey, clientSystem, highlighted = false }: WoMessageBubbleProps) {
   const fromClient = m.source === 'client';
   const who = fromClient ? (m.external_author ?? 'Client') : (m.author?.name ?? 'Unknown');
   const cls = [
     'msg',
     fromClient ? 'msg-from-client' : 'msg-out',
     !fromClient && !m.client_visible ? 'msg-internal' : '',
+    highlighted ? 'is-highlighted' : '',
   ].filter(Boolean).join(' ');
 
-  const { can } = useAuth();
+  const { can, actingAs } = useAuth();
   const canMessageClient = can('work_orders/comments/client', 'create');
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.body);
   const [draftClient, setDraftClient] = useState(m.client_visible);
 
+  // 0089 · the edit box offers the same @ list; the people already mentioned
+  // start out picked.
+  const candidates = useMentionCandidates(woId, editing);
+  const [picked, setPicked] = useState<MentionCandidate[]>([]);
+  const draftMentions = mentionsInBody(draft.trim(), picked);
+  const mentionIds = (list: readonly { id: string }[]) => list.map((x) => x.id).sort().join(',');
+  const mentionsChanged = mentionIds(draftMentions) !== mentionIds(m.mentions);
+
   const save = useMutation({
     mutationFn: () =>
       patchWorkOrderMessage(woId, m.id, {
         ...(draft.trim() !== m.body ? { body: draft.trim() } : {}),
         ...(draftClient !== m.client_visible ? { client_visible: draftClient } : {}),
+        ...(mentionsChanged ? { mentions: draftMentions.map((x) => x.id) } : {}),
       }),
     onSuccess: (res) => {
       qc.setQueryData<WoMessagesResponse>(queryKey, (curr) =>
@@ -100,16 +113,17 @@ export function WoMessageBubble({ message: m, woId, queryKey, clientSystem }: Wo
   const startEdit = () => {
     setDraft(m.body);
     setDraftClient(m.client_visible);
+    setPicked(m.mentions.map((x) => ({ id: x.id, name: x.name, role_label: null })));
     save.reset();
     setEditing(true);
   };
 
   const trimmed = draft.trim();
-  const changed = trimmed !== m.body || draftClient !== m.client_visible;
+  const changed = trimmed !== m.body || draftClient !== m.client_visible || mentionsChanged;
   const canSave = trimmed.length > 0 && trimmed.length <= WO_MESSAGE_MAX && changed && !save.isPending;
 
   return (
-    <li className={cls}>
+    <li className={cls} id={`msg-${m.id}`}>
       <span className="msg-av" aria-hidden="true">{initials(who)}</span>
       <div className="bubble">
         <div className="msg-head">
@@ -138,12 +152,14 @@ export function WoMessageBubble({ message: m, woId, queryKey, clientSystem }: Wo
 
         {editing ? (
           <div className="msg-editing">
-            <textarea
+            <MentionTextarea
               className="composer-input"
               aria-label="Edit message"
               maxLength={WO_MESSAGE_MAX}
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={setDraft}
+              candidates={candidates}
+              onMention={(person) => setPicked((curr) => (curr.some((c) => c.id === person.id) ? curr : [...curr, person]))}
               autoFocus
             />
             <div className="msg-edit-actions">
@@ -184,7 +200,15 @@ export function WoMessageBubble({ message: m, woId, queryKey, clientSystem }: Wo
             </div>
           </div>
         ) : (
-          <p className="msg-txt">{m.body}</p>
+          <p className="msg-txt">
+            {splitMentions(m.body, m.mentions).map((seg, i) =>
+              seg.kind === 'mention' ? (
+                <span key={i} className={`mention${seg.id === actingAs?.id ? ' is-me' : ''}`}>{seg.text}</span>
+              ) : (
+                <Fragment key={i}>{seg.text}</Fragment>
+              ),
+            )}
+          </p>
         )}
 
         {!editing && footFor(m, clientSystem).map((f, i) => (

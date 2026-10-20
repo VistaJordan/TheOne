@@ -16,7 +16,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { CLIENT_MESSAGE_PERM_KEY, MESSAGE_PERM_KEY, WO_MESSAGE_MAX, fieldPermKey, tabPermKey } from '@theone/shared';
+import { CLIENT_MESSAGE_PERM_KEY, MENTION_MAX, MESSAGE_PERM_KEY, WO_MESSAGE_MAX, fieldPermKey, tabPermKey } from '@theone/shared';
 import { ApiError, parse, notFound, badRequest } from '../errors.js';
 import {
   listWorkOrders,
@@ -35,7 +35,7 @@ import { updateWorkOrderFields, getFieldHistory } from '../services/woFieldValue
 import { getFieldTimes } from '../services/woMetrics.js';
 import { getFeed } from '../services/feed.js';
 import { getMessages as getQuoMessages, resolveConversationId, sendMessage } from '../services/messages.js';
-import { editMessage, listMessages, postMessage } from '../services/woMessages.js';
+import { editMessage, listMessages, mentionCandidates, postMessage } from '../services/woMessages.js';
 import { evaluateForTask } from '../services/obligations.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
 import { assertIdsInScope } from '../services/woScope.js';
@@ -273,9 +273,13 @@ function patchKeys(patch: z.output<typeof bulkPatchSchema>): string[] {
 }
 
 // 0052: a message is 1..4000 chars of real text (whitespace-only is empty).
+// 0089: `mentions` = the people picked from the @ list (ids).
+const mentionIdsSchema = z.array(z.string().uuid()).max(MENTION_MAX);
+
 const messageBodySchema = z.object({
   body: z.string().trim().min(1).max(WO_MESSAGE_MAX),
   client_visible: z.boolean(),
+  mentions: mentionIdsSchema.optional(),
 });
 
 // An edit may change the text, the visibility, or both — never nothing.
@@ -283,8 +287,9 @@ const messageEditSchema = z
   .object({
     body: z.string().trim().min(1).max(WO_MESSAGE_MAX).optional(),
     client_visible: z.boolean().optional(),
+    mentions: mentionIdsSchema.optional(),
   })
-  .refine((v) => v.body !== undefined || v.client_visible !== undefined, {
+  .refine((v) => v.body !== undefined || v.client_visible !== undefined || v.mentions !== undefined, {
     message: 'Nothing to change',
   });
 
@@ -655,6 +660,17 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
     return listMessages(taskId, p, allow);
+  });
+
+  // 0089 · the people the composer's @ list offers: active people who can
+  // open this work order and its Messages tab (each by their own scope).
+  app.get('/work-orders/:id/mention-candidates', async (req) => {
+    const { p } = acting(req);
+    requirePerm(p, MESSAGE_PERM_KEY, 'create', 'You cannot post messages');
+    const { id } = parse(idParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    return { items: await mentionCandidates(taskId) };
   });
 
   // 0052 · post a message. Internal needs `work_orders/comments` create;

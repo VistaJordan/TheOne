@@ -25,6 +25,19 @@ export const COMMUNICATION_PART: DocPart = {
           deferred: ['No outbox adapter is registered yet (Ecotrak waits for go-live; Corrigo and ServiceChannel are not built); email as a target is deferred.'],
         },
         {
+          name: '@mentions',
+          what: 'Typing @ in the message box (or while editing their own message) opens a list of the people who can open this work order; arrow keys move, Enter or Tab picks, Esc closes. The pick writes "@Name" into the text and the box says who "will be notified" (on a client-visible message, also that "the client sees the @names too"). In the thread a mention is highlighted, and the reader’s own name stands out. Each person mentioned gets a notice in the bell ("<who> mentioned you on <WO #>", with the start of the message) that opens the Messages tab scrolled to that message, outlined.',
+          value: 'Pulls a specific colleague into a work order without leaving it, as in ClickUp.',
+          rules: [
+            'Only an active person with Work orders view, the Messages tab and the work order inside THEIR own "Which work orders" scope and site list can be mentioned; any other id is refused (400 MENTION_NOT_ALLOWED).',
+            'The body stays plain text; who an "@Name" is lives beside it, and a mention whose name is deleted from the text is dropped. At most 20 people per message.',
+            'An edit notifies only the people it adds; the author is never notified of their own mention.',
+          ],
+          permissions: ['work_orders/comments create (mention while posting) / edit (while editing their own, unsent message)'],
+          audit: ['comment_added and message_edited carry the mentions (id and name)'],
+          since: '0089',
+        },
+        {
           name: 'Technician texts (Quo thread)',
           what: 'The Quo conversation with the technician, synced from Quo and never client-visible; Send text composes from your claimed Quo line (attachments arrive in a later sprint); a right rail shows the technician and the conversation (first contact, last activity, Quo line, job segment, counts of calls, texts and photos, Call via Quo / Text via Quo).',
           value: 'Texts with the technician live beside the job.',
