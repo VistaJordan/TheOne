@@ -426,6 +426,24 @@ export async function refreshClickUp(user: Admin): Promise<ClickUpOverview> {
             team_id = $5, space_id = $6, fetched_at = now() WHERE id = 1`,
     [s.name, JSON.stringify(s.fields), JSON.stringify(s.statuses), JSON.stringify(s.members), s.teamId, s.spaceId],
   );
+  // Rule 1.2.1: the button is logged even when ClickUp answered the same
+  // vocabulary — the row says what was re-read (counts, not the lists).
+  const counts = (c: { list_name: string | null; fields: unknown[]; statuses: unknown[]; members: unknown[] }) => ({
+    name: 'ClickUp',
+    list_id: cfg.list_id,
+    list_name: c.list_name,
+    fields: c.fields.length,
+    statuses: c.statuses.length,
+    members: c.members.length,
+  });
+  await logAdminEvent({
+    actorId: user.id,
+    entity: 'integration',
+    entityId: 'clickup',
+    action: 'clickup_refreshed',
+    before: counts({ list_name: cfg.list_name, fields: cfg.cu_fields ?? [], statuses: cfg.cu_statuses ?? [], members: cfg.cu_members ?? [] }),
+    after: counts({ list_name: s.name, fields: s.fields, statuses: s.statuses, members: s.members }),
+  });
   return clickUpOverview(user);
 }
 
@@ -494,11 +512,24 @@ export async function setClickUpDedupe(user: Admin, days: number): Promise<Click
 export async function retryClickUpTask(user: Admin, taskId: string): Promise<ClickUpOverview> {
   requirePerm(user, INTEGRATIONS_PERM_KEY, 'edit', 'You cannot change Admin › Integrations');
   // Forget the remembered failures so every value is tried again.
-  await query(
-    `UPDATE clickup_link SET dirty = true, dirty_since = now(), attempts = 0, next_try_at = NULL,
-            pushed = pushed - '__errors' WHERE task_id = $1`,
+  const reset = await query<{ wo_number: string | null; clickup_task_id: string | null }>(
+    `UPDATE clickup_link l SET dirty = true, dirty_since = now(), attempts = 0, next_try_at = NULL,
+            pushed = l.pushed - '__errors'
+      WHERE l.task_id = $1
+      RETURNING (SELECT t.wo_number FROM task t WHERE t.id = l.task_id) AS wo_number, l.clickup_task_id`,
     [taskId],
   );
+  // Rule 1.2.1: the Retry button, keyed to the work order (field = its id).
+  if (reset.rows[0]) {
+    await logAdminEvent({
+      actorId: user.id,
+      entity: 'integration',
+      entityId: 'clickup',
+      action: 'clickup_task_retried',
+      field: taskId,
+      after: { name: 'ClickUp', task_id: taskId, wo_number: reset.rows[0].wo_number, clickup_task_id: reset.rows[0].clickup_task_id },
+    });
+  }
   await runClickUpSync('retry').catch(() => undefined);
   return clickUpOverview(user);
 }
@@ -507,7 +538,15 @@ export async function syncClickUpNow(user: Admin): Promise<ClickUpOverview> {
   requirePerm(user, INTEGRATIONS_PERM_KEY, 'edit', 'You cannot change Admin › Integrations');
   needToken();
   if (!(await switchedOn())) throw new ApiError('CONFLICT', 'ClickUp is switched off — turn it on first');
-  await runClickUpSync('manual');
+  const run = await runClickUpSync('manual');
+  // Rule 1.2.1: Sync now, with what the run it started reported.
+  await logAdminEvent({
+    actorId: user.id,
+    entity: 'integration',
+    entityId: 'clickup',
+    action: 'clickup_sync_requested',
+    after: { name: 'ClickUp', pushed: run.pushed, note: run.note },
+  });
   return clickUpOverview(user);
 }
 

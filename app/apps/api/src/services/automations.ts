@@ -920,6 +920,8 @@ async function evaluateAndApply(
 // automatic triggers, conditions checked when the wait ends.
 
 export const ENROLL_CAP = 500;
+/** How many WO numbers the automation_enrolled row lists. */
+const ENROLL_LOG_CAP = 50;
 
 export interface EnrollResult {
   requested: number;
@@ -929,7 +931,11 @@ export interface EnrollResult {
   errored: number;
 }
 
-export async function enrollAutomation(automationId: string, taskIds: string[]): Promise<EnrollResult> {
+export async function enrollAutomation(
+  automationId: string,
+  taskIds: string[],
+  actorId: string,
+): Promise<EnrollResult> {
   if (taskIds.length === 0) throw new ApiError('BAD_REQUEST', 'No work orders selected');
   if (taskIds.length > ENROLL_CAP) {
     throw new ApiError('BAD_REQUEST', `An enrollment is capped at ${ENROLL_CAP} work orders`);
@@ -952,6 +958,7 @@ export async function enrollAutomation(automationId: string, taskIds: string[]):
     requested: taskIds.length, applied: 0, queued: 0, skipped: 0, errored: 0,
   };
   const delay = Math.max(0, Math.round(Number(rule.trigger.delay_minutes ?? 0)));
+  const enrolledNumbers: string[] = [];
 
   for (const taskId of taskIds) {
     const wo = await query<{ wo_number: string }>(
@@ -962,6 +969,7 @@ export async function enrollAutomation(automationId: string, taskIds: string[]):
       result.skipped += 1;
       continue;
     }
+    enrolledNumbers.push(wo.rows[0].wo_number);
 
     if (delay > 0) {
       await query(
@@ -983,6 +991,25 @@ export async function enrollAutomation(automationId: string, taskIds: string[]):
     else if (outcome === 'skipped') result.skipped += 1;
     else result.errored += 1;
   }
+
+  // Rule 1.2.1: who enrolled which work orders, once per click. What each
+  // rule then did is logged per work order by evaluateAndApply as before;
+  // this row is the person's act. WO numbers are capped at ENROLL_LOG_CAP so
+  // a 500-row enrollment does not write a 500-entry snapshot.
+  await logAdminEvent({
+    actorId, entity: 'automation', entityId: rule.id, action: 'automation_enrolled',
+    after: {
+      name: rule.name,
+      work_orders: enrolledNumbers.length,
+      wo_numbers: enrolledNumbers.slice(0, ENROLL_LOG_CAP),
+      truncated: enrolledNumbers.length > ENROLL_LOG_CAP,
+      requested: result.requested,
+      applied: result.applied,
+      queued: result.queued,
+      skipped: result.skipped,
+      errored: result.errored,
+    },
+  });
 
   return result;
 }

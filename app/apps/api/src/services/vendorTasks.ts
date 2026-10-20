@@ -10,6 +10,7 @@
 import { VENDOR_REVIEW_TASK_TYPES, missingFields, requiredFieldKeys } from '@theone/shared';
 import type { FieldProblem, VendorTaskType } from '@theone/shared';
 import { query } from '../db.js';
+import { logAdminEvent } from './adminAudit.js';
 import { notify, vendorReviewerIds } from './notices.js';
 
 export interface OpenTaskInput {
@@ -39,6 +40,26 @@ export async function openVendorTask(t: OpenTaskInput): Promise<string> {
      VALUES ($1, $2, $3, $4, $5, $6) RETURNING id::text AS id`,
     [t.type, t.title.slice(0, 500), t.vendorId, t.entity ?? null, review ? null : (t.assignedTo ?? null), t.createdBy],
   );
+  // Rule 1.2.1: a task somebody's act raised is logged under that person —
+  // the MANUAL one they typed, and the reviews and fixes their act opened
+  // (`automatic` says which). A reused open review returned above, so it logs
+  // nothing; a task with no creator (none today) has no actor to log under.
+  if (t.createdBy) {
+    await logAdminEvent({
+      actorId: t.createdBy,
+      entity: 'vendor_task',
+      entityId: ins.rows[0].id,
+      action: 'vendor_task_created',
+      after: {
+        name: t.title.slice(0, 500),
+        type: t.type,
+        automatic: t.type !== 'MANUAL',
+        vendor_id: t.vendorId,
+        entity: t.entity ?? null,
+        assigned_to: review ? null : (t.assignedTo ?? null),
+      },
+    });
+  }
   // 0059 · tell whoever now has something to do: the reviewers for a review,
   // the assignee for a task somebody else gave them.
   const link = t.vendorId ? `/vendors/${t.vendorId}` : '/vendors?view=tasks';

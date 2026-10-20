@@ -43,6 +43,6 @@ export default async function automationsRoutes(app: FastifyInstance): Promise<v
     }
     const { id } = parse(idParams, req.params);
     const { ids } = parse(enrollBody, req.body);
-    return enrollAutomation(id, ids);
+    return enrollAutomation(id, ids, p.id);
   });
 }

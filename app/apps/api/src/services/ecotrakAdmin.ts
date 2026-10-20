@@ -8,6 +8,7 @@
 import { INTEGRATIONS_PERM_KEY, type EcotrakOverview, type EcotrakRun } from '@theone/shared';
 import { query } from '../db.js';
 import { getEcotrakConnection, ingestEcotrak, type IngestResult } from '../modules/integrations/ecotrak/ingest.js';
+import { logAdminEvent } from './adminAudit.js';
 import { integrationOnNow } from './integrations.js';
 import { allowFor, requirePerm, type PermissionBearer } from './permissions.js';
 
@@ -55,6 +56,22 @@ export async function ecotrakOverview(user: Admin): Promise<EcotrakOverview> {
 export async function syncEcotrakNow(user: Admin): Promise<{ result: IngestResult; overview: EcotrakOverview }> {
   requirePerm(user, INTEGRATIONS_PERM_KEY, 'edit', 'You cannot run the Ecotrak sync');
   const result = await ingestEcotrak({ trigger: 'manual' });
+  // Rule 1.2.1: Sync now, with the run's counts (a refused run — switched off,
+  // not set up — throws above and changed nothing, so it logs nothing).
+  await logAdminEvent({
+    actorId: user.id,
+    entity: 'integration',
+    entityId: 'ecotrak',
+    action: 'ecotrak_sync_requested',
+    after: {
+      name: 'Ecotrak → The One',
+      fetched: result.fetched,
+      created: result.created,
+      updated: result.updated,
+      unchanged: result.unchanged,
+      errors: result.errors.length,
+    },
+  });
   return { result, overview: await ecotrakOverview(user) };
 }
 

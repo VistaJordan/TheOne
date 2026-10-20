@@ -57,6 +57,7 @@ import { metricWidget } from './woMetrics.js';
 import { updateRole } from './roles.js';
 import { setUserOverrideView } from './users.js';
 import { testAccountAdminRefusal } from './testAccounts.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 import { WIDGET_NOT_AVAILABLE, widgetNamedFields } from '@theone/shared';
 import { allowFor, canViewField } from './permissions.js';
 
@@ -444,6 +445,45 @@ export async function previewWidget(
 
 // ── Writing ──────────────────────────────────────────────────────────────────
 
+// Audit (rule 1.2.1, gap closed 2026-10-20). A dashboard and its cards are
+// admin rows on entity 'dashboard', keyed by the DASHBOARD id, so Admin ›
+// Audit lists a board's whole history in one place; a card's rows carry
+// field `widget:<id>`. Sharing is not in the snapshot: it is already logged
+// as role grants (updateRole) and per-person overrides (setUserOverrideView).
+// ensureSystemDashboards is a system act and logs nothing.
+function dashSnapshot(r: DashRow): Snapshot {
+  return {
+    name: r.name,
+    description: r.description ?? null,
+    folder_id: r.folder_id ?? null,
+    folder: r.folder_name ?? null,
+    system_key: r.system_key ?? null,
+    position: r.position,
+  };
+}
+
+const WIDGET_COLUMNS =
+  `id::text AS id, dashboard_id::text AS dashboard_id, kind, label, config, width, position`;
+
+async function widgetById(id: string): Promise<WidgetRow | null> {
+  const res = await query<WidgetRow>(
+    `SELECT ${WIDGET_COLUMNS} FROM dashboard_widget WHERE id = $1`,
+    [id],
+  );
+  return res.rows[0] ?? null;
+}
+
+/** A card as the log keeps it: its title (else its kind) is the `name`. */
+function widgetSnapshot(w: WidgetRow): Snapshot {
+  return {
+    name: w.label || w.kind,
+    kind: w.kind,
+    config: w.config,
+    width: w.width,
+    position: w.position,
+  };
+}
+
 export interface DashboardInput {
   name?: string;
   description?: string | null;
@@ -478,8 +518,13 @@ export async function createDashboard(
     ],
   );
   const id = res.rows[0].id;
+  const created = await rowById(id);
+  await logAdminEvent({
+    actorId: viewer.id, entity: 'dashboard', entityId: id, action: 'dashboard_created',
+    after: dashSnapshot(created),
+  });
   // 0050 · sharing is a role grant; a new dashboard starts with its builder.
-  await applySharing(await rowById(id), input, viewer);
+  await applySharing(created, input, viewer);
   return getOne(id, viewer);
 }
 
@@ -505,6 +550,16 @@ export async function updateDashboard(
       WHERE id = $1`,
     [id, name ?? null, input.description ?? null, input.folder_id ?? null, input.position ?? null],
   );
+  // A PATCH that only shares (or saves what was there) logs no update row;
+  // the sharing half logs itself through applySharing.
+  const before = dashSnapshot(row);
+  const after = dashSnapshot(await rowById(id));
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId: viewer.id, entity: 'dashboard', entityId: id, action: 'dashboard_updated',
+      before, after,
+    });
+  }
   await applySharing(row, input, viewer);
   return getOne(id, viewer);
 }
@@ -519,6 +574,11 @@ export async function deleteDashboard(id: string, viewer: ActingPrincipal): Prom
   // deleted too — it simply comes back on the next read, which is the least
   // surprising behaviour for something the app provides.
   await query(`DELETE FROM dashboard WHERE id = $1`, [id]);
+  // Its cards go by cascade; this one row names the board they were on.
+  await logAdminEvent({
+    actorId: viewer.id, entity: 'dashboard', entityId: id, action: 'dashboard_deleted',
+    before: dashSnapshot(row), after: null,
+  });
 }
 
 export interface WidgetInput {
@@ -601,10 +661,11 @@ export async function addWidget(
   const label = (input.label ?? '').trim();
   if (label.length === 0) throw badRequest('A card needs a name');
 
-  await query(
+  const ins = await query<WidgetRow>(
     `INSERT INTO dashboard_widget (dashboard_id, kind, label, config, width, position)
      VALUES ($1, $2, $3, $4::jsonb, $5,
-             COALESCE($6, (SELECT COALESCE(MAX(position), -1) + 1 FROM dashboard_widget WHERE dashboard_id = $1)))`,
+             COALESCE($6, (SELECT COALESCE(MAX(position), -1) + 1 FROM dashboard_widget WHERE dashboard_id = $1)))
+     RETURNING ${WIDGET_COLUMNS}`,
     [
       dashboardId,
       input.kind ?? 'number',
@@ -614,6 +675,12 @@ export async function addWidget(
       input.position ?? null,
     ],
   );
+  const added = ins.rows[0];
+  await logAdminEvent({
+    actorId: viewer.id, entity: 'dashboard', entityId: dashboardId,
+    action: 'dashboard_widget_added', field: `widget:${added.id}`,
+    after: widgetSnapshot(added),
+  });
   return getOne(dashboardId, viewer);
 }
 
@@ -633,6 +700,7 @@ export async function updateWidget(
     throw new ApiError('FORBIDDEN', 'This dashboard belongs to someone else');
   }
   assertWidget(input);
+  const prior = await widgetById(widgetId);
 
   await query(
     `UPDATE dashboard_widget
@@ -651,6 +719,18 @@ export async function updateWidget(
       input.position ?? null,
     ],
   );
+  // A drag that lands a card where it was, or a save with nothing changed,
+  // logs nothing.
+  const now = await widgetById(widgetId);
+  const before = prior ? widgetSnapshot(prior) : null;
+  const after = now ? widgetSnapshot(now) : null;
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId: viewer.id, entity: 'dashboard', entityId: row.id,
+      action: 'dashboard_widget_updated', field: `widget:${widgetId}`,
+      before, after,
+    });
+  }
   return getOne(row.id, viewer);
 }
 
@@ -665,7 +745,15 @@ export async function deleteWidget(widgetId: string, viewer: ActingPrincipal): P
   if (!canEdit(row, viewer)) {
     throw new ApiError('FORBIDDEN', 'This dashboard belongs to someone else');
   }
+  const prior = await widgetById(widgetId);
   await query(`DELETE FROM dashboard_widget WHERE id = $1`, [widgetId]);
+  if (prior) {
+    await logAdminEvent({
+      actorId: viewer.id, entity: 'dashboard', entityId: row.id,
+      action: 'dashboard_widget_removed', field: `widget:${widgetId}`,
+      before: widgetSnapshot(prior), after: null,
+    });
+  }
 }
 
 async function getOne(id: string, viewer: ActingPrincipal): Promise<Dashboard> {
