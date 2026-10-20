@@ -964,7 +964,7 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
     description: 'The portfolio: how many sites and where, and the equipment in them — its condition and its warranties.',
     folder: 'Operations',
     shared_all: false,
-    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om', 'ops_coord'],
+    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om'],
     widgets: [
       { kind: 'number', label: 'Sites', width: 'quarter', config: { metric: 'count', source: 'sites' } },
       { kind: 'number', label: 'Assets', width: 'quarter', config: { metric: 'count', source: 'assets' } },
@@ -1132,7 +1132,7 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
     description: 'The day of a supervisor: what is open, what is late, who carries it and where it keeps breaking.',
     folder: 'Operations',
     shared_all: false,
-    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om', 'ops_coord'],
+    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om'],
     widgets: [
       { kind: 'number', label: 'Open work orders', width: 'quarter', config: { metric: 'count', filters: OPEN_WORK, tab: 'Today', section: 'Right now' } },
       { kind: 'number', label: 'Emergencies', width: 'quarter', config: { metric: 'count', tab: 'Today', section: 'Right now', filters: { match: 'all', rules: [{ field: 'fields.Emergency', op: 'is_true' }, { field: 'status_group', op: 'in', value: ['open', 'active'], join: 'and' }] } } },
@@ -1183,7 +1183,7 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
     description: 'The technicians on the jobs: who is out, how much they carry, and what they are paid.',
     folder: 'Operations',
     shared_all: false,
-    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om', 'ops_coord', 'vr_officer'],
+    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om', 'vr_officer'],
     widgets: [
       { kind: 'bar', label: 'Open work orders by technician', width: 'half', config: { metric: 'count', group_field: 'fields.Tech Name', filters: OPEN_WORK, limit: 20, tab: 'Jobs' } },
       { kind: 'bar', label: 'All work orders by technician', width: 'half', config: { metric: 'count', group_field: 'fields.Tech Name', limit: 20, tab: 'Jobs' } },
@@ -1204,7 +1204,7 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
     description: 'One store’s view: pick a client and a store in the filter bar above to narrow every card to it.',
     folder: 'Clients',
     shared_all: false,
-    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om', 'ops_coord'],
+    shared_roles: ['admin', 'tl', 'atl', 'am', 'senior_om'],
     widgets: [
       { kind: 'narrative', label: 'How to read this', width: 'full', config: { metric: 'count', text: 'Use the filter bar above to pick a client and a store: every card on this dashboard then counts that store only. Without a pick it shows every store.' } },
       { kind: 'number', label: 'Open work orders', width: 'quarter', config: { metric: 'count', filters: OPEN_WORK, section: 'Open now' } },

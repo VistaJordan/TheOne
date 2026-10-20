@@ -20,6 +20,7 @@
 // parsers are registered here: pg's defaults already match PGlite everywhere
 // that matters, and overriding them is what would introduce drift.
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -71,8 +72,65 @@ export async function query<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<QueryResult<T>> {
+  const ctx = currentAuditContext();
+  // Viewing as: a statement that can reach activity_log runs in its own
+  // transaction carrying the two ids (see AuditContext). Everything else —
+  // and every request that is not viewing as — takes the plain pool path.
+  if (ctx && ACTIVITY_LOG_RE.test(sql)) {
+    return withTransaction((tx) => tx.query<T>(sql, params));
+  }
   const res = await getPool().query(sql, params as unknown[]);
   return { rows: res.rows as T[], rowCount: res.rowCount };
+}
+
+// ── Viewing as: who really made the change ──────────────────────────────────
+//
+// While a super admin views the app as somebody else, the API acts as that
+// person (their rights, their scope, their name on the records they create),
+// but the audit log must still say who was at the keyboard. Sixty-odd
+// statements write activity_log, so the fix is not in them: the API runs each
+// such request inside `runWithAuditContext`, every transaction it opens sets
+// two transaction-local settings, and the BEFORE INSERT trigger of migration
+// 0088 (activity_log_viewing_as) rewrites a row signed by the viewed person to
+// the real one, with `viewing_as_id` naming whom they were viewing as. Local
+// settings end with their transaction, so a pooled connection never carries
+// them into somebody else's request.
+
+/** The two people behind a request made while viewing as someone. */
+export interface AuditContext {
+  /** The person signed in. */
+  realActorId: string;
+  /** The person they are viewing as. */
+  viewingAsId: string;
+}
+
+const auditContext = new AsyncLocalStorage<AuditContext>();
+
+/** Run `fn` (and everything it awaits) as a request made while viewing as. */
+export function runWithAuditContext<T>(ctx: AuditContext, fn: () => T): T {
+  return auditContext.run(ctx, fn);
+}
+
+/** The viewing-as context of the current request, or null. */
+export function currentAuditContext(): AuditContext | null {
+  return auditContext.getStore() ?? null;
+}
+
+/** A statement that names activity_log: only these need the settings outside
+    a transaction (no trigger or function writes activity_log by itself). */
+export const ACTIVITY_LOG_RE = /\bactivity_log\b/i;
+
+/** The setting names migration 0088's trigger reads. Keep in step. */
+export const AUDIT_SETTING_REAL_ACTOR = 'theone.real_actor_id';
+export const AUDIT_SETTING_VIEWING_AS = 'theone.viewing_as_id';
+
+async function applyAuditContext(client: pg.PoolClient): Promise<void> {
+  const ctx = currentAuditContext();
+  if (!ctx) return;
+  await client.query(
+    `SELECT set_config($1, $2, true), set_config($3, $4, true)`,
+    [AUDIT_SETTING_REAL_ACTOR, ctx.realActorId, AUDIT_SETTING_VIEWING_AS, ctx.viewingAsId],
+  );
 }
 
 /**
@@ -94,6 +152,7 @@ export async function withTransaction<T>(fn: (tx: Queryable) => Promise<T>): Pro
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
+    await applyAuditContext(client);
     const tx: Queryable = {
       async query<R = Record<string, unknown>>(sql: string, params: unknown[] = []) {
         const res = await client.query(sql, params as unknown[]);

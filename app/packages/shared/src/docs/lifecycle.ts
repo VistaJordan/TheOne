@@ -33,7 +33,7 @@ export const LIFECYCLE: LifecycleModel = {
       phases: ['Assessment'],
       summary:
         'The dispatcher finds a technician (suggested vendors, the technician map, their own book), logs an Assessment visit and the check-in moves the work order On Site. Checking out starts the 48 business-hour quote clock.',
-      who: ['OM (dispatcher)', 'Senior OM', 'Ops Coordinator'],
+      who: ['OM (dispatcher)', 'Senior OM', 'OM Under Probation'],
     },
     {
       key: 'quote',

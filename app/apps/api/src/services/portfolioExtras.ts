@@ -37,6 +37,7 @@ import type {
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict, forbidden, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
+import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import { logAdminEvent } from './adminAudit.js';
 import { notify } from './notices.js';
 import { requirePerm } from './permissions.js';
@@ -358,7 +359,7 @@ export async function clientHistory(id: string, actor: ActingPrincipal): Promise
   requireClientsView(actor);
   if (!UUID_RE.test(id)) throw notFound('Client not found');
   const res = await query<{ id: string; action: string; a_id: string | null; a_name: string | null; a_kind: 'human' | 'service' | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null; created_at: Date }>(
-    `SELECT a.id::text AS id, a.action, p.id::text AS a_id, p.display_name AS a_name, p.kind AS a_kind, a.before, a.after, a.created_at
+    `SELECT a.id::text AS id, a.action, p.id::text AS a_id, ${ACTOR_NAME_SQL} AS a_name, p.kind AS a_kind, a.before, a.after, a.created_at
        FROM activity_log a LEFT JOIN principal p ON p.id = a.actor_principal_id
       WHERE a.entity_type = 'client' AND a.entity_id = $1::text
       ORDER BY a.created_at DESC, a.id DESC LIMIT 200`,

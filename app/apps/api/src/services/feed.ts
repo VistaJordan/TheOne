@@ -12,6 +12,7 @@
 // feed only reads.
 
 import { query } from '../db.js';
+import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { FeedItem, FeedResponse, FeedActor } from '@theone/shared';
 
 // Same ISO-8601 UTC rendering the S1 activity endpoint uses, so every timestamp
@@ -99,7 +100,7 @@ const FEED_SQL = `
            NULL::text,
            NULL::text,
            p.id,
-           p.display_name,
+           ${ACTOR_NAME_SQL},
            p.kind::text,
            a.before ->> 'status_name',
            a.after  ->> 'status_name',

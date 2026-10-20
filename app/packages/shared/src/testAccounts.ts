@@ -1,6 +1,6 @@
 // UAT follow-up T1 — test sign-in accounts, one per role.
 //
-// Viewing as stays read-only (D6), so UAT needs real sessions per role. A test
+// UAT needs real sessions per role (one per role, signed in for real). A test
 // account is an ordinary `principal` (a real session gets the same scope,
 // gates and audit as the role) that is created or refreshed on a successful
 // test sign-in: username = the role code, one shared password from the

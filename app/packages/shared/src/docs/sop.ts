@@ -15,7 +15,7 @@ export const SOP: SopDocument = {
     'This SOP defines how a work order is received, dispatched, quoted, approved, fulfilled, paid and invoiced in The One, who performs each step, which screen and button does it, and the rules the system enforces along the way. It is generated from the application itself: the procedures are kept beside the code, and the appendix (statuses, fields, roles, automations, integrations) is read from the live instance when this page opens.',
   purpose: [
     'The One is the single system of record for every work order Seamless FM runs on behalf of its clients: it receives the job from the client\'s system or by hand, finds the technician, logs the visits, builds and approves the quote, pays the technician, invoices the client and keeps the client informed, with every action recorded.',
-    'Four kinds of people operate it. Managers (Team Lead, Assistant TL, Account Manager, Admin) accept work, approve quotes, payments and status changes, and set the rules. Dispatchers (OM, Senior OM, OM Under Probation, Ops Coordinator) find technicians, run visits and move the job. The Operations Admin drafts work orders typed in by hand and keeps the client systems in step. Accounts (Accounts Payable, Accounts Receivable, VR Officer, Sales) pay, audit, invoice, recruit vendors and watch their clients.',
+    'Four kinds of people operate it. Managers (Team Lead, Assistant TL, Account Manager, Admin) accept work, approve quotes, payments and status changes, and set the rules. Dispatchers (OM, Senior OM, OM Under Probation — the Ops Coordinator position) find technicians, run visits and move the job. The Operations Admin drafts work orders typed in by hand and keeps the client systems in step. Accounts (Accounts Payable, Accounts Receivable, VR Officer, Sales) pay, audit, invoice, recruit vendors and watch their clients.',
     'Trust is tiered. A probation dispatcher requests status changes and cannot change the assignee; a senior dispatcher builds quotes; a manager decides. What each role may do is set in Admin › Roles and can be adjusted per person by a super admin.',
   ],
   scope:
@@ -26,7 +26,7 @@ export const SOP: SopDocument = {
   terms: [
     { term: 'Work order (WO)', definition: 'One job for one client at one place. Identified by its WO # (the client\'s number when it came from their system).' },
     { term: 'Client CMMS', definition: 'The client\'s own maintenance system (Ecotrak, Corrigo, ServiceChannel). Work orders come from it; approved quotes and status changes go back to it once the connector is live. Which one a work order came from is the Client Portal Type field.' },
-    { term: 'Dispatcher', definition: 'An OM, Senior OM, OM Under Probation or Ops Coordinator: the person assigned to run the work order (the Assignee).' },
+    { term: 'Dispatcher', definition: 'An OM, Senior OM or OM Under Probation (the Ops Coordinator position): the person assigned to run the work order (the Assignee).' },
     { term: 'Technician / vendor', definition: 'An external subcontractor who does the work. A VR vendor is a company the Vendor Relations team recruited; a technician is someone a dispatcher has worked with. Both are vendor records.' },
     { term: 'Status and phase', definition: 'The status is where the work order sits (Open, Assessment Sched, Waiting for Quote, …); statuses are grouped in phases (Open, Active, Pending, Done, Closed) that are the list\'s tabs. The system imposes no order between statuses; only the gates and the Ecotrak check can refuse a pick. Admin edits both.' },
     { term: 'Gate', definition: 'A rule that refuses a status until the record is ready: Quote Ready needs a quote, the parts statuses need Parts Required, Done / Incurred needs a completed visit, the Cost, a quote and an approved after photo (or a before photo and a sign-off for Bill For Incurred).' },
@@ -70,7 +70,7 @@ export const SOP: SopDocument = {
           '**Bell**: "For you" notices (a task given to you, a review to make, a decision on your request, a work order assigned to you, an insurance date expiring, a permit, a purchase request, a dispatch answer, an asset request) above the Pulse pings; **Mark all read**; **Open the Pulse**.',
           '**Sparkle**: the assistant. Ask a question about the data ("which of my work orders are waiting for parts?") or about the app ("how do I request a status change?"). It answers only from what you may see and never changes anything.',
           '**Sun / moon**: switch between the Blackout and Daylight Dispatch themes for this browser (the first visit follows your operating system).',
-          '**Viewing as** (super admins): act as another person to see what they see. It is read-only: every change, the CSV exports, Save as PDF and the technician map answer "Viewing as another user is read-only. Stop viewing as them to make changes." and the top bar shows a **Read-only** chip; **Myself** ends it; it is recorded in the audit log, and the admin console shows what they would see too (an OM gets the OM\'s console, nothing more).',
+          '**Viewing as** (super admins): act as another person to see and do what they can. Changes are allowed, and each one is logged under your own name marked "viewing as" them; the top bar shows a **Changes logged as you** chip; **Myself** ends it; starting and ending it are in the audit log too, and the admin console shows what they would see (an OM gets the OM\'s console, nothing more).',
         ] },
         { kind: 'note', title: 'LOCKED WITH A REASON', text: 'A page or button you may not use is shown locked with a sentence saying why and who to ask ("This section is not available to you — Your role does not include it. Ask a super admin if you need access."). Nothing fails silently.' },
       ],
@@ -180,7 +180,7 @@ export const SOP: SopDocument = {
       n: 7,
       title: 'Running a Work Order: Vendor, Visits and Status',
       lead: 'The dispatcher\'s core loop: find the technician, log the visits, move the status.',
-      who: ['OM (dispatcher)', 'Senior OM', 'OM Under Probation', 'Ops Coordinator'],
+      who: ['OM (dispatcher)', 'Senior OM', 'OM Under Probation'],
       where: 'The work-order page: header, People and CICO tabs',
       needs: ['work_orders edit', 'work_orders/fields/cico edit', 'vendor_map view / create', 'work_orders/status edit or create', 'work_orders/calls create', 'work_orders/fields/cico/fields.24. Sign-Off Link edit (sheets)', 'work_orders/pdf view'],
       blocks: [
@@ -583,7 +583,7 @@ export const SOP: SopDocument = {
   matrix: [
     { role: 'Team Lead / Assistant TL / Account Manager', procedures: [1, 2, 3, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19] },
     { role: 'OM (dispatcher) / Senior OM', procedures: [1, 2, 6, 7, 8, 9, 10, 11, 12, 16, 19] },
-    { role: 'OM Under Probation / Ops Coordinator', procedures: [1, 2, 6, 7, 8, 10, 11, 12, 19] },
+    { role: 'OM Under Probation (Ops Coordinator)', procedures: [1, 2, 6, 7, 8, 10, 11, 12, 19] },
     { role: 'Operations Admin', procedures: [1, 2, 4, 5, 6, 8, 9, 16, 19] },
     { role: 'Accounts Payable', procedures: [1, 2, 10, 12, 19] },
     { role: 'Accounts Receivable', procedures: [1, 2, 13, 19] },

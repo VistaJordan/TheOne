@@ -132,7 +132,6 @@ describe('sentences the guide quotes are the ones the code says', () => {
   const FROM_API: [string, string][] = [
     ['services/users.ts', 'Only a super admin can grant or remove super-admin access'],
     ['services/users.ts', "Only a super admin can change a super admin's account"],
-    ['plugins/authGuard.ts', 'Viewing as another user is read-only. Stop viewing as them to make changes.'],
     ['services/woBulk.ts', 'Some rows in this file are work orders that are not assigned to you'],
     ['services/woBulk.ts', 'You cannot set work-order status — remove the status column, or clear it on these rows'],
     ['services/woBulk.ts', 'You cannot route work orders to a home list — remove the home list column, or clear it on these rows'],
@@ -161,8 +160,9 @@ describe('sentences the guide quotes are the ones the code says', () => {
     expect(APP_GUIDE).toContain(sentence);
   });
 
-  it('names the read-only error code', () => {
-    expect(APP_GUIDE).toContain('IMPERSONATION_READ_ONLY');
+  it('says viewing as can make changes, logged under the real person', () => {
+    expect(APP_GUIDE).not.toContain('IMPERSONATION_READ_ONLY');
+    expect(APP_GUIDE).toContain('Changes logged as you');
   });
 });
 

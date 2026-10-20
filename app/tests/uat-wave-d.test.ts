@@ -108,7 +108,7 @@ describe('#22 / M22 — assignees are dispatchers', () => {
     for (const f of ['intake.ts', 'approvals.ts', 'woCreate.ts', 'woBulk.ts', 'plannedMaintenance.ts', 'maintenance.ts', 'woFieldValues.ts']) {
       expect(read('apps', 'api', 'src', 'services', f), f).toContain('assertDispatchers');
     }
-    expect(DISPATCHER_ROLE_CODES).toEqual(['ops_coord', 'om_probation', 'om', 'senior_om']);
+    expect(DISPATCHER_ROLE_CODES).toEqual(['om_probation', 'om', 'senior_om']);
   });
   it('the pickers and the availability list offer dispatchers only', () => {
     expect(read('apps', 'api', 'src', 'services', 'principals.ts')).toContain('AND p.role = ANY($2::text[])');

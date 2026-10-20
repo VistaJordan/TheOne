@@ -400,12 +400,12 @@ describe('T1 — test accounts: guards in the API', () => {
     expect(auth).toContain('isSuperAdmin: r.is_super_admin && !isTest');
   });
 
-  it('/auth/me carries is_test_account and whether the form is on; the impersonation rules are untouched', () => {
+  it('/auth/me carries is_test_account and whether the form is on; viewing as still runs in the audit context', () => {
     const routes = read('apps', 'api', 'src', 'routes', 'auth.ts');
     expect(routes).toContain('is_test_account: p.isTestAccount');
     expect(routes).toContain('test_accounts: testAccountsEnabled()');
     const guard = read('apps', 'api', 'src', 'plugins', 'authGuard.ts');
-    expect(guard).toContain("'POST /api/auth/impersonate'");
+    expect(guard).toContain('runWithAuditContext');
   });
 });
 

@@ -1367,6 +1367,8 @@ export interface AuditLogEntry extends ActivityEntry {
   entity_name: string | null;
   wo_number: string | null;
   ext_name: string | null;
+  /** 0088 · whom the actor was viewing as when they made the change. */
+  viewing_as?: { id: string; display_name: string } | null;
 }
 
 export interface AuditLogFilters {
@@ -1436,27 +1438,28 @@ export function getMe(): Promise<MeResponse> {
   return request<MeResponse>('/auth/me');
 }
 
-/** Full-page navigation, not fetch: the Entra round trip is a browser redirect. */
-export function startMicrosoftSignIn(redirectTo = '/'): void {
-  window.location.href = `/api/auth/login?redirect_to=${encodeURIComponent(redirectTo)}`;
+/** Full-page navigation, not fetch: the Entra round trip is a browser redirect.
+    `remember` = "Keep me signed in" (0088), carried through the round trip. */
+export function startMicrosoftSignIn(redirectTo = '/', remember = false): void {
+  window.location.href = `/api/auth/login?redirect_to=${encodeURIComponent(redirectTo)}${remember ? '&remember=1' : ''}`;
 }
 
 export function listDevCandidates(): Promise<{ items: SessionUser[] }> {
   return request<{ items: SessionUser[] }>('/auth/dev-candidates');
 }
 
-export function devSignIn(principalId: string): Promise<{ user: SessionUser }> {
+export function devSignIn(principalId: string, remember = false): Promise<{ user: SessionUser }> {
   return request<{ user: SessionUser }>('/auth/dev-login', {
     method: 'POST',
-    body: JSON.stringify({ principal_id: principalId }),
+    body: JSON.stringify({ principal_id: principalId, remember }),
   });
 }
 
 /** UAT T1 · sign in as a role's test account (404 while the feature is off). */
-export function testSignIn(username: string, password: string): Promise<{ user: SessionUser }> {
+export function testSignIn(username: string, password: string, remember = false): Promise<{ user: SessionUser }> {
   return request<{ user: SessionUser }>('/auth/test-login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, remember }),
   });
 }
 
@@ -1581,6 +1584,7 @@ export interface AdminSettings {
     tenant_id: string | null;
     redirect_uri: string | null;
     session_ttl_hours: number;
+    remember_me_days?: number;
     invite_only: true;
     /** M16 (UAT Wave D): the real sign-in policy. */
     allowed_domains?: string[];

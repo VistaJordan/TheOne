@@ -20,7 +20,7 @@
 
 import { query, withTransaction } from '../db.js';
 import { assertQuoteHeld } from './statusGates.js';
-import { CLIENT_APPROVAL_EVIDENCE_CODE, quoteEventStatusName, type QuoteEvent, type VisitStatusMove } from '@theone/shared';
+import { CLIENT_APPROVAL_EVIDENCE_CODE, isDispatcherRole, quoteEventStatusName, type QuoteEvent, type VisitStatusMove } from '@theone/shared';
 import type { Queryable } from '../db.js';
 import type {
   Quote,
@@ -492,11 +492,11 @@ export function canApproveQuote(actor: ActingPrincipal): boolean {
 /** D5 — whoever may approve a quote may record the client's answer; a
     dispatcher (any OM tier) may record an ON-SITE client approval while the
     WO sits in the Approval phase. The phase exception is a business rule tied
-    to the lifecycle, not a grant, so it stays a role test. */
-const DISPATCHER_ROLES: readonly string[] = ['om', 'senior_om', 'om_probation'];
+    to the lifecycle, not a grant, so it stays a role test — over D3's one
+    list of dispatchers. */
 export function canClientDecide(actor: ActingPrincipal, snap: WoStatusSnapshot | null): boolean {
   if (canApproveQuote(actor)) return true;
-  return DISPATCHER_ROLES.includes(actor.role ?? '') && snap?.phase === 'Approval';
+  return isDispatcherRole(actor.role) && snap?.phase === 'Approval';
 }
 
 /** 403 FORBIDDEN — the actor exists, the route exists, the grant is missing. */
