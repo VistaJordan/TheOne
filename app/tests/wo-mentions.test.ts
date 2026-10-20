@@ -115,7 +115,7 @@ describe('filterMentionCandidates', () => {
 describe('API pins', () => {
   const svc = read('apps', 'api', 'src', 'services', 'woMessages.ts');
   const routes = read('apps', 'api', 'src', 'routes', 'workOrders.ts');
-  const mig = read('packages', 'db', 'migrations', '0088_comment_mentions.sql');
+  const mig = read('packages', 'db', 'migrations', '0089_comment_mentions.sql');
 
   it('offers only active humans with the work order and the Messages tab in their own scope', () => {
     expect(svc).toMatch(/p\.kind = 'human' AND p\.status <> 'disabled'/);
