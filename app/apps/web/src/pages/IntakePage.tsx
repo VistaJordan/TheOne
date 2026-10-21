@@ -22,6 +22,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   INTAKE_FORM_FIELDS,
@@ -126,6 +127,7 @@ function fieldsPatch(values: Values, catalogue: Map<string, WoFieldDescriptor>):
 
 function DraftsList() {
   const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   const qc = useQueryClient();
   const drafts = useQuery({ queryKey: ['intake-drafts'], queryFn: listIntakeDrafts });
   const [error, setError] = useState<string | null>(null);
@@ -193,7 +195,7 @@ function DraftsList() {
                     <tr
                       key={d.id}
                       className="is-link"
-                      onClick={() => navigate(`/incoming/drafts/${encodeURIComponent(d.id)}`)}
+                      {...linkTo(`/incoming/drafts/${encodeURIComponent(d.id)}`)}
                     >
                       <td className="mono">{d.wo_number?.trim() || <span className="intake-dim">No WO# yet</span>}</td>
                       <td>
@@ -232,6 +234,7 @@ function DraftsList() {
 
 function DraftForm({ id }: { id: string }) {
   const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   const qc = useQueryClient();
   const catalogue = useWoCatalogue();
   const draftQuery = useQuery({ queryKey: ['intake-draft', id], queryFn: () => getIntakeDraft(id) });
@@ -339,7 +342,7 @@ function DraftForm({ id }: { id: string }) {
 
   const crumbs = (
     <nav className="crumbs" aria-label="Breadcrumb">
-      <button type="button" className="crumb-back" aria-label="Back to the drafts" onClick={() => navigate('/incoming/drafts')}>
+      <button type="button" className="crumb-back" aria-label="Back to the drafts" {...linkTo('/incoming/drafts')}>
         <Icon name="arrow-l" size={14} />
       </button>
       <Link className="crumb" to="/incoming">Incoming Work Orders</Link>

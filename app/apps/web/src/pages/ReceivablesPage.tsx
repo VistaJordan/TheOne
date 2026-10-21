@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { useQuery } from '@tanstack/react-query';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
@@ -92,7 +93,7 @@ async function loadAuditList(): Promise<AuditList> {
 
 export function ReceivablesPage() {
   const { tab } = useParams();
-  const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   // M23 (UAT Wave D): the Audit tab is a prototype and is hidden until it is
   // finished — Receivables opens on Invoicing. Flip AUDIT_TAB_ENABLED to bring it back.
   const activeTab: SubTab = AUDIT_TAB_ENABLED && tab !== 'invoicing' ? 'audit' : 'invoicing';
@@ -215,7 +216,7 @@ export function ReceivablesPage() {
           role="tab"
           aria-selected={activeTab === 'audit'}
           className={`seg-btn${activeTab === 'audit' ? ' is-on' : ''}`}
-          onClick={() => navigate('/receivables')}
+          {...linkTo('/receivables')}
         >
           <Icon name="flag" size={12} />
           Audit
@@ -226,7 +227,7 @@ export function ReceivablesPage() {
           role="tab"
           aria-selected={activeTab === 'invoicing'}
           className={`seg-btn${activeTab === 'invoicing' ? ' is-on' : ''}`}
-          onClick={() => navigate('/receivables/invoicing')}
+          {...linkTo('/receivables/invoicing')}
         >
           <Icon name="dollar" size={12} />
           Invoicing

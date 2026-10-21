@@ -5,6 +5,7 @@
 import { Suspense, lazy, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   SITE_LOCATION_KIND_LABELS,
@@ -37,6 +38,7 @@ const VendorMap = lazy(() => import('../components/map/VendorMap'));
 export function SiteDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   const qc = useQueryClient();
   const { theme } = useTheme();
   const key = ['site', id];
@@ -60,7 +62,7 @@ export function SiteDetailPage() {
 
   const crumbs = (
     <nav className="crumbs" aria-label="Breadcrumb">
-      <button type="button" className="crumb-back" aria-label="Back to Sites" onClick={() => navigate('/sites')}><Icon name="arrow-l" size={14} /></button>
+      <button type="button" className="crumb-back" aria-label="Back to Sites" {...linkTo('/sites')}><Icon name="arrow-l" size={14} /></button>
       <Link className="crumb" to="/sites">Sites</Link>
       <span className="crumb-sep" aria-hidden="true">/</span>
       <span className="crumb-cur" aria-current="page">{s?.name ?? '…'}</span>

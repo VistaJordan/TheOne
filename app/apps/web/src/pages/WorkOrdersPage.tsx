@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { businessDay, isQuoteOwed, resolveWoScope, type StatusGroup } from '@theone/shared';
+import { businessDay, isDispatcherRole, isQuoteOwed, resolveWoScope, type StatusGroup } from '@theone/shared';
 import type { SavedView } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { useAuth } from '../auth/AuthProvider';
@@ -60,16 +60,19 @@ import {
 // see the `filters` memo in the component; only the All tab is fixed.
 
 /** The chips beside the status tabs: the fields the team narrows by all day.
-    `key` is a catalogue key — a promoted column or `fields.<custom key>`. */
-const QUICK_FILTERS: { key: string; label: string }[] = [
+    `key` is a catalogue key — a promoted column or `fields.<custom key>`.
+    A dispatcher (DISPATCHER_ROLE_CODES) sees only Status: their list is
+    already their own book, so the who / which-entity chips are noise to them
+    (`managersOnly`). The Filter menu still offers every field. */
+const QUICK_FILTERS: { key: string; label: string; managersOnly?: boolean }[] = [
   // Status leads: unlike the group tabs beside it, this narrows to EXACT
   // statuses ("invoiced", "quote sent"), and it writes the same one rule the
   // Filter menu would.
   { key: 'status', label: 'Status' },
-  { key: 'fields.Assignee', label: 'Assignee' },
-  { key: 'fields.22. FM', label: 'FM' },
-  { key: 'billing_entity', label: 'Comp' },
-  { key: 'fields.AM', label: 'AM' },
+  { key: 'fields.Assignee', label: 'Assignee', managersOnly: true },
+  { key: 'fields.22. FM', label: 'FM', managersOnly: true },
+  { key: 'billing_entity', label: 'Comp', managersOnly: true },
+  { key: 'fields.AM', label: 'AM', managersOnly: true },
 ];
 
 // Pagination is the footer bar (ListPagination); PAGE_SIZES[0] = 25 is the
@@ -594,7 +597,7 @@ export function WorkOrdersPage() {
           )}
 
           <div className="quick-filters" role="group" aria-label="Quick filters">
-            {QUICK_FILTERS.map((qf) => (
+            {QUICK_FILTERS.filter((qf) => !(qf.managersOnly && isDispatcherRole(actingAs?.role))).map((qf) => (
               <QuickFilter
                 key={qf.key}
                 field={fieldByKey.get(qf.key)}

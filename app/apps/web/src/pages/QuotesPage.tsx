@@ -10,7 +10,8 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { quoteSelfApprovalLock, type QuoteStatus } from '@theone/shared';
 import { ApiRequestError, listQuotes } from '../api/client';
 import { AppShell } from '../components/AppShell';
@@ -38,7 +39,7 @@ const LANES: { key: Lane; label: string }[] = [
 ];
 
 export function QuotesPage() {
-  const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   const quotesQuery = useQuery({ queryKey: ['quotes'], queryFn: listQuotes, retry: 0 });
   // 0053 · BRD §6.4: approve or decline from the sidebar list, not only the builder.
   const { can, actingAs } = useAuth();
@@ -156,7 +157,7 @@ export function QuotesPage() {
                   <tr
                     key={q.id}
                     className={`is-clickable${q.wo_emergency ? ' is-emergency' : ''}${q.wo_escalated ? ' is-escalated' : ''}`}
-                    onClick={() => navigate(href)}
+                    {...linkTo(href)}
                   >
                     <td className="col-wo mono">{q.number ?? '—'}</td>
                     <td className="col-wo">
