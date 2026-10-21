@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CLIENT_PORTAL_TYPES } from '@theone/shared';
 import type { ClientDetail, ClientInput, ClientsListResponse } from '@theone/shared';
@@ -235,6 +236,7 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
 export function ClientDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['client', id], queryFn: () => getClient(id) });
   const meta = useQuery({ queryKey: ['clients', {}], queryFn: () => listClients({}) });
@@ -250,7 +252,7 @@ export function ClientDetailPage() {
 
   const crumbs = (
     <nav className="crumbs" aria-label="Breadcrumb">
-      <button type="button" className="crumb-back" aria-label="Back to Clients" onClick={() => navigate('/clients')}><Icon name="arrow-l" size={14} /></button>
+      <button type="button" className="crumb-back" aria-label="Back to Clients" {...linkTo('/clients')}><Icon name="arrow-l" size={14} /></button>
       <Link className="crumb" to="/clients">Clients</Link>
       <span className="crumb-sep" aria-hidden="true">/</span>
       <span className="crumb-cur" aria-current="page">{c?.name ?? '…'}</span>

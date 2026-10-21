@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, adminPermKey } from '@theone/shared';
 import { getApprovalCounts, listIntakeDrafts } from '../api/client';
@@ -171,7 +171,6 @@ export function AppShell({
   active = 'Work Orders',
   knobIcon,
 }: AppShellProps) {
-  const navigate = useNavigate();
   // Collapsing the sidebar to an icon rail gives the canvas ~170px back — it
   // persists across routes and reloads, and answers to Cmd/Ctrl+B.
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
@@ -315,11 +314,6 @@ export function AppShell({
     };
   }, [flyout]);
 
-  const goFromFlyout = (to: string) => {
-    setFlyout(null);
-    navigate(to);
-  };
-
   const flyoutItem = flyout ? visibleNav.find((i) => i.label === flyout.label) : undefined;
 
   return (
@@ -426,15 +420,15 @@ export function AppShell({
                         {item.children.map((child) => {
                           const childActive = pathname === child.to;
                           return (
-                            <button
-                              type="button"
+                            // A real link, so a middle-click or Ctrl-click opens it in a new tab.
+                            <Link
                               key={child.to}
+                              to={child.to}
                               className={`side-subitem${childActive ? ' is-active' : ''}`}
                               aria-current={childActive ? 'page' : undefined}
-                              onClick={() => navigate(child.to)}
                             >
                               {child.label}
-                            </button>
+                            </Link>
                           );
                         })}
                       </div>
@@ -459,22 +453,35 @@ export function AppShell({
                   onMouseEnter={(e) => previewable && openFlyout(item, e.currentTarget)}
                   onMouseLeave={scheduleClose}
                 >
-                  <button
-                    type="button"
-                    className={`side-item${isActive ? ' is-active' : ''}`}
-                    aria-current={isActive ? 'page' : undefined}
-                    disabled={!item.to}
-                    onFocus={(e) => previewable && openFlyout(item, e.currentTarget)}
-                    onClick={item.to ? () => navigate(item.to as string) : undefined}
-                  >
-                    <span className="side-icon">
-                      <NavIcon name={item.icon} />
-                    </span>
-                    <span className="side-label">{item.label}</span>
-                    {count != null && (
-                      <span className="side-badge">{count.toLocaleString('en-US')}</span>
-                    )}
-                  </button>
+                  {item.to ? (
+                    // A real link, so a middle-click or Ctrl-click opens it in a new tab.
+                    <Link
+                      to={item.to}
+                      className={`side-item${isActive ? ' is-active' : ''}`}
+                      aria-current={isActive ? 'page' : undefined}
+                      onFocus={(e) => previewable && openFlyout(item, e.currentTarget)}
+                    >
+                      <span className="side-icon">
+                        <NavIcon name={item.icon} />
+                      </span>
+                      <span className="side-label">{item.label}</span>
+                      {count != null && (
+                        <span className="side-badge">{count.toLocaleString('en-US')}</span>
+                      )}
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      className="side-item"
+                      disabled
+                      onFocus={(e) => previewable && openFlyout(item, e.currentTarget)}
+                    >
+                      <span className="side-icon">
+                        <NavIcon name={item.icon} />
+                      </span>
+                      <span className="side-label">{item.label}</span>
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -495,16 +502,16 @@ export function AppShell({
               </p>
               {flyoutItem.children ? (
                 flyoutItem.children.map((child) => (
-                  <button
-                    type="button"
+                  <Link
                     role="menuitem"
                     key={child.to}
+                    to={child.to}
                     className={`side-flyout-item${pathname === child.to ? ' is-active' : ''}`}
                     aria-current={pathname === child.to ? 'page' : undefined}
-                    onClick={() => goFromFlyout(child.to)}
+                    onClick={() => setFlyout(null)}
                   >
                     {child.label}
-                  </button>
+                  </Link>
                 ))
               ) : null}
             </div>

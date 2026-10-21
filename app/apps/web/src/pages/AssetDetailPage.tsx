@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ASSET_CONDITIONS, ASSET_CONDITION_LABELS, SITE_SOURCE_LABELS, WARRANTY_STATE_LABELS } from '@theone/shared';
 import type { AssetCondition } from '@theone/shared';
@@ -28,6 +29,7 @@ import { feedTime } from '../lib/fields';
 export function AssetDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   const qc = useQueryClient();
   const key = ['asset', id];
   const q = useQuery({ queryKey: key, queryFn: () => getAsset(id) });
@@ -65,7 +67,7 @@ export function AssetDetailPage() {
 
   const crumbs = (
     <nav className="crumbs" aria-label="Breadcrumb">
-      <button type="button" className="crumb-back" aria-label="Back to Assets" onClick={() => navigate('/assets')}><Icon name="arrow-l" size={14} /></button>
+      <button type="button" className="crumb-back" aria-label="Back to Assets" {...linkTo('/assets')}><Icon name="arrow-l" size={14} /></button>
       <Link className="crumb" to="/assets">Assets</Link>
       <span className="crumb-sep" aria-hidden="true">/</span>
       <span className="crumb-cur" aria-current="page">{a?.name ?? '…'}</span>

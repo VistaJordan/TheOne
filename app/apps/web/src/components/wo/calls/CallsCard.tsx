@@ -1,5 +1,6 @@
 /* 0054 · The call log on a work order (Messages tab): every call placed from
- * it through Quo, with Quo's summary and the transcript once they land, and
+ * it through Quo — and, since 2026-10-21, the Call button itself (it left the
+ * header; calls are started here only), with Quo's summary and the transcript once they land, and
  * the way into the AI quote draft. Polls while a call is still waiting on
  * Quo, so a transcript appears without a refresh. */
 
@@ -8,18 +9,22 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CALL_PERM_KEY, WO_CALL_CONTACT_LABELS } from '@theone/shared';
 import type { WoCall } from '@theone/shared';
+import type { WorkOrderDetailV2 } from '../../../api/client';
 import { ApiRequestError, listWoCalls, pasteCallTranscript } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthProvider';
 import { feedTime } from '../../../lib/fields';
 import { callDuration } from '../../../lib/quo';
 import { Icon } from '../../Icon';
+import { CallButton } from './CallButton';
 
 const PREVIEW_LINES = 3;
 
 /** A call still waiting on Quo keeps the list polling. */
 const waiting = (c: WoCall) => c.status === 'dialing' || c.status === 'completed';
 
-export function CallsCard({ woId, woNumber }: { woId: string; woNumber: string }) {
+export function CallsCard({ wo }: { wo: WorkOrderDetailV2 }) {
+  const woId = wo.id;
+  const woNumber = wo.wo_number;
   const { can } = useAuth();
   const allowed = can(CALL_PERM_KEY, 'view');
   const query = useQuery({
@@ -39,13 +44,15 @@ export function CallsCard({ woId, woNumber }: { woId: string; woNumber: string }
           <Icon name="phone" size={12} />
           Through Quo
         </span>
+        {/* 0054 · call through Quo; optionally draft a quote from the call. */}
+        <CallButton wo={wo} />
       </div>
       {query.isLoading && <div className="empty-flat">Loading calls…</div>}
       {query.isError && <div className="empty-flat">Could not load the calls on this work order.</div>}
       {!query.isLoading && !query.isError && calls.length === 0 && (
         <div className="empty-flat">
-          No calls yet. Use <b>Call</b> at the top of the work order to call the technician through
-          Quo — the transcript lands here, and a quote can be drafted from it.
+          No calls yet. Use <b>Call</b> on this card to call the technician through Quo — the
+          transcript lands here, and a quote can be drafted from it.
         </div>
       )}
       {calls.length > 0 && (

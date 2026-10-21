@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useLinkNav } from '../lib/linkNav';
 import { useQuery } from '@tanstack/react-query';
 import {
   getActivity,
@@ -91,7 +92,7 @@ const isTab = (v: string | null): v is Tab => TAB_IDS.includes(v as Tab);
 
 export function WorkOrderDetailPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
-  const navigate = useNavigate();
+  const { linkTo } = useLinkNav();
   // The active tab lives in the URL (?tab=…) so a refresh reloads the data but
   // stays on the same tab — and a pasted link opens where the sender was.
   // "All fields" is the landing tab (the record itself before the commentary)
@@ -228,7 +229,7 @@ export function WorkOrderDetailPage() {
         type="button"
         className="crumb-back"
         aria-label="Back to Work Orders"
-        onClick={() => navigate('/')}
+        {...linkTo('/')}
       >
         <Icon name="arrow-l" size={14} />
       </button>
@@ -398,7 +399,7 @@ export function WorkOrderDetailPage() {
 
           {/* 0054 · calls placed through Quo from this work order, and the
               way into the AI quote draft — above the written thread. */}
-          {tab === 'messages' && <CallsCard woId={wo.id} woNumber={wo.wo_number} />}
+          {tab === 'messages' && <CallsCard wo={wo} />}
           {tab === 'messages' && (
             <MessagesPanel
               woId={wo.id}

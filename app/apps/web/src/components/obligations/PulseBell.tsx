@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLinkNav } from '../../lib/linkNav';
+import type { Clickish } from '../../lib/linkNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PulseNotification } from '../../api/client';
+import type { AppNotification } from '@theone/shared';
 import { getNoticeCount, getNotices, markAllNoticesRead, markAllNotificationsRead, markNoticeRead, markNotificationRead } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
 import { NOTIFICATIONS_KEY, useNotifications } from '../../hooks/useObligations';
@@ -24,7 +26,7 @@ const NOTICE_COUNT_KEY = ['notices', 'count'];
 export function PulseBell() {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
+  const { go } = useLinkNav();
   const qc = useQueryClient();
   const now = useNow(30_000);
 
@@ -82,11 +84,16 @@ export function PulseBell() {
     };
   }, [open]);
 
-  const openItem = (n: PulseNotification) => {
+  // A middle-click or Ctrl / Cmd-click opens the row in a new tab (lib/linkNav.ts).
+  const openItem = (n: PulseNotification, e?: Clickish) => {
     if (!n.read_at) readOne.mutate(n.id);
     setOpen(false);
-    if (n.wo_number) navigate(`/work-orders/${encodeURIComponent(n.wo_number)}`);
-    else navigate('/pulse');
+    go(n.wo_number ? `/work-orders/${encodeURIComponent(n.wo_number)}` : '/pulse', e);
+  };
+  const openNotice = (n: AppNotification, e?: Clickish) => {
+    if (!n.read) readNotice.mutate(n.id);
+    setOpen(false);
+    if (n.link && n.link.startsWith('/')) go(n.link, e);
   };
 
   return (
@@ -128,10 +135,14 @@ export function PulseBell() {
                   role="menuitem"
                   key={n.id}
                   className={`pulse-row is-notice${n.read ? '' : ' is-unread'}`}
-                  onClick={() => {
-                    if (!n.read) readNotice.mutate(n.id);
-                    setOpen(false);
-                    if (n.link && n.link.startsWith('/')) navigate(n.link);
+                  onClick={(e) => openNotice(n, e)}
+                  onAuxClick={(e) => {
+                    if (e.button !== 1) return;
+                    e.preventDefault();
+                    openNotice(n, e);
+                  }}
+                  onMouseDown={(e) => {
+                    if (e.button === 1) e.preventDefault();
                   }}
                 >
                   <span className="pulse-row-stripe" aria-hidden="true" />
@@ -191,7 +202,15 @@ export function PulseBell() {
                     role="menuitem"
                     key={n.id}
                     className={`pulse-row ${tierClass(tier)}${n.read_at ? '' : ' is-unread'}`}
-                    onClick={() => openItem(n)}
+                    onClick={(e) => openItem(n, e)}
+                    onAuxClick={(e) => {
+                      if (e.button !== 1) return;
+                      e.preventDefault();
+                      openItem(n, e);
+                    }}
+                    onMouseDown={(e) => {
+                      if (e.button === 1) e.preventDefault();
+                    }}
                   >
                     <span className="pulse-row-stripe" aria-hidden="true" />
                     <span className="pulse-row-body">
@@ -211,9 +230,18 @@ export function PulseBell() {
                 <button
                   type="button"
                   className="pulse-linkbtn"
-                  onClick={() => {
+                  onClick={(e) => {
                     setOpen(false);
-                    navigate('/pulse');
+                    go('/pulse', e);
+                  }}
+                  onAuxClick={(e) => {
+                    if (e.button !== 1) return;
+                    e.preventDefault();
+                    setOpen(false);
+                    go('/pulse', e);
+                  }}
+                  onMouseDown={(e) => {
+                    if (e.button === 1) e.preventDefault();
                   }}
                 >
                   Open the Pulse
