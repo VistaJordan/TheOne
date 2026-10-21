@@ -141,7 +141,7 @@ import type {
   WoFieldTime,
 } from '@theone/shared';
 // 0052 — used by the Messages tab's own response shape below.
-import type { ClientSystem, WoMessage, WoMessageResponse } from '@theone/shared';
+import type { ClientSystem, MentionCandidatesResponse, WoMessage, WoMessageResponse } from '@theone/shared';
 
 // ── S2 contract types ────────────────────────────────────────────────────────
 // The Sprint-2 shapes are authored in @theone/shared alongside the S1 ones.
@@ -177,6 +177,10 @@ export type {
   MessageSource,
   ClientSystem,
   ClientMessageTarget,
+  // 0089 — @mentions in messages.
+  MentionCandidate,
+  MentionCandidatesResponse,
+  MessageMention,
   AutomationItem,
   AutomationRunItem,
   AutomationTrigger,
@@ -624,7 +628,7 @@ export function getWorkOrderMessages(idOrNumber: string): Promise<WoMessagesResp
     client-visible; the latter needs the "Message the client" grant. */
 export function postWorkOrderMessage(
   idOrNumber: string,
-  input: { body: string; client_visible: boolean },
+  input: { body: string; client_visible: boolean; mentions?: string[] },
 ): Promise<WoMessageResponse> {
   return request<WoMessageResponse>(
     `/work-orders/${encodeURIComponent(idOrNumber)}/messages`,
@@ -637,11 +641,19 @@ export function postWorkOrderMessage(
 export function patchWorkOrderMessage(
   idOrNumber: string,
   messageId: string,
-  input: { body?: string; client_visible?: boolean },
+  input: { body?: string; client_visible?: boolean; mentions?: string[] },
 ): Promise<WoMessageResponse> {
   return request<WoMessageResponse>(
     `/work-orders/${encodeURIComponent(idOrNumber)}/messages/${encodeURIComponent(messageId)}`,
     { method: 'PATCH', body: JSON.stringify(input) },
+  );
+}
+
+/** GET /api/work-orders/:id/mention-candidates (0089) — the people the
+    composer's @ list offers: active, and able to open this work order. */
+export function getMentionCandidates(idOrNumber: string): Promise<MentionCandidatesResponse> {
+  return request<MentionCandidatesResponse>(
+    `/work-orders/${encodeURIComponent(idOrNumber)}/mention-candidates`,
   );
 }
 

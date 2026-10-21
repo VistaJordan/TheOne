@@ -164,7 +164,7 @@ export function CostBreakdownTab({ woId, woNumber, record }: TabProps) {
         <div className="card-head"><h2 className="card-title">NTE increases</h2></div>
         {error && <p className="snooze-err rec-err" role="alert"><Icon name="alert-circle" size={12} />{error}</p>}
         {record.nte_requests.length === 0 ? (
-          <div className="empty-flat">Nobody has asked for a higher NTE. Use “Increase NTE” above the tabs to ask.</div>
+          <div className="empty-flat">No NTE increase requests on this work order.</div>
         ) : (
           <ul className="vtasks rec-nte">
             {record.nte_requests.map((n) => (

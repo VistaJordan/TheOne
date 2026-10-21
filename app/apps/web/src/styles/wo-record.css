@@ -166,6 +166,20 @@
 .rec-pdf-item b { font-weight: 600; }
 .rec-pdf-item small { color: var(--ink-3); font-size: 11.5px; line-height: 1.35; }
 
+/* 2026-10-20 · the More menu and Save as PDF sit in the header's action row. */
+.wohead-actions .rec-pdf { margin-left: 0; }
+button.rec-pdf-item { width: 100%; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+button.rec-pdf-item:disabled { opacity: 0.5; cursor: default; }
+.rec-pdf-item.is-danger b { color: var(--danger); }
+
+/* The ETA card on CICO lines up with the CICO card under it (.card-cico). */
+.rec-eta { max-width: 960px; }
+/* The Timelog cards merged onto CICO keep the same width. */
+.cico-timelog { max-width: 960px; margin-top: 14px; }
+
+/* Sub-tabs under a grouped strip button (Finances, People). */
+.tabs.wo-subtabs { margin: 0 0 12px; }
+
 /* ── 0073 · Admin › Settings › Work-order PDFs: the layout editor ────────── */
 .pdfl-hint { margin: 0 0 12px; }
 .pdfl-check { margin-top: 4px; }

@@ -575,8 +575,19 @@ export async function sweepSharePoint(actorId: string | null = null): Promise<Sw
 /** "Retry failed": give every failed row its attempts back, then sweep. */
 export async function retrySharePoint(actor: ActingPrincipal): Promise<SweepResult> {
   requirePerm(actor, 'admin/settings', 'edit', 'You cannot run the SharePoint filing');
-  await query(`UPDATE sharepoint_folder SET attempts = 0, status = 'pending' WHERE status = 'failed'`);
-  await query(`UPDATE sharepoint_file SET attempts = 0, status = 'pending' WHERE status = 'failed'`);
+  const folders = await query(`UPDATE sharepoint_folder SET attempts = 0, status = 'pending' WHERE status = 'failed'`);
+  const files = await query(`UPDATE sharepoint_file SET attempts = 0, status = 'pending' WHERE status = 'failed'`);
+  // Rule 1.2.1: the Run now button, with how many failed rows it gave back
+  // their attempts (`reset` = folders + files; 0 still logs — the sweep ran).
+  const resetFolders = folders.rowCount ?? 0;
+  const resetFiles = files.rowCount ?? 0;
+  await logAdminEvent({
+    actorId: actor.id,
+    entity: 'sharepoint_setting',
+    entityId: 'config',
+    action: 'sharepoint_retry_requested',
+    after: { name: 'SharePoint folders', reset: resetFolders + resetFiles, folders: resetFolders, files: resetFiles },
+  });
   return sweepSharePoint(actor.id);
 }
 

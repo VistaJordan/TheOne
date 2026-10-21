@@ -30,23 +30,23 @@ export const WORK_ORDERS_PART: DocPart = {
           rules: ['The gate tags are computed from the latest visit\'s mirrored stamps and the approved attachment kinds; the API checks every visit when the move is attempted.'],
         },
         {
-          name: 'Action bar',
-          what: 'Assign vendor / Re-assign vendor (Responsible vendor: Find a vendor, Hired on this work order shortcuts, Remove), Pause / Resume ("Pause this work order — Why is it paused?"), Add ETA / Change ETA (Estimated time of arrival, Expected on site, Note, Save ETA, Clear the ETA), Tag ("Tag this work order", suggested tags, Reason, Add the tag), Increase NTE ("Ask for a higher NTE": New NTE, Why more is needed, Send the request), Complete service / Edit completion (Completion note, Fault code — what was wrong, Action code — what was done, Is this a temporary fix? No / Yes — a return is needed / Not said; Clear the completion), Cancel work order ("Why is it cancelled?") / Reopen ("Why is it reopened?"), Save as PDF (Work order "The main fields, as set in Admin › Settings"; Request "Client, site and what they asked for"). The bar also shows state chips: Cancelled — reason, Paused <when> — reason, ETA <time>, Service completed · temporary fix, the vendor, "NTE increase to $X waiting", running site events, tags with remove.',
+          name: 'Record actions and state chips',
+          what: 'Since 2026-10-20 the bar under the header holds the state chips only, and its buttons live where the work is. The header\'s More menu: Pause / Resume ("Pause this work order — Why is it paused?"), Tag ("Tag this work order", suggested tags, Reason, Add the tag), Complete service / Edit completion (Completion note, Fault code — what was wrong, Action code — what was done, Is this a temporary fix? No / Yes — a return is needed / Not said; Clear the completion), Cancel work order ("Why is it cancelled?") / Reopen ("Why is it reopened?"); beside it Save as PDF (Work order "The main fields, as set in Admin › Settings"; Request "Client, site and what they asked for"). People › Technicians: the Responsible vendor card with Assign vendor / Re-assign vendor (Find a vendor, Hired on this work order shortcuts, Remove). CICO: the ETA card with Add ETA / Change ETA (Estimated time of arrival, Expected on site, Note, Save ETA, Clear the ETA). The bar under the header shows the state chips: Cancelled — reason, Paused <when> — reason, ETA <time>, Service completed · temporary fix, the vendor, "NTE increase to $X waiting", running site events, tags with remove.',
           value: 'The Facilio-style actions a dispatcher expects, each audited and each a plain column on the work order.',
           rules: [
             'Cancel moves the work order to the first status whose name starts with "Cancel", ends an open pause, and keeps its stamp even if a gate refuses the move (the bar says why); Pause and Complete service are refused on a cancelled work order; Complete needs a note, a fault code or an action code, and codes must be active catalogue codes.',
             'UAT #15 (0085): Pause / Resume, Complete service, Cancel and Reopen need work_orders/lifecycle edit, off for every role that must request status changes, so the buttons are not drawn for them.',
             'UAT M9: Cancel is not offered, and is refused (409 CANCEL_BILLED), once the client invoice is sent or paid or a vendor payment is paid. UAT M31: Reopen needs a reason and moves the work order back to the status it had before the cancel, through the ordinary status change (a refusal is said on the bar).',
-            'Increase NTE: the amount must exceed the current NTE ("That is not an increase…"), a reason is required, one open request per work order; deciders (approvals/nte approve) get a notice and decide on the Cost breakdown tab (Approve — set the NTE to $X / Reject with why / the requester may Withdraw); approval writes Client NTE through the ordinary field path and the requester gets a notice. These requests are not in the Approvals inbox.',
+            'The Increase NTE button ("Ask for a higher NTE") was removed on 2026-10-20. Requests already open are still decided on Finances › Cost breakdown (Approve — set the NTE to $X / Reject with why / the requester may Withdraw) and in Approvals › NTE increase requests; approval writes Client NTE through the ordinary field path.',
             'A pause is a marker only; no clock stops (rule 2.4.4). Assigning a blacklisted vendor is refused.',
           ],
-          permissions: ['work_orders edit', 'vendor_map view or vendors view (vendor controls)', 'work_orders/tabs/money view (Increase NTE)', 'approvals/nte approve (decide it)', 'work_orders/pdf view, unset = work_orders view'],
+          permissions: ['work_orders edit', 'vendor_map view or vendors view (vendor controls)', 'approvals/nte approve (decide an open NTE increase)', 'work_orders/pdf view, unset = work_orders view'],
           audit: ['field rows: Paused, Cancelled, ETA, Tag, Vendor, NTE increase requested / approved / rejected / withdrawn, Service completed', 'work_order_pdf_saved'],
-          since: '0064 / 0073',
+          since: '0064 / 0073 / 2026-10-20',
         },
         {
           name: 'Tabs',
-          what: 'All fields (default), Finances, Dates, CICO, People, Payables, Site, Parts, Flags, Overview, Checklist (n / m badge), Cost breakdown, Timelog (its permission row reads Timelog & metrics), Related, Messages (count badge), Audit trail. Each tab is a permission row (work_orders/tabs/<tab>); Checklist also carries the Job plan, Services and Consumables cards; Timelog the Technician time card (Start a timer / Stop / Log time, Billable); Related the Work permits card (Send for approval, Approve, Reject, Close the permit, Back to draft; "A permit is needed" chip), the approvals list, Same asset and Same site; People the Dispatch offers card; Payables the purchasing card.',
+          what: 'All fields (default), Finances (sub-tabs Finances · Payables · Cost breakdown), Dates, CICO, People (sub-tabs Our team · Technicians), Site, Parts, Overview, Messages (count badge), Audit trail. Timelog is no longer a tab (2026-10-20): its cards sit on CICO under the visits, shown with its permission row (Timelog & metrics), and a ?tab=timelog link opens CICO. Each tab is a permission row (work_orders/tabs/<tab>); a sub-tab keeps its own row (Technicians follows People\'s), and a sub-tab strip is drawn only when the person sees more than one. Checklist and Related have no button since 2026-10-20 (the Flags tab is gone; the flags are checkboxes in All fields); a link to Checklist or Related (Maintenance › Work permits, a vendor\'s consumables) still opens them: Checklist carries the Job plan, Services and Consumables cards; Related the Work permits card (Send for approval, Approve, Reject, Close the permit, Back to draft; "A permit is needed" chip), the approvals list, Same asset and Same site. the Timelog cards on CICO are the Technician time card (Start a timer / Stop / Log time, Billable) and Timelog and metrics; Technicians the Dispatch offers card; Payables the purchasing card. The header opens unfolded on every work order; folding it lasts until the page is left.',
           value: 'A role sees the tabs of its job: AR sees Finances and the audit; a probation dispatcher does not see Payables.',
         },
         {
@@ -73,12 +73,12 @@ export const WORK_ORDERS_PART: DocPart = {
           permissions: ['work_orders/tabs/money view', 'approvals view for the override banner'],
         },
         {
-          name: 'Dates, People, Site, Parts, Flags, Payables',
-          what: 'Dates: received, due, SLA due, scheduled, parts arrival, quote due ("· quote overdue" / "· overdue"). People: the seats (Assignee with Who\'s available?, AM, …), Routing, the Technicians card (Find a technician, Hire, Take off — "the record and its visits stay", Call), Suggested vendors, Dispatch offers. Site: the address fields and the Site record block (Change / Unlink / Link / Keep the current site; the asset: Choose the asset… / No asset; "Getting in:" access notes). Parts: Parts required / No parts listed. Flags: Emergency first, then the other checkboxes ("All clear" / "N raised"). Payables: Payment links, Payment requests (Request payment), Vendor bills ("Approving needs the amount\'s tier (rule 6.2.3); paying is AP\'s."), purchasing documents, payment history.',
+          name: 'Dates, People, Site, Parts, Payables',
+          what: 'Dates: received, due, SLA due, scheduled, parts arrival, quote due ("· quote overdue" / "· overdue"). People › Our team: the seats (Assignee with Who\'s available?, AM, …), Routing, and Assignment history (every change of the Assignee, with the history grant). People › Technicians: Responsible vendor, the Technicians card (Find a technician, Hire, Take off — "the record and its visits stay", Call), Suggested vendors, Dispatch offers. Site: the address fields and the Site record block (Change / Unlink / Link / Keep the current site; the asset: Choose the asset… / No asset; "Getting in:" access notes). Parts: Parts required / No parts listed. Payables: Payment links, Payment requests (Request payment), Vendor bills ("Approving needs the amount\'s tier (rule 6.2.3); paying is AP\'s."), purchasing documents, payment history.',
           value: 'Each cluster of fields where the person working that part of the job expects it.',
         },
         {
-          name: 'Checklist, Cost breakdown, Timelog, Related',
+          name: 'Checklist, Cost breakdown, Timelog (on CICO), Related',
           what: 'Checklist: Add / Add N steps (one per line), tick, remove, "N of M done"; Apply a job plan; services and consumables used. Cost breakdown: Revenue and Cost bases, Margin (% of revenue), "Cost is over the NTE", Open the quote, the NTE increases list (Waiting; Approve — set the NTE to $X; Reject; Withdraw); "Your role does not show the money on a work order." when hidden. Timelog: Open for, Response time, Time on site, Paused ("a marker, no clock stops"), Time in each status, the Visits table with Location, Pauses. Related: On this work order chips, the approvals list (NTE override / Status change request / Manager review / Acceptance), Work permits, Same asset and Same site with open counts.',
           value: 'The Facilio parity set for the record, without leaving the page.',
           since: '0064 / 0065',
@@ -319,7 +319,7 @@ export const WORK_ORDERS_PART: DocPart = {
     {
       key: 'flags',
       title: 'Emergency and Escalated flags',
-      where: 'The work-order header, the Flags tab, every list.',
+      where: 'The work-order header, All fields, every list.',
       purpose: 'Two checkbox fields that colour the work order everywhere it appears.',
       value: 'Urgent work is unmistakable in every list, queue and dashboard, and the escalation route from an email tool is one webhook.',
       features: [

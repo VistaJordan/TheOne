@@ -10,7 +10,14 @@
 //
 // Read-only on purpose: the log is append-only, and this module never writes.
 
-import { REDACTABLE_CORE_KEYS, auditTimestampET } from '@theone/shared';
+import {
+  PERM_ACTION_LABELS,
+  PERM_SNAPSHOT_KEYS,
+  REDACTABLE_CORE_KEYS,
+  auditTimestampET,
+  permGrantWord,
+  permMapChanges,
+} from '@theone/shared';
 import { query } from '../db.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { VIEWING_AS_NAME_SQL } from '../lib/actorName.js';
@@ -259,6 +266,16 @@ function snapshotDiff(before: unknown, after: unknown): { from: string; to: stri
   const toLines: string[] = [];
   for (const k of keys) {
     if (JSON.stringify(b[k]) === JSON.stringify(a[k])) continue;
+    // A role's permissions or a person's overrides: one line per action that
+    // moved (permDiff.ts), not the whole map twice.
+    if (PERM_SNAPSHOT_KEYS.includes(k)) {
+      for (const c of permMapChanges(b[k], a[k])) {
+        const what = `${c.label} · ${PERM_ACTION_LABELS[c.action]}`;
+        fromLines.push(`${what}: ${permGrantWord(c.from)}`);
+        toLines.push(`${what}: ${permGrantWord(c.to)}`);
+      }
+      continue;
+    }
     const show = (v: unknown) =>
       v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
     fromLines.push(`${k}: ${show(b[k])}`);

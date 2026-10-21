@@ -465,7 +465,7 @@ function TimeTab() {
                 ))}
               </tbody>
             </table>
-            {d && d.technicians.length === 0 && <div className="empty-flat">No time was logged in these days. Time is logged on a work order, under its Timelog tab.</div>}
+            {d && d.technicians.length === 0 && <div className="empty-flat">No time was logged in these days. Time is logged on a work order, under its CICO tab.</div>}
           </div>
         )}
       </section>
@@ -479,7 +479,7 @@ function TimeTab() {
                 {d.entries.map((e) => (
                   <tr key={e.id}>
                     <td>{e.tech_name}{e.note && <small className="mt-sub">{e.note}</small>}</td>
-                    <td><Link className="mono" to={`/work-orders/${encodeURIComponent(e.wo_number)}?tab=timelog`}>{e.wo_number}</Link>{e.place && <small className="mt-sub">{e.place}</small>}</td>
+                    <td><Link className="mono" to={`/work-orders/${encodeURIComponent(e.wo_number)}?tab=cico`}>{e.wo_number}</Link>{e.place && <small className="mt-sub">{e.place}</small>}</td>
                     <td>{TIME_KIND_LABELS[e.kind]}{!e.billable && <small className="mt-sub">not billable</small>}</td>
                     <td>{stampText(e.started_at)}</td>
                     <td>{e.ended_at ? stampText(e.ended_at) : <span className="chip chip-sm chip-ok">Running</span>}</td>

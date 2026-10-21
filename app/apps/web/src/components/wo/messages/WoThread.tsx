@@ -1,4 +1,5 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { ClientSystem, WoMessage } from '../../../api/client';
 import { Icon } from '../../Icon';
 import { dayKey, dayLabel } from '../../../lib/quo';
@@ -14,6 +15,16 @@ interface WoThreadProps {
 /** 0052 · the work order's own conversation, oldest-first with day dividers,
     exactly as the API returns it. */
 export function WoThread({ items, woId, queryKey, clientSystem }: WoThreadProps) {
+  // 0089 · a mention notice links to ?tab=messages&msg=<id>: scroll to that
+  // message once it is in the list, and draw it highlighted.
+  const [params] = useSearchParams();
+  const target = params.get('msg');
+  const found = target !== null && items.some((m) => m.id === target);
+  useEffect(() => {
+    if (!found || !target) return;
+    document.getElementById(`msg-${target}`)?.scrollIntoView({ block: 'center' });
+  }, [found, target]);
+
   if (items.length === 0) {
     return (
       <div className="thread">
@@ -45,7 +56,13 @@ export function WoThread({ items, woId, queryKey, clientSystem }: WoThreadProps)
                   <span>{dayLabel(m.created_at)}</span>
                 </li>
               )}
-              <WoMessageBubble message={m} woId={woId} queryKey={queryKey} clientSystem={clientSystem} />
+              <WoMessageBubble
+                message={m}
+                woId={woId}
+                queryKey={queryKey}
+                clientSystem={clientSystem}
+                highlighted={m.id === target}
+              />
             </Fragment>
           );
         })}

@@ -65,7 +65,7 @@ import type {
 import { query } from '../db.js';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
-import { logAdminEvent } from './adminAudit.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 import { notify } from './notices.js';
 import { requirePerm } from './permissions.js';
 import {
@@ -215,6 +215,28 @@ async function loadTask(id: string): Promise<VendorTask> {
   return mapTask(res.rows[0]);
 }
 
+/** Rule 1.2.1 for the decisions that change no vendor column (acknowledge,
+    fixed, done): one row on the task itself, before = the open task, after =
+    how it was closed. `extra` carries anything else the decision moved. */
+async function logTaskDecision(
+  actorId: string,
+  task: VendorTask,
+  action: string,
+  outcome: string,
+  note: string | null,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  const base = { name: task.title, type: task.type, vendor_id: task.vendor?.id ?? null, entity: task.entity };
+  await logAdminEvent({
+    actorId,
+    entity: 'vendor_task',
+    entityId: task.id,
+    action,
+    before: { ...base, status: 'OPEN' },
+    after: { ...base, status: 'DONE', outcome, note, ...extra },
+  });
+}
+
 async function closeTask(id: string, outcome: string, note: string | null, actorId: string): Promise<void> {
   await query(
     `UPDATE vendor_task SET status = 'DONE', outcome = $2, note = COALESCE($3, note), completed_by = $4, completed_at = now()
@@ -279,6 +301,7 @@ export async function resolveTask(id: string, action: VendorTaskAction, note: st
       break;
     case 'acknowledge':
       await closeTask(id, 'acknowledged', text, actor.id);
+      await logTaskDecision(actor.id, task, 'vendor_task_acknowledged', 'acknowledged', text);
       break;
     case 'approve':
     case 'send_back': {
@@ -309,9 +332,17 @@ export async function resolveTask(id: string, action: VendorTaskAction, note: st
       await log(actor.id, vendorId, action === 'approve' ? 'vendor_coi_approved' : 'vendor_coi_sent_back', { name, entity: task.entity, note: text });
       break;
     }
-    case 'fixed':
+    case 'fixed': {
       await closeTask(id, 'fixed', text, actor.id);
+      // The fix resets that company's COI verdict to PENDING; the row says so,
+      // with the verdict it replaced, so the reset is visible in the log.
+      let coiReset: { entity: string; from: string | null; to: 'PENDING' } | null = null;
       if (vendorId && task.entity) {
+        const prev = await query<{ approved: string | null }>(
+          `SELECT approved FROM vendor_coi_requirement WHERE vendor_id = $1 AND entity = $2`,
+          [vendorId, task.entity],
+        );
+        coiReset = { entity: task.entity, from: prev.rows[0]?.approved ?? null, to: 'PENDING' };
         await query(`UPDATE vendor_coi_requirement SET approved = 'PENDING' WHERE vendor_id = $1 AND entity = $2`, [vendorId, task.entity]);
         await syncCoiApproval(vendorId);
         await openVendorTask({
@@ -322,9 +353,12 @@ export async function resolveTask(id: string, action: VendorTaskAction, note: st
           createdBy: actor.id,
         });
       }
+      await logTaskDecision(actor.id, task, 'vendor_task_fixed', 'fixed', text, { coi_reset: coiReset });
       break;
+    }
     case 'done':
       await closeTask(id, 'done', text, actor.id);
+      await logTaskDecision(actor.id, task, 'vendor_task_done', 'done', text);
       break;
   }
   // 0059 · whoever raised it (and, for an approved COI, the vendor's owner)
@@ -390,6 +424,20 @@ export async function setDailyTarget(
   const day = input.day && /^\d{4}-\d{2}-\d{2}$/.test(input.day) ? input.day : today();
   const nw = Math.max(0, Math.round(input.nationwide_target));
   const sw = Math.max(0, Math.round(input.statewide_target));
+  // Rule 1.2.1: the target before and after, keyed to the person it is for.
+  const prev = await query<{ name: string; nationwide_target: number | null; statewide_target: number | null }>(
+    `SELECT p.display_name AS name, t.nationwide_target, t.statewide_target
+       FROM principal p LEFT JOIN vendor_daily_target t ON t.principal_id = p.id AND t.day = $2::date
+      WHERE p.id = $1`,
+    [input.principal_id, day],
+  );
+  if (!prev.rows[0]) throw notFound('Person not found');
+  const person = prev.rows[0].name;
+  const before: Snapshot | null =
+    prev.rows[0].nationwide_target === null
+      ? null
+      : { name: person, day, nationwide_target: prev.rows[0].nationwide_target, statewide_target: prev.rows[0].statewide_target };
+  const after: Snapshot | null = nw === 0 && sw === 0 ? null : { name: person, day, nationwide_target: nw, statewide_target: sw };
   if (nw === 0 && sw === 0) {
     await query(`DELETE FROM vendor_daily_target WHERE principal_id = $1 AND day = $2::date`, [input.principal_id, day]);
   } else {
@@ -401,6 +449,16 @@ export async function setDailyTarget(
                      set_by = EXCLUDED.set_by, updated_at = now()`,
       [input.principal_id, day, nw, sw, actor.id],
     );
+  }
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId: actor.id,
+      entity: 'vendor_target',
+      entityId: input.principal_id,
+      action: after ? 'vendor_target_set' : 'vendor_target_removed',
+      before,
+      after,
+    });
   }
   return loadTargets(day, null);
 }
@@ -1060,12 +1118,21 @@ export async function saveView(
   requirePerm(actor, VENDOR_LISTS_PERM_KEY, 'create', 'You cannot save lists');
   const name = input.name.trim();
   if (name === '') throw badRequest('The list needs a name', { field: 'name' });
-  await query(`INSERT INTO vendor_saved_view (owner_id, name, params, visibility) VALUES ($1, $2, $3::jsonb, $4)`, [
-    actor.id,
-    name.slice(0, 120),
-    JSON.stringify(cleanViewParams(input.params)),
-    input.visibility ?? 'PRIVATE',
-  ]);
+  const params = cleanViewParams(input.params);
+  const visibility = input.visibility ?? 'PRIVATE';
+  const ins = await query<{ id: string }>(
+    `INSERT INTO vendor_saved_view (owner_id, name, params, visibility) VALUES ($1, $2, $3::jsonb, $4) RETURNING id::text AS id`,
+    [actor.id, name.slice(0, 120), JSON.stringify(params), visibility],
+  );
+  // Rule 1.2.1 (a saved list is a button like a saved view). Saving always
+  // inserts — a list is not edited in place — so this is the created row.
+  await logAdminEvent({
+    actorId: actor.id,
+    entity: 'vendor_saved_view',
+    entityId: ins.rows[0].id,
+    action: 'vendor_saved_view_created',
+    after: { name: name.slice(0, 120), params, visibility },
+  });
   return listSavedViews(actor);
 }
 
@@ -1073,11 +1140,20 @@ export async function deleteView(id: string, actor: ActingPrincipal): Promise<Ve
   requireVendorsView(actor);
   if (!UUID_RE.test(id)) throw notFound('List not found');
   // Its owner, or a manager for a list they can see.
-  const res = await query(
-    `DELETE FROM vendor_saved_view WHERE id = $1 AND (owner_id = $2 OR ($3::boolean AND visibility <> 'PRIVATE'))`,
+  const res = await query<{ name: string; params: Record<string, string>; visibility: SavedViewVisibility; owner_id: string }>(
+    `DELETE FROM vendor_saved_view WHERE id = $1 AND (owner_id = $2 OR ($3::boolean AND visibility <> 'PRIVATE'))
+     RETURNING name, params, visibility, owner_id::text AS owner_id`,
     [id, actor.id, isManager(actor)],
   );
-  if ((res.rowCount ?? 0) === 0) throw notFound('List not found');
+  const gone = res.rows[0];
+  if (!gone) throw notFound('List not found');
+  await logAdminEvent({
+    actorId: actor.id,
+    entity: 'vendor_saved_view',
+    entityId: id,
+    action: 'vendor_saved_view_deleted',
+    before: { name: gone.name, params: gone.params ?? {}, visibility: gone.visibility, owner_id: gone.owner_id },
+  });
   return listSavedViews(actor);
 }
 

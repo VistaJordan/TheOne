@@ -47,7 +47,7 @@ import type {
 import { query } from '../db.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
-import { logAdminEvent } from './adminAudit.js';
+import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 import { notify } from './notices.js';
 import { requirePerm } from './permissions.js';
 import { serviceActorId } from './serviceActors.js';
@@ -379,7 +379,7 @@ async function offerNext(taskId: string, settings: DispatchSettings, startedBy: 
       kind: 'dispatch',
       title: `No vendor took ${wo.rows[0]?.wo_number ?? 'the work order'}`,
       body: 'Every preferred vendor declined or did not answer. Assign one by hand.',
-      link: wo.rows[0] ? `/work-orders/${encodeURIComponent(wo.rows[0].wo_number)}?tab=people` : null,
+      link: wo.rows[0] ? `/work-orders/${encodeURIComponent(wo.rows[0].wo_number)}?tab=technicians` : null,
     });
     return null;
   }
@@ -440,7 +440,7 @@ export async function answerOffer(
   if (!o) throw notFound('That offer does not exist');
   if (o.status !== 'offered') throw conflict('That offer is no longer open');
   const settings = await getDispatchSettings();
-  const link = `/work-orders/${encodeURIComponent(o.wo_number)}?tab=people`;
+  const link = `/work-orders/${encodeURIComponent(o.wo_number)}?tab=technicians`;
   if (answer === 'accept') {
     if (o.blacklisted) throw conflict(`${o.vendor_name} is blacklisted and cannot take a work order`);
     if (o.current_vendor && o.current_vendor !== o.vendor_id) throw conflict('Another vendor was assigned to this work order in the meantime');
@@ -550,14 +550,25 @@ export async function saveVendorSkill(vendorId: string, id: string | null, input
   await gateVendor(vendorId, actor, 'edit');
   if (id) {
     if (!UUID_RE.test(id)) throw notFound('That skill is not on this vendor');
-    const res = await query(
+    type SkillSnap = { skill: string; level: string; certified_until: string | null; note: string | null };
+    const cols = `skill, level, certified_until::text AS certified_until, note`;
+    const prev = await query<SkillSnap>(`SELECT ${cols} FROM vendor_skill WHERE id = $1 AND vendor_id = $2`, [id, vendorId]);
+    const res = await query<SkillSnap>(
       `UPDATE vendor_skill SET level = COALESCE($3, level),
               certified_until = CASE WHEN $4 THEN $5::date ELSE certified_until END,
               note = CASE WHEN $6 THEN $7 ELSE note END
-        WHERE id = $1 AND vendor_id = $2 RETURNING id`,
+        WHERE id = $1 AND vendor_id = $2 RETURNING ${cols}`,
       [id, vendorId, input.level ?? null, input.certified_until !== undefined, input.certified_until !== undefined ? dayOrNull(input.certified_until, 'The certificate date') : null, input.note !== undefined, input.note !== undefined ? clean(input.note) : null],
     );
     if (!res.rows[0]) throw notFound('That skill is not on this vendor');
+    // Rule 1.2.1: the edit, named like the add (vendor_skill_*, name = the
+    // skill), with the whole skill before and after; a no-op save logs nothing.
+    const snap = (r: SkillSnap) => ({ name: r.skill, level: r.level, certified_until: r.certified_until, note: r.note });
+    const before = prev.rows[0] ? snap(prev.rows[0]) : null;
+    const after = snap(res.rows[0]);
+    if (snapshotsDiffer(before, after)) {
+      await logAdminEvent({ actorId: actor.id, entity: 'vendor', entityId: vendorId, action: 'vendor_skill_updated', field: `skill:${id}`, before, after });
+    }
   } else {
     const skill = (input.skill ?? '').trim().slice(0, 120);
     if (!skill) throw badRequest('Name the skill', { field: 'skill' });
@@ -587,9 +598,20 @@ export async function saveVendorInduction(vendorId: string, id: string | null, i
   const expires = dayOrNull(input.expires_on, 'The expiry date');
   if (completed && expires && expires < completed) throw badRequest('The induction expires before it was completed', { field: 'expires_on' });
   const title = (input.title ?? '').trim().slice(0, 200);
+  let before: Snapshot | null = null;
   if (id) {
     if (!UUID_RE.test(id)) throw notFound('That induction is not on this vendor');
     if (!title) throw badRequest('Name the induction', { field: 'title' });
+    // What it said before the edit, so the audit row can be read (and undone).
+    const prev = await query<{ title: string; client: string | null; completed_on: string | null; expires_on: string | null }>(
+      `SELECT title, client, completed_on::text AS completed_on, expires_on::text AS expires_on
+         FROM vendor_induction WHERE id = $1 AND vendor_id = $2`,
+      [id, vendorId],
+    );
+    if (prev.rows[0]) {
+      const p = prev.rows[0];
+      before = { name: p.title, client: p.client, completed_on: p.completed_on, expires_on: p.expires_on };
+    }
     const res = await query(
       `UPDATE vendor_induction SET title = $3, client = $4, completed_on = $5::date, expires_on = $6::date, note = $7 WHERE id = $1 AND vendor_id = $2 RETURNING id`,
       [id, vendorId, title, clean(input.client), completed, expires, clean(input.note)],
@@ -602,7 +624,10 @@ export async function saveVendorInduction(vendorId: string, id: string | null, i
       [vendorId, title, clean(input.client), completed, expires, clean(input.note), actor.id],
     );
   }
-  await logAdminEvent({ actorId: actor.id, entity: 'vendor', entityId: vendorId, action: id ? 'vendor_induction_updated' : 'vendor_induction_added', after: { name: title, client: clean(input.client), completed_on: completed, expires_on: expires } });
+  const after: Snapshot = { name: title, client: clean(input.client), completed_on: completed, expires_on: expires };
+  if (!before || snapshotsDiffer(before, after)) {
+    await logAdminEvent({ actorId: actor.id, entity: 'vendor', entityId: vendorId, action: id ? 'vendor_induction_updated' : 'vendor_induction_added', field: id ? `induction:${id}` : null, before, after });
+  }
   return vendorQualifications(vendorId, actor);
 }
 

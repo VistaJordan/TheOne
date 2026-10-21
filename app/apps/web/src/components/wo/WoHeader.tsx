@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BFI_KEY,
@@ -48,27 +49,6 @@ function WorthCell({ label, value }: { label: string; value: number | null | und
 /** Age past which the aging cluster flips to the warn ramp. */
 const AGE_WARN_DAYS = 10;
 
-// Whether the header is folded down to its top row. A property of the browser,
-// not the work order — someone on a small screen wants it folded on EVERY WO,
-// so it lives in localStorage, not in navigation state.
-const COLLAPSE_KEY = 'theone.wo.head.collapsed';
-
-function loadCollapsed(): boolean {
-  try {
-    return localStorage.getItem(COLLAPSE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function saveCollapsed(v: boolean): void {
-  try {
-    localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0');
-  } catch {
-    /* storage disabled — the fold simply does not survive the reload */
-  }
-}
-
 interface WoHeaderProps {
   wo: WorkOrderDetailV2;
   phase: Phase | null;
@@ -81,9 +61,11 @@ interface WoHeaderProps {
   /** Rule 11.2.1: whether the quote carries data (false = missing or empty,
       null/undefined = not known here), so the status menu can tag Quote Ready. */
   quoteFilled?: boolean | null;
+  /** The record's actions (More, Save as PDF), drawn after the header's own buttons. */
+  actions?: ReactNode;
 }
 
-export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, quoteFilled }: WoHeaderProps) {
+export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, quoteFilled, actions }: WoHeaderProps) {
   const meta = deriveHeaderMeta(wo);
   const f = wo.fields ?? {};
   // Rules 2.6.3 / 2.7: where the work order sits on Ecotrak (stamped by the
@@ -131,15 +113,12 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
         .filter((a) => a.has_file && a.review_status === 'approved' && a.kind)
         .map((a) => a.kind as string)
     : null;
-  const [collapsed, setCollapsed] = useState(loadCollapsed);
+  // Every work order opens with the full header (2026-10-20); the fold lasts
+  // until the page is left and is no longer remembered across work orders.
+  const [collapsed, setCollapsed] = useState(false);
   // "Request again" on a rejected request re-opens the status menu.
   const statusTriggerRef = useRef<HTMLButtonElement>(null);
-  const toggleCollapsed = () => {
-    setCollapsed((v) => {
-      saveCollapsed(!v);
-      return !v;
-    });
-  };
+  const toggleCollapsed = () => setCollapsed((v) => !v);
 
   // Who has it and what it is worth: the two things asked about a WO before
   // anything else. Expanded they sit with the other meta chips; folded they
@@ -249,6 +228,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               {escalated ? 'Escalated · Clear' : 'Mark as Escalated'}
             </button>
           )}
+          {actions}
           <button
             type="button"
             className="icon-btn wohead-fold"

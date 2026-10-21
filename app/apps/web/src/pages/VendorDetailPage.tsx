@@ -775,7 +775,7 @@ function SidePanels({ v, vendorKey, entities }: { v: VendorDetail; vendorKey: st
           {v.work_orders.length === 0 && <li>Not hired on a work order yet</li>}
           {v.work_orders.map((w) => (
             <li key={w.wo_number + w.hired_at}>
-              <Link to={`/work-orders/${encodeURIComponent(w.wo_number)}?tab=people`}>{w.wo_number}</Link>
+              <Link to={`/work-orders/${encodeURIComponent(w.wo_number)}?tab=technicians`}>{w.wo_number}</Link>
               <span>{w.title}</span>
               <span className="push">{w.released_at ? 'taken off' : feedTime(w.hired_at)}</span>
             </li>

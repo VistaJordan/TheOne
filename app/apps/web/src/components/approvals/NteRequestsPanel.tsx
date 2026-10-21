@@ -2,7 +2,8 @@
  *
  * "NTE increases" used to mean two different things. This lane is the manual
  * one: somebody on the work order asked for a higher NTE (0064,
- * `wo_nte_request`, Increase NTE on the record bar). The other lane, "NTE
+ * `wo_nte_request`; the Increase NTE button that raised them was removed on
+ * 2026-10-20, so this lane holds the requests already open). The other lane, "NTE
  * override (cost over NTE)", is the approval task rule 1.5.2 raises when the
  * cost passes the NTE. Deciding here is the work order's own route, so the
  * gate (`approvals/nte` approve) and the audit row are the same as there.
@@ -42,7 +43,7 @@ export function NteRequestsPanel() {
   return (
     <div className="apq-nte-requests">
       <p className="hint">
-        Increases somebody asked for on a work order (Increase NTE). Approving writes the new NTE. Cost going over
+        Increases somebody asked for on a work order. Approving writes the new NTE. Cost going over
         the NTE is the other lane, NTE override (cost over NTE).
       </p>
       {error && (

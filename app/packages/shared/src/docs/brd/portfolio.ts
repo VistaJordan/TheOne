@@ -168,7 +168,7 @@ export const MAINTENANCE_PART: DocPart = {
         },
         {
           name: 'Time tracker',
-          what: 'Entries per technician on a work order\'s Timelog tab (Labor / Travel / Waiting; a running timer when no end, one per technician); across work orders: From / To range, tiles Total time / Billable / Labor value / Timers running, By technician and Entries tables, refreshed every minute.',
+          what: 'Entries per technician on a work order\'s CICO tab (the Timelog cards) (Labor / Travel / Waiting; a running timer when no end, one per technician); across work orders: From / To range, tiles Total time / Billable / Labor value / Timers running, By technician and Entries tables, refreshed every minute.',
           value: 'Labour is measured.',
           rules: ['One running timer per technician; a start cannot be in the future; an end cannot precede its start.'],
           permissions: ['maintenance/time view / create (log, start) / edit (change, stop) / delete'],

@@ -24,22 +24,31 @@ import {
   CLIENT_MESSAGE_TARGET_LABELS,
   CLIENT_PORTAL_TYPE_KEY,
   ECOTRAK_ID_KEY,
+  MENTION_NOTICE_KIND,
   MESSAGE_PERM_KEY,
   clientMessageTarget,
+  mentionsInBody,
   messageEditableBy,
   messageIsSent,
+  tabPermKey,
 } from '@theone/shared';
 import type {
   ClientMessageTarget,
   ClientSystem,
   FeedActor,
+  MentionCandidate,
   MessageDelivery,
+  MessageMention,
   WoMessage,
   WoMessagesResponse,
 } from '@theone/shared';
-import type { ActingPrincipal } from './activity.js';
-import type { Allow } from './permissions.js';
+import { actingFromPrincipal, type ActingPrincipal } from './activity.js';
+import { PRINCIPAL_COLUMNS, PRINCIPAL_FROM, toPrincipal, type PrincipalRow } from './auth.js';
+import { allowFor, type Allow } from './permissions.js';
 import { getMessages as getQuoMessages } from './messages.js';
+import { notify } from './notices.js';
+import { Params } from './woFields.js';
+import { woScopeSql } from './woScope.js';
 import { clientMessageAdapter, clientWriteEnabled } from '../modules/integrations/clientMessages.js';
 import { serviceActorId } from './serviceActors.js';
 
@@ -87,6 +96,7 @@ interface MessageRow {
   edited_at: string | null;
   created_at: string;
   deliveries: MessageDelivery[] | string | null;
+  mentions: MessageMention[] | string | null;
 }
 
 const MESSAGE_SELECT = `
@@ -112,7 +122,14 @@ const MESSAGE_SELECT = `
                   ) ORDER BY d.created_at)
              FROM comment_delivery d
             WHERE d.comment_id = c.id
-         ), '[]'::jsonb)           AS deliveries
+         ), '[]'::jsonb)           AS deliveries,
+         COALESCE((
+           SELECT jsonb_agg(jsonb_build_object('id', mp.id::text, 'name', mp.display_name)
+                            ORDER BY m.created_at, mp.display_name)
+             FROM comment_mention m
+             JOIN principal mp ON mp.id = m.principal_id
+            WHERE m.comment_id = c.id
+         ), '[]'::jsonb)           AS mentions
     FROM comment c
     LEFT JOIN principal p ON p.id = c.author_principal_id
 `;
@@ -121,6 +138,14 @@ function toDeliveries(v: MessageRow['deliveries']): MessageDelivery[] {
   if (Array.isArray(v)) return v;
   if (typeof v === 'string') {
     try { return JSON.parse(v) as MessageDelivery[]; } catch { return []; }
+  }
+  return [];
+}
+
+function toMentions(v: MessageRow['mentions']): MessageMention[] {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    try { return JSON.parse(v) as MessageMention[]; } catch { return []; }
   }
   return [];
 }
@@ -146,6 +171,7 @@ function mapRow(r: MessageRow, actor: ActingPrincipal, mayEdit: boolean): WoMess
     ...base,
     sent: messageIsSent(deliveries),
     editable: messageEditableBy(base, actor.id, mayEdit),
+    mentions: toMentions(r.mentions),
   };
 }
 
@@ -184,11 +210,99 @@ async function loadMessage(
   return r ? mapRow(r, actor, allow(MESSAGE_PERM_KEY, 'edit')) : null;
 }
 
+// ── Who can be @mentioned (0089) ─────────────────────────────────────────────
+//
+// Mentioning someone sends them to the work order, so it may only name a
+// person who can open it: an active human with `work_orders` view and the
+// Messages tab, and the work order inside THEIR rule-8.5 scope and site list.
+// Each person's scope is their own predicate (woScopeSql as them); all of
+// them are asked in one statement against the one task row.
+
+const SCOPE_CHUNK = 200;
+
+export async function mentionCandidates(taskId: string): Promise<MentionCandidate[]> {
+  const res = await query<PrincipalRow>(
+    `SELECT ${PRINCIPAL_COLUMNS} ${PRINCIPAL_FROM}
+      WHERE p.kind = 'human' AND p.status <> 'disabled'
+      ORDER BY lower(p.display_name), p.id`,
+  );
+  const people = res.rows
+    .map((r) => ({ row: r, actor: actingFromPrincipal(toPrincipal(r)) }))
+    .filter(({ actor }) => {
+      const allow = allowFor(actor);
+      return allow('work_orders', 'view') && allow(tabPermKey('messages'), 'view');
+    });
+
+  const inScope = new Set<string>();
+  for (let i = 0; i < people.length; i += SCOPE_CHUNK) {
+    const chunk = people.slice(i, i + SCOPE_CHUNK);
+    const p = new Params();
+    const cols = chunk.map(({ actor }, j) => `(${woScopeSql(actor, p) ?? 'TRUE'}) AS c${j}`);
+    const hole = p.add(taskId);
+    const scoped = await query<Record<string, boolean>>(
+      `SELECT ${cols.join(', ')} FROM task t WHERE t.id = ${hole}`,
+      p.values,
+    );
+    const row = scoped.rows[0];
+    if (!row) return [];
+    chunk.forEach(({ actor }, j) => {
+      if (row[`c${j}`] === true) inScope.add(actor.id);
+    });
+  }
+
+  return people
+    .filter(({ actor }) => inScope.has(actor.id))
+    .map(({ row }) => ({ id: row.id, name: row.display_name, role_label: row.role_label }));
+}
+
+/** The people a message may mention: every id asked for must be a candidate
+ *  (400 `MENTION_NOT_ALLOWED` otherwise, naming nobody the asker cannot see),
+ *  and only those whose "@Name" is in the body are kept. */
+async function resolveMentions(taskId: string, body: string, ids: readonly string[] | undefined): Promise<MentionCandidate[]> {
+  if (!ids || ids.length === 0) return [];
+  const candidates = await mentionCandidates(taskId);
+  const byId = new Map(candidates.map((c) => [c.id, c]));
+  const unknown = ids.filter((id) => !byId.has(id));
+  if (unknown.length > 0) {
+    throw new ApiError(
+      'BAD_REQUEST',
+      unknown.length === 1
+        ? 'One of the people mentioned cannot open this work order, so they cannot be mentioned on it'
+        : `${unknown.length} of the people mentioned cannot open this work order, so they cannot be mentioned on it`,
+      { code: 'MENTION_NOT_ALLOWED', principal_ids: unknown },
+    );
+  }
+  return mentionsInBody(body, ids.map((id) => byId.get(id)!));
+}
+
+/** Tell the newly mentioned people, after the commit. Never throws (notify). */
+async function notifyMentioned(
+  taskId: string,
+  commentId: string,
+  body: string,
+  people: readonly { id: string }[],
+  actor: ActingPrincipal,
+): Promise<void> {
+  if (people.length === 0) return;
+  const wo = await query<{ wo_number: string }>(`SELECT wo_number FROM task WHERE id = $1`, [taskId]);
+  const woNumber = wo.rows[0]?.wo_number ?? 'a work order';
+  const snippet = body.length > 280 ? `${body.slice(0, 279)}…` : body;
+  await notify(people.map((p) => p.id), {
+    kind: MENTION_NOTICE_KIND,
+    title: `${actor.name} mentioned you on ${woNumber}`,
+    body: snippet,
+    link: `/work-orders/${encodeURIComponent(woNumber)}?tab=messages&msg=${commentId}`,
+    actorId: actor.id,
+  });
+}
+
 // ── Posting ──────────────────────────────────────────────────────────────────
 
 export interface PostMessageInput {
   body: string;
   client_visible: boolean;
+  /** 0089 · the people picked from the @ list; see resolveMentions. */
+  mentions?: string[];
 }
 
 /** Post a message. One transaction: the comment row, its pending delivery
@@ -203,6 +317,7 @@ export async function postMessage(
 ): Promise<WoMessage> {
   const link = await loadLink(taskId);
   const target = input.client_visible ? (link?.target ?? null) : null;
+  const mentioned = await resolveMentions(taskId, input.body, input.mentions);
   let commentId: string | null = null;
 
   await withTransaction(async (tx) => {
@@ -213,6 +328,15 @@ export async function postMessage(
       [taskId, actor.id, input.body, input.client_visible],
     );
     commentId = ins.rows[0].id;
+
+    if (mentioned.length > 0) {
+      await tx.query(
+        `INSERT INTO comment_mention (comment_id, principal_id)
+         SELECT $1, unnest($2::uuid[])
+         ON CONFLICT DO NOTHING`,
+        [commentId, mentioned.map((m) => m.id)],
+      );
+    }
 
     if (target) {
       await tx.query(
@@ -233,6 +357,7 @@ export async function postMessage(
           client_visible: input.client_visible,
           source: 'staff',
           ...(target ? { delivery: target } : {}),
+          ...(mentioned.length > 0 ? { mentions: mentioned.map((m) => ({ id: m.id, name: m.name })) } : {}),
         }),
       ],
     );
@@ -240,6 +365,7 @@ export async function postMessage(
 
   if (!commentId) throw new ApiError('INTERNAL', 'Message insert produced no row');
   await deliverPendingMessage(commentId);
+  await notifyMentioned(taskId, commentId, input.body, mentioned, actor);
 
   const item = await loadMessage(taskId, commentId, actor, allow);
   if (!item) throw new ApiError('INTERNAL', 'Message vanished after insert');
@@ -251,6 +377,9 @@ export async function postMessage(
 export interface EditMessageInput {
   body?: string;
   client_visible?: boolean;
+  /** 0089 · the whole list after the edit. Omitted = keep the people already
+   *  mentioned whose "@Name" is still in the body. */
+  mentions?: string[];
 }
 
 /** Change one's own unsent message. 403 unless the actor wrote it, 409
@@ -282,7 +411,19 @@ export async function editMessage(
 
   const body = input.body ?? current.body;
   const clientVisible = input.client_visible ?? current.client_visible;
-  if (body === current.body && clientVisible === current.client_visible) return current;
+
+  // 0089 · who it mentions after the edit, and the difference from before.
+  const mentioned: MessageMention[] =
+    input.mentions !== undefined
+      ? await resolveMentions(taskId, body, input.mentions)
+      : mentionsInBody(body, current.mentions);
+  const before = new Set(current.mentions.map((m) => m.id));
+  const after = new Set(mentioned.map((m) => m.id));
+  const added = mentioned.filter((m) => !before.has(m.id));
+  const removed = current.mentions.filter((m) => !after.has(m.id));
+  const mentionsChanged = added.length > 0 || removed.length > 0;
+
+  if (body === current.body && clientVisible === current.client_visible && !mentionsChanged) return current;
 
   const link = clientVisible && !current.client_visible ? await loadLink(taskId) : null;
   const newTarget = link?.target ?? null;
@@ -292,6 +433,20 @@ export async function editMessage(
       `UPDATE comment SET body = $2, client_visible = $3, edited_at = now() WHERE id = $1`,
       [messageId, body, clientVisible],
     );
+    if (removed.length > 0) {
+      await tx.query(
+        `DELETE FROM comment_mention WHERE comment_id = $1 AND principal_id = ANY($2::uuid[])`,
+        [messageId, removed.map((m) => m.id)],
+      );
+    }
+    if (added.length > 0) {
+      await tx.query(
+        `INSERT INTO comment_mention (comment_id, principal_id)
+         SELECT $1, unnest($2::uuid[])
+         ON CONFLICT DO NOTHING`,
+        [messageId, added.map((m) => m.id)],
+      );
+    }
     if (clientVisible && !current.client_visible && newTarget) {
       await tx.query(
         `INSERT INTO comment_delivery (comment_id, target) VALUES ($1, $2)
@@ -309,13 +464,25 @@ export async function editMessage(
       [
         actor.id,
         taskId,
-        JSON.stringify({ comment_id: messageId, body: current.body, client_visible: current.client_visible }),
-        JSON.stringify({ comment_id: messageId, body, client_visible: clientVisible }),
+        JSON.stringify({
+          comment_id: messageId,
+          body: current.body,
+          client_visible: current.client_visible,
+          ...(mentionsChanged ? { mentions: current.mentions } : {}),
+        }),
+        JSON.stringify({
+          comment_id: messageId,
+          body,
+          client_visible: clientVisible,
+          ...(mentionsChanged ? { mentions: mentioned.map((m) => ({ id: m.id, name: m.name })) } : {}),
+        }),
       ],
     );
   });
 
   await deliverPendingMessage(messageId);
+  // Only the people the edit ADDED hear about it; nobody is told twice.
+  await notifyMentioned(taskId, messageId, body, added, actor);
 
   const item = await loadMessage(taskId, messageId, actor, allow);
   if (!item) throw new ApiError('INTERNAL', 'Message vanished after edit');

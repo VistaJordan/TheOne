@@ -38,7 +38,7 @@ import { config } from '../config.js';
 import { query } from '../db.js';
 import { conflict, notFound } from '../errors.js';
 import type { SessionPrincipal } from './auth.js';
-import { logAdminEvent } from './adminAudit.js';
+import { logAdminEvent, type Snapshot } from './adminAudit.js';
 import { integrationOn } from './integrations.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { STATIC_INSTRUCTIONS, buildQuestion, buildReference, chicagoToday, describeAbilities } from '../lib/assistantPrompt.js';
@@ -162,6 +162,13 @@ export async function deleteConversation(a: Asker, id: string): Promise<void> {
   requireAsk(a);
   const c = await ownConversation(a, id);
   await query(`DELETE FROM assistant_conversation WHERE id = $1`, [c.id]);
+  // Rule 1.2.1: the row names the conversation by its title (as
+  // `assistant_asked` does); the messages themselves are not copied here.
+  await logAdminEvent({
+    actorId: a.actingAs.id, entity: 'assistant', entityId: c.id,
+    action: 'assistant_conversation_deleted',
+    before: { name: c.title, updated_at: c.updated_at }, after: null,
+  });
 }
 
 // ── Look-ups, as the asker ───────────────────────────────────────────────────
@@ -433,17 +440,34 @@ export async function ask(app: FastifyInstance, a: Asker, input: AssistantAskInp
 export async function setFeedback(a: Asker, messageId: string, rating: 1 | -1 | 0, note: string | null): Promise<AssistantMessage> {
   requireAsk(a);
   if (!UUID.test(messageId)) throw notFound('Answer not found');
-  const res = await query<MessageRow>(
+  // `o` is the same row as the UPDATE reads it before writing, so the log
+  // can say what the thumb was and skip a click that changed nothing.
+  const res = await query<MessageRow & { conversation_id: string; conversation_title: string; old_feedback: number | null }>(
     `UPDATE assistant_message AS m
         SET feedback = $3, feedback_note = $4, feedback_at = CASE WHEN $3::smallint IS NULL THEN NULL ELSE now() END,
             reviewed_by = NULL, reviewed_at = NULL
-       FROM assistant_conversation c
+       FROM assistant_conversation c, assistant_message o
       WHERE m.id = $1 AND m.role = 'assistant' AND c.id = m.conversation_id AND c.principal_id = $2
-      RETURNING ${MESSAGE_COLUMNS}`,
+        AND o.id = m.id
+      RETURNING ${MESSAGE_COLUMNS}, c.id::text AS conversation_id, c.title AS conversation_title,
+                o.feedback AS old_feedback`,
     [messageId, a.user.id, rating === 0 ? null : rating, rating === -1 ? note : null],
   );
-  if (!res.rows[0]) throw notFound('Answer not found');
-  return toMessage(res.rows[0]);
+  const row = res.rows[0];
+  if (!row) throw notFound('Answer not found');
+  // Rule 1.2.1. Only the thumb and the message id: never the question, the
+  // answer or the note typed with a thumb down (the `assistant_asked` row
+  // carries look-up summaries only, for the same reason).
+  const thumb = (f: number | null) => (f === 1 ? 'up' : f === -1 ? 'down' : 'cleared');
+  const before: Snapshot = { name: row.conversation_title, message_id: row.id, feedback: thumb(row.old_feedback) };
+  const after: Snapshot = { name: row.conversation_title, message_id: row.id, feedback: thumb(row.feedback), has_note: !!row.feedback_note };
+  if (before.feedback !== after.feedback || after.has_note) {
+    await logAdminEvent({
+      actorId: a.actingAs.id, entity: 'assistant', entityId: row.conversation_id,
+      action: 'assistant_feedback_set', field: `message:${row.id}`, before, after,
+    });
+  }
+  return toMessage(row);
 }
 
 // ── Teaching and review ──────────────────────────────────────────────────────
@@ -563,13 +587,26 @@ export async function listFeedback(a: Asker): Promise<AssistantFeedbackResponse>
 export async function markReviewed(a: Asker, messageId: string, reviewed: boolean): Promise<void> {
   requireTeach(a);
   if (!UUID.test(messageId)) throw notFound('Answer not found');
-  const res = await query<{ id: string }>(
-    `UPDATE assistant_message
+  const res = await query<{ id: string; conversation_id: string; conversation_title: string; was_reviewed: boolean }>(
+    `UPDATE assistant_message AS m
         SET reviewed_by = CASE WHEN $2::boolean THEN $3::uuid ELSE NULL END,
             reviewed_at = CASE WHEN $2::boolean THEN now() ELSE NULL END
-      WHERE id = $1 AND feedback IS NOT NULL
-      RETURNING id::text AS id`,
+       FROM assistant_conversation c, assistant_message o
+      WHERE m.id = $1 AND m.feedback IS NOT NULL AND c.id = m.conversation_id AND o.id = m.id
+      RETURNING m.id::text AS id, c.id::text AS conversation_id, c.title AS conversation_title,
+                (o.reviewed_at IS NOT NULL) AS was_reviewed`,
     [messageId, reviewed, a.actingAs.id],
   );
-  if (!res.rows[0]) throw notFound('Answer not found');
+  const row = res.rows[0];
+  if (!row) throw notFound('Answer not found');
+  // Rule 1.2.1: who marked a marked answer read (or unread). Keyed to the
+  // conversation like every assistant row; no message text.
+  if (row.was_reviewed !== reviewed) {
+    await logAdminEvent({
+      actorId: a.actingAs.id, entity: 'assistant', entityId: row.conversation_id,
+      action: 'assistant_feedback_reviewed', field: `message:${row.id}`,
+      before: { name: row.conversation_title, message_id: row.id, reviewed: row.was_reviewed },
+      after: { name: row.conversation_title, message_id: row.id, reviewed },
+    });
+  }
 }
