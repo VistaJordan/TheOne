@@ -399,7 +399,7 @@ export function WorkOrderDetailPage() {
 
           {/* 0054 · calls placed through Quo from this work order, and the
               way into the AI quote draft — above the written thread. */}
-          {tab === 'messages' && <CallsCard woId={wo.id} woNumber={wo.wo_number} />}
+          {tab === 'messages' && <CallsCard wo={wo} />}
           {tab === 'messages' && (
             <MessagesPanel
               woId={wo.id}

@@ -824,7 +824,7 @@ reader's own name in accent) and `WoThread` scrolls to and outlines `?msg=`.
 **Calls through Quo and the AI quote draft** (migration 0054,
 `services/woCalls.ts`, `services/aiQuote.ts`, `lib/aiQuotePrompt.ts`,
 `components/wo/calls/`, `pages/AiQuoteReviewPage.tsx`). Quo's API **cannot
-start a call**, so the **Call** button in the work-order header records the
+start a call**, so the **Call** button (Messages › Calls card since 2026-10-21) records the
 intent first — a `wo_call` row (who, E.164 phone, purpose `call` | `quote` =
 "Just call" / "Call and draft a quote") — then hands `tel:+1…` to the Quo
 desktop app (it must be the Windows tel: handler). Quo's webhooks come back to
@@ -1210,7 +1210,8 @@ its `?tab=` id. Flags is gone (checkboxes in All fields); Checklist and
 Related have no button but a link still opens them; Timelog is no tab, its
 two cards (Technician time, Timelog and metrics) sit on CICO under the visits
 behind the Timelog permission and ?tab=timelog opens CICO; the header always
-opens unfolded. The new
+opens unfolded. Since 2026-10-21 the Quo **Call** button is on the Messages
+tab's Calls card only (`CallsCard` renders `CallButton`), not in the header. The new
 state is plain columns on `task`: `vendor_id` (ONE responsible vendor;
 assigning a blacklisted one is refused), `paused_*` with a `wo_pause` history
 (a pause is a **marker only** — rule 2.4.4 stands, no timer stops), `eta_*`,
