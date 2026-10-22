@@ -23,6 +23,8 @@ interface StatusMeta {
 
 export const QUOTE_STATUS: Record<QuoteStatus, StatusMeta> = {
   draft: { label: 'Draft', color: '#4466ff' },
+  // 0092 · a dispatcher's quote, with a manager for correction.
+  pending_correction: { label: 'Pending correction', color: '#e0a030', inkDay: '#7a5410' },
   pending_approval: { label: 'Pending approval', color: '#0f9d9f' },
   approved: { label: 'Approved', color: '#6bed5e', inkDay: '#36772f' },
   sent: { label: 'Sent to client', color: '#64c6a2', inkDay: '#326351' },
@@ -33,6 +35,14 @@ export const QUOTE_STATUS: Record<QuoteStatus, StatusMeta> = {
 /** Left-to-right order of the pipeline — also the index used to mark done/current.
     The client decision is the fifth step; its label follows the outcome. */
 export const QUOTE_PIPELINE: QuoteStatus[] = ['draft', 'pending_approval', 'approved', 'sent', 'client_approved'];
+
+/** 0092 · the correction step is drawn only while the quote sits in it: a
+    manager's quote never passes through it, so it is not a step of theirs. */
+export function pipelineFor(status: QuoteStatus): QuoteStatus[] {
+  return status === 'pending_correction'
+    ? ['draft', 'pending_correction', 'pending_approval', 'approved', 'sent', 'client_approved']
+    : QUOTE_PIPELINE;
+}
 
 function pillVars(meta: StatusMeta): PillVars {
   const style: PillVars = { '--pill': meta.color };
@@ -52,10 +62,11 @@ export function QuoteStatusPill({ status }: { status: QuoteStatus }) {
 
 export function QuotePipeline({ status, round = 1 }: { status: QuoteStatus; round?: number }) {
   const declined = status === 'client_declined';
-  const current = declined ? QUOTE_PIPELINE.length - 1 : QUOTE_PIPELINE.indexOf(status);
+  const steps = pipelineFor(status);
+  const current = declined ? steps.length - 1 : steps.indexOf(status);
   return (
     <ol className="pipe" aria-label={`Quote status${round > 1 ? ` — round ${round}` : ''}`}>
-      {QUOTE_PIPELINE.map((step, i) => {
+      {steps.map((step, i) => {
         const done = i < current || (i === current && (status === 'client_approved'));
         const isCurrent = i === current && !done;
         const cls = `pstep${done ? ' is-done' : ''}${isCurrent ? ' is-current' : ''}${declined && i === current ? ' is-declined' : ''}`;
@@ -73,7 +84,7 @@ export function QuotePipeline({ status, round = 1 }: { status: QuoteStatus; roun
               </span>
               {label}
             </li>
-            {i < QUOTE_PIPELINE.length - 1 && <li className="pipe-link" aria-hidden="true" />}
+            {i < steps.length - 1 && <li className="pipe-link" aria-hidden="true" />}
           </Fragment>
         );
       })}

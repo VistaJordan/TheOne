@@ -1,18 +1,18 @@
 /* The client-facing summary block (comp: right rail #4).
 
-   Two states, and the difference matters commercially: by default the text is
-   AUTO — regenerated server-side from the narratives, the included lines and the
-   totals on every read. "Edit text" PINS a hand-written version and stops that
-   sync, which is why the pinned state says so out loud and offers a way back. */
+   The text is AUTO — regenerated server-side from the narratives, the
+   included lines and the totals on every read — and since 2026-10-22 (Elise)
+   it cannot be edited here: what the client reads is always what the quote
+   says. A quote pinned under the old "Edit text" still shows its pinned text
+   and keeps one control, the refresh, to go back to the generated version. */
 
-import { useEffect, useState } from 'react';
 import { usd } from '../../lib/quoteTotals';
 import { Icon } from '../Icon';
 
 interface SummaryCardProps {
   /** The API's generated text. */
   auto: string;
-  /** Non-null once someone used "Edit text". */
+  /** Non-null on a quote pinned before the editor was removed. */
   pinned: string | null;
   grandTotal: number;
   editable: boolean;
@@ -20,53 +20,19 @@ interface SummaryCardProps {
 }
 
 export function SummaryCard({ auto, pinned, grandTotal, editable, onPinnedChange }: SummaryCardProps) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(pinned ?? auto);
-
-  // While the operator is typing, the local buffer wins; otherwise follow the
-  // server (the auto text is rewritten on every autosave round-trip).
-  useEffect(() => {
-    if (!editing) setText(pinned ?? auto);
-  }, [editing, pinned, auto]);
-
-  const startEditing = () => {
-    setText(pinned ?? auto);
-    setEditing(true);
-  };
-
-  const commit = () => {
-    setEditing(false);
-    onPinnedChange(text);
-  };
-
-  const unpin = () => {
-    setEditing(false);
-    onPinnedChange(null);
-  };
+  const text = pinned ?? auto;
 
   return (
     <section className="card">
       <div className="card-head">
         <h2 className="card-title grow">Summary</h2>
-        {editable && !editing && (
-          <button type="button" className="btn btn-sm" onClick={startEditing}>
-            <Icon name="pencil" size={12} />
-            Edit text
-          </button>
-        )}
-        {editable && editing && (
-          <button type="button" className="btn btn-sm btn-primary" onClick={commit}>
-            <Icon name="check" size={12} />
-            Save text
-          </button>
-        )}
-        {editable && pinned !== null && !editing && (
+        {editable && pinned !== null && (
           <button
             type="button"
             className="btn btn-sm btn-icon"
             aria-label="Discard the pinned text and resume auto-generating this summary"
             title="Resume auto-generating this summary"
-            onClick={unpin}
+            onClick={() => onPinnedChange(null)}
           >
             <Icon name="refresh" size={14} />
           </button>
@@ -74,25 +40,15 @@ export function SummaryCard({ auto, pinned, grandTotal, editable, onPinnedChange
       </div>
 
       <div className="sum-body">
-        {editing ? (
-          <textarea
-            className="fld sum-text"
-            aria-label="Client summary text"
-            rows={22}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-        ) : (
-          <div
-            className={`sum-text${(pinned ?? auto).trim() === '' ? ' is-none' : ''}`}
-            role="document"
-            aria-label={pinned === null ? 'Auto-generated client summary' : 'Pinned client summary'}
-          >
-            {(pinned ?? auto).trim() === ''
-              ? 'The summary is generated from the narratives and line items — it fills in as you build the quote.'
-              : (pinned ?? auto)}
-          </div>
-        )}
+        <div
+          className={`sum-text${text.trim() === '' ? ' is-none' : ''}`}
+          role="document"
+          aria-label={pinned === null ? 'Auto-generated client summary' : 'Pinned client summary'}
+        >
+          {text.trim() === ''
+            ? 'The summary is generated from the narratives and line items — it fills in as you build the quote.'
+            : text}
+        </div>
 
         <div className="sum-foot">
           <span className="k">Grand total to client</span>
@@ -104,10 +60,7 @@ export function SummaryCard({ auto, pinned, grandTotal, editable, onPinnedChange
           <span>
             This text syncs to the client&rsquo;s CMMS.{' '}
             {pinned === null ? (
-              <>
-                Regenerated from the narratives and line items on approval — <b>Edit text</b> pins a
-                manual version and stops the auto-sync.
-              </>
+              <>Generated from the narratives and line items — it follows the quote as you build it.</>
             ) : (
               <>
                 <b>Pinned</b> — this is a manual version and no longer tracks the narratives or line

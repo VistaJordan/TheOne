@@ -10,6 +10,7 @@
    debounced autosave has round-tripped — and because it can price a draft the
    server would reject, so it also decides which lines are excluded and why. */
 
+import { optionDisplayLabel } from '@theone/shared';
 import type { DraftLine, DraftQuote, DraftSection } from './quoteDraft';
 
 /** Overtime multiplier — the HOUSE default, ×1.5 on the line rate
@@ -246,8 +247,8 @@ export function computeQuoteTotals(
   }
 
   const optionLineTax = new Map<string, number>();
-  const options: OptionTotal[] = draft.sections
-    .filter((s) => s.kind === 'option' && s.round === draft.current_round)
+  const roundOptions = draft.sections.filter((s) => s.kind === 'option' && s.round === draft.current_round);
+  const options: OptionTotal[] = roundOptions
     .map((opt, i) => {
       const sum = sumLines(opt.lines, mult);
       optionLineTax.set(opt.key, sum.tax);
@@ -257,7 +258,8 @@ export function computeQuoteTotals(
       return {
         key: opt.key,
         id: opt.id,
-        label: `Option ${String.fromCharCode(65 + i)}`,
+        // A lone option reads "Proposed" (2026-10-22); letters once there is a choice.
+        label: optionDisplayLabel(`Option ${String.fromCharCode(65 + i)}`, roundOptions.length),
         name: opt.name,
         total: sum.total,
         tax,
@@ -340,6 +342,9 @@ export function scopeFieldId(sectionKey: string, index: number): string {
 export function quoteProblems(draft: DraftQuote): QuoteProblem[] {
   const problems: QuoteProblem[] = [];
   let optionIndex = 0;
+  const openOptions = draft.sections.filter(
+    (s) => s.kind === 'option' && !s.locked && s.round === draft.current_round,
+  ).length;
 
   draft.sections.forEach((section) => {
     if (section.locked || section.round !== draft.current_round) {
@@ -357,17 +362,19 @@ export function quoteProblems(draft: DraftQuote): QuoteProblem[] {
         });
       }
     } else {
-      const label = `Option ${String.fromCharCode(65 + optionIndex++)}`;
-      if (section.name.trim() === '') {
+      // A lone option has no name box (2026-10-22): a name is asked only when
+      // the round offers a choice. Its scope list replaced the narrative.
+      const label = optionDisplayLabel(`Option ${String.fromCharCode(65 + optionIndex++)}`, openOptions);
+      if (openOptions > 1 && section.name.trim() === '') {
         problems.push({
           fieldId: `opt-${section.key}-name`,
           message: `${label} needs a name`,
         });
       }
-      if (section.narrative.trim() === '') {
+      if (section.scope_lines.every((s) => s.trim() === '')) {
         problems.push({
-          fieldId: `opt-${section.key}-narr`,
-          message: `${label} needs a narrative`,
+          fieldId: scopeFieldId(section.key, 0),
+          message: `${label} needs at least one scope line`,
         });
       }
     }

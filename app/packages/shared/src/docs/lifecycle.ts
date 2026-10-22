@@ -331,7 +331,7 @@ export const LIFECYCLE: LifecycleModel = {
       brd: ['11.2.1', '1.5.2'],
       summary: 'One quote per work order, numbered Q-<entity>-<year>-<n>, priced from the client contract in force, submitted, approved and sent.',
       steps: [
-        'Create quote, fill Tech reported that…, lines, scope and options; it autosaves; Submit for approval; a manager clicks Approve or Reject with note (back to draft, from pending or approved), then Send to client, which posts the client-visible message and moves the work order to Waiting for Approval.',
+        'Create quote, fill Tech reported that…, lines, scope and options; it autosaves. A dispatcher clicks Submit for correction: a manager corrects the quote in place and clicks Submit for approval (a manager\'s own quote goes straight to Submit for approval). A second manager clicks Approve or Reject with note (back to draft, from pending correction, pending approval or approved), then Send to client, which posts the client-visible message and moves the work order to Waiting for Approval.',
         'Grand Total counts the options marked Include in summary plus their line tax; the incurred lines are context.',
         'An AI draft from a Quo call transcript lands in the same builder; prices come only from the transcript, the vendor cost plus contract markup, or the contract rates, never invented.',
         'Approving and sending are locked while an NTE override task is open on the work order (409); rejecting never is.',

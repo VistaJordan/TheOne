@@ -249,6 +249,8 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
     }
     case 'quote_submitted':
       return <>submitted the quote for approval</>;
+    case 'quote_submitted_for_correction':
+      return <>submitted the quote for a manager's correction</>;
     case 'quote_sent':
       return <>sent the quote to the client</>;
     case 'quote_approved':

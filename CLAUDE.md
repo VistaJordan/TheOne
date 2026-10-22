@@ -2646,6 +2646,65 @@ move, Send to client (→ Waiting for Approval), the client's approval
 check-in request targets the On Site statuses, which are not hidden; an
 admin who hides one gets the 409 printed on the CICO card like any refusal.
 
+**A dispatcher's quote is corrected before it is approved** (migration 0092,
+Elise 2026-10-22; `packages/shared/src/quoteSubmit.ts` pure,
+`tests/quote-correction.test.ts`). New quote status **`pending_correction`**
+between draft and pending approval. `quoteSubmitTarget(role, from)` decides
+where Submit goes: a dispatcher's (`isDispatcherRole`) draft → `pending_correction`
+and the button reads **Submit for correction**; a manager's draft, or a quote
+a manager corrected → `pending_approval` (**Submit for approval**); a
+dispatcher cannot submit while the quote waits for correction (403
+`QUOTE_CORRECTION_PENDING`). `submitQuote` is the one route for both, stamps
+`submitted_by` each time, so the manager who submits for approval is the
+maker and D2 asks a second manager to approve; approve is from
+`pending_approval` only, reject (back to draft, rev++) also from
+`pending_correction`. A quote in `pending_correction` is **edited in place**
+(`EDITABLE_STATUSES`; the 0083 #23 return-to-draft stays for
+`pending_approval` alone). `Quote.permissions.submit_target` is what the
+builder draws the label from (null = locked with the sentence); the pipeline
+draws the correction step only while the quote sits in it (`pipelineFor`).
+The Quotes page has a **Pending correction** lane; the Approvals › Quotes
+lane shows such a row open with **Correct and submit** (a link to the
+builder) beside Reject, and the badge counts it. Audit:
+`quote_submitted_for_correction`; `quote_submitted` is still the approval
+submit, so the `quote_review_owed` clock is unchanged. The AI draft replaces
+a quote in this status like a draft.
+
+**What a quote opens with, and the builder's trims** (no migration, Elise
+2026-10-22; `packages/shared/src/quoteDefaults.ts` pure,
+`tests/quote-defaults.test.ts`). `createQuote` inserts the Incurred section
+AND one option (position 1) — one option is already open, the button reads
+**Add another option** once one exists — each with the five default
+"Required is to…" lines (`defaultScopeLines`: "Full inspection of the
+working area", three blanks, "Clean the working area") and a **Trip**
+service line (`QUOTE_DEFAULT_TRIP_DESCRIPTION`) at the labor-rate card's
+trip rate (`findLaborRate`, same card as `labor_rate`; 0 = blank in the
+builder). The builder's `blankOption(round, tripRate)` opens the next option
+the same. **Blank scope lines are stored** (the route schema allows `''`,
+the web sends them trimmed) so a reload shows the list as it was left;
+everything that prints the list — `buildAutoSummary`, the print page —
+reads `visibleScopeLines`; the gates (`quoteSectionsHaveData`) already
+counted non-blank lines only, so a fresh quote now passes "has data" (a
+Trip line is a real charge — accepted). `insertScopeLine` is **Add scope
+line**: above the last line, so the closing line stays last. The AI
+draft's "quote already holds content" test (`quoteState` in `aiQuote.ts`)
+ignores the two default texts and a line named Trip. **A lone option has
+no letter and no name** (`optionDisplayLabel(label, count)` → "Proposed";
+`sole` on `OptionCard`, `quoteProblems` asks for a name only with two or
+more, the summary prints "PROPOSED" / "Grand total" / "GRAND TOTAL" with
+no letter, the print page "Proposed work"). The option's narrative box is
+gone: its "required is to…" is the same `ScopeList` as Incurred on
+`scope_lines` (a narrative on file — older quote, AI draft — shows
+read-only). **Tech reported that…** is one line that grows (`fld-grow`,
+`reportRef`). **Required fields paint red only after a Submit attempt**
+(`focusFirstProblem` sets `showErrors`; the `onBlur` is gone). **No UOM
+column** (the value still rides on the line and saves back unchanged) and
+**no Day column** unless a section's **Multi-day job** link is pressed or
+a line already sits past Day 1 (`linesSpanDays`); every line saves `day =
+1` (`QUOTE_DEFAULT_DAY`; the summary groups "Day N" only past day 1, as
+before). The Summary card has **no Edit text**: the text is always the
+generated one; a quote pinned earlier keeps its refresh control.
+
 ## Verify
 
 ```

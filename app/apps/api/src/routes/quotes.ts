@@ -6,7 +6,7 @@
 //   GET    /work-orders/:id/quote/sales-tax       (quotes:view)
 //   POST   /work-orders/:id/quote                 (create draft,  quotes:create)
 //   PUT    /work-orders/:id/quote                 (full update,   quotes:edit)
-//   POST   /work-orders/:id/quote/submit          (draft → pending_approval, quotes:edit)
+//   POST   /work-orders/:id/quote/submit          (draft → pending_correction for a dispatcher, else → pending_approval; quotes:edit — 0092)
 //   POST   /work-orders/:id/quote/approve|send|reject|cancel-submission   (quotes:approve)
 //   POST   /work-orders/:id/quote/client-approve|client-decline  (quotes:approve, or a dispatcher in Approval)
 //   POST   /work-orders/:id/quote/new-round       (quotes:edit)
@@ -64,7 +64,10 @@ export const sectionSchema = z.object({
   kind: z.enum(['incurred', 'option']),
   name: z.string().trim().max(200).nullable().optional(),
   narrative_reported: z.string().max(8000).nullable().optional(),
-  scope_lines: z.array(z.string().trim().min(1).max(1000)).max(50).optional(),
+  // Blank lines are allowed and stored (2026-10-22): the five-line default
+  // opens with three blanks and a reload must show the list as it was left.
+  // Everything that prints the list skips them (visibleScopeLines).
+  scope_lines: z.array(z.string().trim().max(1000)).max(50).optional(),
   include_in_summary: z.boolean().optional(),
   lines: z.array(lineSchema).max(100).optional(),
 });

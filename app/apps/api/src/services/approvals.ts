@@ -1334,7 +1334,7 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
   if (allow('quotes', 'approve') && allow(approvalSectionPermKey('quotes'), 'view')) {
     const q = await query<{ n: number | string }>(
       `SELECT count(*)::int AS n FROM quote q JOIN task t ON t.id = q.task_id
-        WHERE q.status = 'pending_approval' AND t.deleted_at IS NULL ${only}`,
+        WHERE q.status IN ('pending_approval', 'pending_correction') AND t.deleted_at IS NULL ${only}`,
       qp.values,
     );
     to_decide += Number(q.rows[0]?.n ?? 0);

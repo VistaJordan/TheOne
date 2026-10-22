@@ -20,7 +20,18 @@
 
 import { query, withTransaction } from '../db.js';
 import { assertQuoteHeld } from './statusGates.js';
-import { CLIENT_APPROVAL_EVIDENCE_CODE, isDispatcherRole, quoteEventStatusName, type QuoteEvent, type VisitStatusMove } from '@theone/shared';
+import {
+  CLIENT_APPROVAL_EVIDENCE_CODE,
+  isDispatcherRole,
+  quoteEventStatusName,
+  quoteSubmitTarget,
+  QUOTE_CORRECTION_PENDING_CODE,
+  QUOTE_CORRECTION_PENDING_TEXT,
+  QUOTE_SUBMIT_ACTION,
+  type QuoteEvent,
+  type QuoteSubmitFrom,
+  type VisitStatusMove,
+} from '@theone/shared';
 import type { Queryable } from '../db.js';
 import type {
   Quote,
@@ -42,13 +53,18 @@ import type {
 } from '@theone/shared';
 import {
   DEFAULT_OT_MULTIPLIER,
+  QUOTE_DEFAULT_DAY,
+  QUOTE_DEFAULT_TRIP_DESCRIPTION,
   QUOTE_OVER_NTE_CODE,
   SELF_APPROVAL_CODE,
+  defaultScopeLines,
+  optionDisplayLabel,
   permAllows,
   quoteOverNte,
   selfApprovalMessage,
   selfApprovalVerdict,
   reportedSentence,
+  visibleScopeLines,
 } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -396,18 +412,23 @@ export function buildAutoSummary(
   if (incurredLike.length > 0) out.push(...amountRows('Incurred subtotal', totals.incurred_subtotal));
 
   // ── Proposed options ──────────────────────────────────────────────────────
-  const incurredScope = sections.filter((s) => s.kind === 'incurred').flatMap((s) => s.scope_lines);
+  const incurredScope = visibleScopeLines(sections.filter((s) => s.kind === 'incurred').flatMap((s) => s.scope_lines));
   let usedFallbackScope = false;
 
+  // A lone option is the proposal, with no letter and no name (2026-10-22);
+  // letters and names appear once the client has a choice. Blank scope lines
+  // (the unfilled defaults) are never printed.
+  const optionCount = pricedOptions.length;
+  const named = (label: string) => optionDisplayLabel(label, optionCount);
   for (const section of pricedOptions) {
     const total = totals.option_totals.find((o) => o.section_id === section.id);
-    out.push('', `PROPOSED — ${section.label.toUpperCase()}`);
-    if (section.name) out.push(...wrap(section.name, SUMMARY_WIDTH));
+    out.push('', optionCount > 1 ? `PROPOSED — ${section.label.toUpperCase()}` : 'PROPOSED');
+    if (section.name && optionCount > 1) out.push(...wrap(section.name, SUMMARY_WIDTH));
     if (section.narrative_reported) {
       out.push('', ...wrap(section.narrative_reported, SUMMARY_WIDTH));
     }
 
-    let scope = section.scope_lines;
+    let scope = visibleScopeLines(section.scope_lines);
     if (scope.length === 0 && !usedFallbackScope) {
       scope = incurredScope;
       usedFallbackScope = true;
@@ -422,12 +443,12 @@ export function buildAutoSummary(
 
     if (section.lines.length > 0) out.push('');
     out.push(...lineRows(section.lines, multiDay));
-    out.push(...amountRows(`${section.label} total`, total ? total.total : 0));
+    out.push(...amountRows(`${named(section.label)} total`, total ? total.total : 0));
     if (yoda && total) {
       if (totals.sales_tax_pct > 0) {
         out.push(...amountRows(`Sales tax (${pctText(totals.sales_tax_pct)})`, total.tax));
       }
-      out.push(...amountRows(`${section.label} grand total`, total.grand_total));
+      out.push(...amountRows(optionCount > 1 ? `${section.label} grand total` : 'Grand total', total.grand_total));
     }
   }
 
@@ -437,7 +458,7 @@ export function buildAutoSummary(
     const priced = totals.option_totals.find((o) => o.section_id === totals.priced_section_id);
     out.push(
       ...amountRows(
-        priced ? `GRAND TOTAL — ${priced.label.toUpperCase()}` : 'GRAND TOTAL',
+        priced && optionCount > 1 ? `GRAND TOTAL — ${priced.label.toUpperCase()}` : 'GRAND TOTAL',
         totals.grand_total,
         '',
       ),
@@ -875,7 +896,7 @@ function totalsFor(q: QuoteRow, sections: QuoteSection[]): QuoteTotals {
 function permissionsFor(
   actor: ActingPrincipal,
   snap: WoStatusSnapshot | null,
-  q: { maker_id: string | null; nte: number | null },
+  q: { maker_id: string | null; nte: number | null; status: QuoteStatus },
   grandTotal: number,
 ): QuotePermissions {
   return {
@@ -884,6 +905,12 @@ function permissionsFor(
     can_client_decide: canClientDecide(actor, snap),
     self_approval: selfApprovalVerdict(q.maker_id, actor.id, actor.isSuperAdmin) === 'blocked',
     over_nte: quoteOverNte(grandTotal, q.nte),
+    // 0092 · the builder draws Submit's label from this, and locks it for a
+    // dispatcher while a manager has the quote for correction.
+    submit_target:
+      q.status === 'draft' || q.status === 'pending_correction'
+        ? quoteSubmitTarget(actor.role, q.status)
+        : null,
   };
 }
 
@@ -1220,8 +1247,9 @@ export interface QuoteUpdateInput {
   ship_to?: string | null;
 }
 
-/** Statuses a quote may still be edited in (§1: edits stop once approved). */
-const EDITABLE_STATUSES: QuoteStatus[] = ['draft', 'pending_approval'];
+/** Statuses a quote may still be edited in (§1: edits stop once approved).
+    0092: a quote waiting for a manager's correction is edited in place. */
+const EDITABLE_STATUSES: QuoteStatus[] = ['draft', 'pending_correction', 'pending_approval'];
 
 interface QuoteHead {
   id: string;
@@ -1260,13 +1288,18 @@ export async function createQuote(taskId: string, actor: ActingPrincipal): Promi
   // 0048 · the number belongs to the billing entity and the year; 0046 · the
   // contract in force today is snapshotted so the price never drifts under
   // an approved quote. Both read BEFORE the transaction opens.
-  const taskRow = await query<{ client: string | null; billing_entity: string | null }>(
-    `SELECT client, billing_entity FROM task WHERE id = $1`,
+  const taskRow = await query<{ client: string | null; billing_entity: string | null; trade: string | null }>(
+    `SELECT client, billing_entity, trade FROM task WHERE id = $1`,
     [taskId],
   );
   const entity =
     (taskRow.rows[0]?.billing_entity ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'Q';
   const match = await contractForTask(taskId);
+  // The default Trip line is priced at the labor-rate card's trip rate (the
+  // same card getQuote hands the builder as `labor_rate`); 0 = blank in the
+  // builder, to be typed.
+  const card = await findLaborRate(taskRow.rows[0]?.billing_entity ?? null, taskRow.rows[0]?.client ?? null, taskRow.rows[0]?.trade ?? null);
+  const tripRate = card?.trip_rate != null && card.trip_rate > 0 ? card.trip_rate : 0;
 
   await withTransaction(async (tx) => {
     const year = new Date().getUTCFullYear();
@@ -1295,13 +1328,26 @@ export async function createQuote(taskId: string, actor: ActingPrincipal): Promi
         match ? match.rates.ot_multiplier : null,
       ],
     );
-    // Every quote opens with its INCURRED section: the comp has no "add incurred"
-    // affordance, it is always there.
-    await tx.query(
-      `INSERT INTO quote_section (quote_id, kind, name, include_in_summary, position, round)
-       VALUES ($1, 'incurred', 'Work already performed', true, 0, 1)`,
-      [ins.rows[0].id],
+    // Every quote opens with its INCURRED section (the comp has no "add
+    // incurred" affordance, it is always there) AND one proposed option
+    // (2026-10-22, Elise: one option is already open; "Add another option"
+    // is the second). Each opens with the five default "Required is to…"
+    // lines and a Trip service line at the card's trip rate (quoteDefaults
+    // in shared; the builder's blankOption opens the next option the same).
+    const sections = await tx.query<{ id: string }>(
+      `INSERT INTO quote_section (quote_id, kind, name, scope_lines, include_in_summary, position, round)
+       VALUES ($1, 'incurred', 'Work already performed', $2::jsonb, true, 0, 1),
+              ($1, 'option', NULL, $2::jsonb, true, 1, 1)
+       RETURNING id::text AS id`,
+      [ins.rows[0].id, JSON.stringify(defaultScopeLines())],
     );
+    for (const s of sections.rows) {
+      await tx.query(
+        `INSERT INTO quote_line (section_id, line_type, description, qty, rate, day_value, day, ot, position, uom, tax_pct, markup_pct)
+         VALUES ($1, 'service', $2, 1, $3, $4, $5, false, 0, NULL, 0, 0)`,
+        [s.id, QUOTE_DEFAULT_TRIP_DESCRIPTION, tripRate, `Day ${QUOTE_DEFAULT_DAY}`, QUOTE_DEFAULT_DAY],
+      );
+    }
     await logQuoteActivity(tx, actor.id, taskId, 'quote_created', null, { status: 'draft' });
   });
 
@@ -1373,7 +1419,7 @@ export async function updateQuote(
       // Only while the quote is still editable, in the statement (#25): an
       // approve committed since the read above leaves the quote approved.
       const kept = await tx.query(
-        `UPDATE quote SET ${sets.join(', ')} WHERE id = $${params.length} AND status IN ('draft', 'pending_approval') RETURNING id`,
+        `UPDATE quote SET ${sets.join(', ')} WHERE id = $${params.length} AND status IN ('draft', 'pending_correction', 'pending_approval') RETURNING id`,
         params,
       );
       if (!kept.rows[0]) throw conflict('The quote was approved while you were editing it — reload it', { code: 'QUOTE_MOVED' });
@@ -1444,7 +1490,9 @@ export async function updateQuote(
       await logQuoteActivity(tx, actor.id, taskId, 'quote_updated', before, { ...after, round });
       // 0083 (#23): a quote edited while it waits for approval is not the quote
       // the approver was asked about — it goes back to draft (logged) and is
-      // submitted again. Conditional on the status it was read in.
+      // submitted again. Conditional on the status it was read in. A quote
+      // waiting for CORRECTION (0092) is the opposite case: editing it is the
+      // point, so it stays where it is until the manager submits it.
       if (cur.status === 'pending_approval') {
         const back = await tx.query(
           `UPDATE quote SET status = 'draft', submitted_by = NULL, submitted_at = NULL
@@ -1802,11 +1850,27 @@ async function withStatusMove(taskId: string, quote: Quote, event: QuoteEvent, a
   return { ...fresh, status_move };
 }
 
-/** draft → pending_approval (senior_om+). */
+/**
+ * Submit (quotes:edit). Where it goes is `quoteSubmitTarget` (0092): a
+ * dispatcher's draft → pending_correction ("Submit for correction"); a
+ * manager's draft, or a quote a manager corrected → pending_approval
+ * ("Submit for approval"). A dispatcher cannot submit a quote that waits
+ * for correction (403 QUOTE_CORRECTION_PENDING) — that click is the
+ * manager's, and it makes the manager the submitter of record, so D2 asks a
+ * second manager to approve. Each submit stamps submitted_by / submitted_at.
+ */
 export async function submitQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanEdit(actor);
   await assertWoAllows(taskId, 'quote.submit');
-  return transition(taskId, ['draft'], 'pending_approval', 'quote_submitted', actor, undefined,
+  const cur = await currentStatus(taskId);
+  if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');
+  const from: QuoteSubmitFrom[] = ['draft', 'pending_correction'];
+  assertTransition(cur.status, from, 'pending_approval');
+  const target = quoteSubmitTarget(actor.role, cur.status as QuoteSubmitFrom);
+  if (!target) {
+    throw forbidden(QUOTE_CORRECTION_PENDING_TEXT, { code: QUOTE_CORRECTION_PENDING_CODE, status: cur.status });
+  }
+  return transition(taskId, [cur.status], target, QUOTE_SUBMIT_ACTION[target], actor, undefined,
     'submitted_by = $3, submitted_at = now()', [actor.id]);
 }
 
@@ -1884,9 +1948,10 @@ export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise
 }
 
 /**
- * pending_approval | approved → draft (atl+), with the reviewer's note landing
- * as an INTERNAL comment (it is feedback for the dispatcher, never for the
- * client). `rev` bumps: the quote that comes back is a new revision.
+ * pending_correction | pending_approval | approved → draft (atl+), with the
+ * reviewer's note landing as an INTERNAL comment (it is feedback for the
+ * dispatcher, never for the client). `rev` bumps: the quote that comes back
+ * is a new revision.
  */
 export async function rejectQuote(
   taskId: string,
@@ -1897,7 +1962,7 @@ export async function rejectQuote(
   await assertWoAllows(taskId, 'quote.approve');
   return transition(
     taskId,
-    ['pending_approval', 'approved'],
+    ['pending_correction', 'pending_approval', 'approved'],
     'draft',
     'quote_rejected',
     actor,

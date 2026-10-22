@@ -837,11 +837,14 @@ export interface PrincipalsResponse {
 // ── Quotes (S4 → Yoda parity) ────────────────────────────────────────────────
 // Lifecycle:
 //   draft → pending_approval → approved → sent → client_approved | client_declined
-//   reject (atl+)            : pending_approval | approved → draft (rev++)
+//   draft → pending_correction → pending_approval   (a dispatcher's quote: a
+//                              manager corrects it, then submits it — quoteSubmit.ts)
+//   reject (atl+)            : pending_correction | pending_approval | approved → draft (rev++)
 //   cancel-submission (atl+) : sent → approved
 //   new round (senior_om+)   : client_approved → draft, round++ (previous rounds locked)
 export type QuoteStatus =
   | 'draft'
+  | 'pending_correction'
   | 'pending_approval'
   | 'approved'
   | 'sent'
@@ -998,6 +1001,12 @@ export interface QuotePermissions {
   /** 0083 (#23): the quote's total is above the work order's NTE — Send is
       refused (409 QUOTE_OVER_NTE) until the NTE is raised. */
   over_nte: boolean;
+  /** Where this person's Submit takes the quote from its current status
+      (`quoteSubmitTarget`): 'pending_correction' for a dispatcher's draft,
+      'pending_approval' for a manager's; null when Submit is not theirs to
+      press here (a dispatcher while the quote waits for correction, or a
+      status with no Submit). Absent on an older API. */
+  submit_target?: 'pending_correction' | 'pending_approval' | null;
 }
 
 /** Yoda LaborRate for the WO's (billing entity, FM, trade) combo — null when none. */
@@ -2074,8 +2083,10 @@ export * from './moneyGuards';
 export * from './access';
 // UAT round 1, Wave C (0085): request mode, quote-driven status, visit stamps, cancel / reopen.
 export * from './workflow';
+export * from './quoteSubmit';
 export * from './paymentApproval';
 // UAT round 1, Wave D (0086): one client list, dispatcher assignees, field validation, history fields.
 export * from './dataQuality';
 // UAT follow-up T1: test sign-in accounts, one per role.
 export * from './testAccounts';
+export * from './quoteDefaults';

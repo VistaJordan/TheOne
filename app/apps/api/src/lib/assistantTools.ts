@@ -62,7 +62,7 @@ interface Resource {
 }
 
 const RESOURCES: Record<string, Resource> = {
-  quotes: { path: '/quotes', about: 'every quote: work order, status (draft, pending_approval, approved, sent, client_approved, client_declined), rounds, totals' },
+  quotes: { path: '/quotes', about: 'every quote: work order, status (draft, pending_correction, pending_approval, approved, sent, client_approved, client_declined), rounds, totals' },
   payments: { path: '/payments', about: 'vendor payment requests: status (requested, approved, rejected, sent, paid), amount, vendor, work order' },
   approvals: { path: '/approvals', about: 'the approvals inbox: NTE increases, status change requests, incoming work orders, with who raised and who decided' },
   approval_counts: { path: '/approvals/counts', about: 'how many decisions are waiting, by kind' },

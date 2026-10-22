@@ -336,7 +336,9 @@ function taskRow(
 }
 
 function quoteRow(item: QuoteListItem, canDecide: boolean, held: Set<string>): Row {
-  const open = item.status === 'pending_approval';
+  // 0092 · a quote with a manager for correction is open too: the manager
+  // edits it in the builder and submits it, so the row links there.
+  const open = item.status === 'pending_approval' || item.status === 'pending_correction';
   return {
     key: `quote:${item.id}`,
     section: 'quotes',
@@ -1394,6 +1396,17 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
       );
     }
     case 'quote':
+      if (d.item.status === 'pending_correction') {
+        return (
+          <>
+            {verb('Reject', 'x', canApproveQuotes, 'Requires quote approval rights', () => onDecide('reject'), 'danger')}
+            <Link className="btn-sm" to={`/work-orders/${encodeURIComponent(d.item.wo_number)}/quote`}>
+              <Icon name="pencil" size={12} />
+              Correct and submit
+            </Link>
+          </>
+        );
+      }
       return (
         <>
           {verb('Reject', 'x', canApproveQuotes, 'Requires quote approval rights', () => onDecide('reject'), 'danger')}

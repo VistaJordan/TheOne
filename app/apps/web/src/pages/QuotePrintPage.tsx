@@ -14,6 +14,7 @@
  * the document is the same React tree the builder's numbers come from. */
 
 import { useEffect } from 'react';
+import { optionDisplayLabel, visibleScopeLines } from '@theone/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { QUOTE_DOCUMENT_TYPE_LABELS, type QuoteSection } from '@theone/shared';
@@ -145,8 +146,13 @@ export function QuotePrintPage() {
           />
         ))}
 
+        {/* A lone option is "Proposed work" with no letter and no name (2026-10-22). */}
         {options.map((s) => (
-          <LinesBlock key={s.id} section={s} heading={`${s.label}${s.name ? ` — ${s.name}` : ''}`} />
+          <LinesBlock
+            key={s.id}
+            section={s}
+            heading={options.length > 1 ? `${s.label}${s.name ? ` — ${s.name}` : ''}` : 'Proposed work'}
+          />
         ))}
 
         {/* The Yoda rule (0076): each option is priced as the work performed +
@@ -160,7 +166,7 @@ export function QuotePrintPage() {
               )}
               {offered.map((o) => (
                 <tr key={o.section_id}>
-                  <th>{o.label}{o.name ? ` — ${o.name}` : ''}</th>
+                  <th>{offered.length > 1 ? `${o.label}${o.name ? ` — ${o.name}` : ''}` : optionDisplayLabel(o.label, 1) + ' work'}</th>
                   <td>{usd(o.total)}</td>
                 </tr>
               ))}
@@ -229,9 +235,9 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
         {note && <small> · {note}</small>}
       </h3>
       {section.narrative_reported && <p className="qdoc-narr">{section.narrative_reported}</p>}
-      {section.scope_lines.length > 0 && (
+      {visibleScopeLines(section.scope_lines).length > 0 && (
         <ul className="qdoc-scope">
-          {section.scope_lines.map((s, i) => (
+          {visibleScopeLines(section.scope_lines).map((s, i) => (
             <li key={i}>{s}</li>
           ))}
         </ul>
@@ -241,7 +247,6 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
           <tr>
             <th>Description</th>
             <th className="num">Qty</th>
-            <th>UOM</th>
             <th className="num">Unit price</th>
             {anyTax && <th className="num">Tax</th>}
             <th className="num">Amount</th>
@@ -255,7 +260,6 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
                 {l.ot && <small> (overtime)</small>}
               </td>
               <td className="num">{l.qty}</td>
-              <td>{l.uom ?? ''}</td>
               <td className="num">{usd(clientUnit(l))}</td>
               {anyTax && <td className="num">{l.tax > 0 ? usd(l.tax) : ''}</td>}
               <td className="num">{usd(l.amount)}</td>
@@ -264,7 +268,7 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
         </tbody>
         <tfoot>
           <tr>
-            <th colSpan={anyTax ? 5 : 4}>Subtotal</th>
+            <th colSpan={anyTax ? 4 : 3}>Subtotal</th>
             <td className="num">{usd(section.subtotal)}</td>
           </tr>
         </tfoot>

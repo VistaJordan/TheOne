@@ -1,8 +1,16 @@
 /* The "Required is to…" scope list (comp: .scope). A numbered, drag-reorderable
    list of one-line strings — the ordered steps that become the numbered block in
-   the client summary, which is why order is editable at all. */
+   the client summary, which is why order is editable at all.
+
+   Since 2026-10-22 (Elise) every section opens with five lines — "Full
+   inspection of the working area", three blanks, "Clean the working area"
+   (defaultScopeLines in @theone/shared) — and "Add scope line" inserts ABOVE
+   the last line so the closing line stays last. Blank lines are kept (and
+   saved) until the person removes them; the printed list skips them. The
+   incurred section and every option draw the same list. */
 
 import type { KeyboardEvent } from 'react';
+import { insertScopeLine } from '@theone/shared';
 import { moveItem, removeAt, replaceAt } from '../../lib/quoteDraft';
 import { scopeFieldId } from '../../lib/quoteTotals';
 import { useReorder } from '../../hooks/useReorder';
@@ -13,11 +21,15 @@ interface ScopeListProps {
   lines: string[];
   editable: boolean;
   onChange: (lines: string[]) => void;
+  /** Painted once the person has tried to submit with no scope line filled. */
+  showError?: boolean;
 }
 
-export function ScopeList({ sectionKey, lines, editable, onChange }: ScopeListProps) {
+export function ScopeList({ sectionKey, lines, editable, onChange, showError = false }: ScopeListProps) {
   const reorder = useReorder((from, to) => onChange(moveItem(lines, from, to)));
   const labelId = `scope-lbl-${sectionKey}`;
+  const empty = lines.every((l) => l.trim() === '');
+  const err = editable && showError && empty;
 
   // Enter at the end of a line opens the next one — the list is written top to
   // bottom in one pass, and reaching for "Add scope line" every time breaks it.
@@ -54,9 +66,10 @@ export function ScopeList({ sectionKey, lines, editable, onChange }: ScopeListPr
             )}
             <span className="scope-n num">{i + 1}</span>
             <input
-              className="fld"
+              className={`fld${err && i === 0 ? ' is-err' : ''}`}
               id={scopeFieldId(sectionKey, i)}
               aria-label={`Scope line ${i + 1}`}
+              aria-invalid={err && i === 0 ? true : undefined}
               value={line}
               disabled={!editable}
               onChange={(e) => onChange(replaceAt(lines, i, e.target.value))}
@@ -75,9 +88,20 @@ export function ScopeList({ sectionKey, lines, editable, onChange }: ScopeListPr
           </li>
         ))}
       </ol>
+      {err && (
+        <span className="err">
+          <Icon name="alert" size={12} />
+          At least one scope line is required
+        </span>
+      )}
       {editable && (
         <div style={{ marginTop: 8 }}>
-          <button type="button" className="btn btn-sm btn-ghost" onClick={() => onChange([...lines, ''])}>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            title="Adds a line above the last one, so the closing line stays last"
+            onClick={() => onChange(insertScopeLine(lines))}
+          >
             <Icon name="plus" size={12} />
             Add scope line
           </button>

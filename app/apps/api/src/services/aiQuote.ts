@@ -16,7 +16,12 @@
 // the model how to use them, so only buildUserMessage changes.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { quoteDraftHasContent } from '@theone/shared';
+import {
+  QUOTE_DEFAULT_TRIP_DESCRIPTION,
+  QUOTE_SCOPE_FIRST_LINE,
+  QUOTE_SCOPE_LAST_LINE,
+  quoteDraftHasContent,
+} from '@theone/shared';
 import type {
   AiQuoteDraft,
   AiQuoteDraftResponse,
@@ -88,17 +93,21 @@ async function loadDraft(callId: string): Promise<AiQuoteDraft | null> {
   };
 }
 
+/** Does the quote already hold something a person typed? A new quote opens
+    with the default scope lines and a "Trip" service line (quoteDefaults in
+    shared, seeded by createQuote) — those are not content, so replacing them
+    with the AI draft asks no confirmation. */
 async function quoteState(taskId: string): Promise<AiQuoteDraftResponse['quote']> {
   const res = await query<{ status: Quote['status']; has_content: boolean }>(
     `SELECT q.status,
             EXISTS (SELECT 1 FROM quote_section s
-                      LEFT JOIN quote_line l ON l.section_id = s.id
+                      LEFT JOIN quote_line l ON l.section_id = s.id AND l.description <> $2
                      WHERE s.quote_id = q.id
                        AND (l.id IS NOT NULL OR EXISTS (
                              SELECT 1 FROM jsonb_array_elements_text(s.scope_lines) x
-                              WHERE btrim(x) <> ''))) AS has_content
+                              WHERE btrim(x) <> '' AND btrim(x) NOT IN ($3, $4)))) AS has_content
        FROM quote q WHERE q.task_id = $1`,
-    [taskId],
+    [taskId, QUOTE_DEFAULT_TRIP_DESCRIPTION, QUOTE_SCOPE_FIRST_LINE, QUOTE_SCOPE_LAST_LINE],
   );
   return res.rows[0] ?? null;
 }
@@ -268,9 +277,9 @@ export async function submitDraft(
   }
 
   const state = await quoteState(taskId);
-  if (state && state.status !== 'draft' && state.status !== 'pending_approval') {
+  if (state && state.status !== 'draft' && state.status !== 'pending_correction' && state.status !== 'pending_approval') {
     throw conflict(
-      `The quote on this work order is ${state.status.replace('_', ' ')} — it can only be replaced while it is a draft or pending approval`,
+      `The quote on this work order is ${state.status.replace('_', ' ')} — it can only be replaced while it is a draft, pending correction or pending approval`,
       { code: 'QUOTE_LOCKED', status: state.status },
     );
   }

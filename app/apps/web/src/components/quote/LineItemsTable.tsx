@@ -6,12 +6,14 @@
    the .has-err row wash, and is EXCLUDED from the subtotal rather than
    counted as zero — the footer says which lines.
 
-   0048 · two more columns: UOM (free text with the usual units offered) and
-   Tax %, blank = 0, so a quote that never used it prices exactly as before.
-   The per-line markup column was removed on 2026-10-22 (Elise): a stored markup is
-   folded into the unit price when the quote loads (quoteDraft). The OT
-   multiplier comes from the quote's contract when one covers the work order
-   (0046), else ×1.5.
+   0048 added UOM and Tax %. The per-line Markup column was removed on
+   2026-10-22 (Elise): a stored markup is folded into the unit price when the
+   quote loads (quoteDraft). The same day the UOM column went altogether (a
+   saved unit still rides on the line and is saved back unchanged), and the
+   Day column is hidden: every line opens on Day 1 and the column is drawn
+   only when a line already sits on a later day or the section's "Multi-day
+   job" link was pressed. The OT multiplier comes from the quote's contract
+   when one covers the work order (0046), else ×1.5.
 
    Picking the Labor type on a line whose description is still blank fills it
    with "Labor tech N" (N = the section's labor lines so far + 1). */
@@ -23,21 +25,23 @@ import { useReorder } from '../../hooks/useReorder';
 import type { LaborRate } from '../../api/client';
 import { Icon } from '../Icon';
 
-/** The units offered in the UOM box; anything else may be typed. Mirrors
-    QUOTE_UOMS in @theone/shared (a value list, so kept here — the web imports
-    only types from the shared package). */
-const UOMS = ['hr', 'ea', 'trip', 'day', 'lot', 'ft', 'sq ft'];
+/** True when a line sits past Day 1 — the Day column must then be drawn. */
+export function linesSpanDays(lines: readonly DraftLine[]): boolean {
+  return lines.some((l) => Number(l.day_value || '1') > 1);
+}
 
 interface LineItemsTableProps {
   /** Screen-reader caption + the aria-label stem for every control ("Option A"). */
   label: string;
   lines: DraftLine[];
   editable: boolean;
-  /** Errors only paint once the operator has tried to submit, or on blur. */
+  /** Errors only paint once the operator has tried to submit. */
   showErrors: boolean;
   onChange: (lines: DraftLine[]) => void;
   /** 0046 · the multiplier an OT line bills at; the house ×1.5 by default. */
   otMultiplier?: number;
+  /** Draw the Day column (a multi-day job). Forced on when a line is past Day 1. */
+  showDay?: boolean;
 }
 
 export function LineItemsTable({
@@ -47,21 +51,18 @@ export function LineItemsTable({
   showErrors,
   onChange,
   otMultiplier = OT_MULTIPLIER,
+  showDay = false,
 }: LineItemsTableProps) {
   const reorder = useReorder((from, to) => onChange(moveItem(lines, from, to)));
-  const listId = `uom-list-${label.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
   const otText = `${Number.isInteger(otMultiplier * 100) ? otMultiplier : otMultiplier.toFixed(3)}×`;
+  const dayColumn = showDay || linesSpanDays(lines);
+  const columns = dayColumn ? 10 : 9;
 
   const set = (index: number, patch: Partial<DraftLine>) =>
     onChange(replaceAt(lines, index, { ...lines[index], ...patch }));
 
   return (
     <div className="lt-wrap">
-      <datalist id={listId}>
-        {UOMS.map((u) => (
-          <option key={u} value={u} />
-        ))}
-      </datalist>
       <table className="lt">
         <caption className="sr">{label} line items</caption>
         <thead>
@@ -76,7 +77,6 @@ export function LineItemsTable({
               Qty <span className="req" aria-hidden="true">*</span>
               <span className="sr">required</span>
             </th>
-            <th className="c-uom">UOM</th>
             <th className="c-rate ta-r">
               Unit price <span className="req" aria-hidden="true">*</span>
               <span className="sr">required</span>
@@ -92,17 +92,19 @@ export function LineItemsTable({
                 ?
               </button>
             </th>
-            <th className="c-day">
-              Day
-              <button
-                type="button"
-                className="qmk"
-                title="Multi-day jobs: lines are grouped “Day N” on the client summary and the invoice"
-                aria-label="About the Day column: on multi-day jobs lines are grouped Day N on the client summary and the invoice"
-              >
-                ?
-              </button>
-            </th>
+            {dayColumn && (
+              <th className="c-day">
+                Day
+                <button
+                  type="button"
+                  className="qmk"
+                  title="Multi-day jobs: lines are grouped “Day N” on the client summary and the invoice"
+                  aria-label="About the Day column: on multi-day jobs lines are grouped Day N on the client summary and the invoice"
+                >
+                  ?
+                </button>
+              </th>
+            )}
             <th className="c-ot">
               Overtime
               <button
@@ -121,7 +123,7 @@ export function LineItemsTable({
         <tbody>
           {lines.length === 0 && (
             <tr>
-              <td colSpan={11}>
+              <td colSpan={columns}>
                 <span className="hint">
                   No line items yet.{editable ? ' Add the first one below.' : ''}
                 </span>
@@ -214,17 +216,6 @@ export function LineItemsTable({
                   )}
                 </td>
                 <td>
-                  <input
-                    className="fld uom-in"
-                    list={listId}
-                    aria-label={`${label} line ${n} unit of measure`}
-                    placeholder="ea"
-                    value={line.uom}
-                    disabled={!editable}
-                    onChange={(e) => set(i, { uom: e.target.value })}
-                  />
-                </td>
-                <td>
                   <span className="money-in">
                     <span className="cur" aria-hidden="true">$</span>
                     <input
@@ -259,20 +250,21 @@ export function LineItemsTable({
                     onChange={(e) => set(i, { tax_pct: e.target.value })}
                   />
                 </td>
-                <td>
-                  <select
-                    className="fld"
-                    aria-label={`${label} line ${n} day`}
-                    value={line.day_value}
-                    disabled={!editable}
-                    onChange={(e) => set(i, { day_value: e.target.value })}
-                  >
-                    <option value="">—</option>
-                    {DAY_VALUES.map((d) => (
-                      <option key={d} value={d}>Day {d}</option>
-                    ))}
-                  </select>
-                </td>
+                {dayColumn && (
+                  <td>
+                    <select
+                      className="fld"
+                      aria-label={`${label} line ${n} day`}
+                      value={line.day_value || '1'}
+                      disabled={!editable}
+                      onChange={(e) => set(i, { day_value: e.target.value })}
+                    >
+                      {DAY_VALUES.map((d) => (
+                        <option key={d} value={d}>Day {d}</option>
+                      ))}
+                    </select>
+                  </td>
+                )}
                 <td>
                   {/* The checkbox carries a visible "OT" label, not a bare box:
                       an unlabelled toggle in a money column is unreadable. */}
@@ -319,15 +311,18 @@ export function LineItemsTable({
 /** The "Add line" affordance — the comp puts it in the section footer, beside
     the read-only-amount note and the subtotal chip. When the WO's labor rate
     is known (Yoda LaborRate per Comp × FM × Trade) the Yoda presets sit beside
-    it: Tech hour, Helper hour, Trip, After-hours, Holiday. */
+    it: Tech hour, Helper hour, Trip, After-hours, Holiday. `onShowDay` draws
+    the "Multi-day job" link that reveals the hidden Day column. */
 export function AddLineButton({
   lines,
   onChange,
   rate,
+  onShowDay,
 }: {
   lines: DraftLine[];
   onChange: (l: DraftLine[]) => void;
   rate?: LaborRate | null;
+  onShowDay?: () => void;
 }) {
   const preset = (label: string, value: number | null, line_type: DraftLine['line_type'], description: string) =>
     value == null ? null : (
@@ -359,6 +354,17 @@ export function AddLineButton({
           {preset('After-hours', rate.afterhours_rate, 'labor', 'Tech — after-hours labor')}
           {preset('Holiday', rate.holiday_rate, 'labor', 'Tech — holiday labor')}
         </span>
+      )}
+      {onShowDay && !linesSpanDays(lines) && (
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost"
+          title="Show the Day column — lines are grouped Day N on the client summary and the invoice"
+          onClick={onShowDay}
+        >
+          <Icon name="layers" size={12} />
+          Multi-day job
+        </button>
       )}
     </span>
   );

@@ -30,6 +30,8 @@ type Lane = 'all' | QuoteStatus;
 const LANES: { key: Lane; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'draft', label: 'Drafts' },
+  // 0092 · a dispatcher's quote, with a manager for correction.
+  { key: 'pending_correction', label: 'Pending correction' },
   { key: 'pending_approval', label: 'Pending approval' },
   { key: 'approved', label: 'Approved' },
   { key: 'sent', label: 'Sent' },

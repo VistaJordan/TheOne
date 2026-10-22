@@ -642,7 +642,6 @@
   color: var(--ink-3);
 }
 .money-basis b { color: var(--ink); font-weight: 600; }
-.lt .c-uom { width: 72px; }
 .lt .c-pct { width: 78px; }
 .lt .uom-in { width: 64px; }
 .lt .pct-in { width: 64px; text-align: right; }
@@ -773,3 +772,6 @@
   .aiq-spinner { animation: aiq-spin 0.9s linear infinite; }
 }
 @keyframes aiq-spin { to { transform: rotate(360deg); } }
+
+/* "Tech reported that…" is one line that grows with its text (2026-10-22). */
+.qb textarea.fld-grow { resize: none; overflow: hidden; min-height: 34px; }

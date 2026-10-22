@@ -184,7 +184,7 @@ export function AiQuoteReviewPage() {
   /** 0077: imported from the quote — a transcript with no call behind it. */
   const imported = call.transcript_source === 'imported';
   const quote = data.quote;
-  const quoteLocked = quote !== null && quote.status !== 'draft' && quote.status !== 'pending_approval';
+  const quoteLocked = quote !== null && quote.status !== 'draft' && quote.status !== 'pending_correction' && quote.status !== 'pending_approval';
 
   // ── States before there is a draft to review ──────────────────────────────
   let blocker: ReactNode = null;
@@ -484,6 +484,7 @@ export function AiQuoteReviewPage() {
                 key={opt.key}
                 section={opt}
                 index={i}
+                sole={options.length === 1}
                 editable={editable}
                 showErrors={showErrors}
                 otMultiplier={OT_MULT}
@@ -494,7 +495,7 @@ export function AiQuoteReviewPage() {
             {editable && (
               <button type="button" className="addopt" onClick={() => update({ ...draft, sections: [...draft.sections, blankOption()] })}>
                 <Icon name="plus" size={14} />
-                Add option
+                {options.length === 0 ? 'Add option' : 'Add another option'}
               </button>
             )}
           </section>

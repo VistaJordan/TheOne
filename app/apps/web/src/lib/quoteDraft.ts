@@ -23,6 +23,7 @@ import type {
   QuoteUpdateInput,
 } from '../api/client';
 import type { QuoteDocumentType, QuoteDraftBody, QuoteDraftSection } from '@theone/shared';
+import { QUOTE_DEFAULT_DAY, QUOTE_DEFAULT_TRIP_DESCRIPTION, defaultScopeLines } from '@theone/shared';
 import { parseLinePct, parseMoney, parsePct } from './quoteTotals';
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────────
@@ -39,7 +40,8 @@ export const LINE_TYPES: { value: QuoteLineType; label: string }[] = [
   { value: 'discount', label: 'Discount' },
 ];
 
-/** The Day column's options (Yoda `Day` int). '' = single-day job. */
+/** The Day column's options (Yoda `Day` int). Every line opens on Day 1 and
+    the column is drawn only on a multi-day job (2026-10-22). */
 export const DAY_VALUES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 
 /** 'Option A', 'Option B', … derived from position among the option sections —
@@ -148,10 +150,21 @@ export function blankLine(): DraftLine {
     description: '',
     qty: '1',
     rate: '',
-    day_value: '',
+    day_value: String(QUOTE_DEFAULT_DAY),
     ot: false,
     uom: '',
     tax_pct: '',
+  };
+}
+
+/** The service line every new section opens with: "Trip" at the labor-rate
+    card's trip rate, or a blank rate when no card covers the work order. */
+export function tripLine(tripRate: number | null | undefined): DraftLine {
+  return {
+    ...blankLine(),
+    line_type: 'service',
+    description: QUOTE_DEFAULT_TRIP_DESCRIPTION,
+    rate: tripRate != null && tripRate > 0 ? tripRate.toFixed(2) : '',
   };
 }
 
@@ -165,16 +178,18 @@ export function nextLaborDescription(lines: readonly DraftLine[], index: number)
   return `${LABOR_LINE_DESCRIPTION} ${others + 1}`;
 }
 
-export function blankOption(round = 1): DraftSection {
+/** A new option opens like a new incurred section (2026-10-22): the five
+    default "Required is to…" lines and a Trip line at the card's trip rate. */
+export function blankOption(round = 1, tripRate?: number | null): DraftSection {
   return {
     key: uid('opt'),
     id: null,
     kind: 'option',
     name: '',
     narrative: '',
-    scope_lines: [],
+    scope_lines: defaultScopeLines(),
     include_in_summary: true,
-    lines: [blankLine()],
+    lines: [tripLine(tripRate)],
     round,
     locked: false,
     approved: false,
@@ -182,16 +197,16 @@ export function blankOption(round = 1): DraftSection {
   };
 }
 
-function blankIncurred(): DraftSection {
+function blankIncurred(tripRate?: number | null): DraftSection {
   return {
     key: uid('inc'),
     id: null,
     kind: 'incurred',
     name: 'Work already performed',
     narrative: '',
-    scope_lines: [''],
+    scope_lines: defaultScopeLines(),
     include_in_summary: true,
-    lines: [blankLine()],
+    lines: [tripLine(tripRate)],
     round: 1,
     locked: false,
     approved: false,
@@ -227,11 +242,11 @@ function sectionToDraft(section: QuoteSection | QuoteDraftSection, currentRound:
       // and is saved back with markup 0 — the amount does not change.
       rate: rateToInput(foldMarkup(line.rate, line.markup_pct)),
       // A saved line carries the Day as a number; an AI draft line (0054) only
-      // as text ("Day 2") — the digits are the Day either way.
+      // as text ("Day 2") — the digits are the Day either way. No day = Day 1.
       day_value:
-        'day' in line && line.day != null
+        ('day' in line && line.day != null
           ? String(line.day)
-          : (line.day_value ?? '').replace(/\D/g, ''),
+          : (line.day_value ?? '').replace(/\D/g, '')) || String(QUOTE_DEFAULT_DAY),
       ot: line.ot ?? false,
       uom: line.uom ?? '',
       tax_pct: (line.tax_pct ?? 0) > 0 ? String(line.tax_pct) : '',
@@ -258,7 +273,7 @@ function pctToInput(n: number): string {
 export function fromQuote(quote: Quote): DraftQuote {
   const incurred = quote.sections.find((s) => s.kind === 'incurred');
   const options = quote.sections.filter((s) => s.kind === 'option');
-  const inc = incurred ? sectionToDraft(incurred, quote.current_round) : blankIncurred();
+  const inc = incurred ? sectionToDraft(incurred, quote.current_round) : blankIncurred(quote.labor_rate?.trip_rate);
   // From round 2 on the incurred work is what the client already approved — locked.
   if (quote.current_round > 1) inc.locked = true;
   return {
@@ -291,9 +306,11 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
     kind: section.kind,
     name: section.name.trim() === '' ? null : section.name.trim(),
     narrative_reported: section.narrative.trim() === '' ? null : section.narrative,
-    // The API requires every scope line to be non-empty, so blanks (including
-    // the placeholder row a fresh section opens with) never go over the wire.
-    scope_lines: section.scope_lines.map((s) => s.trim()).filter((s) => s.length > 0),
+    // Blank scope lines go over the wire and are STORED (2026-10-22): the
+    // five-line default opens with three blanks for the person to fill, and a
+    // reload must show the list as it was left. Everything that prints the
+    // list skips blanks (visibleScopeLines).
+    scope_lines: section.scope_lines.map((s) => s.trim()),
     include_in_summary: section.include_in_summary,
     // A line with no description CANNOT be saved: the route's Zod schema demands
     // description.min(1) and rejects the whole body otherwise. Sending the row
@@ -308,7 +325,7 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
         description: line.description.trim(),
         qty: toNumber(line.qty),
         rate: toNumber(line.rate),
-        day: line.day_value === '' ? null : Number(line.day_value),
+        day: line.day_value === '' ? QUOTE_DEFAULT_DAY : Number(line.day_value),
         ot: line.ot,
         uom: line.uom.trim() === '' ? null : line.uom.trim(),
         tax_pct: Number.isNaN(parseLinePct(line.tax_pct)) ? 0 : parseLinePct(line.tax_pct),

@@ -275,6 +275,7 @@ export const ACTION_LABELS: Record<string, string> = {
   quote_created: 'Quote created',
   quote_updated: 'Quote revised',
   quote_submitted: 'Quote submitted',
+  quote_submitted_for_correction: 'Quote submitted for correction',
   quote_sent: 'Quote sent',
   quote_approved: 'Quote approved',
   quote_rejected: 'Quote rejected',

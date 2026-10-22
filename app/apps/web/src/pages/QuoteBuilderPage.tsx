@@ -36,6 +36,7 @@ import {
   submitQuote,
 } from '../api/client';
 import type { Quote, QuotePermissions, WoActionMap } from '../api/client';
+import { QUOTE_CORRECTION_PENDING_TEXT, QUOTE_SUBMIT_LABEL } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { CopyButton } from '../components/CopyButton';
 import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
@@ -112,6 +113,19 @@ export function QuoteBuilderPage() {
   // ── Draft state ────────────────────────────────────────────────────────────
   const [draft, setDraft] = useState<DraftQuote | null>(null);
   const [showErrors, setShowErrors] = useState(false);
+  // The Day column is hidden until a section's "Multi-day job" link is
+  // pressed (or a line already sits past Day 1); keyed by section key.
+  const [dayShown, setDayShown] = useState<Record<string, boolean>>({});
+  const showDayFor = (key: string) => setDayShown((m) => ({ ...m, [key]: true }));
+  // "Tech reported that…" is one line that grows with its text (2026-10-22).
+  const reportRef = useRef<HTMLTextAreaElement | null>(null);
+  const reportText = draft?.sections[0]?.narrative ?? '';
+  useEffect(() => {
+    const el = reportRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [reportText]);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -160,7 +174,13 @@ export function QuoteBuilderPage() {
   const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
   /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */
   const editable =
-    canEdit && (status === 'draft' || status === 'pending_approval') && allows('quote.edit');
+    canEdit && (status === 'draft' || status === 'pending_correction' || status === 'pending_approval') && allows('quote.edit');
+  // 0092 · where this person's Submit takes the quote: a dispatcher's draft
+  // goes for correction, a manager's (or a corrected one) for approval; null
+  // while a dispatcher waits on the manager. An older API says nothing, so a
+  // draft falls back to the old label.
+  const submitTarget = permissions?.submit_target ?? (status === 'draft' ? 'pending_approval' : null);
+  const submitLabel = submitTarget ? QUOTE_SUBMIT_LABEL[submitTarget] : QUOTE_SUBMIT_LABEL.pending_approval;
 
   const totalCost = quote?.totals.total_cost ?? null;
   const nte = quote?.totals.nte ?? woQuery.data?.money?.nte ?? woQuery.data?.nte ?? null;
@@ -601,7 +621,7 @@ export function QuoteBuilderPage() {
 
         <div className="actionbar">
           <span className="actor-note">
-            {!allows('quote.edit') && (status === 'draft' || status === 'pending_approval')
+            {!allows('quote.edit') && (status === 'draft' || status === 'pending_correction' || status === 'pending_approval')
               ? blockedReason('quote.edit')
               : editable
                 ? 'You can build and revise this quote.'
@@ -621,7 +641,23 @@ export function QuoteBuilderPage() {
             {status === 'draft' && (
               <>
                 {!canApprove && lockedButton('Approve', 'Needs the quote-approve permission', 'lockTipApprove')}
-                {gated('Submit for approval', 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')}
+                {gated(submitLabel, 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')}
+              </>
+            )}
+
+            {/* 0092 · with a manager for correction: they edit it in place and
+                submit it for approval; a dispatcher's Submit is locked here. */}
+            {status === 'pending_correction' && (
+              <>
+                {canApprove && allows('quote.approve') && (
+                  <button type="button" className="btn btn-lg btn-danger" onClick={() => setRejectOpen(true)}>
+                    <Icon name="x" size={14} />
+                    Reject with note
+                  </button>
+                )}
+                {submitTarget
+                  ? gated('Submit for approval', 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')
+                  : lockedButton('Submit for approval', QUOTE_CORRECTION_PENDING_TEXT, 'lockTipSubmit')}
               </>
             )}
 
@@ -714,8 +750,28 @@ export function QuoteBuilderPage() {
             <span>
               <b>Needs the quote-approve permission.</b> Dispatchers build and revise quotes; approving and
               sending the summary to the client is reserved for ATL, TL, AM and admin.
-              Submit for approval and an ATL picks it up — the control stays visible so you always
-              know it exists.
+              {submitTarget === 'pending_correction'
+                ? ' Submit for correction and a manager corrects it, then submits it for approval — the control stays visible so you always know it exists.'
+                : ' Submit for approval and an ATL picks it up — the control stays visible so you always know it exists.'}
+            </span>
+          </div>
+        )}
+        {status === 'pending_correction' && submitTarget === null && (
+          <div className="callout callout-lock">
+            <Icon name="lock" size={14} />
+            <span>
+              <b>With a manager for correction.</b> {QUOTE_CORRECTION_PENDING_TEXT}. It appears in Quotes ›
+              Pending correction and in Approvals › Quotes; a Reject with note returns it to you as a draft.
+            </span>
+          </div>
+        )}
+        {status === 'pending_correction' && submitTarget !== null && editable && (
+          <div className="callout">
+            <Icon name="info" size={14} />
+            <span>
+              <b>Correct this quote in place.</b> Your edits autosave here and do not return it to draft. When it
+              is right, <b>Submit for approval</b> — that makes you its submitter, so another manager approves
+              it (maker ≠ checker).
             </span>
           </div>
         )}
@@ -912,10 +968,10 @@ export function QuoteBuilderPage() {
 
       <div className="q-grid">
         {/* ══ Main column ═══════════════════════════════════════════════ */}
-        {/* §3.2 validate-on-blur: inline errors stay quiet while a field is
-            being filled in for the first time and light up once focus leaves
-            anything in the form (or once a blocked CTA is pressed). */}
-        <div className="col-main" onBlur={() => setShowErrors(true)}>
+        {/* Required fields paint red only after a Submit was tried while they
+            were empty (Elise, 2026-10-22) — never on blur, so a form being
+            filled in for the first time stays quiet. */}
+        <div className="col-main">
           {/* ── INCURRED ── */}
           <section className="card">
             <div className="card-head">
@@ -942,9 +998,10 @@ export function QuoteBuilderPage() {
                   <span className="sr">required</span>
                 </label>
                 <textarea
-                  className={`fld${showErrors && incurredEditable && incurred.narrative.trim() === '' ? ' is-err' : ''}`}
+                  className={`fld fld-grow${showErrors && incurredEditable && incurred.narrative.trim() === '' ? ' is-err' : ''}`}
                   id="inc-report"
-                  rows={5}
+                  rows={1}
+                  ref={reportRef}
                   value={incurred.narrative}
                   disabled={!incurredEditable}
                   onChange={(e) => setSection(0, { ...incurred, narrative: e.target.value })}
@@ -961,6 +1018,7 @@ export function QuoteBuilderPage() {
                 sectionKey={incurred.key}
                 lines={incurred.scope_lines}
                 editable={incurredEditable}
+                showError={showErrors && incurredEditable}
                 onChange={(scope_lines) => setSection(0, { ...incurred, scope_lines })}
               />
             </div>
@@ -971,6 +1029,7 @@ export function QuoteBuilderPage() {
               editable={incurredEditable}
               showErrors={showErrors && incurredEditable}
               otMultiplier={otMult}
+              showDay={dayShown[incurred.key] === true}
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
 
@@ -980,6 +1039,7 @@ export function QuoteBuilderPage() {
                   lines={incurred.lines}
                   onChange={(lines) => setSection(0, { ...incurred, lines })}
                   rate={quote.labor_rate}
+                  onShowDay={() => showDayFor(incurred.key)}
                 />
               )}
               <span className="lt-note">
@@ -1048,12 +1108,15 @@ export function QuoteBuilderPage() {
                 key={s.key}
                 section={s}
                 index={idx}
+                sole={options.length === 1}
                 editable={editable}
                 showErrors={showErrors}
                 grandTotal={totals.totalRule === 'incurred_plus_option' ? (totals.options.find((o) => o.key === s.key)?.grandTotal ?? null) : null}
                 rate={quote.labor_rate}
                 decisionActions={status === 'sent' && options.length > 1 ? decisionButton(s.key, true) : undefined}
                 otMultiplier={otMult}
+                showDay={dayShown[s.key] === true}
+                onShowDay={() => showDayFor(s.key)}
                 onChange={(next) => setSection(i, next)}
                 onRemove={() => update({ ...draft, sections: removeAt(draft.sections, i) })}
               />
@@ -1063,12 +1126,16 @@ export function QuoteBuilderPage() {
               <button
                 type="button"
                 className="addopt"
-                onClick={() => update({ ...draft, sections: [...draft.sections, blankOption(currentRound)] })}
+                onClick={() =>
+                  update({ ...draft, sections: [...draft.sections, blankOption(currentRound, quote.labor_rate?.trip_rate)] })
+                }
               >
                 <Icon name="plus" size={14} />
-                Add option
+                {options.length === 0 ? 'Add option' : 'Add another option'}
                 <span className="hint" style={{ marginLeft: 'auto', fontWeight: 400 }}>
-                  Option B, C… each gets its own narrative, lines and include-in-summary toggle
+                  {options.length === 0
+                    ? 'The work proposed to the client, with its scope and lines'
+                    : 'Option A, B… each gets a name, its own scope, lines and include-in-summary toggle'}
                 </span>
               </button>
             )}

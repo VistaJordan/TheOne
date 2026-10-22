@@ -1,8 +1,16 @@
 /* One PROPOSED option (comp: .opt-card) — its letter tag, name, include-in-
-   summary switch, narrative and line-item table.
+   summary switch, scope list and line-item table.
 
    The A / B / C letter is DERIVED from position and never stored, so deleting
    Option A promotes B to A with no data migration (0003 header).
+
+   Since 2026-10-22 (Elise): a quote with ONE option has no choice to name, so
+   the lone option draws no letter and no name box and reads "Proposed"
+   (`sole`); both appear on every option once "Add another option" was
+   pressed. The option's "required is to…" is the same numbered scope list
+   the Incurred section uses (ScopeList on `scope_lines`); the free-text
+   narrative box is gone — a narrative already on file (an older quote, an
+   AI draft) is still shown, read-only, above the list.
 
    Yoda parity: an option that belongs to a decided round renders LOCKED (its
    history is the client's record), carries an "Approved" or "Declined" badge,
@@ -10,17 +18,21 @@
    to whoever may record the client decision. */
 
 import type { ReactNode } from 'react';
+import { optionDisplayLabel } from '@theone/shared';
 import type { DraftLine, DraftSection } from '../../lib/quoteDraft';
 import { optionTag } from '../../lib/quoteDraft';
 import { excludedNote, sumLines, usd } from '../../lib/quoteTotals';
 import type { LaborRate } from '../../api/client';
 import { AddLineButton, LineItemsTable } from './LineItemsTable';
+import { ScopeList } from './ScopeList';
 import { Icon } from '../Icon';
 
 interface OptionCardProps {
   section: DraftSection;
   /** 0-based position among the OPTION sections of ITS round — drives the letter. */
   index: number;
+  /** True when this is the only option of its round: no letter, no name. */
+  sole?: boolean;
   editable: boolean;
   showErrors: boolean;
   /** The option's client price under the active total rule (null while invalid). */
@@ -32,11 +44,15 @@ interface OptionCardProps {
   onRemove: () => void;
   /** 0046 · the multiplier an OT line bills at; the house ×1.5 by default. */
   otMultiplier?: number;
+  /** The "Multi-day job" link revealed the Day column for this option. */
+  showDay?: boolean;
+  onShowDay?: () => void;
 }
 
 export function OptionCard({
   section,
   index,
+  sole = false,
   editable,
   showErrors,
   grandTotal,
@@ -45,15 +61,15 @@ export function OptionCard({
   onChange,
   onRemove,
   otMultiplier,
+  showDay,
+  onShowDay,
 }: OptionCardProps) {
-  const label = `Option ${optionTag(index)}`;
+  const label = optionDisplayLabel(`Option ${optionTag(index)}`, sole ? 1 : 2);
   const totals = sumLines(section.lines, otMultiplier);
   const note = excludedNote(totals.excluded);
   const nameId = `opt-${section.key}-name`;
-  const narrId = `opt-${section.key}-narr`;
   const canEdit = editable && !section.locked;
-  const nameErr = canEdit && showErrors && section.name.trim() === '';
-  const narrErr = canEdit && showErrors && section.narrative.trim() === '';
+  const nameErr = !sole && canEdit && showErrors && section.name.trim() === '';
   const declined = section.rejection_note !== null && !section.approved;
 
   const setLines = (lines: DraftLine[]) => onChange({ ...section, lines });
@@ -61,29 +77,36 @@ export function OptionCard({
   return (
     <div className={`opt-card${section.approved ? ' is-approved' : ''}${declined ? ' is-declined' : ''}${section.locked ? ' is-locked' : ''}`}>
       <div className="opt-head">
-        <span className="opt-tag" aria-hidden="true">{optionTag(index)}</span>
-        <div className="field" style={{ flex: 1, minWidth: 240 }}>
-          <label className="lbl" htmlFor={nameId}>
-            Option name <span className="req" aria-hidden="true">*</span>
-            <span className="sr">required</span>
+        {!sole && <span className="opt-tag" aria-hidden="true">{optionTag(index)}</span>}
+        {sole ? (
+          <span className="lbl" style={{ flex: 1, minWidth: 160, alignSelf: 'center' }}>
+            {label}
             {section.round > 1 && <span className="chip chip-sm chip-outline" style={{ marginLeft: 6 }}>Round {section.round}</span>}
-          </label>
-          <input
-            className={`fld${nameErr ? ' is-err' : ''}`}
-            id={nameId}
-            value={section.name}
-            disabled={!canEdit}
-            aria-invalid={nameErr ? true : undefined}
-            aria-describedby={nameErr ? `${nameId}-err` : undefined}
-            onChange={(e) => onChange({ ...section, name: e.target.value })}
-          />
-          {nameErr && (
-            <span className="err" id={`${nameId}-err`}>
-              <Icon name="alert" size={12} />
-              {label} needs a name
-            </span>
-          )}
-        </div>
+          </span>
+        ) : (
+          <div className="field" style={{ flex: 1, minWidth: 240 }}>
+            <label className="lbl" htmlFor={nameId}>
+              Option name <span className="req" aria-hidden="true">*</span>
+              <span className="sr">required</span>
+              {section.round > 1 && <span className="chip chip-sm chip-outline" style={{ marginLeft: 6 }}>Round {section.round}</span>}
+            </label>
+            <input
+              className={`fld${nameErr ? ' is-err' : ''}`}
+              id={nameId}
+              value={section.name}
+              disabled={!canEdit}
+              aria-invalid={nameErr ? true : undefined}
+              aria-describedby={nameErr ? `${nameId}-err` : undefined}
+              onChange={(e) => onChange({ ...section, name: e.target.value })}
+            />
+            {nameErr && (
+              <span className="err" id={`${nameId}-err`}>
+                <Icon name="alert" size={12} />
+                {label} needs a name
+              </span>
+            )}
+          </div>
+        )}
 
         {section.approved ? (
           <span className="chip chip-accent" style={{ alignSelf: 'flex-end', marginBottom: 6 }}>
@@ -139,28 +162,20 @@ export function OptionCard({
       )}
 
       <div className="opt-body">
-        <div className="field">
-          <label className="lbl" htmlFor={narrId}>
-            Option narrative — required is to… <span className="req" aria-hidden="true">*</span>
-            <span className="sr">required</span>
-          </label>
-          <textarea
-            className={`fld${narrErr ? ' is-err' : ''}`}
-            id={narrId}
-            rows={6}
-            value={section.narrative}
-            disabled={!canEdit}
-            aria-invalid={narrErr ? true : undefined}
-            aria-describedby={narrErr ? `${narrId}-err` : undefined}
-            onChange={(e) => onChange({ ...section, narrative: e.target.value })}
-          />
-          {narrErr && (
-            <span className="err" id={`${narrId}-err`}>
-              <Icon name="alert" size={12} />
-              {label} needs a narrative
-            </span>
-          )}
-        </div>
+        {section.narrative.trim() !== '' && (
+          <div className="field">
+            <span className="lbl">Option narrative</span>
+            <p className="hint" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{section.narrative}</p>
+          </div>
+        )}
+
+        <ScopeList
+          sectionKey={section.key}
+          lines={section.scope_lines}
+          editable={canEdit}
+          showError={showErrors && canEdit}
+          onChange={(scope_lines) => onChange({ ...section, scope_lines })}
+        />
 
         <LineItemsTable
           label={label}
@@ -168,12 +183,13 @@ export function OptionCard({
           editable={canEdit}
           showErrors={showErrors && canEdit}
           otMultiplier={otMultiplier}
+          showDay={showDay}
           onChange={setLines}
         />
       </div>
 
       <div className="opt-foot">
-        {canEdit && <AddLineButton lines={section.lines} onChange={setLines} rate={rate} />}
+        {canEdit && <AddLineButton lines={section.lines} onChange={setLines} rate={rate} onShowDay={onShowDay} />}
         {note && (
           <span className="lt-note">
             <Icon name="alert" size={12} />
