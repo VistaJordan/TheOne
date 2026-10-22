@@ -38,6 +38,12 @@
 // old duplicate-purpose 409. Pre-0083 free-text purposes are left as they are.
 // 0083 (#5 / #7): before approve and pay, a payment that would take Cost past
 // the NTE or past the approved quote raises the hold (D1b) and is refused.
+// 0090 (Elise, 2026-10-22): WHO has to say yes — `paymentApprovalVerdict`
+// (shared) at create: an OM Under Probation's request always waits, an OM /
+// Senior OM's under $500 lands `approved` as it is raised (`auto_approved`),
+// and Approve asks the 6.2.3 amount bands again (`assertTierAllows`:
+// $500–3,000 TL / ATL, $3,000 and over AM; the row carries `tier` so the
+// button locks first). Pay is unchanged: approved, a second person, the holds.
 //
 // The payee is EITHER a vendor record OR a manual name+phone pair. The DB does
 // not CHECK across the two shapes — the rule is enforced here, where a useful
@@ -55,6 +61,7 @@ import type {
   PaymentRequestStatus,
   PaymentRequestsResponse,
   VendorYtd,
+  ApprovalTier,
 } from '@theone/shared';
 import {
   NTE_OVERRIDE_REQUIRED_CODE,
@@ -66,6 +73,7 @@ import {
   nextPurpose,
   overNte,
   overQuoteReason,
+  paymentApprovalVerdict,
   paymentLockReason,
   permAllows,
   projectedCost,
@@ -80,6 +88,7 @@ import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
 import { requirePerm } from './permissions.js';
 import { approvedCover, assertNoOpenMoneyHold, assertNoOpenNteOverride, raiseMoneyHold } from './approvals.js';
+import { assertTierAllows, listApprovalTiers, tierSummary } from './approvalTiers.js';
 import { assertWoAllows } from './woPolicy.js';
 import { enqueueOutbox } from './outbox.js';
 import { evaluateForTask } from './obligations.js';
@@ -144,6 +153,8 @@ interface PaymentRow {
   paid_by_kind: 'human' | 'service' | null;
   paid_at: string | null;
   nte_override_open: boolean;
+  /** 0090: landed approved as it was raised (a dispatcher's request under $500). */
+  auto_approved: boolean | null;
   wo_due: string | null;
   wo_nte: number | string | null;
   wo_cost: string | null;
@@ -172,6 +183,7 @@ const SELECT_SQL = `
          pr.method, pr.payment_address, pr.note,
          pr.recipient_name, pr.recipient_phone, pr.recipient_is_store,
          pr.status, pr.needs_w9, pr.pending_delete, pr.delete_reason,
+         pr.auto_approved,
          pr.attachment_id::text AS attachment_id,
          rb.id::text        AS requested_by_id,
          rb.display_name    AS requested_by_name,
@@ -292,16 +304,30 @@ async function quoteFiguresFor(rows: PaymentRow[]): Promise<QuoteFigures> {
   return bindableQuoteFiguresFor(waiting);
 }
 
+/** 0090: what mapPayment needs to draw the amount's band for the viewer —
+    the bands read once per call (one query, not one per row). Rows read with
+    no viewer (a service, the obligations engine) carry `tier: null`. */
+interface MapOpts {
+  fullAddress: boolean;
+  viewer?: ActingPrincipal | null;
+  tiers?: ApprovalTier[];
+}
+
+async function withTiers(opts: MapOpts): Promise<MapOpts> {
+  if (!opts.viewer || opts.tiers) return opts;
+  return { ...opts, tiers: await listApprovalTiers() };
+}
+
 /** One request as the API returns it — read, created, edited or moved —
     with the same lock the queues draw: its work order's quote figures read
     through the same batched reader (one work order, one call). */
-async function mapOne(r: PaymentRow, opts: { fullAddress: boolean }): Promise<PaymentRequest> {
-  return mapPayment(r, opts, await quoteFiguresFor([r]));
+async function mapOne(r: PaymentRow, opts: MapOpts): Promise<PaymentRequest> {
+  return mapPayment(r, await withTiers(opts), await quoteFiguresFor([r]));
 }
 
 function mapPayment(
   r: PaymentRow,
-  opts: { fullAddress: boolean } = { fullAddress: false },
+  opts: MapOpts = { fullAddress: false },
   quotes?: QuoteFigures,
 ): PaymentRequest {
   const address = parseAddress(r.payment_address);
@@ -346,6 +372,11 @@ function mapPayment(
     paid_at: r.paid_at,
     nte_override_open: Boolean(r.nte_override_open),
     money_hold: moneyHoldOf(r, quotes),
+    tier:
+      opts.viewer && opts.tiers
+        ? tierSummary(opts.tiers, 'payment', Number(r.amount ?? 0), opts.viewer)
+        : null,
+    auto_approved: r.auto_approved === true,
   };
 }
 
@@ -370,7 +401,7 @@ function moneyHoldOf(r: PaymentRow, quotes?: QuoteFigures): string | null {
   });
 }
 
-function mapListItem(r: PaymentRow, opts?: { fullAddress: boolean }, quotes?: QuoteFigures): PaymentListItem {
+function mapListItem(r: PaymentRow, opts?: MapOpts, quotes?: QuoteFigures): PaymentListItem {
   return {
     ...mapPayment(r, opts, quotes),
     title: r.title,
@@ -416,13 +447,14 @@ function money(n: number): string {
  * `total_requested` ("Payables total") counts everything not rejected — money
  * that is either out the door or on its way. Soft-deleted rows are omitted.
  */
-export async function listPaymentRequests(taskId: string): Promise<PaymentRequestsResponse> {
+export async function listPaymentRequests(taskId: string, viewer?: ActingPrincipal): Promise<PaymentRequestsResponse> {
   const res = await query<PaymentRow>(
     `${SELECT_SQL} WHERE pr.task_id = $1 AND pr.deleted_at IS NULL ORDER BY pr.created_at DESC, pr.id DESC`,
     [taskId],
   );
   const quotes = await quoteFiguresFor(res.rows);
-  const items = res.rows.map((r) => mapPayment(r, undefined, quotes));
+  const opts = await withTiers({ fullAddress: false, viewer: viewer ?? null });
+  const items = res.rows.map((r) => mapPayment(r, opts, quotes));
   return {
     items,
     total: items.length,
@@ -437,7 +469,7 @@ export async function listPaymentRequests(taskId: string): Promise<PaymentReques
 export async function getPaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
   const res = await query<PaymentRow>(`${SELECT_SQL} WHERE pr.id = $1 AND pr.deleted_at IS NULL`, [id]);
   if (res.rows.length === 0) throw notFound('Payment request not found');
-  return mapOne(res.rows[0], { fullAddress: canProcessPayments(actor) });
+  return mapOne(res.rows[0], { fullAddress: canProcessPayments(actor), viewer: actor });
 }
 
 const STATUSES: PaymentRequestStatus[] = ['requested', 'approved', 'sent_to_yoda', 'paid', 'rejected'];
@@ -508,8 +540,9 @@ export async function listAllPaymentRequests(f: QueueFilters, viewer: ActingPrin
     p.values,
   );
   const quotes = await quoteFiguresFor(rows.rows);
+  const opts = await withTiers({ fullAddress: false, viewer });
   return {
-    items: rows.rows.map((r) => mapListItem(r, undefined, quotes)),
+    items: rows.rows.map((r) => mapListItem(r, opts, quotes)),
     total: Number(total.rows[0]?.n ?? 0),
     counts,
     page: f.page,
@@ -708,6 +741,11 @@ export async function createPaymentRequest(
   }
   assertAddressMatches(input.method, input.payment_address);
   const purposeCode = purposeCodeOf(input.purpose);
+  // 0090: who has to say yes. A dispatcher's request under $500 is cleared
+  // for AP as it is raised; a probation dispatcher's, and anyone's at $500
+  // or over, waits in the queue for the band's approver.
+  const approval = paymentApprovalVerdict(actor.role, input.amount);
+  const startStatus: PaymentRequestStatus = approval.needed ? 'requested' : 'approved';
 
   // Yoda resolves the Technician by phone and creates one when unknown, so the
   // W9 / YTD bookkeeping has a record to hang off. Same here: a manual payee
@@ -763,8 +801,10 @@ export async function createPaymentRequest(
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO payment_request
          (task_id, vendor_id, payee_name, payee_phone, purpose, amount, method, payment_address, note,
-          recipient_name, recipient_phone, recipient_is_store, attachment_id, status, requested_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, 'requested', $14)
+          recipient_name, recipient_phone, recipient_is_store, attachment_id, status, requested_by,
+          auto_approved, approved_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $15, $14,
+               $16, CASE WHEN $16 THEN now() ELSE NULL END)
        RETURNING id::text AS id`,
       [
         taskId,
@@ -781,6 +821,8 @@ export async function createPaymentRequest(
         input.recipient_is_store === true,
         input.attachment_id ?? null,
         actor.id,
+        startStatus,
+        !approval.needed,
       ],
     );
     createdId = ins.rows[0].id;
@@ -793,11 +835,12 @@ export async function createPaymentRequest(
 
     await logPayment(tx, actor.id, taskId, 'payment_requested', null, {
       payment_request_id: createdId,
-      status: 'requested',
+      status: startStatus,
       amount: input.amount,
       method: input.method,
       purpose,
       needs_w9: full.needs_w9,
+      ...(approval.needed ? {} : { auto_approved: true, approval_reason: approval.reason }),
     });
     await enqueueOutbox(tx, 'payment.requested', 'payment_request', createdId, {
       task_id: taskId,
@@ -812,7 +855,7 @@ export async function createPaymentRequest(
   // (2 business days), owed by AP until a decision lands.
   await evaluateForTask(taskId);
 
-  return mapOne(await loadRow(createdId), { fullAddress: canProcessPayments(actor) });
+  return mapOne(await loadRow(createdId), { fullAddress: canProcessPayments(actor), viewer: actor });
 }
 
 export interface PaymentEditInput {
@@ -886,7 +929,7 @@ export async function updatePaymentRequest(
       fields: Object.keys(input),
     });
   });
-  return mapOne(await loadRow(id), { fullAddress: canProcessPayments(actor) });
+  return mapOne(await loadRow(id), { fullAddress: canProcessPayments(actor), viewer: actor });
 }
 
 const LABEL: Record<PaymentRequestStatus, string> = {
@@ -948,7 +991,7 @@ async function setStatus(
     });
   });
   await afterCost(row.task_id, costChanges);
-  return mapOne(await loadRow(row.id), { fullAddress: canProcessPayments(actor) });
+  return mapOne(await loadRow(row.id), { fullAddress: canProcessPayments(actor), viewer: actor });
 }
 
 /** D2: 403 SELF_APPROVAL when the requester decides their own request;
@@ -1039,6 +1082,9 @@ async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, mov
 export async function approvePaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
   assertCanApprove(actor, 'approve');
   const row = await loadRow(id);
+  // 0090 (rule 6.2.3): the amount's band says which roles may approve it —
+  // $500–3,000 TL / ATL, $3,000 and over AM (Admin › Settings).
+  await assertTierAllows('payment', Number(row.amount ?? 0), actor, 'Approving a payment');
   const selfApproved = assertNotOwnRequest(row, actor, 'approve');
   await assertPaymentNotHeld(row, actor, 'Approving this payment');
   return setStatus(row, ['requested'], 'approved', 'payment_approved', actor,
@@ -1118,7 +1164,7 @@ export async function convertPaymentMethod(id: string, method: PaymentMethod, ac
       method,
     });
   });
-  return mapOne(await loadRow(id), { fullAddress: true });
+  return mapOne(await loadRow(id), { fullAddress: true, viewer: actor });
 }
 
 async function hardDelete(tx: Queryable, row: PaymentRow, reason: string, actor: ActingPrincipal): Promise<TaskChange[]> {
@@ -1184,7 +1230,7 @@ export async function deletePaymentRequest(id: string, reason: string, actor: Ac
     });
     await enqueueOutbox(tx, 'payment.delete_requested', 'payment_request', id, { task_id: row.task_id, reason: trimmed });
   });
-  return mapOne(await loadRow(id), { fullAddress: canProcessPayments(actor) });
+  return mapOne(await loadRow(id), { fullAddress: canProcessPayments(actor), viewer: actor });
 }
 
 /** Admin confirms a pending delete (second person). */
@@ -1207,5 +1253,5 @@ export async function rejectDeletePaymentRequest(id: string, actor: ActingPrinci
     );
     await logPayment(tx, actor.id, row.task_id, 'payment_delete_rejected', null, { payment_request_id: id });
   });
-  return mapOne(await loadRow(id), { fullAddress: true });
+  return mapOne(await loadRow(id), { fullAddress: true, viewer: actor });
 }

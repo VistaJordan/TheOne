@@ -123,6 +123,13 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
 
   const apLock = isAp ? null : 'Requires the payments/process permission (AP)';
   const approveLock = canApprove ? null : 'Requires payment approval rights';
+  // 0090 (rule 6.2.3): the amount's band names the roles that may approve
+  // it ($500–3,000 TL / ATL, $3,000 and over AM); the API answers 403.
+  // Approve only — rejecting is never banded.
+  const tierLock =
+    item.tier && !item.tier.allowed
+      ? `${item.tier.label}: needs a role allowed for this amount (rule 6.2.3)`
+      : null;
   const adminLock = isAdmin ? null : 'Requires admin';
 
   return (
@@ -138,7 +145,7 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
         </>
       ) : (
         <>
-          {item.status === 'requested' && btn('Approve', 'check', () => approve.mutate(), { locked: approveLock ?? ownLock ?? (hold ? HOLD : null) ?? moneyHold })}
+          {item.status === 'requested' && btn('Approve', 'check', () => approve.mutate(), { locked: approveLock ?? tierLock ?? ownLock ?? (hold ? HOLD : null) ?? moneyHold })}
           {/* 0083 (#4): Pay only once a second person approved the request. */}
           {open && btn('Mark paid', 'dollar', () => pay.mutate(), {
             primary: true,

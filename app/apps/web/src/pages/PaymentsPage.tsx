@@ -295,9 +295,11 @@ function PaymentRow({ item }: { item: PaymentListItem }) {
   // What happened last, for the status cell's second line.
   const trail = item.pending_delete
     ? (item.delete_reason ?? 'delete requested')
-    : item.status === 'approved' && item.approved_by
-      ? `by ${item.approved_by.display_name}${item.approved_at ? ` · ${numericDate(item.approved_at)}` : ''}`
-      : item.status === 'paid' && item.paid_at
+    : item.status === 'approved' && item.auto_approved
+      ? `as requested (under $500)${item.approved_at ? ` · ${numericDate(item.approved_at)}` : ''}`
+      : item.status === 'approved' && item.approved_by
+        ? `by ${item.approved_by.display_name}${item.approved_at ? ` · ${numericDate(item.approved_at)}` : ''}`
+        : item.status === 'paid' && item.paid_at
         ? `${numericDate(item.paid_at)}${item.paid_by ? ` · ${item.paid_by.display_name}` : ''}`
         : item.status === 'rejected'
           ? (item.rejection_note ?? (item.rejected_by ? `by ${item.rejected_by.display_name}` : null))

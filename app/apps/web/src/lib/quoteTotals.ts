@@ -17,7 +17,7 @@ import type { DraftLine, DraftQuote, DraftSection } from './quoteDraft';
     own (`quote.rates.ot_multiplier`), passed into computeQuoteTotals. */
 export const OT_MULTIPLIER = 1.5;
 
-/** A percentage typed into a LINE's Tax % or Markup % box (0048): '' is 0,
+/** A percentage typed into a LINE's Tax % box (0048): '' is 0,
     otherwise a plain number with at most two decimals. NaN is the error state.
     (The quote's sales-tax % has its own grammar — parsePct, below.) */
 export function parseLinePct(v: string | null | undefined): number {
@@ -83,16 +83,17 @@ export function usd0(n: number | null | undefined): string {
 }
 
 /** A line's computed amount, or null when the line is not yet valid. Amount is
-    never an input (§3.6 read-only-distinction): qty × rate, × (1 + markup),
-    × the OT multiplier when OT, NEGATIVE for a discount line (the sign comes
-    from the type). Server parity: computeLineAmount. */
+    never an input (§3.6 read-only-distinction): qty × rate, × the OT
+    multiplier when OT, NEGATIVE for a discount line (the sign comes from the
+    type). Server parity: computeLineAmount, which still multiplies by
+    (1 + markup) — the builder always saves markup 0 since 2026-10-22, so the
+    two agree. */
 export function lineAmount(line: DraftLine, otMultiplier: number = OT_MULTIPLIER): number | null {
   const q = parseMoney(line.qty);
   const r = parseMoney(line.rate);
-  const markup = parseLinePct(line.markup_pct);
-  if (Number.isNaN(q) || Number.isNaN(r) || Number.isNaN(markup)) return null;
+  if (Number.isNaN(q) || Number.isNaN(r)) return null;
   const sign = line.line_type === 'discount' ? -1 : 1;
-  return round2(sign * q * r * (1 + markup / 100) * (line.ot ? otMultiplier : 1));
+  return round2(sign * q * r * (line.ot ? otMultiplier : 1));
 }
 
 /** 0048 · the tax a line carries from its own rate; 0 when none, null when
@@ -111,7 +112,6 @@ export interface LineErrors {
   qty?: string;
   rate?: string;
   tax_pct?: string;
-  markup_pct?: string;
 }
 
 export function lineErrors(line: DraftLine): LineErrors {
@@ -124,7 +124,6 @@ export function lineErrors(line: DraftLine): LineErrors {
     errs.rate = line.rate.trim() === '' ? 'Rate is required' : 'Enter a rate greater than $0';
   }
   if (Number.isNaN(parseLinePct(line.tax_pct))) errs.tax_pct = 'Tax is a percentage';
-  if (Number.isNaN(parseLinePct(line.markup_pct))) errs.markup_pct = 'Markup is a percentage';
   return errs;
 }
 

@@ -729,7 +729,8 @@ export function RequestPaymentPage() {
                 {submitted ? (
                   <>
                     <Icon name="check-circle" size={12} />
-                    Submitted · in the AP queue{submitted.needs_w9 ? ' · W9 needed' : ''}
+                    {submitted.auto_approved ? 'Submitted · approved as requested (under $500) · with AP to pay' : 'Submitted · in the AP queue'}
+                    {submitted.needs_w9 ? ' · W9 needed' : ''}
                   </>
                 ) : (
                   <>

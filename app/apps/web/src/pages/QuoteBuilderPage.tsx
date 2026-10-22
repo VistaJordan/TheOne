@@ -985,7 +985,7 @@ export function QuoteBuilderPage() {
               <span className="lt-note">
                 <Icon name={incurredNote ? 'alert' : 'info'} size={12} />
                 {incurredNote ??
-                  `Amount is computed (qty × unit price, plus markup, ×${otMult} when OT; discounts subtract) and read-only.`}
+                  `Amount is computed (qty × unit price, ×${otMult} when OT; discounts subtract) and read-only.`}
               </span>
               <span className="subtotal-chip" style={{ marginLeft: 'auto' }}>
                 Incurred lines <b className="num">{usd(incurredTotals.total)}</b>

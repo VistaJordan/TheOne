@@ -19,6 +19,20 @@ export function isStatusRequestMode(perms: PermissionSet, isSuperAdmin = false):
   return !permAllows(perms, STATUS_KEY, 'edit') && permAllows(perms, STATUS_KEY, 'create');
 }
 
+/** Statuses a request-mode person moves to DIRECTLY, no approval task
+    (Elise, 2026-10-22): Quote Ready is internal — it changes nothing on the
+    client's side, so a manager has nothing to decide. The API lets a
+    `work_orders/status` create-only actor PATCH straight to one of these;
+    the status menu skips the request for them. Matched by name, case
+    folded; the gates (11.2.1: a quote with data) still apply. */
+export const NO_APPROVAL_STATUS_NAMES = ['Quote Ready'] as const;
+
+export function statusMoveNeedsNoApproval(statusName: string | null | undefined): boolean {
+  if (typeof statusName !== 'string') return false;
+  const n = statusName.trim().toLowerCase();
+  return (NO_APPROVAL_STATUS_NAMES as readonly string[]).some((s) => s.toLowerCase() === n);
+}
+
 /** #15: Cancel, Reopen, Pause / Resume and Complete service on the record
     bar. Unset inherits `work_orders` edit; 0085 sets it off for every
     request-mode system role, so Admin › Roles can loosen it per role. */

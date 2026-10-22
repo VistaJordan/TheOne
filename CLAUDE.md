@@ -2575,6 +2575,44 @@ approval-tier role lists, drops the code from dashboards' `shared_roles`,
 and deletes the role. `DISPATCHER_ROLE_CODES` / `REQUEST_MODE_DISPATCHER_ROLES`
 are the three codes; `canClientDecide` (quotes.ts) uses `isDispatcherRole`.
 
+**Payment approval by requester and amount, Quote Ready without a request,
+no Markup column** (migration 0090, Elise 2026-10-22; `packages/shared/src/
+paymentApproval.ts` pure, `tests/payment-approval.test.ts`). **Who has to
+ask:** `paymentApprovalVerdict(requesterRole, amount)` runs once in
+`createPaymentRequest` — an OM Under Probation's request always lands
+`requested`; an OM / Senior OM's under `PAYMENT_AUTO_APPROVE_UNDER` ($500)
+lands `approved` as it is raised (`payment_request.auto_approved`,
+`approved_at = now()`, `approved_by` NULL, the `payment_requested` row says
+`auto_approved: true` + `approval_reason`); everyone else's waits as before.
+Pay is untouched (approved, a second person, the NTE / quote holds asked
+again), so auto-approved means cleared for AP, not paid. **Who may say
+yes:** `approvePaymentRequest` asks the 6.2.3 amount band again
+(`assertTierAllows('payment', …)`, 403 `APPROVAL_TIER`; 0076 had stopped
+asking for payments) and 0090 rewrites the payment bands: under $500 anyone
+with `payments` approve · $500–3,000 tl / atl / admin · $3,000 and over am /
+admin (still editable in Admin › Settings › Approval tiers; vendor-bill and
+invoice bands untouched). Every payment row read with a viewer carries
+`tier: {label, allowed}` (`MapOpts.viewer`, the bands read once per call by
+`withTiers`), so Approve locks with the band on the Payments page, the
+Payables card and the Approvals inbox; Reject is never banded. The Approvals
+inbox approves a payment **in one click** — the "Approve this payment?"
+confirm dialog is gone (the quote one stays). **Quote Ready needs no
+approval:** `NO_APPROVAL_STATUS_NAMES` / `statusMoveNeedsNoApproval` in
+shared `workflow.ts`; `PATCH /work-orders/:id/status` lets a request-mode
+actor (`work_orders/status` create without edit) move DIRECTLY to one of
+those (the status name is read by id; anyone else without edit is still
+403), the status menu calls `patchStatus` instead of `requestStatusChange`
+for them and tags the pick "No approval" (`.status-menu-direct`). The
+11.2.1 quote gate and the Ecotrak check still run in `changeStatus`.
+**Markup:** the quote builder's per-line Markup % column is gone
+(`LineItemsTable`, `DraftLine` has no `markup_pct`); a line saved with a
+markup loads with the marked-up unit price (`foldMarkup` in `quoteDraft.ts`,
+the M27 figure) and saves back `markup_pct: 0`, so amounts do not move; the
+API column, `computeLineAmount` and the AI draft's `markup_pct` are
+unchanged (the fold shows the AI's marked-up rate). **Labor:** picking the
+Labor type on a line with a blank description fills "Labor tech N"
+(`nextLaborDescription`: the section's other labor lines + 1).
+
 ## Verify
 
 ```

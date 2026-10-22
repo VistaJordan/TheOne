@@ -170,7 +170,8 @@ describe('T5a — a payment that would pass the approved quote is drawn locked',
     expect(pay).toContain('async function mapOne(');
     // The one `return mapPayment(` left is mapOne's own.
     expect(pay.match(/return mapPayment\(/g)).toHaveLength(1);
-    expect(pay).toMatch(/async function mapOne[^\n]*\n\s*return mapPayment\(r, opts, await quoteFiguresFor\(\[r\]\)\)/);
+    // 0090: the viewer's amount band rides in opts (withTiers — one read), the quote figures beside it.
+    expect(pay).toMatch(/async function mapOne[^\n]*\n\s*return mapPayment\(r, await withTiers\(opts\), await quoteFiguresFor\(\[r\]\)\)/);
     expect(pay).not.toMatch(/mapPayment\(await loadRow/);
     expect(pay).toMatch(/export async function getPaymentRequest[\s\S]*?return mapOne\(/);
   });

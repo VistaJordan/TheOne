@@ -1,18 +1,23 @@
 /* The quote builder's line-item table (comp: .lt). One per section — INCURRED
    and every option render the same table with a different caption.
 
-   Amount is COMPUTED and read-only (qty × rate, × (1 + markup), × the OT
-   multiplier when OT). A line that does not yet compute renders "—", takes
+   Amount is COMPUTED and read-only (qty × rate, × the OT multiplier when
+   OT). A line that does not yet compute renders "—", takes
    the .has-err row wash, and is EXCLUDED from the subtotal rather than
    counted as zero — the footer says which lines.
 
-   0048 · three more columns: UOM (free text with the usual units offered),
-   Tax % and Markup %. Both percentages default to blank = 0, so a quote that
-   never used them prices exactly as before. The OT multiplier comes from the
-   quote's contract when one covers the work order (0046), else ×1.5. */
+   0048 · two more columns: UOM (free text with the usual units offered) and
+   Tax %, blank = 0, so a quote that never used it prices exactly as before.
+   The per-line markup column was removed on 2026-10-22 (Elise): a stored markup is
+   folded into the unit price when the quote loads (quoteDraft). The OT
+   multiplier comes from the quote's contract when one covers the work order
+   (0046), else ×1.5.
+
+   Picking the Labor type on a line whose description is still blank fills it
+   with "Labor tech N" (N = the section's labor lines so far + 1). */
 
 import type { DraftLine } from '../../lib/quoteDraft';
-import { DAY_VALUES, LINE_TYPES, blankLine, moveItem, removeAt, replaceAt } from '../../lib/quoteDraft';
+import { DAY_VALUES, LINE_TYPES, blankLine, moveItem, nextLaborDescription, removeAt, replaceAt } from '../../lib/quoteDraft';
 import { OT_MULTIPLIER, lineAmount, lineErrors, lineFieldId, lineTax, usd } from '../../lib/quoteTotals';
 import { useReorder } from '../../hooks/useReorder';
 import type { LaborRate } from '../../api/client';
@@ -77,17 +82,6 @@ export function LineItemsTable({
               <span className="sr">required</span>
             </th>
             <th className="c-pct ta-r">
-              Markup %
-              <button
-                type="button"
-                className="qmk"
-                title="Added to the unit price before the amount is computed — parts bought and resold"
-                aria-label="About the Markup column: added to the unit price before the amount is computed"
-              >
-                ?
-              </button>
-            </th>
-            <th className="c-pct ta-r">
               Tax %
               <button
                 type="button"
@@ -127,7 +121,7 @@ export function LineItemsTable({
         <tbody>
           {lines.length === 0 && (
             <tr>
-              <td colSpan={12}>
+              <td colSpan={11}>
                 <span className="hint">
                   No line items yet.{editable ? ' Add the first one below.' : ''}
                 </span>
@@ -167,9 +161,15 @@ export function LineItemsTable({
                     aria-label={`${label} line ${n} type`}
                     value={line.line_type}
                     disabled={!editable}
-                    onChange={(e) =>
-                      set(i, { line_type: e.target.value as DraftLine['line_type'] })
-                    }
+                    onChange={(e) => {
+                      const line_type = e.target.value as DraftLine['line_type'];
+                      // Labor fills a blank description with "Labor tech N".
+                      const description =
+                        line_type === 'labor' && line.description.trim() === ''
+                          ? nextLaborDescription(lines, i)
+                          : line.description;
+                      set(i, { line_type, description });
+                    }}
                   >
                     {LINE_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
@@ -246,18 +246,6 @@ export function LineItemsTable({
                       {errs.rate}
                     </span>
                   )}
-                </td>
-                <td>
-                  <input
-                    className={`fld pct-in${errs.markup_pct ? ' is-err' : ''}`}
-                    inputMode="decimal"
-                    placeholder="0"
-                    aria-label={`${label} line ${n} markup percent`}
-                    aria-invalid={errs.markup_pct ? true : undefined}
-                    value={line.markup_pct}
-                    disabled={!editable}
-                    onChange={(e) => set(i, { markup_pct: e.target.value })}
-                  />
                 </td>
                 <td>
                   <input

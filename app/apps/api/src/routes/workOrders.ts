@@ -16,7 +16,17 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { CLIENT_MESSAGE_PERM_KEY, MENTION_MAX, MESSAGE_PERM_KEY, WO_MESSAGE_MAX, fieldPermKey, tabPermKey } from '@theone/shared';
+import {
+  CLIENT_MESSAGE_PERM_KEY,
+  MENTION_MAX,
+  MESSAGE_PERM_KEY,
+  STATUS_PERM_KEY,
+  WO_MESSAGE_MAX,
+  fieldPermKey,
+  permAllows,
+  statusMoveNeedsNoApproval,
+  tabPermKey,
+} from '@theone/shared';
 import { ApiError, parse, notFound, badRequest } from '../errors.js';
 import {
   listWorkOrders,
@@ -592,9 +602,20 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
 
   app.patch('/work-orders/:id/status', async (req) => {
     const { p } = acting(req);
-    requirePerm(p, 'work_orders/status', 'edit', 'You cannot change work-order status');
     const { id } = parse(idParamsSchema, req.params);
     const { status_id } = parse(statusBodySchema, req.body);
+    // A request-mode person (status create without edit, rule 2.4.1) may
+    // still move DIRECTLY to a status that needs no approval — Quote Ready,
+    // internal, nothing changes for the client (Elise, 2026-10-22). Anyone
+    // else without edit is refused as before.
+    if (!permAllows(p.perms, STATUS_PERM_KEY, 'edit', p.isSuperAdmin)) {
+      const target = permAllows(p.perms, STATUS_PERM_KEY, 'create', p.isSuperAdmin)
+        ? await query<{ name: string }>(`SELECT name FROM status WHERE id = $1 LIMIT 1`, [status_id])
+        : null;
+      if (!statusMoveNeedsNoApproval(target?.rows[0]?.name)) {
+        requirePerm(p, STATUS_PERM_KEY, 'edit', 'You cannot change work-order status');
+      }
+    }
     if (!(await resolveTaskId(id, p))) throw notFound('Work order not found');
     return changeStatus(id, status_id, actorIdFromRequest(req));
   });

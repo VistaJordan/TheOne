@@ -138,7 +138,7 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
   app.get('/work-orders/:id/payment-requests', async (req) => {
     requirePerm(actingPrincipalFromRequest(req), 'payments', 'view', 'You cannot view payment requests');
     const taskId = await taskIdOf(req);
-    return listPaymentRequests(taskId);
+    return listPaymentRequests(taskId, actingPrincipalFromRequest(req));
   });
 
   app.post('/work-orders/:id/payment-requests', async (req, reply) => {

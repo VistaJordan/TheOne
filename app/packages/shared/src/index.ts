@@ -1172,6 +1172,14 @@ export interface PaymentRequest {
       it would take Cost past the NTE with no approved override covering it,
       or an over-the-quote hold waits on a manager. Null = nothing held. */
   money_hold: string | null;
+  /** 0090: the amount's approval band (rule 6.2.3, Admin › Settings) and
+      whether the VIEWER's role may approve inside it — so Approve locks with
+      the reason before the click. Null when no band covers the amount or the
+      row was read without a viewer. */
+  tier: { label: string; allowed: boolean } | null;
+  /** 0090: approved as it was raised (a dispatcher's request under $500,
+      `paymentApprovalVerdict`) — nobody clicked Approve. */
+  auto_approved: boolean;
 }
 
 /** One row of GET /api/payments — the request plus the work order it sits on. */
@@ -2063,6 +2071,7 @@ export * from './moneyGuards';
 export * from './access';
 // UAT round 1, Wave C (0085): request mode, quote-driven status, visit stamps, cancel / reopen.
 export * from './workflow';
+export * from './paymentApproval';
 // UAT round 1, Wave D (0086): one client list, dispatcher assignees, field validation, history fields.
 export * from './dataQuality';
 // UAT follow-up T1: test sign-in accounts, one per role.

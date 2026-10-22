@@ -855,7 +855,14 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                   onDecide={(kind) => {
                     setError(null);
                     // Claim, acknowledge and withdraw need no note: straight through.
-                    if (kind === 'claim' || kind === 'acknowledge' || kind === 'withdraw') {
+                    // Approving a payment too (Elise, 2026-10-22: no confirm
+                    // popup — the row already says the amount and the payee).
+                    if (
+                      kind === 'claim' ||
+                      kind === 'acknowledge' ||
+                      kind === 'withdraw' ||
+                      (kind === 'approve' && r.data.kind === 'payment')
+                    ) {
                       decide.mutate({ kind, row: r, text: null });
                     } else setPending({ kind, row: r });
                   }}
@@ -932,26 +939,6 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
           note="Approving fills the work order's quote amount. Sending it to the client's CMMS is a separate step in the quote builder."
           noteTone="info"
           confirmLabel="Approve quote"
-          busy={busy}
-          busyLabel="Approving…"
-          onConfirm={() => decide.mutate({ ...pending, text: null })}
-          onCancel={() => setPending(null)}
-        />
-      )}
-
-      {pending?.kind === 'approve' && pending.row.data.kind === 'payment' && (
-        <ConfirmDialog
-          title="Approve this payment?"
-          icon="check-circle"
-          message={
-            <>
-              {usd(pending.row.data.item.amount)} to <b>{payeeLabel(pending.row.data.item)}</b> for{' '}
-              {pending.row.data.item.purpose} on {pending.row.wo_number}.
-            </>
-          }
-          note="Approving clears it for AP to pay. Nothing is paid until AP does."
-          noteTone="info"
-          confirmLabel="Approve payment"
           busy={busy}
           busyLabel="Approving…"
           onConfirm={() => decide.mutate({ ...pending, text: null })}
@@ -1432,14 +1419,20 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
           {verb(
             'Approve',
             'check',
-            canApprovePayments && !row.held && !own(d.item.requested_by?.id) && !d.item.money_hold,
+            canApprovePayments &&
+              !(d.item.tier && !d.item.tier.allowed) &&
+              !row.held &&
+              !own(d.item.requested_by?.id) &&
+              !d.item.money_hold,
             !canApprovePayments
               ? 'Requires payment approval rights'
-              : own(d.item.requested_by?.id)
-                ? OWN
-                : row.held
-                  ? NTE_HOLD
-                  : (d.item.money_hold ?? NTE_HOLD),
+              : d.item.tier && !d.item.tier.allowed
+                ? `${d.item.tier.label}: needs a role allowed for this amount (rule 6.2.3)`
+                : own(d.item.requested_by?.id)
+                  ? OWN
+                  : row.held
+                    ? NTE_HOLD
+                    : (d.item.money_hold ?? NTE_HOLD),
             () => onDecide('approve'),
             'primary',
           )}

@@ -11,6 +11,7 @@ import {
   partsRequiredFilled,
   statusGateFor,
   statusGateTag,
+  statusMoveNeedsNoApproval,
   type DoneGateCheck,
   type StatusGate,
   type StatusRef,
@@ -135,7 +136,10 @@ export function StatusChangeMenu({
 
   const mutation = useMutation({
     mutationFn: async (s: { id: string; name: string }) => {
-      if (mode === 'request') {
+      // A status that needs no approval (Quote Ready — internal, nothing
+      // changes for the client) moves directly even in request mode; the
+      // API lets a create-only actor through for exactly those.
+      if (mode === 'request' && !statusMoveNeedsNoApproval(s.name)) {
         await requestStatusChange(woId, s.id);
         return s.name;
       }
@@ -254,6 +258,7 @@ export function StatusChangeMenu({
                   const gate = active ? null : statusGateFor(s.name, current.name);
                   const gateHit = gate && gateHints ? hintedBlock(gate, gateHints) : null;
                   const gateNote = gate && gateHit ? describeStatusGate(gate, s.name, gateHit.missing) : null;
+                  const direct = !active && mode === 'request' && statusMoveNeedsNoApproval(s.name);
                   return (
                     <button
                       type="button"
@@ -280,6 +285,11 @@ export function StatusChangeMenu({
                       {refusal && (
                         <span className="status-menu-ecotrak" aria-label={refusal}>
                           Ecotrak
+                        </span>
+                      )}
+                      {direct && (
+                        <span className="status-menu-ecotrak status-menu-direct" aria-label="Moves at once — no approval needed">
+                          No approval
                         </span>
                       )}
                       {active && <span className="status-menu-check" aria-hidden="true">✓</span>}

@@ -256,7 +256,11 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
     case 'quote_rejected':
       return <>rejected the quote</>;
     case 'payment_requested':
-      return <>requested a technician payment</>;
+      return e.after?.auto_approved === true ? (
+        <>requested a technician payment — approved as requested (under $500)</>
+      ) : (
+        <>requested a technician payment</>
+      );
     case 'payment_approved':
       return <>approved a technician payment</>;
     case 'payment_rejected':

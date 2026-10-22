@@ -65,11 +65,12 @@ export interface DraftLine {
   /** '' = single day; otherwise the Day number as typed ('2'). */
   day_value: string;
   ot: boolean;
-  /** 0048 · unit of measure ('' = none) and the line's own tax / markup
-      percentages as RAW strings ('' = 0). */
+  /** 0048 · unit of measure ('' = none) and the line's own tax percentage
+      as a RAW string ('' = 0). The per-line Markup % left the builder on
+      2026-10-22 (Elise): a stored markup is folded into `rate` on load and
+      the saved line carries markup_pct 0 from then on. */
   uom: string;
   tax_pct: string;
-  markup_pct: string;
 }
 
 export interface DraftSection {
@@ -130,6 +131,14 @@ function rateToInput(n: number): string {
   return n.toFixed(2);
 }
 
+/** rate × (1 + markup %), to the cent — the server's own marked-up unit
+    price (M27); a line with no markup comes back unchanged. */
+function foldMarkup(rate: number, markupPct: number | null | undefined): number {
+  const pct = markupPct ?? 0;
+  if (!Number.isFinite(rate) || !(pct > 0)) return rate;
+  return Math.round(rate * (1 + pct / 100) * 100) / 100;
+}
+
 // ── Constructors ─────────────────────────────────────────────────────────────
 
 export function blankLine(): DraftLine {
@@ -143,8 +152,17 @@ export function blankLine(): DraftLine {
     ot: false,
     uom: '',
     tax_pct: '',
-    markup_pct: '',
   };
+}
+
+/** The description a Labor line gets when picked on a blank line: "Labor
+    tech N", N counting the section's OTHER labor lines plus one, so the first
+    reads "Labor tech 1". */
+export const LABOR_LINE_DESCRIPTION = 'Labor tech';
+
+export function nextLaborDescription(lines: readonly DraftLine[], index: number): string {
+  const others = lines.filter((l, i) => i !== index && l.line_type === 'labor').length;
+  return `${LABOR_LINE_DESCRIPTION} ${others + 1}`;
 }
 
 export function blankOption(round = 1): DraftSection {
@@ -204,7 +222,10 @@ function sectionToDraft(section: QuoteSection | QuoteDraftSection, currentRound:
       line_type: line.line_type,
       description: line.description,
       qty: qtyToInput(line.qty),
-      rate: rateToInput(line.rate),
+      // The builder has no Markup column any more: a line saved with one
+      // shows the marked-up unit price (what the client already saw, M27)
+      // and is saved back with markup 0 — the amount does not change.
+      rate: rateToInput(foldMarkup(line.rate, line.markup_pct)),
       // A saved line carries the Day as a number; an AI draft line (0054) only
       // as text ("Day 2") — the digits are the Day either way.
       day_value:
@@ -214,7 +235,6 @@ function sectionToDraft(section: QuoteSection | QuoteDraftSection, currentRound:
       ot: line.ot ?? false,
       uom: line.uom ?? '',
       tax_pct: (line.tax_pct ?? 0) > 0 ? String(line.tax_pct) : '',
-      markup_pct: (line.markup_pct ?? 0) > 0 ? String(line.markup_pct) : '',
     })),
     round,
     locked,
@@ -292,7 +312,7 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
         ot: line.ot,
         uom: line.uom.trim() === '' ? null : line.uom.trim(),
         tax_pct: Number.isNaN(parseLinePct(line.tax_pct)) ? 0 : parseLinePct(line.tax_pct),
-        markup_pct: Number.isNaN(parseLinePct(line.markup_pct)) ? 0 : parseLinePct(line.markup_pct),
+        markup_pct: 0,
       })),
   };
 }
