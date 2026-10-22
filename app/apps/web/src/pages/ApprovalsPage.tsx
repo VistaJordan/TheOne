@@ -124,6 +124,7 @@ const SECTION_LABEL: Record<Section, string> = {
   nte: 'NTE override (cost over NTE)',
   money: 'Money holds',
   status: 'Status changes',
+  snooze: 'Snooze requests',
   reviews: 'Manager reviews',
   quotes: 'Quotes',
   payments: 'Payments',
@@ -135,6 +136,7 @@ const KIND_CHIP: Record<Kind, string> = {
   nte: 'NTE override',
   money: 'Money hold',
   status: 'Status change',
+  snooze: 'Snooze',
   reviews: 'Review',
   quotes: 'Quote',
   payments: 'Payment',
@@ -589,6 +591,12 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
     ...(canSeeSection('status') || rows.some((r) => r.section === 'status' && r.requester)
       ? (['status'] as Section[])
       : []),
+    // Elise, 2026-10-22: Pulse snoozes asked for by people who may not snooze
+    // directly; shown once one exists, or when the viewer raised one.
+    ...((canSeeSection('snooze') && rows.some((r) => r.section === 'snooze')) ||
+    rows.some((r) => r.section === 'snooze' && r.requester)
+      ? (['snooze'] as Section[])
+      : []),
     ...(canSeeSection('reviews') && rows.some((r) => r.section === 'reviews') ? (['reviews'] as Section[]) : []),
     ...(canSeeQuotes ? (['quotes'] as Section[]) : []),
     ...(canSeePayments ? (['payments'] as Section[]) : []),
@@ -914,7 +922,9 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
               ? 'Approve this NTE increase?'
               : pending.row.data.item.type === 'status_change'
                 ? 'Approve this status change?'
-                : 'Approve this task?'
+                : pending.row.data.item.type === 'snooze_request'
+                  ? 'Approve this snooze?'
+                  : 'Approve this task?'
           }
           facts={facts(pending.row)}
           idKey={pending.row.key}
@@ -961,7 +971,9 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                     ? 'Reject this status change'
                     : pending.row.data.item.type === 'wo_acceptance'
                       ? 'Reject this work order'
-                      : 'Reject this task'
+                      : pending.row.data.item.type === 'snooze_request'
+                        ? 'Reject this snooze request'
+                        : 'Reject this task'
           }
           facts={facts(pending.row)}
           idKey={pending.row.key}
@@ -1153,6 +1165,15 @@ function Ask({ row }: { row: Row }) {
           </strong>
           {move && d.item.created_by && (
             <small>Requested by {d.item.created_by.display_name}</small>
+          )}
+          {d.item.type === 'snooze_request' && (
+            <small>
+              {d.item.created_by ? `Requested by ${d.item.created_by.display_name}` : 'Requested'}
+              {typeof (d.item.detail as { hours?: unknown }).hours === 'number'
+                ? ` · ${(d.item.detail as { hours: number }).hours}h`
+                : ''}
+              {row.open ? ' · the clock keeps running until this is approved' : ''}
+            </small>
           )}
         </div>
       );

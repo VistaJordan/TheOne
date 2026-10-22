@@ -2705,6 +2705,45 @@ a line already sits past Day 1 (`linesSpanDays`); every line saves `day =
 before). The Summary card has **no Edit text**: the text is always the
 generated one; a quote pinned earlier keeps its refresh control.
 
+**Probation cannot change the Client or the FM** (migration 0093, Elise
+2026-10-22; `PROBATION_LOCKED_FIELD_PATHS` / `PROBATION_FIELD_LOCKED_ROLES`
+in `packages/shared/src/workflow.ts`, `tests/snooze-requests.test.ts`). A
+permission, not code, like the 0039 Assignee lock: 0093 sets `fields.Client`
+and `fields.22. FM` (section `client`) to edit false for `om_probation`
+only, so `assertFieldWrites` refuses the write and the editor draws them
+read-only; OM and Senior OM keep the edit. Its own list because the wave-c
+test pins `DISPATCHER_LOCKED_FIELD_PATHS` to 0085's file. Loosen it in
+Admin › Roles or per person with Adjust.
+
+**Snooze as a request** (no migration, Elise 2026-10-22; shared
+`snoozeMode` / `SNOOZE_PERM_KEY` / `SnoozeRequestDetail` /
+`ObligationSnoozeRequest` in `index.ts`, `services/obligations.ts`
+`requestSnooze` / `applySnoozeFromRequest` / `snoozeRequestStale`,
+`tests/snooze-requests.test.ts`). The fifth kind riding the approval-task
+table: a Pulse snooze by someone without **`approvals/snooze` approve**
+(a new inbox section, unset inherits `approvals`, so the managers who
+decide the inbox snooze directly and the dispatcher tiers, VR Officer and OP
+Admin ask) raises a `snooze_request` task on the clock's work order (same
+bounds, reason and rule-8.5 scope as a direct snooze; a clock with no work
+order is refused — nowhere to raise it; the tier-3 leadership rule is not
+asked, the approver is the leadership). `POST /obligations/:id/snooze`
+answers `{obligation, requested: true, approval_task_id}` and nothing
+moves: the obligation carries `snooze_request` (hours, reason, who, when;
+a correlated subselect in `OBLIGATION_SELECT`) and the Pulse card, the
+Watching row and the work order's Obligations card read "Snooze requested"
+with the button disabled; the dialog's button reads **Request snooze**.
+`decide` approves it in the **Snooze requests** lane (`approvals/snooze`
+approve; maker ≠ checker as every task), refusing one whose clock has
+since been resolved or snoozed directly (409 `SNOOZE_REQUEST_STALE`) and,
+after the commit, applying the snooze as the manager's act (`snoozed_by` =
+the approver, the requester's reason; the `obligation_snoozed` row carries
+`via: 'approval_task'`, the task id and the requester) and re-running the
+evaluator. `reconcileApprovalTasks` cancels a stale one with the reason.
+One open request per work order (`createApprovalTask`'s one-open-per-type,
+a repeat replaces it and becomes the asker's, as a status request does).
+The audit rows are the task's own (`approval_task_*`) plus
+`obligation_snoozed`.
+
 ## Verify
 
 ```

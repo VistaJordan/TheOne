@@ -97,6 +97,16 @@ export const DISPATCHER_LOCKED_FIELD_PATHS = [
 ] as const;
 export const FIELD_LOCKED_ROLES = [...REQUEST_MODE_DISPATCHER_ROLES, 'vr_officer'] as const;
 
+/** Elise, 2026-10-22 (migration 0093): an OM Under Probation does not change
+    who the work order is for — the Client and the FM are view-only for that
+    role. Its own list, apart from 0085's, because the wave-c test pins that
+    list to 0085's file; Admin › Roles or Adjust can loosen it per person. */
+export const PROBATION_LOCKED_FIELD_PATHS = [
+  'work_orders/fields/client/fields.Client',
+  'work_orders/fields/client/fields.22. FM',
+] as const;
+export const PROBATION_FIELD_LOCKED_ROLES = ['om_probation'] as const;
+
 // ── M5 · the status follows the quote ────────────────────────────────────────
 // The lifecycle (docs/lifecycle.ts): Quote Ready → Waiting for Approval when
 // the quote goes to the client; → Approved when the client says yes. A

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Obligation } from '../../api/client';
 import { ApiRequestError, snoozeObligation } from '../../api/client';
+import { useAuth } from '../../auth/AuthProvider';
+import { SNOOZE_PERM_KEY } from '@theone/shared';
 import { useInvalidateObligations } from '../../hooks/useObligations';
 import { TIER_LABEL, ruleFullLabel, tierOf } from '../../lib/obligations';
 import { Icon } from '../Icon';
@@ -27,11 +29,21 @@ export function SnoozeDialog({ ob, onClose }: SnoozeDialogProps) {
   const qc = useQueryClient();
   const invalidateObligations = useInvalidateObligations();
   const tier = tierOf(ob);
+  // Elise, 2026-10-22: without `approvals/snooze` approve the snooze is a
+  // REQUEST a manager decides in the Approvals inbox; the clock keeps running
+  // until they approve. The API decides the same way (snoozeMode).
+  const { can } = useAuth();
+  const requestOnly = !can(SNOOZE_PERM_KEY, 'approve');
+  const span = hours < 24 ? `${hours}h` : `${hours / 24}d`;
 
   const mutation = useMutation({
     mutationFn: () => snoozeObligation(ob.id, { hours, reason: reason.trim() }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       invalidateObligations();
+      if (res.requested) {
+        void qc.invalidateQueries({ queryKey: ['approvals'] });
+        void qc.invalidateQueries({ queryKey: ['approval-counts'] });
+      }
       // A snooze writes an activity row against the work order.
       if (ob.wo_id) {
         void qc.invalidateQueries({ queryKey: ['wo-activity', ob.wo_id] });
@@ -62,8 +74,9 @@ export function SnoozeDialog({ ob, onClose }: SnoozeDialogProps) {
         <p className="sheet-b">
           <b>{ruleFullLabel(ob)}</b>
           {ob.wo_number ? ` · ${ob.wo_number}` : ''} · currently {TIER_LABEL[tier].toLowerCase()}.
-          Snoozing moves the deadline and records the reason on the work order — it does not
-          resolve anything.
+          {requestOnly
+            ? ' A snooze is a request here: a manager approves it in Approvals and the deadline moves then. The clock keeps running until they do.'
+            : ' Snoozing moves the deadline and records the reason on the work order — it does not resolve anything.'}
         </p>
 
         <div className="snooze-field">
@@ -97,7 +110,7 @@ export function SnoozeDialog({ ob, onClose }: SnoozeDialogProps) {
           />
         </label>
 
-        {tier >= 3 && (
+        {tier >= 3 && !requestOnly && (
           <p className="snooze-note" role="note">
             <Icon name="alert" size={12} />
             This obligation is critical — only ATL and above can snooze it.
@@ -122,7 +135,9 @@ export function SnoozeDialog({ ob, onClose }: SnoozeDialogProps) {
             title={trimmed.length === 0 ? 'A reason is required' : undefined}
             onClick={() => mutation.mutate()}
           >
-            {mutation.isPending ? 'Snoozing…' : `Snooze ${hours < 24 ? `${hours}h` : `${hours / 24}d`}`}
+            {mutation.isPending
+              ? requestOnly ? 'Sending…' : 'Snoozing…'
+              : requestOnly ? `Request snooze ${span}` : `Snooze ${span}`}
           </button>
         </div>
       </div>

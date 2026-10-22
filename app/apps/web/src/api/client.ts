@@ -922,6 +922,14 @@ export interface Obligation extends ObligationSummary {
   owed_role?: string | null;
   snooze_reason?: string | null;
   snoozed_until?: string | null;
+  /** An open snooze request on this clock (Elise, 2026-10-22), or null. */
+  snooze_request?: {
+    approval_task_id: string;
+    hours: number;
+    reason: string;
+    requested_by: string | null;
+    requested_at: string;
+  } | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -1103,8 +1111,13 @@ export function markAllNotificationsRead(): Promise<void> {
 
 /** POST /api/obligations/:id/snooze — moves due_at and logs the reason.
     403 when a tier-3 obligation is snoozed by someone below ATL. */
-export function snoozeObligation(id: string, input: SnoozeInput): Promise<{ obligation?: Obligation }> {
-  return request<{ obligation?: Obligation }>(
+/** `requested` (Elise, 2026-10-22): the person may not snooze directly, so a
+    snooze_request task was raised instead and the clock has not moved. */
+export function snoozeObligation(
+  id: string,
+  input: SnoozeInput,
+): Promise<{ obligation?: Obligation; requested?: boolean; approval_task_id?: string }> {
+  return request<{ obligation?: Obligation; requested?: boolean; approval_task_id?: string }>(
     `/obligations/${encodeURIComponent(id)}/snooze`,
     { method: 'POST', body: JSON.stringify(input) },
   );

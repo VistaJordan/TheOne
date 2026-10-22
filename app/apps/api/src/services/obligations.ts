@@ -47,6 +47,7 @@
 // full run is in flight shares the in-flight run instead of starting another.
 
 import { query } from '../db.js';
+import type { ObligationSnoozeRequest, SnoozeRequestDetail } from '@theone/shared';
 import type {
   Obligation,
   ObligationOwner,
@@ -975,6 +976,8 @@ interface ObligationRow {
   status_name: string | null;
   owner_name: string | null;
   owner_role: string | null;
+  /** The open snooze_request task on this clock, if any (Elise, 2026-10-22). */
+  snooze_request: ObligationSnoozeRequest | null;
 }
 
 const OBLIGATION_SELECT = `
@@ -985,7 +988,18 @@ const OBLIGATION_SELECT = `
          ${ISO('o.created_at')} AS created_at, ${ISO('o.updated_at')} AS updated_at,
          t.wo_number, t.title AS wo_title, t.client,
          s.name AS status_name,
-         p.display_name AS owner_name, p.role AS owner_role
+         p.display_name AS owner_name, p.role AS owner_role,
+         (SELECT jsonb_build_object(
+                   'approval_task_id', a.id::text,
+                   'hours', (a.detail ->> 'hours')::numeric,
+                   'reason', a.detail ->> 'reason',
+                   'requested_by', rq.display_name,
+                   'requested_at', ${ISO('a.created_at')})
+            FROM approval_task a
+            LEFT JOIN principal rq ON rq.id = a.created_by
+           WHERE a.type = 'snooze_request' AND a.status = 'open'
+             AND a.detail ->> 'obligation_id' = o.id::text
+           ORDER BY a.created_at DESC LIMIT 1) AS snooze_request
     FROM obligation o
     LEFT JOIN task t ON t.id = o.task_id
     LEFT JOIN status s ON s.id = t.status_id
@@ -1051,6 +1065,9 @@ function mapObligation(row: ObligationRow, rules: Map<string, Rule>, actor: Acti
     clock_label: clockLabel(row.clock),
     snooze_reason: row.snooze_reason,
     snoozed_until: row.status === 'snoozed' ? row.due_at : null,
+    snooze_request: row.snooze_request
+      ? { ...row.snooze_request, hours: Number(row.snooze_request.hours) }
+      : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -1402,10 +1419,39 @@ export async function snoozeObligation(
     });
   }
 
+  await applySnooze(ob, hours, trimmed, actor.id, null);
+
+  const rules = await loadRules();
+  const res = await query<ObligationRow>(`${OBLIGATION_SELECT} WHERE o.id = $1`, [ob.id]);
+  if (res.rows.length === 0) throw notFound('Obligation not found');
+  return mapObligation(res.rows[0], rules, actor, new Date());
+}
+
+/** The clock as the snooze paths read it — what snoozeObligation checks. */
+interface SnoozeTarget {
+  id: string;
+  tier: number;
+  clock: ClockKind;
+  status: ObligationState;
+  task_id: string | null;
+  rule_key: string;
+}
+
+/**
+ * The snooze itself: the clock moves and the trail says so. Shared by a
+ * direct snooze and by an approved snooze request (`via` names the task).
+ * A business-clock snooze is measured in BUSINESS hours: "give me 4 hours" at
+ * 16:00 means until 10:00 tomorrow, not until 20:00 tonight when nobody is
+ * working. An emergency snooze is wall time, like its clock.
+ */
+async function applySnooze(
+  ob: SnoozeTarget,
+  hours: number,
+  reason: string,
+  byId: string,
+  via: { approval_task_id: string; requested_by: string | null } | null,
+): Promise<string> {
   const now = new Date();
-  // A business-clock snooze is measured in BUSINESS hours: "give me 4 hours" at
-  // 16:00 means until 10:00 tomorrow, not until 20:00 tonight when nobody is
-  // working. An emergency snooze is wall time, like its clock.
   const until = addClockMs(ob.clock, now, hours * 3_600_000);
 
   await query(
@@ -1413,7 +1459,7 @@ export async function snoozeObligation(
         SET status = 'snoozed', opened_at = $2, due_at = $3, tier = 0,
             snooze_reason = $4, snoozed_by = $5, snoozed_at = now()
       WHERE id = $1`,
-    [ob.id, now.toISOString(), until.toISOString(), trimmed, actor.id],
+    [ob.id, now.toISOString(), until.toISOString(), reason, byId],
   );
 
   // The audit trail. `obligation_snoozed` is prefixed so the emergency_ack
@@ -1424,22 +1470,137 @@ export async function snoozeObligation(
          (actor_principal_id, entity_type, entity_id, action, field, before, after)
        VALUES ($1, 'task', $2, 'obligation_snoozed', 'obligation.due_at', $3::jsonb, $4::jsonb)`,
       [
-        actor.id,
+        byId,
         ob.task_id,
         JSON.stringify({ obligation_id: ob.id, rule_key: ob.rule_key, tier: ob.tier }),
         JSON.stringify({
           obligation_id: ob.id,
           rule_key: ob.rule_key,
           hours,
-          reason: trimmed,
+          reason,
           due_at: until.toISOString(),
+          ...(via ? { via: 'approval_task', approval_task_id: via.approval_task_id, requested_by: via.requested_by } : {}),
         }),
       ],
     );
   }
+  return until.toISOString();
+}
+
+/**
+ * Elise, 2026-10-22: a person without `approvals/snooze` approve does not
+ * snooze — they ASK. The same checks as a direct snooze (bounds, reason,
+ * scope), then a `snooze_request` approval task on the clock's work order
+ * carrying the hours and the reason; a manager approves it in the Snooze
+ * requests lane and the snooze is applied as the decision commits. The
+ * clock keeps running meanwhile (the Pulse says "Snooze requested"). A
+ * clock with no work order has nowhere to raise a task, so it is refused.
+ * The tier-3 rule is not asked here: the manager who approves is the
+ * leadership the rule wants.
+ */
+export async function requestSnooze(
+  id: string,
+  hours: number,
+  reason: string,
+  actor: ActingPrincipal,
+): Promise<{ approval_task_id: string; created: boolean; obligation: Obligation }> {
+  if (!(await obligationsReady())) throw notFound('Obligation not found');
+  if (!(hours > 0) || hours > SNOOZE_MAX_HOURS) {
+    throw badRequest(`Snooze must be between 1 and ${SNOOZE_MAX_HOURS} hours`, { hours });
+  }
+  const trimmed = reason.trim();
+  if (trimmed.length === 0) throw badRequest('A snooze needs a reason');
+
+  const p = new Params();
+  const scope = woScopeSql(actor, p);
+  const cur = await query<SnoozeTarget & { in_scope: boolean; due_at: string }>(
+    `SELECT o.id::text AS id, o.tier, o.clock, o.status, o.task_id::text AS task_id, o.rule_key,
+            ${ISO('o.due_at')} AS due_at,
+            ${scope ? `COALESCE(${scope}, FALSE)` : 'TRUE'} AS in_scope
+       FROM obligation o
+       LEFT JOIN task t ON t.id = o.task_id
+      WHERE o.id = ${p.add(id)} AND o.status <> 'resolved' LIMIT 1`,
+    p.values,
+  );
+  if (cur.rows.length === 0) throw notFound('Obligation not found');
+  const ob = cur.rows[0];
+  if (!ob.in_scope) throw outOfScope();
+  if (!ob.task_id) {
+    throw badRequest('This clock is not on a work order, so a snooze cannot be requested for it — ask a manager to snooze it.', {
+      obligation_id: ob.id,
+    });
+  }
 
   const rules = await loadRules();
+  const rule = rules.get(ob.rule_key);
+  const detail: SnoozeRequestDetail = {
+    obligation_id: ob.id,
+    rule_key: ob.rule_key,
+    rule_name: rule?.name ?? ob.rule_key,
+    hours,
+    reason: trimmed,
+    clock: ob.clock,
+    tier: ob.tier,
+    due_at: ob.due_at,
+  };
+  const { createApprovalTask } = await import('./approvals.js');
+  const { item, created } = await createApprovalTask({
+    taskId: ob.task_id,
+    type: 'snooze_request',
+    actorId: actor.id,
+    preset: {
+      title: `Snooze requested: ${detail.rule_name} for ${hours < 24 ? `${hours}h` : `${hours / 24}d`} — ${trimmed}`,
+      detail: { ...detail },
+    },
+  });
+
   const res = await query<ObligationRow>(`${OBLIGATION_SELECT} WHERE o.id = $1`, [ob.id]);
   if (res.rows.length === 0) throw notFound('Obligation not found');
-  return mapObligation(res.rows[0], rules, actor, new Date());
+  return { approval_task_id: item.id, created, obligation: mapObligation(res.rows[0], rules, actor, new Date()) };
+}
+
+/** Why an open snooze request can no longer be applied, or null while the
+    clock is still waiting on it. Asked by the inbox before an approval
+    commits and by reconcile, so a stale ask is refused / cancelled with
+    the reason instead of snoozing a clock that already moved. */
+export async function snoozeRequestStale(detail: Partial<SnoozeRequestDetail>): Promise<string | null> {
+  if (!detail.obligation_id || !(await obligationsReady())) return 'The obligation no longer exists';
+  const res = await query<{ status: ObligationState }>(
+    `SELECT status FROM obligation WHERE id = $1 LIMIT 1`,
+    [detail.obligation_id],
+  );
+  const st = res.rows[0]?.status;
+  if (!st) return 'The obligation no longer exists';
+  if (st === 'resolved') return 'The obligation was resolved in the meantime';
+  if (st === 'snoozed') return 'The obligation was snoozed directly in the meantime';
+  return null;
+}
+
+/**
+ * The approval's half: the snooze a `snooze_request` asked for, applied as
+ * the manager's act (snoozed_by = the approver; the reason is the
+ * requester's). Called by approvals.decide AFTER its transaction commits.
+ * Returns the new deadline, or null when the clock had already moved.
+ */
+export async function applySnoozeFromRequest(
+  detail: Partial<SnoozeRequestDetail>,
+  approvalTaskId: string,
+  approverId: string,
+  requestedBy: string | null,
+): Promise<string | null> {
+  if (!detail.obligation_id || typeof detail.hours !== 'number' || typeof detail.reason !== 'string') return null;
+  if (await snoozeRequestStale(detail)) return null;
+  const res = await query<SnoozeTarget>(
+    `SELECT id::text AS id, tier, clock, status, task_id::text AS task_id, rule_key
+       FROM obligation WHERE id = $1 LIMIT 1`,
+    [detail.obligation_id],
+  );
+  const ob = res.rows[0];
+  if (!ob) return null;
+  const until = await applySnooze(ob, detail.hours, detail.reason, approverId, {
+    approval_task_id: approvalTaskId,
+    requested_by: requestedBy,
+  });
+  await evaluateNow();
+  return until;
 }

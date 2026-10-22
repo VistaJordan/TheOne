@@ -39,8 +39,10 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   snoozeObligation,
+  requestSnooze,
   SNOOZE_MAX_HOURS,
 } from '../services/obligations.js';
+import { snoozeMode } from '@theone/shared';
 
 const obligationQuerySchema = z.object({
   /** Work-order uuid or WO number. */
@@ -148,6 +150,13 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
     const { hours, reason } = parse(snoozeSchema, req.body);
     const actor = actingPrincipalFromRequest(req);
     requirePerm(actor, 'work_orders', 'view', 'You cannot snooze obligations');
+    // Elise, 2026-10-22: without `approvals/snooze` approve the snooze is a
+    // REQUEST — a manager decides it in the Approvals inbox and the clock
+    // moves when they approve. Nothing moves here for them.
+    if (snoozeMode(actor.perms, actor.isSuperAdmin) === 'request') {
+      const { approval_task_id, created, obligation } = await requestSnooze(id, hours, reason, actor);
+      return { obligation, requested: true, approval_task_id, created };
+    }
     const obligation = await snoozeObligation(id, hours, reason, actor);
     // The snooze changed the world the evaluator reads; re-run so the very next
     // read (the web invalidates immediately) already agrees with it.

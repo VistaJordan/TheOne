@@ -735,6 +735,7 @@ export function buildPermissionTree(
         { key: 'approvals/intake', label: 'Pending acceptance', actions: ['view', 'approve'], note: 'New work orders waiting for a manager to accept and assign, or reject (rule 7.1).' },
         { key: 'approvals/nte', label: 'NTE increases', actions: ['view', 'approve'] },
         { key: 'approvals/status', label: 'Status changes', actions: ['view', 'approve'], note: 'Requests raised under rule 2.4.1. A person always sees their own.' },
+        { key: 'approvals/snooze', label: 'Snooze requests', actions: ['view', 'approve'], note: 'Approve = snooze a Pulse clock directly. Without it a snooze is a request a manager decides here. A person always sees their own.' },
         { key: 'approvals/reviews', label: 'Manager reviews', actions: ['view', 'approve'] },
         { key: 'approvals/quotes', label: 'Quotes', actions: ['view'], note: 'Deciding stays with Quotes › Approve.' },
         { key: 'approvals/payments', label: 'Payments', actions: ['view'], note: 'Deciding stays with Payments › Approve.' },

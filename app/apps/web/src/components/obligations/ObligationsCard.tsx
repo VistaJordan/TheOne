@@ -73,16 +73,23 @@ export function ObligationsCard({ items, loading, error }: ObligationsCardProps)
                   <button
                     type="button"
                     className="obl-snooze"
+                    disabled={!!ob.snooze_request}
+                    title={ob.snooze_request ? 'A snooze request is waiting for a manager in Approvals' : undefined}
                     onClick={() => setSnoozing(ob)}
                   >
                     <Icon name="clock" size={12} />
-                    Snooze
+                    {ob.snooze_request ? 'Snooze requested' : 'Snooze'}
                   </button>
                 </div>
                 {ob.state === 'snoozed' && ob.snooze_reason && (
                   <p className="obl-why">Snoozed — {ob.snooze_reason}</p>
                 )}
-                {ob.state !== 'snoozed' && why && <p className="obl-why">{why}</p>}
+                {ob.state !== 'snoozed' && ob.snooze_request && (
+                  <p className="obl-why">
+                    Snooze requested ({ob.snooze_request.hours}h) — {ob.snooze_request.reason} · waiting for a manager
+                  </p>
+                )}
+                {ob.state !== 'snoozed' && !ob.snooze_request && why && <p className="obl-why">{why}</p>}
               </li>
             );
           })}

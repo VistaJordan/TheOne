@@ -205,6 +205,10 @@ function PulseCard({ ob, now, onSnooze }: CardProps) {
 
       {ob.state === 'snoozed' && ob.snooze_reason ? (
         <p className="pulse-card-why">Snoozed — {ob.snooze_reason}</p>
+      ) : ob.snooze_request ? (
+        <p className="pulse-card-why">
+          Snooze requested ({ob.snooze_request.hours}h) — {ob.snooze_request.reason} · waiting for a manager
+        </p>
       ) : (
         why && <p className="pulse-card-why">{why}</p>
       )}
@@ -214,9 +218,16 @@ function PulseCard({ ob, now, onSnooze }: CardProps) {
           <span className="pulse-avatar" aria-hidden="true">{owner.initials}</span>
           <span className="pulse-owner-name">{owner.name}</span>
         </span>
-        <button type="button" className="obl-snooze" onClick={() => onSnooze(ob)}>
+        {/* Elise, 2026-10-22: one open request per clock — it waits in Approvals. */}
+        <button
+          type="button"
+          className="obl-snooze"
+          disabled={!!ob.snooze_request}
+          title={ob.snooze_request ? 'A snooze request is waiting for a manager in Approvals' : undefined}
+          onClick={() => onSnooze(ob)}
+        >
           <Icon name="clock" size={12} />
-          Snooze
+          {ob.snooze_request ? 'Snooze requested' : 'Snooze'}
         </button>
       </div>
     </article>
@@ -252,8 +263,9 @@ function PulseMiniRow({ ob, now, onSnooze }: CardProps) {
       <button
         type="button"
         className="pulse-mini-snooze"
-        aria-label="Snooze this obligation"
-        title="Snooze"
+        aria-label={ob.snooze_request ? 'Snooze requested — waiting for a manager' : 'Snooze this obligation'}
+        title={ob.snooze_request ? 'Snooze requested — waiting for a manager' : 'Snooze'}
+        disabled={!!ob.snooze_request}
         onClick={() => onSnooze(ob)}
       >
         <Icon name="clock" size={12} />

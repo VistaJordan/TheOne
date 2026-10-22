@@ -3,6 +3,8 @@
 // Web imports these as `import type { ... }` (erased at build time) and never
 // imports the DB runtime.
 
+import { permAllows, type PermissionSet } from './permissions';
+
 // ── Status groups ────────────────────────────────────────────────────────────
 // Since 0013 the phase groups live in the `status_group_def` table (admins can
 // add their own), so the type is an open string. The five every install starts
@@ -1358,6 +1360,9 @@ export interface Obligation extends ObligationSummary {
   clock_label: string;
   snooze_reason: string | null;
   snoozed_until: string | null;
+  /** An open `snooze_request` task on this clock (Elise, 2026-10-22), or
+      null. The Pulse says "Snooze requested" instead of offering another. */
+  snooze_request: ObligationSnoozeRequest | null;
   created_at: string;
   updated_at: string;
 }
@@ -1444,7 +1449,10 @@ export type ApprovalTaskType =
   // UAT round 1, Wave A (0083, D1b): the money holds a payment or a vendor
   // bill raises when it would go past the approved quote / what is owed.
   | 'over_quote'
-  | 'bill_over_owed';
+  | 'bill_over_owed'
+  // Elise, 2026-10-22: a Pulse snooze asked for by someone who may not
+  // snooze directly (no `approvals/snooze` approve). Applied by the approval.
+  | 'snooze_request';
 
 export type ApprovalTaskStatus = 'open' | 'approved' | 'rejected' | 'cancelled';
 
@@ -1458,17 +1466,53 @@ export const APPROVALS_PERM_KEY = 'approvals';
  * `view` here — deciding those stays with `quotes:approve` and the payments
  * grant, so the money rules keep one gate.
  */
-export type ApprovalSectionKey = 'intake' | 'nte' | 'money' | 'status' | 'reviews' | 'quotes' | 'payments';
+export type ApprovalSectionKey = 'intake' | 'nte' | 'money' | 'status' | 'snooze' | 'reviews' | 'quotes' | 'payments';
 
 export const APPROVAL_SECTIONS: { key: ApprovalSectionKey; label: string; decides: boolean }[] = [
   { key: 'intake', label: 'Pending acceptance', decides: true },
   { key: 'nte', label: 'NTE increases', decides: true },
   { key: 'money', label: 'Money holds', decides: true },
   { key: 'status', label: 'Status changes', decides: true },
+  { key: 'snooze', label: 'Snooze requests', decides: true },
   { key: 'reviews', label: 'Manager reviews', decides: true },
   { key: 'quotes', label: 'Quotes', decides: false },
   { key: 'payments', label: 'Payments', decides: false },
 ];
+
+/** `approvals/snooze` (Elise, 2026-10-22): approve = snooze a Pulse clock
+    directly; anyone else raises a `snooze_request` a manager decides. Unset
+    inherits from `approvals`, so the managers who approve the inbox snooze
+    directly and the dispatchers (view only) ask. */
+export const SNOOZE_PERM_KEY = 'approvals/snooze';
+
+export type SnoozeMode = 'direct' | 'request';
+
+/** What a snooze does for this person: applies at once, or asks a manager. */
+export function snoozeMode(perms: PermissionSet, isSuperAdmin = false): SnoozeMode {
+  return permAllows(perms, SNOOZE_PERM_KEY, 'approve', isSuperAdmin) ? 'direct' : 'request';
+}
+
+/** What a `snooze_request` task carries (approval_task.detail). */
+export interface SnoozeRequestDetail {
+  obligation_id: string;
+  rule_key: string;
+  rule_name: string;
+  hours: number;
+  reason: string;
+  clock: string;
+  tier: number;
+  /** The deadline as it stood when the request was raised. */
+  due_at: string;
+}
+
+/** An open snooze request, as the Pulse draws it on the obligation. */
+export interface ObligationSnoozeRequest {
+  approval_task_id: string;
+  hours: number;
+  reason: string;
+  requested_by: string | null;
+  requested_at: string;
+}
 
 export function approvalSectionPermKey(section: ApprovalSectionKey): string {
   return `${APPROVALS_PERM_KEY}/${section}`;
@@ -1482,6 +1526,8 @@ export function approvalSectionOf(type: ApprovalTaskType): ApprovalSectionKey {
       ? 'money'
       : type === 'status_change'
       ? 'status'
+      : type === 'snooze_request'
+        ? 'snooze'
       : type === 'wo_acceptance'
         ? 'intake'
         : 'reviews';
@@ -1513,6 +1559,7 @@ export const APPROVAL_TASK_LABEL: Record<ApprovalTaskType, string> = {
   wo_acceptance: 'Work order acceptance',
   over_quote: 'Over the approved quote',
   bill_over_owed: 'Vendor bill over what is owed',
+  snooze_request: 'Snooze request',
 };
 
 // ── Pending acceptance (rules 7.1.1 – 7.1.4) ─────────────────────────────────

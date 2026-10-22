@@ -53,6 +53,7 @@ import {
   selfApprovalVerdict,
   STATUS_REQUEST_HIDDEN_CODE,
   describeRequestHidden,
+  type SnoozeRequestDetail,
 } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -75,6 +76,9 @@ const TYPES = new Set<string>([
   // 0083 (D1b): raised by a payment or a vendor bill, never by a rule.
   'over_quote',
   'bill_over_owed',
+  // Elise, 2026-10-22: a Pulse snooze asked for by someone who may not
+  // snooze directly (obligations.requestSnooze); never by a rule.
+  'snooze_request',
 ]);
 const STATUSES: ApprovalTaskStatus[] = ['open', 'approved', 'rejected', 'cancelled'];
 
@@ -452,7 +456,7 @@ export async function createApprovalTask(
             SET title = $1, detail = $2::jsonb, updated_at = now(),
                 created_by = CASE WHEN $4::boolean THEN $5::uuid ELSE created_by END
           WHERE id = $3`,
-        [title, JSON.stringify(detail), open.rows[0].id, input.type === 'status_change', input.actorId],
+        [title, JSON.stringify(detail), open.rows[0].id, input.type === 'status_change' || input.type === 'snooze_request', input.actorId],
       );
       // Rule 1.2.1: the refresh is a change to the record, so it is logged —
       // the trail shows both asks, not just the last one.
@@ -615,6 +619,20 @@ async function decide(
     await assertEcotrakAllowsMove(cur.task_id, hit.rows[0].name);
     moveTo = hit.rows[0].id;
   }
+  // Elise, 2026-10-22: a snooze request whose clock already moved — resolved
+  // by evidence, or snoozed directly by a manager — is refused BEFORE the
+  // decision commits (409), so an approval never promises a snooze it
+  // cannot apply. Reject or withdraw it instead.
+  if (to === 'approved' && cur.type === 'snooze_request') {
+    const { snoozeRequestStale } = await import('./obligations.js');
+    const stale = await snoozeRequestStale(cur.detail as Partial<SnoozeRequestDetail>);
+    if (stale) {
+      throw conflict(`${stale}, so this snooze request cannot be approved. Reject it with a note instead.`, {
+        code: 'SNOOZE_REQUEST_STALE',
+        approval_task_id: id,
+      });
+    }
+  }
   // Rule 7.1.2: rejecting a new work order parks it in Cancelled / Postponed.
   // The status is looked up by name, so a renamed pipeline says so up front
   // instead of leaving the task decided and the work order where it was.
@@ -717,6 +735,18 @@ async function decide(
   if (assignee !== null) {
     const { updateWorkOrderFields } = await import('./woFieldValues.js');
     await updateWorkOrderFields(cur.task_id, { [`fields.${K_ASSIGNEE}`]: assignee }, actor.id);
+  }
+  // Elise, 2026-10-22: an approved snooze request IS the snooze — applied
+  // after the commit as the manager's act (snoozed_by), with the
+  // requester's hours and reason; the obligation_snoozed row names the task.
+  if (to === 'approved' && cur.type === 'snooze_request') {
+    const { applySnoozeFromRequest } = await import('./obligations.js');
+    await applySnoozeFromRequest(
+      cur.detail as Partial<SnoozeRequestDetail>,
+      id,
+      actor.id,
+      cur.created_by?.display_name ?? null,
+    );
   }
   return getApprovalTask(id);
 }
@@ -901,8 +931,27 @@ export async function reconcileApprovalTasks(taskId: string, actorId: string): P
     await reconcileMoneyHolds(taskId, actorId);
     await reconcileStatusChange(taskId, actorId);
     await reconcileAcceptance(taskId, actorId);
+    await reconcileSnoozeRequests(taskId, actorId);
   } catch (err) {
     console.error('[approvals] reconcile failed:', err);
+  }
+}
+
+/** Elise, 2026-10-22: an open snooze request whose clock already moved —
+    resolved by evidence, or snoozed directly by a manager — is closed with
+    the reason rather than left for a manager to approve a snooze that
+    cannot be applied. */
+async function reconcileSnoozeRequests(taskId: string, actorId: string): Promise<void> {
+  const open = await query<{ id: string; title: string; detail: Record<string, unknown> | null }>(
+    `SELECT id::text AS id, title, detail FROM approval_task
+      WHERE task_id = $1 AND type = 'snooze_request' AND status = 'open'`,
+    [taskId],
+  );
+  if (open.rows.length === 0) return;
+  const { snoozeRequestStale } = await import('./obligations.js');
+  for (const r of open.rows) {
+    const why = await snoozeRequestStale((r.detail ?? {}) as Partial<SnoozeRequestDetail>);
+    if (why) await cancelTask(taskId, r.id, 'snooze_request', r.title, why, actorId, r.detail);
   }
 }
 
@@ -1295,7 +1344,7 @@ export async function withdrawApprovalTask(id: string, actor: ActingPrincipal): 
  */
 export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalCounts> {
   const allow = allowFor(viewer);
-  const decideTypes = (['wo_acceptance', 'nte_override', 'over_quote', 'bill_over_owed', 'status_change', 'manager_review'] as ApprovalTaskType[]).filter(
+  const decideTypes = (['wo_acceptance', 'nte_override', 'over_quote', 'bill_over_owed', 'status_change', 'snooze_request', 'manager_review'] as ApprovalTaskType[]).filter(
     (t) => allow(approvalSectionPermKey(approvalSectionOf(t)), 'approve'),
   );
   const p = new Params();
