@@ -181,7 +181,7 @@ export const PLATFORM_PART: DocPart = {
         },
         {
           name: 'Field-level visibility and redaction',
-          what: 'Every work-order field is a row under its section (Overview, Finances, Dates, People, CICO, Payables, Invoicing, AR, QC, Integrations, …; the promoted columns under "Work order header", unknown custom fields under "More fields"). A field a role cannot view is removed from every payload the API sends (promoted columns nulled, hidden keys stripped, the whole money block hidden when the NTE is hidden; identity, number, title and status always ship); editing a field needs view and edit; a hidden field is absent from the catalogue the list, the filters and the exports offer.',
+          what: 'Every work-order field is a row under its section (Overview, Finances, Dates, Penalties, People, CICO, Payables, Invoicing, AR, QC, Integrations, …; the promoted columns under "Work order header", unknown custom fields under "More fields"). A field a role cannot view is removed from every payload the API sends (promoted columns nulled, hidden keys stripped, the whole money block hidden when the NTE is hidden; identity, number, title and status always ship); editing a field needs view and edit; a hidden field is absent from the catalogue the list, the filters and the exports offer.',
           value: 'Cost, profit and client NTE can be kept from roles that should not see them, including in exports and the assistant.',
           rules: [
             'UAT M13 (0084): every role but Admin, TL, ATL, AM, AR and AP has Cost, Profit, Total Invoiced and Discount hidden and no invoicing view; the computed Margin % column (and the margin on the money block and the Cost breakdown tab) stays visible.',

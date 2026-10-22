@@ -866,12 +866,15 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                     setError(null);
                     // Claim, acknowledge and withdraw need no note: straight through.
                     // Approving a payment too (Elise, 2026-10-22: no confirm
-                    // popup — the row already says the amount and the payee).
+                    // popup — the row already says the amount and the payee),
+                    // and approving a status change (same day: the row says
+                    // from and to; no confirmation, no note).
                     if (
                       kind === 'claim' ||
                       kind === 'acknowledge' ||
                       kind === 'withdraw' ||
-                      (kind === 'approve' && r.data.kind === 'payment')
+                      (kind === 'approve' && r.data.kind === 'payment') ||
+                      (kind === 'approve' && r.data.kind === 'task' && r.data.item.type === 'status_change')
                     ) {
                       decide.mutate({ kind, row: r, text: null });
                     } else setPending({ kind, row: r });

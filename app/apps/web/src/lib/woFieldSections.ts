@@ -47,6 +47,7 @@ const SECTION_ICONS: Record<string, IconName> = {
   payments: 'card',
   invoicing: 'clipboard',
   ar: 'flag',
+  penalties: 'alert',
   qc: 'check-check',
   other: 'dots',
   integrations: 'plug',

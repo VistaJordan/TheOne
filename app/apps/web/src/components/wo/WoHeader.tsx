@@ -27,6 +27,7 @@ import { StatusPill } from '../StatusPill';
 import { PhaseBar } from './PhaseBar';
 import { StatusChangeBanner } from './StatusChangeBanner';
 import { AcceptanceChip } from './AcceptanceChip';
+import { AssignDialog } from './AssignDialog';
 import { SharePointFolderChip } from '../SharePointFolderChip';
 
 /** One labelled amount in the worth block. The currency sign is drawn
@@ -103,6 +104,14 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
   const escalatedKey = `fields.${FIELD.escalated}`;
   const canEscalate = useCanEditField(escalatedKey);
   const escalateSave = useWoFieldSave(wo.id);
+  // 2026-10-22 · reassign or unassign from the top: the assignee chip opens
+  // the dispatcher picker for whoever may edit the Assignee field (the
+  // dispatcher tiers are view-only on it, 0039). The write is the ordinary
+  // field save — audited, mirrored, scoped, gated by 11.1.1 like any other.
+  const assigneeKey = `fields.${FIELD.assignee}`;
+  const canAssign = useCanEditField(assigneeKey);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const assignSave = useWoFieldSave(wo.id, () => setAssignOpen(false));
   // Rule 11.3.4: the approved files, from the same cache entry the Photos
   // card draws, so approving a photo untags Done / Incurred at once.
   const attachments = useQuery({
@@ -134,13 +143,29 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
   // move up beside the status so the fold never hides them.
   const whoAndWorth = (
     <>
-      <span
-        className={`chip${assignee ? '' : ' chip-outline'}`}
-        title={assignee ? 'Assignee — the dispatcher handling this work order' : 'No assignee yet'}
-      >
-        <Icon name="user" size={12} />
-        {assignee ?? 'Unassigned'}
-      </span>
+      {canAssign ? (
+        <button
+          type="button"
+          className={`chip chip-btn${assignee ? '' : ' chip-outline'}`}
+          onClick={() => {
+            assignSave.clearError();
+            setAssignOpen(true);
+          }}
+          title={assignee ? 'Assignee — click to reassign or unassign' : 'No assignee yet — click to assign'}
+        >
+          <Icon name="user" size={12} />
+          {assignee ?? 'Unassigned'}
+          <Icon name="chev-d" size={12} />
+        </button>
+      ) : (
+        <span
+          className={`chip${assignee ? '' : ' chip-outline'}`}
+          title={assignee ? 'Assignee — the dispatcher handling this work order' : 'No assignee yet'}
+        >
+          <Icon name="user" size={12} />
+          {assignee ?? 'Unassigned'}
+        </span>
+      )}
       <span
         className={`worth${overNte ? ' is-over' : ''}`}
         title={
@@ -319,6 +344,18 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
 
       <PhaseBar current={phase} statusName={wo.status.name} visited={wo.phases_visited} />
         </>
+      )}
+      {assignOpen && (
+        <AssignDialog
+          woNumber={wo.wo_number}
+          client={wo.client ?? null}
+          current={assignee ?? null}
+          busy={assignSave.isPending}
+          error={assignSave.error}
+          onAssign={(name) => assignSave.mutate({ key: assigneeKey, value: name })}
+          onUnassign={() => assignSave.mutate({ key: assigneeKey, value: null })}
+          onCancel={() => setAssignOpen(false)}
+        />
       )}
     </section>
   );

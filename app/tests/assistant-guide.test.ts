@@ -86,6 +86,11 @@ const FROM_SHARED: Record<string, { file: string; literal?: string }> = {
   'Not on the form': { file: 'packages/shared/src/woCreate.ts' },
   'On the form': { file: 'packages/shared/src/woCreate.ts' },
   'Parts Required': { file: 'packages/shared/src/statusGates.ts' },
+  // 0094 · the Penalties fields are field_def labels, named in shared.
+  // (Penalty, Missed ETA and Recall happen to occur in the web source.)
+  'Bad Quote': { file: 'packages/shared/src/managerFlags.ts' },
+  'Late Quote': { file: 'packages/shared/src/managerFlags.ts' },
+  'Manager Description': { file: 'packages/shared/src/managerFlags.ts' },
 };
 
 describe('every bold label in the guide is in the web source', () => {

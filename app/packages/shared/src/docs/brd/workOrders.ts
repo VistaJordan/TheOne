@@ -246,7 +246,7 @@ export const WORK_ORDERS_PART: DocPart = {
     {
       key: 'incoming',
       title: 'Incoming Work Orders: acceptance and drafts',
-      where: 'Sidebar › Incoming Work Orders: To accept and Drafts tabs (the strip shows when the person holds both; with one grant the page is that queue).',
+      where: 'Sidebar › Incoming Work Orders: To accept, Unassigned and Drafts tabs (To accept and Unassigned come with approvals/intake view, Drafts with intake view; the strip shows when the person holds more than one tab).',
       purpose: 'One door for every work order on its way in: the queue a manager accepts from and assigns, and the OP Admin\'s drafting area.',
       value: 'The inbox of client traffic is a queue with a badge, not an email folder; a work order cannot reach a dispatcher half-filled.',
       users: ['Team Lead', 'Assistant TL', 'Account Manager', 'Admin', 'Operations Admin'],
@@ -260,6 +260,14 @@ export const WORK_ORDERS_PART: DocPart = {
           audit: ['approval_task_created', 'approval_task_approved', 'approval_task_rejected', 'approval_task_cancelled', 'comment_added', 'field_updated (Assignee)'],
           brd: ['7.1.1', '7.1.2', '7.1.3', '7.1.4'],
           since: '0036',
+        },
+        {
+          name: 'Unassigned',
+          what: 'Every live work order (open, active or pending) whose Assignee seat is empty — from Ecotrak or the CSV import, typed in, or unassigned from the header — oldest received first, with Assign per row ("Assign this work order?", Assign to with Who\'s available?, Assign). The same dispatcher picker opens from the assignee chip in a work order\'s header: "Reassign this work order?" with Reassign and Unassign. Both are an ordinary Assignee field save, so the 11.1.1 gate, the dispatcher check, the audit row, the mirror columns and the scope all apply.',
+          value: 'Nothing falls between the acceptance queue and a dispatcher\'s list: a job nobody carries is always on one screen, and handing it on takes one click from the top of the work order.',
+          permissions: ['approvals/intake view (the tab)', 'work_orders/fields/people/fields.Assignee edit (Assign, Reassign, Unassign — the dispatcher tiers are view-only on it, 0039)'],
+          audit: ['field_updated (Assignee)'],
+          since: '2026-10-22',
         },
         {
           name: 'Ready to Assign gate',

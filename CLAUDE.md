@@ -2744,6 +2744,37 @@ a repeat replaces it and becomes the asker's, as a status request does).
 The audit rows are the task's own (`approval_task_*`) plus
 `obligation_snoozed`.
 
+**Profitability exception, Penalties, Unassigned, reassign from the top,
+one-click status approval** (migration 0094, Elise 2026-10-22;
+`packages/shared/src/managerFlags.ts` + `unassigned.ts` pure,
+`tests/manager-flags.test.ts`). **Finances** gains two custom fields,
+`Profitability Exception` (checkbox) and `Profitability Exception Notes`
+(long text, drawn as "Manager notes"), as rows on the Finances card
+(`MoneyCard`) under Discount. **Penalties** is a new `FIELD_SECTIONS` section
+(slug `penalties`, permission path `work_orders/fields/penalties`): `12. Bad
+quote` MOVED there from AR (its permission path changed), beside the new
+`Penalty`, `Late Quote`, `Missed ETA`, `Recall` (checkboxes) and `Penalty
+Description` ("Manager description"); `CLIENT_UNSAFE_SECTION_SLUGS` lists it.
+0094 inserts the seven rows (seed.ts carries the same — keep in step) and sets
+edit false for `MANAGER_FLAG_LOCKED_ROLES` (the dispatcher tiers, vr_officer,
+oa) on the section and the two Finances paths. **Incoming › Unassigned**
+(`/incoming/unassigned`, `pages/UnassignedPage.tsx`, `approvals/intake` view,
+third tab of `IncomingTabs`, which now shows the strip whenever more than one
+tab is held): the ordinary `/work-orders` list under `unassignedWorkFilter()`
+(`fields.Assignee` is_not_set AND status_group in open / active / pending,
+oldest received first, `UNASSIGNED_LIST_CAP` 500), scoped like any list, with
+**Assign** per row for whoever may edit the Assignee field. **Reassign /
+unassign from the header**: the assignee chip in `WoHeader` is a button for
+the same people and opens `components/wo/AssignDialog.tsx` (the Accept
+flow's dispatcher picker, no note) with **Reassign** and **Unassign**; both
+are a plain `fields.Assignee` save through `useWoFieldSave` (null clears),
+so the audit row, the mirror columns, `assertDispatchers`, the 11.1.1 gate
+and the scope apply as on the People tab. Nothing raises an acceptance task
+on unassign: the Unassigned tab is where such a work order shows.
+**Approving a status change in the inbox is one click** — the row already
+says from and to; the confirm dialog and the note are gone for
+`status_change` (like a payment since 0090); Reject still asks the reason.
+
 ## Verify
 
 ```

@@ -19,6 +19,7 @@ import {
   ROLE_EDIT_RESTRICTED_CODE,
   SELF_EDIT_CODE,
   activityFieldKey,
+  MANAGER_FLAG_NEW_FIELDS,
   clientUnsafeDefaultBagKeys,
   defaultClientSafe,
   dispatcherTier,
@@ -95,7 +96,10 @@ describe('migration 0084 (D4: the role matrix lives here)', () => {
     const list = MIGRATION.match(/UPDATE field_def SET client_safe = false\s+WHERE key = ANY \(ARRAY\[([\s\S]*?)\]::text\[\]\)/);
     expect(list).not.toBeNull();
     const keys = [...list![1].matchAll(/'((?:[^']|'')*)'/g)].map((m) => m[1]).sort();
-    expect(keys).toEqual(clientUnsafeDefaultBagKeys());
+    // 0094 added the Penalties section and the two Finances rows after 0084
+    // and flags them itself; the seed still re-applies the whole shared list.
+    const since0094 = new Set(MANAGER_FLAG_NEW_FIELDS.map((f) => f.key));
+    expect(keys).toEqual(clientUnsafeDefaultBagKeys().filter((k) => !since0094.has(k)));
     const seed = src('packages/db/src/seed.ts');
     expect(seed).toMatch(/UPDATE field_def SET client_safe = false WHERE key = ANY\(\$1::text\[\]\)`, \[clientUnsafeDefaultBagKeys\(\)\]/);
   });

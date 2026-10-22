@@ -7,6 +7,7 @@ import { DASH, FIELD, field, isCostOverNte, money, num, numericDate, str } from 
 import { NTE_WARN_PCT, nteBasis, resolveMoney } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 import { InlineField } from './fieldEdit';
+import { PROFITABILITY_EXCEPTION_KEY, PROFITABILITY_NOTES_KEY } from '@theone/shared';
 
 interface MoneyCardProps {
   wo: WorkOrderDetailV2;
@@ -96,6 +97,21 @@ export function MoneyCard({ wo }: MoneyCardProps) {
         />
         <MoneyRow wo={wo} label="Total invoiced" fieldKey={`fields.${FIELD.invoiced}`} value={m.invoiced} />
         <MoneyRow wo={wo} label="Discount" fieldKey="fields.Discount" value={discount} />
+        {/* 2026-10-22 (0094): a manager accepts this job's margin as it is and
+            says why. Two ordinary fields of the Finances section; the
+            dispatcher tiers are view-only on them. */}
+        <div className="kvrow">
+          <dt>Profitability exception</dt>
+          <dd>
+            <InlineField wo={wo} fieldKey={`fields.${PROFITABILITY_EXCEPTION_KEY}`} label="Profitability exception" />
+          </dd>
+        </div>
+        <div className="kvrow">
+          <dt>Manager notes</dt>
+          <dd>
+            <InlineField wo={wo} fieldKey={`fields.${PROFITABILITY_NOTES_KEY}`} label="Manager notes" />
+          </dd>
+        </div>
         <div className="kvrow is-total">
           <dt>Profit</dt>
           <dd className={[

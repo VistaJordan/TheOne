@@ -379,6 +379,15 @@ const CURATED_FIELDS: CuratedField[] = [
   // photo and a sign-off instead of an after photo. KEEP IN STEP with 0061.
   { key: 'Bill For Incurred',        label: 'Bill For Incurred',    type: 'checkbox' },
   { key: '12. Bad quote',            label: 'Bad Quote',            type: 'checkbox' },
+  // 2026-10-22 (0094): the Finances profitability exception and the Penalties
+  // section (shared managerFlags.ts). KEEP IN STEP with migration 0094.
+  { key: 'Profitability Exception',       label: 'Profitability Exception', type: 'checkbox' },
+  { key: 'Profitability Exception Notes', label: 'Manager Notes',           type: 'long_text' },
+  { key: 'Penalty',                  label: 'Penalty',              type: 'checkbox' },
+  { key: 'Late Quote',               label: 'Late Quote',           type: 'checkbox' },
+  { key: 'Missed ETA',               label: 'Missed ETA',           type: 'checkbox' },
+  { key: 'Recall',                   label: 'Recall',               type: 'checkbox' },
+  { key: 'Penalty Description',      label: 'Manager Description',  type: 'long_text' },
   { key: '16. Client NTE 🔴',        label: 'Client NTE',           type: 'currency' },
   { key: '17. Address',              label: 'Address',              type: 'location' },
   { key: '20. Last Update',          label: 'Last Update',          type: 'short_text' },

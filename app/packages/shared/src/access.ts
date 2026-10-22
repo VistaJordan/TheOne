@@ -78,7 +78,7 @@ export function moneyHiddenPermKeys(): string[] {
 // Payments (AP), Invoicing and AR sections; on everywhere else. Core columns
 // are not field_defs: the one money column among them (Margin %) is off.
 
-export const CLIENT_UNSAFE_SECTION_SLUGS = ['finances', 'payments', 'invoicing', 'ar'] as const;
+export const CLIENT_UNSAFE_SECTION_SLUGS = ['finances', 'payments', 'invoicing', 'ar', 'penalties'] as const;
 export const CLIENT_UNSAFE_CORE_KEYS = [MARGIN_PCT_KEY] as const;
 
 /** The default for a catalogue key, before anyone flips it in Admin › Custom fields. */

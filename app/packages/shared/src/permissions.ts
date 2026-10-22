@@ -169,6 +169,9 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       'fields.Profit',
       'fields.Discount',
       'fields.Client Quote',
+      // 2026-10-22 (0094): a manager accepts the margin as it is, and says why.
+      'fields.Profitability Exception',
+      'fields.Profitability Exception Notes',
     ],
   },
   {
@@ -239,7 +242,6 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
     title: 'AR',
     slug: 'ar',
     keys: [
-      'fields.12. Bad quote',
       'fields.Admin Comment',
       'fields.Grey Flag Date',
       'fields.Quote Check',
@@ -248,6 +250,20 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       // Rule 11.3.4's BFI_Checkbox (0061): ticked, Done / Incurred asks for a
       // before photo and a sign-off instead of an after photo.
       'fields.Bill For Incurred',
+    ],
+  },
+  {
+    // 2026-10-22 (0094): what went wrong on the job, a manager's call — Bad
+    // quote moved here from AR. Keys in PENALTY_FIELDS (managerFlags.ts).
+    title: 'Penalties',
+    slug: 'penalties',
+    keys: [
+      'fields.12. Bad quote',
+      'fields.Penalty',
+      'fields.Late Quote',
+      'fields.Missed ETA',
+      'fields.Recall',
+      'fields.Penalty Description',
     ],
   },
   {

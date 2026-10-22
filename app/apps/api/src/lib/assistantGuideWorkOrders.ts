@@ -42,12 +42,15 @@ Needs \`work_orders\` view. A person limited to their own work orders sees a "Yo
 Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view): **Overview** (the landing tab: deadlines, updates and activity, the soft-close checklist), **All fields**, **Finances** (sub-tabs **Finances**: money, client quote, invoice; **Payables**: vendor bills, purchasing, payment history; **Cost breakdown**), **Dates**, **CICO** (the ETA, the visit log, and the timelog: time on site, time in each status, technician time), **People** (sub-tabs **Our team**: our people and the **Assignment history**; **Technicians**: the responsible vendor, technicians, suggested vendors, dispatch), **Site**, **Parts**, **Drive** (the photos and files), **Messages**, **Audit trail**. There is no Flags tab (the flags are checkboxes in All fields). Checklist and Related have no tab button; a link to them (for example from Maintenance › Work permits) still opens them. The header opens unfolded on every work order.
 
 - Edit a field: on **All fields**, click the value, change it, click the tick. **Search fields…** finds a field. Needs \`work_orders\` edit and edit on that field.
+- Mark a profitability exception: on **Finances**, the **Profitability exception** checkbox and the **Manager notes** text under the money rows say the margin on this job is accepted as it is, and why. A manager's call: the dispatcher tiers, the VR Officer and the OP Admin see them but cannot change them.
+- Record a penalty: on **All fields**, the Penalties section holds the **Bad Quote**, **Penalty**, **Late Quote**, **Missed ETA** and **Recall** checkboxes and the **Manager Description** text. Same rule: managers edit them, the dispatcher tiers see them.
   - The visit fields (Visit Type, Check-in/out Status, Checked-in At, Checked-out At, Tech Name, Tech Phone Number, CICO Method) cannot be typed: they follow the latest visit, so edit the visit on the CICO tab.
   - Quote Due Date cannot be typed: it is computed from the assessment visit's check-out.
   - **Cost** fills itself in: paying a payment request adds its amount to Cost, and deleting a paid one takes it back out. Once a payment has written it, it cannot be typed. A work order with no paid payment request still takes a typed Cost.
   - **Total Invoiced** fills itself in: when the work order's invoice is sent it becomes the invoice total. It can never be typed.
   - Profit is always Total Invoiced minus Cost.
 - Change the status: **Change status** in the header, pick a status. Needs \`work_orders/status\` edit.
+- Reassign or unassign from the header: click the assignee chip (it reads the dispatcher's name, or Unassigned), pick someone under **Assign to** and click **Reassign**, or click **Unassign** to clear the seat — the work order then shows under Incoming Work Orders › Unassigned. Needs edit on the Assignee field (the dispatcher tiers are view-only on it).
 - Request a status change: for people who must request, the same button reads **Request status change**. Pick a status; a manager approves or rejects it in Approvals, and the result shows on a chip in the header. Statuses ticked **Managers only** in Admin › Custom fields › Statuses (Approved, Waiting for Advice, Waiting for Approval, Ready to Invoice, Cancelled / Postponed by default) are not offered to them at all — a manager moves the work order there, or Send to client and the client's approval do.
 - Statuses the app holds back until the work order is ready (the menu tags them):
   - Quote Ready needs a quote with at least one line or scope item.
@@ -89,9 +92,10 @@ Checklist (no tab button; opened from a link to the work order's checklist): typ
 
 ### Incoming Work Orders (sidebar: Incoming Work Orders)
 
-Two tabs: **To accept** (needs \`approvals/intake\` view) and **Drafts** (needs \`intake\` view).
+Three tabs: **To accept** and **Unassigned** (both need \`approvals/intake\` view) and **Drafts** (needs \`intake\` view).
 
 - Accept a work order: on **To accept** click **Accept**, choose **Assign to**, click **Accept and assign** (needs \`approvals/intake\` approve). **Who’s available?** beside Assign to lists the people assigned to that client in Admin › Users, or **All dispatchers**, each with the number of active work orders they hold across every client; **Fewest first** / **Most first** flips the order, the chevron on a row shows their work orders per status, and clicking a name picks them. The same button sits beside the Assignee on **New work order**, on a draft, and on the Assignee seat of a work order. Accept stays locked while the row says **Fill before assigning: …**; the fields it needs are Received on, Due date, SLA, Address, City, State, Zip code, Store, Trade, WO description, FM, Comp and Client NTE.
 - Reject one: **Reject**, type the reason, **Reject with note**.
+- Give an unassigned work order a dispatcher: on **Unassigned** (every live work order whose Assignee is empty, oldest first) click **Assign**, pick the dispatcher under **Assign to**, click **Assign**. Needs edit on the Assignee field (the dispatcher tiers are view-only on it).
 - Draft a new work order: on **Drafts** click **New work order** (needs \`intake\` create), fill the fields and the **Assignee**, **Save draft** to keep it, and when it shows **Ready to submit** click **Submit & assign** (needs \`intake\` edit). That creates the work order already assigned.
 - **Discard**, then **Yes, discard**, removes a draft.`;
