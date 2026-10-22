@@ -892,6 +892,34 @@ phone only for imported rows; the webhook matches by number so never sees
 them), parsed by `parseTranscriptFile` in shared, logged `call_transcribed`
 with `source: 'imported'` + `file_name`. The browser then opens the AI draft
 page on it, which drafts straight away; everything after is the call path.
+**From a Quo call** (no migration, 2026-10-22, Elise's ask; the dialog's
+second mode under "Where is the conversation?"): a call the person already
+had on their Quo line but did not place from the work order. They type the
+other party's number; `GET /work-orders/:id/quo-calls?phone=` (`quotes`
+edit) finds THEIR Quo lines by the email they signed in with
+(`listQuoPhoneNumbers` + `quoLinesForEmail`, the line's `users[].email`;
+Quo runs on the same Byblos Vista accounts), lists the calls between each
+line and the number over `QUO_CALL_LOOKUP_DAYS` (90, `listQuoCalls`: Quo's
+`GET /calls` wants ONE `phoneNumberId` and ONE participant) and answers
+`QuoCallsLookup` — newest first, `QUO_CALL_LOOKUP_MAX` 25, each with
+`answered` (an unanswered call has no transcript) and `already_on` (the
+`wo_call` row holding that `quo_call_id`, same work order or another).
+`POST …/quo-calls/:quoCallId/import {phone, contact_name?, contact_role?}`
+(`importQuoCall`) checks the call is on one of those lines AND with that
+number (`getQuoCall`), fetches `GET /call-transcripts/{id}`
+(`getQuoTranscript`; a 404 reads `absent`), refuses 409 `QUO_NO_TRANSCRIPT`
+(in-progress says so), `QUO_CALL_USED` (on another work order — `quo_call_id`
+is UNIQUE since 0054, so one Quo call is one row), `QUO_CALL_MISMATCH`,
+`QUO_API_MISSING` / `QUO_NO_EMAIL`, and INSERTs a `wo_call` row with the
+number, purpose `quote`, status `transcribed`, `transcript_source 'quo'`,
+Quo's id, user, direction, stamps and duration — a same-work-order row with
+no transcript yet is filled in instead, one with a transcript is returned as
+is. Logged `call_transcribed` with `source: 'quo'`, `fetched_from_quo:
+true`, `quo_call_id`, `call_at`. `quoDialogueToLines` (shared) is the one
+dialogue → lines mapping, used by the webhook too. Reading needs only
+`QUO_API_KEY` + the Quo switch (`quoReadReady`; `QUO_FROM_NUMBER` is for
+sending); each Quo read is bounded (15 s) and never retried. Tests:
+`tests/quo-call-lookup.test.ts`.
 
 **Sign-off sheets** (migration 0070, `services/signoff.ts`,
 `lib/signoffPdf.ts`, `lib/signoffAssets.ts`, `lib/quoApi.ts`,

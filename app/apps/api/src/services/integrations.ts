@@ -141,11 +141,16 @@ async function sharepointConfigured(): Promise<Configured> {
 async function configuredOf(key: IntegrationKey): Promise<Configured> {
   switch (key) {
     case 'quo': {
+      const read = config.quoApiKey !== null;
       const send = Boolean(config.quoApiKey && config.quoFromNumber);
       const hook = config.quoWebhookSecret !== null;
-      if (send && hook) return { configured: true, note: `Sending from ${config.quoFromNumber} · webhook secret set.` };
-      const missing = [!send && 'QUO_API_KEY / QUO_FROM_NUMBER (sending)', !hook && 'QUO_WEBHOOK_SECRET (events coming back)'].filter(Boolean);
-      return { configured: send || hook, note: `Missing ${missing.join(' and ')}.` };
+      if (send && hook) return { configured: true, note: `Sending from ${config.quoFromNumber} · reading calls · webhook secret set.` };
+      const missing = [
+        !read && 'QUO_API_KEY (reading calls, Import transcript › From a Quo call)',
+        !send && 'QUO_API_KEY / QUO_FROM_NUMBER (sending)',
+        !hook && 'QUO_WEBHOOK_SECRET (events coming back)',
+      ].filter(Boolean);
+      return { configured: read || hook, note: `Missing ${missing.join(' and ')}.` };
     }
     case 'ecotrak':
       return ecotrakConfigured();

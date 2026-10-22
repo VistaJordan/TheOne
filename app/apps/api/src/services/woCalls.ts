@@ -22,11 +22,19 @@ import {
   CALL_EXPIRE_HOURS,
   CALL_MATCH_AFTER_MINUTES,
   CALL_MATCH_BEFORE_MINUTES,
+  QUO_CALL_LOOKUP_DAYS,
+  QUO_CALL_LOOKUP_MAX,
   displayCallStatus,
   normalizePhone,
+  quoCallOption,
+  quoDialogueToLines,
+  quoLinesForEmail,
+  sortQuoCallOptions,
 } from '@theone/shared';
 import type {
   AiQuoteDraftStatus,
+  QuoCallOption,
+  QuoCallsLookup,
   WoCall,
   WoCallContactRole,
   WoCallPurpose,
@@ -36,7 +44,9 @@ import type {
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import type { Queryable } from '../db.js';
-import { badRequest, notFound } from '../errors.js';
+import { badRequest, conflict, notFound } from '../errors.js';
+import { getQuoCall, getQuoTranscript, listQuoCalls, listQuoPhoneNumbers, quoReadReady } from '../lib/quoApi.js';
+import { integrationOn } from './integrations.js';
 import type { ActingPrincipal } from './activity.js';
 import { serviceActorId } from './serviceActors.js';
 
@@ -354,14 +364,7 @@ async function onTranscript(obj: Record<string, unknown>): Promise<QuoEventOutco
 
   const theirs = target.contact_name ?? 'Contact';
   const ours = target.placed_by_name ?? 'Seamless FM';
-  const lines: WoCallTranscriptLine[] = dialogue
-    .map((d) => ({
-      speaker: normalizePhone(text(d.identifier)) === target!.phone ? theirs : ours,
-      line: text(d.content) ?? '',
-      start: typeof d.start === 'number' ? Math.round(d.start * 10) / 10 : null,
-    }))
-    .filter((l) => l.line !== '')
-    .sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  const lines: WoCallTranscriptLine[] = quoDialogueToLines(dialogue, target.phone, theirs, ours);
   const duration = typeof obj.duration === 'number' ? Math.round(obj.duration) : null;
 
   const actorId = await quoActorId();
@@ -423,4 +426,189 @@ async function logCall(
      VALUES ($1, 'task', $2, $3, NULL, NULL, $4::jsonb)`,
     [actorId, taskId, action, JSON.stringify(after)],
   );
+}
+
+// ── A transcript fetched from Quo for a call the person already had ──────────
+//
+// Import transcript › From a Quo call. The call was not placed from the work
+// order (no wo_call row, no webhook match), so the person types the other
+// party's number, we find THEIR Quo lines by the email they signed in with,
+// list the calls between those lines and the number, and on the pick fetch
+// the transcript and store it keyed by Quo's call id — quo_call_id is UNIQUE,
+// so one Quo call is one row, whoever imports it and however often.
+
+type QuoLine = { id: string; number: string | null; name: string | null };
+
+function quoNotReady(): { configured: false; reason: string } | null {
+  if (quoReadReady()) return null;
+  return {
+    configured: false,
+    reason: integrationOn('quo')
+      ? 'Reading calls from Quo is not set up on the server (QUO_API_KEY).'
+      : 'The Quo integration is switched off in Admin › Integrations.',
+  };
+}
+
+/** The person's own Quo lines, by the email they signed in with. */
+async function quoLinesOf(email: string | null): Promise<QuoLine[]> {
+  if (!email) throw conflict('Your account has no email address, so your Quo line cannot be found', { code: 'QUO_NO_EMAIL' });
+  const numbers = await listQuoPhoneNumbers();
+  return quoLinesForEmail(numbers, email).map((n) => ({
+    id: n.id,
+    number: normalizePhone(n.number ?? n.formattedNumber ?? null),
+    name: n.name ?? null,
+  }));
+}
+
+/** The rows already holding these Quo call ids, by id. */
+async function alreadyOnRows(
+  quoIds: string[],
+  taskId: string,
+): Promise<Map<string, NonNullable<QuoCallOption['already_on']>>> {
+  const out = new Map<string, NonNullable<QuoCallOption['already_on']>>();
+  if (quoIds.length === 0) return out;
+  const res = await query<{ quo_call_id: string; id: string; task_id: string; wo_number: string }>(
+    `SELECT c.quo_call_id, c.id::text AS id, c.task_id::text AS task_id, t.wo_number
+       FROM wo_call c JOIN task t ON t.id = c.task_id
+      WHERE c.quo_call_id = ANY($1::text[])`,
+    [quoIds],
+  );
+  for (const r of res.rows) {
+    out.set(r.quo_call_id, { call_id: r.id, task_id: r.task_id, wo_number: r.wo_number, same_work_order: r.task_id === taskId });
+  }
+  return out;
+}
+
+/** The recent calls between the person's Quo line(s) and `phoneRaw`. */
+export async function lookupQuoCalls(taskId: string, phoneRaw: string, email: string | null): Promise<QuoCallsLookup> {
+  const phone = normalizePhone(phoneRaw);
+  if (!phone) throw badRequest('That is not a phone number Quo can look up', { field: 'phone' });
+  const off = quoNotReady();
+  if (off) return { ...off, lines: [], phone, calls: [] };
+
+  const lines = await quoLinesOf(email);
+  if (lines.length === 0) {
+    return {
+      configured: true,
+      reason: `No Quo line is shared with ${email} — Quo must know you under the email you sign in with.`,
+      lines: [],
+      phone,
+      calls: [],
+    };
+  }
+  const createdAfter = new Date(Date.now() - QUO_CALL_LOOKUP_DAYS * 24 * 3600 * 1000);
+  const perLine = await Promise.all(
+    lines.map(async (line) => {
+      const rows = await listQuoCalls({ phoneNumberId: line.id, participant: phone, createdAfter, maxResults: QUO_CALL_LOOKUP_MAX });
+      return rows.map((r) => ({ line, row: r }));
+    }),
+  );
+  const all = perLine.flat();
+  const used = await alreadyOnRows(all.map((x) => x.row.id), taskId);
+  const calls = sortQuoCallOptions(all.map((x) => quoCallOption(x.row, x.line, used.get(x.row.id) ?? null)));
+  return { configured: true, reason: null, lines, phone, calls };
+}
+
+export interface ImportQuoCallArgs {
+  phone: string;
+  contact_name: string | null;
+  contact_role: WoCallContactRole;
+}
+
+/** Fetch one Quo call's transcript and keep it on the work order as a
+    transcribed call (purpose 'quote'), or return the row that already holds
+    it. Refused when the call is not between the person's line and the
+    number, when it sits on another work order, or when Quo has no
+    transcript for it. */
+export async function importQuoCall(
+  taskId: string,
+  quoCallId: string,
+  input: ImportQuoCallArgs,
+  actor: ActingPrincipal,
+  email: string | null,
+): Promise<WoCall> {
+  const phone = normalizePhone(input.phone);
+  if (!phone) throw badRequest('That is not a phone number Quo can look up', { field: 'phone' });
+  const off = quoNotReady();
+  if (off) throw conflict(off.reason, { code: 'QUO_API_MISSING' });
+  if (!/^[A-Za-z0-9_-]{2,80}$/.test(quoCallId)) throw badRequest('That is not a Quo call id', { field: 'quo_call_id' });
+
+  // Already stored? Same work order with a transcript = done; same work order
+  // without one = fill it in; another work order = not usable here.
+  const held = (await alreadyOnRows([quoCallId], taskId)).get(quoCallId) ?? null;
+  if (held && !held.same_work_order) {
+    throw conflict(`That call is already on work order ${held.wo_number}`, { code: 'QUO_CALL_USED', wo_number: held.wo_number });
+  }
+  if (held) {
+    const existing = await getCall(taskId, held.call_id);
+    if ((existing.transcript?.length ?? 0) > 0) return existing;
+  }
+
+  const lines = await quoLinesOf(email);
+  const call = await getQuoCall(quoCallId);
+  if (!call) throw notFound('Quo has no call with that id');
+  const onMyLine = lines.some((l) => l.id === call.phoneNumberId);
+  const withPhone = (call.participants ?? []).some((p) => normalizePhone(p) === phone);
+  if (!onMyLine || !withPhone) {
+    throw conflict('That call is not between your Quo line and this number', { code: 'QUO_CALL_MISMATCH' });
+  }
+
+  const tr = await getQuoTranscript(quoCallId);
+  const dialogue = Array.isArray(tr.dialogue) ? tr.dialogue : [];
+  if (tr.status === 'in-progress') {
+    throw conflict('Quo is still transcribing that call — try again in a few minutes', { code: 'QUO_NO_TRANSCRIPT', status: tr.status });
+  }
+  if (tr.status !== 'completed' || dialogue.length === 0) {
+    throw conflict('Quo has no transcript for that call', { code: 'QUO_NO_TRANSCRIPT', status: tr.status });
+  }
+  const theirs = input.contact_name ?? 'Contact';
+  const transcript = quoDialogueToLines(dialogue, phone, theirs, actor.name);
+  if (transcript.length === 0) throw conflict('The transcript Quo sent is empty', { code: 'QUO_NO_TRANSCRIPT', status: tr.status });
+
+  const answeredAt = date(call.answeredAt);
+  const completedAt = date(call.completedAt);
+  const duration =
+    typeof call.duration === 'number' && Number.isFinite(call.duration)
+      ? Math.max(0, Math.round(call.duration))
+      : typeof tr.duration === 'number' && Number.isFinite(tr.duration)
+        ? Math.round(tr.duration)
+        : null;
+  const direction = call.direction === 'incoming' ? 'incoming' : 'outgoing';
+
+  const id = await withTransaction(async (tx) => {
+    let callId: string;
+    if (held) {
+      callId = held.call_id;
+      await tx.query(
+        `UPDATE wo_call
+            SET transcript = $2::jsonb, transcript_source = 'quo', status = 'transcribed',
+                duration_seconds = COALESCE(duration_seconds, $3)
+          WHERE id = $1`,
+        [callId, JSON.stringify(transcript), duration],
+      );
+    } else {
+      const ins = await tx.query<{ id: string }>(
+        `INSERT INTO wo_call (task_id, placed_by, contact_name, contact_role, phone, purpose, status,
+                              quo_call_id, quo_user_id, direction, answered_at, completed_at, duration_seconds,
+                              transcript, transcript_source)
+         VALUES ($1, $2, $3, $4, $5, 'quote', 'transcribed', $6, $7, $8, $9, $10, $11, $12::jsonb, 'quo')
+         RETURNING id::text AS id`,
+        [taskId, actor.id, input.contact_name, input.contact_role, phone, quoCallId, call.userId ?? null,
+         direction, answeredAt, completedAt, duration, JSON.stringify(transcript)],
+      );
+      callId = ins.rows[0].id;
+    }
+    await logCall(tx, actor.id, taskId, 'call_transcribed', {
+      call_id: callId,
+      source: 'quo',
+      fetched_from_quo: true,
+      quo_call_id: quoCallId,
+      phone,
+      contact_name: input.contact_name,
+      call_at: call.createdAt,
+      lines: transcript.length,
+    });
+    return callId;
+  });
+  return getCall(taskId, id);
 }

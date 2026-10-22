@@ -94,15 +94,16 @@ export const MONEY_PART: DocPart = {
         },
         {
           name: 'AI quote draft from an imported transcript',
-          what: 'Import transcript on the quote builder (beside Create quote when there is none, in the header while the quote is a draft) and on the Client quote card ("Draft the quote from a transcript": Choose a file — .txt, .vtt or .srt, the Teams / Zoom / Meet exports — or paste it; Conversation with; They are the…; Import and draft the quote). Caption files lose their header, cue numbers and timings, voice tags become speakers and one speaker\'s consecutive cues join; plain text reads as "Name: what they said". The transcript is kept as a number-less entry in the Calls card ("Transcript imported by …") and the AI quote draft page opens on it and drafts straight away; review and Submit quote are exactly the call path\'s.',
+          what: 'Import transcript on the quote builder (beside Create quote when there is none, in the header while the quote is a draft) and on the Client quote card ("Draft the quote from a transcript"), two ways under "Where is the conversation?". Attach or paste: Choose a file — .txt, .vtt or .srt, the Teams / Zoom / Meet exports — or paste it; Conversation with; They are the…; Import and draft the quote. Caption files lose their header, cue numbers and timings, voice tags become speakers and one speaker\'s consecutive cues join; plain text reads as "Name: what they said". The transcript is kept as a number-less entry in the Calls card ("Transcript imported by …"). From a Quo call: type Their number and click Find calls; the app finds the Quo line(s) that belong to the email you signed in with and lists your calls with that number over the last 90 days — date and time, who called whom, duration, the line when you have several — with unanswered calls and calls already on another work order greyed out; pick one and Use this call and draft the quote fetches the transcript from Quo and keeps it as a call on the Calls card, keyed by Quo\'s call id (a call already on this work order just opens its draft). Either way the AI quote draft page opens and drafts straight away; review and Submit quote are exactly the call path\'s.',
           value: 'A quote discussed in a Teams meeting, on a recorded site walk or from a personal phone gets the same AI first draft as a Quo call.',
           rules: [
             'Needs quotes edit; the button is locked with the work order\'s reason while quoting is closed and hidden once the quote is past draft.',
             'An empty transcript is refused ("The transcript is empty"); files over 2 MB are refused in the browser.',
             'An imported transcript cannot be overwritten by Save transcript — import the corrected one instead.',
+            'From a Quo call needs QUO_API_KEY on the server and the Quo integration on; the person must be a member of a Quo line under their sign-in email, and only calls between that line and the number typed are offered. A call Quo did not transcribe, or is still transcribing, is refused with the reason; one Quo call is one row, so a call on another work order cannot be used here.',
           ],
           permissions: ['quotes edit'],
-          audit: ['call_transcribed (source imported, with the file name)'],
+          audit: ['call_transcribed (source imported, with the file name; source quo with fetched_from_quo and the Quo call id)'],
           since: '0077',
         },
       ],

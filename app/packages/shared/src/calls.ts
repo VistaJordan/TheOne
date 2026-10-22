@@ -271,3 +271,153 @@ export function quoteDraftHasContent(body: QuoteDraftBody): boolean {
     (s) => s.lines.length > 0 || s.scope_lines.some((l) => l.trim() !== ''),
   );
 }
+
+// ── Transcript from a Quo call the person already had (Import transcript ›
+//    From a Quo call) ───────────────────────────────────────────────────────
+//
+// The call was not placed from the work order, so no wo_call row and no
+// webhook match exists for it. The person types the other party's number;
+// the API finds THEIR Quo line(s) by the email they signed in with (Quo is
+// on the same Byblos Vista accounts), lists the recent calls between those
+// lines and that number, and on the pick fetches the transcript from Quo and
+// stores it as a wo_call row keyed by Quo's call id — so the same call is
+// never stored twice.
+
+/** How far back the lookup reads and how many calls it offers. */
+export const QUO_CALL_LOOKUP_DAYS = 90;
+export const QUO_CALL_LOOKUP_MAX = 25;
+
+export type QuoCallDirection = 'incoming' | 'outgoing';
+
+/** One recent call between the person's Quo line and the number they typed. */
+export interface QuoCallOption {
+  quo_call_id: string;
+  /** The Quo line it was on ('PN…' id, its number and display name). */
+  line: { id: string; number: string | null; name: string | null };
+  direction: QuoCallDirection;
+  /** Quo's call status as reported ('completed', 'missed', 'no-answer', …). */
+  status: string;
+  created_at: string;
+  answered_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  /** False when the call was never answered: Quo cannot have a transcript. */
+  answered: boolean;
+  /** The row already holding this call, when one does. Same work order =
+      the pick just opens it; another = it cannot be used here. */
+  already_on: { call_id: string; task_id: string; wo_number: string; same_work_order: boolean } | null;
+}
+
+/** GET /work-orders/:id/quo-calls?phone= */
+export interface QuoCallsLookup {
+  /** False when Quo's API is not set up or switched off; `reason` says which. */
+  configured: boolean;
+  reason: string | null;
+  /** The person's own Quo lines the calls were read from. */
+  lines: { id: string; number: string | null; name: string | null }[];
+  /** The number as it was understood (E.164), null when it could not be. */
+  phone: string | null;
+  calls: QuoCallOption[];
+}
+
+/** POST /work-orders/:id/quo-calls/:quoCallId/import */
+export interface ImportQuoCallInput {
+  phone: string;
+  contact_name?: string | null;
+  contact_role?: WoCallContactRole;
+}
+
+/** The shape of a call as Quo's `GET /v1/calls` returns it (the part read). */
+export interface QuoApiCall {
+  id: string;
+  phoneNumberId: string;
+  userId?: string | null;
+  direction: 'incoming' | 'outgoing';
+  status: string;
+  participants?: string[];
+  createdAt: string;
+  answeredAt?: string | null;
+  completedAt?: string | null;
+  duration?: number | null;
+}
+
+/** A line as Quo's `GET /v1/phone-numbers` returns it (the part read). */
+export interface QuoApiPhoneNumber {
+  id: string;
+  number?: string | null;
+  formattedNumber?: string | null;
+  name?: string | null;
+  users?: { id: string; email?: string | null }[];
+}
+
+/** One dialogue segment as Quo's transcript endpoint and webhook send it. */
+export interface QuoDialogueSegment {
+  content?: unknown;
+  start?: unknown;
+  identifier?: unknown;
+}
+
+/** The Quo lines a person may read calls from: every line whose members
+ *  include a Quo user with that email (case-insensitive). */
+export function quoLinesForEmail(numbers: QuoApiPhoneNumber[], email: string | null | undefined): QuoApiPhoneNumber[] {
+  const want = (email ?? '').trim().toLowerCase();
+  if (want === '') return [];
+  return numbers.filter((n) => (n.users ?? []).some((u) => (u.email ?? '').trim().toLowerCase() === want));
+}
+
+/** Quo's dialogue → transcript lines. Segments spoken from `theirPhone` are
+ *  the contact's, everything else ours; empty segments drop; ordered by
+ *  start. Shared by the webhook and the lookup so both store the same shape. */
+export function quoDialogueToLines(
+  dialogue: QuoDialogueSegment[],
+  theirPhone: string | null,
+  theirs: string,
+  ours: string,
+): WoCallTranscriptLine[] {
+  const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+  return dialogue
+    .map((d) => ({
+      speaker: theirPhone !== null && normalizePhone(str(d.identifier)) === theirPhone ? theirs : ours,
+      line: str(d.content),
+      start: typeof d.start === 'number' ? Math.round(d.start * 10) / 10 : null,
+    }))
+    .filter((l) => l.line !== '')
+    .sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+}
+
+/** A Quo call → the option the dialog lists. `answered` is read off
+ *  answeredAt first, then Quo's status, because an unanswered call has no
+ *  transcript to fetch. */
+export function quoCallOption(
+  call: QuoApiCall,
+  line: { id: string; number: string | null; name: string | null },
+  alreadyOn: QuoCallOption['already_on'],
+): QuoCallOption {
+  const answeredAt = typeof call.answeredAt === 'string' && call.answeredAt !== '' ? call.answeredAt : null;
+  const completedAt = typeof call.completedAt === 'string' && call.completedAt !== '' ? call.completedAt : null;
+  const answered = answeredAt !== null || call.status === 'completed' || call.status === 'answered';
+  let duration = typeof call.duration === 'number' && Number.isFinite(call.duration) ? Math.max(0, Math.round(call.duration)) : null;
+  if (duration === null && answeredAt && completedAt) {
+    const ms = new Date(completedAt).getTime() - new Date(answeredAt).getTime();
+    if (Number.isFinite(ms)) duration = Math.max(0, Math.round(ms / 1000));
+  }
+  return {
+    quo_call_id: call.id,
+    line,
+    direction: call.direction === 'incoming' ? 'incoming' : 'outgoing',
+    status: call.status,
+    created_at: call.createdAt,
+    answered_at: answeredAt,
+    completed_at: completedAt,
+    duration_seconds: duration,
+    answered,
+    already_on: alreadyOn,
+  };
+}
+
+/** Newest first, capped — the order the dialog shows. */
+export function sortQuoCallOptions(calls: QuoCallOption[], max = QUO_CALL_LOOKUP_MAX): QuoCallOption[] {
+  return [...calls]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, max);
+}

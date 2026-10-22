@@ -2545,7 +2545,9 @@ export function listRoutingLists(): Promise<{ items: RoutingList[] }> {
 
 import type {
   AiQuoteDraftResponse,
+  ImportQuoCallInput,
   ImportTranscriptInput,
+  QuoCallsLookup,
   PlaceCallResponse,
   QuoteDraftBody,
   WoCall,
@@ -2586,6 +2588,21 @@ export function pasteCallTranscript(idOrNumber: string, callId: string, text: st
     the quote; the AI draft page opens on the returned row. */
 export function importWoTranscript(idOrNumber: string, input: ImportTranscriptInput): Promise<{ call: WoCall }> {
   return request(`/work-orders/${encodeURIComponent(idOrNumber)}/transcripts`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** GET /api/work-orders/:id/quo-calls?phone= — the person's recent Quo calls
+    with that number (Import transcript › From a Quo call). */
+export function lookupQuoCalls(idOrNumber: string, phone: string): Promise<QuoCallsLookup> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/quo-calls?phone=${encodeURIComponent(phone)}`);
+}
+
+/** POST /api/work-orders/:id/quo-calls/:quoCallId/import — fetch that call's
+    transcript from Quo; the AI draft page opens on the returned row. */
+export function importQuoCall(idOrNumber: string, quoCallId: string, input: ImportQuoCallInput): Promise<{ call: WoCall }> {
+  return request(`/work-orders/${encodeURIComponent(idOrNumber)}/quo-calls/${encodeURIComponent(quoCallId)}/import`, {
     method: 'POST',
     body: JSON.stringify(input),
   });
