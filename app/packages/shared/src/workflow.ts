@@ -33,6 +33,42 @@ export function statusMoveNeedsNoApproval(statusName: string | null | undefined)
   return (NO_APPROVAL_STATUS_NAMES as readonly string[]).some((s) => s.toLowerCase() === n);
 }
 
+// ── Statuses a dispatcher may not even request (Elise, 2026-10-22) ──────────
+// The statuses ClickUp marks "!!" are a manager's call, never a dispatcher's
+// ask. `status.request_hidden` (migration 0091) carries the flag per status
+// — the "Managers only" tick in Admin › Custom fields › Statuses — so a new
+// manager-only status needs no deploy; these are the names 0091 and the
+// seed tick. A request-mode person is not offered them in the status menu
+// and the API refuses a request for one (409 STATUS_REQUEST_HIDDEN). The
+// routes that move a work order there on their own — Send to client, the
+// client's approval, a manager's direct move — are untouched.
+
+export const REQUEST_HIDDEN_STATUS_NAMES = [
+  'Approved',
+  'Waiting for Advice',
+  'Waiting for Approval',
+  'Ready to Invoice',
+  'Cancelled / Postponed',
+] as const;
+
+export const STATUS_REQUEST_HIDDEN_CODE = 'STATUS_REQUEST_HIDDEN';
+
+/** The 409's sentence, and the menu's reason when a hidden status is the
+    current one (drawn, as current, but never a pick). */
+export function describeRequestHidden(statusName: string): string {
+  return `${statusName} is a manager's call — it cannot be requested. Ask your manager to move the work order there.`;
+}
+
+/** What a request-mode person is offered: every status whose flag is off,
+    plus the one the work order sits at (it is drawn as current, with its
+    tick, and clicking it only closes the menu). A direct mover sees all. */
+export function requestableStatuses<T extends { id: string; request_hidden?: boolean }>(
+  statuses: readonly T[],
+  currentId: string | null | undefined,
+): T[] {
+  return statuses.filter((s) => !s.request_hidden || s.id === currentId);
+}
+
 /** #15: Cancel, Reopen, Pause / Resume and Complete service on the record
     bar. Unset inherits `work_orders` edit; 0085 sets it off for every
     request-mode system role, so Admin › Roles can loosen it per role. */

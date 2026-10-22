@@ -2613,6 +2613,26 @@ unchanged (the fold shows the AI's marked-up rate). **Labor:** picking the
 Labor type on a line with a blank description fills "Labor tech N"
 (`nextLaborDescription`: the section's other labor lines + 1).
 
+**Statuses a dispatcher may not even request** (migration 0091, Elise
+2026-10-22; `REQUEST_HIDDEN_STATUS_NAMES` / `requestableStatuses` /
+`STATUS_REQUEST_HIDDEN_CODE` in `packages/shared/src/workflow.ts`,
+`tests/status-request-hidden.test.ts`). The "!!" statuses in ClickUp —
+Approved, Waiting for Advice, Waiting for Approval, Ready to Invoice,
+Cancelled / Postponed — are a manager's call. `status.request_hidden` (0091)
+is the flag per status, drawn as a **Managers only** tick in Admin › Custom
+fields › Statuses (`PATCH /admin/workflow/statuses/:id {request_hidden}`,
+`admin/fields` edit, in the `status_updated` snapshot); 0091 and `seed.ts`
+tick the same five names — keep the three in step. `GET /statuses` carries
+`request_hidden`; the status menu in request mode (`work_orders/status`
+create without edit) drops them (`requestableStatuses`: the current status
+stays, drawn as current) and `requestStatusChange` refuses one with a **409
+`STATUS_REQUEST_HIDDEN`** before the gate and the Ecotrak check, so the bulk
+bar or a typed call cannot slip one through. Untouched: a manager's direct
+move, Send to client (→ Waiting for Approval), the client's approval
+(→ Approved) and Cancel on the record bar, which never ask. `moveOnSite`'s
+check-in request targets the On Site statuses, which are not hidden; an
+admin who hides one gets the 409 printed on the CICO card like any refusal.
+
 ## Verify
 
 ```

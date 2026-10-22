@@ -24,7 +24,7 @@ import type { WorkflowItem } from './adminMeta.js';
 import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 
 function statusSnapshot(s: WorkflowItem): Snapshot {
-  return { name: s.name, group: s.status_group, color: s.color };
+  return { name: s.name, group: s.status_group, color: s.color, request_hidden: s.request_hidden };
 }
 
 function groupSnapshot(g: StatusGroupRow): Snapshot {
@@ -53,7 +53,7 @@ export async function listStatusGroups(): Promise<StatusGroupRow[]> {
 
 async function getStatusRow(id: string): Promise<WorkflowItem> {
   const res = await query<WorkflowItem>(
-    `SELECT s.id, s.name, s.status_group, s.color, s.position, s.is_archive,
+    `SELECT s.id, s.name, s.status_group, s.color, s.position, s.is_archive, s.request_hidden,
             (SELECT COUNT(*)::int FROM task t
               WHERE t.status_id = s.id AND t.deleted_at IS NULL) AS wo_count
        FROM status s WHERE s.id = $1 LIMIT 1`,
@@ -127,6 +127,9 @@ export async function createStatus(input: CreateStatusInput, actorId: string): P
 export interface StatusPatch {
   name?: string;
   color?: string;
+  /** 0091: "Managers only" — a request-mode person is never offered the
+      status and a request for it is refused. */
+  request_hidden?: boolean;
 }
 
 export async function updateStatus(id: string, patch: StatusPatch, actorId: string): Promise<WorkflowItem> {
@@ -150,9 +153,10 @@ export async function updateStatus(id: string, patch: StatusPatch, actorId: stri
     `UPDATE status
         SET name = COALESCE($2, name),
             color = COALESCE($3, color),
+            request_hidden = COALESCE($4, request_hidden),
             updated_at = now()
       WHERE id = $1`,
-    [id, name ?? null, patch.color ?? null],
+    [id, name ?? null, patch.color ?? null, patch.request_hidden ?? null],
   );
 
   invalidateFieldCache();

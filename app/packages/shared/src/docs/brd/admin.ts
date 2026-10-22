@@ -86,9 +86,9 @@ export const ADMIN_PART: DocPart = {
         },
         {
           name: 'Statuses and phases',
-          what: 'Per phase card: Add a status to … with a colour (default grey), Add; pencil to rename; trash then Delete status. New phase (Name, Create phase) becomes a list tab; only an empty, non-built-in phase can be deleted.',
+          what: 'Per phase card: Add a status to … with a colour (default grey), Add; pencil to rename; a Managers only tick per status (0091: ticked, a person who must request status changes is never offered it in the status menu and a request for it is refused — Approved, Waiting for Advice, Waiting for Approval, Ready to Invoice and Cancelled / Postponed ship ticked); trash then Delete status. New phase (Name, Create phase) becomes a list tab; only an empty, non-built-in phase can be deleted.',
           value: 'The pipeline is edited where the fields are.',
-          rules: ['A duplicate status name (case-insensitive) is refused; a status with work orders at it, trashed ones included ("(n in the trash)"), cannot be deleted; renaming Waiting for Approval or Ready to Invoice empties two dashboard tiles (warned on screen).'],
+          rules: ['A duplicate status name (case-insensitive) is refused; a status with work orders at it, trashed ones included ("(n in the trash)"), cannot be deleted; renaming Waiting for Approval or Ready to Invoice empties two dashboard tiles (warned on screen); a Managers only status is still reached by a manager\'s direct move, Send to client and the client\'s approval.'],
           audit: ['status_created', 'status_updated', 'status_deleted', 'status_group_created', 'status_group_renamed', 'status_group_deleted'],
         },
         {

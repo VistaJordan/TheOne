@@ -9,6 +9,7 @@ import {
   doneGateMissing,
   ecotrakTransitionRefused,
   partsRequiredFilled,
+  requestableStatuses,
   statusGateFor,
   statusGateTag,
   statusMoveNeedsNoApproval,
@@ -201,7 +202,13 @@ export function StatusChangeMenu({
   // Fractions are computed on the FULL group first, so a filtered list keeps
   // each status's own circle rather than re-spreading the wedges.
   const q = search.trim().toLowerCase();
-  const buckets = bucketStatuses(statusesQuery.data ?? [], groups)
+  // 0091: a request-mode person is never offered a "Managers only" status
+  // (the one the work order sits at stays, drawn as current).
+  const offered =
+    mode === 'request'
+      ? requestableStatuses(statusesQuery.data ?? [], current.id)
+      : statusesQuery.data ?? [];
+  const buckets = bucketStatuses(offered, groups)
     .map((b) => ({ ...b, statuses: b.statuses.filter((s) => !q || s.name.toLowerCase().includes(q)) }))
     .filter((b) => b.statuses.length > 0);
   const noMatch = q.length > 0 && buckets.length === 0 && !statusesQuery.isLoading;

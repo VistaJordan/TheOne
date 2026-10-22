@@ -380,6 +380,14 @@ td.pcell .sw { justify-content: center; }
 .wf-count { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .wf-row:hover .fedit { opacity: 1; }
 .wf-headedit { opacity: 1; }
+/* 0091: the "Managers only" tick. Its own class on purpose — the global
+   .ck::after hit-area expander has no positioned parent here and would
+   overlay its neighbours. */
+.wf-hidden {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-size: 12px; color: var(--ink-2); cursor: pointer; white-space: nowrap;
+}
+.wf-hidden input { margin: 0; accent-color: var(--accent); }
 /* Native color input stripped down to a round swatch. */
 .wf-color {
   width: 20px; height: 20px; padding: 0; border: 1px solid var(--border-strong);

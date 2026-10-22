@@ -545,7 +545,7 @@ function StatusEditor() {
     setError(err instanceof ApiRequestError ? err.message : 'The change did not save');
 
   const patchStatusM = useMutation({
-    mutationFn: (v: { id: string; input: { name?: string; color?: string } }) =>
+    mutationFn: (v: { id: string; input: { name?: string; color?: string; request_hidden?: boolean } }) =>
       updateAdminStatus(v.id, v.input),
     onSuccess: done,
     onError: fail,
@@ -629,6 +629,7 @@ function StatusEditor() {
           onDeleteGroup={() => setConfirm({ kind: 'group', code: g.code, label: g.label })}
           onRenameStatus={(id, name) => patchStatusM.mutate({ id, input: { name } })}
           onRecolorStatus={(id, color) => patchStatusM.mutate({ id, input: { color } })}
+          onRequestHiddenStatus={(id, request_hidden) => patchStatusM.mutate({ id, input: { request_hidden } })}
           onDeleteStatus={(id, name) => setConfirm({ kind: 'status', id, name })}
           onAddStatus={(name, color) => createStatusM.mutate({ name, group: g.code, color })}
         />
@@ -2020,7 +2021,7 @@ function ValueControl({ desc, value, onChange, emptyLabel, placeholder, ariaLabe
 
 function WfGroupCard({
   group: g, rows, busy, onRenameGroup, onDeleteGroup,
-  onRenameStatus, onRecolorStatus, onDeleteStatus, onAddStatus,
+  onRenameStatus, onRecolorStatus, onRequestHiddenStatus, onDeleteStatus, onAddStatus,
 }: {
   group: StatusGroupItem;
   rows: AdminWorkflowItem[];
@@ -2029,6 +2030,7 @@ function WfGroupCard({
   onDeleteGroup: () => void;
   onRenameStatus: (id: string, name: string) => void;
   onRecolorStatus: (id: string, color: string) => void;
+  onRequestHiddenStatus: (id: string, hidden: boolean) => void;
   onDeleteStatus: (id: string, name: string) => void;
   onAddStatus: (name: string, color: string) => void;
 }) {
@@ -2098,6 +2100,7 @@ function WfGroupCard({
             busy={busy}
             onRename={(name) => onRenameStatus(s.id, name)}
             onRecolor={(color) => onRecolorStatus(s.id, color)}
+            onRequestHidden={(hidden) => onRequestHiddenStatus(s.id, hidden)}
             onDelete={() => onDeleteStatus(s.id, s.name)}
           />
         ))}
@@ -2107,13 +2110,15 @@ function WfGroupCard({
   );
 }
 
-function WfStatusRow({ status: s, group, fraction, busy, onRename, onRecolor, onDelete }: {
+function WfStatusRow({ status: s, group, fraction, busy, onRename, onRecolor, onRequestHidden, onDelete }: {
   status: AdminWorkflowItem;
   group: string;
   fraction: number;
   busy: boolean;
   onRename: (name: string) => void;
   onRecolor: (color: string) => void;
+  /** 0091: "Managers only" — a request-mode person is never offered it. */
+  onRequestHidden: (hidden: boolean) => void;
   onDelete: () => void;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -2163,6 +2168,21 @@ function WfStatusRow({ status: s, group, fraction, busy, onRename, onRecolor, on
         </span>
       )}
       {s.is_archive && <span className="chip chip-sm">Archive</span>}
+      {/* 0091 (Elise, 2026-10-22): the "!!" statuses are a manager's call. Ticked,
+          a person who must request status changes is never offered this status
+          and the API refuses a request for it. */}
+      <label
+        className="wf-hidden"
+        title="Ticked: people who must request a status change are not offered this status. Managers with direct status edit still move to it."
+      >
+        <input
+          type="checkbox"
+          checked={s.request_hidden}
+          disabled={busy}
+          onChange={(e) => onRequestHidden(e.target.checked)}
+        />
+        <span>Managers only</span>
+      </label>
       {/* Keyed on the saved color so an outside refresh resets the swatch. */}
       <input
         key={`${s.id}-${s.color}`}

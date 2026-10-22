@@ -1636,6 +1636,8 @@ export interface AdminWorkflowItem {
   color: string;
   position: number;
   is_archive: boolean;
+  /** 0091: "Managers only" — a request-mode person is never offered it. */
+  request_hidden: boolean;
   wo_count: number;
 }
 
@@ -1658,7 +1660,7 @@ export function createAdminStatus(input: {
 
 export function updateAdminStatus(
   id: string,
-  input: { name?: string; color?: string },
+  input: { name?: string; color?: string; request_hidden?: boolean },
 ): Promise<{ item: AdminWorkflowItem }> {
   return request(`/admin/workflow/statuses/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
 }

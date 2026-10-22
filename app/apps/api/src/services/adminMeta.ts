@@ -73,6 +73,8 @@ export interface WorkflowItem {
   color: string;
   position: number;
   is_archive: boolean;
+  /** 0091: "Managers only" — a request-mode person is never offered it. */
+  request_hidden: boolean;
   /** Live work orders sitting at this status right now. */
   wo_count: number;
 }
@@ -80,7 +82,7 @@ export interface WorkflowItem {
 export async function listWorkflow(): Promise<WorkflowItem[]> {
   const res = await query<WorkflowItem>(
     `SELECT s.id, s.name, s.status_group::text AS status_group, s.color,
-            s.position, s.is_archive,
+            s.position, s.is_archive, s.request_hidden,
             (SELECT COUNT(*)::int FROM task t
               WHERE t.status_id = s.id AND t.deleted_at IS NULL) AS wo_count
        FROM status s

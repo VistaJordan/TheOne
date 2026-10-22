@@ -644,8 +644,9 @@ export async function listStatuses(): Promise<Status[]> {
     color: string;
     position: number | string;
     is_archive: boolean;
+    request_hidden: boolean;
   }>(
-    `SELECT id, name, status_group AS "group", color, position, is_archive
+    `SELECT id, name, status_group AS "group", color, position, is_archive, request_hidden
        FROM status ORDER BY position ASC`,
   );
   return res.rows.map((s) => ({
@@ -655,6 +656,7 @@ export async function listStatuses(): Promise<Status[]> {
     color: s.color,
     position: Number(s.position),
     is_archive: s.is_archive,
+    request_hidden: s.request_hidden,
     phase: phaseFor(s.name),
   }));
 }

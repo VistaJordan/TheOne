@@ -15,7 +15,7 @@ import { seedAllowed } from './seedGuard.js';
 import { describeSeedUnpooledMismatch } from './migrateLedger.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, clientUnsafeDefaultBagKeys, type StatusGroup } from '@theone/shared';
+import { REQUEST_HIDDEN_STATUS_NAMES, STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, clientUnsafeDefaultBagKeys, type StatusGroup } from '@theone/shared';
 // S5 · the demo-state anchors below are computed with the SAME business-time
 // arithmetic the obligation engine evaluates with, so the seeded tiers are
 // exact rather than approximated by calendar offsets — a 4-business-hour clock
@@ -908,6 +908,12 @@ async function main() {
     statusIdByName.set('Invoiced', id);
     statusGroupById.set(id, 'done');
   }
+  // 0091: the "!!" statuses are a manager's call — a request-mode person is
+  // never offered them. Same names as the migration (keep in step).
+  await query(
+    `UPDATE status SET request_hidden = true WHERE lower(name) = ANY($1::text[])`,
+    [REQUEST_HIDDEN_STATUS_NAMES.map((n) => n.toLowerCase())],
+  );
 
   function resolveStatusId(raw: string): string {
     const canonical = STATUS_ALIAS[raw] ?? raw;

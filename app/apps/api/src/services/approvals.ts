@@ -51,6 +51,8 @@ import {
   SELF_APPROVAL_CODE,
   selfApprovalMessage,
   selfApprovalVerdict,
+  STATUS_REQUEST_HIDDEN_CODE,
+  describeRequestHidden,
 } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -1216,8 +1218,20 @@ export async function requestStatusChange(
   // Rules 11.2.1 / 11.2.2: a request for a move the gate would refuse is
   // refused here, with the same sentence a direct move gets — a manager is
   // never asked to approve something the system will then block.
-  const to = await query<{ name: string }>(`SELECT name FROM status WHERE id = $1 LIMIT 1`, [toStatusId]);
+  const to = await query<{ name: string; request_hidden: boolean }>(
+    `SELECT name, request_hidden FROM status WHERE id = $1 LIMIT 1`,
+    [toStatusId],
+  );
   if (to.rows[0]) {
+    // 0091 (Elise, 2026-10-22): the "!!" statuses are a manager's call. The
+    // menu never offers them to a request-mode person; the API refuses the
+    // ask too, so the bulk bar or a typed call cannot slip one through.
+    if (to.rows[0].request_hidden) {
+      throw conflict(describeRequestHidden(to.rows[0].name), {
+        code: STATUS_REQUEST_HIDDEN_CODE,
+        status_name: to.rows[0].name,
+      });
+    }
     await assertStatusGate({ query }, taskId, to.rows[0].name);
     // Rule 2.6.4, at request time.
     await assertEcotrakAllowsMove(taskId, to.rows[0].name);

@@ -107,6 +107,9 @@ export interface Status {
   color: string;
   position: number;
   is_archive: boolean;
+  /** 0091: a manager's call — a request-mode person is never offered it
+      (`REQUEST_HIDDEN_STATUS_NAMES` in workflow.ts; "Managers only" in Admin). */
+  request_hidden: boolean;
   /** S2: lifecycle phase for the detail-page phase bar; null = off-pipeline. */
   phase: Phase | null;
 }

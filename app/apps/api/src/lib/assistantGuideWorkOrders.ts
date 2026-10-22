@@ -48,7 +48,7 @@ Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view):
   - **Total Invoiced** fills itself in: when the work order's invoice is sent it becomes the invoice total. It can never be typed.
   - Profit is always Total Invoiced minus Cost.
 - Change the status: **Change status** in the header, pick a status. Needs \`work_orders/status\` edit.
-- Request a status change: for people who must request, the same button reads **Request status change**. Pick a status; a manager approves or rejects it in Approvals, and the result shows on a chip in the header.
+- Request a status change: for people who must request, the same button reads **Request status change**. Pick a status; a manager approves or rejects it in Approvals, and the result shows on a chip in the header. Statuses ticked **Managers only** in Admin › Custom fields › Statuses (Approved, Waiting for Advice, Waiting for Approval, Ready to Invoice, Cancelled / Postponed by default) are not offered to them at all — a manager moves the work order there, or Send to client and the client's approval do.
 - Statuses the app holds back until the work order is ready (the menu tags them):
   - Quote Ready needs a quote with at least one line or scope item.
   - Waiting for Parts and Please Order Parts need the **Parts Required** field filled.

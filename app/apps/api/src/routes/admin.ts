@@ -384,7 +384,12 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
     })
     .strict();
   const updateStatusSchema = z
-    .object({ name: z.string().trim().min(1).max(80).optional(), color: colorSchema.optional() })
+    .object({
+      name: z.string().trim().min(1).max(80).optional(),
+      color: colorSchema.optional(),
+      // 0091: "Managers only" — a request-mode person is never offered it.
+      request_hidden: z.boolean().optional(),
+    })
     .strict();
   const groupLabelSchema = z.object({ label: z.string().trim().min(1).max(60) }).strict();
   const groupParams = z.object({ code: z.string().trim().min(1).max(60) });
