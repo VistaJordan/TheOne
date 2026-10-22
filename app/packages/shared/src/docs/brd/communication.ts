@@ -58,13 +58,13 @@ export const COMMUNICATION_PART: DocPart = {
     {
       key: 'files',
       title: 'Photos, files and approval',
-      where: 'The message composer (Add photo, Attach file); Overview › Photos.',
+      where: 'The message composer (Add photo, Attach file, paste or drag and drop); Overview › Photos.',
       purpose: 'Uploads to private storage, read back only through the work order so a photo is exactly as visible as its work order; every upload reviewed before anyone else sees it.',
       value: 'Before and after photos are classified and proven before the job is Done; a copied link is useless outside.',
       features: [
         {
           name: 'Attachments',
-          what: 'Add photo / Attach file in the composer (disabled with "Your role cannot add photos" or "File storage is not configured on this server"); photos shrink in the browser first (2000 px, 4 MB cap; HEIC goes up as-is); allowed types jpeg, png, webp, heic, heif, gif, pdf, txt, csv, doc, docx, xls, xlsx; every read goes through the API after the work order\'s own scope check and no URL is ever handed out; Remove.',
+          what: 'Add photo / Attach file in the composer (disabled with "Your role cannot add photos" or "File storage is not configured on this server"), or paste a screenshot into the message box or drag files from a folder onto the composer (a pasted screenshot is named pasted-<stamp>.png; the same refusals apply); photos shrink in the browser first (2000 px, 4 MB cap; HEIC goes up as-is); allowed types jpeg, png, webp, heic, heif, gif, pdf, txt, csv, doc, docx, xls, xlsx; every read goes through the API after the work order\'s own scope check and no URL is ever handed out; Remove.',
           value: 'Phone photos upload from the field without failing, and nothing leaks by link.',
           rules: ['Uploads are refused when the File storage integration is off (409).'],
           permissions: ['work_orders/attachments create / delete', 'work_orders view to read'],

@@ -253,7 +253,7 @@ export const SOP: SopDocument = {
         ] },
         { kind: 'sub', title: 'Photos and files' },
         { kind: 'steps', items: [
-          'In the message box click the camera (**Add photo**) or **Attach file**. Photos are shrunk in the browser first; the cap is 4 MB; PDFs, images, text, CSV and Office files are accepted.',
+          'In the message box click the camera (**Add photo**) or **Attach file**, paste a screenshot straight into the message box, or drag files from a folder onto the message box. Photos are shrunk in the browser first; the cap is 4 MB; PDFs, images, text, CSV and Office files are accepted.',
           'Every upload waits for approval ("Hidden from everyone else until approved"). On **Overview › Photos › Waiting for approval**, a reviewer picks **What is it?** (Before photo, After photo, Sign-off, Other), optionally renames the file, then **Approve** or **Decline**. Until then only reviewers and the uploader can see it.',
           'Approved photos group by kind and, when the SharePoint switch is on, are copied into the work order\'s SharePoint folder.',
         ] },

@@ -19,7 +19,7 @@ import { INSIGHT_PART } from './brd/insight';
 import { AUTOMATION_PART, ADMIN_PART } from './brd/admin';
 
 /** The date the prose was last reviewed against the screens (YYYY-MM-DD). */
-export const DOCS_REVIEWED_ON = '2026-10-20';
+export const DOCS_REVIEWED_ON = '2026-10-22';
 
 export const BRD_PARTS: DocPart[] = [
   PLATFORM_PART,

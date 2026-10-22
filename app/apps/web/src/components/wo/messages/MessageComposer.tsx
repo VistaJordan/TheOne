@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ATTACHMENT_ALLOWED_TYPES, ATTACHMENT_MAX_BYTES, WO_MESSAGE_MAX, formatBytes, mentionsInBody } from '@theone/shared';
 import type { ClientSystem, MentionCandidate, WoMessagesResponse } from '../../../api/client';
@@ -66,6 +66,9 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
   const photoInput = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(0);
+  // Drag depth, not a boolean: dragenter / dragleave fire for every child the
+  // pointer crosses, so only a counter back at zero means "left the composer".
+  const [dragDepth, setDragDepth] = useState(0);
 
   const attachments = useQuery({
     queryKey: ['wo-attachments', woId],
@@ -74,8 +77,16 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
     retry: 0,
   });
   const storageReady = attachments.data?.storage_ready ?? true;
+  // Why paste and drop are refused, or null when they would work. The two
+  // buttons keep their own titles; this is the sentence a paste or a drop
+  // gets instead of silently doing nothing.
+  const uploadsClosed = !canAttach
+    ? 'Your role cannot add photos'
+    : !storageReady
+      ? 'File storage is not configured on this server'
+      : null;
 
-  const sendFiles = async (files: FileList | null) => {
+  const sendFiles = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     setUploadError(null);
     setUploading(files.length);
@@ -95,6 +106,54 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
     }
   };
 
+  // Paste: a screenshot (or a file copied in Explorer / Finder) on the
+  // clipboard goes up like a click on Attach file; text pastes as text. The
+  // clipboard names a screenshot "image.png", so it is renamed with a stamp
+  // before the list fills with identical names.
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = filesFrom(e.clipboardData);
+    if (files.length === 0) return;
+    e.preventDefault();
+    if (uploadsClosed) {
+      setUploadError(uploadsClosed);
+      return;
+    }
+    void sendFiles(files.map(nameClipboardFile));
+  };
+
+  // Drag and drop: a file dragged from a folder onto any part of the composer
+  // (the text box included — the browser would otherwise open it) uploads
+  // with the visibility the segment says. Nothing else dragged (text, a link)
+  // is touched, so selecting text and dragging it still works.
+  const onDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    if (!dragHasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    setDragDepth((d) => d + 1);
+  };
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (!dragHasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = uploadsClosed || uploading > 0 ? 'none' : 'copy';
+  };
+  const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    if (!dragHasFiles(e.dataTransfer)) return;
+    setDragDepth((d) => Math.max(0, d - 1));
+  };
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    if (!dragHasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    setDragDepth(0);
+    const files = filesFrom(e.dataTransfer);
+    if (files.length === 0) return;
+    if (uploadsClosed) {
+      setUploadError(uploadsClosed);
+      return;
+    }
+    if (uploading > 0) return;
+    void sendFiles(files);
+  };
+  const dragging = dragDepth > 0;
+
   const trimmed = body.trim();
   const tooLong = trimmed.length > WO_MESSAGE_MAX;
   const canSend = trimmed.length > 0 && !tooLong && !mutation.isPending;
@@ -108,7 +167,19 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
     : 'Internal — the team only, never the client';
 
   return (
-    <div className={`composer${clientVisible ? ' is-client' : ''}`}>
+    <div
+      className={`composer${clientVisible ? ' is-client' : ''}${dragging ? ' is-dragging' : ''}`}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {dragging && (
+        <div className="composer-drop" aria-hidden="true">
+          <Icon name={uploadsClosed ? 'alert' : 'clip'} size={16} />
+          {uploadsClosed ?? `Drop to attach (${clientVisible ? 'client-visible' : 'internal'})`}
+        </div>
+      )}
       <div className="composer-head">
         <div className="seg" role="group" aria-label="Message visibility">
           <button
@@ -149,6 +220,7 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
         maxLength={WO_MESSAGE_MAX}
         value={body}
         onChange={setBody}
+        onPaste={onPaste}
         candidates={candidates}
         onMention={(person) => setPicked((curr) => (curr.some((c) => c.id === person.id) ? curr : [...curr, person]))}
       />
@@ -210,7 +282,11 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
           >
             <Icon name="clip" size={14} />
           </button>
-          {uploading > 0 && <span className="composer-count">Uploading {uploading}…</span>}
+          {uploading > 0 ? (
+            <span className="composer-count">Uploading {uploading}…</span>
+          ) : (
+            !uploadsClosed && <span className="composer-hint">or paste / drop a file here</span>
+          )}
         </div>
 
         {mutation.isError ? (
@@ -232,4 +308,33 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
       </div>
     </div>
   );
+}
+
+/** The files on a clipboard or a drag, whichever way the browser offers them
+    (`files` on most; some only list `items` of kind "file"). */
+function filesFrom(dt: DataTransfer | null): File[] {
+  if (!dt) return [];
+  const direct = Array.from(dt.files ?? []);
+  if (direct.length > 0) return direct;
+  const out: File[] = [];
+  for (const item of Array.from(dt.items ?? [])) {
+    if (item.kind !== 'file') continue;
+    const f = item.getAsFile();
+    if (f) out.push(f);
+  }
+  return out;
+}
+
+/** True while what is being dragged includes a file (not text or a link). */
+function dragHasFiles(dt: DataTransfer | null): boolean {
+  return dt !== null && Array.from(dt.types).includes('Files');
+}
+
+/** A pasted screenshot arrives as "image.png" every time; give it a name
+    that says when it was taken so the Photos card can tell them apart. */
+function nameClipboardFile(file: File): File {
+  if (file.name && !/^image\.(png|jpe?g|gif|webp)$/i.test(file.name)) return file;
+  const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.png';
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  return new File([file], `pasted-${stamp}${ext}`, { type: file.type, lastModified: file.lastModified });
 }
