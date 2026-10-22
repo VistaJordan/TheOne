@@ -202,7 +202,7 @@ export const SOP: SopDocument = {
           'When they leave, set **Checked out** (or **Checked out · return trip needed**). An Assessment check-out stamps **Quote Due Date** (48 business hours). A Job check-out never does.',
           'Correct a stamp with the pencil (**Save visit**; "A corrected time keeps its history"); see **History of this visit**; delete with the trash icon ("The old check-in/out fields will read the visit before it.").',
         ] },
-        { kind: 'note', title: 'SIGN-OFF SHEET', text: 'The sheet was drawn when the work order was assigned (the panel at the foot of the CICO card; it needs a Comp that names a layout and file storage on). Click **Send to tech**, pick the technician\'s number (hired technicians, visit technicians, the latest visit, or **Another number**) and click **Text the sheet** (Quo API) or **Open in Quo** (the Quo desktop app sends it). When the signed copy is texted back it is filed as a pending Sign-off attachment, Sign-Off Link is set and the chip reads **Signed copy received**; approve it on Overview › Photos like any upload. If several sheets could match, each candidate shows **Yes, file it here / Not this one**. **Redraw with current details** appears when the number or address changed (**Details changed**); **New sheet** replaces the sheet and its link.' },
+        { kind: 'note', title: 'SIGN-OFF SHEET', text: 'The sheet was drawn when the work order was assigned (the panel at the foot of the CICO card; it needs a Comp that names a layout and file storage on). Click **Send to tech**, pick the technician\'s number (hired technicians, visit technicians, the latest visit, or **Another number**) and click **Text the sheet** (Quo API) or **Open in Quo** (the Quo desktop app sends it). When the signed copy is texted back it is filed as a pending Sign-off attachment, Sign-Off Link is set and the chip reads **Signed copy received**; approve it on the Drive tab like any upload. If several sheets could match, each candidate shows **Yes, file it here / Not this one**. **Redraw with current details** appears when the number or address changed (**Details changed**); **New sheet** replaces the sheet and its link.' },
         { kind: 'sub', title: 'C. Move the status' },
         { kind: 'steps', items: [
           'Click **Change status** in the header (or the status pill in the list) and pick the next status. Roles in request mode see **Request status change** instead: the pick raises a request a manager decides in Approvals ("Request for <status> sent for approval"), and the decision shows on the header banner: **Continue** after an approval; **Request again** or **Understood** after a rejection. **Withdraw** an open request from Approvals › My requests.',
@@ -235,7 +235,7 @@ export const SOP: SopDocument = {
       title: 'Flags, Messages, Photos and Files',
       lead: 'What everyone else sees about the job.',
       who: ['Dispatchers', 'Managers', 'Operations Admin'],
-      where: 'Header, All fields, Messages tab, Overview › Photos',
+      where: 'Header, All fields, Messages tab, Drive tab',
       needs: ['work_orders/comments create / edit', 'work_orders/comments/client create', 'work_orders/attachments create / approve', 'work_orders/history view'],
       blocks: [
         { kind: 'sub', title: 'Flags' },
@@ -254,7 +254,7 @@ export const SOP: SopDocument = {
         { kind: 'sub', title: 'Photos and files' },
         { kind: 'steps', items: [
           'In the message box click the camera (**Add photo**) or **Attach file**, paste a screenshot straight into the message box, or drag files from a folder onto the message box. Photos are shrunk in the browser first; the cap is 4 MB; PDFs, images, text, CSV and Office files are accepted.',
-          'Every upload waits for approval ("Hidden from everyone else until approved"). On **Overview › Photos › Waiting for approval**, a reviewer picks **What is it?** (Before photo, After photo, Sign-off, Other), optionally renames the file, then **Approve** or **Decline**. Until then only reviewers and the uploader can see it.',
+          'Every upload waits for approval ("Hidden from everyone else until approved"). On the **Drive** tab, under **Waiting for approval**, a reviewer picks **What is it?** (Before photo, After photo, Sign-off, Other), optionally renames the file, then **Approve** or **Decline**. Until then only reviewers and the uploader can see it.',
           'Approved photos group by kind and, when the SharePoint switch is on, are copied into the work order\'s SharePoint folder.',
         ] },
         { kind: 'note', title: 'WHY', text: 'Done / Incurred needs an approved After photo (or Before photo plus Sign-off for Bill For Incurred): rules 1.3.1 to 1.3.4 and 11.3.4. The "Needs after photo" / "Needs sign-off" tag clears the moment the file is approved.' },

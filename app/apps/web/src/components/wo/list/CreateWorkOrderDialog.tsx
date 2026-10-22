@@ -246,10 +246,10 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       setUploading(null);
       const to = `/work-orders/${encodeURIComponent(res.wo_number)}`;
       if (failed.length > 0) {
-        window.alert(`${res.wo_number} was created, but ${failed.length === 1 ? 'one file' : `${failed.length} files`} could not be uploaded: ${failed.join(', ')}. Add ${failed.length === 1 ? 'it' : 'them'} from the Overview tab.`);
-        navigate(`${to}?tab=overview`);
+        window.alert(`${res.wo_number} was created, but ${failed.length === 1 ? 'one file' : `${failed.length} files`} could not be uploaded: ${failed.join(', ')}. Add ${failed.length === 1 ? 'it' : 'them'} from the Drive tab.`);
+        navigate(`${to}?tab=drive`);
       } else {
-        navigate(files.length > 0 ? `${to}?tab=overview` : to);
+        navigate(files.length > 0 ? `${to}?tab=drive` : to);
       }
     },
     onError: (err: unknown) => {

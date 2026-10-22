@@ -58,7 +58,7 @@ export const COMMUNICATION_PART: DocPart = {
     {
       key: 'files',
       title: 'Photos, files and approval',
-      where: 'The message composer (Add photo, Attach file, paste or drag and drop); Overview › Photos.',
+      where: 'The message composer (Add photo, Attach file, paste or drag and drop); the Drive tab (Photos card).',
       purpose: 'Uploads to private storage, read back only through the work order so a photo is exactly as visible as its work order; every upload reviewed before anyone else sees it.',
       value: 'Before and after photos are classified and proven before the job is Done; a copied link is useless outside.',
       features: [

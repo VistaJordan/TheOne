@@ -604,7 +604,7 @@ async function loadRelated(taskId: string, t: TaskRow, actor: ActingPrincipal, n
   add(c.payments, 'payment', 'payment request', 'payment requests', `/work-orders/${wo}?tab=payables`);
   add(c.visits, 'visit', 'visit', 'visits', `/work-orders/${wo}?tab=cico`);
   add(c.messages, 'message', 'message', 'messages', `/work-orders/${wo}?tab=messages`);
-  add(c.photos, 'photo', 'photo or file', 'photos and files', `/work-orders/${wo}?tab=overview`);
+  add(c.photos, 'photo', 'photo or file', 'photos and files', `/work-orders/${wo}?tab=drive`);
   if (nteRequests > 0) records.push({ kind: 'nte_request', label: `${nteRequests} NTE increase ${nteRequests === 1 ? 'request' : 'requests'}`, status: null, link: null });
   return {
     same_asset: sameAsset,

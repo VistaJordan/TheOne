@@ -577,7 +577,11 @@ canvas so it goes up as-is or is refused. Images group before/after by
 `client_visible` (internal = the assessment, client-visible = sign-off);
 anything else lists underneath. Logged `attachment_added|removed` under field
 `attachment:<id>`. Permission path `work_orders/attachments` (create /
-delete); reading needs only `work_orders` view.
+delete); reading needs only `work_orders` view. Since 2026-10-22 the Photos card
+sits on its own **Drive** tab (`work_orders/tabs/drive`, unset inherits
+like every tab; links that pointed at photos say `?tab=drive`), Overview
+leads the strip and is the landing tab (bare URL; All fields second, reached
+by `?tab=fields`).
 
 **Photo approval and proof before Done** (migration 0061, rules 1.3.1–1.3.4
 and 11.3.4). Every upload lands `attachment.review_status = 'pending'` and is

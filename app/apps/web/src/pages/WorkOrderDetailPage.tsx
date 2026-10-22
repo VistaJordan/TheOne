@@ -53,8 +53,10 @@ import { useAuth } from '../auth/AuthProvider';
 import { quoteSectionsHaveData, tabPermKey } from '@theone/shared';
 
 const TAB_IDS = [
-  'fields', 'money', 'payables', 'people', 'technicians', 'site', 'dates', 'cico', 'parts',
-  'overview', 'messages', 'audit',
+  'overview', 'fields', 'money', 'payables', 'people', 'technicians', 'site', 'dates', 'cico', 'parts',
+  // 2026-10-22 · Drive: the work order's files (the Photos card, moved off
+  // Overview). Overview leads the strip and is the landing tab.
+  'drive', 'messages', 'audit',
   // 0064 · the record's own tabs. Checklist (tasks) and Related have no button
   // on the strip since 2026-10-20; a link to them (Maintenance › Work permits,
   // a vendor's consumables) still opens them.
@@ -95,8 +97,8 @@ export function WorkOrderDetailPage() {
   const { linkTo } = useLinkNav();
   // The active tab lives in the URL (?tab=…) so a refresh reloads the data but
   // stays on the same tab — and a pasted link opens where the sender was.
-  // "All fields" is the landing tab (the record itself before the commentary)
-  // and keeps a bare URL. `replace` keeps tab hops out of the back button.
+  // Overview is the landing tab since 2026-10-22 (All fields was) and keeps a
+  // bare URL. `replace` keeps tab hops out of the back button.
   const [searchParams, setSearchParams] = useSearchParams();
   // 0015 · each tab is its own permission; a tab the acting principal may not
   // view is not drawn, and a link to it lands on the first one they may.
@@ -106,10 +108,10 @@ export function WorkOrderDetailPage() {
   const rawTab = searchParams.get('tab');
   // 2026-10-20 · Timelog lives on CICO now: an old ?tab=timelog link opens
   // CICO (the Timelog view itself only for someone who cannot see CICO).
-  const wanted: Tab = rawTab === 'timelog' && show('cico') ? 'cico' : isTab(rawTab) ? rawTab : 'fields';
-  const tab: Tab = show(wanted) ? wanted : (visibleTabs[0] ?? 'fields');
+  const wanted: Tab = rawTab === 'timelog' && show('cico') ? 'cico' : isTab(rawTab) ? rawTab : 'overview';
+  const tab: Tab = show(wanted) ? wanted : (visibleTabs[0] ?? 'overview');
   const setTab = (t: Tab) =>
-    setSearchParams(t === 'fields' ? {} : { tab: t }, { replace: true });
+    setSearchParams(t === 'overview' ? {} : { tab: t }, { replace: true });
   // A group's button lands on the first sub-tab the person may see, and reads
   // as on while any of its sub-tabs is open.
   const groupTabs = (id: string) => (TAB_GROUPS.find((g) => g.id === id)?.tabs ?? []).filter((x) => show(x.id));
@@ -320,6 +322,7 @@ export function WorkOrderDetailPage() {
         <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} note={recordNote} />
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
+          {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
           {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
           {groupTabs('money').length > 0 && (
             <GroupButton on={activeGroup?.id === 'money'} onSelect={() => setTab(groupTabs('money')[0].id)}>Finances</GroupButton>
@@ -331,7 +334,7 @@ export function WorkOrderDetailPage() {
           )}
           {show('site') && <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>}
           {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
-          {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
+          {show('drive') && <TabButton id="drive" tab={tab} onSelect={setTab}>Drive</TabButton>}
           {show('messages') && (
             <TabButton id="messages" tab={tab} onSelect={setTab}>
               <Icon name="msg" size={12} />
@@ -392,8 +395,15 @@ export function WorkOrderDetailPage() {
                 )}
               </section>
 
-              <PhotosCard wo={wo} />
               <SoftCloseChecklist wo={wo} />
+            </div>
+          )}
+
+          {/* 2026-10-22 · Drive: the work order's photos and files, on a tab
+              of their own (they used to close the Overview tab). */}
+          {tab === 'drive' && (
+            <div role="tabpanel" aria-label="Drive">
+              <PhotosCard wo={wo} />
             </div>
           )}
 

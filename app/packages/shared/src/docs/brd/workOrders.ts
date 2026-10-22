@@ -45,7 +45,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Tabs',
-          what: 'All fields (default), Finances (sub-tabs Finances · Payables · Cost breakdown), Dates, CICO, People (sub-tabs Our team · Technicians), Site, Parts, Overview, Messages (count badge), Audit trail. Timelog is no longer a tab (2026-10-20): its cards sit on CICO under the visits, shown with its permission row (Timelog & metrics), and a ?tab=timelog link opens CICO. Each tab is a permission row (work_orders/tabs/<tab>); a sub-tab keeps its own row (Technicians follows People\'s), and a sub-tab strip is drawn only when the person sees more than one. Checklist and Related have no button since 2026-10-20 (the Flags tab is gone; the flags are checkboxes in All fields); a link to Checklist or Related (Maintenance › Work permits, a vendor\'s consumables) still opens them: Checklist carries the Job plan, Services and Consumables cards; Related the Work permits card (Send for approval, Approve, Reject, Close the permit, Back to draft; "A permit is needed" chip), the approvals list, Same asset and Same site. the Timelog cards on CICO are the Technician time card (Start a timer / Stop / Log time, Billable) and Timelog and metrics; Technicians the Dispatch offers card; Payables the purchasing card. The header opens unfolded on every work order; folding it lasts until the page is left.',
+          what: 'Overview (default since 2026-10-22), All fields, Finances (sub-tabs Finances · Payables · Cost breakdown), Dates, CICO, People (sub-tabs Our team · Technicians), Site, Parts, Drive (the photos and files, moved off Overview on 2026-10-22), Messages (count badge), Audit trail. Timelog is no longer a tab (2026-10-20): its cards sit on CICO under the visits, shown with its permission row (Timelog & metrics), and a ?tab=timelog link opens CICO. Each tab is a permission row (work_orders/tabs/<tab>); a sub-tab keeps its own row (Technicians follows People\'s), and a sub-tab strip is drawn only when the person sees more than one. Checklist and Related have no button since 2026-10-20 (the Flags tab is gone; the flags are checkboxes in All fields); a link to Checklist or Related (Maintenance › Work permits, a vendor\'s consumables) still opens them: Checklist carries the Job plan, Services and Consumables cards; Related the Work permits card (Send for approval, Approve, Reject, Close the permit, Back to draft; "A permit is needed" chip), the approvals list, Same asset and Same site. the Timelog cards on CICO are the Technician time card (Start a timer / Stop / Log time, Billable) and Timelog and metrics; Technicians the Dispatch offers card; Payables the purchasing card. The header opens unfolded on every work order; folding it lasts until the page is left.',
           value: 'A role sees the tabs of its job: AR sees Finances and the audit; a probation dispatcher does not see Payables.',
         },
         {
@@ -62,8 +62,15 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Overview',
-          what: 'The Obligations card first ("Nothing owed on this work order."; Snooze per row), the Soft-close checklist (Quote created, Before photos, Quote check, Admin check, GTG; an n / 5 meter), the Updates & activity feed (read-only, "N events · newest first", with a Write a message button) and the Photos card.',
+          what: 'The Obligations card first ("Nothing owed on this work order."; Snooze per row), the Updates & activity feed (read-only, "N events · newest first", with a Write a message button) and the Soft-close checklist (Quote created, Before photos, Quote check, Admin check, GTG; an n / 5 meter). The landing tab since 2026-10-22.',
           value: 'The story of the job on one tab.',
+        },
+        {
+          name: 'Drive',
+          what: 'The photos and files of the work order: the Photos card (Waiting for approval, then the approved files grouped by kind), moved off Overview on 2026-10-22. Uploading still happens from the message box.',
+          value: 'The files of the job in one place, apart from the story.',
+          permissions: ['work_orders/tabs/drive view (unset follows work_orders view)', 'work_orders/attachments create / approve / delete'],
+          since: '2026-10-22',
         },
         {
           name: 'Finances',
@@ -181,7 +188,7 @@ export const WORK_ORDERS_PART: DocPart = {
           name: 'The signed copy comes back',
           what: 'A text with a file to the Quo line (message.received) is matched by the sender\'s number to sheets sent to it in the last 45 days (current sheets of live work orders; a signed sheet stays matchable for two days so a second photo lands on the same work order). Exactly one candidate: the file is added as a pending Sign-off attachment by the Quo service principal, Sign-Off Link now points at the attachment and the sheet is marked signed. Several candidates: the file is held and every candidate\'s CICO card shows "A signed sheet came back from a number that holds more than one open sheet. Is it this work order\'s?" with Yes, file it here / Not this one. None: dropped. The chips read Waiting for the signed copy / Signed copy received.',
           value: 'The signature files itself.',
-          rules: ['Texts with no file, from an unknown number, or while storage is off are acknowledged and dropped; each file is fetched up to the attachment size cap and must be a PDF or an image.', 'The filed copy still waits for approval on Overview › Photos, and the Done gate for Bill For Incurred reads the APPROVED sign-off.'],
+          rules: ['Texts with no file, from an unknown number, or while storage is off are acknowledged and dropped; each file is fetched up to the attachment size cap and must be a PDF or an image.', 'The filed copy still waits for approval on Drive › Photos, and the Done gate for Bill For Incurred reads the APPROVED sign-off.'],
           audit: ['signoff_received', 'signoff_reply_held', 'signoff_reply_dismissed', 'attachment_added (kind signoff, via quo)', 'field_updated on Sign-Off Link'],
           deferred: ['Needs QUO_API_KEY and QUO_FROM_NUMBER on the server for API sends (the Quo desktop fallback works without them) and the message.received event on the Quo webhook.'],
         },

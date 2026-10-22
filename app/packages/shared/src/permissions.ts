@@ -304,6 +304,9 @@ export function fieldSectionPermKey(slug: string): string {
 // ── The work-order detail tabs ───────────────────────────────────────────────
 
 export const WO_TABS: { id: string; label: string }[] = [
+  // 2026-10-22 · Overview leads (and is the landing tab); Drive is the
+  // work order's photos and files, which used to sit on Overview.
+  { id: 'overview', label: 'Overview' },
   { id: 'fields', label: 'All fields' },
   { id: 'money', label: 'Finances' },
   { id: 'dates', label: 'Dates' },
@@ -312,7 +315,7 @@ export const WO_TABS: { id: string; label: string }[] = [
   { id: 'payables', label: 'Payables' },
   { id: 'site', label: 'Site' },
   { id: 'parts', label: 'Parts' },
-  { id: 'overview', label: 'Overview' },
+  { id: 'drive', label: 'Drive' },
   { id: 'messages', label: 'Messages' },
   { id: 'audit', label: 'Audit trail' },
   // 0064 · the record's own tabs. Since 2026-10-20 Checklist and Related have
