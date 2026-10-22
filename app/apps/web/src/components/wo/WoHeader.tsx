@@ -60,11 +60,14 @@ interface WoHeaderProps {
   /** Rule 11.2.1: whether the quote carries data (false = missing or empty,
       null/undefined = not known here), so the status menu can tag Quote Ready. */
   quoteFilled?: boolean | null;
+  /** 11.2.1 (2026-10-22): the quote's status — null = no quote, undefined =
+      not loaded yet. */
+  quoteStatus?: string | null;
   /** The record's actions (More, Save as PDF), drawn after the header's own buttons. */
   actions?: ReactNode;
 }
 
-export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, quoteFilled, actions }: WoHeaderProps) {
+export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, quoteFilled, quoteStatus, actions }: WoHeaderProps) {
   const meta = deriveHeaderMeta(wo);
   const f = wo.fields ?? {};
   // Rules 2.6.3 / 2.7: where the work order sits on Ecotrak (stamped by the
@@ -111,6 +114,13 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
     ? attachments.data.items
         .filter((a) => a.has_file && a.review_status === 'approved' && a.kind)
         .map((a) => a.kind as string)
+    : null;
+  // 11.2.1 (2026-10-22): Quote Ready needs one approved picture — an image
+  // with a file behind it, whatever its kind.
+  const approvedPhotos = attachments.data
+    ? attachments.data.items.filter(
+        (a) => a.has_file && a.review_status === 'approved' && (a.content_type ?? '').toLowerCase().startsWith('image/'),
+      ).length
     : null;
   // Every work order opens with the full header (2026-10-20); the fold lasts
   // until the page is left and is no longer remembered across work orders.
@@ -182,6 +192,8 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
             ecotrakStatus={f[ECOTRAK_STATUS_KEY]}
             gateHints={{
               quoteFilled: quoteFilled ?? null,
+              quoteStatus,
+              approvedPhotos,
               partsValue: f[PARTS_REQUIRED_KEY] ?? null,
               // Rule 11.3.1 from the mirrored keys (the LATEST visit): a hint,
               // the API reads every visit.

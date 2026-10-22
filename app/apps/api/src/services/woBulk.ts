@@ -27,7 +27,7 @@ import { assertNotVisitOwned } from './visits.js';
 import { assertDateOrder, assertDispatchers, assertNotHistoryField, canonicalClient, clientRecordNames } from './dataRules.js';
 import { checkWriteValue } from './woFieldValues.js';
 import { assertMoneyNotLocked } from './moneySync.js';
-import { assertGateHoldsFields, doneGateMissingFor, quoteFilledTaskIds } from './statusGates.js';
+import { assertGateHoldsFields, doneGateMissingFor, quoteGateMissingFor } from './statusGates.js';
 import {
   PARTS_REQUIRED_KEY,
   STATUS_GATE_ERROR_CODE,
@@ -215,7 +215,8 @@ export async function bulkUpdate(
     if (gated.length > 0) {
       const gate = gated[0].gate as NonNullable<ReturnType<typeof statusGateFor>>;
       const partsPatch = customPatch.find((c) => c.key === PARTS_REQUIRED_KEY);
-      const quoteOk = gate === 'quote' ? await quoteFilledTaskIds({ query }, gated.map((x) => x.r.id)) : null;
+      // 11.2.1 (widened 2026-10-22): data, submitted, an approved picture — per row.
+      const quoteMissing = gate === 'quote' ? await quoteGateMissingFor({ query }, gated.map((x) => x.r.id)) : null;
       // Rules 11.3.1–11.3.3: the Done gate reads visits, cost and quote per row.
       const doneMissing = new Map<string, DoneGateCheck[]>();
       if (gate === 'done') {
@@ -225,7 +226,7 @@ export async function bulkUpdate(
         .map((x) => x.r)
         .filter((r) =>
           gate === 'quote'
-            ? !(quoteOk as Set<string>).has(r.id)
+            ? (quoteMissing?.get(r.id)?.length ?? 1) > 0
             : gate === 'done'
               ? (doneMissing.get(r.id)?.length ?? 0) > 0
               : !partsRequiredFilled(partsPatch ? partsPatch.value : r.fields?.[PARTS_REQUIRED_KEY]),

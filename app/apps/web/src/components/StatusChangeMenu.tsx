@@ -7,13 +7,15 @@ import {
   describeEcotrakRefusal,
   describeStatusGate,
   doneGateMissing,
+  quoteGateMissing,
+  quoteSubmitted,
   ecotrakTransitionRefused,
   partsRequiredFilled,
   requestableStatuses,
   statusGateFor,
   statusGateTag,
   statusMoveNeedsNoApproval,
-  type DoneGateCheck,
+  type GateCheck,
   type StatusGate,
   type StatusRef,
 } from '@theone/shared';
@@ -66,6 +68,11 @@ interface StatusChangeMenuProps {
 
 export interface GateHints {
   quoteFilled?: boolean | null;
+  /** 11.2.1 (2026-10-22): the quote's status (null = no quote; omitted =
+      unknown, no tag) and how many approved pictures the work order holds
+      (null = not loaded yet, no tag). */
+  quoteStatus?: string | null;
+  approvedPhotos?: number | null;
   partsValue?: unknown;
   visitComplete?: boolean | null;
   costValue?: unknown;
@@ -76,8 +83,15 @@ export interface GateHints {
 
 /** What the hints say the gate would find missing, or null when the pick
     may go ahead as far as the caller knows. An unknown hint never tags. */
-function hintedBlock(gate: StatusGate, h: GateHints): { missing: DoneGateCheck[] } | null {
-  if (gate === 'quote') return h.quoteFilled === false ? { missing: ['quote'] } : null;
+function hintedBlock(gate: StatusGate, h: GateHints): { missing: GateCheck[] } | null {
+  if (gate === 'quote') {
+    const missing = quoteGateMissing({
+      quoteFilled: h.quoteFilled !== false,
+      quoteSubmitted: h.quoteStatus === undefined ? true : quoteSubmitted(h.quoteStatus),
+      approvedPhotos: h.approvedPhotos ?? 1,
+    });
+    return missing.length > 0 ? { missing } : null;
+  }
   if (gate === 'parts') return 'partsValue' in h && !partsRequiredFilled(h.partsValue) ? { missing: [] } : null;
   const missing = doneGateMissing({
     visitComplete: h.visitComplete ?? true,

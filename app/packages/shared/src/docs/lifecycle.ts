@@ -134,7 +134,7 @@ export const LIFECYCLE: LifecycleModel = {
     {
       status: 'Quote Ready',
       meaning: 'A quote with content exists and is ready for the manager\'s approval.',
-      enteredBy: 'Change status; refused while the quote has no line item or scope line (rule 11.2.1).',
+      enteredBy: 'Change status; refused while the quote has no line item or scope line, has not been submitted for approval, or no approved picture is on the work order (rule 11.2.1, widened 2026-10-22).',
       who: 'Senior OM or a manager.',
       gate: 'quote',
     },

@@ -1,4 +1,6 @@
 // Rules 11.2.1 / 11.2.2 — the "Quoting & Parts" gate, database half.
+// (11.2.1 widened 2026-10-22: Quote Ready also needs the quote submitted and
+// one approved picture — quoteGateMissingFor below.)
 //
 // The vocabulary (which status opens which gate, what "filled" means, the
 // sentence) is in @theone/shared statusGates.ts; this file answers the
@@ -20,10 +22,14 @@ import {
   describeStatusGate,
   doneGateMissing,
   gateHoldingField,
+  quoteGateMissing,
+  quoteSubmitted,
   statusHoldsQuote,
   partsRequiredFilled,
   statusGateFor,
   type DoneGateCheck,
+  type GateCheck,
+  type QuoteGateCheck,
   type StatusGate,
 } from '@theone/shared';
 import type { Queryable } from '../db.js';
@@ -45,6 +51,44 @@ export async function quoteFilledTaskIds(q: Queryable, ids: readonly string[]): 
     [ids],
   );
   return new Set(res.rows.map((r) => r.task_id));
+}
+
+/**
+ * Rule 11.2.1 (as widened on 2026-10-22) against the rows, for several work
+ * orders at once: what the Quote Ready gate finds missing on each. The
+ * quote's data is the 11.2.1 question above; "submitted" is the quote row's
+ * status having left draft (one quote per task, 0003); a "picture" is an
+ * attachment with a file in storage, an image content type and
+ * review_status = 'approved' (the 1.3.x review — whoever approved it). A
+ * work order with no quote row is missing the quote.
+ */
+export async function quoteGateMissingFor(q: Queryable, ids: readonly string[]): Promise<Map<string, QuoteGateCheck[]>> {
+  const out = new Map<string, QuoteGateCheck[]>();
+  if (ids.length === 0) return out;
+  const filled = await quoteFilledTaskIds(q, ids);
+  const res = await q.query<{ task_id: string; quote_status: string | null; approved_photos: number | string }>(
+    `SELECT t.id::text AS task_id,
+            (SELECT q.status FROM quote q WHERE q.task_id = t.id LIMIT 1) AS quote_status,
+            (SELECT count(*) FROM attachment a
+              WHERE a.task_id = t.id
+                AND a.review_status = 'approved'
+                AND a.storage_key IS NOT NULL
+                AND a.content_type LIKE 'image/%') AS approved_photos
+       FROM task t
+      WHERE t.id = ANY($1::uuid[])`,
+    [ids],
+  );
+  for (const r of res.rows) {
+    out.set(
+      r.task_id,
+      quoteGateMissing({
+        quoteFilled: filled.has(r.task_id),
+        quoteSubmitted: quoteSubmitted(r.quote_status),
+        approvedPhotos: Number(r.approved_photos ?? 0),
+      }),
+    );
+  }
+  return out;
 }
 
 /**
@@ -103,7 +147,7 @@ export async function statusGateBlocker(
   targetStatusName: string,
   partsValue?: unknown,
   currentStatusName?: string | null,
-): Promise<{ gate: StatusGate; message: string; missing?: DoneGateCheck[] } | null> {
+): Promise<{ gate: StatusGate; message: string; missing?: GateCheck[] } | null> {
   // #2 (Wave C): a billing status is gated unless the work order is already
   // done or later, so the current status is read when the caller did not say.
   let current = currentStatusName;
@@ -123,10 +167,14 @@ export async function statusGateBlocker(
       ? null
       : { gate, message: describeStatusGate(gate, targetStatusName, missing), missing };
   }
-  let ok: boolean;
   if (gate === 'quote') {
-    ok = (await quoteFilledTaskIds(q, [taskId])).has(taskId);
-  } else if (partsValue !== undefined) {
+    const missing = (await quoteGateMissingFor(q, [taskId])).get(taskId) ?? ['quote'];
+    return missing.length === 0
+      ? null
+      : { gate, message: describeStatusGate(gate, targetStatusName, missing), missing };
+  }
+  let ok: boolean;
+  if (partsValue !== undefined) {
     ok = partsRequiredFilled(partsValue);
   } else {
     const res = await q.query<{ parts: unknown }>(

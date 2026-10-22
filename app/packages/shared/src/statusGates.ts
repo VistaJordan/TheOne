@@ -2,8 +2,12 @@
 // and rules 11.3.1–11.3.3 — the "Job is Done" gate (completion).
 //
 // Three statuses cannot be entered empty-handed:
-//   11.2.1  Quote Ready needs the work order's quote to carry data. (Waiting
-//           for Quote needs nothing — it is where the quote is still owed.)
+//   11.2.1  Quote Ready needs the work order's quote to carry data, and —
+//           since 2026-10-22 (Elise) — the quote SUBMITTED for approval (it
+//           has left draft) and at least one APPROVED picture on the work
+//           order (an image that passed the 1.3.x review, on the Drive tab).
+//           (Waiting for Quote needs nothing — it is where the quote is
+//           still owed.)
 //   11.2.2  Waiting for Parts and Please Order Parts need the Parts Required
 //           list, so the person is asked to type the parts before the move.
 //   11.3.x  Done / Incurred needs a visit that checked in AND out (11.3.1),
@@ -42,10 +46,19 @@ export const FINAL_COST_KEY = '34. Cost';
 
 export type StatusGate = 'quote' | 'parts' | 'done';
 
+/** The Quote Ready gate's checks (11.2.1, widened 2026-10-22), in order:
+    the quote carries data, it was submitted (left draft), an approved
+    picture is on file. */
+export type QuoteGateCheck = 'quote' | 'quote_submitted' | 'photo';
+export const QUOTE_GATE_CHECKS: readonly QuoteGateCheck[] = ['quote', 'quote_submitted', 'photo'];
+
 /** The Done gate's three checks, in the rule's order. */
 export type DoneGateCheck = 'visit' | 'cost' | 'quote' | 'after_photo' | 'bfi_proof';
 /** What a standard completion needs; a BFI job swaps the last for 'bfi_proof'. */
 export const DONE_GATE_CHECKS: readonly DoneGateCheck[] = ['visit', 'cost', 'quote', 'after_photo'];
+
+/** Any check a gate can report missing (`details.missing` on the 409). */
+export type GateCheck = DoneGateCheck | QuoteGateCheck;
 
 /** `details.code` on the 409 a refused move returns; `details.gate` says which. */
 export const STATUS_GATE_ERROR_CODE = 'STATUS_GATE';
@@ -166,6 +179,33 @@ export function doneGateMissing(state: {
   return missing;
 }
 
+/** "Submitted" for the Quote Ready gate: the quote has left draft —
+    pending_correction (a dispatcher's Submit for correction), pending_approval,
+    approved, sent, or decided by the client. A quote sent back to draft by
+    an edit (Wave A #8) or a rejection counts as not submitted again. */
+export function quoteSubmitted(status: string | null | undefined): boolean {
+  return typeof status === 'string' && status.trim() !== '' && status.trim().toLowerCase() !== 'draft';
+}
+
+/** Which of the Quote Ready gate's checks fail (11.2.1 as widened on
+    2026-10-22): `quoteFilled` = quoteSectionsHaveData, `quoteSubmitted` =
+    the quote left draft, `approvedPhotos` = how many APPROVED images with a
+    file behind them the work order holds (the Drive tab; the uploader's own
+    approval counts, as the photo review allows it). A quote with no data
+    reports only 'quote' — submitting is the next step, not a second fault.
+    Empty = the move may go ahead. */
+export function quoteGateMissing(state: {
+  quoteFilled: boolean;
+  quoteSubmitted: boolean;
+  approvedPhotos: number;
+}): QuoteGateCheck[] {
+  const missing: QuoteGateCheck[] = [];
+  if (!state.quoteFilled) missing.push('quote');
+  else if (!state.quoteSubmitted) missing.push('quote_submitted');
+  if (!(state.approvedPhotos > 0)) missing.push('photo');
+  return missing;
+}
+
 /** "NOT NULL" for a hand-typed list: something other than whitespace. A
     value that arrived as an array (a future list widget) counts when any
     entry is non-blank. */
@@ -190,18 +230,22 @@ export function quoteSectionsHaveData(
   );
 }
 
-const DONE_CHECK_TEXT: Record<DoneGateCheck, string> = {
+const CHECK_TEXT: Record<GateCheck, string> = {
   visit: 'a visit checked in and checked out (CICO tab)',
   cost: `the final vendor cost (${FINAL_COST_KEY})`,
   quote: 'a quote with at least one line or scope item (Quote tab)',
-  after_photo: 'an approved after photo (Photos card)',
-  bfi_proof: 'an approved before photo and an approved sign-off (Photos card — this job is Bill For Incurred)',
+  quote_submitted: 'the quote submitted (Submit for correction or Submit for approval on the Quote tab)',
+  photo: 'at least one approved picture (Drive tab)',
+  after_photo: 'an approved after photo (Drive tab)',
+  bfi_proof: 'an approved before photo and an approved sign-off (Drive tab — this job is Bill For Incurred)',
 };
 
-const DONE_CHECK_TAG: Record<DoneGateCheck, string> = {
+const CHECK_TAG: Record<GateCheck, string> = {
   visit: 'Needs check-out',
   cost: 'Needs cost',
   quote: 'Needs quote',
+  quote_submitted: 'Needs quote submitted',
+  photo: 'Needs photo',
   after_photo: 'Needs after photo',
   bfi_proof: 'Needs sign-off',
 };
@@ -211,27 +255,26 @@ function joinAnd(parts: readonly string[]): string {
   return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
-/** The sentence the person sees when a move is refused. For the Done gate,
-    `missing` narrows it to what is actually absent (all three when unknown). */
+/** The sentence the person sees when a move is refused. For the Done and
+    Quote Ready gates, `missing` narrows it to what is actually absent (every
+    check when unknown). */
 export function describeStatusGate(
   gate: StatusGate,
   statusName: string,
-  missing?: readonly DoneGateCheck[],
+  missing?: readonly GateCheck[],
 ): string {
-  if (gate === 'quote') {
-    return `${statusName} needs a quote first — add at least one line or scope item on the Quote tab.`;
-  }
   if (gate === 'parts') {
     return `Enter the parts required (${PARTS_REQUIRED_KEY}) before moving to ${statusName}.`;
   }
-  const checks = missing && missing.length > 0 ? missing : DONE_GATE_CHECKS;
-  return `${statusName} needs ${joinAnd(checks.map((c) => DONE_CHECK_TEXT[c]))} first.`;
+  const all: readonly GateCheck[] = gate === 'quote' ? QUOTE_GATE_CHECKS : DONE_GATE_CHECKS;
+  const checks = missing && missing.length > 0 ? missing : all;
+  return `${statusName} needs ${joinAnd(checks.map((c) => CHECK_TEXT[c]))} first.`;
 }
 
 /** The short tag the status menu draws on a pick the gate would refuse. */
-export function statusGateTag(gate: StatusGate, missing?: readonly DoneGateCheck[]): string {
-  if (gate === 'quote') return 'Needs quote';
+export function statusGateTag(gate: StatusGate, missing?: readonly GateCheck[]): string {
   if (gate === 'parts') return 'Needs parts';
-  if (missing && missing.length === 1) return DONE_CHECK_TAG[missing[0]];
+  if (missing && missing.length === 1) return CHECK_TAG[missing[0]];
+  if (gate === 'quote' && !missing) return 'Needs quote';
   return 'Not ready';
 }

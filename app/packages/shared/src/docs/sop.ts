@@ -209,7 +209,7 @@ export const SOP: SopDocument = {
           'A pick the record is not ready for is tagged and refused with the reason:',
         ] },
         { kind: 'table', head: ['Status', 'Needs', 'Tag in the menu'], rows: [
-          ['Quote Ready', 'A quote with at least one line item or scope line.', 'Needs quote'],
+          ['Quote Ready', 'A quote with at least one line item or scope line, submitted for approval, and at least one approved picture on the Drive tab.', 'Needs quote / Needs quote submitted / Needs photo; Not ready for several'],
           ['Waiting for Parts, Please Order Parts', 'The Parts Required field written (Parts tab).', 'Needs parts'],
           ['Done / Incurred', 'A visit checked in and out; Cost; a quote with data; an approved After photo (Bill For Incurred: an approved Before photo and an approved Sign-off).', 'Needs check-out / Needs cost / Needs quote / Needs after photo / Needs sign-off; Not ready for several'],
           ['Any', 'A move Ecotrak would refuse from the work order\'s Ecotrak status.', 'Ecotrak (a warning, unless the site is set to block)'],

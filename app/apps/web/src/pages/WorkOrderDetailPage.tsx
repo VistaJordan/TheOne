@@ -315,6 +315,7 @@ export function WorkOrderDetailPage() {
           obligations={obligations}
           onClockClick={revealObligations}
           quoteFilled={quoteQuery.data ? quoteSectionsHaveData(quoteQuery.data.quote?.sections) : null}
+          quoteStatus={quoteQuery.data ? (quoteQuery.data.quote?.status ?? null) : undefined}
           actions={<RecordActions woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} onNote={setRecordNote} />}
         />
 

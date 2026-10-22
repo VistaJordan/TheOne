@@ -416,7 +416,20 @@ or the list was emptied since). The status menu tags a pick "Needs quote" /
 "Needs parts" from `gateHints` (the detail page hands it the quote query
 and the bag) and prints the API's sentence after a refused click. Not
 gated on purpose: the CSV import (an upsert that names a status is a data
-load, not a person pausing a job) and the seed's own statuses.
+load, not a person pausing a job) and the seed's own statuses. **Quote Ready
+widened (Elise, 2026-10-22, no migration):** the quote must also be
+SUBMITTED (its status past `draft` — `pending_correction` from a
+dispatcher's Submit for correction counts, `quoteSubmitted` in shared) and
+the work order must hold at least one APPROVED picture (an `attachment` with
+a file in storage, an `image/*` content type and `review_status =
+'approved'`, whoever approved it). `quoteGateMissing` (shared) /
+`quoteGateMissingFor` (API, batched for bulk) answer `quote` /
+`quote_submitted` / `photo` as `details.missing` on the 409; the menu tags
+Needs quote / Needs quote submitted / Needs photo (Not ready for several)
+from `quoteStatus` + `approvedPhotos` hints the header reads off the quote
+query and the `['wo-attachments', id]` cache. Only entry is gated: M3 still
+holds the quote's DATA in Quote Ready, not its status or the picture.
+`tests/status-gates.test.ts`.
 
 **Job is Done gate** (rules 11.3.1–11.3.3, no migration) is the third gate
 in the same two files: **Done / Incurred** needs a visit that checked in AND
