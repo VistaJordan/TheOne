@@ -93,7 +93,15 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
     try {
       for (const file of Array.from(files)) {
         const prepared = await prepareFile(file);
-        await uploadAttachment(woId, { ...prepared, client_visible: clientVisible });
+        // Only the fields the route accepts: its schema is strict, so the
+        // byte_size prepareFile reports for the browser's own cap would turn
+        // the whole upload into "Validation failed" if it rode along.
+        await uploadAttachment(woId, {
+          file_name: prepared.file_name,
+          content_type: prepared.content_type,
+          data: prepared.data,
+          client_visible: clientVisible,
+        });
       }
       await qc.invalidateQueries({ queryKey: ['wo-attachments', woId] });
       await qc.invalidateQueries({ queryKey: ['wo-activity', woId] });
