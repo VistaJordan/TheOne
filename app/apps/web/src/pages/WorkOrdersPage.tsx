@@ -29,7 +29,6 @@ import { GroupMenu } from '../components/wo/list/GroupMenu';
 import { QuickFilter } from '../components/wo/list/QuickFilter';
 import { BulkBar } from '../components/wo/list/BulkBar';
 import { ImportDialog } from '../components/wo/list/ImportDialog';
-import { CreateWorkOrderDialog } from '../components/wo/list/CreateWorkOrderDialog';
 import { ListPagination, PAGE_SIZES } from '../components/ListPagination';
 import { ToolButton } from '../components/wo/list/Popover';
 import { useStatusGroups } from '../lib/statusGroups';
@@ -153,8 +152,6 @@ export function WorkOrdersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allMatchingSelected, setAllMatchingSelected] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  // 0041 · "Add work order" — the manual create form.
-  const [showCreate, setShowCreate] = useState(false);
   // 0015 · Import needs work_orders:create, Export its own view grant — and
   const { can, actingAs } = useAuth();
   // 0026: a scoped person's list is "theirs" before any filter; say so, so an
@@ -482,19 +479,8 @@ export function WorkOrdersPage() {
                   Margin % sort approximate
                 </span>
               )}
-              {/* The comp's accent CTA leads the cluster (0041). Which fields
-                  the form offers is configured in Admin › Custom fields. */}
-              {can('work_orders', 'create') && (
-                <button
-                  type="button"
-                  className="tool-btn is-primary"
-                  onClick={() => setShowCreate(true)}
-                  title="Raise a work order by hand"
-                >
-                  <Icon name="plus" size={14} />
-                  Add work order
-                </button>
-              )}
+              {/* "Add work order" (0041) moved to Incoming Work Orders on
+                  2026-10-22 — a work order typed in by hand is incoming work. */}
               {can('work_orders', 'create') && (
                 <ToolButton onClick={() => setShowImport(true)} title="Import work orders from a CSV">
                   <Icon name="upload" size={14} />
@@ -702,7 +688,6 @@ export function WorkOrdersPage() {
       </div>
 
       {showImport && <ImportDialog fields={fields} onClose={() => setShowImport(false)} />}
-      {showCreate && <CreateWorkOrderDialog onClose={() => setShowCreate(false)} />}
 
       {pendingDelete && (
         <ConfirmDialog

@@ -53,6 +53,7 @@ import {
   saveCreateTemplate,
   updateSubcategory,
 } from '../services/woCreate.js';
+import { zipPlace } from '../services/addressFill.js';
 import {
   addAttachment,
   canReviewAttachments,
@@ -178,6 +179,8 @@ const createBodySchema = z
     asset_id: z.string().uuid().nullable().optional(),
   })
   .strict();
+
+const zipQuerySchema = z.object({ zip: z.string().trim().min(5).max(10) }).strict();
 
 const checkQuerySchema = z.object({
   wo_number: z.string().max(60).default(''),
@@ -438,6 +441,16 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     return checkWoNumber(q.wo_number, { store: q.store ?? null, trade: q.trade ?? null, site_id: q.site_id ?? null, asset_id: q.asset_id ?? null });
   });
 
+  // The forms complete City and State from a ZIP the address carries alone
+  // ("123 Main St, 77002"), from our own ZIP table — the same completion the
+  // save runs (services/addressFill.ts), shown before the save.
+  app.get('/work-orders/new/zip', async (req) => {
+    const { p } = acting(req);
+    requireWoCreate(p);
+    const { zip } = parse(zipQuerySchema, req.query);
+    return { place: await zipPlace(zip) };
+  });
+
   // 0063 · saved sets of values that pre-fill the form.
   app.get('/work-orders/new/templates', async (req) => {
     const { p } = acting(req);
@@ -486,7 +499,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // Every read comes back through here so the work order's scope is checked
   // first — a photo is exactly as visible as the work order it is on.
 
-  // 0071 � the work order's SharePoint folder: where it is (or why not),
+  // 0071 � the work order's SharePoint folder: where it is (or why not),
   // and a button to make it now whatever the Settings switch says.
   app.get('/work-orders/:id/sharepoint-folder', async (req) => {
     const { p } = acting(req);

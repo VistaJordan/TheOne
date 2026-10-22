@@ -1880,6 +1880,12 @@ export function getWoCreateForm(): Promise<WoCreateForm> {
   return request('/work-orders/new/form');
 }
 
+/** GET /api/work-orders/new/zip?zip= — the city and state our ZIP table
+    names, to complete an address typed with the ZIP alone. */
+export function lookupZip(zip: string): Promise<{ place: { city: string; state: string } | null }> {
+  return request(`/work-orders/new/zip?zip=${encodeURIComponent(zip)}`);
+}
+
 /** Is this WO # free, and is something like it already open? `taken` blocks
     Create; `near` is only a warning. */
 export function checkWoNumber(input: {

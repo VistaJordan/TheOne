@@ -117,17 +117,17 @@ export const SOP: SopDocument = {
     },
     {
       n: 5,
-      title: 'Adding a Work Order from the List',
+      title: 'Adding a Work Order from Incoming Work Orders',
       lead: 'The same act without the draft, for anyone with the create right.',
       who: ['Operations Admin', 'Team Lead', 'Assistant TL', 'Account Manager', 'Admin'],
-      where: 'Work Orders › Add work order',
+      where: 'Incoming Work Orders › Add work order',
       needs: ['work_orders create'],
       blocks: [
         { kind: 'steps', items: [
-          'Click **Add work order**. Optionally **Start from a template…** ("Filled in from <name>. The WO # is still yours to type.").',
+          'Open **Incoming Work Orders** and click **Add work order** (on the To accept queue or the Drafts tab). Optionally **Start from a template…** ("Filled in from <name>. The WO # is still yours to type.").',
           'Type the **WO #** ("The number the client knows this job by"). A number in use is refused as you type ("That number is already taken"; a trashed one says so, with **Open it**).',
           'Optionally pick a **Site** and an **Asset**; the site fills the client, store and address while those fields are empty; an asset under warranty shows "Under warranty — check before quoting."',
-          'Fill the sections (Identity, Where, What is wrong, When it is due, Money and people, More details). Fields marked * are required, and the footer lists what the form **Still needs** until it reads **Ready**. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade; a banner says when one applies).',
+          'Fill the sections (Identity, Where, What is wrong, When it is due, Money and people, More details). Under Where, paste or type the address and City, State and Zip Code fill in from it (a ZIP alone completes the city and state); they stay editable. Fields marked * are required, and the footer lists what the form **Still needs** until it reads **Ready**. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade; a banner says when one applies).',
           'Optionally add files under **Photos and files** (up to 10); they upload once the work order exists and wait for approval like any upload.',
           'Click **Create work order** (or **Create and upload N files**). **Save as template** keeps the filled form for next time ("The WO # and the asset are not saved"); **Share it with everyone** needs the Custom fields edit right.',
         ] },

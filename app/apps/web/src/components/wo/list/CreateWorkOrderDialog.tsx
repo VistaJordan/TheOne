@@ -68,6 +68,7 @@ import {
   type WoFieldDescriptor,
 } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthProvider';
+import { useAddressFill } from '../../../lib/addressFill';
 import { prepareFile } from '../../../lib/upload';
 import { Icon } from '../../Icon';
 import { AssetStatusChip, ConditionChip, SitePicker, WarrantyChip } from '../../portfolio/PortfolioParts';
@@ -140,9 +141,9 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   const onForm = useMemo(() => new Set(form.fields.map((f) => f.key)), [form.fields]);
 
   const set = (key: string, v: string) => {
-    // The address fills City, State and Zip Code as it is typed; they stay
-    // editable, and the API completes a part only the ZIP table knows
-    // (services/addressFill.ts).
+    // The address fills City, State and Zip Code as it is typed or pasted;
+    // they stay editable. A part only the ZIP table knows is completed below
+    // (and again by the API on create, services/addressFill.ts).
     const parts = key === ADDRESS_KEY ? addressPartValues(parseAddressParts(v)) : {};
     setValues((cur) => ({ ...cur, ...parts, [key]: v }));
     setFlagged((f) => {
@@ -152,6 +153,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       return next;
     });
   };
+  useAddressFill(values[ADDRESS_KEY], (fill) => setValues(fill));
 
   // ── The site and the asset ─────────────────────────────────────────────────
   const siteQuery = useQuery({ queryKey: ['site', site?.id], queryFn: () => getSite(site!.id), enabled: Boolean(site) });

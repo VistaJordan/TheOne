@@ -500,7 +500,9 @@ match the editor; dates go in as ISO, money as a number.
 
 **Add work order** (migration 0041, `services/woCreate.ts`,
 `components/wo/list/CreateWorkOrderDialog.tsx`) is the same act without the
-draft: the list's accent button, gated on `work_orders:create`, opens a form
+draft: the **Add work order** button on Incoming Work Orders (both tabs,
+`components/wo/list/AddWorkOrderButton.tsx`; moved off the list on
+2026-10-22, Elise), gated on `work_orders:create`, opens a form
 and POSTs `/api/work-orders`. **The form is configuration**:
 `field_def.create_mode` (`off` | `optional` | `required`) says per field
 whether it is offered and whether Create refuses without it, set from the

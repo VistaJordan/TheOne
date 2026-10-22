@@ -25,7 +25,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useLinkNav } from '../lib/linkNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ADDRESS_KEY,
   INTAKE_FORM_FIELDS,
+  addressPartValues,
+  parseAddressParts,
   intakeDraftMissing,
   intakeValueFilled,
   type IntakeDraft,
@@ -47,6 +50,8 @@ import {
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
 import { IncomingTabs } from '../components/IncomingTabs';
+import { AddWorkOrderButton } from '../components/wo/list/AddWorkOrderButton';
+import { useAddressFill } from '../lib/addressFill';
 import { AssigneeSelect } from '../components/wo/AssigneeAvailability';
 import { useWoCatalogue } from '../components/wo/fieldEdit';
 
@@ -153,8 +158,10 @@ function DraftsList() {
             : `${items.length} draft${items.length === 1 ? '' : 's'} waiting · a work order leaves the intake once every field is filled and it is assigned`}
         </p>
         <div className="intake-head-actions">
-          <button type="button" className="btn btn-primary" onClick={() => start.mutate()} disabled={start.isPending}>
-            <Icon name="plus" size={14} />
+          {/* "Add work order" (the form, no draft) lives on Incoming since 2026-10-22. */}
+          <AddWorkOrderButton />
+          <button type="button" className="btn" onClick={() => start.mutate()} disabled={start.isPending}>
+            <Icon name="pencil" size={14} />
             New work order
           </button>
         </div>
@@ -253,7 +260,10 @@ function DraftForm({ id }: { id: string }) {
   }, [draft, values, catalogue]);
 
   const set = (key: string, v: string) => {
-    setValues((cur) => ({ ...(cur ?? {}), [key]: v }));
+    // The address fills City, State and Zip Code as it is typed or pasted
+    // (the same reading the API runs on Submit, shared/addressParts.ts).
+    const parts = key === ADDRESS_KEY ? addressPartValues(parseAddressParts(v)) : {};
+    setValues((cur) => ({ ...(cur ?? {}), ...parts, [key]: v }));
     setFlagged((f) => {
       if (!f.has(key)) return f;
       const next = new Set(f);
@@ -261,6 +271,9 @@ function DraftForm({ id }: { id: string }) {
       return next;
     });
   };
+  // A ZIP the text carries with no readable city or state is completed from
+  // the ZIP table, into the two fields while they are empty.
+  useAddressFill(values?.[ADDRESS_KEY], (fill) => setValues((cur) => (cur ? fill(cur) : cur)));
 
   const input = (): IntakeDraftInput => ({
     wo_number: (values?.wo_number ?? '').trim() || null,

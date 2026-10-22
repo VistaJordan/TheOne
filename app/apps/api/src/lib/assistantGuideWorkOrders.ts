@@ -28,14 +28,14 @@ Needs \`work_orders\` view. A person limited to their own work orders sees a "Yo
 - Import a CSV: click **Import**, **Choose file**, map each column under **Match the columns**, choose **Create and update** or **Only create**, click **Preview**, then **Import N row(s)**. Needs \`work_orders\` create. A row whose WO # already exists updates that work order; a WO # that is in the trash is skipped ("In trash"). Three refusals stop the whole file, the Preview included (never for a super admin), and the dialog lists the rows refused: a row that is a work order outside the person's own work orders ("Some rows in this file are work orders that are not assigned to you"); a **Status (by name)** cell without \`work_orders/status\` edit ("You cannot set work-order status — remove the status column, or clear it on these rows"); a **Home list (by name)** cell on a new row without it ("You cannot route work orders to a home list — remove the home list column, or clear it on these rows").
 
 **Add a work order** (needs \`work_orders\` create)
-1. Click **Add work order**.
+1. Open **Incoming Work Orders** in the sidebar (the To accept queue or the **Drafts** tab) and click **Add work order**. The button is not on the Work Orders list.
 2. Optionally pick **Start from a template…**.
 3. Type the **WO #** (required; a number already in use, even in the trash, is refused).
 4. Optionally pick a **Site** and an **Asset**; the site fills in the client, store and address.
 5. Fill the sections; fields marked * are required, and the footer lists what is **Still needs …**.
 6. Optionally add files under **Photos and files**.
 7. Click **Create work order**.
-"Possible duplicates" is a warning only. **Save as template** keeps the filled form for next time. Typing the Address fills City, State and Zip code from it (they stay editable); this happens wherever the Address is filled, not only on this form. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade).
+"Possible duplicates" is a warning only. **Save as template** keeps the filled form for next time. Typing or pasting the Address under Where fills City, State and Zip code from it, and a ZIP alone completes the city and state (they stay editable); the same fill runs on the Drafts form and wherever the Address is saved. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade).
 
 ### The work-order page
 

@@ -86,6 +86,7 @@ import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { IncomingTabs } from '../components/IncomingTabs';
+import { AddWorkOrderButton } from '../components/wo/list/AddWorkOrderButton';
 import { EmergencyBadge } from '../components/EmergencyBadge';
 import { EscalatedBadge } from '../components/EscalatedBadge';
 import { compareInboxRows } from '../lib/inboxOrder';
@@ -705,7 +706,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   return (
     <AppShell active={intake ? 'Incoming Work Orders' : 'Approvals'}>
       {intake && <IncomingTabs tab="accept" />}
-      <div className="page-head">
+      <div className={`page-head${intake ? ' intake-page-head' : ''}`}>
         <p className="page-sub">
           {loading
             ? 'Loading…'
@@ -715,6 +716,12 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                   section === 'all' ? 'all sections' : SECTION_LABEL[section].toLowerCase()
                 } · ${LANE_LABEL[lane].toLowerCase()}`}
         </p>
+        {/* "Add work order" lives on Incoming (both tabs) since 2026-10-22. */}
+        {intake && (
+          <div className="intake-head-actions">
+            <AddWorkOrderButton />
+          </div>
+        )}
       </div>
 
       <div className="payq-head">

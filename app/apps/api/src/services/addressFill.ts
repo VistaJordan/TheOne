@@ -27,6 +27,16 @@ export interface AddressFillChange {
   after: string;
 }
 
+/** The city and state a ZIP names in our own table (geo_zip, 0056), for the
+    forms to complete an address that carries only the ZIP. Null when the
+    ZIP is unknown. */
+export async function zipPlace(zip: string): Promise<{ city: string; state: string } | null> {
+  const five = zip.trim().slice(0, 5);
+  if (!/^\d{5}$/.test(five)) return null;
+  const res = await query<{ city: string; state: string }>(`SELECT city, state FROM geo_zip WHERE zip = $1`, [five]);
+  return res.rows[0] ?? null;
+}
+
 /** Did this save put a non-blank address on the work order? */
 export function addressWritten(before: unknown, after: unknown): boolean {
   if (typeof after !== 'string' || after.trim() === '') return false;
