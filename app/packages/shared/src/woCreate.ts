@@ -105,9 +105,15 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
   },
   {
     id: 'money',
-    title: 'Money and people',
-    hint: 'The NTE the client authorised, and who carries the job.',
-    keys: ['16. Client NTE 🔴', '22. FM', '21. Comp', 'AM', 'Assignee'],
+    title: 'Money',
+    hint: 'The NTE the client authorised, and the entity that bills the job.',
+    keys: ['16. Client NTE 🔴', '21. Comp'],
+  },
+  {
+    id: 'people',
+    title: 'People',
+    hint: 'The FM company the job came through, and who carries it.',
+    keys: ['22. FM', 'AM', 'Assignee'],
   },
 ];
 
