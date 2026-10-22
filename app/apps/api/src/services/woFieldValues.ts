@@ -24,6 +24,8 @@ import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { ActivityEntry } from '@theone/shared';
 import { MONEY_MAX, VALIDATION_CODE, addedAssignees, withinMoneyBound } from '@theone/shared';
 import { assertDateOrder, assertDispatchers, assertNotHistoryField, checkFieldValue } from './dataRules.js';
+import { addressWritten, fillFromAddress } from './addressFill.js';
+import { ADDRESS_KEY } from '@theone/shared';
 
 // ── Promoted-column mirrors ──────────────────────────────────────────────────
 // The map moved to woMirrors.ts (the automations engine reads it too). The
@@ -182,6 +184,9 @@ export async function updateWorkOrderFields(
   const task = row.rows[0];
   // Reads that need no lock run on the pool first; the bag is read FOR NO KEY UPDATE inside the transaction.
   const log: TaskChange[] = [];
+  // City / State / Zip Code read off an address this save wrote, logged
+  // `via: 'address'` (services/addressFill.ts).
+  const addressLog: TaskChange[] = [];
   await withTransaction(async (tx) => {
     // THE lock strength for a bag write — here and in every other writer of
     // task.fields (woBulk, visits, signoff, assigneeHistory, moneySync), which
@@ -237,6 +242,18 @@ export async function updateWorkOrderFields(
     }
     if (log.length === 0) return;
 
+    // The address fills City, State and Zip Code; a part this same save set
+    // by hand is left as typed.
+    const addr = log.find((c) => c.field === `fields.${ADDRESS_KEY}`);
+    if (addr && addressWritten(addr.before, addr.after)) {
+      const fills = await fillFromAddress(merged, new Set(patch.map((p) => p.jsonKey)), tx);
+      for (const f of fills) {
+        addressLog.push({ field: `fields.${f.key}`, before: f.before, after: f.after });
+        const mirror = MIRROR_BY_JSON_KEY[f.key];
+        if (mirror) mirrorSets.push({ ...mirror, value: mirrorValue(mirror.cast, f.after) });
+      }
+    }
+
     // M2 (Wave D): Received on ≤ Due date, against the bag as this save leaves it.
     assertDateOrder(merged, log.map((c) => c.field.slice('fields.'.length)));
     // #22 / M22 (Wave D, D3): a name ADDED to the Assignee seat is an active
@@ -272,10 +289,11 @@ export async function updateWorkOrderFields(
       params,
     );
     await logTaskChanges(tx, actorId, task.id, log, auto?.by);
+    if (addressLog.length > 0) await logTaskChanges(tx, actorId, task.id, addressLog, 'address');
   });
   if (log.length > 0) {
     // Automations react after the commit, before the fresh detail is read.
-    await dispatchAutomations({ taskId: task.id, kind: 'changed', changes: log }, auto);
+    await dispatchAutomations({ taskId: task.id, kind: 'changed', changes: [...log, ...addressLog] }, auto);
   }
 
   // The fresh detail, whether or not anything changed — saving the value a

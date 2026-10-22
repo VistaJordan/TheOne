@@ -50,6 +50,9 @@ import {
   type WoCreateTemplate,
   type WoDuplicateHit,
   isDispatcherRole,
+  ADDRESS_KEY,
+  addressPartValues,
+  parseAddressParts,
 } from '@theone/shared';
 import {
   ApiRequestError,
@@ -137,7 +140,11 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   const onForm = useMemo(() => new Set(form.fields.map((f) => f.key)), [form.fields]);
 
   const set = (key: string, v: string) => {
-    setValues((cur) => ({ ...cur, [key]: v }));
+    // The address fills City, State and Zip Code as it is typed; they stay
+    // editable, and the API completes a part only the ZIP table knows
+    // (services/addressFill.ts).
+    const parts = key === ADDRESS_KEY ? addressPartValues(parseAddressParts(v)) : {};
+    setValues((cur) => ({ ...cur, ...parts, [key]: v }));
     setFlagged((f) => {
       if (!f.has(key)) return f;
       const next = new Set(f);

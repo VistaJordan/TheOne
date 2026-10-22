@@ -50,6 +50,7 @@ import {
   VALIDATION_CODE,
   assigneeNames,
   woNumberProblem,
+  ADDRESS_KEY,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict } from '../errors.js';
@@ -62,6 +63,7 @@ import { stampDateCreated } from './dateCreated.js';
 import { INTAKE_START_STATUS_NAME } from './intake.js';
 import { dispatchAutomations } from './automations.js';
 import { assertDispatchers } from './dataRules.js';
+import { addressWritten, fillFromAddress } from './addressFill.js';
 
 const PERM_KEY = 'work_orders';
 
@@ -382,6 +384,12 @@ export async function createWorkOrder(
     const s = typeof value === 'string' ? value.trim() : value;
     if (typeof s === 'string' && s.length === 0) continue;
     bag[key] = s;
+  }
+
+  // The address fills City, State and Zip Code the form left empty
+  // (addressFill.ts) — before the checks, so a part it fills counts as filled.
+  if (addressWritten(null, bag[ADDRESS_KEY])) {
+    await fillFromAddress(bag, new Set(Object.keys(bag)));
   }
 
   // Wave D (M2 / #11): every value checked for its type, the Client a record.

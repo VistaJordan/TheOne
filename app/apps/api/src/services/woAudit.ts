@@ -36,7 +36,9 @@ export interface TaskChange {
 // decision that moved the figure.
 // 'ecotrak': the change was made on Ecotrak and the sync brought it in (0079)
 // — the actor is the 'Ecotrak sync' service principal.
-export type ChangeSource = 'import' | 'bulk' | 'visit' | 'webhook' | 'payment' | 'quote' | 'invoice' | 'signoff' | 'assignment' | 'ecotrak' | AutomationSource | ApprovalSource;
+// 'address': City / State / Zip Code read off the address a save wrote
+// (services/addressFill.ts) — the actor is whoever wrote the address.
+export type ChangeSource = 'address' | 'import' | 'bulk' | 'visit' | 'webhook' | 'payment' | 'quote' | 'invoice' | 'signoff' | 'assignment' | 'ecotrak' | AutomationSource | ApprovalSource;
 
 /** The rule that made this change, when an automation did. */
 export interface AutomationSource {

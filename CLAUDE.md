@@ -234,6 +234,27 @@ a link to the work order. 0037 defines `SLA Due Date` as a datetime
 field_def declared it, so nobody could type it; seed.ts carries the same
 row. Self-checks: `tests/intake-gate.test.ts`.
 
+**City, State and Zip Code follow the address** (Elise, 2026-10-22, no
+migration; `packages/shared/src/addressParts.ts` pure,
+`apps/api/src/services/addressFill.ts`, `tests/address-parts.test.ts`).
+Whenever a save puts a non-blank `17. Address` on a work order,
+`parseAddressParts` reads city, state and ZIP off its end (the team's shape is
+"7898 Bradley Long Dr, Sherrills Ford, NC 28673, USA"; also a spelled-out
+state, ZIP+4, a suite part, "City ST ZIP" with no comma) and `fillFromAddress`
+writes them into `City` / `State` / `Zip Code`; a city or state the text
+leaves out is completed from `geo_zip` (0056, our own table: parsing, never
+an outside geocoder). Called by every writer of the address:
+`updateWorkOrderFields` (editor, automations), `bulkUpdate`, both halves of
+the CSV import, `createWorkOrder`, intake draft create / update (the form
+sends every value, so "set by hand" there means changed from the stored one)
+and the PM raise; the Add work order form also fills them as the address is
+typed. The Ecotrak sync writes city / state columns but never the address, so
+it is untouched. Rules: the parts OVERWRITE what the three fields held; a
+part the same save sets explicitly wins; a bare street changes nothing; the
+City / State mirror columns follow; updates are logged `via: 'address'`
+(creations are part of the `created` row). Going forward only: nothing
+back-filled the work orders on file.
+
 **Which work orders a person sees** (migration 0032, rule 8.5, the
 roadmap's "my book / my entity") is two more paths in the same permission
 tree, so Roles and per-user Adjust draw it with no UI of its own:

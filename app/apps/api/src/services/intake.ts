@@ -34,8 +34,10 @@ import {
   type IntakeSubmitResponse,
   VALIDATION_CODE,
   woNumberProblem,
+  ADDRESS_KEY,
 } from '@theone/shared';
 import type { ActingPrincipal } from './activity.js';
+import { addressWritten, fillFromAddress } from './addressFill.js';
 import { assertDispatchers } from './dataRules.js';
 import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
 import { applyProfitFormula } from './money.js';
@@ -207,6 +209,10 @@ export async function createIntakeDraft(input: IntakeDraftInput, actor: ActingPr
   const woNumber = cleanText(input.wo_number, 'WO#', 80);
   const assignee = cleanText(input.assignee, 'Assignee', 200);
   const fields = mergeFields({}, cleanFields(input.fields));
+  // The address fills City, State and Zip Code left empty (addressFill.ts).
+  if (addressWritten(null, fields[ADDRESS_KEY])) {
+    await fillFromAddress(fields, new Set(Object.keys(fields).filter((k) => fields[k] !== null && fields[k] !== '')));
+  }
   const res = await query<{ id: string }>(
     `INSERT INTO wo_intake_draft (wo_number, fields, assignee, created_by, updated_by)
      VALUES ($1, $2::jsonb, $3, $4, $4)
@@ -237,6 +243,15 @@ export async function updateIntakeDraft(
   const woNumber = 'wo_number' in input ? cleanText(input.wo_number, 'WO#', 80) : cur.wo_number;
   const assignee = 'assignee' in input ? cleanText(input.assignee, 'Assignee', 200) : cur.assignee;
   const fields = 'fields' in input ? mergeFields(cur.fields, cleanFields(input.fields)) : cur.fields;
+  // The address fills City, State and Zip Code (addressFill.ts). The form
+  // sends every value on each save, so "set by hand in this save" means a
+  // value that differs from the one on file.
+  if (addressWritten(cur.fields[ADDRESS_KEY], fields[ADDRESS_KEY])) {
+    const handSet = new Set(
+      Object.keys(fields).filter((k) => String(fields[k] ?? '') !== String(cur.fields[k] ?? '')),
+    );
+    await fillFromAddress(fields, handSet);
+  }
 
   await query(
     `UPDATE wo_intake_draft

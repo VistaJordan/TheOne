@@ -262,6 +262,18 @@ export const WORK_ORDERS_PART: DocPart = {
           since: '0037',
         },
         {
+          name: 'City, State and Zip code follow the address',
+          what: 'When a work order’s Address is filled (typed in the editor, bulk edit, an automation, Add work order, an intake draft, the CSV import or a planned-maintenance raise), City, State and Zip code are read off its end ("7898 Bradley Long Dr, Sherrills Ford, NC 28673, USA" gives Sherrills Ford / NC / 28673) and written into their fields. On Add work order they appear as the address is typed. A city or state the text leaves out is completed from the ZIP code, from the app’s own ZIP table.',
+          value: 'The address is typed once; the intake fields that depend on it fill themselves.',
+          rules: [
+            'The address is the source: the three fields are overwritten whenever the address changes. A hand edit to them stays until the address changes again; a value typed in the same save as the address is kept.',
+            'An address that names none of them (a bare street) changes nothing.',
+            'Going forward only: work orders already on file were not back-filled.',
+          ],
+          audit: ['field_updated on City / State / Zip Code, stamped via address'],
+          since: '2026-10-22',
+        },
+        {
           name: 'Drafts (WO Intake)',
           what: 'Columns WO # ("No WO# yet"), Client · Store, Trade, FM, Still to fill, Assignee ("Not assigned"), Last touched; chips Draft / Ready to submit. New work order opens a draft with the WO # ("The client\'s work order number"), the 13 intake fields, Client and Assignee ("Pick the dispatcher it goes to", Who\'s available?); Save draft keeps it; Submit & assign creates the work order already assigned (no acceptance task); Discard this draft? keeps the row as discarded. Result pages Submitted / Discarded with Open the work order / Back to the drafts.',
           value: 'The Operations Admin\'s staging area for emails and phone calls, with the same completeness rule as acceptance.',

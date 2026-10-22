@@ -35,7 +35,7 @@ Needs \`work_orders\` view. A person limited to their own work orders sees a "Yo
 5. Fill the sections; fields marked * are required, and the footer lists what is **Still needs …**.
 6. Optionally add files under **Photos and files**.
 7. Click **Create work order**.
-"Possible duplicates" is a warning only. **Save as template** keeps the filled form for next time. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade).
+"Possible duplicates" is a warning only. **Save as template** keeps the filled form for next time. Typing the Address fills City, State and Zip code from it (they stay editable); this happens wherever the Address is filled, not only on this form. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade).
 
 ### The work-order page
 

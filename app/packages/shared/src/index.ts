@@ -1790,6 +1790,7 @@ export interface ApiError {
 export * from './permissions';
 export * from './permDiff';
 export * from './messaging';
+export * from './addressParts';
 export * from './mentions';
 import type { ClientSystem, WoMessage } from './messaging';
 

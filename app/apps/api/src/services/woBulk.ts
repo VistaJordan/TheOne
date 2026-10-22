@@ -16,6 +16,8 @@ import type { ActingPrincipal } from './activity.js';
 import { Params, listCustomFields, resolveField } from './woFields.js';
 import { woScopeSql } from './woScope.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
+import { addressWritten, fillFromAddress } from './addressFill.js';
+import { ADDRESS_KEY } from '@theone/shared';
 import { dispatchAutomations } from './automations.js';
 import { raiseAcceptanceTasks } from './approvals.js';
 import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
@@ -295,6 +297,8 @@ export async function bulkUpdate(
       const params: unknown[] = [];
       // One activity row per entry, written after the UPDATE (see woAudit.ts).
       const log: TaskChange[] = [];
+      // City / State / Zip Code read off an address this edit wrote (addressFill.ts).
+      const addressLog: TaskChange[] = [];
 
       const push = (col: string, value: unknown) => {
         params.push(value);
@@ -344,6 +348,22 @@ export async function bulkUpdate(
             else merged[c.key] = c.value;
             log.push({ field: `fields.${c.key}`, before: rowFields[c.key] ?? null, after: c.value });
           }
+          // The address fills City, State and Zip Code, unless this same edit
+          // set them (the bag key, or the city / state column).
+          const addr = changed.find((c) => c.key === ADDRESS_KEY);
+          if (addr && addressWritten(rowFields[ADDRESS_KEY], addr.value)) {
+            const explicit = new Set(customPatch.map((c) => c.key));
+            if ('city' in patch) explicit.add('City');
+            if ('state' in patch) explicit.add('State');
+            for (const f of await fillFromAddress(merged, explicit, tx)) {
+              addressLog.push({ field: `fields.${f.key}`, before: f.before, after: f.after });
+              const col = f.key === 'City' ? 'city' : f.key === 'State' ? 'state' : null;
+              if (col) {
+                params.push(f.after);
+                sets.push(`${col} = $${params.length}::text`);
+              }
+            }
+          }
           // M2 (Wave D): Received on ≤ Due date on the row as the save leaves it.
           try {
             assertDateOrder(merged, changed.map((c) => c.key));
@@ -378,7 +398,8 @@ export async function bulkUpdate(
       );
 
       await logTaskChanges(tx, actorId, row.id, log, 'bulk');
-      firedRows.push({ id: row.id, log });
+      if (addressLog.length > 0) await logTaskChanges(tx, actorId, row.id, addressLog, 'address');
+      firedRows.push({ id: row.id, log: [...log, ...addressLog] });
       updated += 1;
     }
   });
@@ -1000,6 +1021,17 @@ export async function importWorkOrders(
   await withTransaction(async (tx) => {
     for (const plan of ordered) {
       if (plan.action === 'create') {
+        // The address fills City, State and Zip Code the file left out
+        // (addressFill.ts); part of the creation, so no rows of their own.
+        if (addressWritten(null, plan.fields[ADDRESS_KEY])) {
+          const explicit = new Set(Object.keys(plan.fields).filter((k) => String(plan.fields[k] ?? '').trim() !== ''));
+          if (plan.cols.city) explicit.add('City');
+          if (plan.cols.state) explicit.add('State');
+          for (const f of await fillFromAddress(plan.fields, explicit, tx)) {
+            if (f.key === 'City') plan.cols.city = f.after;
+            if (f.key === 'State') plan.cols.state = f.after;
+          }
+        }
         const res = await tx.query<{ id: string }>(
           `INSERT INTO task
              (wo_number, ext_name, title, description, client, city, state, trade,
@@ -1083,9 +1115,25 @@ export async function importWorkOrders(
         const bagChanges: TaskChange[] = Object.entries(plan.fieldPatch)
           .map(([key, value]) => ({ field: `fields.${key}`, before: curFields[key] ?? null, after: value }))
           .filter((c) => changed(c.before, c.after));
+        // City / State / Zip Code read off an address the file wrote (addressFill.ts).
+        const addressLog: TaskChange[] = [];
         if (bagChanges.length > 0) {
           changes.push(...bagChanges);
-          params.push(JSON.stringify(applyFieldPatch(curFields, plan.fieldPatch)));
+          const nextBag = applyFieldPatch(curFields, plan.fieldPatch);
+          if (ADDRESS_KEY in plan.fieldPatch && addressWritten(curFields[ADDRESS_KEY], plan.fieldPatch[ADDRESS_KEY])) {
+            const explicit = new Set(Object.keys(plan.fieldPatch));
+            if ('city' in plan.cols) explicit.add('City');
+            if ('state' in plan.cols) explicit.add('State');
+            for (const f of await fillFromAddress(nextBag, explicit, tx)) {
+              addressLog.push({ field: `fields.${f.key}`, before: f.before, after: f.after });
+              const col = f.key === 'City' ? 'city' : f.key === 'State' ? 'state' : null;
+              if (col) {
+                params.push(f.after);
+                sets.push(`${col} = $${params.length}`);
+              }
+            }
+          }
+          params.push(JSON.stringify(nextBag));
           sets.push(`fields = $${params.length}::jsonb`);
         }
         // The status moves only when the file named one, and against the
@@ -1111,7 +1159,8 @@ export async function importWorkOrders(
           params,
         );
         await logTaskChanges(tx, actorId, plan.id as string, changes, 'import');
-        updatedRows.push({ id: plan.id as string, changes });
+        if (addressLog.length > 0) await logTaskChanges(tx, actorId, plan.id as string, addressLog, 'address');
+        updatedRows.push({ id: plan.id as string, changes: [...changes, ...addressLog] });
       }
     }
   });

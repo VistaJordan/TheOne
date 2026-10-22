@@ -42,6 +42,7 @@ import { dispatchAutomations } from './automations.js';
 import { serviceActorId } from './serviceActors.js';
 import { assertDispatchers, canonicalClient } from './dataRules.js';
 import { PM_ALREADY_RAISED_CODE, pmAlreadyRaisedMessage } from '@theone/shared';
+import { addressWritten, fillFromAddress } from './addressFill.js';
 
 export function requirePmView(p: ActingPrincipal): void {
   requirePerm(p, PM_PERM_KEY, 'view', 'You cannot see planned maintenance');
@@ -393,6 +394,11 @@ async function raiseOne(s: PmSchedule, dueOn: string, actorId: string): Promise<
   put('Date-Time Received', today());
   put('Scheduled Date', dueOn);
   put('Due Date', dueOn);
+  // The schedule's address fills City, State and Zip Code it left empty
+  // (addressFill.ts); the City / State columns follow the bag.
+  if (addressWritten(null, bag['17. Address'])) {
+    await fillFromAddress(bag, new Set(Object.keys(bag)));
+  }
   applyProfitFormula(bag);
   stampDateCreated(bag);
 
@@ -423,8 +429,8 @@ async function raiseOne(s: PmSchedule, dueOn: string, actorId: string): Promise<
         titleOf(s),
         String(bag['35. WO Description']),
         s.client,
-        s.city,
-        s.state,
+        (bag['City'] as string | undefined) ?? s.city,
+        (bag['State'] as string | undefined) ?? s.state,
         s.trade,
         s.billing_entity,
         s.nte,
