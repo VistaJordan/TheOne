@@ -159,8 +159,17 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   }, [fields, pref]);
 
   const needle = q.trim().toLowerCase();
-  const matches = (f: WoFieldDescriptor) =>
+  const fieldMatches = (f: WoFieldDescriptor) =>
     !needle || f.label.toLowerCase().includes(needle) || f.key.toLowerCase().includes(needle);
+  // A search for a section's title ("site", "dates") finds every field in it.
+  const titleMatches = (title: string) => needle !== '' && title.toLowerCase().includes(needle);
+  const sectionTitleOf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of FIELD_SECTIONS) for (const k of s.keys) if (!m.has(k)) m.set(k, s.title);
+    return m;
+  }, []);
+  const matches = (f: WoFieldDescriptor) =>
+    fieldMatches(f) || titleMatches(sectionTitleOf.get(f.key) ?? MORE_SECTION_TITLE);
   const shown = ordered.filter(matches);
 
   // Default mode renders the operator's sections; a field the config does not
@@ -181,7 +190,7 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     return out;
   }, [fields]);
   const shownSections = sections
-    .map((s) => ({ ...s, fields: s.fields.filter(matches) }))
+    .map((s) => ({ ...s, fields: titleMatches(s.title) ? s.fields : s.fields.filter(fieldMatches) }))
     .filter((s) => s.fields.length > 0);
 
   const setMode = (mode: OrderMode) => {
@@ -463,8 +472,9 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
           {shownSections.map((s) => (
             // The CICO section IS the visit log — the same card as the CICO
             // tab, so the two can never drift. A search narrows it back to
-            // the matching rows (IVR link, pin…) like any other section.
-            s.slug === CICO_SECTION_SLUG && needle === '' ? (
+            // the matching rows (IVR link, pin…) like any other section;
+            // searching its title keeps the whole card.
+            s.slug === CICO_SECTION_SLUG && (needle === '' || titleMatches(s.title)) ? (
               <CicoCard key={s.title} wo={wo} embedded />
             ) : (
             <section className={`card afp-sect${s.wide ? ' is-wide' : ''}`} key={s.title}>
