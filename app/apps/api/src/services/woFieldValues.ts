@@ -23,7 +23,7 @@ import { CREATED_AT_SQL } from './activity.js';
 import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { ActivityEntry } from '@theone/shared';
 import { MONEY_MAX, VALIDATION_CODE, addedAssignees, withinMoneyBound } from '@theone/shared';
-import { assertDateOrder, assertDispatchers, assertNotHistoryField, checkFieldValue } from './dataRules.js';
+import { assertDateOrder, assertDispatchers, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
 
@@ -259,9 +259,13 @@ export async function updateWorkOrderFields(
     // #22 / M22 (Wave D, D3): a name ADDED to the Assignee seat is an active
     // dispatcher. A rule's own write (auto) and the system's (opts.system)
     // are not a person picking — the rule / schedule is checked where it is saved.
+    // A disabled account is refused on every path, the rule and the schedule
+    // included (either may name someone disabled since it was saved).
     const seat = log.find((c) => c.field === 'fields.Assignee');
     if (seat && !auto && !opts.system) {
       await assertDispatchers(addedAssignees(seat.before, seat.after), 'fields.Assignee', tx);
+    } else if (seat) {
+      await assertNoDisabledAssignees(addedAssignees(seat.before, seat.after), 'fields.Assignee', tx);
     }
 
     // Rule 11.1.1: filling the Assignee seat on a work order still waiting in

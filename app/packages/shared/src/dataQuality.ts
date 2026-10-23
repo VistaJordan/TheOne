@@ -59,6 +59,17 @@ export function assigneeNotDispatcherMessage(names: readonly string[]): string {
     : `${list} are not active dispatchers — a work order is assigned to an OM Under Probation, OM or Senior OM`;
 }
 
+/** `details.code` when an assignee names a disabled account — asked of every
+    writer of the seat, the automations, the PM raise and the CSV import too. */
+export const ASSIGNEE_DISABLED_CODE = 'ASSIGNEE_DISABLED';
+
+export function assigneeDisabledMessage(names: readonly string[]): string {
+  const list = names.map((n) => `"${n}"`).join(', ');
+  return names.length === 1
+    ? `${list} is a disabled account — a work order cannot be assigned to them`
+    : `${list} are disabled accounts — a work order cannot be assigned to them`;
+}
+
 /** Names in a comma-joined `users` value, trimmed, blanks dropped. */
 export function assigneeNames(v: unknown): string[] {
   return String(v ?? '')

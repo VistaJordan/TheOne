@@ -24,7 +24,7 @@ import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
-import { assertDateOrder, assertDispatchers, assertNotHistoryField, canonicalClient, clientRecordNames } from './dataRules.js';
+import { assertDateOrder, assertDispatchers, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
 import { checkWriteValue } from './woFieldValues.js';
 import { assertMoneyNotLocked } from './moneySync.js';
 import { assertGateHoldsFields, doneGateMissingFor, quoteGateMissingFor } from './statusGates.js';
@@ -41,6 +41,8 @@ import {
   VALIDATION_CODE,
   CLIENT_FIELD_KEY,
   IMPORT_UNKNOWN_CLIENT_CODE,
+  ASSIGNEE_DISABLED_CODE,
+  ASSIGNEE_FIELD_KEY,
   assigneeNames,
   matchClientRecord,
   normalizeUsState,
@@ -821,6 +823,29 @@ export async function importWorkOrders(
         `Some rows name a client that is not on file (${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}) — add the client under Clients first, or correct the spelling`,
         { code: IMPORT_UNKNOWN_CLIENT_CODE, wo_numbers: [...new Set(unknownRows)], clients: names },
       );
+    }
+  }
+
+  // A file never assigns a work order to a disabled account: refused whole,
+  // naming the rows, like an unknown client.
+  {
+    const cells = rows.map((r) => assigneeNames(r[ASSIGNEE_FIELD_KEY]));
+    const disabled = await disabledAssigneeKeys([...new Set(cells.flat())]);
+    if (disabled.size > 0) {
+      const badRows: string[] = [];
+      const badNames = new Set<string>();
+      cells.forEach((names, i) => {
+        const hit = names.filter((n) => disabled.has(n.toLowerCase()));
+        if (hit.length === 0) return;
+        hit.forEach((n) => badNames.add(n));
+        badRows.push(importRowName(rows[i], i));
+      });
+      const names = [...badNames];
+      throw new ApiError('BAD_REQUEST', `Some rows assign a disabled account (${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}) — pick an active dispatcher or leave the Assignee blank`, {
+        code: ASSIGNEE_DISABLED_CODE,
+        wo_numbers: [...new Set(badRows)],
+        assignees: names,
+      });
     }
   }
 

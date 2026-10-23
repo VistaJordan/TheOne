@@ -17,7 +17,9 @@
 // a 400 with `details.code` and `details.field`.
 
 import {
+  ASSIGNEE_DISABLED_CODE,
   ASSIGNEE_NOT_DISPATCHER_CODE,
+  assigneeDisabledMessage,
   CLIENT_FIELD_KEY,
   CLIENT_NOT_ON_FILE_CODE,
   DISPATCHER_ROLE_CODES,
@@ -150,6 +152,39 @@ export async function assertDispatchers(
     });
   }
   return names.map((n) => byKey.get(n.trim().toLowerCase()) as string);
+}
+
+/** The names that belong to a disabled account and to no account that is
+    not disabled (display names are not unique) — lower-cased keys. */
+export async function disabledAssigneeKeys(names: readonly string[], q: Queryable = pool): Promise<Set<string>> {
+  if (names.length === 0) return new Set();
+  const res = await q.query<{ k: string }>(
+    `SELECT lower(btrim(display_name)) AS k FROM principal
+      WHERE lower(btrim(display_name)) = ANY($1::text[])
+      GROUP BY 1
+     HAVING bool_and(status = 'disabled')`,
+    [names.map((n) => n.trim().toLowerCase())],
+  );
+  return new Set(res.rows.map((r) => r.k));
+}
+
+/** The lighter check for writers that need not name a dispatcher (a rule's
+    own write, the PM raise): a disabled account is still refused, 400
+    `ASSIGNEE_DISABLED`. */
+export async function assertNoDisabledAssignees(
+  names: readonly string[],
+  field = 'Assignee',
+  q: Queryable = pool,
+): Promise<void> {
+  const disabled = await disabledAssigneeKeys(names, q);
+  const bad = names.filter((n) => disabled.has(n.trim().toLowerCase()));
+  if (bad.length > 0) {
+    throw new ApiError('BAD_REQUEST', assigneeDisabledMessage(bad), {
+      code: ASSIGNEE_DISABLED_CODE,
+      field,
+      assignees: bad,
+    });
+  }
 }
 
 // ── M2 / L3 · one field value ────────────────────────────────────────────────

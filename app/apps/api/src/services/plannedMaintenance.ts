@@ -31,7 +31,7 @@ import {
   type PmUnit,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
-import { badRequest, conflict, notFound } from '../errors.js';
+import { ApiError, badRequest, conflict, notFound } from '../errors.js';
 import { requirePerm } from './permissions.js';
 import { logAdminEvent } from './adminAudit.js';
 import type { ActingPrincipal } from './activity.js';
@@ -474,7 +474,15 @@ async function raiseOne(s: PmSchedule, dueOn: string, actorId: string): Promise<
   }
   if (s.assignee) {
     const { updateWorkOrderFields } = await import('./woFieldValues.js');
-    await updateWorkOrderFields(taskId, { 'fields.Assignee': s.assignee }, actorId, undefined, { system: true });
+    // The work order is already committed: an assignee disabled since the
+    // schedule was saved is refused, and the work order stays unassigned
+    // (Incoming › Unassigned) rather than the run stopping.
+    try {
+      await updateWorkOrderFields(taskId, { 'fields.Assignee': s.assignee }, actorId, undefined, { system: true });
+    } catch (err) {
+      if (!(err instanceof ApiError)) throw err;
+      console.warn(`[pm] ${s.code}: left ${woNumber} unassigned — ${err.message}`);
+    }
   }
   return taskId;
 }

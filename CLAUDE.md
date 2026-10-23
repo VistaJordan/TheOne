@@ -2775,6 +2775,18 @@ on unassign: the Unassigned tab is where such a work order shows.
 says from and to; the confirm dialog and the note are gone for
 `status_change` (like a payment since 0090); Reject still asks the reason.
 
+**No work order goes to a disabled account** (Elise, 2026-10-23, no
+migration; `tests/assignee-disabled.test.ts`). The person paths already
+refused one through `assertDispatchers` (`status <> 'disabled'`). The paths
+that skip the dispatcher check now ask `assertNoDisabledAssignees` /
+`disabledAssigneeKeys` (`services/dataRules.ts`; a name is disabled when
+every account of that display name is), 400 `ASSIGNEE_DISABLED`: a rule's own
+write and the PM raise in `updateWorkOrderFields` (the engine records the
+errored run; the PM raise catches it and leaves the work order unassigned,
+for Incoming › Unassigned), and the CSV import (whole file refused, rows in
+`details.wo_numbers`). Only a name ADDED to the seat is asked, so work orders
+already held by someone who is then disabled stay as they are.
+
 ## Verify
 
 ```
