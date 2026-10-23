@@ -13,12 +13,14 @@ interface PrincipalRow {
   role: string | null;
 }
 
-/** Every human principal, ordered by name (GET /api/principals). */
+/** Every human principal who is not disabled, ordered by name
+    (GET /api/principals) — the list every assignee picker and the Viewing-as
+    switcher draw from, so a disabled account is never offered. */
 export async function listPrincipals(): Promise<PrincipalListItem[]> {
   const res = await query<PrincipalRow>(
     `SELECT id, display_name, kind, role
        FROM principal
-      WHERE kind = 'human'
+      WHERE kind = 'human' AND status <> 'disabled'
       ORDER BY display_name ASC`,
   );
   return res.rows.map((p) => ({

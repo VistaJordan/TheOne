@@ -1,5 +1,5 @@
 // Routes:
-//   GET /principals               humans only, ordered by name (S4.1)
+//   GET /principals               humans who are not disabled, ordered by name (S4.1)
 //   GET /principals/availability  ?client=<name> — who is free to take a work
 //                                 order: every person with ALL their active
 //                                 work orders split by status, flagged when

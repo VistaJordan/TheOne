@@ -41,3 +41,9 @@ describe('assigning a disabled account', () => {
     expect(src).toContain('code: ASSIGNEE_DISABLED_CODE');
   });
 });
+
+describe('the pickers never offer a disabled account', () => {
+  it('GET /principals leaves disabled people out', () => {
+    expect(svc('principals.ts')).toMatch(/FROM principal\s+WHERE kind = 'human' AND status <> 'disabled'\s+ORDER BY display_name/);
+  });
+});
