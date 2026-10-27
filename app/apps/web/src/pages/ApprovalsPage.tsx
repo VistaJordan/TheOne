@@ -53,6 +53,7 @@ import {
   describeIntakeGate,
   ecotrakTransitionRefused,
   isDispatcherRole,
+  statusApprovalNeedsNote,
   type AcceptanceDetail,
   type ApprovalSectionKey,
 } from '@theone/shared';
@@ -865,17 +866,18 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                   busy={busy}
                   onDecide={(kind) => {
                     setError(null);
-                    // Claim, acknowledge and withdraw need no note: straight through.
+                    // Acknowledge and withdraw need no note: straight through.
                     // Approving a payment too (Elise, 2026-10-22: no confirm
                     // popup — the row already says the amount and the payee),
-                    // and approving a status change (same day: the row says
-                    // from and to; no confirmation, no note).
+                    // and since 2026-10-27 approving any task: no note is
+                    // asked, except a status change INTO Approved (how the
+                    // client approved) and accepting a new work order (the
+                    // dispatcher to assign). Rejecting always asks the reason.
                     if (
-                      kind === 'claim' ||
                       kind === 'acknowledge' ||
                       kind === 'withdraw' ||
                       (kind === 'approve' && r.data.kind === 'payment') ||
-                      (kind === 'approve' && r.data.kind === 'task' && r.data.item.type === 'status_change')
+                      (kind === 'approve' && r.data.kind === 'task' && !approveAsksNote(r) && r.data.item.type !== 'wo_acceptance')
                     ) {
                       decide.mutate({ kind, row: r, text: null });
                     } else setPending({ kind, row: r });
@@ -920,23 +922,14 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
           />
         )}
 
-      {pending?.kind === 'approve' &&
-        pending.row.data.kind === 'task' &&
-        pending.row.data.item.type !== 'wo_acceptance' && (
+      {pending?.kind === 'approve' && approveAsksNote(pending.row) && (
         <TextDialog
-          title={
-            pending.row.data.item.type === 'nte_override'
-              ? 'Approve this NTE increase?'
-              : pending.row.data.item.type === 'status_change'
-                ? 'Approve this status change?'
-                : pending.row.data.item.type === 'snooze_request'
-                  ? 'Approve this snooze?'
-                  : 'Approve this task?'
-          }
+          title="Approve the move to Approved?"
           facts={facts(pending.row)}
           idKey={pending.row.key}
-          label="Note"
-          hint={`Optional — posted as an internal update on ${pending.row.wo_number} so whoever is running the job sees the decision.`}
+          label="How did the client approve?"
+          hint={`Required — posted as an internal update on ${pending.row.wo_number} with the decision.`}
+          required
           multiline
           confirmLabel="Approve"
           busy={busy}
@@ -1001,6 +994,13 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
       )}
     </AppShell>
   );
+}
+
+/** 2026-10-27 (Elise): approving asks a note only for a status change into
+    Approved (`statusApprovalNeedsNote`; the API refuses it without one). */
+function approveAsksNote(row: Row): boolean {
+  if (row.data.kind !== 'task' || row.data.item.type !== 'status_change') return false;
+  return statusApprovalNeedsNote((row.data.item.detail as Partial<StatusChangeDetail>).to_status_name);
 }
 
 /** The key/value block at the top of a decision dialog, per row kind. */
@@ -1397,7 +1397,6 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
 
   switch (d.kind) {
     case 'task': {
-      const claimedByMe = d.item.assigned_to?.id === myId;
       const may = canDecideTask(d.item.type);
       const need = `Requires ${KIND_CHIP[row.section].toLowerCase()} approval rights`;
       // Rule 7.1.3: a new work order is ACCEPTED (and assigned), not approved.
@@ -1409,7 +1408,6 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
         <>
           {row.requester &&
             verb('Withdraw', 'refresh', true, '', () => onDecide('withdraw'), 'plain')}
-          {!claimedByMe && verb('Claim', 'user', may, need, () => onDecide('claim'), 'plain')}
           {verb('Reject', 'x', may, need, () => onDecide('reject'), 'danger')}
           {verb(
             accept ? 'Accept' : 'Approve',
@@ -1505,7 +1503,6 @@ function AcceptDialog({
   onCancel: () => void;
 }) {
   const [assignee, setAssignee] = useState('');
-  const [note, setNote] = useState('');
   const people = useQuery({ queryKey: ['principals'], queryFn: getPrincipals, retry: 0 });
   // Rule 7.1.4 hands the work order to a DISPATCHER (DISPATCHER_ROLE_CODES in
   // shared); since Wave D (#22 / M22, D3) nobody else can be picked — the API
@@ -1514,7 +1511,6 @@ function AcceptDialog({
   const dispatchers = humans.filter((p) => isDispatcherRole(p.role)).map((p) => p.name);
   const ok = assignee.trim().length > 0;
   const whoId = `apq-assignee-${idKey}`;
-  const noteId = `apq-text-${idKey}`;
 
   return (
     <div className="modal-scrim" onClick={busy ? undefined : onCancel} role="presentation">
@@ -1568,17 +1564,6 @@ function AcceptDialog({
                 : `Accepting fills the Assignee seat on ${woNumber}; the work order then shows in that person's list (rule 7.1.4).`}
             </span>
           </div>
-          <div className="field">
-            <label className="lbl" htmlFor={noteId}>Note</label>
-            <textarea
-              className="fld"
-              id={noteId}
-              rows={2}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-            <span className="hint">Optional — posted as an internal update on {woNumber} with the assignment.</span>
-          </div>
         </div>
         <div className="modal-foot">
           <button type="button" className="btn-sm is-ghost" onClick={onCancel} disabled={busy}>
@@ -1587,7 +1572,7 @@ function AcceptDialog({
           <button
             type="button"
             className="btn-sm"
-            onClick={() => ok && onConfirm(assignee.trim(), note)}
+            onClick={() => ok && onConfirm(assignee.trim(), '')}
             disabled={busy || !ok}
           >
             {busy ? 'Saving…' : 'Accept and assign'}

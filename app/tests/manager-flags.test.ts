@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   CLIENT_UNSAFE_SECTION_SLUGS,
+  statusApprovalNeedsNote,
   FIELD_SECTIONS,
   MANAGER_FLAG_LOCKED_ROLES,
   MANAGER_FLAG_NEW_FIELDS,
@@ -109,6 +110,26 @@ describe('reassign / unassign from the header', () => {
 describe('approving a status change is one click', () => {
   it('the inbox sends a status_change approve straight through, like a payment', () => {
     const inbox = src('apps/web/src/pages/ApprovalsPage.tsx');
-    expect(inbox).toContain("(kind === 'approve' && r.data.kind === 'task' && r.data.item.type === 'status_change')");
+    // 2026-10-27: every task approves in one click; only a move INTO Approved
+    // (and accepting a new work order) opens a dialog.
+    expect(inbox).toContain("(kind === 'approve' && r.data.kind === 'task' && !approveAsksNote(r) && r.data.item.type !== 'wo_acceptance')");
+    expect(inbox).toContain('statusApprovalNeedsNote(');
+    expect(inbox).not.toContain("onDecide('claim')");
+  });
+});
+
+describe('a status change is decided on the work order (2026-10-27)', () => {
+  it('the header chip offers Approve / Reject to a manager, Withdraw to the requester', () => {
+    const chip = src('apps/web/src/components/wo/StatusChangeBanner.tsx');
+    expect(chip).toContain('approveApprovalTask(');
+    expect(chip).toContain('rejectApprovalTask(');
+    expect(chip).not.toContain('Decide');
+    expect(chip).toContain('{mine && (');
+  });
+  it('approving a move into Approved needs a note, on the API too', () => {
+    expect(statusApprovalNeedsNote('Approved')).toBe(true);
+    expect(statusApprovalNeedsNote('approved ')).toBe(true);
+    expect(statusApprovalNeedsNote('Quote Ready')).toBe(false);
+    expect(src('apps/api/src/services/approvals.ts')).toContain('statusApprovalNeedsNote(hit.rows[0].name) && !note?.trim()');
   });
 });

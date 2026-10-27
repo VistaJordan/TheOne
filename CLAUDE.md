@@ -2732,6 +2732,14 @@ with the browser's now, editable. **Status requests:** `decide` stamps an
 approved `status_change` acknowledged (by its requester) as it approves, so
 no Continue; 0102 back-fills the approved ones on file; the header chip draws
 nothing for an approval. Rejections still wait for Understood.
+**Deciding (same day, no migration):** an open request's header chip offers
+**Approve** / **Reject** to a manager (`approvals/status` approve, not their
+own ask) and **Withdraw** to the requester; the inbox has no **Claim**
+button (the route stays); approving any task is one click with no note,
+except a status change INTO a status in `APPROVAL_NOTE_STATUS_NAMES`
+(Approved — `statusApprovalNeedsNote` in shared `workflow.ts`), which asks
+"How did the client approve?" and the API refuses without
+(400 `STATUS_APPROVAL_NOTE_REQUIRED`); Accept asks only the dispatcher.
 
 **What a quote opens with, and the builder's trims** (no migration, Elise
 2026-10-22; `packages/shared/src/quoteDefaults.ts` pure,

@@ -53,6 +53,8 @@ import {
   selfApprovalVerdict,
   STATUS_REQUEST_HIDDEN_CODE,
   describeRequestHidden,
+  STATUS_APPROVAL_NOTE_CODE,
+  statusApprovalNeedsNote,
   type SnoozeRequestDetail,
 } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
@@ -610,6 +612,14 @@ async function decide(
         `The status "${d.to_status_name ?? '?'}" no longer exists, so this request cannot be approved. Reject it with a note instead.`,
         { approval_task_id: id, status_id: d.to_status_id ?? null },
       );
+    }
+    // 2026-10-27 (Elise): a move to Approved is approved with a note (how the
+    // client approved); every other status request needs none.
+    if (statusApprovalNeedsNote(hit.rows[0].name) && !note?.trim()) {
+      throw badRequest(`Add a note to approve the move to ${hit.rows[0].name}`, {
+        code: STATUS_APPROVAL_NOTE_CODE,
+        approval_task_id: id,
+      });
     }
     // Rules 11.2.1 / 11.2.2: asked again at approval time — the quote or the
     // parts list may have been emptied since the request — and BEFORE the

@@ -176,7 +176,6 @@ describe('snooze requests are wired', () => {
     }
     const inbox = read('apps/web/src/pages/ApprovalsPage.tsx');
     expect(inbox).toContain("snooze: 'Snooze requests'");
-    expect(inbox).toContain("'Approve this snooze?'");
     expect(inbox).toContain("'Reject this snooze request'");
   });
 });

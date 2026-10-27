@@ -94,7 +94,7 @@ export const SOP: SopDocument = {
         ] },
         { kind: 'sub', title: 'Reject' },
         { kind: 'steps', items: ['Click **Reject**, type the reason in "Reject this work order", click **Reject with note**.', 'The work order moves to Cancelled / Postponed and leaves the queue.'] },
-        { kind: 'note', title: 'RULES', text: 'Accept stays locked while an intake field is missing (rule 11.1.1). The assignee must be an active person on file. Filling the Assignee by hand on the work order, or cancelling it, closes the acceptance by itself. Dispatcher tiers cannot change the Assignee (rule 8.5.4); a manager can, from the People tab. **Claim** takes a row for yourself. A reject needs a "Cancelled / Postponed" status to exist (Admin › Custom fields).' },
+        { kind: 'note', title: 'RULES', text: 'Accept stays locked while an intake field is missing (rule 11.1.1). The assignee must be an active person on file. Filling the Assignee by hand on the work order, or cancelling it, closes the acceptance by itself. Dispatcher tiers cannot change the Assignee (rule 8.5.4); a manager can, from the People tab. A reject needs a "Cancelled / Postponed" status to exist (Admin › Custom fields).' },
       ],
     },
     {
@@ -205,7 +205,7 @@ export const SOP: SopDocument = {
         { kind: 'note', title: 'SIGN-OFF SHEET', text: 'The sheet was drawn when the work order was assigned (the panel at the foot of the CICO card; it needs a Comp that names a layout and file storage on). Click **Send to tech**, pick the technician\'s number (hired technicians, visit technicians, the latest visit, or **Another number**) and click **Text the sheet** (Quo API) or **Open in Quo** (the Quo desktop app sends it). When the signed copy is texted back it is filed as a pending Sign-off attachment, Sign-Off Link is set and the chip reads **Signed copy received**; approve it on the Drive tab like any upload. If several sheets could match, each candidate shows **Yes, file it here / Not this one**. **Redraw with current details** appears when the number or address changed (**Details changed**); **New sheet** replaces the sheet and its link.' },
         { kind: 'sub', title: 'C. Move the status' },
         { kind: 'steps', items: [
-          'Click **Change status** in the header (or the status pill in the list) and pick the next status. Roles in request mode see **Request status change** instead: the pick raises a request a manager decides in Approvals ("Request for <status> sent for approval"), and the decision shows on the header banner: **Continue** after an approval; **Request again** or **Understood** after a rejection. **Withdraw** an open request from Approvals › My requests.',
+          'Click **Change status** in the header (or the status pill in the list) and pick the next status. Roles in request mode see **Request status change** instead: the pick raises a request a manager decides in Approvals ("Request for <status> sent for approval"), and an approval moves the status at once; after a rejection the header banner offers **Request again** or **Understood**. A manager can decide an open request from the header banner (**Approve** / **Reject**) or from Approvals; the requester can **Withdraw** it.',
           'A pick the record is not ready for is tagged and refused with the reason:',
         ] },
         { kind: 'table', head: ['Status', 'Needs', 'Tag in the menu'], rows: [
@@ -395,8 +395,8 @@ export const SOP: SopDocument = {
         ] },
         { kind: 'bullets', items: [
           'Lanes: **For me**, **Open**, **Done**, **My requests**. Filters **Entity / Client / Trade / For**; **Columns** adds Client, Waiting for, NTE, Cost, WO Due Date, For, Raised, Status; pages of rows, up to 500. Escalated rows pin to the top; open rows are oldest first and every decision is per row.',
-          '**Claim** takes a task for yourself. **Approve** takes an optional **Note**; **Reject** needs the reason, then **Reject with note**. A locked verb says why ("Requires new work order approval rights", "On hold — the NTE override on this work order has to be decided first").',
-          'Under **My requests**: **Withdraw** a request still open; after a decision click **Continue** (approved) or **Understood** (rejected) to clear it from the header banner. An approver may withdraw or acknowledge on the requester\'s behalf.',
+          '**Approve** is one click with no note (a status change into Approved asks how the client approved); **Reject** needs the reason, then **Reject with note**. A locked verb says why ("Requires new work order approval rights", "On hold — the NTE override on this work order has to be decided first").',
+          'Under **My requests**: **Withdraw** a request still open; an approved one clears by itself; after a rejection click **Understood** to clear it from the header banner.',
           'Acceptances are not here: they have their own page, Incoming Work Orders (SOP 3). Approvals raise no bell notice; the badge is the signal.',
         ] },
       ],

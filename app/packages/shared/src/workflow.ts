@@ -33,6 +33,20 @@ export function statusMoveNeedsNoApproval(statusName: string | null | undefined)
   return (NO_APPROVAL_STATUS_NAMES as readonly string[]).some((s) => s.toLowerCase() === n);
 }
 
+// ── Approving a status request: a note only for these (Elise, 2026-10-27) ──
+// Approving is one click with no note, except a move into a status named
+// here: the work order moving to Approved says the client approved, so the
+// manager writes how (the API refuses an empty note with a 400
+// STATUS_APPROVAL_NOTE_REQUIRED; the inbox and the work-order header ask).
+export const APPROVAL_NOTE_STATUS_NAMES = ['Approved'] as const;
+export const STATUS_APPROVAL_NOTE_CODE = 'STATUS_APPROVAL_NOTE_REQUIRED';
+
+export function statusApprovalNeedsNote(statusName: string | null | undefined): boolean {
+  if (typeof statusName !== 'string') return false;
+  const n = statusName.trim().toLowerCase();
+  return (APPROVAL_NOTE_STATUS_NAMES as readonly string[]).some((s) => s.toLowerCase() === n);
+}
+
 // ── Statuses a dispatcher may not even request (Elise, 2026-10-22) ──────────
 // The statuses ClickUp marks "!!" are a manager's call, never a dispatcher's
 // ask. `status.request_hidden` (migration 0091) carries the flag per status

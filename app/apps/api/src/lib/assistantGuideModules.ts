@@ -57,8 +57,8 @@ Rules: a purchase order never changes a work order's Cost. Going over a budget o
 
 Sections: **All**, **NTE override (cost over NTE)** (the cost passed the NTE, rule 1.5.2), **NTE increase requests** (manual asks for a higher NTE still open; the button that raised them was removed), **Status changes**, **Manager reviews**, **Quotes**, **Payments**. Lanes: **For me**, **Open**, **Done**, **My requests**. Needs \`approvals\` view; deciding in a section needs that section's approve (\`approvals/nte\`, \`approvals/status\`, \`approvals/reviews\`), and a quote or a payment also needs \`quotes\` approve or \`payments\` approve.
 
-- Decide: on the row click **Approve** (optional **Note**), or **Reject**, say why, **Reject with note**. **Claim** takes a task for yourself. Open rows are oldest first, and each is decided on its own.
-- Your own requests: under **My requests**, **Withdraw** cancels one that is still open; after a decision click **Continue** (approved) or **Understood** (rejected) to clear it.
+- Decide: on the row click **Approve** (one click, no note — except a status change into Approved, which asks how the client approved), or **Reject**, say why, **Reject with note**. A status change can also be decided from the work order's header chip (**Approve** / **Reject**). Open rows are oldest first, and each is decided on its own.
+- Your own requests: under **My requests**, **Withdraw** cancels one that is still open; an approved one clears by itself; after a rejection click **Understood** to clear it.
 - An approved status change request moves the work order by itself.
 
 ### Planned Maintenance (sidebar: Planned Maintenance)
