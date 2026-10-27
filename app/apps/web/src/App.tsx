@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { Suspense, lazy, type ReactNode } from 'react';
 import { ThemeProvider } from './theme/ThemeProvider';
-import { INTAKE_PERM_KEY } from '@theone/shared';
+import { INTAKE_PERM_KEY, PULSE_PERM_KEY } from '@theone/shared';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AppShell, type NavKey } from './components/AppShell';
 import { Icon } from './components/Icon';
@@ -244,7 +244,7 @@ export function App() {
               {/* 0065 — the maintenance modules. */}
               <Route path="/maintenance" element={<RequireAuth><RequireCan perm="maintenance" nav="Maintenance"><MaintenancePage /></RequireCan></RequireAuth>} />
               {/* S5 — the Pulse: every open obligation, by how much clock is left. */}
-              <Route path="/pulse" element={<RequireAuth><RequireCan perm="work_orders" nav="Pulse"><PulsePage /></RequireCan></RequireAuth>} />
+              <Route path="/pulse" element={<RequireAuth><RequireCan perm={PULSE_PERM_KEY} nav="Pulse"><PulsePage /></RequireCan></RequireAuth>} />
               {/* AR — Receivables: the completion audit (a browser-side prototype
                   over the lists) and the invoicing pipeline. :tab is 'invoicing';
                   bare = /audit. Gated on `invoicing`, the same permission the

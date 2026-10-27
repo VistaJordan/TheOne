@@ -28,6 +28,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { STATUS_SINCE_SQL } from '../apps/api/src/services/obligations';
+import { PULSE_PERM_KEY, buildPermissionTree, permAllows } from '../packages/shared/src/permissions';
 
 const serviceSrc = readFileSync(new URL('../apps/api/src/services/obligations.ts', import.meta.url), 'utf8');
 const routeSrc = readFileSync(new URL('../apps/api/src/routes/obligations.ts', import.meta.url), 'utf8');
@@ -65,9 +66,10 @@ function handler(src: string, registration: string): string {
  * recognise fails by name instead of as a misleading "expected undefined".
  */
 function pulseNavPerms(src: string): string[] {
-  const m = /^\s*Pulse: (?:'([^']+)'|\[([^\]]*)\]),/m.exec(src);
-  if (!m) throw new Error("NAV_PERM.Pulse not found in AppShell.tsx as a 'key' or a [list] — update this test's regex with the new shape");
+  const m = /^\s*Pulse: (?:'([^']+)'|\[([^\]]*)\]|([A-Z_]+)),/m.exec(src);
+  if (!m) throw new Error("NAV_PERM.Pulse not found in AppShell.tsx as a 'key', a CONSTANT or a [list] — update this test's regex with the new shape");
   if (m[1]) return [m[1]];
+  if (m[3]) return [m[3]];
   const keys = [...m[2].matchAll(/'([^']+)'/g)].map((x) => x[1]);
   if (keys.length === 0) throw new Error('NAV_PERM.Pulse is a list with no quoted key in it — update this test');
   return keys;
@@ -131,22 +133,38 @@ describe('W4-7 · the readers are scoped and gated', () => {
     expect(serviceSrc).toMatch(/import \{[^}]*outOfScope[^}]*\} from '\.\/woScope\.js'/);
   });
 
-  it('gates every Pulse surface on the permission the sidebar opens it with', () => {
+  it('gates every Pulse surface on the permission the sidebar opens it with (its own Roles row since 2026-10-27)', () => {
     // The route gates on ONE key, so the nav must open the Pulse with exactly
     // one too; a list here means the two have drifted apart.
     const navPerms = pulseNavPerms(shellSrc);
-    expect(navPerms).toEqual(['work_orders']);
-    const gate = `requirePerm(actor, '${navPerms[0]}', 'view'`;
+    expect(navPerms).toEqual(['PULSE_PERM_KEY']);
+    expect(PULSE_PERM_KEY).toBe('work_orders/pulse');
+    const gate = `requirePerm(actor, PULSE_PERM_KEY, 'view'`;
     for (const registration of [
       "app.get('/pulse'",
       "app.get('/obligations'",
       "app.get('/notifications'",
       "app.post('/notifications/:id/read'",
       "app.post('/notifications/read-all'",
-      "app.post('/obligations/:id/snooze'",
     ]) {
       expect(handler(routeSrc, registration), registration).toContain(gate);
     }
+    // One work order's clocks (chips, Obligations card) and the snooze stay
+    // part of the work order.
+    expect(handler(routeSrc, "app.get('/obligations'")).toContain(
+      "if (q.wo) requirePerm(actor, 'work_orders', 'view', 'You cannot view this work order');",
+    );
+    expect(handler(routeSrc, "app.post('/obligations/:id/snooze'")).toContain("requirePerm(actor, 'work_orders', 'view'");
+  });
+
+  it('the Pulse row sits under Work orders, so unset follows work_orders view', () => {
+    const wo = buildPermissionTree([]).find((n) => n.key === 'work_orders');
+    expect(wo?.children?.some((c) => c.key === PULSE_PERM_KEY && c.actions.join() === 'view')).toBe(true);
+    const allows = (role: Record<string, Record<string, boolean>>) =>
+      permAllows({ role, overrides: {} }, PULSE_PERM_KEY, 'view');
+    expect(allows({ work_orders: { view: true } })).toBe(true);
+    expect(allows({ work_orders: { view: true }, [PULSE_PERM_KEY]: { view: false } })).toBe(false);
+    expect(allows({ work_orders: { view: false } })).toBe(false);
   });
 
   it('resolves ?wo= through resolveTaskId: scope 403 outside the book, empty when unknown', () => {

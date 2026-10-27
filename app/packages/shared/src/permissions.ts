@@ -419,6 +419,13 @@ export const STATUS_MODE_CHOICES: NonNullable<PermNode['choices']> = [
 // Per person from Adjust, as usual: an override at any of these paths beats
 // the role, so "let this OM see everything later" is one click.
 export const WO_SCOPE_PERM_KEY = 'work_orders/scope';
+
+/** Elise, 2026-10-27 · the Pulse (sidebar page, /pulse, the obligations list
+    and the bell's Pulse alerts) has its own row in Roles, under Work orders.
+    Unset follows `work_orders` view, so nobody gained or lost it when the
+    row appeared. The clock chips and the Obligations card on ONE work order
+    stay on `work_orders` view: they are part of that work order. */
+export const PULSE_PERM_KEY = 'work_orders/pulse';
 export const WO_SCOPE_ENTITY_ROOT = `${WO_SCOPE_PERM_KEY}/entity`;
 
 /** Path segments cannot hold '/', so the entity code is URI-encoded. */
@@ -662,6 +669,14 @@ export function buildPermissionTree(
           actions: ['create', 'edit'],
           note: 'Change directly, or must ask a manager (rule 2.4.1). Set per role here; per person from Adjust.',
           choices: STATUS_MODE_CHOICES,
+        },
+        {
+          // 2026-10-27 · the Pulse page and the bell's Pulse alerts. Unset
+          // follows work_orders view.
+          key: PULSE_PERM_KEY,
+          label: 'Pulse',
+          actions: ['view'],
+          note: 'The Pulse page in the sidebar and the Pulse alerts in the bell. Unticked, both are hidden and refused; the clocks on a work order still show.',
         },
         {
           // 0085 (#15) · the record bar's Cancel / Reopen, Pause / Resume and

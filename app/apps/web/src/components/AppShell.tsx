@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, adminPermKey } from '@theone/shared';
+import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, PULSE_PERM_KEY, adminPermKey } from '@theone/shared';
 import { getApprovalCounts, listIntakeDrafts } from '../api/client';
 import { LOGO } from '../lib/brand';
 import { ThemeToggle } from '../theme/ThemeToggle';
@@ -132,7 +132,7 @@ const NAV_PERM: Record<string, string | string[]> = {
   Dashboard: 'dashboard',
   // 0072 · Pulse and Receivables read work orders and invoices; a role with
   // neither (the sales team) has no business seeing the doors.
-  Pulse: 'work_orders',
+  Pulse: PULSE_PERM_KEY,
   'Work Orders': 'work_orders',
   Receivables: 'invoicing',
   Vendors: 'vendors',

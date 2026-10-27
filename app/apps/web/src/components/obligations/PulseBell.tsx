@@ -3,7 +3,7 @@ import { useLinkNav } from '../../lib/linkNav';
 import type { Clickish } from '../../lib/linkNav';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PulseNotification } from '../../api/client';
-import type { AppNotification } from '@theone/shared';
+import { PULSE_PERM_KEY, type AppNotification } from '@theone/shared';
 import { getNoticeCount, getNotices, markAllNoticesRead, markAllNotificationsRead, markNoticeRead, markNotificationRead } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
 import { NOTIFICATIONS_KEY, useNotifications } from '../../hooks/useObligations';
@@ -30,12 +30,12 @@ export function PulseBell() {
   const qc = useQueryClient();
   const now = useNow(30_000);
 
-  // The Pulse half is gated on work_orders view — the same can() the sidebar
-  // reads, so a role without it (sales, 0072) never polls /notifications and
+  // The Pulse half is gated on the Pulse grant (PULSE_PERM_KEY, unset =
+  // work_orders view) — the same can() the sidebar reads, so a role without it (sales, 0072) never polls /notifications and
   // is not answered 403 once a minute: the badge counts notices alone and the
   // dropdown shows "For you" only. The notices half below is untouched.
   const { can } = useAuth();
-  const canPulse = can('work_orders', 'view');
+  const canPulse = can(PULSE_PERM_KEY, 'view');
   const query = useNotifications(canPulse);
   const items = canPulse ? (query.data?.items ?? []).slice(0, MAX_ROWS) : [];
   const unread = canPulse ? (query.data?.unread ?? 0) : 0;

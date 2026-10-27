@@ -42,7 +42,7 @@ import {
   requestSnooze,
   SNOOZE_MAX_HOURS,
 } from '../services/obligations.js';
-import { snoozeMode } from '@theone/shared';
+import { PULSE_PERM_KEY, snoozeMode } from '@theone/shared';
 
 const obligationQuerySchema = z.object({
   /** Work-order uuid or WO number. */
@@ -78,7 +78,7 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
    */
   app.get('/pulse', async (req) => {
     const actor = actingPrincipalFromRequest(req);
-    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
+    requirePerm(actor, PULSE_PERM_KEY, 'view', 'You cannot view the Pulse');
     await evaluateDebounced();
     const board = await getPulse(actor);
     return {
@@ -96,7 +96,11 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
   app.get('/obligations', async (req) => {
     const q = parse(obligationQuerySchema, req.query);
     const actor = actingPrincipalFromRequest(req);
-    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
+    // One work order's clocks (the chips and the Obligations card) are part of
+    // that work order: work_orders view. The list across work orders is the
+    // Pulse's and needs its grant (PULSE_PERM_KEY, 2026-10-27).
+    if (q.wo) requirePerm(actor, 'work_orders', 'view', 'You cannot view this work order');
+    else requirePerm(actor, PULSE_PERM_KEY, 'view', 'You cannot view the Pulse');
     // `?wo=` is a uuid or a WO number: resolve it the way every per-work-order
     // route does — the scope 403 for a row outside the book, an empty list for
     // one that does not exist — and hand the list the uuid.
@@ -115,7 +119,7 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
   app.get('/notifications', async (req) => {
     const { limit } = parse(notificationsQuerySchema, req.query);
     const actor = actingPrincipalFromRequest(req);
-    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
+    requirePerm(actor, PULSE_PERM_KEY, 'view', 'You cannot view the Pulse');
     await evaluateDebounced();
     const { items, unread } = await listNotifications(actor.id, limit);
     // `unread` and `unread_count` carry the same number: apps/web's reader
@@ -126,14 +130,14 @@ export default async function obligationRoutes(app: FastifyInstance): Promise<vo
   app.post('/notifications/:id/read', async (req) => {
     const { id } = parse(idParamsSchema, req.params);
     const actor = actingPrincipalFromRequest(req);
-    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
+    requirePerm(actor, PULSE_PERM_KEY, 'view', 'You cannot view the Pulse');
     await markNotificationRead(id, actor.id);
     return { ok: true };
   });
 
   app.post('/notifications/read-all', async (req) => {
     const actor = actingPrincipalFromRequest(req);
-    requirePerm(actor, 'work_orders', 'view', 'You cannot view the Pulse');
+    requirePerm(actor, PULSE_PERM_KEY, 'view', 'You cannot view the Pulse');
     const marked = await markAllNotificationsRead(actor.id);
     return { ok: true, marked };
   });

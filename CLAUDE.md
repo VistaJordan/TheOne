@@ -2068,7 +2068,14 @@ reopen and purchase-order reopen gained their rows on 2026-10-14);
 `tests/obligations-sql.test.ts`): the four `activity_log` joins cast
 `t.id::text` (they had compared text with uuid since 0023, the error was
 swallowed and the engine returned nothing), `/pulse`, `/obligations`,
-`/notifications` and the snooze need `work_orders` view (`NAV_PERM.Pulse`,
+`/notifications` and the snooze need `work_orders` view — **since 2026-10-27
+the Pulse has its own Roles row**, `work_orders/pulse` view (`PULSE_PERM_KEY`
+in `shared/permissions.ts`, a child of Work orders, so unset follows
+`work_orders` view and nobody changed when it appeared): `/pulse`,
+`/obligations` without `?wo=`, `/notifications` and its two read routes, the
+sidebar item (`NAV_PERM.Pulse`), the route's `RequireCan` and the bell ask
+it; one work order's clocks (`/obligations?wo=`) and the snooze stay on
+`work_orders` view (`NAV_PERM.Pulse`,
 `RequireCan` on the route; the top-bar bell polls `/notifications` only with
 that grant, `useNotifications(enabled)`, so a role without it, sales, sees
 its app notices alone), the list and the snooze append `woScopeSql` (an
@@ -2919,6 +2926,7 @@ reads it**: `findLaborRate` (services/rates.ts) asks `priceFor` first and a
 figure the list gives wins, so a new quote's Trip line opens at the card's
 trip; the Yoda `labor_rate` row fills the rest and still decides "sales tax
 required". The assistant can read it (`prices` in `RESOURCES`). No FK to
+
 principal and the seed truncates none of the three tables, so the list
 survives a re-seed; no seed twin. The migration's INSERTs were generated from
 the workbook (stable uuid5 ids); a re-import is a new migration.

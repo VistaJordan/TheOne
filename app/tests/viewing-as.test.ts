@@ -285,7 +285,7 @@ describe('an import refusal names its rows (F7)', () => {
   });
 });
 
-describe('the bell asks the Pulse only for a role with work_orders view (F7)', () => {
+describe('the bell asks the Pulse only for a role with the Pulse grant (F7; work_orders/pulse since 2026-10-27)', () => {
   it('useNotifications takes `enabled` and hands it to the query', () => {
     const src = webSrc('hooks', 'useObligations.ts');
     const at = src.indexOf('export function useNotifications(');
@@ -295,9 +295,9 @@ describe('the bell asks the Pulse only for a role with work_orders view (F7)', (
     expect(fn).toMatch(/\n\s+enabled,\r?\n/);
   });
 
-  it("PulseBell gates it on can('work_orders', 'view') and leaves the notices half alone", () => {
+  it("PulseBell gates it on can(PULSE_PERM_KEY, 'view') and leaves the notices half alone", () => {
     const src = webSrc('components', 'obligations', 'PulseBell.tsx');
-    expect(src).toMatch(/const canPulse = can\('work_orders', 'view'\);/);
+    expect(src).toMatch(/const canPulse = can\(PULSE_PERM_KEY, 'view'\);/);
     expect(src).toMatch(/useNotifications\(canPulse\)/);
     // 0059's two queries, exactly as they were.
     expect(src).toContain('useQuery({ queryKey: NOTICE_COUNT_KEY, queryFn: getNoticeCount, refetchInterval: 60_000, retry: 0 })');
