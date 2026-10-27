@@ -19,6 +19,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { HistoryCard, WorkOrderList, errText } from '../components/portfolio/PortfolioParts';
 import { SharePointFolderChip } from '../components/SharePointFolderChip';
+import { ClientCicoCard } from '../components/portfolio/ClientCicoCard';
 import { ClientTeamCard } from '../components/portfolio/ClientTeamCard';
 import { useEscape } from '../lib/useEscape';
 
@@ -216,9 +217,12 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
           {field('Account manager', (
             <select className="fld" value={d.account_manager} onChange={(e) => set('account_manager', e.target.value)}>
               <option value="">Nobody</option>
-              {(meta?.people ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {client?.account_manager && !(meta?.account_managers ?? []).some((p) => p.id === client.account_manager?.id) && (
+                <option value={client.account_manager.id}>{client.account_manager.name}</option>
+              )}
+              {(meta?.account_managers ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-          ))}
+          ), false, 'People whose role is AM.')}
           {field('Contact name', <input className="fld" value={d.contact_name} onChange={(e) => set('contact_name', e.target.value)} />)}
           {field('Contact phone', <input className="fld" value={d.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} />)}
           {field('Contact email', <input className="fld" type="email" value={d.contact_email} onChange={(e) => set('contact_email', e.target.value)} />)}
@@ -350,6 +354,10 @@ export function ClientDetailPage() {
           {/* 0096 · who leads this client under each Comp; Add work order
               fills AM, TL and ATL from it. */}
           <ClientTeamCard clientId={c.id} />
+
+          {/* 0100 · how a technician checks in under each Comp; a new visit
+              on the client's work order starts from it. */}
+          <ClientCicoCard clientId={c.id} />
 
           <section className="card">
             <div className="card-head">

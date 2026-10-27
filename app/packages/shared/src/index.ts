@@ -2046,6 +2046,12 @@ export interface WoVisitsResponse {
   default_method_detail: string | null;
   /** 0098 · the FM's portal, when its method is Portal. */
   default_method_portal: string | null;
+  /** 0100 · where the default came from: "PH · BKR" (the client's row for
+      the work order's Comp) or "FM Powerhouse" (the FM table); null = none. */
+  default_method_from: string | null;
+  /** 0100 · the work order's Client, so the card can say which client has no
+      check-in method on file. */
+  client: string | null;
 }
 
 /** Rule 2.2.2: what a check-in did to the work order's status. `moved`
@@ -2093,6 +2099,8 @@ export * from './visitStatus';
 export * from './woCreate';
 export * from './clientTeams';
 export * from './prices';
+// 0100: the check-in method per client and Comp.
+export * from './clientCico';
 // 0045: invoices — the bill to the client.
 export * from './invoices';
 // 0043: attachments — the photos and files a work order carries.

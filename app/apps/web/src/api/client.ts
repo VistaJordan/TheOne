@@ -3357,6 +3357,8 @@ import type {
   ClientTeamInput,
   ClientTeamsOverview,
   ClientTeamsResponse,
+  ClientCicoInput,
+  ClientCicoResponse,
   PortfolioListName,
 } from '@theone/shared';
 
@@ -3407,6 +3409,23 @@ export function saveClientTeam(
 
 export function deleteClientTeam(id: string, teamId: string): Promise<ClientTeamsResponse> {
   return request(`/clients/${encodeURIComponent(id)}/teams/${encodeURIComponent(teamId)}`, { method: 'DELETE' });
+}
+
+// ── 0100 · the check-in method per client and Comp ─────────────────────────
+
+export function getClientCico(id: string): Promise<ClientCicoResponse> {
+  return request(`/clients/${encodeURIComponent(id)}/cico`);
+}
+
+export function saveClientCico(id: string, rowId: string | null, input: ClientCicoInput): Promise<ClientCicoResponse> {
+  return request(`/clients/${encodeURIComponent(id)}/cico${rowId ? `/${encodeURIComponent(rowId)}` : ''}`, {
+    method: rowId ? 'PATCH' : 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteClientCico(id: string, rowId: string): Promise<ClientCicoResponse> {
+  return request(`/clients/${encodeURIComponent(id)}/cico/${encodeURIComponent(rowId)}`, { method: 'DELETE' });
 }
 
 // ── 0071 · SharePoint folders ───────────────────────────────────────────────

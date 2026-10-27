@@ -13,6 +13,7 @@ import {
   SITES_PERM_KEY,
   assetRequestProblem,
   permAllows,
+  CLIENT_TEAM_SEAT_ROLE,
 } from '@theone/shared';
 import type {
   AdminPortfolioResponse,
@@ -180,13 +181,14 @@ export async function listClients(q: ClientListQuery, actor: ActingPrincipal): P
       `${select} WHERE ${where.join(' AND ')} ORDER BY ${sort} ${q.dir === 'desc' ? 'DESC' : 'ASC'} NULLS LAST, lower(c.name) LIMIT 2000`,
       p.values,
     ),
-    query<FeedActor>(`SELECT id::text AS id, display_name AS name, kind FROM principal WHERE kind = 'human' AND status <> 'disabled' ORDER BY lower(display_name)`),
+    query<FeedActor & { role: string | null }>(`SELECT id::text AS id, display_name AS name, kind, role FROM principal WHERE kind = 'human' AND status <> 'disabled' ORDER BY lower(display_name)`),
     query<{ v: string }>(`SELECT DISTINCT btrim(billing_entity) AS v FROM task WHERE deleted_at IS NULL AND btrim(COALESCE(billing_entity, '')) <> '' ORDER BY 1`),
   ]);
   return {
     items: rows.rows.map(mapClient),
     total: rows.rows.length,
-    people: people.rows,
+    people: people.rows.map(({ role: _role, ...p }) => p),
+    account_managers: people.rows.filter((p) => p.role === CLIENT_TEAM_SEAT_ROLE.am).map(({ role: _role, ...p }) => p),
     billing_entities: entities.rows.map((r) => r.v),
     can: { create: can(actor, CLIENTS_PERM_KEY, 'create'), edit: can(actor, CLIENTS_PERM_KEY, 'edit'), delete: can(actor, CLIENTS_PERM_KEY, 'delete') },
   };

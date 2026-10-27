@@ -54,6 +54,8 @@ import {
   formatBytes,
   pickClientTeam,
   pickFormLayout,
+  seatNames,
+  seatRoleForField,
   subcategoriesFor,
   woCreateMissing,
   type SiteDetail,
@@ -210,16 +212,17 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   // AM, TL and ATL fill from Clients › Account team — each only while it is
   // empty or still holds what the team last put there, like the site fill. A
   // client with a single team also fills an empty Comp. The dispatcher is
-  // never filled.
-  const humanNames = useMemo(
-    () => (people.data?.items ?? []).filter((p) => p.kind === 'human').map((p) => p.name),
-    [people.data],
-  );
+  // never filled. Each seat lists, and resolves a team name against, only the
+  // people whose role is that seat's (AM → AM, TL → TL, ATL → ATL).
+  const seatPeople = useMemo(() => {
+    const humans = (people.data?.items ?? []).filter((p) => p.kind === 'human');
+    return { am: seatNames(humans, 'am'), tl: seatNames(humans, 'tl'), atl: seatNames(humans, 'atl') };
+  }, [people.data]);
   const team = useMemo(
     () => pickClientTeam(configured.client_teams ?? [], values['Client'], values[COMP_KEY]),
     [configured.client_teams, values],
   );
-  const teamFill = useMemo(() => clientTeamValues(team, humanNames), [team, humanNames]);
+  const teamFill = useMemo(() => clientTeamValues(team, seatPeople), [team, seatPeople]);
   const teamFilled = useRef<Values>({});
   useEffect(() => {
     if (!people.isSuccess) return;
@@ -402,9 +405,10 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     }
 
     // 0096 · AM, TL and ATL: a person, filled from the client's account team
-    // and still changeable here.
+    // and still changeable here — among the people holding the seat's role.
     if (TEAM_KEYS.has(f.key)) {
-      const humans = people.data?.items.filter((p) => p.kind === 'human') ?? [];
+      const role = seatRoleForField(f.key);
+      const humans = people.data?.items.filter((p) => p.kind === 'human' && p.role === role) ?? [];
       const unmatched = teamFill.unmatched[f.key];
       return (
         <>

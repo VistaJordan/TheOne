@@ -217,6 +217,8 @@ export function CicoCard({ wo, embedded }: CicoCardProps) {
           loading={visitsQuery.isLoading}
           failed={visitsQuery.isError}
           fm={visitsQuery.data?.fm ?? null}
+          client={visitsQuery.data?.client ?? null}
+          defaultFrom={visitsQuery.data?.default_method_from ?? null}
           defaultMethod={visitsQuery.data?.default_method ?? null}
           defaultDetail={visitsQuery.data?.default_method_detail ?? null}
           defaultPortal={visitsQuery.data?.default_method_portal ?? null}
@@ -314,6 +316,8 @@ interface VisitLogProps {
   loading: boolean;
   failed: boolean;
   fm: string | null;
+  client: string | null;
+  defaultFrom: string | null;
   defaultMethod: string | null;
   defaultDetail: string | null;
   defaultPortal: string | null;
@@ -324,7 +328,7 @@ interface VisitLogProps {
 }
 
 function VisitLog({
-  wo, visits, loading, failed, fm, defaultMethod, defaultDetail, defaultPortal, collapsed, onExpand, canEdit, visitTypes,
+  wo, visits, loading, failed, fm, client, defaultFrom, defaultMethod, defaultDetail, defaultPortal, collapsed, onExpand, canEdit, visitTypes,
 }: VisitLogProps) {
   const qc = useQueryClient();
   const { can } = useAuth();
@@ -470,7 +474,7 @@ function VisitLog({
           <VisitComposer
             woId={wo.id}
             visitTypes={visitTypes}
-            fm={fm}
+            defaultFrom={defaultFrom}
             defaultMethod={defaultMethod}
             defaultDetail={defaultDetail}
             defaultPortal={defaultPortal}
@@ -484,10 +488,13 @@ function VisitLog({
               <Icon name="plus" size={14} />
               New visit
             </button>
-            {fm && !defaultMethod && (
+            {(client || fm) && !defaultMethod && (
               <span className="cv-hint">
-                No check-in method on file for <b>{fm.trim()}</b>
-                {canAdmin ? <> — <Link to="/admin/fields">add it in Admin › Custom fields</Link></> : null}.
+                No check-in method on file for{' '}
+                {client ? <><b>{client.trim()}</b> under this Comp</> : null}
+                {client && fm ? ' or ' : null}
+                {fm ? <>FM <b>{fm.trim()}</b></> : null}
+                {canAdmin ? <> — add it on the client’s page or in <Link to="/admin/fields">Admin › Custom fields</Link></> : null}.
               </span>
             )}
           </div>
@@ -776,10 +783,10 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
 
 // ── Logging a new visit ──────────────────────────────────────────────────────
 
-function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, defaultPortal, busy, onCancel, onSubmit }: {
+function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDetail, defaultPortal, busy, onCancel, onSubmit }: {
   woId: string;
   visitTypes: string[];
-  fm: string | null;
+  defaultFrom: string | null;
   defaultMethod: string | null;
   defaultDetail: string | null;
   defaultPortal: string | null;
@@ -885,6 +892,10 @@ function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, def
         </button>
         <button type="button" className="btn btn-sm" onClick={onCancel} disabled={busy}>Cancel</button>
         {touched && !type && <span className="cv-hint">Pick the visit type first.</span>}
+        {/* 0100 · where the method came from: the client's row for this Comp, or the FM table. */}
+        {defaultFrom && defaultMethod && method === defaultMethod && (
+          <span className="cv-hint">Method from {defaultFrom}</span>
+        )}
       </div>
     </form>
   );

@@ -18,7 +18,7 @@
 import { AGE_BANDS } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
-import { CLIENT_FIELD_KEY, DISPATCHER_ROLE_CODES, defaultClientSafe } from '@theone/shared';
+import { CLIENT_FIELD_KEY, DISPATCHER_ROLE_CODES, defaultClientSafe, seatRoleForField } from '@theone/shared';
 
 export type FieldType = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'boolean';
 
@@ -306,17 +306,25 @@ async function distinctOptions(): Promise<Record<string, FieldOption[]>> {
  * already written on a work order that is not a user (an ex-colleague, an
  * import), so no existing value is unreachable. Users are matched by display
  * name because that is what the JSONB bag stores.
+ *
+ * The AM, TL and ATL seats (Elise, 2026-10-27) offer only the people whose
+ * role is that seat's (`seatRoleForField`); a name on a work order that is no
+ * active account (a lead typed from the team sheet before they had one) stays
+ * reachable, an account in another role does not.
  */
 async function customDistinctOptions(): Promise<Record<string, FieldOption[]>> {
   const out: Record<string, FieldOption[]> = {};
   if (distinctCustomKeys.length === 0) return out;
-  const users = await query<{ v: string }>(
-    `SELECT display_name AS v
+  const people = await query<{ v: string; role: string | null }>(
+    `SELECT display_name AS v, role
        FROM principal
       WHERE kind = 'human' AND status <> 'disabled'
       ORDER BY display_name ASC`,
   );
+  const accounts = new Set(people.rows.map((r) => r.v));
   for (const key of distinctCustomKeys) {
+    const seatRole = seatRoleForField(key);
+    const users = seatRole ? { rows: people.rows.filter((r) => r.role === seatRole) } : people;
     const onTasks = await query<{ v: string }>(
       `SELECT DISTINCT (t.fields->>$1) AS v
          FROM task t
@@ -326,7 +334,7 @@ async function customDistinctOptions(): Promise<Record<string, FieldOption[]>> {
       [key],
     );
     const names = new Set(users.rows.map((r) => r.v));
-    for (const r of onTasks.rows) names.add(r.v);
+    for (const r of onTasks.rows) if (!seatRole || !accounts.has(r.v)) names.add(r.v);
     out[`fields.${key}`] = [...names]
       .sort((a, b) => a.localeCompare(b))
       .map((v) => ({ value: v, label: v }));

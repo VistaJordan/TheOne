@@ -23,6 +23,30 @@ export const CLIENT_TEAM_FIELDS: readonly { key: string; from: 'am' | 'tl' | 'at
   { key: 'ATL', from: 'atl' },
 ];
 
+/**
+ * The role a person must hold to sit in each seat (Elise, 2026-10-27): the AM
+ * picker lists only people whose role is AM, the TL picker only TLs, the ATL
+ * picker only ATLs — on Add work order, in the work order's own fields, in
+ * bulk edit and filters, and on a client's Account team.
+ */
+export const CLIENT_TEAM_SEAT_ROLE: Readonly<Record<'am' | 'tl' | 'atl', string>> = { am: 'am', tl: 'tl', atl: 'atl' };
+
+/** The role a work-order seat (bag key AM / TL / ATL) asks for, else null. */
+export function seatRoleForField(key: string): string | null {
+  const seat = CLIENT_TEAM_FIELDS.find((f) => f.key === key);
+  return seat ? CLIENT_TEAM_SEAT_ROLE[seat.from] : null;
+}
+
+/** The names a seat offers: the people holding its role. */
+export function seatNames(people: readonly { name: string; role: string | null }[], seat: 'am' | 'tl' | 'atl'): string[] {
+  const role = CLIENT_TEAM_SEAT_ROLE[seat];
+  return people.filter((p) => p.role === role).map((p) => p.name);
+}
+
+/** Who a team name may resolve to: one list for every seat, or one per seat
+    (`seatNames`), so "Mary" in the TL column only ever means a TL. */
+export type TeamNames = readonly string[] | Readonly<Record<'am' | 'tl' | 'atl', readonly string[]>>;
+
 /** The salesperson column's "nobody in particular". */
 export const CLIENT_TEAM_HOUSE = 'House';
 
@@ -63,8 +87,13 @@ export interface ClientTeamsResponse {
   billing_entities: string[];
   /** Active people's display names, for the pickers. */
   people: string[];
+  /** The active people holding each seat's role (`CLIENT_TEAM_SEAT_ROLE`):
+      what the AM / TL / ATL columns suggest and resolve against. */
+  people_by_seat: Record<'am' | 'tl' | 'atl', string[]>;
   can_edit: boolean;
 }
+
+const isNameList = (n: TeamNames): n is readonly string[] => Array.isArray(n);
 
 const norm = (s: string | null | undefined): string => (s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -113,7 +142,7 @@ export function resolvePersonName(raw: string | null | undefined, names: readonl
  */
 export function clientTeamValues(
   team: Pick<ClientTeam, 'am' | 'tl' | 'atl'> | null,
-  names: readonly string[],
+  names: TeamNames,
 ): { values: Record<string, string>; unmatched: Record<string, string> } {
   const values: Record<string, string> = {};
   const unmatched: Record<string, string> = {};
@@ -121,7 +150,8 @@ export function clientTeamValues(
   for (const { key, from } of CLIENT_TEAM_FIELDS) {
     const raw = (team[from] ?? '').trim();
     if (raw === '') continue;
-    const name = resolvePersonName(raw, names);
+    const pool: readonly string[] = isNameList(names) ? names : names[from];
+    const name = resolvePersonName(raw, pool);
     if (name) values[key] = name;
     else if (norm(raw) !== norm(CLIENT_TEAM_HOUSE)) {
       values[key] = raw;

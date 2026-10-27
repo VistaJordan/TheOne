@@ -44,7 +44,11 @@ import { query, withTransaction } from '../db.js';
 import { ApiError } from '../errors.js';
 import {
   CICO_PORTAL_METHOD,
+  CLIENT_FIELD_KEY,
+  CLIENT_PORTAL_TYPE_KEY,
+  cicoSourceLabel,
   cicoMethodText,
+  portalFromClientPortalType,
   fieldSectionPermKey,
   CICO_SECTION_SLUG,
   COMPUTED_KEYS,
@@ -71,6 +75,7 @@ import type { ActingPrincipal } from './activity.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import { requirePerm } from './permissions.js';
+import { cicoForClient } from './clientCico.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
 import { addWorkingHours } from '../lib/businessDays.js';
@@ -78,6 +83,7 @@ import { holidayDays } from './holidays.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 const K_FM = '22. FM';
+const K_COMP = '21. Comp';
 const STATUSES: VisitStatus[] = ['planned', 'checked_in', 'checked_out'];
 
 export const CICO_PERM_KEY = fieldSectionPermKey(CICO_SECTION_SLUG);
@@ -274,19 +280,57 @@ export async function deleteCicoMethod(fm: string): Promise<FmCicoMethod | null>
 
 // ── Reads ────────────────────────────────────────────────────────────────────
 
-export async function listVisits(taskId: string): Promise<WoVisitsResponse> {
-  const t = await query<{ fm: string | null }>(
-    `SELECT t.fields->>$2 AS fm FROM task t WHERE t.id = $1`,
-    [taskId, K_FM],
+/** The check-in method a new visit on this work order starts from: the
+    client's row for the work order's Comp (0100, Clients › Check-in method),
+    else the FM's entry (fm_cico_method). The portal is filled from the work
+    order's `Client Portal Type` when the entry is Portal and names none
+    (2026-10-27: the portal is filled automatically wherever it is known); an
+    Email method with no instruction shows the mailbox it is handled from. */
+async function methodForTask(taskId: string): Promise<{
+  fm: string | null;
+  client: string | null;
+  from: string | null;
+  entry: { method: string; detail: string | null; portal: string | null } | null;
+}> {
+  const t = await query<{ fm: string | null; cpt: string | null; client: string | null; comp: string | null }>(
+    `SELECT t.fields->>$2 AS fm, t.fields->>$3 AS cpt,
+            COALESCE(NULLIF(btrim(t.fields->>$4), ''), t.client) AS client,
+            COALESCE(NULLIF(btrim(t.fields->>$5), ''), t.billing_entity) AS comp
+       FROM task t WHERE t.id = $1`,
+    [taskId, K_FM, CLIENT_PORTAL_TYPE_KEY, CLIENT_FIELD_KEY, K_COMP],
   );
   const fm = t.rows[0]?.fm ?? null;
-  const entry = await methodForFm(fm);
+  const client = t.rows[0]?.client ?? null;
+  const byClient = await cicoForClient(client, t.rows[0]?.comp ?? null);
+  let entry: { method: string; detail: string | null; portal: string | null } | null;
+  let from: string | null;
+  if (byClient) {
+    entry = {
+      method: byClient.method,
+      detail: byClient.detail ?? (byClient.method === 'Email' ? byClient.email : null),
+      portal: byClient.portal,
+    };
+    from = cicoSourceLabel({ kind: 'client', client: byClient.client, billing_entity: byClient.billing_entity });
+  } else {
+    entry = await methodForFm(fm);
+    from = entry && fm ? cicoSourceLabel({ kind: 'fm', fm }) : null;
+  }
+  if (entry && entry.method === CICO_PORTAL_METHOD && !entry.portal) {
+    entry.portal = portalFromClientPortalType(t.rows[0]?.cpt);
+  }
+  return { fm, client, from, entry };
+}
+
+export async function listVisits(taskId: string): Promise<WoVisitsResponse> {
+  const { fm, client, from, entry } = await methodForTask(taskId);
   return {
     items: await rowsForTask({ query }, taskId),
     fm,
+    client,
     default_method: entry?.method ?? null,
     default_method_detail: entry?.detail ?? null,
     default_method_portal: entry?.portal ?? null,
+    default_method_from: from,
   };
 }
 
@@ -554,8 +598,7 @@ export async function createVisit(
   let detail = c.method_detail;
   let portal = c.method_portal;
   if (method === undefined || detail === undefined || portal === undefined) {
-    const t = await query<{ fm: string | null }>(`SELECT t.fields->>$2 AS fm FROM task t WHERE t.id = $1`, [taskId, K_FM]);
-    const entry = await methodForFm(t.rows[0]?.fm ?? null);
+    const { entry } = await methodForTask(taskId);
     if (method === undefined) method = entry?.method ?? null;
     if (detail === undefined) detail = entry && entry.method === method ? entry.detail : null;
     // 0098 · the FM's portal rides with its method, as the detail does.

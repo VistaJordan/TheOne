@@ -8,7 +8,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { CICO_PORTAL_METHOD, cicoMethodLabel, cicoMethodText } from '../packages/shared/src/index';
+import { CICO_PORTAL_METHOD, cicoMethodLabel, cicoMethodText, portalFromClientPortalType } from '../packages/shared/src/index';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -29,6 +29,23 @@ describe('how a check-in method reads', () => {
     expect(cicoMethodText('Portal', 'Submit request on Teams', 'Corrigo')).toBe('Portal: Corrigo - Submit request on Teams');
     expect(cicoMethodText('IVR', '(866) 254-8780')).toBe('IVR - (866) 254-8780');
     expect(CICO_PORTAL_METHOD).toBe('Portal');
+  });
+});
+
+describe('the portal falls back to the work order’s Client Portal Type', () => {
+  it('names the client system the field holds', () => {
+    expect(portalFromClientPortalType('ServiceChannel')).toBe('Service Channel');
+    expect(portalFromClientPortalType('service channel')).toBe('Service Channel');
+    expect(portalFromClientPortalType('Corrigo')).toBe('Corrigo');
+    expect(portalFromClientPortalType('Ecotrack')).toBe('Ecotrak');
+    expect(portalFromClientPortalType('Fexa')).toBeNull();
+    expect(portalFromClientPortalType(null)).toBeNull();
+  });
+
+  it('only when the FM’s entry is Portal and names none', () => {
+    const visits = read('apps/api/src/services/visits.ts');
+    expect(visits).toContain('if (entry && entry.method === CICO_PORTAL_METHOD && !entry.portal) {');
+    expect(visits).toContain('entry.portal = portalFromClientPortalType(t.rows[0]?.cpt);');
   });
 });
 

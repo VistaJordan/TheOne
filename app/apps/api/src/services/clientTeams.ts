@@ -15,6 +15,7 @@ import {
   clientTeamValues,
   permAllows,
   pickClientTeam,
+  seatNames,
 } from '@theone/shared';
 import type { ClientTeam, ClientTeamForForm, ClientTeamInput, ClientTeamsOverview, ClientTeamsResponse } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
@@ -50,13 +51,20 @@ async function billingEntities(): Promise<string[]> {
   return Array.isArray(opts) ? opts.map((o) => String(typeof o === 'string' ? o : (o as { name?: string })?.name ?? '')).filter(Boolean) : [];
 }
 
-/** Active people's display names — what a team name is matched against. */
-export async function activePeopleNames(): Promise<string[]> {
-  const r = await query<{ name: string }>(
-    `SELECT display_name AS name FROM principal WHERE kind = 'human' AND status <> 'disabled' ORDER BY lower(display_name)`,
+/** Active people with their role — what a team name is matched against. */
+async function activePeople(): Promise<{ name: string; role: string | null }[]> {
+  const r = await query<{ name: string; role: string | null }>(
+    `SELECT display_name AS name, role FROM principal WHERE kind = 'human' AND status <> 'disabled' ORDER BY lower(display_name)`,
   );
-  return r.rows.map((x) => x.name);
+  return r.rows;
 }
+
+/** Each seat's candidates: only the people whose role is that seat's. */
+const bySeat = (people: { name: string; role: string | null }[]): ClientTeamsResponse['people_by_seat'] => ({
+  am: seatNames(people, 'am'),
+  tl: seatNames(people, 'tl'),
+  atl: seatNames(people, 'atl'),
+});
 
 async function clientName(id: string): Promise<string> {
   if (!UUID_RE.test(id)) throw notFound('Client not found');
@@ -77,11 +85,12 @@ async function loadTeams(clientId: string): Promise<ClientTeam[]> {
 export async function listClientTeams(clientId: string, actor: ActingPrincipal): Promise<ClientTeamsResponse> {
   requirePerm(actor, CLIENTS_PERM_KEY, 'view', 'You cannot open Clients');
   await clientName(clientId);
-  const [teams, entities, people] = await Promise.all([loadTeams(clientId), billingEntities(), activePeopleNames()]);
+  const [teams, entities, people] = await Promise.all([loadTeams(clientId), billingEntities(), activePeople()]);
   return {
     teams,
     billing_entities: entities,
-    people,
+    people: people.map((p) => p.name),
+    people_by_seat: bySeat(people),
     can_edit: permAllows(actor.perms, CLIENTS_PERM_KEY, 'edit', actor.isSuperAdmin),
   };
 }
@@ -215,10 +224,10 @@ export async function fillFromClientTeam(bag: Record<string, unknown>): Promise<
   const client = typeof bag['Client'] === 'string' ? bag['Client'] : null;
   if (!client) return;
   const comp = typeof bag['21. Comp'] === 'string' ? bag['21. Comp'] : null;
-  const [teams, people] = await Promise.all([teamsForForm(), activePeopleNames()]);
+  const [teams, people] = await Promise.all([teamsForForm(), activePeople()]);
   const team = pickClientTeam(teams, client, comp);
   if (!team) return;
-  const { values } = clientTeamValues(team, people);
+  const { values } = clientTeamValues(team, bySeat(people));
   for (const [k, v] of Object.entries(values)) {
     const cur = bag[k];
     if (cur === undefined || cur === null || (typeof cur === 'string' && cur.trim() === '')) bag[k] = v;

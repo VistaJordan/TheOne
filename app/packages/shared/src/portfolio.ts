@@ -535,6 +535,8 @@ export interface ClientsListResponse {
   items: ClientRow[];
   total: number;
   people: FeedActor[];
+  /** The people whose role is AM — what the Account manager picker offers. */
+  account_managers: FeedActor[];
   billing_entities: string[];
   can: { create: boolean; edit: boolean; delete: boolean };
 }

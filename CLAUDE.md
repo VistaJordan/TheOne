@@ -2862,6 +2862,35 @@ stored but writes no work-order field (the `Sales Owner` dropdown is
 separate). Only the create form fills: intake drafts, the CSV import and the
 Ecotrak ingest do not.
 
+**AM / TL / ATL list only their role; check-in method per client and Comp**
+(migration 0100, Elise 2026-10-27; `packages/shared/src/clientCico.ts`,
+`services/clientCico.ts`, `components/portfolio/ClientCicoCard.tsx`,
+`tests/client-cico.test.ts`). **Seats:** `CLIENT_TEAM_SEAT_ROLE` /
+`seatRoleForField` / `seatNames` in shared `clientTeams.ts` — the AM picker
+offers only role `am`, TL only `tl`, ATL only `atl`: the catalogue options of
+`fields.AM|TL|ATL` (`customDistinctOptions`; a name on a work order that is no
+active account stays reachable, an account in another role does not), the Add
+work order selects, the Account team card's suggestions
+(`people_by_seat`) and the client record's Account manager
+(`ClientsListResponse.account_managers`). A team name now resolves among that
+seat's role only (`clientTeamValues` takes `TeamNames`). UI only: the API
+still accepts any name in those fields, because the team sheet's names are
+written as typed before the leads have accounts. **Check-in method:**
+`client_cico_method` is one row per (client, Comp) — method, portal (Portal
+only), detail, email — loaded by 0100 from the operation's "CICO methods"
+sheet (79 rows; for a non-Portal method the sheet's portal column is put in
+front of the detail, "Service Channel · (516) 500-7776"; EcoTrack → Ecotrak)
+and edited on **Clients › a client › Check-in method** (`clients` view /
+edit, `/clients/:id/cico`, logged `client_cico_added|updated|removed` on the
+client). `methodForTask` in `visits.ts` reads the row for the work order's
+Client + Comp first (`cicoForClient`, `pickClientTeam`'s matching: a client
+with one row uses it while the Comp is blank), else the FM table as before;
+an Email row with no detail shows its mailbox. `WoVisitsResponse` carries
+`default_method_from` ("PH · BKR" / "FM Powerhouse") and `client`, which the
+CICO composer prints. The seed truncates neither `client` nor the new table.
+Where the sheet and 0099 disagree (the Service Channel clients: IVR on the
+sheet, Portal in 0099's FM rows) the client row wins.
+
 **No work order goes to a disabled account** (Elise, 2026-10-23, no
 migration; `tests/assignee-disabled.test.ts`). The person paths already
 refused one through `assertDispatchers` (`status <> 'disabled'`). The paths
@@ -2897,6 +2926,7 @@ tab (they needed Messages); the page reads the thread through
 `getWorkOrderQuoMessages` under `['wo-quo', id]` (the TextComposer's
 optimistic write targets that shape). `GET /messages` still carries `quo`,
 unread by the web. The AI review page's back links go to Tech Hub.
+
 **Prices** (migration 0101, Elise 2026-10-27; `packages/shared/src/prices.ts`
 pure, `services/prices.ts`, `routes/prices.ts`, `pages/PricesPage.tsx`,
 `styles/prices.css`, `tests/prices.test.ts`). The "Prices & quotes library"
@@ -2926,7 +2956,6 @@ reads it**: `findLaborRate` (services/rates.ts) asks `priceFor` first and a
 figure the list gives wins, so a new quote's Trip line opens at the card's
 trip; the Yoda `labor_rate` row fills the rest and still decides "sales tax
 required". The assistant can read it (`prices` in `RESOURCES`). No FK to
-
 principal and the seed truncates none of the three tables, so the list
 survives a re-seed; no seed twin. The migration's INSERTs were generated from
 the workbook (stable uuid5 ids); a re-import is a new migration.

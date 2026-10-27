@@ -21,7 +21,9 @@ const COLS: { key: Exclude<keyof Draft, 'billing_entity'>; label: string }[] = [
   { key: 'sales', label: 'Sales' },
   { key: 'am', label: 'AM' },
 ];
-const toDraft = (t: ClientTeam | null): Draft => ({
+/** The role a column's name should hold, as the hint names it. */
+const seatLabel = (k: string): string => (k === 'am' ? 'AM' : k === 'tl' ? 'Team Lead' : k === 'atl' ? 'Assistant TL' : 'account');
+const toDraft =(t: ClientTeam | null): Draft => ({
   billing_entity: t?.billing_entity ?? '',
   tl: t?.tl ?? '',
   atl: t?.atl ?? '',
@@ -73,16 +75,20 @@ export function ClientTeamCard({ clientId }: { clientId: string }) {
     setDraft(toDraft(t));
     setProblem(null);
   };
-  const listId = `client-team-people-${clientId}`;
+  const listId = (k: string) => `client-team-people-${clientId}-${k}`;
+  /** Who a column suggests and resolves against: AM, TL and ATL only the
+      people whose role is that seat's; Sales anyone. */
+  const poolFor = (k: string): string[] =>
+    k === 'am' || k === 'tl' || k === 'atl' ? (data?.people_by_seat?.[k] ?? []) : people;
 
   /** A stored name, with the account it stands for when that differs. */
   const shown = (raw: string | null, k: string) => {
     if (!raw) return <span className="pf-muted">—</span>;
     if (k === 'sales' && raw.trim().toLowerCase() === CLIENT_TEAM_HOUSE.toLowerCase()) return <span className="pf-muted">{raw}</span>;
-    const who = resolvePersonName(raw, people);
+    const who = resolvePersonName(raw, poolFor(k));
     if (!who) {
       return k === 'sales' ? <>{raw}</> : (
-        <span title="No single active account answers to this name yet, so Add work order writes it as typed">
+        <span title={`No single active ${seatLabel(k)} answers to this name yet, so Add work order writes it as typed`}>
           {raw} <Icon name="alert" size={12} />
         </span>
       );
@@ -101,7 +107,7 @@ export function ClientTeamCard({ clientId }: { clientId: string }) {
       </td>
       {COLS.map((c) => (
         <td key={c.key}>
-          <input className="fld" list={listId} value={draft[c.key]} onChange={(e) => setDraft({ ...draft, [c.key]: e.target.value })} disabled={busy} aria-label={c.label} />
+          <input className="fld" list={listId(c.key)} value={draft[c.key]} onChange={(e) => setDraft({ ...draft, [c.key]: e.target.value })} disabled={busy} aria-label={c.label} />
         </td>
       ))}
       <td className="client-team-acts">
@@ -159,10 +165,12 @@ export function ClientTeamCard({ clientId }: { clientId: string }) {
           </table>
         </div>
       )}
-      <datalist id={listId}>
-        {people.map((p) => <option key={p} value={p} />)}
-        <option value={CLIENT_TEAM_HOUSE} />
-      </datalist>
+      {COLS.map((col) => (
+        <datalist key={col.key} id={listId(col.key)}>
+          {poolFor(col.key).map((p) => <option key={p} value={p} />)}
+          {col.key === 'sales' && <option value={CLIENT_TEAM_HOUSE} />}
+        </datalist>
+      ))}
       {problem && <p className="modal-error" role="alert">{problem}</p>}
     </section>
   );

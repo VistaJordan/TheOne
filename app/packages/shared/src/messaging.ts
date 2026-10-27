@@ -36,6 +36,21 @@ export function clientMessageTarget(portalType: string | null | undefined): Clie
   return null;
 }
 
+/** 0098 · the portal a client system is, as the check-in method names it
+    ("Portal: Service Channel"). */
+export const CLIENT_SYSTEM_PORTAL_NAME: Record<ClientMessageTarget, string> = {
+  ecotrak: 'Ecotrak',
+  corrigo: 'Corrigo',
+  servicechannel: 'Service Channel',
+};
+
+/** The portal a work order's `Client Portal Type` names, or null — the
+    fallback when the FM's check-in entry names no portal. */
+export function portalFromClientPortalType(portalType: string | null | undefined): string | null {
+  const target = clientMessageTarget(portalType);
+  return target ? CLIENT_SYSTEM_PORTAL_NAME[target] : null;
+}
+
 export type MessageDeliveryStatus = 'pending' | 'sent' | 'failed';
 
 export interface MessageDelivery {
