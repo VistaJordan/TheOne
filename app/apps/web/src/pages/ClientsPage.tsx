@@ -12,8 +12,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useLinkNav } from '../lib/linkNav';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CLIENT_PORTAL_TYPES, CLIENT_TEAM_HOUSE } from '@theone/shared';
-import type { ClientDetail, ClientInput, ClientsListResponse } from '@theone/shared';
-import { ApiRequestError, createClient, deleteClient, getClient, getClientHistory, getClientTeams, getClientTeamsOverview, listClients, updateClient } from '../api/client';
+import type { ClientDetail, ClientInput, ClientsListResponse, ClientTeamInput } from '@theone/shared';
+import { ApiRequestError, createClient, deleteClient, getClient, getClientHistory, getClientTeams, getClientTeamsOverview, listClients, saveClientTeam, updateClient } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
@@ -21,6 +21,7 @@ import { HistoryCard, WorkOrderList, errText } from '../components/portfolio/Por
 import { SharePointFolderChip } from '../components/SharePointFolderChip';
 import { ClientCicoCard } from '../components/portfolio/ClientCicoCard';
 import { ClientTeamCard } from '../components/portfolio/ClientTeamCard';
+import { ClientTeamCells, ClientTeamDatalists, teamListId } from '../components/portfolio/ClientTeamCells';
 import { useEscape } from '../lib/useEscape';
 
 export function ClientsPage() {
@@ -127,18 +128,8 @@ export function ClientsPage() {
                           </span>
                         )}
                       </td>
-                      {showTeams && (['billing_entity', 'am', 'tl', 'atl', 'sales'] as const).map((k) => {
-                        const list = teamsBy.get(c.id) ?? [];
-                        return (
-                          <td key={k} className="client-teams-cell">
-                            {list.length === 0 ? '—' : list.map((t) => (
-                              <span key={t.id} className="client-teams-line">
-                                {k === 'billing_entity' ? <b className="mono">{t.billing_entity}</b> : (t[k] ?? '—')}
-                              </span>
-                            ))}
-                          </td>
-                        );
-                      })}
+                      {/* 2026-10-27 · click a name (or "+ Comp") to change it here. */}
+                      {showTeams && <ClientTeamCells clientId={c.id} teams={teamsBy.get(c.id) ?? []} vocab={teamsQ.data} />}
                       <td>{[c.contact_name, c.contact_email ?? c.contact_phone].filter(Boolean).join(' · ') || '—'}</td>
                       <td>{c.portal_type ?? '—'}</td>
                       <td className="num">{c.sites}</td>
@@ -154,6 +145,7 @@ export function ClientsPage() {
           )}
           <div className="vend-foot"><span>{q.isFetching ? 'Loading…' : `${rows.length} ${rows.length === 1 ? 'client' : 'clients'}`}</span></div>
         </section>
+        <ClientTeamDatalists vocab={teamsQ.data} />
       </div>
       {adding && <ClientFormDialog client={null} meta={q.data} onClose={() => setAdding(false)} onSaved={(c) => navigate(`/clients/${c.id}`)} />}
     </AppShell>
@@ -180,21 +172,44 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
   });
   const [problem, setProblem] = useState<string | null>(null);
   const set = (k: keyof Draft, v: string | boolean) => setD((cur) => ({ ...cur, [k]: v }));
+  // 2026-10-27 · a new client may name its first account team right away
+  // (Comp, AM, TL, ATL, Sales); more Comps are added on the client's page or
+  // from the list.
+  const vocab = useQuery({ queryKey: ['client-teams-overview'], queryFn: getClientTeamsOverview, staleTime: 60_000, enabled: client === null });
+  const [team, setTeam] = useState<Record<'billing_entity' | 'am' | 'tl' | 'atl' | 'sales', string>>({ billing_entity: '', am: '', tl: '', atl: '', sales: '' });
+  const teamNamed = team.am.trim() !== '' || team.tl.trim() !== '' || team.atl.trim() !== '' || team.sales.trim() !== '';
+  // The client is saved but its team was refused: the dialog stays open to say so.
+  const [created, setCreated] = useState<ClientDetail | null>(null);
   const txt = (k: keyof Draft) => (d[k] as string).trim() || null;
   const inUse = Boolean(client && (client.work_orders > 0 || client.sites > 0));
   const save = useMutation({
     mutationFn: () => {
       if (!d.name.trim()) throw new Error('The client needs a name.');
+      if (!client && teamNamed && !team.billing_entity) throw new Error('Pick the Comp the account team is for.');
       const input: ClientInput = {
         name: d.name.trim(), code: txt('code'), billing_entity: txt('billing_entity'),
         contact_name: txt('contact_name'), contact_email: txt('contact_email'), contact_phone: txt('contact_phone'), billing_email: txt('billing_email'),
         address: txt('address'), portal_type: txt('portal_type'), payment_terms: txt('payment_terms'), notes: txt('notes'), is_active: d.is_active,
       };
-      return client ? updateClient(client.id, input) : createClient(input);
+      if (client) return updateClient(client.id, input);
+      return createClient(input).then(async (res) => {
+        if (!team.billing_entity) return res;
+        const t = (k: 'am' | 'tl' | 'atl' | 'sales') => team[k].trim() || null;
+        const teamInput: ClientTeamInput = { billing_entity: team.billing_entity, am: t('am'), tl: t('tl'), atl: t('atl'), sales: t('sales') };
+        try {
+          await saveClientTeam(res.client.id, null, teamInput);
+        } catch (e) {
+          setCreated(res.client);
+          throw new Error(`${res.client.name} was added, but its account team was not: ${errText(e, 'the team could not be saved')}. Add it on the client’s page.`);
+        }
+        return res;
+      });
     },
     onMutate: () => setProblem(null),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['clients'] });
+      void qc.invalidateQueries({ queryKey: ['client-teams-overview'] });
+      void qc.invalidateQueries({ queryKey: ['wo-create-form'] });
       qc.setQueryData(['client', res.client.id], res);
       onSaved(res.client);
     },
@@ -218,7 +233,27 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
               edited on the client's Account team card, the one place AM / TL /
               ATL / Sales live. The record's old Account manager (0062) is not
               drawn any more; the save does not send it, so it stays as stored. */}
-          <ClientTeamSummary clientId={client?.id ?? null} />
+          {client ? <ClientTeamSummary clientId={client.id} /> : (
+            <div className="pf-field is-wide">
+              <span className="lbl">Account team</span>
+              <div className="client-new-team">
+                <label>
+                  <span className="lbl">Comp</span>
+                  <select className="fld" value={team.billing_entity} onChange={(e) => setTeam({ ...team, billing_entity: e.target.value })}>
+                    <option value="">—</option>
+                    {(vocab.data?.billing_entities ?? []).map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                </label>
+                {(['am', 'tl', 'atl', 'sales'] as const).map((k) => (
+                  <label key={k}>
+                    <span className="lbl">{k === 'am' ? 'AM' : k === 'tl' ? 'TL' : k === 'atl' ? 'ATL' : 'Sales'}</span>
+                    <input className="fld" list={teamListId(k)} value={team[k]} onChange={(e) => setTeam({ ...team, [k]: e.target.value })} />
+                  </label>
+                ))}
+              </div>
+              <span className="hint">Optional. Another Comp’s team can be added on the client’s page or from the list.</span>
+            </div>
+          )}
           {field('Code', <input className="fld mono" value={d.code} onChange={(e) => set('code', e.target.value)} />)}
           {field('Contact name', <input className="fld" value={d.contact_name} onChange={(e) => set('contact_name', e.target.value)} />)}
           {field('Contact phone', <input className="fld" value={d.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} />)}
@@ -250,7 +285,11 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
         {problem && <p className="snooze-err" role="alert"><Icon name="alert-circle" size={12} />{problem}</p>}
         <div className="sheet-f">
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button type="button" className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : client ? 'Save changes' : 'Add client'}</button>
+          {created ? (
+            <button type="button" className="btn btn-primary" onClick={() => { void qc.invalidateQueries({ queryKey: ['clients'] }); onSaved(created); }}>Open the client</button>
+          ) : (
+            <button type="button" className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : client ? 'Save changes' : 'Add client'}</button>
+          )}
         </div>
       </div>
     </div>

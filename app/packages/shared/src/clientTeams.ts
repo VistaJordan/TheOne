@@ -90,6 +90,12 @@ export interface ClientTeamsOverview {
   teams: (Omit<ClientTeam, 'updated_at'> & { client_id: string })[];
   /** false = this database has no account teams yet (0096 not applied). */
   ready: boolean;
+  /** 2026-10-27 · what the Clients list needs to edit the teams in place
+      (the same vocabulary as ClientTeamsResponse). Absent on an older API. */
+  billing_entities?: string[];
+  people?: string[];
+  people_by_seat?: Record<'am' | 'tl' | 'atl', string[]>;
+  can_edit?: boolean;
 }
 
 export interface ClientTeamInput {

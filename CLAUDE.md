@@ -2880,7 +2880,13 @@ name nobody matches is written on the work order as typed (Elise, 2026-10-27:
 the leads show before they have accounts) and flagged on the card, never
 guessed into someone else's account. The Clients list draws the teams as
 Comp, AM, TL and ATL columns, one line per Comp (`GET /client-teams`; the
-old Account manager column, the client record's own field, left the list). **The form:** the first section is Client (`21. Comp`,
+old Account manager column, the client record's own field, left the list).
+Since 2026-10-27 those cells (Sales included) edit in place for `clients`
+edit (`components/portfolio/ClientTeamCells.tsx`: click a name, or **+ Comp**;
+the overview also returns `billing_entities`, `people`, `people_by_seat` and
+`can_edit` for it) and **Add client** takes the first team, saved by the same
+POST right after the client (a refused team keeps the dialog open with
+**Open the client**). **The form:** the first section is Client (`21. Comp`,
 `Client`, `Client Portal Type`, `22. FM`, drawn in that order); Money is the
 NTE alone; People is AM, TL, ATL and the Assignee seat drawn as
 **Dispatcher** (always picked by hand, with Who's available?). AM / TL / ATL

@@ -187,7 +187,15 @@ export async function teamsOverview(actor: ActingPrincipal): Promise<ClientTeams
         WHERE c.deleted_at IS NULL
         ORDER BY upper(t.billing_entity)`,
     );
-    return { teams: r.rows, ready: true };
+    const [entities, people] = await Promise.all([billingEntities(), activePeople()]);
+    return {
+      teams: r.rows,
+      ready: true,
+      billing_entities: entities,
+      people: people.map((p) => p.name),
+      people_by_seat: bySeat(people),
+      can_edit: permAllows(actor.perms, CLIENTS_PERM_KEY, 'edit', actor.isSuperAdmin),
+    };
   } catch (e) {
     const err = e as { code?: string; message?: string };
     if (err.code !== '42P01') throw e;
