@@ -864,7 +864,7 @@ reader's own name in accent) and `WoThread` scrolls to and outlines `?msg=`.
 **Calls through Quo and the AI quote draft** (migration 0054,
 `services/woCalls.ts`, `services/aiQuote.ts`, `lib/aiQuotePrompt.ts`,
 `components/wo/calls/`, `pages/AiQuoteReviewPage.tsx`). Quo's API **cannot
-start a call**, so the **Call** button (Messages › Calls card since 2026-10-21) records the
+start a call**, so the **Call** button (since 0095: **Call client** on Messages › Client calls, **Call technician** on Tech Hub › Technician calls) records the
 intent first — a `wo_call` row (who, E.164 phone, purpose `call` | `quote` =
 "Just call" / "Call and draft a quote") — then hands `tel:+1…` to the Quo
 desktop app (it must be the Windows tel: handler). Quo's webhooks come back to
@@ -1018,7 +1018,7 @@ vendor trades are tables every dropdown reads (`vendor_status`,
 `vendor_brand_source`, `vendor_trade`). Dispatchers never remove a technician:
 they add a `vendor_note` or **blacklist** (flag + required reason, visible to
 all, sorts last; clearing is `vendors/blacklist` edit).
-*The map* opens **from a work order only** (People tab › Technicians › Find a
+*The map* opens **from a work order only** (Tech Hub tab › Technicians › Find a
 technician; `GET /work-orders/:id/tech-map`), centred on the work order, radius
 from `vendor_setting.map_radius_miles` (100). Who is on it is the role's
 `vendor_map/*` grants (`resolveVendorMapScope`): VR vendors (`/vr`), all
@@ -1265,16 +1265,15 @@ read, `GET /work-orders/:id/record`, feeds everything new on the page: the
 state chips under the header (`RecordBar`; since 2026-10-20 its buttons
 moved: Pause / Tag / Complete service / Cancel / Reopen into the header's
 **More** menu and Save as PDF beside it, both `RecordActions` passed to
-`WoHeader` as its `actions` slot; Assign vendor to People › Technicians,
+`WoHeader` as its `actions` slot; Assign vendor to Tech Hub (was People › Technicians),
 `ResponsibleVendorCard`; Add ETA to CICO, `EtaCard`; Increase NTE was
 removed, open `wo_nte_request` rows are still decided), the right rail (`RecordRail`:
 Responsibility, Location, Time with a live timer, Cost; drawn only on
 Overview and the four new tabs, `RAIL_TABS`) and the tabs Checklist (`tasks`),
 Cost breakdown (`costs`), Timelog & metrics (`timelog`) and Related. Since
 2026-10-20 the strip in `WorkOrderDetailPage.tsx` groups tabs (`TAB_GROUPS`; since 2026-10-26 Finances is ONE panel, `FINANCE_TABS`: the money cards, then Payables, then Cost breakdown, each part behind its own tab permission, `?tab=payables|costs` opens it scrolled to that part; since 2026-10-27 the Client quote card is on its own **Quotes** tab beside it, `work_orders/tabs/quotes` view + `quotes` view):
-People = people (Our team, with
-Assignment history) · technicians (permission: People's); each sub-tab keeps
-its `?tab=` id. Flags is gone (checkboxes in All fields); Checklist and
+People is one tab again since 0095 (Our team, with Assignment history;
+Technicians became the Tech Hub tab, below), and `TAB_GROUPS` is gone. Flags is gone (checkboxes in All fields); Checklist and
 Related have no button but a link still opens them; Timelog is no tab, its
 two cards (Technician time, Timelog and metrics) sit on CICO under the visits
 behind the Timelog permission and ?tab=timelog opens CICO; the header always
@@ -1608,7 +1607,7 @@ statements on purpose — **if you change one, change the other** (0003/roles,
 0004/super admins). The seed prints `super admins : 4 (…)` so drift is visible.
 
 **Suggested vendors** (migration 0069, `services/vendorSuggest.ts`,
-`components/wo/tech/SuggestedVendorsCard.tsx` on the People tab): the top few
+`components/wo/tech/SuggestedVendorsCard.tsx` on the Tech Hub tab): the top few
 vendors for a work order by its trade, location and client. Two layers, one
 list: the hand-picked `preferred_vendor` rules first (most specific rule, then
 rank; a rule may now name a **city** of its state, scored client 8 · trade 4 ·
@@ -2786,6 +2785,30 @@ errored run; the PM raise catches it and leaves the work order unassigned,
 for Incoming › Unassigned), and the CSV import (whole file refused, rows in
 `details.wo_numbers`). Only a name ADDED to the seat is asked, so work orders
 already held by someone who is then disabled stay as they are.
+
+**Tech Hub: technicians off the client conversation** (migration 0095,
+Elise 2026-10-27; `callSide` / `TECH_HUB_TAB` in `packages/shared/src/
+calls.ts`, `components/wo/tech/TechTextsCard.tsx`, `tests/tech-hub.test.ts`).
+People › Technicians became the **Tech Hub** tab (id still `technicians`, so
+old `?tab=technicians` links open it): Responsible vendor, Suggested vendors,
+Technicians (map, Hire), **Technician calls** (`CallsCard side="tech"`: Call
+technician, Just call / Call and draft a quote, the AI draft link), the Quo
+**Technician texts** with the technician rail (`MessagesRail`, the
+`is-messages` grid class moved with it) and Dispatch offers. Messages keeps
+the team / client thread and **Client calls** (`side="client"`: Call client,
+a typed name and number — the client's IVR is NOT offered, Elise's call for
+now — always purpose `call`, no AI draft). One `wo_call` list feeds both;
+`callSide` puts a call on Messages only when `contact_role = 'client'` AND
+`purpose = 'call'` (a quote call or an imported transcript is Tech Hub's,
+where its draft lives). Nothing on the API refuses a client quote call: the
+split is the UI's. Tech Hub has its own permission row
+`work_orders/tabs/technicians` (`WO_TABS`, Admin › Roles); 0095 copies each
+role's and each person's People row onto it where set, so nobody gained or
+lost the tab. `GET|POST /work-orders/:id/messages/quo` now need the Tech Hub
+tab (they needed Messages); the page reads the thread through
+`getWorkOrderQuoMessages` under `['wo-quo', id]` (the TextComposer's
+optimistic write targets that shape). `GET /messages` still carries `quo`,
+unread by the web. The AI review page's back links go to Tech Hub.
 
 ## Verify
 

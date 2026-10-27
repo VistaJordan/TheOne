@@ -1,5 +1,9 @@
 /* 0054 · The Call button on a work order, and the dialog behind it.
  *
+ * 0095 · two sides (`side`): on Messages the dialog calls the CLIENT — a
+ * number typed by hand, a plain call; on Tech Hub it calls a technician or a
+ * vendor — the ones on file first — with "Call and draft a quote" offered.
+ *
  * Quo's API cannot start a call, so the dialog records the call first (who,
  * which number, just a call or a call to draft a quote from) and then opens
  * the number in the Quo app with a tel: link. Quo's webhook brings the
@@ -11,13 +15,14 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CALL_PERM_KEY,
+  TECH_HUB_TAB,
   VISIT_MIRROR_KEYS,
   WO_CALL_CONTACT_LABELS,
   normalizePhone,
 } from '@theone/shared';
-import type { WoCallContactRole, WoCallPurpose } from '@theone/shared';
+import type { WoCallContactRole, WoCallPurpose, WoCallSide } from '@theone/shared';
 import type { WorkOrderDetailV2 } from '../../../api/client';
-import { ApiRequestError, getWorkOrderMessages, placeWoCall } from '../../../api/client';
+import { ApiRequestError, getWorkOrderQuoMessages, placeWoCall } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthProvider';
 import { str } from '../../../lib/fields';
 import { Icon } from '../../Icon';
@@ -30,7 +35,10 @@ interface Contact {
   source: string;
 }
 
-export function CallButton({ wo }: { wo: WorkOrderDetailV2 }) {
+/** Technician-side roles a typed number may be (the client is Messages'). */
+const TECH_SIDE_ROLES: WoCallContactRole[] = ['tech', 'vendor', 'other'];
+
+export function CallButton({ wo, side }: { wo: WorkOrderDetailV2; side: WoCallSide }) {
   const { can } = useAuth();
   const [open, setOpen] = useState(false);
   if (!can(CALL_PERM_KEY, 'create')) return null;
@@ -40,38 +48,49 @@ export function CallButton({ wo }: { wo: WorkOrderDetailV2 }) {
         type="button"
         className="btn"
         onClick={() => setOpen(true)}
-        title="Call the technician, vendor or client through Quo — optionally draft a quote from the call"
+        title={
+          side === 'client'
+            ? 'Call the client through Quo'
+            : 'Call a technician or vendor through Quo — optionally draft a quote from the call'
+        }
       >
         <Icon name="phone" size={14} />
-        Call
+        {side === 'client' ? 'Call client' : 'Call technician'}
       </button>
-      {open && <CallDialog wo={wo} onClose={() => setOpen(false)} />}
+      {open && <CallDialog wo={wo} side={side} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
 /** `preset` (0057): the technician map opens the dialog on the person whose
     Call button was pressed; the work order's own contacts stay as alternatives. */
-export function CallDialog({ wo, onClose, preset }: {
+export function CallDialog({ wo, onClose, preset, side = 'tech' }: {
   wo: WorkOrderDetailV2;
   onClose: () => void;
   preset?: { name: string; phone: string; role: WoCallContactRole };
+  /** 0095 · `client` (Messages): a typed number, a plain call. `tech`
+      (Tech Hub, the map, the suggested vendors): the default. */
+  side?: WoCallSide;
 }) {
   const { can } = useAuth();
   const qc = useQueryClient();
-  const canQuote = can('quotes', 'edit');
+  const isClient = side === 'client';
+  const canQuote = !isClient && can('quotes', 'edit');
 
-  // The vendor on the Quo line, when the Messages query already knows one.
-  // Same key as the detail page, so this is usually a cache hit.
-  const messages = useQuery({
-    queryKey: ['wo-messages', wo.id],
-    queryFn: () => getWorkOrderMessages(wo.id),
+  // The vendor on the Quo line, when Tech Hub already knows one. Same key as
+  // the detail page, so this is usually a cache hit.
+  const quo = useQuery({
+    queryKey: ['wo-quo', wo.id],
+    queryFn: () => getWorkOrderQuoMessages(wo.id),
+    enabled: !isClient,
     retry: false,
     staleTime: 60_000,
   });
 
   const contacts = useMemo<Contact[]>(() => {
     const out: Contact[] = [];
+    // 0095 · the client's number is typed by hand for now (Elise, 2026-10-27).
+    if (isClient) return out;
     const presetPhone = preset ? normalizePhone(preset.phone) : null;
     if (preset && presetPhone) {
       out.push({ key: 'preset', name: preset.name, phone: presetPhone, role: preset.role, source: 'From the map' });
@@ -82,13 +101,13 @@ export function CallDialog({ wo, onClose, preset }: {
     if (techPhone && techPhone !== presetPhone) {
       out.push({ key: 'tech', name: techName ?? 'Technician', phone: techPhone, role: 'tech', source: 'Latest visit' });
     }
-    const vendor = messages.data?.quo.conversation?.vendor;
+    const vendor = quo.data?.conversation?.vendor;
     const vendorPhone = normalizePhone(vendor?.phone);
     if (vendor && vendorPhone && vendorPhone !== techPhone && vendorPhone !== presetPhone) {
       out.push({ key: 'vendor', name: vendor.name, phone: vendorPhone, role: 'vendor', source: 'Quo line' });
     }
     return out;
-  }, [wo.fields, messages.data, preset]);
+  }, [wo.fields, quo.data, preset, isClient]);
 
   const [pick, setPick] = useState<string>('');
   const chosen = contacts.find((c) => c.key === pick) ?? null;
@@ -97,16 +116,17 @@ export function CallDialog({ wo, onClose, preset }: {
 
   const [otherName, setOtherName] = useState('');
   const [otherPhone, setOtherPhone] = useState('');
-  const [otherRole, setOtherRole] = useState<WoCallContactRole>('client');
+  const [otherRole, setOtherRole] = useState<WoCallContactRole>(isClient ? 'client' : 'tech');
   const [purpose, setPurpose] = useState<WoCallPurpose>('call');
 
   const phone = usingOther ? normalizePhone(otherPhone) : (selected?.phone ?? null);
   const name = usingOther ? otherName.trim() || null : (selected?.name ?? null);
-  const role = usingOther ? otherRole : (selected?.role ?? 'other');
+  const role = isClient ? 'client' : usingOther ? otherRole : (selected?.role ?? 'other');
 
   const [placed, setPlaced] = useState<{ dial: string; name: string | null } | null>(null);
   const mutation = useMutation({
-    mutationFn: () => placeWoCall(wo.id, { phone: phone!, contact_name: name, contact_role: role, purpose }),
+    mutationFn: () =>
+      placeWoCall(wo.id, { phone: phone!, contact_name: name, contact_role: role, purpose: isClient ? 'call' : purpose }),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['wo-calls', wo.id] });
       setPlaced({ dial: res.dial, name });
@@ -116,7 +136,7 @@ export function CallDialog({ wo, onClose, preset }: {
   });
 
   const activeKey = usingOther ? 'other' : (selected?.key ?? '');
-  const callsHref = `/work-orders/${encodeURIComponent(wo.wo_number)}?tab=messages`;
+  const callsHref = `/work-orders/${encodeURIComponent(wo.wo_number)}?tab=${isClient ? 'messages' : TECH_HUB_TAB}`;
 
   return (
     <div
@@ -131,7 +151,7 @@ export function CallDialog({ wo, onClose, preset }: {
       <div className="sheet call-sheet">
         <h2 className="sheet-t" id="callT">
           <Icon name="phone" size={18} />
-          {placed ? 'Calling in Quo' : `Call from ${wo.wo_number}`}
+          {placed ? 'Calling in Quo' : isClient ? `Call the client · ${wo.wo_number}` : `Call from ${wo.wo_number}`}
         </h2>
 
         {placed ? (
@@ -139,7 +159,7 @@ export function CallDialog({ wo, onClose, preset }: {
             <p className="sheet-b">
               Quo should be dialling <b>{placed.name ?? placed.dial.replace('tel:', '')}</b> now. When
               the call ends, Quo sends the transcript to this work order
-              {purpose === 'quote' ? ' and the AI quote draft is one click away in the call log.' : '.'}
+              {!isClient && purpose === 'quote' ? ' and the AI quote draft is one click away in the call log.' : '.'}
             </p>
             <p className="call-hint">
               <Icon name="info" size={12} />
@@ -163,6 +183,7 @@ export function CallDialog({ wo, onClose, preset }: {
               Opens the number in the Quo app and records the call on this work order.
             </p>
 
+            {!isClient && (
             <div className="call-field">
               <span className="overline">Who</span>
               <div className="call-contacts" role="radiogroup" aria-label="Who to call">
@@ -191,11 +212,12 @@ export function CallDialog({ wo, onClose, preset }: {
                   />
                   <span className="call-contact-main">
                     <b>Another number</b>
-                    <span>{contacts.length === 0 ? 'No technician phone on this work order yet' : 'Client, vendor, anyone'}</span>
+                    <span>{contacts.length === 0 ? 'No technician phone on this work order yet' : 'Another technician or vendor'}</span>
                   </span>
                 </label>
               </div>
             </div>
+            )}
 
             {usingOther && (
               <div className="call-other">
@@ -215,17 +237,20 @@ export function CallDialog({ wo, onClose, preset }: {
                     onChange={(e) => setOtherPhone(e.target.value)}
                   />
                 </div>
-                <div className="field">
-                  <label className="lbl" htmlFor="call-role">They are the</label>
-                  <select className="fld" id="call-role" value={otherRole} onChange={(e) => setOtherRole(e.target.value as WoCallContactRole)}>
-                    {(Object.keys(WO_CALL_CONTACT_LABELS) as WoCallContactRole[]).map((r) => (
-                      <option key={r} value={r}>{WO_CALL_CONTACT_LABELS[r]}</option>
-                    ))}
-                  </select>
-                </div>
+                {!isClient && (
+                  <div className="field">
+                    <label className="lbl" htmlFor="call-role">They are the</label>
+                    <select className="fld" id="call-role" value={otherRole} onChange={(e) => setOtherRole(e.target.value as WoCallContactRole)}>
+                      {TECH_SIDE_ROLES.map((r) => (
+                        <option key={r} value={r}>{WO_CALL_CONTACT_LABELS[r]}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
 
+            {!isClient && (
             <div className="call-field">
               <span className="overline">After the call</span>
               <div className="seg" role="group" aria-label="After the call">
@@ -255,6 +280,7 @@ export function CallDialog({ wo, onClose, preset }: {
                   : 'The call and its transcript are kept on this work order. You can still draft a quote from it later.'}
               </span>
             </div>
+            )}
 
             {mutation.isError && (
               <p className="snooze-err" role="alert">
@@ -271,7 +297,7 @@ export function CallDialog({ wo, onClose, preset }: {
                 type="button"
                 className="btn btn-primary"
                 disabled={!phone || mutation.isPending}
-                title={!phone ? 'Pick who to call, or type a number' : undefined}
+                title={!phone ? (isClient ? 'Type the client’s number' : 'Pick who to call, or type a number') : undefined}
                 onClick={() => mutation.mutate()}
               >
                 <Icon name="phone-out" size={14} />

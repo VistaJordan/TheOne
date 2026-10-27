@@ -657,6 +657,12 @@ export function getMentionCandidates(idOrNumber: string): Promise<MentionCandida
   );
 }
 
+/** GET /api/work-orders/:id/messages/quo — the Quo technician thread on its
+    own (0095: Tech Hub draws it; gated on that tab, not on Messages). */
+export function getWorkOrderQuoMessages(idOrNumber: string): Promise<MessagesResponse> {
+  return request<MessagesResponse>(`/work-orders/${encodeURIComponent(idOrNumber)}/messages/quo`);
+}
+
 /** POST /api/work-orders/:id/messages/quo — queues an outbound text to the
     technician (direction 'out', pending_sync=true) and writes a
     `tech_message_sent` activity row. */

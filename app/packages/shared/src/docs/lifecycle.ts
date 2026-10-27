@@ -293,7 +293,7 @@ export const LIFECYCLE: LifecycleModel = {
       statuses: ['Open', 'Assessment Sched', 'Job Sched'],
       summary: 'Suggested vendors (preferred rules first, then an automatic fill by trade, coverage and history), the technician map around the site, the dispatcher\'s own book, and the optional dispatch cascade that offers the job to preferred vendors in turn.',
       steps: [
-        'Hire for <WO#> records the technician on People › Technicians (Take off releases them); a blacklisted vendor is never suggested, cannot accept an offer and cannot be the responsible vendor (hiring from the map warns).',
+        'Hire for <WO#> records the technician on the Tech Hub tab (Take off releases them); a blacklisted vendor is never suggested, cannot accept an offer and cannot be the responsible vendor (hiring from the map warns).',
         'Call via Quo records the intent and opens the Quo desktop app; the transcript comes back by webhook.',
         'A hired technician, or one picked on a visit, joins the dispatcher\'s own technician list ("theirs" on the map).',
         'Compliance (W-9, MSA, approved COI) warns on hire; it never blocks.',

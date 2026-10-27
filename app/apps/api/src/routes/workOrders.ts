@@ -20,6 +20,7 @@ import {
   CLIENT_MESSAGE_PERM_KEY,
   MENTION_MAX,
   MESSAGE_PERM_KEY,
+  TECH_HUB_TAB,
   STATUS_PERM_KEY,
   WO_MESSAGE_MAX,
   fieldPermKey,
@@ -750,9 +751,10 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // S3 · the Quo conversation mirror — oldest-first thread + its channel header.
   // A WO with no linked Quo line is NOT an error: it returns conversation:null
   // and the web renders the empty state. (Also carried by GET /messages.)
+  // 0095 · the technician texts are drawn on Tech Hub, so its tab decides.
   app.get('/work-orders/:id/messages/quo', async (req) => {
     const { p } = requireView(req);
-    requirePerm(p, tabPermKey('messages'), 'view', 'You cannot view messages');
+    requirePerm(p, tabPermKey(TECH_HUB_TAB), 'view', 'You cannot view the technician texts');
     const { id } = parse(idParamsSchema, req.params);
     const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
@@ -763,7 +765,7 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   // lands, hence pending_sync=true on the stored row.
   app.post('/work-orders/:id/messages/quo', async (req, reply) => {
     const { p } = acting(req);
-    requirePerm(p, tabPermKey('messages'), 'view', 'You cannot send messages');
+    requirePerm(p, tabPermKey(TECH_HUB_TAB), 'view', 'You cannot text the technician');
     const { id } = parse(idParamsSchema, req.params);
     const { body } = parse(quoTextSchema, req.body);
     const taskId = await resolveTaskId(id, p);

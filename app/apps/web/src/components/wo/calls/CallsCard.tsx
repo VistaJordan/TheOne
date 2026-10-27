@@ -1,14 +1,19 @@
-/* 0054 · The call log on a work order (Messages tab): every call placed from
- * it through Quo — and, since 2026-10-21, the Call button itself (it left the
- * header; calls are started here only), with Quo's summary and the transcript once they land, and
- * the way into the AI quote draft. Polls while a call is still waiting on
- * Quo, so a transcript appears without a refresh. */
+/* 0054 · The call log on a work order: every call placed from it through
+ * Quo — and, since 2026-10-21, the Call button itself (it left the header;
+ * calls are started here only), with Quo's summary and the transcript once
+ * they land. Polls while a call is still waiting on Quo, so a transcript
+ * appears without a refresh.
+ *
+ * 0095 · drawn twice, one `side` each (`callSide` in shared): on Messages the
+ * calls to the client (plain calls, no AI draft); on Tech Hub every other call
+ * — technicians, vendors, calls placed to draft a quote, imported transcripts
+ * — with the way into the AI quote draft. One query feeds both. */
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CALL_PERM_KEY, WO_CALL_CONTACT_LABELS } from '@theone/shared';
-import type { WoCall } from '@theone/shared';
+import { CALL_PERM_KEY, WO_CALL_CONTACT_LABELS, callSide } from '@theone/shared';
+import type { WoCall, WoCallSide } from '@theone/shared';
 import type { WorkOrderDetailV2 } from '../../../api/client';
 import { ApiRequestError, listWoCalls, pasteCallTranscript } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthProvider';
@@ -22,7 +27,7 @@ const PREVIEW_LINES = 3;
 /** A call still waiting on Quo keeps the list polling. */
 const waiting = (c: WoCall) => c.status === 'dialing' || c.status === 'completed';
 
-export function CallsCard({ wo }: { wo: WorkOrderDetailV2 }) {
+export function CallsCard({ wo, side }: { wo: WorkOrderDetailV2; side: WoCallSide }) {
   const woId = wo.id;
   const woNumber = wo.wo_number;
   const { can } = useAuth();
@@ -34,31 +39,37 @@ export function CallsCard({ wo }: { wo: WorkOrderDetailV2 }) {
     refetchInterval: (q) => (q.state.data?.calls.some(waiting) ? 15_000 : false),
   });
   if (!allowed) return null;
-  const calls = query.data?.calls ?? [];
+  const calls = (query.data?.calls ?? []).filter((c) => callSide(c) === side);
 
   return (
     <section className="card calls-card">
       <div className="card-head">
-        <h2 className="card-title grow">Calls</h2>
+        <h2 className="card-title grow">{side === 'client' ? 'Client calls' : 'Technician calls'}</h2>
         <span className="chip chip-sm">
           <Icon name="phone" size={12} />
           Through Quo
         </span>
-        {/* 0054 · call through Quo; optionally draft a quote from the call. */}
-        <CallButton wo={wo} />
+        {/* 0054 · call through Quo; on Tech Hub, optionally draft a quote from the call. */}
+        <CallButton wo={wo} side={side} />
       </div>
       {query.isLoading && <div className="empty-flat">Loading calls…</div>}
       {query.isError && <div className="empty-flat">Could not load the calls on this work order.</div>}
       {!query.isLoading && !query.isError && calls.length === 0 && (
         <div className="empty-flat">
-          No calls yet. Use <b>Call</b> on this card to call the technician through Quo — the
-          transcript lands here, and a quote can be drafted from it.
+          {side === 'client' ? (
+            <>No calls to the client yet. Use <b>Call client</b> on this card to call them through Quo — the transcript lands here.</>
+          ) : (
+            <>
+              No technician calls yet. Use <b>Call technician</b> on this card to call them through Quo — the
+              transcript lands here, and a quote can be drafted from it.
+            </>
+          )}
         </div>
       )}
       {calls.length > 0 && (
         <ul className="calls-list">
           {calls.map((c) => (
-            <CallRow key={c.id} call={c} woId={woId} woNumber={woNumber} />
+            <CallRow key={c.id} call={c} woId={woId} woNumber={woNumber} side={side} />
           ))}
         </ul>
       )}
@@ -74,7 +85,7 @@ const STATUS_TEXT: Record<WoCall['status'], string> = {
   expired: 'Quo never reported this call',
 };
 
-function CallRow({ call, woId, woNumber }: { call: WoCall; woId: string; woNumber: string }) {
+function CallRow({ call, woId, woNumber, side }: { call: WoCall; woId: string; woNumber: string; side: WoCallSide }) {
   const { can } = useAuth();
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
@@ -96,7 +107,8 @@ function CallRow({ call, woId, woNumber }: { call: WoCall; woId: string; woNumbe
   // 0077: an imported transcript has no call behind it — no number, no paste.
   const imported = call.transcript_source === 'imported';
   const canPaste = can(CALL_PERM_KEY, 'create') && call.transcript_source !== 'quo' && !imported;
-  const canDraft = can('quotes', 'edit') && lines.length > 0;
+  // 0095 · the AI quote draft is Tech Hub's; a client call is a plain call.
+  const canDraft = side === 'tech' && can('quotes', 'edit') && lines.length > 0;
   const draftHref = `/work-orders/${encodeURIComponent(woNumber)}/calls/${call.id}/quote`;
   const who = call.contact_name ?? call.phone ?? 'Imported transcript';
 

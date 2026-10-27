@@ -26,6 +26,23 @@ export const WO_CALL_CONTACT_LABELS: Record<WoCallContactRole, string> = {
   other: 'Other',
 };
 
+/** 2026-10-27 · the work order's calls live on two tabs: client calls on
+ *  Messages (beside the conversation with the client), everything to do with
+ *  a technician — hiring, the AI quote draft — on Tech Hub. A call is the
+ *  client's when the client was called for a plain call; a call placed to
+ *  draft a quote, or an imported transcript (always purpose `quote`), belongs
+ *  to Tech Hub whoever was on the line, because the draft lives there. */
+export type WoCallSide = 'client' | 'tech';
+
+export function callSide(call: { contact_role: WoCallContactRole; purpose: WoCallPurpose }): WoCallSide {
+  return call.contact_role === 'client' && call.purpose === 'call' ? 'client' : 'tech';
+}
+
+/** The work-order tab that holds the technician side (its id predates the
+ *  name: People › Technicians became Tech Hub, so old ?tab=technicians links
+ *  still open it). */
+export const TECH_HUB_TAB = 'technicians';
+
 /** A Quo call is matched to the newest `dialing` row for its number placed at
  *  most this long BEFORE Quo says the call started … */
 export const CALL_MATCH_BEFORE_MINUTES = 30;

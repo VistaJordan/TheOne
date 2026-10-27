@@ -140,7 +140,7 @@ export function AiQuoteReviewPage() {
     mutationFn: () => discardAiQuoteDraft(woNumber, callId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['wo-calls'] });
-      navigate(`/work-orders/${encodeURIComponent(woNumber)}?tab=messages`);
+      navigate(`/work-orders/${encodeURIComponent(woNumber)}?tab=technicians`);
     },
     onError: (err) => setError(errorText(err, 'Could not discard the draft.')),
   });
@@ -151,7 +151,7 @@ export function AiQuoteReviewPage() {
   const woHref = `/work-orders/${encodeURIComponent(woNumber)}`;
   const breadcrumb = (
     <nav className="crumbs" aria-label="Breadcrumb">
-      <button type="button" className="crumb-back" aria-label={`Back to ${woNumber}`} {...linkTo(`${woHref}?tab=messages`)}>
+      <button type="button" className="crumb-back" aria-label={`Back to ${woNumber}`} {...linkTo(`${woHref}?tab=technicians`)}>
         <Icon name="arrow-l" size={14} />
       </button>
       <Link className="crumb" to="/">Work Orders</Link>
@@ -174,7 +174,7 @@ export function AiQuoteReviewPage() {
         <Icon name="alert" size={22} />
         <b>Could not load this call</b>
         <span>{errorText(query.error, 'Try again in a moment.')}</span>
-        <Link className="btn" to={`${woHref}?tab=messages`}>Back to {woNumber}</Link>
+        <Link className="btn" to={`${woHref}?tab=technicians`}>Back to {woNumber}</Link>
       </div>,
     );
   }
@@ -197,7 +197,7 @@ export function AiQuoteReviewPage() {
           Quo sends the transcript a minute or two after the call ends. If the call was made outside
           Quo’s webhook, paste the transcript onto the call in the call log.
         </span>
-        <Link className="btn" to={`${woHref}?tab=messages`}>Open the call log</Link>
+        <Link className="btn" to={`${woHref}?tab=technicians`}>Open the call log</Link>
       </div>
     );
   } else if (!server && !data.ai_configured) {

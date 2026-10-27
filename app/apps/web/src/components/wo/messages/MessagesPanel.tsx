@@ -1,9 +1,6 @@
 import type { WoMessagesResponse } from '../../../api/client';
 import { Icon } from '../../Icon';
 import { feedTime } from '../../../lib/fields';
-import { ChannelHeader } from './ChannelHeader';
-import { MessageThread } from './MessageThread';
-import { TextComposer } from './TextComposer';
 import { WoThread } from './WoThread';
 import { MessageComposer } from './MessageComposer';
 
@@ -13,15 +10,13 @@ interface MessagesPanelProps {
   data: WoMessagesResponse | undefined;
   loading: boolean;
   error: boolean;
-  /** Cleaned WO status name for the Quo thread foot ("— Waiting for Approval"). */
-  waitingOn: string | null;
   queryKey: readonly unknown[];
 }
 
 /** 0052 · the Messages tab: the work order's own thread (internal and
-    client-visible, on every work order) with its composer, and below it the
-    Quo technician thread when a line is linked to this work order. */
-export function MessagesPanel({ woId, woNumber, data, loading, error, waitingOn, queryKey }: MessagesPanelProps) {
+    client-visible, on every work order) with its composer. The Quo technician
+    thread moved to Tech Hub (0095, `TechTextsCard`). */
+export function MessagesPanel({ woId, woNumber, data, loading, error, queryKey }: MessagesPanelProps) {
   if (loading) {
     return (
       <div className="card" role="tabpanel" aria-label="Messages">
@@ -42,8 +37,7 @@ export function MessagesPanel({ woId, woNumber, data, loading, error, waitingOn,
     );
   }
 
-  const { items, client_system: clientSystem, quo } = data;
-  const conversation = quo.conversation;
+  const { items, client_system: clientSystem } = data;
   const last = items.length > 0 ? items[items.length - 1].created_at : null;
 
   return (
@@ -80,31 +74,6 @@ export function MessagesPanel({ woId, woNumber, data, loading, error, waitingOn,
 
         <MessageComposer woId={woId} woNumber={woNumber} queryKey={queryKey} clientSystem={clientSystem} />
       </section>
-
-      {conversation && (
-        <>
-          <ChannelHeader conversation={conversation} />
-          <section className="card">
-            <div className="card-head">
-              <h2 className="card-title">Technician texts</h2>
-              <span className="chip chip-sm"><Icon name="lock" size={12} />Not client-visible</span>
-              <span className="card-meta">
-                Synced from Quo
-                {conversation.last_activity ? ` · ${feedTime(conversation.last_activity)}` : ''}
-              </span>
-            </div>
-
-            <MessageThread
-              items={quo.items}
-              techName={conversation.vendor.name}
-              dispatcherName={conversation.claimed_by ?? 'Dispatcher'}
-              waitingOn={waitingOn}
-            />
-
-            <TextComposer woId={woId} conversation={conversation} queryKey={queryKey} />
-          </section>
-        </>
-      )}
     </div>
   );
 }

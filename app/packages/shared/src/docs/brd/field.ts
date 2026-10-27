@@ -95,7 +95,7 @@ export const FIELD_PART: DocPart = {
     {
       key: 'techmap',
       title: 'The technician map, suggested vendors and the dispatch cascade',
-      where: 'A work order › People tab › Technicians card (Find a technician), Suggested vendors card, Dispatch offers card; Admin › Vendors & map.',
+      where: 'A work order › Tech Hub tab › Technicians card (Find a technician), Suggested vendors card, Dispatch offers card; Admin › Vendors & map.',
       purpose: 'Find the right person near the job: the map around the site, the top few suggestions by rule and by fit, and an optional cascade that offers the job to preferred vendors in turn.',
       value: 'The choice of vendor is made from distance, coverage, history and compliance in seconds, with the hand-picked preferences first; a dispatcher never sees more of the database than one job needs.',
       users: ['OM (dispatcher)', 'Senior OM', 'OM Under Probation', 'Team Lead'],

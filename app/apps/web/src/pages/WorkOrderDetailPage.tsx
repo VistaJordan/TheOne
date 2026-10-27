@@ -10,6 +10,7 @@ import {
   getWorkOrder,
   getWorkOrderFeed,
   getWorkOrderMessages,
+  getWorkOrderQuoMessages,
   getWorkOrderQuote,
   listWorkOrders,
 } from '../api/client';
@@ -36,6 +37,7 @@ import { AllFieldsPanel } from '../components/wo/AllFieldsPanel';
 import { AuditTrail } from '../components/wo/AuditTrail';
 import { MessagesPanel } from '../components/wo/messages/MessagesPanel';
 import { CallsCard } from '../components/wo/calls/CallsCard';
+import { TechTextsCard } from '../components/wo/tech/TechTextsCard';
 import { EtaCard, RecordActions, RecordBar, RecordRail, ResponsibleVendorCard, useWoRecord } from '../components/wo/record/RecordParts';
 import { ChecklistTab, CostBreakdownTab, RelatedTab, TimelogTab } from '../components/wo/record/RecordTabs';
 import { JobPlanServicesCard, PermitsCard, TimeCard } from '../components/wo/maint/WoMaintCards';
@@ -50,7 +52,7 @@ import { phaseForStatus } from '../lib/phases';
 import { deriveHeaderMeta } from '../lib/woDerive';
 import { tradeIcon } from '../lib/tradeIcon';
 import { useAuth } from '../auth/AuthProvider';
-import { quoteSectionsHaveData, tabPermKey } from '@theone/shared';
+import { TECH_HUB_TAB, quoteSectionsHaveData, tabPermKey } from '@theone/shared';
 
 const TAB_IDS = [
   'overview', 'fields', 'money', 'quotes', 'payables', 'people', 'technicians', 'site', 'dates', 'cico', 'parts',
@@ -75,19 +77,10 @@ type Tab = (typeof TAB_IDS)[number];
     and ?tab=costs links open Finances scrolled to that part. */
 const FINANCE_TABS: readonly Tab[] = ['money', 'payables', 'costs'];
 
-/** 2026-10-20 · strip buttons that stand for a group of sub-tabs: People =
-    Our team · Technicians. Each sub-tab keeps its own id, so ?tab= links and
-    each tab's permission stay as they were. */
-const TAB_GROUPS: { id: string; label: string; tabs: { id: Tab; label: string }[] }[] = [
-  { id: 'people', label: 'People', tabs: [
-    { id: 'people', label: 'Our team' },
-    { id: 'technicians', label: 'Technicians' },
-  ] },
-];
-
-/** The permission a tab is shown under: Technicians was part of People and
-    keeps People's grant. */
-const tabPerm = (t: Tab): string => tabPermKey(t === 'technicians' ? 'people' : t);
+/** 0095 · People › Technicians became the Tech Hub tab, with its own
+    permission row (it rode on People's until then); People is one tab again.
+    The id stays `technicians` (TECH_HUB_TAB) so old ?tab= links still open it. */
+const tabPerm = (t: Tab): string => tabPermKey(t);
 
 const isTab = (v: string | null): v is Tab => TAB_IDS.includes(v as Tab);
 
@@ -120,10 +113,6 @@ export function WorkOrderDetailPage() {
   const financeFocus = tab === 'money' && (asked === 'payables' || asked === 'costs') && show(asked) ? asked : null;
   const setTab = (t: Tab) =>
     setSearchParams(t === 'overview' ? {} : { tab: t }, { replace: true });
-  // A group's button lands on the first sub-tab the person may see, and reads
-  // as on while any of its sub-tabs is open.
-  const groupTabs = (id: string) => (TAB_GROUPS.find((g) => g.id === id)?.tabs ?? []).filter((x) => show(x.id));
-  const activeGroup = TAB_GROUPS.find((g) => g.tabs.some((x) => x.id === tab)) ?? null;
   // What Cancel / Reopen / Resume could not do, said under the header.
   const [recordNote, setRecordNote] = useState<string | null>(null);
 
@@ -148,6 +137,14 @@ export function WorkOrderDetailPage() {
     queryKey: messagesKey,
     queryFn: () => getWorkOrderMessages(wo?.id ?? woNumber),
     enabled: Boolean(wo) && show('messages'),
+  });
+
+  // 0095 · the Quo technician thread, drawn on Tech Hub (and its rail).
+  const quoKey = ['wo-quo', wo?.id ?? woNumber] as const;
+  const quoQuery = useQuery({
+    queryKey: quoKey,
+    queryFn: () => getWorkOrderQuoMessages(wo?.id ?? woNumber),
+    enabled: Boolean(wo) && show(TECH_HUB_TAB),
   });
 
   const activityQuery = useQuery({
@@ -308,9 +305,9 @@ export function WorkOrderDetailPage() {
     );
   }
 
-  const conversation = messagesQuery.data?.quo.conversation ?? null;
+  const conversation = quoQuery.data?.conversation ?? null;
   // 0052 · the badge counts the work order's own messages; the Quo thread
-  // keeps its own counts in the rail.
+  // keeps its own counts in Tech Hub's rail.
   const threadCount = messagesQuery.data ? messagesQuery.data.items.length : null;
 
   const obligations = obligationsQuery.data ?? [];
@@ -352,9 +349,7 @@ export function WorkOrderDetailPage() {
           {show('quotes') && <TabButton id="quotes" tab={tab} onSelect={setTab}>Quotes</TabButton>}
           {show('dates') && <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>}
           {show('cico') && <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>}
-          {groupTabs('people').length > 0 && (
-            <GroupButton on={activeGroup?.id === 'people'} onSelect={() => setTab(groupTabs('people')[0].id)}>People</GroupButton>
-          )}
+          {show('people') && <TabButton id="people" tab={tab} onSelect={setTab}>People</TabButton>}
           {show('site') && <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>}
           {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
           {show('drive') && <TabButton id="drive" tab={tab} onSelect={setTab}>Drive</TabButton>}
@@ -365,24 +360,17 @@ export function WorkOrderDetailPage() {
               {threadCount !== null && <span className="seg-count">{threadCount}</span>}
             </TabButton>
           )}
+          {show(TECH_HUB_TAB) && <TabButton id={TECH_HUB_TAB} tab={tab} onSelect={setTab}>Tech Hub</TabButton>}
           {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Audit trail</TabButton>}
         </div>
       </div>
 
       <div
-        className={`wo-grid${tab === 'messages' ? ' is-messages' : ''}${
-          tab === 'messages' && conversation ? '' : RAIL_TABS.includes(tab) ? ' has-record-rail' : ' no-rail'
+        className={`wo-grid${tab === TECH_HUB_TAB && conversation ? ' is-messages' : ''}${
+          tab === TECH_HUB_TAB && conversation ? '' : RAIL_TABS.includes(tab) ? ' has-record-rail' : ' no-rail'
         }`}
       >
         <div className="col-main">
-          {activeGroup && groupTabs(activeGroup.id).length > 1 && (
-            <div className="seg tabs wo-subtabs" role="tablist" aria-label={`${activeGroup.label} sections`}>
-              {groupTabs(activeGroup.id).map((x) => (
-                <TabButton key={x.id} id={x.id} tab={tab} onSelect={setTab}>{x.label}</TabButton>
-              ))}
-            </div>
-          )}
-
           {tab === 'overview' && (
             <div role="tabpanel" aria-label="Overview">
               {/* S5 — what is owed leads the panel: activity is context, a
@@ -430,9 +418,10 @@ export function WorkOrderDetailPage() {
             </div>
           )}
 
-          {/* 0054 · calls placed through Quo from this work order, and the
-              way into the AI quote draft — above the written thread. */}
-          {tab === 'messages' && <CallsCard wo={wo} />}
+          {/* 0095 · Messages is the conversation with the team and the client:
+              the calls to the client above the written thread. Technician
+              calls, texts and the AI quote draft are on Tech Hub. */}
+          {tab === 'messages' && <CallsCard wo={wo} side="client" />}
           {tab === 'messages' && (
             <MessagesPanel
               woId={wo.id}
@@ -440,7 +429,6 @@ export function WorkOrderDetailPage() {
               data={messagesQuery.data}
               loading={messagesQuery.isLoading}
               error={messagesQuery.isError}
-              waitingOn={plainStatus(wo.status.name)}
               queryKey={messagesKey}
             />
           )}
@@ -533,14 +521,26 @@ export function WorkOrderDetailPage() {
             </div>
           )}
 
-          {tab === 'technicians' && (
-            <div role="tabpanel" aria-label="Technicians">
+          {/* 0095 · Tech Hub (was People › Technicians): finding, hiring and
+              talking to the technician — calls (with the AI quote draft) and
+              the Quo texts sit here, away from the client conversation. */}
+          {tab === TECH_HUB_TAB && (
+            <div role="tabpanel" aria-label="Tech Hub">
               {/* 0064 · the one vendor answering for the job (was Assign vendor on the bar). */}
               <ResponsibleVendorCard woId={wo.id} woNumber={wo.wo_number} />
-              {/* 0057 · who has been hired onto the work order, and the map. */}
-              <TechniciansCard wo={wo} />
               {/* 0069 · the top few vendors for this trade, location and client. */}
               <SuggestedVendorsCard wo={wo} />
+              {/* 0057 · who has been hired onto the work order, and the map. */}
+              <TechniciansCard wo={wo} />
+              {/* 0054 · calls to technicians and vendors, and the AI quote draft. */}
+              <CallsCard wo={wo} side="tech" />
+              {/* S3 · the Quo technician texts (moved off Messages). */}
+              <TechTextsCard
+                woId={wo.id}
+                data={quoQuery.data}
+                queryKey={quoKey}
+                waitingOn={plainStatus(wo.status.name)}
+              />
               {/* 0066 · offering the job to the preferred vendors in turn (hidden while switched off). */}
               <DispatchCard woId={wo.id} />
             </div>
@@ -607,9 +607,9 @@ export function WorkOrderDetailPage() {
 
         {RAIL_TABS.includes(tab) && <RecordRail woId={wo.id} record={recordQuery.data} loading={recordQuery.isLoading} />}
 
-        {tab === 'messages' && conversation && (
+        {tab === TECH_HUB_TAB && conversation && (
           <aside className="rail">
-            <MessagesRail conversation={conversation} items={messagesQuery.data?.quo.items ?? []} />
+            <MessagesRail conversation={conversation} items={quoQuery.data?.items ?? []} />
           </aside>
         )}
       </div>
@@ -622,15 +622,6 @@ interface TabButtonProps {
   tab: Tab;
   onSelect: (t: Tab) => void;
   children: ReactNode;
-}
-
-/** A strip button that stands for a group of sub-tabs. */
-function GroupButton({ on, onSelect, children }: { on: boolean; onSelect: () => void; children: ReactNode }) {
-  return (
-    <button type="button" role="tab" aria-selected={on} className={`seg-btn${on ? ' is-on' : ''}`} onClick={onSelect}>
-      {children}
-    </button>
-  );
 }
 
 function TabButton({ id, tab, onSelect, children }: TabButtonProps) {

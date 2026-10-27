@@ -6,8 +6,9 @@
    in wo-detail.css and are reused as-is; only the message-specific classes
    are defined here. */
 
-/* The rail is SLIMMER on Messages than on Overview (71/29 vs 62/38) so the
-   thread bubbles get their full measure. */
+/* The Quo rail is SLIMMER than Overview's (71/29 vs 62/38) so the thread
+   bubbles get their full measure. 0095 · the Quo thread and its rail moved
+   to Tech Hub; the class name stayed. */
 .wo-grid.is-messages { grid-template-columns: minmax(0, 71fr) minmax(0, 29fr); }
 
 /* ── C1. Channel header (tech identity + Quo actions) ─────────────────────── */

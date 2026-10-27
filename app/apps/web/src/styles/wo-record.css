@@ -177,9 +177,6 @@ button.rec-pdf-item:disabled { opacity: 0.5; cursor: default; }
 /* The Timelog cards merged onto CICO keep the same width. */
 .cico-timelog { max-width: 960px; margin-top: 14px; }
 
-/* Sub-tabs under a grouped strip button (Finances, People). */
-.tabs.wo-subtabs { margin: 0 0 12px; }
-
 /* ── 0073 · Admin › Settings › Work-order PDFs: the layout editor ────────── */
 .pdfl-hint { margin: 0 0 12px; }
 .pdfl-check { margin-top: 4px; }
