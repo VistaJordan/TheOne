@@ -1224,8 +1224,8 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .card-fin .nte-k { font-size: 12.5px; }
 .card-fin .nte-v { font-size: 21px; }
 
-/* The Finances tab: the money card and the Client Quote card side by side —
-   the quote used to be a 2-line footnote inside the money card. */
+/* The Finances tab: the money card and the invoice card side by side (the
+   Client Quote card moved to its own Quotes tab on 2026-10-27). */
 .fin-grid {
   display: grid;
   grid-template-columns: minmax(0, 520px) minmax(0, 620px);
@@ -1234,7 +1234,7 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 }
 
 /* The grid's gap is the only spacing — undo the app-wide `.card + .card`
-   margin so the quote card's top lines up with the money card's. */
+   margin so the second card's top lines up with the money card's. */
 .fin-grid > .card { margin-top: 0; }
 
 /* Blue titles, matching the All-fields section cards. */
@@ -1248,7 +1248,26 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
   }
 }
 
-/* The Payables tab: the Payments fields beside the payment-request ledger. */
+/* 2026-10-26 · Finances is one panel: the money cards, then Payables, then
+   the Cost breakdown, stacked. A link to a part scrolls it clear of the
+   pinned header. */
+/* 2026-10-27 · the Quotes tab: the client quote card at a readable width. */
+.quote-tab { max-width: 760px; }
+.quote-tab > .card { margin-top: 0; }
+
+.fin-stack { display: flex; flex-direction: column; gap: 22px; }
+.fin-part { scroll-margin-top: calc(var(--wo-pin-h, 0px) + 12px); }
+.fin-part > .card:first-child { margin-top: 0; }
+.fin-part-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* The Payables part of Finances: the Payments fields beside the payment-request ledger. */
 .pay-grid {
   display: grid;
   grid-template-columns: minmax(0, 480px) minmax(0, 640px);

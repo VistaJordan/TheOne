@@ -12,7 +12,7 @@ export const MONEY_PART: DocPart = {
     {
       key: 'quotes',
       title: 'Quotes',
-      where: 'Sidebar › Quotes; the Client quote card on a work order\'s Finances tab; the quote builder; /work-orders/:wo/quote/print.',
+      where: 'Sidebar › Quotes; the Client quote card on a work order\'s Quotes tab; the quote builder; /work-orders/:wo/quote/print.',
       purpose: 'One quote per work order, built from the technician\'s report, priced from the client contract, submitted, approved and sent, then printed.',
       value: 'Quotes are consistent across dispatchers, priced from the contract rather than memory, approved by the right role, numbered, and never re-priced after approval.',
       users: ['Senior OM', 'Team Lead', 'Assistant TL', 'Account Manager'],

@@ -53,7 +53,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { quoteSectionsHaveData, tabPermKey } from '@theone/shared';
 
 const TAB_IDS = [
-  'overview', 'fields', 'money', 'payables', 'people', 'technicians', 'site', 'dates', 'cico', 'parts',
+  'overview', 'fields', 'money', 'quotes', 'payables', 'people', 'technicians', 'site', 'dates', 'cico', 'parts',
   // 2026-10-22 · Drive: the work order's files (the Photos card, moved off
   // Overview). Overview leads the strip and is the landing tab.
   'drive', 'messages', 'audit',
@@ -66,20 +66,19 @@ const TAB_IDS = [
 /** 0064 · the tabs that carry the right rail (Responsibility · Location ·
     Time · Cost). The wide ones — All fields, the audit trail — and the tabs
     that are one card of their own keep the full width they had. */
-const RAIL_TABS: readonly string[] = ['overview', 'tasks', 'costs', 'timelog', 'related'];
+const RAIL_TABS: readonly string[] = ['overview', 'tasks', 'timelog', 'related'];
 
 type Tab = (typeof TAB_IDS)[number];
 
-/** 2026-10-20 · strip buttons that stand for a group of sub-tabs: Finances =
-    Finances · Payables · Cost breakdown, People = Our team · Technicians. Each
-    sub-tab keeps its own id, so ?tab= links and each tab's permission stay as
-    they were. */
+/** 2026-10-26 · Finances is ONE panel: the money cards, then Payables, then
+    the Cost breakdown, each still behind its own tab permission. ?tab=payables
+    and ?tab=costs links open Finances scrolled to that part. */
+const FINANCE_TABS: readonly Tab[] = ['money', 'payables', 'costs'];
+
+/** 2026-10-20 · strip buttons that stand for a group of sub-tabs: People =
+    Our team · Technicians. Each sub-tab keeps its own id, so ?tab= links and
+    each tab's permission stay as they were. */
 const TAB_GROUPS: { id: string; label: string; tabs: { id: Tab; label: string }[] }[] = [
-  { id: 'money', label: 'Finances', tabs: [
-    { id: 'money', label: 'Finances' },
-    { id: 'payables', label: 'Payables' },
-    { id: 'costs', label: 'Cost breakdown' },
-  ] },
   { id: 'people', label: 'People', tabs: [
     { id: 'people', label: 'Our team' },
     { id: 'technicians', label: 'Technicians' },
@@ -103,13 +102,22 @@ export function WorkOrderDetailPage() {
   // 0015 · each tab is its own permission; a tab the acting principal may not
   // view is not drawn, and a link to it lands on the first one they may.
   const { can } = useAuth();
-  const visibleTabs = TAB_IDS.filter((t) => can(tabPerm(t), 'view'));
+  // The Quotes tab also needs the quotes section itself: without it the tab
+  // would hold nothing.
+  const visibleTabs = TAB_IDS.filter((t) => can(tabPerm(t), 'view') && (t !== 'quotes' || can('quotes', 'view')));
   const show = (t: Tab) => visibleTabs.includes(t);
   const rawTab = searchParams.get('tab');
   // 2026-10-20 · Timelog lives on CICO now: an old ?tab=timelog link opens
   // CICO (the Timelog view itself only for someone who cannot see CICO).
-  const wanted: Tab = rawTab === 'timelog' && show('cico') ? 'cico' : isTab(rawTab) ? rawTab : 'overview';
-  const tab: Tab = show(wanted) ? wanted : (visibleTabs[0] ?? 'overview');
+  const asked: Tab = rawTab === 'timelog' && show('cico') ? 'cico' : isTab(rawTab) ? rawTab : 'overview';
+  // The Finances panel opens for anyone who may see any of its three parts.
+  const financeParts = FINANCE_TABS.filter(show);
+  const toPanel = (t: Tab): Tab => (FINANCE_TABS.includes(t) ? 'money' : t);
+  const canOpen = (t: Tab) => (t === 'money' ? financeParts.length > 0 : show(t));
+  const wanted = toPanel(asked);
+  const tab: Tab = canOpen(wanted) ? wanted : toPanel(visibleTabs[0] ?? 'overview');
+  // Which part of Finances an old ?tab=payables / ?tab=costs link pointed at.
+  const financeFocus = tab === 'money' && (asked === 'payables' || asked === 'costs') && show(asked) ? asked : null;
   const setTab = (t: Tab) =>
     setSearchParams(t === 'overview' ? {} : { tab: t }, { replace: true });
   // A group's button lands on the first sub-tab the person may see, and reads
@@ -208,6 +216,21 @@ export function WorkOrderDetailPage() {
     if (tabs) ro.observe(tabs);
     return () => ro.disconnect();
   }, [wo?.id]);
+
+  // A link to Payables or the Cost breakdown lands on that part of Finances,
+  // once per link (the record loading later does not pull the page back).
+  const focusedRef = useRef<string | null>(null);
+  const costsReady = Boolean(recordQuery.data);
+  useEffect(() => {
+    if (!financeFocus || !wo) return;
+    const key = `${wo.id}:${financeFocus}`;
+    if (focusedRef.current === key) return;
+    if (financeFocus === 'costs' && !costsReady) return;
+    const el = document.getElementById(`fin-${financeFocus}`);
+    if (!el) return;
+    focusedRef.current = key;
+    el.scrollIntoView({ block: 'start' });
+  }, [financeFocus, wo?.id, costsReady]);
 
   const phase = useMemo(() => {
     if (!wo) return null;
@@ -325,9 +348,8 @@ export function WorkOrderDetailPage() {
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
           {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
           {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
-          {groupTabs('money').length > 0 && (
-            <GroupButton on={activeGroup?.id === 'money'} onSelect={() => setTab(groupTabs('money')[0].id)}>Finances</GroupButton>
-          )}
+          {canOpen('money') && <TabButton id="money" tab={tab} onSelect={setTab}>Finances</TabButton>}
+          {show('quotes') && <TabButton id="quotes" tab={tab} onSelect={setTab}>Quotes</TabButton>}
           {show('dates') && <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>}
           {show('cico') && <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>}
           {groupTabs('people').length > 0 && (
@@ -441,9 +463,9 @@ export function WorkOrderDetailPage() {
             </div>
           )}
 
-          {tab === 'money' && (
-            <div role="tabpanel" aria-label="Finances" className="fin-grid">
-              <MoneyCard wo={wo} />
+          {/* 2026-10-27 · the client quote has its own tab beside Finances. */}
+          {tab === 'quotes' && (
+            <div role="tabpanel" aria-label="Quotes" className="quote-tab">
               <ClientQuoteCard
                 wo={wo}
                 quoteStatus={
@@ -451,27 +473,55 @@ export function WorkOrderDetailPage() {
                 }
                 quote={quoteQuery.isSuccess ? quoteQuery.data.quote : null}
               />
-              {/* 0045 · what the client was actually billed. This tab used to
-                  stop at the quote, which is only what we proposed. */}
-              <InvoiceCard wo={wo} />
             </div>
           )}
 
-          {tab === 'payables' && (
-            <div role="tabpanel" aria-label="Payables" className="pay-grid">
-              <PayablesFieldsCard wo={wo} />
-              {/* 0047 · the vendor's own invoice — the document the payment
-                  request should be settling. */}
-              <VendorBillsCard wo={wo} />
-              {/* 0067 · what was requested, quoted and ordered for this job. */}
-              <WoPurchasingCard woId={wo.id} woNumber={wo.wo_number} />
-              <PaymentHistoryCard
-                woNumber={wo.wo_number}
-                items={paymentsQuery.data?.items ?? []}
-                totalPaid={paymentsQuery.data?.total_paid ?? null}
-                loading={paymentsQuery.isLoading}
-                requestAction={wo.actions?.['payment.request'] ?? null}
-              />
+          {/* 2026-10-26 · Finances, Payables and Cost breakdown on one panel,
+              each part behind its own tab permission. */}
+          {tab === 'money' && (
+            <div role="tabpanel" aria-label="Finances" className="fin-stack">
+              {show('money') && (
+                <div className="fin-grid">
+                  <MoneyCard wo={wo} />
+                  {/* 0045 · what the client was actually billed. This tab used to
+                      stop at the quote, which is only what we proposed. */}
+                  <InvoiceCard wo={wo} />
+                </div>
+              )}
+
+              {show('payables') && (
+                <section id="fin-payables" className="fin-part" aria-label="Payables">
+                  <h2 className="fin-part-title">Payables</h2>
+                  <div className="pay-grid">
+                    <PayablesFieldsCard wo={wo} />
+                    {/* 0047 · the vendor's own invoice — the document the payment
+                        request should be settling. */}
+                    <VendorBillsCard wo={wo} />
+                    {/* 0067 · what was requested, quoted and ordered for this job. */}
+                    <WoPurchasingCard woId={wo.id} woNumber={wo.wo_number} />
+                    <PaymentHistoryCard
+                      woNumber={wo.wo_number}
+                      items={paymentsQuery.data?.items ?? []}
+                      totalPaid={paymentsQuery.data?.total_paid ?? null}
+                      loading={paymentsQuery.isLoading}
+                      requestAction={wo.actions?.['payment.request'] ?? null}
+                    />
+                  </div>
+                </section>
+              )}
+
+              {show('costs') && (
+                <section id="fin-costs" className="fin-part" aria-label="Cost breakdown">
+                  {recordQuery.data ? (
+                    <CostBreakdownTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
+                  ) : (
+                    <section className="card">
+                      <div className="card-head"><h2 className="card-title">Cost breakdown</h2></div>
+                      <div className="empty-flat">{recordQuery.isLoading ? 'Loading…' : 'Could not load the cost breakdown.'}</div>
+                    </section>
+                  )}
+                </section>
+              )}
             </div>
           )}
 
@@ -525,9 +575,9 @@ export function WorkOrderDetailPage() {
             <div role="tabpanel" aria-label="Parts"><PartsCard wo={wo} /></div>
           )}
 
-          {/* 0064 · the four tabs that read the record. */}
-          {(tab === 'tasks' || tab === 'costs' || tab === 'timelog' || tab === 'related') && (
-            <div role="tabpanel" aria-label={tab === 'tasks' ? 'Checklist' : tab === 'costs' ? 'Cost breakdown' : tab === 'timelog' ? 'Timelog and metrics' : 'Related'}>
+          {/* 0064 · the tabs that read the record (Cost breakdown is on Finances). */}
+          {(tab === 'tasks' || tab === 'timelog' || tab === 'related') && (
+            <div role="tabpanel" aria-label={tab === 'tasks' ? 'Checklist' : tab === 'timelog' ? 'Timelog and metrics' : 'Related'}>
               {!recordQuery.data ? (
                 <section className="card"><div className="empty-flat">{recordQuery.isLoading ? 'Loading…' : 'Could not load this part of the work order.'}</div></section>
               ) : tab === 'tasks' ? (
@@ -538,8 +588,6 @@ export function WorkOrderDetailPage() {
                   {/* 0066 · the stock the job used up. */}
                   <ConsumablesCard woId={wo.id} />
                 </>
-              ) : tab === 'costs' ? (
-                <CostBreakdownTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
               ) : tab === 'timelog' ? (
                 <>
                   {/* 0065 · who worked on it, from when to when. */}

@@ -39,7 +39,7 @@ Needs \`work_orders\` view. A person limited to their own work orders sees a "Yo
 
 ### The work-order page
 
-Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view): **Overview** (the landing tab: deadlines, updates and activity, the soft-close checklist), **All fields**, **Finances** (sub-tabs **Finances**: money, client quote, invoice; **Payables**: vendor bills, purchasing, payment history; **Cost breakdown**), **Dates**, **CICO** (the ETA, the visit log, and the timelog: time on site, time in each status, technician time), **People** (sub-tabs **Our team**: our people and the **Assignment history**; **Technicians**: the responsible vendor, technicians, suggested vendors, dispatch), **Site**, **Parts**, **Drive** (the photos and files), **Messages**, **Audit trail**. There is no Flags tab (the flags are checkboxes in All fields). Checklist and Related have no tab button; a link to them (for example from Maintenance › Work permits) still opens them. The header opens unfolded on every work order.
+Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view): **Overview** (the landing tab: deadlines, updates and activity, the soft-close checklist), **All fields**, **Finances** (one page: money and invoice, then **Payables** — vendor bills, purchasing, payment history — then the **Cost breakdown** card), **Quotes** (the **Client quote** card; shown with \`quotes\` view), **Dates**, **CICO** (the ETA, the visit log, and the timelog: time on site, time in each status, technician time), **People** (sub-tabs **Our team**: our people and the **Assignment history**; **Technicians**: the responsible vendor, technicians, suggested vendors, dispatch), **Site**, **Parts**, **Drive** (the photos and files), **Messages**, **Audit trail**. There is no Flags tab (the flags are checkboxes in All fields). Checklist and Related have no tab button; a link to them (for example from Maintenance › Work permits) still opens them. The header opens unfolded on every work order.
 
 - Edit a field: on **All fields**, click the value, change it, click the tick. **Search fields…** finds a field. Needs \`work_orders\` edit and edit on that field.
 - Mark a profitability exception: on **Finances**, the **Profitability exception** checkbox and the **Manager notes** text under the money rows say the margin on this job is accepted as it is, and why. A manager's call: the dispatcher tiers, the VR Officer and the OP Admin see them but cannot change them.
@@ -70,7 +70,7 @@ The **More** menu in the header, beside **Save as PDF** (all need \`work_orders\
 Elsewhere on the page (need \`work_orders\` edit):
 - **Assign vendor** / **Re-assign vendor**: **People** tab, **Technicians**, the **Responsible vendor** card; search under **Find a vendor** and click one. Blacklisted vendors cannot be picked.
 - **Add ETA** / **Change ETA**: **CICO** tab, the **ETA** card; set **Expected on site**, **Save ETA**.
-- There is no button to ask for a higher NTE any more. Requests already open are decided on **Finances** › **Cost breakdown** under **NTE increases** or in Approvals (needs \`approvals/nte\` approve).
+- There is no button to ask for a higher NTE any more. Requests already open are decided on **Finances**, in the **Cost breakdown** card, under **NTE increases** or in Approvals (needs \`approvals/nte\` approve).
 
 Visits (the **CICO** tab; needs \`work_orders\` edit and \`work_orders/fields/cico\` edit):
 1. Click **New visit**.

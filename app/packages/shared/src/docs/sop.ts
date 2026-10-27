@@ -224,7 +224,7 @@ export const SOP: SopDocument = {
         ] },
         { kind: 'sub', title: 'E. The other record tabs' },
         { kind: 'bullets', items: [
-          '**Cost breakdown** (under **Finances**): revenue and cost bases, margin, **Open the quote**, NTE increase requests already open (the button that raised them was removed).',
+          '**Cost breakdown** (the last card on **Finances**): revenue and cost bases, margin, **Open the quote**, NTE increase requests already open (the button that raised them was removed).',
           '**Timelog** (on the **CICO** tab, under the visits): open time, response time, time on site, time in each status, the visits with their locations, pauses; **Start a timer** / **Stop** / **Log time** for technician time.',
           '**Site**: the **Site record** block — **Link** / **Change** / **Unlink** a site, choose the asset; access notes under "Getting in".',
         ] },
@@ -270,7 +270,7 @@ export const SOP: SopDocument = {
       needs: ['quotes create', 'quotes edit', 'quotes approve'],
       blocks: [
         { kind: 'steps', items: [
-          'On the work order\'s **Finances** tab, **Client quote** card, click **Create quote**, then **Create quote** again in the builder. The number (Q-<entity>-<year>-<n>) is issued, the client contract\'s rates are snapshotted and Bill to is pre-filled with the client.',
+          'On the work order\'s **Quotes** tab, **Client quote** card, click **Create quote**, then **Create quote** again in the builder. The number (Q-<entity>-<year>-<n>) is issued, the client contract\'s rates are snapshotted and Bill to is pre-filled with the client.',
           'Fill **Tech reported that…** (required, one line that grows) and the "Required is to…" list — it opens with "Full inspection of the working area", three blank lines and "Clean the working area"; type into the blanks, Enter adds a line, **Add scope line** adds one above the last, any line can be removed. Each section opens with a Trip service line at the rate card\'s trip rate. **Add line** for more priced items (Type, Description, Qty, Unit price, Tax %, OT; picking Labor on a blank line fills "Labor tech N"; **Multi-day job** shows the Day column). One option is already open; **Add another option** for the alternatives the client chooses between — each then needs an **Option name**, and only options with **Include in summary** on count in the Grand Total. Required fields turn red only after a Submit is tried while they are empty. Pick a tax rate with **Apply a rate…** if sales tax applies. It saves as you type (the chip reads Draft saved · n ago).',
           'Fix anything the red chip lists, then click **Submit for correction** (a dispatcher) or **Submit for approval** (a manager). A dispatcher\'s quote appears in Quotes › Pending correction and in Approvals › Quotes with **Correct and submit**: a manager opens it, corrects it in place (edits there do not return it to draft) and clicks **Submit for approval**. It then appears in Quotes › Pending approval.',
           'A manager clicks **Approve** in the builder, on the Quotes list or in Approvals (approves only — nothing goes to the client), then **Send to client** in the builder, which posts the client-visible message and moves the work order to Waiting for Approval. To send it back: **Reject with note** in the builder or **Decline** on the list — a note is required, the quote returns to draft (even from approved) and its revision number goes up.',
@@ -329,11 +329,11 @@ export const SOP: SopDocument = {
       title: 'Paying the Technician',
       lead: 'A request per payment, approved, paid by AP in The One (the Yoda payment flow, 0076), rolled into Cost.',
       who: ['Dispatchers (request)', 'Team Lead / Assistant TL / Account Manager (approve)', 'Accounts Payable (process)'],
-      where: 'Finances › Payables on the work order; Payments',
+      where: 'Finances (Payables part) on the work order; Payments',
       needs: ['payments create', 'payments approve', 'payments/process edit'],
       blocks: [
         { kind: 'steps', items: [
-          'On the work order\'s **Finances** tab, **Payables**, **Payment requests** card, click **Request payment**. Find the technician in the vendor typeahead (name or phone), or type a name and phone (a new phone creates the technician\'s record); optionally add a **Recipient** (a person or a store); fill **Purpose**, **Amount** (above $0), **Method** (Zelle, ACH, Check, Cash App, Credit card) and its payout details, a note for AP, then submit. Watch the year-to-date line: past $599 with no W9 on file the request is flagged **W9 needed**. Receipts cannot be attached here yet.',
+          'On the work order\'s **Finances** tab, under **Payables**, **Payment requests** card, click **Request payment**. Find the technician in the vendor typeahead (name or phone), or type a name and phone (a new phone creates the technician\'s record); optionally add a **Recipient** (a person or a store); fill **Purpose**, **Amount** (above $0), **Method** (Zelle, ACH, Check, Cash App, Credit card) and its payout details, a note for AP, then submit. Watch the year-to-date line: past $599 with no W9 on file the request is flagged **W9 needed**. Receipts cannot be attached here yet.',
           'An approver opens **Payments › Needs approval** and clicks **Approve**, or **Reject** with a reason for the requester. Approve is locked while an NTE override is open.',
           'Accounts Payable opens **Payments › To pay** and clicks **Mark paid** on an approved request (a request is approved by someone other than its requester first). **Change method** swaps the method and clears the payout details. Paying adds the amount to the work order\'s Cost; a payment that would take Cost past the NTE or the approved quote is held for a manager under Approvals first.',
           'To remove a request, click **Delete** with a reason: a requested or rejected one goes at once; an approved or paid one becomes **Pending delete** until an admin clicks **Confirm delete** or **Keep**.',

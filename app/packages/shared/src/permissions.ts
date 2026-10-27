@@ -325,6 +325,8 @@ export const WO_TABS: { id: string; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'fields', label: 'All fields' },
   { id: 'money', label: 'Finances' },
+  // 2026-10-27 · the client quote, moved off Finances onto a tab of its own.
+  { id: 'quotes', label: 'Quotes' },
   { id: 'dates', label: 'Dates' },
   { id: 'cico', label: 'CICO' },
   { id: 'people', label: 'People' },
