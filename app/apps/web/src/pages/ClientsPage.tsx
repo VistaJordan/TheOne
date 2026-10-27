@@ -11,9 +11,9 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useLinkNav } from '../lib/linkNav';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CLIENT_PORTAL_TYPES } from '@theone/shared';
+import { CLIENT_PORTAL_TYPES, CLIENT_TEAM_HOUSE } from '@theone/shared';
 import type { ClientDetail, ClientInput, ClientsListResponse } from '@theone/shared';
-import { ApiRequestError, createClient, deleteClient, getClient, getClientHistory, getClientTeamsOverview, listClients, updateClient } from '../api/client';
+import { ApiRequestError, createClient, deleteClient, getClient, getClientHistory, getClientTeams, getClientTeamsOverview, listClients, updateClient } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
@@ -104,6 +104,7 @@ export function ClientsPage() {
                         <th>AM</th>
                         <th>TL</th>
                         <th>ATL</th>
+                        <th>Sales</th>
                       </>
                     )}
                     <th>Contact</th>
@@ -126,7 +127,7 @@ export function ClientsPage() {
                           </span>
                         )}
                       </td>
-                      {showTeams && (['billing_entity', 'am', 'tl', 'atl'] as const).map((k) => {
+                      {showTeams && (['billing_entity', 'am', 'tl', 'atl', 'sales'] as const).map((k) => {
                         const list = teamsBy.get(c.id) ?? [];
                         return (
                           <td key={k} className="client-teams-cell">
@@ -161,7 +162,7 @@ export function ClientsPage() {
 
 // ── The form ─────────────────────────────────────────────────────────────────
 
-type Draft = Record<'name' | 'code' | 'account_manager' | 'billing_entity' | 'contact_name' | 'contact_email' | 'contact_phone' | 'billing_email' | 'address' | 'portal_type' | 'payment_terms' | 'notes', string> & { is_active: boolean };
+type Draft = Record<'name' | 'code' | 'billing_entity' | 'contact_name' | 'contact_email' | 'contact_phone' | 'billing_email' | 'address' | 'portal_type' | 'payment_terms' | 'notes', string> & { is_active: boolean };
 
 function ClientFormDialog({ client, meta, onClose, onSaved }: {
   client: ClientDetail | null;
@@ -172,7 +173,7 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
   useEscape(onClose);
   const qc = useQueryClient();
   const [d, setD] = useState<Draft>({
-    name: client?.name ?? '', code: client?.code ?? '', account_manager: client?.account_manager?.id ?? '', billing_entity: client?.billing_entity ?? '',
+    name: client?.name ?? '', code: client?.code ?? '', billing_entity: client?.billing_entity ?? '',
     contact_name: client?.contact_name ?? '', contact_email: client?.contact_email ?? '', contact_phone: client?.contact_phone ?? '',
     billing_email: client?.billing_email ?? '', address: client?.address ?? '', portal_type: client?.portal_type ?? '',
     payment_terms: client?.payment_terms ?? '', notes: client?.notes ?? '', is_active: client?.is_active ?? true,
@@ -185,7 +186,7 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
     mutationFn: () => {
       if (!d.name.trim()) throw new Error('The client needs a name.');
       const input: ClientInput = {
-        name: d.name.trim(), code: txt('code'), account_manager: d.account_manager || null, billing_entity: txt('billing_entity'),
+        name: d.name.trim(), code: txt('code'), billing_entity: txt('billing_entity'),
         contact_name: txt('contact_name'), contact_email: txt('contact_email'), contact_phone: txt('contact_phone'), billing_email: txt('billing_email'),
         address: txt('address'), portal_type: txt('portal_type'), payment_terms: txt('payment_terms'), notes: txt('notes'), is_active: d.is_active,
       };
@@ -213,16 +214,12 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
         <div className="pf-form">
           {field('Name', <input className="fld" autoFocus={!client} value={d.name} onChange={(e) => set('name', e.target.value)} />, true,
             inUse ? 'Work orders and sites are filed under this name: only its capitals and spacing can change.' : 'Exactly as it is written on work orders.')}
+          {/* 0096 · the account team, one line per Comp, read-only here: it is
+              edited on the client's Account team card, the one place AM / TL /
+              ATL / Sales live. The record's old Account manager (0062) is not
+              drawn any more; the save does not send it, so it stays as stored. */}
+          <ClientTeamSummary clientId={client?.id ?? null} />
           {field('Code', <input className="fld mono" value={d.code} onChange={(e) => set('code', e.target.value)} />)}
-          {field('Account manager', (
-            <select className="fld" value={d.account_manager} onChange={(e) => set('account_manager', e.target.value)}>
-              <option value="">Nobody</option>
-              {client?.account_manager && !(meta?.account_managers ?? []).some((p) => p.id === client.account_manager?.id) && (
-                <option value={client.account_manager.id}>{client.account_manager.name}</option>
-              )}
-              {(meta?.account_managers ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          ), false, 'People whose role is AM.')}
           {field('Contact name', <input className="fld" value={d.contact_name} onChange={(e) => set('contact_name', e.target.value)} />)}
           {field('Contact phone', <input className="fld" value={d.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} />)}
           {field('Contact email', <input className="fld" type="email" value={d.contact_email} onChange={(e) => set('contact_email', e.target.value)} />)}
@@ -256,6 +253,47 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
           <button type="button" className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate()}>{save.isPending ? 'Saving…' : client ? 'Save changes' : 'Add client'}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The account team inside the edit dialog: Comp · AM · TL · ATL · Sales. */
+function ClientTeamSummary({ clientId }: { clientId: string | null }) {
+  const q = useQuery({ queryKey: ['client-teams', clientId], queryFn: () => getClientTeams(clientId as string), enabled: clientId !== null });
+  const teams = q.data?.teams ?? [];
+  const cell = (v: string | null, sales = false) =>
+    !v ? <span className="pf-muted">—</span>
+      : sales && v.trim().toLowerCase() === CLIENT_TEAM_HOUSE.toLowerCase() ? <span className="pf-muted">{v}</span> : v;
+  return (
+    <div className="pf-field is-wide">
+      <span className="lbl">Account team</span>
+      {clientId === null ? (
+        <span className="hint">Add the account team on the client’s page once it is saved.</span>
+      ) : q.isLoading ? (
+        <span className="hint">Loading…</span>
+      ) : teams.length === 0 ? (
+        <span className="hint">No account team yet. Add one on the client’s Account team card.</span>
+      ) : (
+        <>
+          <div className="vend-wrap client-team-summary">
+            <table className="vend-table">
+              <thead><tr><th>Comp</th><th>AM</th><th>TL</th><th>ATL</th><th>Sales</th></tr></thead>
+              <tbody>
+                {teams.map((t) => (
+                  <tr key={t.id}>
+                    <td><b className="mono">{t.billing_entity}</b></td>
+                    <td>{cell(t.am)}</td>
+                    <td>{cell(t.tl)}</td>
+                    <td>{cell(t.atl)}</td>
+                    <td>{cell(t.sales, true)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <span className="hint">Changed on the client’s Account team card.</span>
+        </>
+      )}
     </div>
   );
 }
@@ -305,7 +343,6 @@ export function ClientDetailPage() {
   }
   const rows: [string, ReactNode][] = [
     ['Code', c.code],
-    ['Account manager', c.account_manager?.name],
     ['Contact', c.contact_name],
     ['Contact phone', c.contact_phone],
     ['Contact email', c.contact_email],

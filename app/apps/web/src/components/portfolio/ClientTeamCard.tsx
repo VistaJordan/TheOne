@@ -43,6 +43,7 @@ export function ClientTeamCard({ clientId }: { clientId: string }) {
     qc.setQueryData(key, res);
     void qc.invalidateQueries({ queryKey: ['client-history', clientId] });
     void qc.invalidateQueries({ queryKey: ['wo-create-form'] });
+    void qc.invalidateQueries({ queryKey: ['client-teams-overview'] });
     setOpen(null);
     setProblem(null);
   };
