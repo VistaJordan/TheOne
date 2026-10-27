@@ -10,6 +10,11 @@
  * what it is (before photo, after photo, sign-off, other) and approves or
  * declines it — one decision per file. Only approved files are drawn in the
  * groups below, and those are what the Job is Done gate reads (11.3.4).
+ *
+ * 2026-10-27 (Elise) · the approved files sit in three columns side by side —
+ * Before · After · Sign-off — with anything else (kind "other", or a
+ * non-image marked before / after) listed underneath. The columns stack on a
+ * narrow screen.
  */
 
 import { useState } from 'react';
@@ -77,7 +82,9 @@ export function PhotosCard({ wo }: PhotosCardProps) {
 
   const before = approved.filter((a) => a.kind === 'before' && isImageType(a.content_type));
   const after = approved.filter((a) => a.kind === 'after' && isImageType(a.content_type));
-  const files = approved.filter((a) => !before.includes(a) && !after.includes(a));
+  // A sign-off is a scan or a PDF as often as a photo: any type belongs here.
+  const signoff = approved.filter((a) => a.kind === 'signoff');
+  const files = approved.filter((a) => !before.includes(a) && !after.includes(a) && !signoff.includes(a));
 
   const onRemove = canRemove ? (id: string) => remove.mutate(id) : undefined;
   const viewerItems = viewer ? (viewer.list === 'pending' ? pending : declined) : [];
@@ -87,7 +94,7 @@ export function PhotosCard({ wo }: PhotosCardProps) {
       <div className="card-head">
         <h2 className="card-title">Photos</h2>
         <span className="card-meta">
-          {before.length} before · {after.length} after
+          {before.length} before · {after.length} after · {signoff.length} sign-off
           {files.length > 0 && ` · ${files.length} file${files.length === 1 ? '' : 's'}`}
           {pending.length > 0 && ` · ${pending.length} waiting`}
         </span>
@@ -129,73 +136,37 @@ export function PhotosCard({ wo }: PhotosCardProps) {
         </div>
       )}
 
-      <div className="photo-group">
-        <div className="group-label">
-          Before
-          {before.length > 0 && (
-            <>
-              <span className="sep-dot">·</span>
-              <span className="n">{before.length}</span>
-            </>
-          )}
-        </div>
-        {before.length > 0 ? (
-          <PhotoGrid woId={woId} items={before} badge="Before" onRemove={onRemove} />
-        ) : (
-          <div className="empty">
-            <Icon name="camera" />
-            Add a photo from the message box — it shows here once approved as a before photo
-          </div>
-        )}
-      </div>
-
-      <div className="photo-group">
-        <div className="group-label">
-          After
-          {after.length > 0 && (
-            <>
-              <span className="sep-dot">·</span>
-              <span className="n">{after.length}</span>
-            </>
-          )}
-        </div>
-        {after.length > 0 ? (
-          <PhotoGrid woId={woId} items={after} badge="After" onRemove={onRemove} />
-        ) : (
-          <div className="empty">
-            <Icon name="camera" />
-            An approved after photo is needed before Done / Incurred
-          </div>
-        )}
+      <div className="photo-columns">
+        <PhotoColumn
+          woId={woId}
+          label="Before"
+          items={before}
+          empty="Add a photo from the message box — it shows here once approved as a before photo"
+          onRemove={onRemove}
+        />
+        <PhotoColumn
+          woId={woId}
+          label="After"
+          items={after}
+          empty="An approved after photo is needed before Done / Incurred"
+          onRemove={onRemove}
+        />
+        <PhotoColumn
+          woId={woId}
+          label="Sign-off"
+          items={signoff}
+          empty="The signed sheet shows here once it is approved as a sign-off"
+          onRemove={onRemove}
+        />
       </div>
 
       {files.length > 0 && (
         <div className="photo-group">
           <div className="group-label">
-            Sign-off and files<span className="sep-dot">·</span>
+            Other files<span className="sep-dot">·</span>
             <span className="n">{files.length}</span>
           </div>
-          <ul className="file-list">
-            {files.map((a) => (
-              <li key={a.id}>
-                <a href={attachmentUrl(woId, a.id)} target="_blank" rel="noreferrer">
-                  <Icon name="clip" size={12} />
-                  {a.file_name}
-                </a>
-                <span className="file-meta">
-                  {a.kind ? `${ATTACHMENT_KIND_LABEL[a.kind]} · ` : ''}
-                  {formatBytes(a.byte_size)}
-                  {a.uploaded_by ? ` · ${a.uploaded_by.display_name}` : ''}
-                  {numericDate(a.created_at) ? ` · ${numericDate(a.created_at)}` : ''}
-                </span>
-                {onRemove && (
-                  <button type="button" className="linkbtn" onClick={() => onRemove(a.id)}>
-                    Remove
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+          <FileList woId={woId} items={files} onRemove={onRemove} />
         </div>
       )}
 
@@ -305,6 +276,75 @@ function ReviewRow({
         )}
       </div>
     </li>
+  );
+}
+
+/** One of the three columns: its images as a grid, any other file (a PDF
+    sign-off sheet, say) as a list under them. */
+function PhotoColumn({
+  woId,
+  label,
+  items,
+  empty,
+  onRemove,
+}: {
+  woId: string;
+  label: string;
+  items: Attachment[];
+  empty: string;
+  onRemove?: (id: string) => void;
+}) {
+  const images = items.filter((a) => isImageType(a.content_type));
+  const others = items.filter((a) => !isImageType(a.content_type));
+  return (
+    <div className="photo-group photo-column">
+      <div className="group-label">
+        {label}
+        {items.length > 0 && (
+          <>
+            <span className="sep-dot">·</span>
+            <span className="n">{items.length}</span>
+          </>
+        )}
+      </div>
+      {items.length === 0 ? (
+        <div className="empty">
+          <Icon name="camera" />
+          {empty}
+        </div>
+      ) : (
+        <>
+          {images.length > 0 && <PhotoGrid woId={woId} items={images} badge={label} onRemove={onRemove} />}
+          {others.length > 0 && <FileList woId={woId} items={others} onRemove={onRemove} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+function FileList({ woId, items, onRemove }: { woId: string; items: Attachment[]; onRemove?: (id: string) => void }) {
+  return (
+    <ul className="file-list">
+      {items.map((a) => (
+        <li key={a.id}>
+          <a href={attachmentUrl(woId, a.id)} target="_blank" rel="noreferrer">
+            <Icon name="clip" size={12} />
+            {a.file_name}
+          </a>
+          <span className="file-meta">
+            {a.kind ? `${ATTACHMENT_KIND_LABEL[a.kind]} · ` : ''}
+            {formatBytes(a.byte_size)}
+            {a.uploaded_by ? ` · ${a.uploaded_by.display_name}` : ''}
+            {numericDate(a.created_at) ? ` · ${numericDate(a.created_at)}` : ''}
+          </span>
+          {onRemove && (
+            <button type="button" className="linkbtn" onClick={() => onRemove(a.id)}>
+              Remove
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 
