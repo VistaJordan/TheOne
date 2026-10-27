@@ -258,7 +258,7 @@ export const WORK_ORDERS_PART: DocPart = {
     {
       key: 'incoming',
       title: 'Incoming Work Orders: acceptance and drafts',
-      where: 'Sidebar › Incoming Work Orders: To accept, Unassigned and Drafts tabs (To accept and Unassigned come with approvals/intake view, Drafts with intake view; the strip shows when the person holds more than one tab).',
+      where: 'Sidebar › Incoming Work Orders: To accept and Drafts tabs (To accept, with the Unassigned list under its queue, comes with approvals/intake view; Drafts with intake view; the strip shows when the person holds both).',
       purpose: 'One door for every work order on its way in: the queue a manager accepts from and assigns, and the OP Admin\'s drafting area.',
       value: 'The inbox of client traffic is a queue with a badge, not an email folder; a work order cannot reach a dispatcher half-filled.',
       users: ['Team Lead', 'Assistant TL', 'Account Manager', 'Admin', 'Operations Admin'],
@@ -275,9 +275,9 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Unassigned',
-          what: 'Every live work order (open, active or pending) whose Assignee seat is empty — from Ecotrak or the CSV import, typed in, or unassigned from the header — oldest received first, with Assign per row ("Assign this work order?", Assign to with Who\'s available?, Assign). The same dispatcher picker opens from the assignee chip in a work order\'s header: "Reassign this work order?" with Reassign and Unassign. Both are an ordinary Assignee field save, so the 11.1.1 gate, the dispatcher check, the audit row, the mirror columns and the scope all apply.',
+          what: 'A section under the To accept queue (a tab of its own until 2026-10-27; old /incoming/unassigned links land on Incoming). Every live work order (open, active or pending) whose Assignee seat is empty — from Ecotrak or the CSV import, typed in, or unassigned from the header — oldest received first, with Assign per row ("Assign this work order?", Assign to with Who\'s available?, Assign). The same dispatcher picker opens from the assignee chip in a work order\'s header: "Reassign this work order?" with Reassign and Unassign. Both are an ordinary Assignee field save, so the 11.1.1 gate, the dispatcher check, the audit row, the mirror columns and the scope all apply.',
           value: 'Nothing falls between the acceptance queue and a dispatcher\'s list: a job nobody carries is always on one screen, and handing it on takes one click from the top of the work order.',
-          permissions: ['approvals/intake view (the tab)', 'work_orders/fields/people/fields.Assignee edit (Assign, Reassign, Unassign — the dispatcher tiers are view-only on it, 0039)'],
+          permissions: ['approvals/intake view (the page)', 'work_orders/fields/people/fields.Assignee edit (Assign, Reassign, Unassign — the dispatcher tiers are view-only on it, 0039)'],
           audit: ['field_updated (Assignee)'],
           since: '2026-10-22',
         },
@@ -302,7 +302,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Drafts (WO Intake)',
-          what: 'Columns WO # ("No WO# yet"), Client · Store, Trade, FM, Still to fill, Assignee ("Not assigned"), Last touched; chips Draft / Ready to submit. New work order opens a draft with the WO # ("The client\'s work order number"), the 13 intake fields, Client and Assignee ("Pick the dispatcher it goes to", Who\'s available?); Save draft keeps it; Submit & assign creates the work order already assigned (no acceptance task); Discard this draft? keeps the row as discarded. Result pages Submitted / Discarded with Open the work order / Back to the drafts.',
+          what: 'Columns WO # ("No WO# yet"), Client · Store, Trade, FM, Still to fill, Assignee ("Not assigned"), Last touched; chips Draft / Ready to submit. New draft opens an empty draft, and Save as draft on Add work order files what was typed there as one (the WO # may be blank; fields the draft form does not draw are listed under "Also on this draft" and carried to Submit; the site, asset and files are not kept). A draft has with the WO # ("The client\'s work order number"), the 13 intake fields, Client and Assignee ("Pick the dispatcher it goes to", Who\'s available?); Save draft keeps it; Submit & assign creates the work order already assigned (no acceptance task); Discard this draft? keeps the row as discarded. Result pages Submitted / Discarded with Open the work order / Back to the drafts.',
           value: 'The Operations Admin\'s staging area for emails and phone calls, with the same completeness rule as acceptance.',
           rules: ['Submit refuses (409, rule 14.2.2) until every required field and an active assignee are in, refuses a WO # that exists even in Trash, needs a status named Open, stamps Date Created, inserts like the import (title = first line of the description, promoted columns, Profit), logs created (source intake), runs the create rules, files the SharePoint folder and writes the Assignee as an audited edit.', 'A draft cannot be edited after it is submitted or discarded; discard is idempotent.'],
           permissions: ['intake view / create / edit'],

@@ -6,8 +6,9 @@
    /incoming/drafts      the staging list (14.3.1): every draft started or
                          saved that has not been submitted — what still has
                          to be typed, who it is meant for, who touched it
-                         last. "New work order" starts a draft on the API
-                         and opens it.
+                         last. "New draft" starts an empty draft on the API
+                         and opens it; Add work order › Save as draft
+                         (2026-10-27) files what was typed there as one.
    /incoming/drafts/:id  the manual entry form (14.2.x): WO#, the thirteen
                          11.1.1 fields, Client, and the Assignee dropdown.
                          Save keeps a draft; Submit needs every required
@@ -18,7 +19,9 @@
    (types and dropdown options), keyed `fields.<bag key>`, so a value typed
    here is exactly what the work order will carry. The API is the judge:
    Submit answers 409 with the list of what is still empty, and the form
-   marks those fields. */
+   marks those fields. A draft saved from Add work order may carry fields this
+   form does not draw (AM, TL, Problem Type…): they are listed read-only under
+   the form and go onto the work order with the rest at Submit. */
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -162,7 +165,7 @@ function DraftsList() {
           <AddWorkOrderButton />
           <button type="button" className="btn" onClick={() => start.mutate()} disabled={start.isPending}>
             <Icon name="pencil" size={14} />
-            New work order
+            New draft
           </button>
         </div>
       </div>
@@ -194,7 +197,7 @@ function DraftsList() {
                   <tr className="ct-empty"><td colSpan={7}>Loading the intake…</td></tr>
                 )}
                 {!drafts.isLoading && items.length === 0 && (
-                  <tr className="ct-empty"><td colSpan={7}>No drafts are waiting. Start one with New work order.</td></tr>
+                  <tr className="ct-empty"><td colSpan={7}>No drafts are waiting. Start one with New draft, or Save as draft on Add work order.</td></tr>
                 )}
                 {items.map((d) => {
                   const need = d.missing.length + (intakeValueFilled(d.assignee) ? 0 : 1);
@@ -423,6 +426,13 @@ function DraftForm({ id }: { id: string }) {
   const assigneeOptions =
     v.assignee && !humans.some((p) => p.name === v.assignee) ? [{ id: 'current', name: v.assignee }, ...humans] : humans;
 
+  // Fields typed on Add work order that this form does not draw: kept on the
+  // draft and carried to the work order at Submit.
+  const formKeys = new Set(INTAKE_FORM_FIELDS.map((f) => f.key));
+  const extras = Object.entries(draft.fields).filter(
+    ([k, val]) => !formKeys.has(k) && val !== null && val !== undefined && val !== '',
+  );
+
   const isMissing = (key: string) => flagged.has(key) || (submit.isError && missingNow.keys.has(key));
 
   const control = (f: IntakeFormField) => {
@@ -526,6 +536,21 @@ function DraftForm({ id }: { id: string }) {
               </AssigneeSelect>
             </div>
           </div>
+
+          {extras.length > 0 && (
+            <div className="intake-extras">
+              <span className="lbl">Also on this draft</span>
+              <dl>
+                {extras.map(([k, val]) => (
+                  <div key={k}>
+                    <dt>{catalogue.get(`fields.${k}`)?.label ?? k}</dt>
+                    <dd>{val === true ? 'Yes' : str(val)}</dd>
+                  </div>
+                ))}
+              </dl>
+              <span className="intake-dim">Typed on Add work order; they go onto the work order when it is submitted.</span>
+            </div>
+          )}
 
           {error && <p className="payq-err" role="alert">{error}</p>}
 

@@ -24,6 +24,14 @@
  *   sub-category  narrows the trade; its suggestions follow the trade picked.
  *   templates     a saved set of values that pre-fills the form.
  *
+ * Save as draft (2026-10-27, Elise): a person who may start intake drafts
+ * (`intake` create) can keep what is typed as a draft in Incoming › Drafts
+ * instead of creating the work order — the WO # may still be blank and nothing
+ * is required. The whole bag goes on the draft (the Assignee as the draft's
+ * assignee), so the fields the draft form does not draw ride along to Submit.
+ * The site, the asset and chosen files are not kept: a draft has no place
+ * for them yet, and the button says so.
+ *
  * Creation stays lighter than assignment: rule 11.1.1's 13 fields are still
  * demanded before this work order can be assigned or accepted, so raising one
  * from a phone call with only the number is allowed and safe.
@@ -54,12 +62,14 @@ import {
   type WoDuplicateHit,
   isDispatcherRole,
   ADDRESS_KEY,
+  INTAKE_PERM_KEY,
   addressPartValues,
   parseAddressParts,
 } from '@theone/shared';
 import {
   ApiRequestError,
   checkWoNumber,
+  createIntakeDraft,
   createWorkOrder,
   deleteWoCreateTemplate,
   getPrincipals,
@@ -345,7 +355,28 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   });
   const templateList = templates.data?.templates ?? [];
 
-  const busy = create.isPending || uploading !== null;
+  // ── Save as draft ──────────────────────────────────────────────────────────
+  const canDraft = can(INTAKE_PERM_KEY, 'create');
+  const saveDraft = useMutation({
+    mutationFn: () => {
+      const { [ASSIGNEE_KEY]: assignee, ...fields } = bag;
+      return createIntakeDraft({
+        wo_number: woNumber.trim() || null,
+        fields,
+        assignee: typeof assignee === 'string' && assignee.trim() ? assignee : null,
+      });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['intake-drafts'] });
+      onClose();
+      navigate('/incoming/drafts');
+    },
+    onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Could not save the draft'),
+  });
+  const somethingTyped = woNumber.trim() !== '' || Object.keys(bag).length > 0;
+  const lostOnDraft = [site ? 'the site' : null, assetId ? 'the asset' : null, files.length > 0 ? 'the files' : null].filter(Boolean);
+
+  const busy = create.isPending || uploading !== null || saveDraft.isPending;
   const blocked = taken || missing.length > 0 || busy;
 
   // ── Drawing one field ──────────────────────────────────────────────────────
@@ -713,6 +744,24 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
           <button type="button" className="btn-sm is-ghost" onClick={onClose} disabled={busy}>
             Cancel
           </button>
+          {canDraft && (
+            <button
+              type="button"
+              className="btn-sm"
+              onClick={() => saveDraft.mutate()}
+              disabled={busy || !somethingTyped}
+              title={
+                !somethingTyped
+                  ? 'Type something first'
+                  : lostOnDraft.length > 0
+                    ? `Keeps what is typed in Incoming › Drafts. A draft does not keep ${lostOnDraft.join(', ')} yet.`
+                    : 'Keeps what is typed in Incoming › Drafts, to finish and submit later'
+              }
+            >
+              <Icon name="pencil" size={12} />
+              {saveDraft.isPending ? 'Saving…' : 'Save as draft'}
+            </button>
+          )}
           <button
             type="button"
             className="btn-sm is-primary"

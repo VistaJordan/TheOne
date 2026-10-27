@@ -3,11 +3,10 @@
 
      To accept   rule 7.1.1 (0036): work orders the system or a client
                  created that wait for a manager to accept and assign, or
-                 reject. Shown to `approvals/intake` view.
-     Unassigned  2026-10-22: every live work order nobody carries — whether
-                 an acceptance is open on it or it was unassigned from the
-                 header — with an Assign button per row. Same grant as
-                 To accept.
+                 reject. Shown to `approvals/intake` view. The Unassigned
+                 list (every live work order nobody carries, 2026-10-22)
+                 sits on the same page under the queue — it was a tab of
+                 its own until 2026-10-27 (Elise).
      Drafts      section 14 (0040): work orders typed in by hand that wait
                  as drafts until every intake field and an assignee are in.
                  Shown to `intake` view.
@@ -22,10 +21,9 @@ import { useQuery } from '@tanstack/react-query';
 import { INTAKE_PERM_KEY, approvalSectionPermKey } from '@theone/shared';
 import { getApprovalCounts, listIntakeDrafts } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
-import { UNASSIGNED_QUERY_KEY, fetchUnassigned } from '../lib/unassigned';
 import { Icon } from './Icon';
 
-export type IncomingTab = 'accept' | 'unassigned' | 'drafts';
+export type IncomingTab = 'accept' | 'drafts';
 
 export const INCOMING_ACCEPT_PERM = approvalSectionPermKey('intake');
 
@@ -34,27 +32,19 @@ export function IncomingTabs({ tab }: { tab: IncomingTab }) {
   const { can, actingAs } = useAuth();
   const showAccept = can(INCOMING_ACCEPT_PERM, 'view');
   const showDrafts = can(INTAKE_PERM_KEY, 'view');
-  const tabs = (showAccept ? 2 : 0) + (showDrafts ? 1 : 0);
-  const strip = tabs > 1;
+  const strip = showAccept && showDrafts;
 
   const counts = useQuery({
     queryKey: ['approval-counts', actingAs?.id ?? null],
     queryFn: getApprovalCounts,
-    enabled: strip && showAccept,
-    staleTime: 30 * 1000,
-    retry: 0,
-  });
-  const unassigned = useQuery({
-    queryKey: UNASSIGNED_QUERY_KEY,
-    queryFn: fetchUnassigned,
-    enabled: strip && showAccept,
+    enabled: strip,
     staleTime: 30 * 1000,
     retry: 0,
   });
   const drafts = useQuery({
     queryKey: ['intake-drafts'],
     queryFn: listIntakeDrafts,
-    enabled: strip && showDrafts,
+    enabled: strip,
     staleTime: 30 * 1000,
     retry: 0,
   });
@@ -62,54 +52,34 @@ export function IncomingTabs({ tab }: { tab: IncomingTab }) {
   if (!strip) return null;
 
   const toAccept = counts.data?.to_accept;
-  const unassignedCount = unassigned.data?.total;
   const draftCount = drafts.data?.items.length;
 
   return (
     <div className="seg incoming-tabs" role="tablist" aria-label="Incoming work orders">
-      {showAccept && (
-        <>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'accept'}
-            className={`seg-btn${tab === 'accept' ? ' is-on' : ''}`}
-            {...linkTo('/incoming')}
-          >
-            <Icon name="download" size={12} />
-            To accept
-            {toAccept !== undefined && (
-              <span className={`payq-count${toAccept > 0 ? ' is-hot' : ''}`}>{toAccept}</span>
-            )}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'unassigned'}
-            className={`seg-btn${tab === 'unassigned' ? ' is-on' : ''}`}
-            {...linkTo('/incoming/unassigned')}
-          >
-            <Icon name="user" size={12} />
-            Unassigned
-            {unassignedCount !== undefined && (
-              <span className={`payq-count${unassignedCount > 0 ? ' is-hot' : ''}`}>{unassignedCount}</span>
-            )}
-          </button>
-        </>
-      )}
-      {showDrafts && (
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'drafts'}
-          className={`seg-btn${tab === 'drafts' ? ' is-on' : ''}`}
-          {...linkTo('/incoming/drafts')}
-        >
-          <Icon name="pencil" size={12} />
-          Drafts
-          {draftCount !== undefined && <span className="payq-count">{draftCount}</span>}
-        </button>
-      )}
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === 'accept'}
+        className={`seg-btn${tab === 'accept' ? ' is-on' : ''}`}
+        {...linkTo('/incoming')}
+      >
+        <Icon name="download" size={12} />
+        To accept
+        {toAccept !== undefined && (
+          <span className={`payq-count${toAccept > 0 ? ' is-hot' : ''}`}>{toAccept}</span>
+        )}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tab === 'drafts'}
+        className={`seg-btn${tab === 'drafts' ? ' is-on' : ''}`}
+        {...linkTo('/incoming/drafts')}
+      >
+        <Icon name="pencil" size={12} />
+        Drafts
+        {draftCount !== undefined && <span className="payq-count">{draftCount}</span>}
+      </button>
     </div>
   );
 }

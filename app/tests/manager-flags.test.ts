@@ -76,14 +76,16 @@ describe('Incoming › Unassigned', () => {
     expect(UNASSIGNED_STATUS_GROUPS).toEqual(['open', 'active', 'pending']);
   });
 
-  it('the tab, the route and the page exist and write through the Assignee field', () => {
+  it('2026-10-27: a section of the main Incoming page, not a tab; it writes through the Assignee field', () => {
     const tabs = src('apps/web/src/components/IncomingTabs.tsx');
-    expect(tabs).toContain("'/incoming/unassigned'");
-    expect(tabs).toContain("export type IncomingTab = 'accept' | 'unassigned' | 'drafts';");
+    expect(tabs).not.toContain("'/incoming/unassigned'");
+    expect(tabs).toContain("export type IncomingTab = 'accept' | 'drafts';");
     const app = src('apps/web/src/App.tsx');
-    expect(app).toContain('path="/incoming/unassigned"');
-    expect(app).toContain('<RequireCan perm={INCOMING_ACCEPT_PERM} nav="Incoming Work Orders"><UnassignedPage />');
-    const page = src('apps/web/src/pages/UnassignedPage.tsx');
+    expect(app).toContain('<Route path="/incoming/unassigned" element={<Navigate to="/incoming" replace />} />');
+    expect(app).not.toContain('UnassignedPage');
+    expect(src('apps/web/src/pages/ApprovalsPage.tsx')).toContain('{intake && <UnassignedSection />}');
+    const page = src('apps/web/src/components/UnassignedSection.tsx');
+    expect(page).not.toContain('AppShell');
     expect(page).toContain('patchWorkOrderFields(v.id, { [ASSIGNEE_KEY]: v.name })');
     expect(page).toContain("useCanEditField(ASSIGNEE_KEY)");
     expect(src('apps/web/src/lib/unassigned.ts')).toContain('unassignedWorkFilter()');

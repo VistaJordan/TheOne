@@ -96,3 +96,38 @@
 
 .intake-done { max-width: 640px; }
 .intake-done .intake-actions { margin-top: 12px; }
+
+/* Unassigned, a section of the main Incoming page under the To accept queue
+   (2026-10-27; it was a tab of its own). */
+.incoming-unassigned { margin-top: 28px; }
+.incoming-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.incoming-section-head .card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.incoming-section-head .page-sub { margin: 0; }
+
+/* Fields a draft carries that its form does not draw (saved from Add work order). */
+.intake-extras {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.intake-extras dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px 16px;
+  margin: 0;
+}
+.intake-extras dt { font-size: 11px; color: var(--ink-3); }
+.intake-extras dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }

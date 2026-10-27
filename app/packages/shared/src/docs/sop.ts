@@ -106,7 +106,7 @@ export const SOP: SopDocument = {
       needs: ['intake view', 'intake create', 'intake edit'],
       blocks: [
         { kind: 'steps', items: [
-          'On **Drafts** click **New work order**.',
+          'On **Drafts** click **New draft** — or, halfway through **Add work order**, click **Save as draft** to keep what you typed (the site, asset and files are not kept on a draft).',
           'Type the **WO #** ("The client\'s work order number") and fill the fields: the same 13 intake fields plus Client and the **Assignee** ("Pick the dispatcher it goes to"; use **Who\'s available?**).',
           'Click **Save draft** to keep it; the row shows what is **Still to fill** and reads **Draft** or **Ready to submit**.',
           'When it reads **Ready to submit**, click **Submit & assign**. The work order is created in status Open, already assigned, with its SharePoint folder when that switch is on; the draft is marked submitted and you land on "Submitted" with **Open the work order** / **Back to the drafts**. No acceptance is raised: your assignment is the handoff.',

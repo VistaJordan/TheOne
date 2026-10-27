@@ -86,6 +86,7 @@ import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { IncomingTabs } from '../components/IncomingTabs';
+import { UnassignedSection } from '../components/UnassignedSection';
 import { AddWorkOrderButton } from '../components/wo/list/AddWorkOrderButton';
 import { EmergencyBadge } from '../components/EmergencyBadge';
 import { EscalatedBadge } from '../components/EscalatedBadge';
@@ -899,6 +900,9 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
           }}
         />
       )}
+
+      {/* 2026-10-27 · Unassigned is part of this page, under the queue, not a tab. */}
+      {intake && <UnassignedSection />}
 
       {pending?.kind === 'approve' &&
         pending.row.data.kind === 'task' &&

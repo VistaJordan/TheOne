@@ -539,7 +539,14 @@ through `updateWorkOrderFields`. Per-field edit grants are checked on the way
 in (`assertFieldWrites`), and a key the form does not offer is dropped rather
 than written. Creation stays lighter than assignment on purpose: rule 11.1.1
 still holds the work order back from a dispatcher until its 13 fields are in,
-whatever is required here.
+whatever is required here. **Save as draft** (2026-10-27, Elise; shown with
+`intake` create) files what the form holds as a `wo_intake_draft` instead
+(`createIntakeDraft`: WO # may be blank, the Assignee becomes the draft's
+assignee, every other bag key rides along — the draft form lists the ones it
+does not draw under "Also on this draft" and Submit carries them); the site,
+the asset and chosen files are not kept, and the button's title says so. The
+Drafts tab's own button reads **New draft** (it read "New work order", beside
+Add work order).
 
 **Dashboards** (migration 0042, `services/dashboards.ts`,
 `components/dash/DashboardBoard.tsx`) are records now, not one person's
@@ -2732,7 +2739,14 @@ and `fields.22. FM` (section `client`) to edit false for `om_probation`
 only, so `assertFieldWrites` refuses the write and the editor draws them
 read-only; OM and Senior OM keep the edit. Its own list because the wave-c
 test pins `DISPATCHER_LOCKED_FIELD_PATHS` to 0085's file. Loosen it in
-Admin › Roles or per person with Adjust.
+Admin › Roles or per person with Adjust. **Since 0097 (Elise, 2026-10-27)
+no dispatcher changes them:** OM and Senior OM get the same two paths
+(`CLIENT_FM_LOCKED_ROLES` = the three dispatcher tiers). Raising a work
+order is not changing it, so `POST /work-orders` skips the edit check for
+`CREATE_FILLABLE_FIELD_KEYS` (Client, FM) when the person can SEE the field
+(`fillableOnCreate` + `canViewField`) — before that, probation's Add work
+order was refused on a Client. The field editor, bulk edit and the import
+still refuse.
 
 **Snooze as a request** (no migration, Elise 2026-10-22; shared
 `snoozeMode` / `SNOOZE_PERM_KEY` / `SnoozeRequestDetail` /
@@ -2777,9 +2791,10 @@ Description` ("Manager description"); `CLIENT_UNSAFE_SECTION_SLUGS` lists it.
 0094 inserts the seven rows (seed.ts carries the same — keep in step) and sets
 edit false for `MANAGER_FLAG_LOCKED_ROLES` (the dispatcher tiers, vr_officer,
 oa) on the section and the two Finances paths. **Incoming › Unassigned**
-(`/incoming/unassigned`, `pages/UnassignedPage.tsx`, `approvals/intake` view,
-third tab of `IncomingTabs`, which now shows the strip whenever more than one
-tab is held): the ordinary `/work-orders` list under `unassignedWorkFilter()`
+(`components/UnassignedSection.tsx`, `approvals/intake` view; since
+2026-10-27 a section under the To accept queue on `/incoming` itself, not a
+tab — `/incoming/unassigned` redirects there and `IncomingTabs` is back to
+To accept · Drafts): the ordinary `/work-orders` list under `unassignedWorkFilter()`
 (`fields.Assignee` is_not_set AND status_group in open / active / pending,
 oldest received first, `UNASSIGNED_LIST_CAP` 500), scoped like any list, with
 **Assign** per row for whoever may edit the Assignee field. **Reassign /

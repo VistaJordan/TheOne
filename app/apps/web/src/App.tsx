@@ -50,7 +50,6 @@ import { ReceivablesPage } from './pages/ReceivablesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { IntakePage } from './pages/IntakePage';
-import { UnassignedPage } from './pages/UnassignedPage';
 import { INCOMING_ACCEPT_PERM } from './components/IncomingTabs';
 
 const queryClient = new QueryClient({
@@ -265,11 +264,9 @@ export function App() {
                   manual entry form for one draft. /intake is where the drafts
                   used to live. */}
               <Route path="/incoming" element={<RequireAuth><IncomingRoute /></RequireAuth>} />
-              {/* 2026-10-22 · every live work order nobody carries, with Assign per row. */}
-              <Route
-                path="/incoming/unassigned"
-                element={<RequireAuth><RequireCan perm={INCOMING_ACCEPT_PERM} nav="Incoming Work Orders"><UnassignedPage /></RequireCan></RequireAuth>}
-              />
+              {/* The Unassigned list was a tab here from 2026-10-22; since 2026-10-27 it is
+                  a section of /incoming itself, and old links land there. */}
+              <Route path="/incoming/unassigned" element={<Navigate to="/incoming" replace />} />
               <Route
                 path="/incoming/drafts"
                 element={<RequireAuth><RequireCan perm={INTAKE_PERM_KEY} nav="Incoming Work Orders"><IntakePage /></RequireCan></RequireAuth>}

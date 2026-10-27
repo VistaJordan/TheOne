@@ -24,6 +24,7 @@ import {
   STATUS_PERM_KEY,
   WO_MESSAGE_MAX,
   fieldPermKey,
+  fillableOnCreate,
   permAllows,
   statusMoveNeedsNoApproval,
   tabPermKey,
@@ -80,6 +81,7 @@ import { logExport } from '../services/adminAudit.js';
 import {
   allowFor,
   assertFieldWrites,
+  canViewField,
   redactWorkOrder,
   requirePerm,
   visibleColumns,
@@ -495,10 +497,15 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     requireWoCreate(p);
     const body = parse(createBodySchema, req.body);
     // The same per-field gate the import and the bulk editor run: a field
-    // this role may not edit cannot be filled in on the way in either.
+    // this role may not edit cannot be filled in on the way in either —
+    // except the Client and the FM (0097): the dispatchers may not CHANGE
+    // them, but raising a work order sets them for the first time, so seeing
+    // them is enough here.
     assertFieldWrites(
       allow,
-      Object.keys(body.fields ?? {}).map((k) => `fields.${k}`),
+      Object.keys(body.fields ?? {})
+        .map((k) => `fields.${k}`)
+        .filter((k) => !(fillableOnCreate(k) && canViewField(allow, k))),
     );
     const created = await createWorkOrder(body, p);
     return reply.status(201).send(created);

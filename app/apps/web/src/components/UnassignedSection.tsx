@@ -4,26 +4,25 @@
    button per row. The rows come from the ordinary /work-orders list with
    `unassignedWorkFilter()` (shared), so the rule-8.5 scope applies; the
    write is an Assignee field save (audited, mirrored, gated like any other).
-   Shown to `approvals/intake` view, beside To accept. */
+   Since 2026-10-27 (Elise) it is a section of the main Incoming page, under
+   the To accept queue, not a tab of its own; ApprovalsPage draws it in
+   intake mode, which needs `approvals/intake` view. */
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WorkOrderListItemV2 } from '../api/client';
 import { ApiRequestError, patchWorkOrderFields } from '../api/client';
-import { AppShell } from '../components/AppShell';
-import { Icon } from '../components/Icon';
-import { IncomingTabs } from '../components/IncomingTabs';
-import { StatusPill } from '../components/StatusPill';
-import { AssignDialog } from '../components/wo/AssignDialog';
-import { AddWorkOrderButton } from '../components/wo/list/AddWorkOrderButton';
-import { useCanEditField } from '../components/wo/fieldEdit';
+import { Icon } from './Icon';
+import { StatusPill } from './StatusPill';
+import { AssignDialog } from './wo/AssignDialog';
+import { useCanEditField } from './wo/fieldEdit';
 import { DASH, FIELD, numericDate } from '../lib/fields';
 import { useLinkNav } from '../lib/linkNav';
 import { UNASSIGNED_QUERY_KEY, UNASSIGNED_STORE_KEY as STORE_KEY, fetchUnassigned } from '../lib/unassigned';
 
 const ASSIGNEE_KEY = `fields.${FIELD.assignee}`;
 
-export function UnassignedPage() {
+export function UnassignedSection() {
   const { linkTo } = useLinkNav();
   const qc = useQueryClient();
   const canAssign = useCanEditField(ASSIGNEE_KEY);
@@ -47,18 +46,17 @@ export function UnassignedPage() {
   const total = rows.data?.total ?? items.length;
 
   return (
-    <AppShell active="Incoming Work Orders">
-      <IncomingTabs tab="unassigned" />
-      <div className="page-head intake-page-head">
+    <section className="incoming-unassigned" aria-labelledby="incoming-unassigned-title">
+      <div className="incoming-section-head">
+        <h2 id="incoming-unassigned-title" className="card-title">
+          <Icon name="user" size={14} />
+          Unassigned
+          {!rows.isLoading && <span className={`payq-count${total > 0 ? ' is-hot' : ''}`}>{total}</span>}
+        </h2>
         <p className="page-sub">
-          {rows.isLoading
-            ? 'Loading…'
-            : `${total} unassigned work order${total === 1 ? '' : 's'} · live work nobody carries yet — assign each to a dispatcher`}
+          {rows.isLoading ? 'Loading…' : 'Live work nobody carries yet — assign each to a dispatcher'}
           {total > items.length && ` · showing the first ${items.length}`}
         </p>
-        <div className="intake-head-actions">
-          <AddWorkOrderButton />
-        </div>
       </div>
       {rows.isError && (
         <p className="payq-err" role="alert">
@@ -143,6 +141,6 @@ export function UnassignedPage() {
           }}
         />
       )}
-    </AppShell>
+    </section>
   );
 }

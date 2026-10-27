@@ -24,7 +24,13 @@ import {
 import { buildPermissionTree, fieldPermKey, type PermMap } from '../packages/shared/src/permissions';
 
 const set = (role: PermMap, overrides: PermMap = {}) => ({ role, overrides });
-import { PROBATION_FIELD_LOCKED_ROLES, PROBATION_LOCKED_FIELD_PATHS } from '../packages/shared/src/workflow';
+import {
+  CLIENT_FM_LOCKED_ROLES,
+  CREATE_FILLABLE_FIELD_KEYS,
+  PROBATION_FIELD_LOCKED_ROLES,
+  PROBATION_LOCKED_FIELD_PATHS,
+  fillableOnCreate,
+} from '../packages/shared/src/workflow';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -52,6 +58,28 @@ describe('0093 — an OM Under Probation cannot change the Client or the FM', ()
     for (const other of ['om', 'senior_om', 'vr_officer', 'oa']) {
       expect(sql, other).not.toMatch(new RegExp(`'${other}'`));
     }
+  });
+});
+
+describe('0097 — no dispatcher changes the Client or the FM; raising a work order still sets them', () => {
+  it('all three dispatcher tiers, on the same two paths', () => {
+    expect([...CLIENT_FM_LOCKED_ROLES]).toEqual(['om_probation', 'om', 'senior_om']);
+    const sql = read('packages/db/migrations/0097_dispatcher_client_fm_lock.sql');
+    for (const p of PROBATION_LOCKED_FIELD_PATHS) expect(sql).toContain(`'${p}'`);
+    for (const r of CLIENT_FM_LOCKED_ROLES) expect(sql).toContain(`'${r}'`);
+    expect(sql).toContain('{"edit": false}');
+    for (const other of ['vr_officer', 'oa', 'tl', 'atl', 'am', 'admin']) {
+      expect(sql, other).not.toMatch(new RegExp(`'${other}'`));
+    }
+  });
+
+  it('the create route exempts exactly those two keys, and only for someone who can see them', () => {
+    expect([...CREATE_FILLABLE_FIELD_KEYS]).toEqual(['fields.Client', 'fields.22. FM']);
+    for (const k of CREATE_FILLABLE_FIELD_KEYS) expect(PROBATION_LOCKED_FIELD_PATHS).toContain(fieldPermKey(k));
+    expect(fillableOnCreate('fields.Client')).toBe(true);
+    expect(fillableOnCreate('fields.16. Client NTE 🔴')).toBe(false);
+    const route = read('apps/api/src/routes/workOrders.ts');
+    expect(route).toContain('.filter((k) => !(fillableOnCreate(k) && canViewField(allow, k))),');
   });
 });
 

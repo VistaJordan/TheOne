@@ -107,6 +107,18 @@ export const PROBATION_LOCKED_FIELD_PATHS = [
 ] as const;
 export const PROBATION_FIELD_LOCKED_ROLES = ['om_probation'] as const;
 
+/** Elise, 2026-10-27 (migration 0097): no dispatcher changes the Client or
+    the FM — OM and Senior OM join probation on the same two paths
+    (PROBATION_LOCKED_FIELD_PATHS). Raising a work order is not changing it:
+    Add work order lets anyone who may SEE these fields fill them
+    (CREATE_FILLABLE_FIELD_KEYS, read by POST /work-orders), so the lock
+    bites on the field editor, bulk edit and the import, not on creation. */
+export const CLIENT_FM_LOCKED_ROLES = REQUEST_MODE_DISPATCHER_ROLES;
+export const CREATE_FILLABLE_FIELD_KEYS = ['fields.Client', 'fields.22. FM'] as const;
+export function fillableOnCreate(catalogueKey: string): boolean {
+  return (CREATE_FILLABLE_FIELD_KEYS as readonly string[]).includes(catalogueKey);
+}
+
 // ── M5 · the status follows the quote ────────────────────────────────────────
 // The lifecycle (docs/lifecycle.ts): Quote Ready → Waiting for Approval when
 // the quote goes to the client; → Approved when the client says yes. A
