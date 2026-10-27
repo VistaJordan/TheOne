@@ -206,10 +206,10 @@ describe('T5b — the submitter sees Approve locked on a Quotes list row', () =>
   it('the list row carries submitted_by and both pages lock with it', () => {
     expect(read('apps', 'api', 'src', 'services', 'quotes.ts')).toContain('submitted_by: r.maker_id');
     expect(read('apps', 'web', 'src', 'api', 'client.ts')).toMatch(/submitted_by: string \| null;/);
+    // 2026-10-27: quotes dropped maker ≠ checker, so neither page locks on it.
     const page = read('apps', 'web', 'src', 'pages', 'QuotesPage.tsx');
-    expect(page).toContain('quoteSelfApprovalLock(q.submitted_by');
-    expect(page).toContain('lockReason={');
-    expect(read('apps', 'web', 'src', 'pages', 'ApprovalsPage.tsx')).toContain('own(d.item.submitted_by)');
+    expect(page).not.toContain('quoteSelfApprovalLock(q.submitted_by');
+    expect(read('apps', 'web', 'src', 'pages', 'ApprovalsPage.tsx')).not.toContain('own(d.item.submitted_by)');
   });
 });
 

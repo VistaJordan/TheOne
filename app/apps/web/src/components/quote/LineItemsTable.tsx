@@ -159,8 +159,10 @@ export function LineItemsTable({
                 </td>
                 <td>
                   <select
-                    className="fld"
+                    className={`fld${errs.type ? ' is-err' : ''}`}
+                    id={lineFieldId(line.key, 'type')}
                     aria-label={`${label} line ${n} type`}
+                    aria-invalid={errs.type ? true : undefined}
                     value={line.line_type}
                     disabled={!editable}
                     onChange={(e) => {
@@ -173,6 +175,8 @@ export function LineItemsTable({
                       set(i, { line_type, description });
                     }}
                   >
+                    {/* 2026-10-27 · a new line opens with no type picked. */}
+                    {line.line_type === '' && <option value="">Type…</option>}
                     {LINE_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}

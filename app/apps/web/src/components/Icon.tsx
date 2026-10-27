@@ -19,7 +19,7 @@ export type IconName =
   // S5 — sidebar chrome: collapse control + group disclosure
   | 'chevs-l' | 'chevs-r' | 'chev-u'
   // S6 — the work-order list toolbar: filters, columns, grouping, import/export
-  | 'filter' | 'columns' | 'layers' | 'download'
+  | 'filter' | 'columns' | 'layers' | 'download' | 'import'
   // S7 — sign-in route stops (work orders · quotes · operations)
   | 'wrench' | 'user-cog'
   // Trade glyphs for the work-orders list (plumbing · appliance · roofing)
@@ -119,6 +119,8 @@ export function IconSprite() {
         <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></symbol>
         <symbol id="i-tag" viewBox="0 0 24 24"><path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z" /><circle cx="7.5" cy="7.5" r="1.4" /></symbol>
         <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7.5 8.5 12 4 16.5 8.5" /><line x1="12" y1="4" x2="12" y2="15.5" /></symbol>
+        {/* 2026-10-27 · Import: a document with an arrow going IN (the tray-and-arrow "upload" read as export). */}
+        <symbol id="i-import" viewBox="0 0 24 24"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><line x1="2" y1="15" x2="12" y2="15" /><polyline points="9 18 12 15 9 12" /></symbol>
         <symbol id="i-card" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2" /><line x1="2.5" y1="10" x2="21.5" y2="10" /><line x1="6.5" y1="15" x2="10" y2="15" /></symbol>
         <symbol id="i-alert-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><line x1="12" y1="7.5" x2="12" y2="12.8" /><line x1="12" y1="16.4" x2="12.01" y2="16.4" /></symbol>
         <symbol id="i-sort" viewBox="0 0 24 24"><polyline points="8 9.5 12 5.5 16 9.5" /><polyline points="8 14.5 12 18.5 16 14.5" /></symbol>

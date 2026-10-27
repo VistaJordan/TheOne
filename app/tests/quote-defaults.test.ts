@@ -174,7 +174,9 @@ describe('source pins', () => {
     const card = read('apps/web/src/components/quote/OptionCard.tsx');
     expect(card).toMatch(/\{!sole && <span className="opt-tag"/);
     expect(card).toMatch(/<ScopeList/);
-    expect(card).not.toMatch(/<textarea/);
+    // 2026-10-27: the option has its own "Tech reported that…" line.
+    expect(card).toContain('Tech reported that…');
+    expect(card).toContain('fld fld-grow');
   });
 
   it('the summary card has no Edit text button', () => {

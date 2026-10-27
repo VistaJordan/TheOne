@@ -1,12 +1,13 @@
 // Where Submit takes a quote (Elise, 2026-10-22): a dispatcher's quote is
 // not asked for approval straight away — a manager corrects it first. So a
 // dispatcher's Submit reads "Submit for correction" and lands the quote in
-// `pending_correction`; a manager (anyone who is not a dispatcher) edits it
-// there and clicks "Submit for approval", which lands it in
-// `pending_approval` for a SECOND manager to approve (D2, maker ≠ checker:
-// the submitter of record is whoever last pressed Submit). A manager's own
-// quote skips the correction step. A dispatcher cannot press Submit while
-// the quote waits for correction — that is the manager's click.
+// `pending_correction`. Since 2026-10-27 (Elise: "1 dispatcher, then 1
+// manager, then the client") a manager with the approve grant does not
+// submit at all: they correct it and click Approve (approveQuote takes a
+// quote from draft or pending correction; quotes have no maker ≠ checker
+// any more). "Submit for approval" (→ `pending_approval`) is left for
+// someone who may edit quotes but not approve them. A dispatcher cannot
+// press Submit while the quote waits for correction.
 //
 // Pure: the API decides the transition with it and the builder draws the
 // button's label from the `submit_target` it is handed on QuotePermissions.

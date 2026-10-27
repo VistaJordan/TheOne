@@ -2669,6 +2669,26 @@ builder) beside Reject, and the badge counts it. Audit:
 submit, so the `quote_review_owed` clock is unchanged. The AI draft replaces
 a quote in this status like a draft.
 
+**One manager approves a quote; the builder's 2026-10-27 trims** (no
+migration, Elise 2026-10-27). "1 dispatcher, then 1 manager, then the
+client": quotes have NO maker ≠ checker any more. `approveQuote` moves a
+quote from draft, pending correction or pending approval
+(`QUOTE_APPROVABLE_FROM`; a quote approved from draft takes the approver as
+submitter), `assertNotOwnQuote` is gone from approve and send,
+`Quote.permissions.self_approval` is always false, and the Quotes list /
+Approvals Quotes lane no longer lock on `submitted_by`. In the builder a
+person with `quotes` approve sees **Approve** on a draft and on a quote
+pending correction (with Reject with note); **Submit for approval** remains
+only for a non-dispatcher without the approve grant. The inbox link reads
+**Correct and approve**. D2 still holds for payments, vendor bills,
+invoices, purchasing and approval tasks. Also: a line added by hand opens
+with an EMPTY Type (`DraftLine.line_type` may be `''`; "Type is required"
+in `lineErrors`; such a row waits locally like an unnamed one); a proposed
+option has its own optional **Tech reported that…** line (its `narrative`,
+printed through `reportedSentence` under PROPOSED); the Work Orders and
+Vendors **Import** buttons use the new `import` icon (a document with an
+arrow going in), `upload` stays for file uploads.
+
 **What a quote opens with, and the builder's trims** (no migration, Elise
 2026-10-22; `packages/shared/src/quoteDefaults.ts` pure,
 `tests/quote-defaults.test.ts`). `createQuote` inserts the Incurred section

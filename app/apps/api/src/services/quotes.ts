@@ -56,13 +56,10 @@ import {
   QUOTE_DEFAULT_DAY,
   QUOTE_DEFAULT_TRIP_DESCRIPTION,
   QUOTE_OVER_NTE_CODE,
-  SELF_APPROVAL_CODE,
   defaultScopeLines,
   optionDisplayLabel,
   permAllows,
   quoteOverNte,
-  selfApprovalMessage,
-  selfApprovalVerdict,
   reportedSentence,
   visibleScopeLines,
 } from '@theone/shared';
@@ -424,8 +421,10 @@ export function buildAutoSummary(
     const total = totals.option_totals.find((o) => o.section_id === section.id);
     out.push('', optionCount > 1 ? `PROPOSED — ${section.label.toUpperCase()}` : 'PROPOSED');
     if (section.name && optionCount > 1) out.push(...wrap(section.name, SUMMARY_WIDTH));
+    // 2026-10-27 · the option has its own "Tech reported that…" line, worded
+    // as the Incurred one is (L1: never "Tech reported that Tech found…").
     if (section.narrative_reported) {
-      out.push('', ...wrap(section.narrative_reported, SUMMARY_WIDTH));
+      out.push('', ...wrap(reportedSentence(section.narrative_reported), SUMMARY_WIDTH));
     }
 
     let scope = visibleScopeLines(section.scope_lines);
@@ -903,7 +902,10 @@ function permissionsFor(
     can_edit: canEditQuote(actor),
     can_approve: canApproveQuote(actor),
     can_client_decide: canClientDecide(actor, snap),
-    self_approval: selfApprovalVerdict(q.maker_id, actor.id, actor.isSuperAdmin) === 'blocked',
+    // 2026-10-27 (Elise): quotes have no maker ≠ checker any more — one
+    // dispatcher, then one manager, then the client. Kept on the payload,
+    // always false, so an older screen draws nothing locked.
+    self_approval: false,
     over_nte: quoteOverNte(grandTotal, q.nte),
     // 0092 · the builder draws Submit's label from this, and locks it for a
     // dispatcher while a manager has the quote for correction.
@@ -912,23 +914,6 @@ function permissionsFor(
         ? quoteSubmitTarget(actor.role, q.status)
         : null,
   };
-}
-
-/**
- * 0083 (D2, #8): the person who submitted the quote does not approve or send
- * it. A super admin may — the quote_approved / quote_sent row then says
- * self_approved. Returns whether this is that case.
- */
-async function assertNotOwnQuote(taskId: string, actor: ActingPrincipal, verb: string): Promise<boolean> {
-  const res = await query<{ maker_id: string | null }>(
-    `SELECT COALESCE(submitted_by, created_by)::text AS maker_id FROM quote WHERE task_id = $1 LIMIT 1`,
-    [taskId],
-  );
-  const verdict = selfApprovalVerdict(res.rows[0]?.maker_id ?? null, actor.id, actor.isSuperAdmin);
-  if (verdict === 'blocked') {
-    throw forbidden(selfApprovalMessage('this quote', verb), { code: SELF_APPROVAL_CODE });
-  }
-  return verdict === 'self_approved';
 }
 
 /** The full quote payload for a work order, or null when none exists. */
@@ -1874,25 +1859,32 @@ export async function submitQuote(taskId: string, actor: ActingPrincipal): Promi
     'submitted_by = $3, submitted_at = now()', [actor.id]);
 }
 
-/** pending_approval → approved (quotes:approve). Fills money.quote on the WO.
-    Refused (409) while an NTE override waits on a manager — rule 1.5.2. */
+/** → approved (quotes:approve). Fills money.quote on the WO. Refused (409)
+    while an NTE override waits on a manager — rule 1.5.2.
+    2026-10-27 (Elise): "1 dispatcher, then 1 manager, then the client". The
+    manager approves a dispatcher's quote straight from correction, or their
+    own straight from draft — no second manager (the 0083 D2 check on quotes
+    is gone). pending_approval is still approved from, for a quote someone
+    without the approve grant submitted. A quote approved from draft names
+    the approver as its submitter; one corrected keeps the dispatcher's. */
 export async function approveQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.approve');
-  const selfApproved = await assertNotOwnQuote(taskId, actor, 'approve');
   await assertNoOpenNteOverride(taskId, 'Approving the quote');
   return transition(
     taskId,
-    ['pending_approval'],
+    QUOTE_APPROVABLE_FROM,
     'approved',
     'quote_approved',
     actor,
     undefined,
-    'approved_by = $3',
+    'approved_by = $3, submitted_by = COALESCE(submitted_by, $3), submitted_at = COALESCE(submitted_at, now())',
     [actor.id],
-    selfApproved,
   );
 }
+
+/** The statuses Approve moves a quote from (2026-10-27). */
+const QUOTE_APPROVABLE_FROM: QuoteStatus[] = ['draft', 'pending_correction', 'pending_approval'];
 
 /**
  * approved → sent (atl+). Stamps sent_by/sent_at, posts the client-visible
@@ -1902,7 +1894,6 @@ export async function approveQuote(taskId: string, actor: ActingPrincipal): Prom
 export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.send');
-  const selfApproved = await assertNotOwnQuote(taskId, actor, 'send');
   await assertNoOpenNteOverride(taskId, 'Sending the quote');
 
   // Read the numbers on the pool BEFORE the transaction opens: a read that
@@ -1942,7 +1933,6 @@ export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise
     },
     'sent_by = $3, sent_at = now()',
     [actor.id],
-    selfApproved,
   );
   return withStatusMove(taskId, sent, 'sent', actor);
 }

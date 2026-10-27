@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useLinkNav } from '../lib/linkNav';
-import { quoteSelfApprovalLock, type QuoteStatus } from '@theone/shared';
+import type { QuoteStatus } from '@theone/shared';
 import { ApiRequestError, listQuotes } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
@@ -189,8 +189,8 @@ export function QuotesPage() {
                         woNumber={q.wo_number}
                         status={q.status}
                         canApprove={canApprove}
-                        // UAT T5b (D2): the submitter sees Approve locked with the reason.
-                        lockReason={quoteSelfApprovalLock(q.submitted_by, actingAs?.id, actingAs?.is_super_admin ?? false)}
+                        // 2026-10-27: no maker ≠ checker on quotes any more.
+                        lockReason={null}
                         size="row"
                       />
                       <Link

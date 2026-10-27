@@ -1426,7 +1426,7 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
             {verb('Reject', 'x', canApproveQuotes, 'Requires quote approval rights', () => onDecide('reject'), 'danger')}
             <Link className="btn-sm" to={`/work-orders/${encodeURIComponent(d.item.wo_number)}/quote`}>
               <Icon name="pencil" size={12} />
-              Correct and submit
+              Correct and approve
             </Link>
           </>
         );
@@ -1437,13 +1437,9 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
           {verb(
             'Approve',
             'check',
-            // UAT T5b (D2): the submitter's Approve is locked before the click.
-            canApproveQuotes && !row.held && !own(d.item.submitted_by),
-            !canApproveQuotes
-              ? 'Requires quote approval rights'
-              : own(d.item.submitted_by)
-                ? 'You submitted this quote — someone else has to approve it (maker ≠ checker)'
-                : NTE_HOLD,
+            // 2026-10-27: quotes have no maker ≠ checker (one manager approves).
+            canApproveQuotes && !row.held,
+            !canApproveQuotes ? 'Requires quote approval rights' : NTE_HOLD,
             () => onDecide('approve'),
             'primary',
           )}

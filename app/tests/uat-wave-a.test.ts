@@ -64,8 +64,6 @@ describe('D2 · maker ≠ checker (selfApprovalVerdict)', () => {
   it.each([
     ['payments approve', payments, 'export async function approvePaymentRequest('],
     ['payments pay', payments, 'export async function payPaymentRequest('],
-    ['quote approve', quotes, 'export async function approveQuote('],
-    ['quote send', quotes, 'export async function sendQuote('],
     ['approval tasks decide', approvals, 'async function decide('],
     ['invoice send', invoices, 'async function move('],
     ['vendor bill approve', vendorBills, 'async function move('],
@@ -74,6 +72,13 @@ describe('D2 · maker ≠ checker (selfApprovalVerdict)', () => {
   ])('%s refuses its maker with SELF_APPROVAL', (_name, file, header) => {
     const body = fn(file, header);
     expect(/selfApprovalVerdict\(|assertNotOwnRequest\(|assertNotOwnQuote\(/.test(body)).toBe(true);
+  });
+
+  it('quotes have no maker ≠ checker (Elise, 2026-10-27: one dispatcher, one manager, the client)', () => {
+    for (const header of ['export async function approveQuote(', 'export async function sendQuote(']) {
+      expect(/selfApprovalVerdict\(|assertNotOwnQuote\(/.test(fn(quotes, header))).toBe(false);
+    }
+    expect(quotes).toContain('self_approval: false,');
   });
 
   it('logs a super admin deciding their own as self_approved', () => {

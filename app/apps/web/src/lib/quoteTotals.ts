@@ -109,6 +109,7 @@ export function lineTax(line: DraftLine, otMultiplier: number = OT_MULTIPLIER): 
 
 /** Per-field errors on one line. An empty object means the line is billable. */
 export interface LineErrors {
+  type?: string;
   description?: string;
   qty?: string;
   rate?: string;
@@ -117,6 +118,7 @@ export interface LineErrors {
 
 export function lineErrors(line: DraftLine): LineErrors {
   const errs: LineErrors = {};
+  if (line.line_type === '') errs.type = 'Type is required';
   if (line.description.trim() === '') errs.description = 'Description is required';
   if (Number.isNaN(parseMoney(line.qty))) {
     errs.qty = line.qty.trim() === '' ? 'Qty is required' : 'Enter a quantity greater than 0';

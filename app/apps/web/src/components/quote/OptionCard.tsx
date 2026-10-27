@@ -8,16 +8,16 @@
    the lone option draws no letter and no name box and reads "Proposed"
    (`sole`); both appear on every option once "Add another option" was
    pressed. The option's "required is to…" is the same numbered scope list
-   the Incurred section uses (ScopeList on `scope_lines`); the free-text
-   narrative box is gone — a narrative already on file (an older quote, an
-   AI draft) is still shown, read-only, above the list.
+   the Incurred section uses (ScopeList on `scope_lines`). Since 2026-10-27
+   it has its own "Tech reported that…" line too (the section's narrative,
+   optional here, required on Incurred), above the list.
 
    Yoda parity: an option that belongs to a decided round renders LOCKED (its
    history is the client's record), carries an "Approved" or "Declined" badge,
    and — while the quote is Sent — offers the "Client chose this option" action
    to whoever may record the client decision. */
 
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { optionDisplayLabel } from '@theone/shared';
 import type { DraftLine, DraftSection } from '../../lib/quoteDraft';
 import { optionTag } from '../../lib/quoteDraft';
@@ -73,6 +73,15 @@ export function OptionCard({
   const declined = section.rejection_note !== null && !section.approved;
 
   const setLines = (lines: DraftLine[]) => onChange({ ...section, lines });
+
+  // "Tech reported that…" is one line that grows with its text, as on Incurred.
+  const reportRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = reportRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [section.narrative]);
 
   return (
     <div className={`opt-card${section.approved ? ' is-approved' : ''}${declined ? ' is-declined' : ''}${section.locked ? ' is-locked' : ''}`}>
@@ -162,10 +171,18 @@ export function OptionCard({
       )}
 
       <div className="opt-body">
-        {section.narrative.trim() !== '' && (
+        {(canEdit || section.narrative.trim() !== '') && (
           <div className="field">
-            <span className="lbl">Option narrative</span>
-            <p className="hint" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{section.narrative}</p>
+            <label className="lbl" htmlFor={`opt-${section.key}-report`}>Tech reported that…</label>
+            <textarea
+              className="fld fld-grow"
+              id={`opt-${section.key}-report`}
+              rows={1}
+              ref={reportRef}
+              value={section.narrative}
+              disabled={!canEdit}
+              onChange={(e) => onChange({ ...section, narrative: e.target.value })}
+            />
           </div>
         )}
 

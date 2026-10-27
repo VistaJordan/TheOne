@@ -483,7 +483,7 @@ export function WorkOrdersPage() {
                   2026-10-22 — a work order typed in by hand is incoming work. */}
               {can('work_orders', 'create') && (
                 <ToolButton onClick={() => setShowImport(true)} title="Import work orders from a CSV">
-                  <Icon name="upload" size={14} />
+                  <Icon name="import" size={14} />
                   Import
                 </ToolButton>
               )}

@@ -164,10 +164,9 @@ export function QuoteBuilderPage() {
   /** Rule 1.5.2: an NTE override waits on a manager, so approve / send / the
       client's yes are on hold (the API refuses them with a 409) until decided. */
   const nteHold = quote?.nte_override_open ?? false;
-  // 0083 (D2, #23): the person who submitted the quote does not approve or
-  // send it, and a quote above the NTE is not sent until the NTE is raised.
-  const selfApproval = permissions?.self_approval ?? false;
-  const SELF_TIP = 'You submitted this quote — someone else has to approve and send it (maker ≠ checker)';
+  // 0083 (#23): a quote above the NTE is not sent until the NTE is raised.
+  // (Its D2 half — a second manager approves — was dropped 2026-10-27: one
+  // dispatcher, then one manager, then the client.)
   const overNte = permissions?.over_nte ?? false;
   const OVER_NTE_TIP = 'The quote is above the work order’s NTE — have the work order’s Client NTE raised before sending';
   const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
@@ -521,13 +520,11 @@ export function QuoteBuilderPage() {
       ? lockedButton(label, blockedReason(action) ?? 'Not allowed in this work-order status', tipId)
       : nteHold && NTE_HOLD_ACTIONS.has(action)
         ? lockedButton(label, NTE_HOLD_TIP, tipId)
-        : selfApproval && (action === 'quote.approve' || action === 'quote.send')
-          ? lockedButton(label, SELF_TIP, tipId)
-          : overNte && action === 'quote.send'
-            ? lockedButton(label, OVER_NTE_TIP, tipId)
-            : roleOk
-              ? primary(label, icon, run, needsValid)
-              : lockedButton(label, roleTip, tipId);
+        : overNte && action === 'quote.send'
+          ? lockedButton(label, OVER_NTE_TIP, tipId)
+          : roleOk
+            ? primary(label, icon, run, needsValid)
+            : lockedButton(label, roleTip, tipId);
 
   const decisionButton = (sectionKey: string | null, compact: boolean) =>
     !allows('quote.client_decide')
@@ -638,15 +635,21 @@ export function QuoteBuilderPage() {
               </button>
             )}
 
-            {status === 'draft' && (
-              <>
-                {!canApprove && lockedButton('Approve', 'Needs the quote-approve permission', 'lockTipApprove')}
-                {gated(submitLabel, 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')}
-              </>
-            )}
+            {/* 2026-10-27 · a manager approves their own draft directly (no
+                second manager); everyone else submits it. */}
+            {status === 'draft' &&
+              (canApprove ? (
+                gated('Approve', 'check', canApprove, 'Needs the quote-approve permission', 'quote.approve', () => approveMutation.mutate(), 'lockTipApprove')
+              ) : (
+                <>
+                  {lockedButton('Approve', 'Needs the quote-approve permission', 'lockTipApprove')}
+                  {gated(submitLabel, 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')}
+                </>
+              ))}
 
-            {/* 0092 · with a manager for correction: they edit it in place and
-                submit it for approval; a dispatcher's Submit is locked here. */}
+            {/* 0092 · with a manager for correction: they edit it in place and,
+                since 2026-10-27, approve it themselves; a dispatcher's Submit is
+                locked here. */}
             {status === 'pending_correction' && (
               <>
                 {canApprove && allows('quote.approve') && (
@@ -655,9 +658,11 @@ export function QuoteBuilderPage() {
                     Reject with note
                   </button>
                 )}
-                {submitTarget
-                  ? gated('Submit for approval', 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')
-                  : lockedButton('Submit for approval', QUOTE_CORRECTION_PENDING_TEXT, 'lockTipSubmit')}
+                {canApprove
+                  ? gated('Approve', 'check', canApprove, 'Needs the quote-approve permission', 'quote.approve', () => approveMutation.mutate(), 'lockTipApprove')
+                  : submitTarget
+                    ? gated('Submit for approval', 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')
+                    : lockedButton('Submit for approval', QUOTE_CORRECTION_PENDING_TEXT, 'lockTipSubmit')}
               </>
             )}
 
@@ -751,7 +756,7 @@ export function QuoteBuilderPage() {
               <b>Needs the quote-approve permission.</b> Dispatchers build and revise quotes; approving and
               sending the summary to the client is reserved for ATL, TL, AM and admin.
               {submitTarget === 'pending_correction'
-                ? ' Submit for correction and a manager corrects it, then submits it for approval — the control stays visible so you always know it exists.'
+                ? ' Submit for correction and a manager corrects and approves it — the control stays visible so you always know it exists.'
                 : ' Submit for approval and an ATL picks it up — the control stays visible so you always know it exists.'}
             </span>
           </div>
@@ -770,8 +775,7 @@ export function QuoteBuilderPage() {
             <Icon name="info" size={14} />
             <span>
               <b>Correct this quote in place.</b> Your edits autosave here and do not return it to draft. When it
-              is right, <b>Submit for approval</b> — that makes you its submitter, so another manager approves
-              it (maker ≠ checker).
+              is right, <b>Approve</b> it, then <b>Send to client</b> — no second manager is needed.
             </span>
           </div>
         )}

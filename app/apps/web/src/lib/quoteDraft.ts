@@ -59,7 +59,9 @@ export function optionTag(index: number): string {
 
 export interface DraftLine {
   key: string;
-  line_type: QuoteLineType;
+  /** '' = not picked yet: a line added by hand opens with no type
+      (2026-10-27) and blocks Submit until one is chosen. */
+  line_type: QuoteLineType | '';
   description: string;
   /** RAW user input — validated as typed, never pre-sanitised. */
   qty: string;
@@ -146,7 +148,7 @@ function foldMarkup(rate: number, markupPct: number | null | undefined): number 
 export function blankLine(): DraftLine {
   return {
     key: uid('line'),
-    line_type: 'service',
+    line_type: '',
     description: '',
     qty: '1',
     rate: '',
@@ -318,10 +320,12 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
     // row sat on the form — so an unnamed row stays local until it has a
     // description. It is still counted as a blocking problem by quoteProblems(),
     // so it cannot be forgotten: the CTA stays blocked and points at it.
+    // Same for a row whose Type is still empty (2026-10-27): the schema takes
+    // only a real type, so it waits locally until one is picked.
     lines: section.lines
-      .filter((line) => line.description.trim() !== '')
+      .filter((line) => line.description.trim() !== '' && line.line_type !== '')
       .map((line) => ({
-        line_type: line.line_type,
+        line_type: line.line_type as QuoteLineType,
         description: line.description.trim(),
         qty: toNumber(line.qty),
         rate: toNumber(line.rate),

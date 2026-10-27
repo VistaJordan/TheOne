@@ -58,8 +58,9 @@ describe('the API honours it', () => {
     expect(QUOTE_CORRECTION_PENDING_CODE).toBe('QUOTE_CORRECTION_PENDING');
   });
 
-  it('approve is from pending approval only; reject also from pending correction', () => {
-    expect(fn(quotes, 'export async function approveQuote(')).toContain("['pending_approval'],");
+  it('a manager approves from draft, correction or pending approval; reject also from pending correction', () => {
+    expect(fn(quotes, 'export async function approveQuote(')).toContain('QUOTE_APPROVABLE_FROM,');
+    expect(quotes).toContain("const QUOTE_APPROVABLE_FROM: QuoteStatus[] = ['draft', 'pending_correction', 'pending_approval'];");
     expect(fn(quotes, 'export async function rejectQuote(')).toContain("['pending_correction', 'pending_approval', 'approved']");
   });
 
@@ -102,7 +103,7 @@ describe('the screens', () => {
     expect(src('apps/web/src/pages/QuotesPage.tsx')).toContain("{ key: 'pending_correction', label: 'Pending correction' }");
     const inbox = src('apps/web/src/pages/ApprovalsPage.tsx');
     expect(inbox).toContain("item.status === 'pending_approval' || item.status === 'pending_correction'");
-    expect(inbox).toContain('Correct and submit');
+    expect(inbox).toContain('Correct and approve');
     const pill = src('apps/web/src/components/quote/QuoteStatusPill.tsx');
     expect(pill).toContain("pending_correction: { label: 'Pending correction'");
     expect(pill).toContain("['draft', 'pending_correction', 'pending_approval', 'approved', 'sent', 'client_approved']");

@@ -254,7 +254,7 @@ export function VendorsPage() {
           </div>
           {can('vendors/import', 'create') && (
             <Link className="btn" to="/vendors/import">
-              <Icon name="upload" size={14} />
+              <Icon name="import" size={14} />
               Import
             </Link>
           )}
