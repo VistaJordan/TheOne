@@ -376,7 +376,7 @@ export function VendorsPage() {
                 )}
                 {can('vendors/export', 'view') && (
                   <a className="btn btn-sm is-ghost" href={vendorExportUrl(filterParams)} download>
-                    <Icon name="download" size={12} />
+                    <Icon name="export" size={12} />
                     Export CSV
                   </a>
                 )}

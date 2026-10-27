@@ -495,7 +495,7 @@ export function WorkOrdersPage() {
                   href={workOrdersExportUrl(criteria)}
                   title="Export the filtered rows, in the columns shown"
                 >
-                  <Icon name="download" size={14} />
+                  <Icon name="export" size={14} />
                   Export
                 </a>
               )}

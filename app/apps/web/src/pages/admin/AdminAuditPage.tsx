@@ -104,7 +104,7 @@ export function AdminAuditPage() {
       title="Audit log"
       actions={
         <a className="tool-btn" href={auditLogExportUrl(filters)} title="Download the filtered rows as CSV">
-          <Icon name="download" size={14} />
+          <Icon name="export" size={14} />
           Export CSV
         </a>
       }
