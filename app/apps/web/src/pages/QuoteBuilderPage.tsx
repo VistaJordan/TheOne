@@ -78,6 +78,15 @@ const CLIENT_DECISION_DECLINED = 'Record client decision — declined';
 
 export function QuoteBuilderPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
+  return <QuoteBuilder woNumber={woNumber} />;
+}
+
+/** The quote builder. Its own page (/work-orders/:wo/quote), and since
+    2026-10-27 also the body of the work order's Quotes tab (`embedded`): the
+    quote opens right there, no "Open quote" click. Embedded, it draws no
+    AppShell or breadcrumb, and leaving the tab sends anything typed since the
+    last autosave instead of asking. */
+export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string; embedded?: boolean }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const invalidateObligations = useInvalidateObligations();
@@ -214,6 +223,26 @@ export function QuoteBuilderPage() {
     const t = setTimeout(() => saveRef.current(draft), AUTOSAVE_MS);
     return () => clearTimeout(t);
   }, [draft, editable, dirty]);
+
+  // Embedded in the Quotes tab, switching tabs unmounts the builder before the
+  // autosave fires: send what is pending on the way out.
+  const pendingRef = useRef<DraftQuote | null>(null);
+  pendingRef.current = draft && editable && dirty ? draft : null;
+  useEffect(() => {
+    if (!embedded) return;
+    return () => {
+      const pending = pendingRef.current;
+      if (!pending) return;
+      void putWorkOrderQuote(woNumber, toUpdateInput(pending))
+        .then((res) =>
+          queryClient.setQueryData(['wo-quote', woNumber], (old: { permissions?: QuotePermissions | null } | undefined) => ({
+            quote: res.quote,
+            permissions: old?.permissions ?? null,
+          })),
+        )
+        .catch(() => undefined);
+    };
+  }, [embedded, woNumber, queryClient]);
 
   const update = useCallback((next: DraftQuote) => {
     setDraft(next);
@@ -355,9 +384,8 @@ export function QuoteBuilderPage() {
     </nav>
   );
 
-  const shell = (children: ReactNode) => (
-    <AppShell active="Work Orders" breadcrumb={breadcrumb}>
-      <div className="canvas-inner qb">{children}</div>
+  const sheets = (
+    <>
       {leaveTo && (
         <DismissSheet
           onStay={() => setLeaveTo(null)}
@@ -380,8 +408,20 @@ export function QuoteBuilderPage() {
           }}
         />
       )}
-    </AppShell>
+    </>
   );
+  const shell = (children: ReactNode) =>
+    embedded ? (
+      <div className="qb qb-embedded">
+        {children}
+        {sheets}
+      </div>
+    ) : (
+      <AppShell active="Work Orders" breadcrumb={breadcrumb}>
+        <div className="canvas-inner qb">{children}</div>
+        {sheets}
+      </AppShell>
+    );
 
   if (quoteQuery.isLoading || woQuery.isLoading) {
     return shell(<div className="wo-state"><b>Loading the quote for {woNumber}…</b></div>);

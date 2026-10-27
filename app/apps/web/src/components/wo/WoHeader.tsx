@@ -104,6 +104,12 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
   const escalatedKey = `fields.${FIELD.escalated}`;
   const canEscalate = useCanEditField(escalatedKey);
   const escalateSave = useWoFieldSave(wo.id);
+  // 2026-10-27 · Mark as Emergency beside it, same pattern in red: whoever may
+  // edit the Emergency field sees it (rule 2.5.1, ticked by hand until the
+  // client portals decide it).
+  const emergencyKey = `fields.${FIELD.emergency}`;
+  const canFlagEmergency = useCanEditField(emergencyKey);
+  const emergencySave = useWoFieldSave(wo.id);
   // 2026-10-22 · reassign or unassign from the top: the assignee chip opens
   // the dispatcher picker for whoever may edit the Assignee field (the
   // dispatcher tiers are view-only on it, 0039). The write is the ordinary
@@ -245,6 +251,23 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               </button>
             )}
           />
+          {canFlagEmergency && (
+            <button
+              type="button"
+              className={`btn${emergency ? ' is-emergency' : ''}`}
+              disabled={emergencySave.isPending}
+              aria-pressed={emergency}
+              onClick={() => emergencySave.mutate({ key: emergencyKey, value: !emergency })}
+              title={
+                emergency
+                  ? 'Clear the emergency flag — the work order stops reading red (rule 2.5.1)'
+                  : 'Flag this work order as an emergency: red in every view (rule 2.5.1)'
+              }
+            >
+              <Icon name="alert" size={14} />
+              {emergency ? 'Emergency · Clear' : 'Mark as Emergency'}
+            </button>
+          )}
           {canEscalate && (
             <button
               type="button"

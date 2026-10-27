@@ -12,14 +12,14 @@ export const MONEY_PART: DocPart = {
     {
       key: 'quotes',
       title: 'Quotes',
-      where: 'Sidebar › Quotes; the Client quote card on a work order\'s Quotes tab; the quote builder; /work-orders/:wo/quote/print.',
+      where: 'Sidebar › Quotes; a work order\'s Quotes tab (the builder in place); the quote builder; /work-orders/:wo/quote/print.',
       purpose: 'One quote per work order, built from the technician\'s report, priced from the client contract, submitted, approved and sent, then printed.',
       value: 'Quotes are consistent across dispatchers, priced from the contract rather than memory, approved by the right role, numbered, and never re-priced after approval.',
       users: ['Senior OM', 'Team Lead', 'Assistant TL', 'Account Manager'],
       features: [
         {
           name: 'Creating the quote',
-          what: 'Create quote on the Client quote card issues the number (Q-<entity>-<year>-<n>, per billing entity per year, never reused; a work order with no entity gets Q-Q-…), snapshots the contract in force and its overtime multiplier, pre-fills Bill to with the client and opens the Incurred section as "Work already performed". One quote per work order ("A quote already exists for this work order").',
+          what: 'Create quote on the work order\'s Quotes tab issues the number (Q-<entity>-<year>-<n>, per billing entity per year, never reused; a work order with no entity gets Q-Q-…), snapshots the contract in force and its overtime multiplier, pre-fills Bill to with the client and opens the Incurred section as "Work already performed". One quote per work order ("A quote already exists for this work order").',
           value: 'The price basis is frozen on day one.',
           permissions: ['quotes create and quotes edit (both are checked)'],
           audit: ['quote_created'],
@@ -96,7 +96,7 @@ export const MONEY_PART: DocPart = {
         },
         {
           name: 'AI quote draft from an imported transcript',
-          what: 'Import transcript on the quote builder (beside Create quote when there is none, in the header while the quote is a draft) and on the Client quote card ("Draft the quote from a transcript"), two ways under "Where is the conversation?". Attach or paste: Choose a file — .txt, .vtt or .srt, the Teams / Zoom / Meet exports — or paste it; Conversation with; They are the…; Import and draft the quote. Caption files lose their header, cue numbers and timings, voice tags become speakers and one speaker\'s consecutive cues join; plain text reads as "Name: what they said". The transcript is kept as a number-less entry in the Calls card ("Transcript imported by …"). From a Quo call: type Their number and click Find calls; the app finds the Quo line(s) that belong to the email you signed in with and lists your calls with that number over the last 90 days — date and time, who called whom, duration, the line when you have several — with unanswered calls and calls already on another work order greyed out; pick one and Use this call and draft the quote fetches the transcript from Quo and keeps it as a call on the Calls card, keyed by Quo\'s call id (a call already on this work order just opens its draft). Either way the AI quote draft page opens and drafts straight away; review and Submit quote are exactly the call path\'s.',
+          what: 'Import transcript on the quote builder (beside Create quote when there is none, in the header while the quote is a draft) (also on the work order\'s Quotes tab, which is the builder), two ways under "Where is the conversation?". Attach or paste: Choose a file — .txt, .vtt or .srt, the Teams / Zoom / Meet exports — or paste it; Conversation with; They are the…; Import and draft the quote. Caption files lose their header, cue numbers and timings, voice tags become speakers and one speaker\'s consecutive cues join; plain text reads as "Name: what they said". The transcript is kept as a number-less entry in the Calls card ("Transcript imported by …"). From a Quo call: type Their number and click Find calls; the app finds the Quo line(s) that belong to the email you signed in with and lists your calls with that number over the last 90 days — date and time, who called whom, duration, the line when you have several — with unanswered calls and calls already on another work order greyed out; pick one and Use this call and draft the quote fetches the transcript from Quo and keeps it as a call on the Calls card, keyed by Quo\'s call id (a call already on this work order just opens its draft). Either way the AI quote draft page opens and drafts straight away; review and Submit quote are exactly the call path\'s.',
           value: 'A quote discussed in a Teams meeting, on a recorded site walk or from a personal phone gets the same AI first draft as a Quo call.',
           rules: [
             'Needs quotes edit; the button is locked with the work order\'s reason while quoting is closed and hidden once the quote is past draft.',

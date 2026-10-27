@@ -2226,6 +2226,12 @@ a.bd-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; 
   background: var(--warn-bg);
   border-color: var(--warn-border);
 }
+/* Mark as Emergency, red while the flag is up. */
+.wohead .btn.is-emergency {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
 
 /* ══ 0042 — dashboards: the grid, the cards, and the charts on them ═════════
    A dashboard is a grid of cards over one set of work orders. Widths are

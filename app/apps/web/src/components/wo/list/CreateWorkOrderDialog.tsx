@@ -42,6 +42,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   CLIENT_TEAM_FIELDS,
+  SALES_OWNER_KEY,
+  fieldPermKey,
+  salesOwnerFromTeam,
   WO_CREATE_MORE_SECTION,
   WO_CREATE_SECTIONS,
   WO_NEAR_DUPLICATE_DAYS,
@@ -250,6 +253,13 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     [configured.client_teams, values],
   );
   const teamFill = useMemo(() => clientTeamValues(team, seatPeople), [team, seatPeople]);
+  // 2026-10-27 · Sales Owner follows the team's salesperson when the dropdown
+  // offers that name ("House" included).
+  const salesOptions = useMemo(
+    () => configured.fields.find((f) => f.key === SALES_OWNER_KEY)?.options ?? [],
+    [configured.fields],
+  );
+  const salesFill = useMemo(() => salesOwnerFromTeam(team, salesOptions) ?? '', [team, salesOptions]);
   const teamFilled = useRef<Values>({});
   useEffect(() => {
     if (!people.isSuccess) return;
@@ -273,9 +283,11 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
         put(key, incoming);
         teamFilled.current[key] = incoming;
       }
+      put(SALES_OWNER_KEY, salesFill);
+      teamFilled.current[SALES_OWNER_KEY] = salesFill;
       return changed ? next : cur;
     });
-  }, [team, teamFill, onForm, people.isSuccess]);
+  }, [team, teamFill, salesFill, onForm, people.isSuccess]);
 
   const assets = siteDetail?.asset_list.filter((a) => a.status !== 'retired') ?? [];
   const asset = assets.find((a) => a.id === assetId) ?? null;
@@ -469,10 +481,14 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     }
 
     // 0063 · a tick. Unticked sends nothing, so "required" means "must be ticked".
+    // A tick this person may not set (Escalated for the dispatchers, 0038)
+    // is drawn locked: the API would refuse it on Create.
     if (f.type === 'checkbox') {
+      const pk = fieldPermKey(`fields.${f.key}`);
+      const locked = !(can(pk, 'view') && can(pk, 'edit'));
       return (
-        <label className="tmap-check">
-          <input id={domId} type="checkbox" checked={val === 'true'} onChange={(e) => set(f.key, e.target.checked ? 'true' : '')} disabled={busy} />
+        <label className="tmap-check" title={locked ? 'Your role cannot set this field — a manager can, once the work order exists.' : undefined}>
+          <input id={domId} type="checkbox" checked={val === 'true'} onChange={(e) => set(f.key, e.target.checked ? 'true' : '')} disabled={busy || locked} />
           <span>Yes</span>
         </label>
       );

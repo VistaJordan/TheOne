@@ -50,6 +50,25 @@ export type TeamNames = readonly string[] | Readonly<Record<'am' | 'tl' | 'atl',
 /** The salesperson column's "nobody in particular". */
 export const CLIENT_TEAM_HOUSE = 'House';
 
+/** The work-order field the team's salesperson fills on Add work order
+    (2026-10-27, Elise: "in People also add Sales"). A dropdown of first
+    names, "House" included. */
+export const SALES_OWNER_KEY = 'Sales Owner';
+
+/**
+ * The Sales Owner a team puts on a new work order: the dropdown option that
+ * matches the team's salesperson (any case; "House" is an option like any
+ * other here), else null — a name the list does not offer is never written.
+ */
+export function salesOwnerFromTeam(
+  team: Pick<ClientTeam, 'sales'> | null,
+  options: readonly string[],
+): string | null {
+  const want = norm(team?.sales);
+  if (want === '') return null;
+  return options.find((o) => norm(o) === want) ?? null;
+}
+
 export interface ClientTeam {
   id: string;
   /** The billing entity, a `21. Comp` value (SFM, BKR, AF, TPM, RF, EDS). */

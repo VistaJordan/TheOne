@@ -74,7 +74,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Finances',
-          what: 'The NTE meter ("Not fully paid"), the NTE override banner (awaiting a manager / approved / rejected), the Client invoice card (Raise invoice, "Proposed — waiting to be confirmed", Send to client, Mark paid, Open in Receivables, Print / PDF, "N d overdue"), Total Invoiced and Profit, the Profitability exception checkbox with its Manager notes box. Since 2026-10-27 Finances is again a strip button over three sub-tabs: Finances, Payables, Cost breakdown (the client quote has its own Quotes tab, the penalties their own Penalties tab).',
+          what: 'The NTE meter ("Not fully paid"), the NTE override banner (awaiting a manager / approved / rejected), the Client invoice card (Raise invoice, "Proposed — waiting to be confirmed", Send to client, Mark paid, Open in Receivables, Print / PDF, "N d overdue"), Total Invoiced and Profit, the Profitability exception checkbox with its Manager notes box. Since 2026-10-27 Finances is one page: the money and invoice cards, then Payables, then the Cost breakdown, each part behind its own tab permission; ?tab=payables and ?tab=costs open it scrolled to that part (the quote has its own Quotes tab, the penalties their own Penalties tab).',
           value: 'The money side of the work order with the invoice beside the numbers.',
           permissions: ['work_orders/tabs/money view', 'approvals view for the override banner'],
         },
@@ -86,7 +86,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Quotes',
-          what: 'The Client quote card, on a tab of its own beside Finances since 2026-10-27: Create quote / Open quote, Approve and Decline when pending, the total terms.',
+          what: 'The quote builder itself, on a tab of its own beside Finances since 2026-10-27: the quote opens in place (Create quote when there is none), with every builder action and the total terms; leaving the tab saves what was typed.',
           value: 'The quote is worked on its own, apart from the money figures.',
           permissions: ['work_orders/tabs/quotes view', 'quotes view'],
         },

@@ -67,6 +67,11 @@ export const WO_CREATE_DEFAULT_KEYS: readonly string[] = [
   'TL',
   'ATL',
   'Assignee',
+  // 0104 (Elise, 2026-10-27) · the salesperson, filled from the account team,
+  // and the two flags, ticked at intake.
+  'Sales Owner',
+  'Emergency',
+  'Escalated',
 ];
 
 /**
@@ -133,6 +138,12 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
     keys: ['Date-Time Received', 'Due Date', 'SLA Due Date'],
   },
   {
+    id: 'flags',
+    title: 'Flags',
+    hint: 'Emergency reads red and Escalated amber in every view.',
+    keys: ['Emergency', 'Escalated'],
+  },
+  {
     id: 'money',
     title: 'Money',
     hint: 'The NTE the client authorised.',
@@ -141,8 +152,8 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
   {
     id: 'people',
     title: 'People',
-    hint: 'AM, TL and ATL come from the client’s account team for this Comp (Clients › Account team). The dispatcher is yours to pick.',
-    keys: ['AM', 'TL', 'ATL', 'Assignee'],
+    hint: 'AM, TL, ATL and Sales come from the client’s account team for this Comp (Clients › Account team). The dispatcher is yours to pick.',
+    keys: ['AM', 'TL', 'ATL', 'Sales Owner', 'Assignee'],
   },
 ];
 

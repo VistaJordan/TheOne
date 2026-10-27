@@ -1286,7 +1286,7 @@ removed, open `wo_nte_request` rows are still decided), the right rail (`RecordR
 Responsibility, Location, Time with a live timer, Cost; drawn only on
 Overview and the four new tabs, `RAIL_TABS`) and the tabs Checklist (`tasks`),
 Cost breakdown (`costs`), Timelog & metrics (`timelog`) and Related. Since
-2026-10-20 the strip in `WorkOrderDetailPage.tsx` groups tabs (`FINANCE_TABS`: the Finances strip button over the sub-tabs Finances · Payables · Cost breakdown, each its own panel, id and tab permission — the one-panel layout of 2026-10-26 was undone on 2026-10-27; the Finances sub-tab holds the money card (with Profitability exception + Manager notes, an open box, `NoteField`), and the invoice card; the **Penalties** card, `components/wo/ManagerFlags.tsx`, is its own **Penalties** tab after Tech Hub, `work_orders/tabs/penalties` view + `work_orders/fields/penalties` view; since 2026-10-27 the Client quote card is on its own **Quotes** tab beside it, `work_orders/tabs/quotes` view + `quotes` view):
+2026-10-20 the strip in `WorkOrderDetailPage.tsx` groups tabs (`FINANCE_TABS`: Finances is ONE panel again since later on 2026-10-27 — the money and invoice cards, then Payables, then the Cost breakdown, each part behind its own tab permission, ?tab=payables / ?tab=costs scroll to their part; the money part holds the money card (with Profitability exception + Manager notes, an open box, `NoteField`), and the invoice card; the **Penalties** card, `components/wo/ManagerFlags.tsx`, is its own **Penalties** tab after Tech Hub, `work_orders/tabs/penalties` view + `work_orders/fields/penalties` view; since 2026-10-27 the **Quotes** tab beside it IS the quote builder, `QuoteBuilder` from `QuoteBuilderPage.tsx` with `embedded` (no shell, flushes a pending autosave on unmount; the Client quote card is gone), `work_orders/tabs/quotes` view + `quotes` view):
 People is one tab again since 0095 (Our team, with Assignment history;
 Technicians became the Tech Hub tab, below), and `TAB_GROUPS` is gone. Flags is gone (checkboxes in All fields); Checklist and
 Related have no button but a link still opens them; Timelog is no tab, its
@@ -3020,6 +3020,20 @@ required". The assistant can read it (`prices` in `RESOURCES`). No FK to
 principal and the seed truncates none of the three tables, so the list
 survives a re-seed; no seed twin. The migration's INSERTs were generated from
 the workbook (stable uuid5 ids); a re-import is a new migration.
+
+**Sales on Add work order, the two flags at intake, Mark as Emergency**
+(migration 0104, Elise 2026-10-27). `Sales Owner` offers Kevin and House
+(appended to the dropdown's options when missing; seed.ts's CURATED_FIELDS
+carries the same list — keep in step). Add work order shows `Sales Owner` in
+People (after ATL) and a **Flags** section with the `Emergency` and
+`Escalated` ticks (`WO_CREATE_DEFAULT_KEYS` / `WO_CREATE_SECTIONS`, 0104 sets
+the three `optional`). The form fills Sales Owner from the account team's
+salesperson when the dropdown offers that name (`salesOwnerFromTeam` in shared
+`clientTeams.ts`; browser only — the API's `fillFromClientTeam` still fills
+AM / TL / ATL alone). A tick the person may not set (Escalated for the
+dispatchers, 0038) is drawn locked, since `assertFieldWrites` would refuse it.
+The header has **Mark as Emergency** beside Mark as Escalated (`WoHeader`,
+the field's edit permission, red `.btn.is-emergency`).
 
 ## Verify
 

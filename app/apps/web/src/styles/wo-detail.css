@@ -1263,16 +1263,30 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
   }
 }
 
-/* 2026-10-27 · the Quotes tab: the client quote card at a readable width. */
-.quote-tab { max-width: 760px; }
-.quote-tab > .card { margin-top: 0; }
+/* 2026-10-27 · the Quotes tab holds the quote builder itself, full width. */
+.quote-tab .qb-embedded > .card:first-child,
+.quote-tab .qb-embedded > .wo-state:first-child { margin-top: 0; }
+
+/* 2026-10-27 (later) · Finances is one panel again: the money cards, then
+   Payables, then the Cost breakdown, stacked. A link to a part scrolls it
+   clear of the pinned header. */
+.fin-stack { display: flex; flex-direction: column; gap: 22px; }
+.fin-part { scroll-margin-top: calc(var(--wo-pin-h, 0px) + 12px); }
+.fin-part > .card:first-child,
+.fin-part > .fin-part-title + .card { margin-top: 0; }
+.fin-part-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
 
 /* 2026-10-27 · the Penalties tab: one card at a readable width. */
 .penalties-tab { max-width: 560px; }
 .penalties-tab > .card { margin-top: 0; }
 
-/* Sub-tabs under the Finances strip button: Finances · Payables · Cost breakdown. */
-.tabs.wo-subtabs { margin: 0 0 12px; }
 
 /* 0094 · a manager's note (Manager notes, Manager description): an open box
    across the row, label above it. */
@@ -1351,25 +1365,6 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
   background: var(--danger-bg);
   color: var(--danger);
   border-color: var(--danger-border);
-}
-
-.quote-card-body {
-  padding: 12px 16px 14px;
-}
-
-.quote-card-text {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--ink-2);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.quote-card-none {
-  font-size: 12.5px;
-  color: var(--ink-3);
-  font-style: italic;
 }
 
 /* ── Inline field editing on the tab cards (fieldEdit.tsx) ─────────────────

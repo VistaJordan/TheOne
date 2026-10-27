@@ -341,9 +341,8 @@ describe('#9 — every term of the Grand Total is on screen', () => {
     expect(r.terms).toEqual([{ label: 'Option A lines', amount: 200 }]);
     expect(r.adds_up).toBe(true);
   });
-  it('the rail and the Client quote card draw it', () => {
+  it('the quote rail draws it (the Client quote card left with the embedded builder, 2026-10-27)', () => {
     expect(read('apps', 'web', 'src', 'components', 'quote', 'MoneyRail.tsx')).toContain('<QuoteTerms');
-    expect(read('apps', 'web', 'src', 'components', 'wo', 'ClientQuoteCard.tsx')).toContain('<QuoteTerms input={quoteTermsFromTotals(quote.totals)}');
   });
 });
 
