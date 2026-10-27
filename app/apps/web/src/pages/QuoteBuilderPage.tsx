@@ -48,7 +48,7 @@ import { QUOTE_STATUS, QuotePipeline, QuoteStatusPill } from '../components/quot
 import { ScopeList } from '../components/quote/ScopeList';
 import { SummaryCard } from '../components/quote/SummaryCard';
 import type { DraftLine, DraftQuote, DraftSection } from '../lib/quoteDraft';
-import { blankOption, fromQuote, removeAt, replaceAt, toUpdateInput } from '../lib/quoteDraft';
+import { blankOption, fromQuote, removeAt, replaceAt, resetDraft, toUpdateInput } from '../lib/quoteDraft';
 import {
   computeQuoteTotals,
   excludedNote,
@@ -140,6 +140,8 @@ export function QuoteBuilderPage() {
   const [decisionNote, setDecisionNote] = useState('');
   const [decisionOnSite, setDecisionOnSite] = useState(false);
   const [leaveTo, setLeaveTo] = useState<string | null>(null);
+  // 2026-10-27 · "Reset quote" asks first; the autosave saves the reset.
+  const [resetOpen, setResetOpen] = useState(false);
 
   // Re-seed the form from the server only when the quote's IDENTITY changes —
   // its id, its status or its revision. An autosave round-trip changes none of
@@ -362,6 +364,19 @@ export function QuoteBuilderPage() {
           onLeave={() => {
             setLeaveTo(null);
             navigate(leaveTo);
+          }}
+        />
+      )}
+      {resetOpen && (
+        <ResetSheet
+          round={draft?.current_round ?? 1}
+          onCancel={() => setResetOpen(false)}
+          onReset={() => {
+            setResetOpen(false);
+            if (!draft) return;
+            setShowErrors(false);
+            setDayShown({});
+            update(resetDraft(draft, quote?.labor_rate?.trip_rate));
           }}
         />
       )}
@@ -595,6 +610,17 @@ export function QuoteBuilderPage() {
           <div className="qhead-right">
             {/* 0077 · redraft from a transcript; Submit on the draft asks before replacing. */}
             {editable && <ImportTranscriptButton woNumber={quote.wo_number} />}
+            {editable && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setResetOpen(true)}
+                title="Clear the lines, options and notes and start the quote again"
+              >
+                <Icon name="refresh" size={12} />
+                Reset quote
+              </button>
+            )}
             <AutosaveChip
               editable={editable}
               saving={saveMutation.isPending}
@@ -1364,6 +1390,29 @@ function ago(at: number): string {
   if (mins < 60) return `${mins} minutes ago`;
   const hrs = Math.floor(mins / 60);
   return hrs === 1 ? '1 hour ago' : `${hrs} hours ago`;
+}
+
+function ResetSheet({ round, onCancel, onReset }: { round: number; onCancel: () => void; onReset: () => void }) {
+  return (
+    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="resetT" aria-describedby="resetB">
+      <div className="sheet">
+        <h2 className="sheet-t" id="resetT">
+          <Icon name="alert" size={18} />
+          Reset this quote?
+        </h2>
+        <p className="sheet-b" id="resetB">
+          Every line, option and scope line, the specs and the note to the customer are cleared, and
+          the quote opens again as a new one: Incurred and one option, each with its Trip line.
+          {round > 1 ? ' Earlier rounds and the approved incurred work stay as they are.' : ''} The
+          quote number, sales tax and bill-to / ship-to are kept. This cannot be undone.
+        </p>
+        <div className="sheet-f">
+          <button type="button" className="btn btn-danger" onClick={onReset}>Reset quote</button>
+          <button type="button" className="btn btn-primary" onClick={onCancel} autoFocus>Keep my quote</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function DismissSheet({ onStay, onLeave }: { onStay: () => void; onLeave: () => void }) {

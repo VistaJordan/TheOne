@@ -206,3 +206,75 @@ describe('source pins', () => {
     expect(ai).toMatch(/btrim\(x\) NOT IN \(\$3, \$4\)/);
   });
 });
+
+describe('Reset quote (2026-10-27)', async () => {
+  const { blankOption, resetDraft } = await import('../apps/web/src/lib/quoteDraft');
+  type Draft = Parameters<typeof resetDraft>[0];
+  const typed = (round: number, locked = false) => ({
+    ...blankOption(round, 50),
+    name: 'Typed option',
+    scope_lines: ['typed'],
+    locked,
+  });
+  const base = (round: number): Draft => ({
+    sections: [
+      { ...blankOption(round, 50), kind: 'incurred', name: 'Work already performed', scope_lines: ['typed'], locked: round > 1 },
+      typed(1, round > 1),
+      typed(round),
+      typed(round),
+    ],
+    current_round: round,
+    sales_tax_pct: '8.25',
+    total_rule: 'incurred_plus_option',
+    bill_to: 'Bill',
+    is_cost_tbd: true,
+    specs: 'specs',
+    note_to_customer: 'note',
+    summary_pinned: 'pinned',
+    document_type: 'proposal',
+    ship_to: 'Ship',
+  });
+
+  it('opens the quote again as new: incurred + one option, each with the default lines and Trip', () => {
+    const next = resetDraft(base(1), 75);
+    expect(next.sections).toHaveLength(2);
+    const [inc, opt] = next.sections;
+    expect(inc.kind).toBe('incurred');
+    expect(opt.kind).toBe('option');
+    for (const s of next.sections) {
+      expect(s.scope_lines).toEqual(defaultScopeLines());
+      expect(s.lines).toHaveLength(1);
+      expect(s.lines[0].description).toBe(QUOTE_DEFAULT_TRIP_DESCRIPTION);
+      expect(s.lines[0].rate).toBe('75.00');
+      expect(s.name === '' || s.kind === 'incurred').toBe(true);
+    }
+    expect(next.specs).toBe('');
+    expect(next.note_to_customer).toBe('');
+    expect(next.summary_pinned).toBeNull();
+    expect(next.is_cost_tbd).toBe(false);
+  });
+
+  it('keeps the sales tax, total rule and document fields', () => {
+    const next = resetDraft(base(1), 75);
+    expect(next.sales_tax_pct).toBe('8.25');
+    expect(next.document_type).toBe('proposal');
+    expect(next.bill_to).toBe('Bill');
+    expect(next.ship_to).toBe('Ship');
+  });
+
+  it('from round 2 keeps the locked incurred work and the earlier rounds', () => {
+    const before = base(2);
+    const next = resetDraft(before, 75);
+    expect(next.sections[0]).toBe(before.sections[0]);
+    expect(next.sections[1]).toBe(before.sections[1]);
+    expect(next.sections).toHaveLength(3);
+    expect(next.sections[2].round).toBe(2);
+    expect(next.sections[2].scope_lines).toEqual(defaultScopeLines());
+  });
+
+  it('the builder offers it only while the quote is editable, behind a confirm', () => {
+    const page = read('apps/web/src/pages/QuoteBuilderPage.tsx');
+    expect(page).toMatch(/\{editable && \(\s*<button[\s\S]{0,200}setResetOpen\(true\)/);
+    expect(page).toMatch(/resetDraft\(draft, quote\?\.labor_rate\?\.trip_rate\)/);
+  });
+});

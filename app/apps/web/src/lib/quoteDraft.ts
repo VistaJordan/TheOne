@@ -216,6 +216,31 @@ function blankIncurred(tripRate?: number | null): DraftSection {
   };
 }
 
+/** "Reset quote" (Elise, 2026-10-27): the form back to what a new quote opens
+    with — the Incurred section and ONE option, each with the default scope
+    lines and a Trip line at the card's trip rate; Specs, the note to the
+    customer, a pinned summary and Cost TBD cleared. What is history stays:
+    a locked section (an earlier round, the incurred work from round 2 on)
+    is kept as it is. The sales tax %, the total rule and the document fields
+    (type, bill to, ship to) are kept — they describe the job, not the work.
+    Nothing is sent here: the autosave saves the reset like any other edit. */
+export function resetDraft(draft: DraftQuote, tripRate?: number | null): DraftQuote {
+  const [incurred, ...options] = draft.sections;
+  const keptOptions = options.filter((s) => s.locked || s.round < draft.current_round);
+  return {
+    ...draft,
+    sections: [
+      incurred && incurred.locked ? incurred : blankIncurred(tripRate),
+      ...keptOptions,
+      blankOption(draft.current_round, tripRate),
+    ],
+    is_cost_tbd: false,
+    specs: '',
+    note_to_customer: '',
+    summary_pinned: null,
+  };
+}
+
 // ── wire → draft ─────────────────────────────────────────────────────────────
 
 /** Takes a saved section or an AI draft section (0054) — the draft is the

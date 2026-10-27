@@ -2737,6 +2737,12 @@ a line already sits past Day 1 (`linesSpanDays`); every line saves `day =
 1` (`QUOTE_DEFAULT_DAY`; the summary groups "Day N" only past day 1, as
 before). The Summary card has **no Edit text**: the text is always the
 generated one; a quote pinned earlier keeps its refresh control.
+**Reset quote** (2026-10-27, Elise; builder header while editable, behind
+a confirm): `resetDraft` in `lib/quoteDraft.ts` puts the form back to a new
+quote (Incurred + one option, default scope lines, Trip line; specs, note,
+pinned summary, Cost TBD cleared), keeping locked sections, sales tax, total
+rule and the document fields. Client-side only — the autosave saves it, so it
+is an ordinary `quote_updated` row.
 
 **Probation cannot change the Client or the FM** (migration 0093, Elise
 2026-10-22; `PROBATION_LOCKED_FIELD_PATHS` / `PROBATION_FIELD_LOCKED_ROLES`
