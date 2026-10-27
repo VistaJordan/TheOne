@@ -15,7 +15,7 @@ import { seedAllowed } from './seedGuard.js';
 import { describeSeedUnpooledMismatch } from './migrateLedger.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { REQUEST_HIDDEN_STATUS_NAMES, STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, clientUnsafeDefaultBagKeys, type StatusGroup } from '@theone/shared';
+import { REQUEST_HIDDEN_STATUS_NAMES, STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, cicoMethodText, clientUnsafeDefaultBagKeys, type StatusGroup } from '@theone/shared';
 // S5 · the demo-state anchors below are computed with the SAME business-time
 // arithmetic the obligation engine evaluates with, so the seeded tiers are
 // exact rather than approximated by calendar offsets — a 4-business-hour clock
@@ -517,7 +517,9 @@ const QUOTE_INCURRED_NARRATIVE =
 // The operation's real table (Elise, 2026-09-08): which kind of check-in each
 // FM company uses and the instruction that goes with it. Migration 0022
 // carries the SAME rows for an already-migrated database — keep in step.
-const FM_CICO_METHODS: [fm: string, method: string, detail: string][] = [
+// 0099 · the twelve Service Channel FMs are Portal: Service Channel (the 4th
+// element, 0098's portal), detail cleared — the same UPDATE the migration runs.
+const FM_CICO_METHODS: [fm: string, method: string, detail: string | null, portal?: string][] = [
   ["FrontStreet", "IVR", "(866) 254-8780"],
   ["Lessen", "Portal", "Submit request on Teams"],
   ["Powerhouse", "Portal", "Submit request on Teams (must add photos)"],
@@ -526,28 +528,28 @@ const FM_CICO_METHODS: [fm: string, method: string, detail: string][] = [
   ["Impact", "Email", "Submit request on Teams"],
   ["Advanced", "IVR", "(866) 254-8347"],
   ["Nest", "IVR", "(877) 374-2054"],
-  ["OReilly", "IVR", "Service Channel"],
-  ["Outback Steakhouse", "IVR", "Service Channel"],
+  ["OReilly", "Portal", null, "Service Channel"],
+  ["Outback Steakhouse", "Portal", null, "Service Channel"],
   ["SHEER", "Operator", "Submit request on Teams"],
   ["RESQ", "Portal", "Submit request on Teams (must add photos and the manager's name)"],
   ["HERO", "Email", "Submit request on Teams"],
   ["Davaco", "IVR", "(833) 948-2261"],
   ["KFM24", "IVR", "(301) 854-6776"],
-  ["PRS", "IVR", "Service Channel"],
+  ["PRS", "Portal", null, "Service Channel"],
   ["TrueSource", "Operator", "Submit request on Teams"],
   ["Vixxo", "IVR", "(888) 928-3276 (if you're new and a live operator answers, hang up)"],
   ["Canteen", "Email", "Submit request on Teams"],
   ["Extra Space", "Email", "Submit request on Teams"],
   ["ONO-BBQ", "Email", "Submit request on Teams"],
-  ["CHEESECAKE FACTORY", "IVR", "Service Channel"],
-  ["DinTai", "IVR", "Service Channel"],
-  ["FedEx", "IVR", "Service Channel"],
-  ["First Watch", "IVR", "Service Channel"],
-  ["JRSK", "IVR", "Service Channel"],
-  ["Habit Burger", "IVR", "Service Channel"],
-  ["KINDERCARE", "IVR", "Service Channel"],
-  ["Mobettahs", "IVR", "Service Channel"],
-  ["Rural King", "IVR", "Service Channel"],
+  ["CHEESECAKE FACTORY", "Portal", null, "Service Channel"],
+  ["DinTai", "Portal", null, "Service Channel"],
+  ["FedEx", "Portal", null, "Service Channel"],
+  ["First Watch", "Portal", null, "Service Channel"],
+  ["JRSK", "Portal", null, "Service Channel"],
+  ["Habit Burger", "Portal", null, "Service Channel"],
+  ["KINDERCARE", "Portal", null, "Service Channel"],
+  ["Mobettahs", "Portal", null, "Service Channel"],
+  ["Rural King", "Portal", null, "Service Channel"],
   ["AMC", "Portal", "Submit request on Teams"],
   ["Bashas", "Portal", "Submit request on Teams"],
   ["Learning", "Portal", "Submit request on Teams"],
@@ -983,8 +985,8 @@ async function main() {
   const taskIdByWo = new Map<string, string>();
 
   // 0021 · the FM → check-in method table, before the visits that read it.
-  for (const [fm, method, detail] of FM_CICO_METHODS) {
-    await query(`INSERT INTO fm_cico_method (fm, method, detail) VALUES ($1, $2, $3)`, [fm, method, detail]);
+  for (const [fm, method, detail, portal] of FM_CICO_METHODS) {
+    await query(`INSERT INTO fm_cico_method (fm, method, detail, portal) VALUES ($1, $2, $3, $4)`, [fm, method, detail, portal ?? null]);
   }
   const taskMeta = new Map<string, { statusName: string; fields: Record<string, unknown> }>();
 
@@ -1012,7 +1014,7 @@ async function main() {
     // in the log, and the seven mirrored fields read that visit — the same
     // state the API would leave after logging and checking out the visit.
     const legacyCico = str(f['18. Check-in/out Status']);
-    let visit: { type: string; method: string | null; detail: string | null; inAt: string; outAt: string } | null = null;
+    let visit: { type: string; method: string | null; detail: string | null; portal: string | null; inAt: string; outAt: string } | null = null;
     if (legacyCico && /checked.?out/i.test(legacyCico)) {
       const base = createdAt ? new Date(`${createdAt}T14:00:00Z`) : new Date('2026-08-01T14:00:00Z');
       const inAt = new Date(base.getTime() + 2 * 86_400_000 + (taskCount % 5) * 37 * 60_000);
@@ -1021,13 +1023,14 @@ async function main() {
       const entry = FM_METHOD_BY_NAME.get((str(f['22. FM']) ?? '').trim().toLowerCase());
       const method = entry?.[1] ?? null;
       const detail = entry?.[2] ?? null;
-      visit = { type, method, detail, inAt: isoSeconds(inAt), outAt: isoSeconds(outAt) };
+      const portal = entry?.[3] ?? null;
+      visit = { type, method, detail, portal, inAt: isoSeconds(inAt), outAt: isoSeconds(outAt) };
       f['Visit Type'] = type;
       f['18. Check-in/out Status'] = 'Checked-out';
       f['Checked-in At'] = visit.inAt;
       f['Checked-out At'] = visit.outAt;
       // "IVR - (866) 254-8780" — the shape the operation wrote by hand.
-      if (method) f['CICO Method'] = detail ? `${method} - ${detail}` : method;
+      if (method) f['CICO Method'] = cicoMethodText(method, detail, portal);
       else delete f['CICO Method'];
     }
 
@@ -1068,9 +1071,9 @@ async function main() {
     if (visit) {
       await query(
         `INSERT INTO wo_visit
-           (task_id, seq, visit_type, status, method, method_detail, checked_in_at, checked_out_at, created_by)
-         VALUES ($1, 1, $2, 'checked_out', $3, $4, $5::timestamptz, $6::timestamptz, $7)`,
-        [taskId, visit.type, visit.method, visit.detail, visit.inAt, visit.outAt, seedBotId],
+           (task_id, seq, visit_type, status, method, method_detail, checked_in_at, checked_out_at, created_by, method_portal)
+         VALUES ($1, 1, $2, 'checked_out', $3, $4, $5::timestamptz, $6::timestamptz, $7, $8)`,
+        [taskId, visit.type, visit.method, visit.detail, visit.inAt, visit.outAt, seedBotId, visit.portal],
       );
       visitCount++;
     }

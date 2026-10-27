@@ -142,7 +142,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Check-in method by FM',
-          what: 'An admin table FM → method (IVR, Portal, Email, Operator, App, Manual) with a detail, pre-filling a new visit.',
+          what: 'An admin table FM → method (IVR, Portal, Email, Operator, App, Manual) with a detail and, for Portal, which portal (0098), pre-filling a new visit; the visit log reads "Portal: Service Channel" and its form has a Portal box while the method is Portal.',
           value: 'The dispatcher does not have to remember how each facilities-management company wants check-ins done.',
           since: '0028',
         },

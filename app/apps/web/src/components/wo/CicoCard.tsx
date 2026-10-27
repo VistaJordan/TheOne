@@ -26,8 +26,11 @@ import {
   QUOTE_DUE_KEY,
   SIGNOFF_FIELD_KEY,
   VISIT_HIDDEN_KEYS,
+  CICO_PORTAL_METHOD,
+  CICO_PORTAL_SUGGESTIONS,
   VISIT_METHODS,
   VISIT_MIRROR_KEYS,
+  cicoMethodLabel,
   fieldSectionPermKey,
   type ActivityEntry,
   type VisitInput,
@@ -216,6 +219,7 @@ export function CicoCard({ wo, embedded }: CicoCardProps) {
           fm={visitsQuery.data?.fm ?? null}
           defaultMethod={visitsQuery.data?.default_method ?? null}
           defaultDetail={visitsQuery.data?.default_method_detail ?? null}
+          defaultPortal={visitsQuery.data?.default_method_portal ?? null}
           collapsed={collapsed}
           onExpand={() => { setCollapsed(false); writeFold(false); }}
           canEdit={canEditLog}
@@ -312,6 +316,7 @@ interface VisitLogProps {
   fm: string | null;
   defaultMethod: string | null;
   defaultDetail: string | null;
+  defaultPortal: string | null;
   collapsed: boolean;
   onExpand: () => void;
   canEdit: boolean;
@@ -319,7 +324,7 @@ interface VisitLogProps {
 }
 
 function VisitLog({
-  wo, visits, loading, failed, fm, defaultMethod, defaultDetail, collapsed, onExpand, canEdit, visitTypes,
+  wo, visits, loading, failed, fm, defaultMethod, defaultDetail, defaultPortal, collapsed, onExpand, canEdit, visitTypes,
 }: VisitLogProps) {
   const qc = useQueryClient();
   const { can } = useAuth();
@@ -468,6 +473,7 @@ function VisitLog({
             fm={fm}
             defaultMethod={defaultMethod}
             defaultDetail={defaultDetail}
+            defaultPortal={defaultPortal}
             busy={create.isPending}
             onCancel={() => { setComposing(false); setError(null); }}
             onSubmit={(input) => create.mutate(input)}
@@ -567,7 +573,7 @@ function VisitRow({ v, now, canEdit, busy, visitTypes, onPatch, onDelete }: Visi
               <span />
             </div>
             <div className="cv-meta">
-              {v.method && <span className="chip" title="Check-in method">{v.method}</span>}
+              {v.method && <span className="chip" title="Check-in method">{cicoMethodLabel(v.method, v.method_portal)}</span>}
               {v.method_detail && <span className="cv-detail">{v.method_detail}</span>}
               {done && (v.return_trip_needed
                 ? <span className="chip chip-danger">Return trip needed</span>
@@ -679,6 +685,7 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
   const [vendorId, setVendorId] = useState<string | null | undefined>(undefined);
   const [method, setMethod] = useState(v.method ?? '');
   const [detail, setDetail] = useState(v.method_detail ?? '');
+  const [portal, setPortal] = useState(v.method_portal ?? '');
   const [inAt, setInAt] = useState(toLocalInput(v.checked_in_at));
   const [outAt, setOutAt] = useState(toLocalInput(v.checked_out_at));
 
@@ -697,6 +704,8 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
     if (vendorId !== undefined) input.vendor_id = vendorId;
     if (method !== (v.method ?? '')) input.method = method || null;
     if (detail.trim() !== (v.method_detail ?? '')) input.method_detail = detail.trim() || null;
+    const nextPortal = method === CICO_PORTAL_METHOD ? portal.trim() : '';
+    if (nextPortal !== (v.method_portal ?? '')) input.method_portal = nextPortal || null;
     if (inAt !== toLocalInput(v.checked_in_at)) input.checked_in_at = fromLocalInput(inAt);
     if (outAt !== toLocalInput(v.checked_out_at)) input.checked_out_at = fromLocalInput(outAt);
     if (Object.keys(input).length === 0) { onCancel(); return; }
@@ -737,6 +746,7 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
             {methods.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
+        {method === CICO_PORTAL_METHOD && <PortalField value={portal} onChange={setPortal} disabled={busy} />}
         <label className="field cv-detailfield">
           <span className="lbl">Method detail</span>
           <input className="fld" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="IVR number, portal, where to submit…" disabled={busy} />
@@ -766,12 +776,13 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
 
 // ── Logging a new visit ──────────────────────────────────────────────────────
 
-function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, busy, onCancel, onSubmit }: {
+function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, defaultPortal, busy, onCancel, onSubmit }: {
   woId: string;
   visitTypes: string[];
   fm: string | null;
   defaultMethod: string | null;
   defaultDetail: string | null;
+  defaultPortal: string | null;
   busy: boolean;
   onCancel: () => void;
   onSubmit: (input: VisitInput) => void;
@@ -783,6 +794,8 @@ function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, bus
   const [vendorId, setVendorId] = useState<string | null>(null);
   const [method, setMethod] = useState(defaultMethod ?? '');
   const [detail, setDetail] = useState(defaultDetail ?? '');
+  // 0098 · the FM's portal ("Service Channel") rides with its Portal method.
+  const [portal, setPortal] = useState(defaultPortal ?? '');
   const [touched, setTouched] = useState(false);
 
   // Picking a different method than the FM's drops the FM's instruction (an
@@ -790,6 +803,7 @@ function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, bus
   const pickMethod = (m: string) => {
     setMethod(m);
     setDetail(m === defaultMethod ? (defaultDetail ?? '') : '');
+    setPortal(m === defaultMethod ? (defaultPortal ?? '') : '');
   };
 
   const submit = () => {
@@ -802,6 +816,7 @@ function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, bus
       ...(vendorId && tech.trim() ? { vendor_id: vendorId } : {}),
       method: method || null,
       method_detail: detail.trim() || null,
+      method_portal: method === CICO_PORTAL_METHOD ? portal.trim() || null : null,
     });
   };
 
@@ -851,6 +866,7 @@ function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, bus
             {VISIT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
+        {method === CICO_PORTAL_METHOD && <PortalField value={portal} onChange={setPortal} disabled={busy} />}
         <label className="field cv-detailfield">
           <span className="lbl">Method detail</span>
           <input
@@ -871,6 +887,28 @@ function VisitComposer({ woId, visitTypes, fm, defaultMethod, defaultDetail, bus
         {touched && !type && <span className="cv-hint">Pick the visit type first.</span>}
       </div>
     </form>
+  );
+}
+
+/** 0098 · which portal a Portal check-in goes through ("Service Channel",
+    "Corrigo"): typed, with the usual ones suggested. */
+function PortalField({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
+  return (
+    <label className="field">
+      <span className="lbl">Portal</span>
+      <input
+        className="fld"
+        list="cv-portal-options"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Service Channel, Corrigo…"
+        maxLength={80}
+        disabled={disabled}
+      />
+      <datalist id="cv-portal-options">
+        {CICO_PORTAL_SUGGESTIONS.map((p) => <option key={p} value={p} />)}
+      </datalist>
+    </label>
   );
 }
 

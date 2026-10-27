@@ -40,6 +40,7 @@ const visitBodySchema = z.object({
   tech_phone: z.string().max(60).nullable().optional(),
   method: z.string().max(60).nullable().optional(),
   method_detail: z.string().max(300).nullable().optional(),
+  method_portal: z.string().max(80).nullable().optional(),
   checked_in_at: z.string().max(40).nullable().optional(),
   checked_out_at: z.string().max(40).nullable().optional(),
   /** 0057 · the vendor record the technician was picked from; null = typed by

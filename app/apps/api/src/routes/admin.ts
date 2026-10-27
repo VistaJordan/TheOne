@@ -595,22 +595,25 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.put('/admin/cico-methods/:fm', async (req) => {
     const actorId = requireAdmin(req, 'fields', 'edit');
     const { fm } = parse(z.object({ fm: z.string().trim().min(1).max(120) }), req.params);
-    const { method, detail } = parse(
+    const { method, detail, portal } = parse(
       z.object({
         method: z.string().trim().min(1).max(60),
         detail: z.string().trim().max(300).nullable().optional(),
+        // 0098 · which portal, kept only when the method is Portal.
+        portal: z.string().trim().max(80).nullable().optional(),
       }),
       req.body,
     );
     const before = (await listCicoMethods()).find((m) => m.fm === fm) ?? null;
-    const item = await setCicoMethod(fm, method, detail ?? null, actorId);
+    // An older screen sends no portal: keep the one on file.
+    const item = await setCicoMethod(fm, method, detail ?? null, portal === undefined ? (before?.portal ?? null) : portal, actorId);
     await logAdminEvent({
       actorId,
       entity: 'fm_cico_method',
       entityId: item.fm,
       action: before ? 'cico_method_changed' : 'cico_method_created',
-      before: before ? { name: before.fm, method: before.method, detail: before.detail } : null,
-      after: { name: item.fm, method: item.method, detail: item.detail },
+      before: before ? { name: before.fm, method: before.method, detail: before.detail, portal: before.portal } : null,
+      after: { name: item.fm, method: item.method, detail: item.detail, portal: item.portal },
     });
     return { item };
   });
@@ -625,7 +628,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       entity: 'fm_cico_method',
       entityId: gone.fm,
       action: 'cico_method_deleted',
-      before: { name: gone.fm, method: gone.method, detail: gone.detail },
+      before: { name: gone.fm, method: gone.method, detail: gone.detail, portal: gone.portal },
       after: null,
     });
     return { ok: true };

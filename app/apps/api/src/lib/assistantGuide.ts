@@ -55,7 +55,7 @@ Afterwards each automation is a card with a switch (on, or paused), its run log 
 - Let a field go out to clients on a shared Client Update: the **Client-safe** column (a tick; money, AP, AR and invoicing fields start off). A field that is not client-safe can still be a team-only column on a tracker.
 - Statuses live on the same page under **Statuses**. Add one: in its phase's card type in **Add a status to …**, pick a colour, click **Add**. Rename with the pencil; delete with the trash icon then **Delete status**. A status that work orders are sitting in cannot be deleted; move them first.
 - Phases (status groups): **New phase**, **Name**, **Create phase**; it becomes a tab on the work-orders list. Only an empty phase that is not built in can be deleted.
-- Check-in method by FM: fill **FM company**, **Method** and optional **Detail**, click **Add**. It pre-fills the method of a new visit.
+- Check-in method by FM: fill **FM company**, **Method** (for **Portal**, also which **Portal**: Service Channel, Corrigo…) and optional **Detail**, click **Add**. It pre-fills the method of a new visit, which then reads "Portal: Service Channel".
 
 **Settings** (Admin › Settings; needs \`admin/settings\` edit)
 - Holidays (the days the quote clock skips): pick **Day**, type **Name**, click **Add**. Edit a name in the table; the trash icon removes one. Quote due dates already stamped do not move until the visit is next edited.

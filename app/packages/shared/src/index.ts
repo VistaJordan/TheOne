@@ -1880,11 +1880,30 @@ export const VISIT_STATUSES: { code: VisitStatus; label: string }[] = [
     that goes with it (the IVR number, "Submit request on Teams" …). */
 export const VISIT_METHODS = ['IVR', 'Portal', 'Email', 'Operator', 'App', 'Manual'] as const;
 
-/** The legacy 'CICO Method' value for a method + detail pair — the shape the
-    operation wrote by hand before the log ("IVR - (866) 254-8780"). */
-export function cicoMethodText(method: string | null, detail: string | null): string | null {
+/** 0098 · the method a portal is (Elise, 2026-10-27): an FM whose techs
+    check in on the client's portal names WHICH portal, so the visit reads
+    "Portal: Service Channel". Only this method carries a portal. */
+export const CICO_PORTAL_METHOD = 'Portal';
+
+/** The portals offered when one is typed (free text: a new portal needs no
+    deploy; the admin card also suggests any portal already on file). */
+export const CICO_PORTAL_SUGGESTIONS = ['Service Channel', 'Corrigo', 'Ecotrak'] as const;
+
+/** "Portal: Service Channel" — the method as a person reads it; the method
+    alone when it is not a portal or no portal is named. */
+export function cicoMethodLabel(method: string | null, portal?: string | null): string | null {
   if (!method) return null;
-  return detail ? `${method} - ${detail}` : method;
+  const p = portal?.trim();
+  return method === CICO_PORTAL_METHOD && p ? `${method}: ${p}` : method;
+}
+
+/** The legacy 'CICO Method' value for a method + detail pair — the shape the
+    operation wrote by hand before the log ("IVR - (866) 254-8780"; since
+    0098 "Portal: Corrigo - Submit request on Teams"). */
+export function cicoMethodText(method: string | null, detail: string | null, portal?: string | null): string | null {
+  const label = cicoMethodLabel(method, portal);
+  if (!label) return null;
+  return detail ? `${label} - ${detail}` : label;
 }
 
 /** Fallback vocabulary when the 'Visit Type' dropdown is not in the catalogue. */
@@ -1980,6 +1999,9 @@ export interface WoVisit {
   tech_name: string | null;
   tech_phone: string | null;
   method: string | null;
+  /** 0098 · which portal, when the method is Portal ("Service Channel",
+      "Corrigo"); copied from the FM table with the method; null otherwise. */
+  method_portal: string | null;
   /** The instruction for this method — the IVR number, "Service Channel",
       "Submit request on Teams (must add photos)". Copied from the FM table
       when the visit is logged; editable on the visit. */
@@ -2005,6 +2027,8 @@ export interface VisitInput {
   tech_phone?: string | null;
   method?: string | null;
   method_detail?: string | null;
+  /** 0098 · kept only while the method is Portal. */
+  method_portal?: string | null;
   checked_in_at?: string | null;
   checked_out_at?: string | null;
   /** 0057 · the vendor record the technician was picked from (null = typed by
@@ -2020,6 +2044,8 @@ export interface WoVisitsResponse {
   fm: string | null;
   default_method: string | null;
   default_method_detail: string | null;
+  /** 0098 · the FM's portal, when its method is Portal. */
+  default_method_portal: string | null;
 }
 
 /** Rule 2.2.2: what a check-in did to the work order's status. `moved`
@@ -2050,6 +2076,9 @@ export interface FmCicoMethod {
   method: string;
   /** The instruction: phone number, portal, "Submit request on Teams" … */
   detail: string | null;
+  /** 0098 · which portal ("Service Channel", "Corrigo") — only when the
+      method is Portal, null otherwise. */
+  portal: string | null;
   updated_at: string;
 }
 

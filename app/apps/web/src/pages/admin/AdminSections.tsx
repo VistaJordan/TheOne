@@ -73,6 +73,8 @@ import {
   APPROVAL_TASK_TYPES,
   QUOTE_DUE_HOURS,
   VISIT_METHODS,
+  CICO_PORTAL_METHOD,
+  CICO_PORTAL_SUGGESTIONS,
   WO_CREATE_MODES,
   WO_CREATE_MODE_LABELS,
   businessDay,
@@ -2462,20 +2464,24 @@ export function AdminFieldsPage() {
 
 /** One FM's instruction, edited in place: saves on blur or Enter, Escape
     puts the saved value back. */
-function DetailCell({ value, busy, label, onCommit }: {
+function DetailCell({ value, busy, label, onCommit, list, placeholder = '—' }: {
   value: string;
   busy: boolean;
   label: string;
   onCommit: (v: string) => void;
+  /** 0098 · a datalist id to suggest from (the Portal column). */
+  list?: string;
+  placeholder?: string;
 }) {
   const [draft, setDraft] = useState(value);
   return (
     <input
       className="fld adm-cico-detail"
+      list={list}
       value={draft}
       disabled={busy}
       aria-label={label}
-      placeholder="—"
+      placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => onCommit(draft.trim())}
       onKeyDown={(e) => {
@@ -2490,6 +2496,8 @@ function DetailCell({ value, busy, label, onCommit }: {
 // The "database of the method for each client": FM company → IVR / App /
 // Phone / Portal / Email / Manual. The FM names come from the '22. FM'
 // dropdown so a row can only be spelled the way the work orders spell it.
+// 0098 · a Portal row also names WHICH portal (Service Channel, Corrigo …),
+// so a visit on that FM's work order reads "Portal: Service Channel".
 
 const FM_FIELD_KEY = 'fields.22. FM';
 
@@ -2507,10 +2515,16 @@ function CicoMethodsCard() {
   );
   const items = q.data?.items ?? [];
   const onFile = new Set(items.map((i) => i.fm));
+  // The usual portals, plus any already typed on another row.
+  const portalOptions = useMemo(
+    () => [...new Set<string>([...CICO_PORTAL_SUGGESTIONS, ...items.map((i) => i.portal ?? '').filter(Boolean)])],
+    [items],
+  );
 
   const [fm, setFm] = useState('');
   const [method, setMethod] = useState<string>(VISIT_METHODS[0]);
   const [detail, setDetail] = useState('');
+  const [portal, setPortal] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const done = () => {
@@ -2520,9 +2534,9 @@ function CicoMethodsCard() {
   const fail = (err: unknown) =>
     setError(err instanceof ApiRequestError ? err.message : 'The change did not save');
   const set = useMutation({
-    mutationFn: (v: { fm: string; method: string; detail: string | null }) =>
-      setCicoMethod(v.fm, v.method, v.detail),
-    onSuccess: () => { done(); setFm(''); setDetail(''); },
+    mutationFn: (v: { fm: string; method: string; detail: string | null; portal: string | null }) =>
+      setCicoMethod(v.fm, v.method, v.detail, v.portal),
+    onSuccess: () => { done(); setFm(''); setDetail(''); setPortal(''); },
     onError: fail,
   });
   const del = useMutation({ mutationFn: (name: string) => deleteCicoMethod(name), onSuccess: done, onError: fail });
@@ -2553,7 +2567,14 @@ function CicoMethodsCard() {
         className="adm-cico-add"
         onSubmit={(e) => {
           e.preventDefault();
-          if (fm.trim()) set.mutate({ fm: fm.trim(), method, detail: detail.trim() || null });
+          if (fm.trim()) {
+            set.mutate({
+              fm: fm.trim(),
+              method,
+              detail: detail.trim() || null,
+              portal: method === CICO_PORTAL_METHOD ? portal.trim() || null : null,
+            });
+          }
         }}
       >
         <label className="field">
@@ -2576,6 +2597,23 @@ function CicoMethodsCard() {
             {methods.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
+        {method === CICO_PORTAL_METHOD && (
+          <label className="field">
+            <span className="lbl">Portal</span>
+            <input
+              className="fld"
+              list="adm-cico-portal-options"
+              value={portal}
+              onChange={(e) => setPortal(e.target.value)}
+              placeholder="Service Channel, Corrigo…"
+              maxLength={80}
+              disabled={busy}
+            />
+          </label>
+        )}
+        <datalist id="adm-cico-portal-options">
+          {portalOptions.map((p) => <option key={p} value={p} />)}
+        </datalist>
         <label className="field adm-cico-detailfield">
           <span className="lbl">Detail</span>
           <input
@@ -2604,6 +2642,7 @@ function CicoMethodsCard() {
               <tr>
                 <th>FM company</th>
                 <th>Method</th>
+                <th>Portal</th>
                 <th>Detail</th>
                 <th>Updated</th>
                 <th aria-label="Remove" />
@@ -2619,11 +2658,28 @@ function CicoMethodsCard() {
                       value={i.method}
                       disabled={busy}
                       aria-label={`Check-in method for ${i.fm}`}
-                      onChange={(e) => set.mutate({ fm: i.fm, method: e.target.value, detail: i.detail })}
+                      onChange={(e) => set.mutate({ fm: i.fm, method: e.target.value, detail: i.detail, portal: i.portal })}
                     >
                       {!methods.includes(i.method) && <option value={i.method}>{i.method}</option>}
                       {methods.map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
+                  </td>
+                  <td>
+                    {i.method === CICO_PORTAL_METHOD ? (
+                      <DetailCell
+                        key={`${i.fm}:portal:${i.portal ?? ''}`}
+                        value={i.portal ?? ''}
+                        busy={busy}
+                        label={`Portal for ${i.fm}`}
+                        list="adm-cico-portal-options"
+                        placeholder="Which portal?"
+                        onCommit={(v) => {
+                          if (v !== (i.portal ?? '')) set.mutate({ fm: i.fm, method: i.method, detail: i.detail, portal: v || null });
+                        }}
+                      />
+                    ) : (
+                      <span className="adm-cico-when">—</span>
+                    )}
                   </td>
                   <td>
                     <DetailCell
@@ -2632,7 +2688,7 @@ function CicoMethodsCard() {
                       busy={busy}
                       label={`Detail for ${i.fm}`}
                       onCommit={(v) => {
-                        if (v !== (i.detail ?? '')) set.mutate({ fm: i.fm, method: i.method, detail: v || null });
+                        if (v !== (i.detail ?? '')) set.mutate({ fm: i.fm, method: i.method, detail: v || null, portal: i.portal });
                       }}
                     />
                   </td>

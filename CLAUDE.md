@@ -290,7 +290,14 @@ edit, so columns / filters / automations on them keep working. Mirror writes
 are logged `via: 'visit'`; visit writes are logged as `visit_created|updated|
 deleted` with snapshots under field `visit:<id>`. `fm_cico_method` (FM → IVR /
 App / Phone / …, Admin › Custom fields) pre-fills a new visit's method from the
-WO's `22. FM`. The same `CicoCard` renders in the CICO tab and as the CICO
+WO's `22. FM`. Since 0098 a Portal row also names WHICH portal
+(`fm_cico_method.portal`, copied to `wo_visit.method_portal` with the method,
+kept only while the method is Portal — `portalFor`), and the visit reads
+"Portal: Service Channel" (`cicoMethodLabel`; the `CICO Method` mirror
+"Portal: Corrigo - <detail>"). Suggestions `CICO_PORTAL_SUGGESTIONS`; no
+FM row was filled in by 0098; 0099 moved the twelve FMs filed as IVR /
+"Service Channel" to Portal: Service Channel (detail cleared; only rows
+still as 0028 wrote them; seed.ts in step). `tests/cico-portal.test.ts`. The same `CicoCard` renders in the CICO tab and as the CICO
 section of All-fields. Gate: `work_orders/fields/cico` view / edit.
 
 **Quote clock and the Due Today view** (migration 0030, rules 2.3.1–2.3.3,

@@ -535,7 +535,7 @@ export const SOP: SopDocument = {
           '**New field**: **Name**, **Type** (Text, Long text, Dropdown, Checkbox, Date, Date & time, $ amount, Number, People, Phone number, Link, Address, Attachment, Function, Rating), **Dropdown values** one per line, **Create … field**. Rename with the pencil; change the type in its row; drag to reorder; edit values under **"<n> values ▾"** (**Save values** / **Reset**). Fields are never deleted.',
           '**Add work order** column: **Not on the form**, **On the form**, **Required**.',
           '**Statuses**: in a phase card, **Add a status to …**, a colour, **Add**; pencil to rename; trash then **Delete status** (only when no work order, trashed ones included, sits at it). **New phase** becomes a list tab; only an empty, non-built-in phase can be deleted.',
-          '**Check-in method by FM**: **FM company**, **Method**, **Detail**, **Add**.',
+          '**Check-in method by FM**: **FM company**, **Method**, **Portal** (for the Portal method: which portal, e.g. Service Channel or Corrigo), **Detail**, **Add**. A new visit on that FM\'s work orders then reads "Portal: Service Channel".',
         ] },
         { kind: 'sub', title: 'D. Settings' },
         { kind: 'table', head: ['Card', 'What it sets'], rows: [

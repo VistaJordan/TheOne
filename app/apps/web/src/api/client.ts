@@ -2521,10 +2521,12 @@ export function setCicoMethod(
   fm: string,
   method: string,
   detail: string | null,
+  /** 0098 · which portal; kept by the API only when the method is Portal. */
+  portal: string | null,
 ): Promise<{ item: FmCicoMethod }> {
   return request(`/admin/cico-methods/${encodeURIComponent(fm)}`, {
     method: 'PUT',
-    body: JSON.stringify({ method, detail }),
+    body: JSON.stringify({ method, detail, portal }),
   });
 }
 

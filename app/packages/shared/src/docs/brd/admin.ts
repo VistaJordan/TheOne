@@ -93,7 +93,7 @@ export const ADMIN_PART: DocPart = {
         },
         {
           name: 'Check-in method by FM',
-          what: 'FM company ("Type or pick an FM"), Method, Detail, Add; an Updated column; delete per row. Pre-fills a new visit\'s method and detail from the work order\'s FM.',
+          what: 'FM company ("Type or pick an FM"), Method, Portal (shown for the Portal method: which portal — Service Channel, Corrigo, Ecotrak suggested, any name typed; 0098), Detail, Add; a Portal column editable on Portal rows; an Updated column; delete per row. Pre-fills a new visit\'s method, portal and detail from the work order\'s FM, so the visit reads "Portal: Service Channel".',
           value: 'Pre-fills visits.',
           permissions: ['admin/fields edit'],
           audit: ['cico_method_created', 'cico_method_changed', 'cico_method_deleted'],
