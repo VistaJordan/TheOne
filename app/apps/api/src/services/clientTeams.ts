@@ -166,15 +166,24 @@ export async function deleteClientTeam(clientId: string, teamId: string, actor: 
   return listClientTeams(clientId, actor);
 }
 
-/** Every active client's teams, for the create form (names as stored). */
+/** Every active client's teams, for the create form (names as stored).
+ *  Decoration-grade: the form must open even when the teams cannot be read
+ *  (a database 0096 has not reached yet answers 42P01), so a failure is
+ *  logged and reads as "no teams" — never as a form with no fields. */
 export async function teamsForForm(): Promise<ClientTeamForForm[]> {
-  const r = await query<ClientTeamForForm>(
-    `SELECT c.name AS client, t.billing_entity, t.tl, t.atl, t.sales, t.am
-       FROM client_team t JOIN client c ON c.id = t.client_id
-      WHERE c.deleted_at IS NULL AND c.is_active
-      ORDER BY lower(c.name), upper(t.billing_entity)`,
-  );
-  return r.rows;
+  try {
+    const r = await query<ClientTeamForForm>(
+      `SELECT c.name AS client, t.billing_entity, t.tl, t.atl, t.sales, t.am
+         FROM client_team t JOIN client c ON c.id = t.client_id
+        WHERE c.deleted_at IS NULL AND c.is_active
+        ORDER BY lower(c.name), upper(t.billing_entity)`,
+    );
+    return r.rows;
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    console.error('client teams unavailable', { code: err.code, message: err.message });
+    return [];
+  }
 }
 
 /**

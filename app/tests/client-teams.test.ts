@@ -78,3 +78,12 @@ describe('the create form', () => {
     expect(seed).toMatch(/key: 'ATL',\s+label: 'Assistant Team Lead',\s+type: 'users'/);
   });
 });
+
+describe('the form never loses its fields to the team lookup', () => {
+  it('reads the teams inside a try, so a database without 0096 still opens the form', () => {
+    const src = readFileSync('apps/api/src/services/clientTeams.ts', 'utf8');
+    const fn = src.slice(src.indexOf('export async function teamsForForm'), src.indexOf('export async function fillFromClientTeam'));
+    expect(fn).toMatch(/try \{[\s\S]*FROM client_team[\s\S]*\} catch/);
+    expect(fn).toMatch(/return \[\];/);
+  });
+});
