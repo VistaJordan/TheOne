@@ -100,6 +100,8 @@ export function derivePeople(wo: WorkOrderDetailV2): WoPeople {
       fieldKey: `fields.${FIELD.am}` },
     { role: 'Team lead', names: names(field(f, FIELD.teamLead)),
       fieldKey: `fields.${FIELD.teamLead}` },
+    { role: 'Associate team lead (ATL)', names: names(field(f, FIELD.associateTeamLead)),
+      fieldKey: `fields.${FIELD.associateTeamLead}` },
     // The dropdown is the field the list filters on; the older free-text
     // 'Assignee Name TXT' backstops WOs imported before it existed. The editor
     // writes the dropdown either way (same rule as the header).
