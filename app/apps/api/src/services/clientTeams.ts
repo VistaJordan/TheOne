@@ -207,9 +207,9 @@ export async function teamsForForm(): Promise<ClientTeamForForm[]> {
 
 /**
  * `createWorkOrder`'s half: AM, TL and ATL the form left empty are filled
- * from the client's team for the Comp (or its only team), when the name on
- * the team resolves to one active person. A value the bag already holds is
- * never touched.
+ * from the client's team for the Comp (or its only team): the account the
+ * name resolves to, else the name as the team has it. A value the bag already
+ * holds is never touched.
  */
 export async function fillFromClientTeam(bag: Record<string, unknown>): Promise<void> {
   const client = typeof bag['Client'] === 'string' ? bag['Client'] : null;

@@ -51,10 +51,13 @@ describe('resolvePersonName', () => {
 });
 
 describe('clientTeamValues', () => {
-  it('fills AM, TL and ATL and reports what it could not match', () => {
+  it('fills AM, TL and ATL, a name with no account as typed, and says which', () => {
     const r = clientTeamValues({ tl: 'Josh', atl: 'Lucas', am: 'Peter' }, people);
-    expect(r.values).toEqual({ AM: 'Peter Khoury', TL: 'Josh Ramirez' });
+    expect(r.values).toEqual({ AM: 'Peter Khoury', TL: 'Josh Ramirez', ATL: 'Lucas' });
     expect(r.unmatched).toEqual({ ATL: 'Lucas' });
+  });
+  it('never writes House', () => {
+    expect(clientTeamValues({ tl: null, atl: null, am: 'House' }, people)).toEqual({ values: {}, unmatched: {} });
   });
   it('fills nothing without a team', () => {
     expect(clientTeamValues(null, people)).toEqual({ values: {}, unmatched: {} });

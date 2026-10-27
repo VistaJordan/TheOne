@@ -385,10 +385,9 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
             ))}
           </select>
           {team && val !== '' && val === (teamFilled.current[f.key] ?? '') && (
-            <span className="hint">From the {team.billing_entity} account team</span>
-          )}
-          {unmatched && val === '' && (
-            <span className="hint">The account team says “{unmatched}”, which matches no single active account. Fix it under Clients › Account team.</span>
+            <span className="hint">
+              From the {team.billing_entity} account team{unmatched && val === unmatched ? ' · no account with this name yet' : ''}
+            </span>
           )}
         </>
       );

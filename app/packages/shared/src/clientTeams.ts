@@ -13,7 +13,7 @@
  * The names are stored as typed ("Josh", "Fady", "House") — the team sheet
  * uses first names. `resolvePersonName` turns one into an account's display
  * name when exactly one active person answers to it; a name nobody answers to
- * is shown on the form and left out of the work order, never guessed.
+ * is written as typed, never guessed into someone else's account.
  */
 
 /** The bag keys the team fills on a new work order, and where each comes from. */
@@ -104,9 +104,12 @@ export function resolvePersonName(raw: string | null | undefined, names: readonl
 }
 
 /**
- * What a team writes on a work order: AM, TL and ATL as account names. A
- * name that does not resolve is reported in `unmatched` (key → the name on
- * file) and written nowhere.
+ * What a team writes on a work order: AM, TL and ATL — the account's
+ * display name when the team's name resolves to one, else the name exactly as
+ * the team has it (Elise, 2026-10-27: the leads must show on the work order
+ * even before they have an account). The ones written as typed are listed in
+ * `unmatched` (key → the name on file) so the form can say so. "House" is
+ * never written.
  */
 export function clientTeamValues(
   team: Pick<ClientTeam, 'am' | 'tl' | 'atl'> | null,
@@ -120,7 +123,10 @@ export function clientTeamValues(
     if (raw === '') continue;
     const name = resolvePersonName(raw, names);
     if (name) values[key] = name;
-    else if (norm(raw) !== norm(CLIENT_TEAM_HOUSE)) unmatched[key] = raw;
+    else if (norm(raw) !== norm(CLIENT_TEAM_HOUSE)) {
+      values[key] = raw;
+      unmatched[key] = raw;
+    }
   }
   return { values, unmatched };
 }

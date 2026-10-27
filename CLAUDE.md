@@ -2808,9 +2808,12 @@ neither `client` nor `client_team`, so the teams survive a re-seed; 0096 also
 creates a client record for every client on Elise's sheet and loads the sheet
 (TPM / PRS appeared twice, the first row kept). Names are stored as typed
 (first names; "House" = no salesperson); `resolvePersonName` turns one into an
-active account's display name only when exactly one person answers to it, and
-a name nobody matches is flagged on the card and left off the work order,
-never guessed. **The form:** the first section is Client (`21. Comp`,
+active account's display name only when exactly one person answers to it; a
+name nobody matches is written on the work order as typed (Elise, 2026-10-27:
+the leads show before they have accounts) and flagged on the card, never
+guessed into someone else's account. The Clients list draws the teams as
+Comp, AM, TL and ATL columns, one line per Comp (`GET /client-teams`; the
+old Account manager column, the client record's own field, left the list). **The form:** the first section is Client (`21. Comp`,
 `Client`, `Client Portal Type`, `22. FM`, drawn in that order); Money is the
 NTE alone; People is AM, TL, ATL and the Assignee seat drawn as
 **Dispatcher** (always picked by hand, with Who's available?). AM / TL / ATL

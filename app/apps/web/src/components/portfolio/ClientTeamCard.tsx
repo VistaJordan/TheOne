@@ -82,7 +82,7 @@ export function ClientTeamCard({ clientId }: { clientId: string }) {
     const who = resolvePersonName(raw, people);
     if (!who) {
       return k === 'sales' ? <>{raw}</> : (
-        <span title="No single active account answers to this name, so Add work order leaves the field empty">
+        <span title="No single active account answers to this name yet, so Add work order writes it as typed">
           {raw} <Icon name="alert" size={12} />
         </span>
       );

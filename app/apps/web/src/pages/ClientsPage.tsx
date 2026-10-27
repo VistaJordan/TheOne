@@ -96,9 +96,16 @@ export function ClientsPage() {
                 <thead>
                   <tr>
                     {th('Client', 'name')}
-                    {showTeams && <th>Account team</th>}
+                    {/* 0096 · the account team, one line per Comp in each column. */}
+                    {showTeams && (
+                      <>
+                        <th>Comp</th>
+                        <th>AM</th>
+                        <th>TL</th>
+                        <th>ATL</th>
+                      </>
+                    )}
                     <th>Contact</th>
-                    {th('Account manager', 'manager')}
                     <th>Portal</th>
                     {th('Sites', 'sites')}
                     {th('Assets', 'assets')}
@@ -118,17 +125,19 @@ export function ClientsPage() {
                           </span>
                         )}
                       </td>
-                      {showTeams && (
-                        <td className="client-teams-cell">
-                          {(teamsBy.get(c.id) ?? []).length === 0 ? '—' : (teamsBy.get(c.id) ?? []).map((t) => (
-                            <span key={t.id} className="client-teams-line">
-                              <b className="mono">{t.billing_entity}</b> TL {t.tl ?? '—'} · ATL {t.atl ?? '—'} · AM {t.am ?? '—'}
-                            </span>
-                          ))}
-                        </td>
-                      )}
+                      {showTeams && (['billing_entity', 'am', 'tl', 'atl'] as const).map((k) => {
+                        const list = teamsBy.get(c.id) ?? [];
+                        return (
+                          <td key={k} className="client-teams-cell">
+                            {list.length === 0 ? '—' : list.map((t) => (
+                              <span key={t.id} className="client-teams-line">
+                                {k === 'billing_entity' ? <b className="mono">{t.billing_entity}</b> : (t[k] ?? '—')}
+                              </span>
+                            ))}
+                          </td>
+                        );
+                      })}
                       <td>{[c.contact_name, c.contact_email ?? c.contact_phone].filter(Boolean).join(' · ') || '—'}</td>
-                      <td>{c.account_manager?.name ?? '—'}</td>
                       <td>{c.portal_type ?? '—'}</td>
                       <td className="num">{c.sites}</td>
                       <td className="num">{c.assets}</td>
