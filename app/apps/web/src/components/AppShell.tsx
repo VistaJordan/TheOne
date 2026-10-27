@@ -31,6 +31,7 @@ export type NavKey =
   | 'Assets'
   | 'Clients'
   | 'Quotes'
+  | 'Prices'
   | 'Payments'
   | 'Receivables'
   | 'Incoming Work Orders'
@@ -80,6 +81,9 @@ const NAV: NavItem[] = [
   // 0062 — the client records: contacts, billing, who looks after the account.
   { label: 'Clients', icon: 'user-cog', to: '/clients' },
   { label: 'Quotes', icon: 'file', to: '/quotes' },
+  // 0101 — the price list per entity, client and trade. Hidden without the
+  // `prices` grant; only admins change it.
+  { label: 'Prices', icon: 'list', to: '/prices' },
   // Payables: the queue where technician payment requests are approved and
   // handed to Yoda. Receivables (AR) sits beside it.
   { label: 'Payments', icon: 'card', to: '/payments' },
@@ -136,6 +140,7 @@ const NAV_PERM: Record<string, string | string[]> = {
   Assets: 'assets',
   Clients: 'clients',
   Quotes: 'quotes',
+  Prices: 'prices',
   Payments: 'payments',
   'Incoming Work Orders': ['approvals/intake', INTAKE_PERM_KEY],
   Approvals: 'approvals',

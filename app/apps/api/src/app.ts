@@ -55,6 +55,7 @@ import intakeRoutes from './routes/intake.js';
 import dashboardRoutes from './routes/dashboards.js';
 import invoiceRoutes from './routes/invoices.js';
 import contractRoutes from './routes/contracts.js';
+import priceRoutes from './routes/prices.js';
 import vendorBillRoutes from './routes/vendorBills.js';
 import plannedMaintenanceRoutes from './routes/plannedMaintenance.js';
 import billingProposalRoutes from './routes/billingProposals.js';
@@ -156,6 +157,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(invoiceRoutes, { prefix: '/api' });
   // 0046 · contracts and labor rates; 0047 · vendor bills (AP) and tiers.
   await app.register(contractRoutes, { prefix: '/api' });
+  // 0101 · the price list per entity, client and trade.
+  await app.register(priceRoutes, { prefix: '/api' });
   await app.register(vendorBillRoutes, { prefix: '/api' });
   // 0051 — schedules that raise work orders by the calendar.
   await app.register(plannedMaintenanceRoutes, { prefix: '/api' });

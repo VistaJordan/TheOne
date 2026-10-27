@@ -7,6 +7,7 @@ import { query } from '../db.js';
 import type { LaborRate } from '@theone/shared';
 import { ApiError } from '../errors.js';
 import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
+import { priceFor } from './prices.js';
 
 interface RateRow {
   id: string;
@@ -43,7 +44,37 @@ function mapRate(r: RateRow): LaborRate {
   };
 }
 
+/**
+ * The rate card the quote builder shows and prices its Trip line from. Since
+ * 0101 the price list (Prices in the sidebar) is read first — the client's
+ * card for the entity, else the Standard card, trade by trade — and a figure
+ * it gives wins; the Yoda `labor_rate` row fills what it leaves blank and is
+ * still the only source of "sales tax required".
+ */
 export async function findLaborRate(
+  billingEntity: string | null,
+  fm: string | null,
+  trade: string | null,
+): Promise<LaborRate | null> {
+  const [legacy, price] = await Promise.all([findYodaRate(billingEntity, fm, trade), priceFor(billingEntity, fm, trade)]);
+  if (!price || (!price.rate && price.trip_rate === null)) return legacy;
+  const r = price.rate;
+  const pick = (mine: number | null | undefined, theirs: number | null | undefined) => mine ?? theirs ?? null;
+  return {
+    id: legacy?.id ?? price.card.id,
+    billing_entity: price.card.billing_entity,
+    fm: price.card.client ?? legacy?.fm ?? null,
+    trade: trade ?? legacy?.trade ?? null,
+    tech_rate: pick(r?.tech_rate, legacy?.tech_rate),
+    helper_rate: pick(r?.helper_rate, legacy?.helper_rate),
+    trip_rate: pick(price.trip_rate, legacy?.trip_rate),
+    afterhours_rate: pick(r?.afterhours_rate, legacy?.afterhours_rate),
+    holiday_rate: pick(r?.holiday_rate, legacy?.holiday_rate),
+    is_sales_tax_required: legacy?.is_sales_tax_required ?? false,
+  };
+}
+
+async function findYodaRate(
   billingEntity: string | null,
   fm: string | null,
   trade: string | null,

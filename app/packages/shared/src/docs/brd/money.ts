@@ -272,6 +272,29 @@ export const MONEY_PART: DocPart = {
       ],
     },
     {
+      key: 'prices',
+      title: 'Prices',
+      where: 'Sidebar › Prices.',
+      purpose: 'The price list per billing entity, client and trade (the old "Prices & quotes library" sheet): trip charge, materials markup, labor rates and special fees.',
+      value: 'Everyone quotes from one list; only admins change it, and every change is in the audit log.',
+      users: ['Admin', 'Team Lead', 'Account Manager', 'Dispatchers'],
+      features: [
+        {
+          name: 'Price cards',
+          what: 'One tab per entity (Comp); under it the Standard card, then a card per client. A card shows Trip, Materials markup ("Up to ×1.3"), a labor-rate table (Trade, Tech / hr, Helper / hr, After-hours / hr, Holiday / hr, and Trip when a trade has its own) and Special fees. Search client and Every trade narrow the page; a client card with no rate for the picked trade shows the Standard one. A card for a client with no client record carries a No client record chip. Admins: New price card, Edit (Entity, Client — blank = Standard, Trip, Materials markup (×), Note; Labor rates with Add rate, each row a name and the trades it prices; Special fees with Add fee, an amount or the price as written), and Remove.',
+          value: 'The sheet is a record: searchable, permissioned and audited.',
+          rules: [
+            'One card per entity and client (409 PRICE_CARD_EXISTS); a trade is priced by one row of a card; a fee needs an amount or a note.',
+            'A client card states only what differs: a trade it does not list, and a trip or markup it leaves blank, come from the entity’s Standard card.',
+            'The quote builder’s rate card reads the list first (the work order’s Comp, Client and Trade), so a new quote’s Trip line opens at the card’s trip; the Yoda labor rate fills what the list leaves blank and still decides "sales tax required".',
+          ],
+          permissions: ['prices view / create / edit / delete (0101: admin all four; every role that views quotes may view)'],
+          audit: ['price_card_created', 'price_card_updated', 'price_card_deleted'],
+          since: '0101',
+        },
+      ],
+    },
+    {
       key: 'purchasing',
       title: 'Purchasing, tax rates, document templates and budgets',
       where: 'Sidebar › Purchasing: Requests, Requests for quotation, Purchase orders, Budgets (each shown with its own view grant); the Purchasing card on a work order\'s Payables tab.',

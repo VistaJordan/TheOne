@@ -38,6 +38,7 @@ const AdminDocsPage = lazy(() => import('./pages/admin/AdminDocsPage').then((m) 
 import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
+import { PricesPage } from './pages/PricesPage';
 import { PlannedMaintenancePage } from './pages/PlannedMaintenancePage';
 import { MaintenancePage } from './pages/MaintenancePage';
 import { VendorPortalPage } from './pages/VendorPortalPage';
@@ -223,6 +224,10 @@ export function App() {
               <Route
                 path="/contracts"
                 element={<RequireAuth><RequireCan perm="contracts" nav="Contracts"><ContractsPage /></RequireCan></RequireAuth>}
+              />
+              <Route
+                path="/prices"
+                element={<RequireAuth><RequireCan perm="prices" nav="Prices"><PricesPage /></RequireCan></RequireAuth>}
               />
               <Route
                 path="/client-updates"

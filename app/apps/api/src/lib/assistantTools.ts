@@ -70,6 +70,7 @@ const RESOURCES: Record<string, Resource> = {
   vendor_bills: { path: '/vendor-bills', one: '/vendor-bills/:id', about: 'bills from vendors: status, amounts, vendor, work order' },
   billing_proposals: { path: '/billing-proposals', about: 'invoices and vendor bills proposed on completion, waiting to be confirmed' },
   contracts: { path: '/contracts', one: '/contracts/:id', about: 'client rate cards and vendor terms' },
+  prices: { path: '/prices', about: 'the price list per entity (Comp), client and trade: trip, materials markup, labor rates (tech / helper / after-hours / holiday per hour) and special fees; a client card states only what differs from the entity’s Standard card' },
   vendors: {
     path: '/vendors',
     one: '/vendors/:id',

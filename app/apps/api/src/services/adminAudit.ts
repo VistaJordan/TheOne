@@ -96,7 +96,9 @@ export type AdminEntity =
   | 'dashboard'
   | 'vendor_task'
   | 'vendor_target'
-  | 'vendor_saved_view';
+  | 'vendor_saved_view'
+  // 0101: a card of the price list (entity, client: trip, markup, rates, fees).
+  | 'price_card';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

@@ -803,6 +803,14 @@ export function buildPermissionTree(
       note: 'The client rate cards: hourly, overtime, trip charge, markup. View = read them and see which one a quote used; edit = change the terms.',
     },
     {
+      // 0101 · the price list: per entity, client and trade (the old "Prices
+      // & quotes library" sheet). 0101 gives create / edit / delete to admin.
+      key: 'prices',
+      label: 'Prices',
+      actions: ['view', 'create', 'edit', 'delete'],
+      note: 'The price list per entity, client and trade: trip, markup, labor rates and special fees. View = read it; create / edit / delete = change it (admin only by default).',
+    },
+    {
       // 0051 · schedules that raise work orders by the calendar.
       key: 'planned_maintenance',
       label: 'Planned maintenance',

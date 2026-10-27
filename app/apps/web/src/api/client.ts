@@ -76,6 +76,9 @@ import type {
   Contract,
   ContractInput,
   ContractsResponse,
+  PriceCard,
+  PriceCardInput,
+  PricesResponse,
   ResolvedRates,
   // 0047 · vendor bills and approval tiers.
   VendorBill,
@@ -2095,6 +2098,22 @@ export function updateContract(id: string, input: ContractInput): Promise<{ cont
 
 export function deleteContract(id: string): Promise<void> {
   return request(`/contracts/${id}`, { method: 'DELETE' });
+}
+
+// ── 0101 · the price list ────────────────────────────────────────────────────
+
+export function getPrices(): Promise<PricesResponse> {
+  return request('/prices');
+}
+
+export function savePriceCard(id: string | null, input: PriceCardInput): Promise<{ card: PriceCard }> {
+  return id
+    ? request(`/prices/cards/${id}`, { method: 'PUT', body: JSON.stringify(input) })
+    : request('/prices/cards', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function deletePriceCard(id: string): Promise<void> {
+  return request(`/prices/cards/${id}`, { method: 'DELETE' });
 }
 
 // ── Planned maintenance (0051) ───────────────────────────────────────────────

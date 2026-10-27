@@ -2884,6 +2884,38 @@ tab (they needed Messages); the page reads the thread through
 `getWorkOrderQuoMessages` under `['wo-quo', id]` (the TextComposer's
 optimistic write targets that shape). `GET /messages` still carries `quo`,
 unread by the web. The AI review page's back links go to Tech Hub.
+**Prices** (migration 0101, Elise 2026-10-27; `packages/shared/src/prices.ts`
+pure, `services/prices.ts`, `routes/prices.ts`, `pages/PricesPage.tsx`,
+`styles/prices.css`, `tests/prices.test.ts`). The "Prices & quotes library"
+sheet's five Price List tabs as records (its Quote Library / Quote Archive
+tabs were not loaded): one `price_card` per (billing entity, client) — the
+entity's **Standard** card has no client — with trip, materials markup (the
+multiplier, "Up to ×1.3"), a note, its `price_rate` rows (a label as the sheet
+wrote it plus the work-order Trade values it prices; tech / helper /
+after-hours / holiday, and a trip of its own where the sheet gave one per
+trade) and its `price_fee` rows (an amount, or the price as written:
+"$350-550"). A client card states only what differs: `resolvePrice` takes a
+trade it does not list, and a blank trip / markup, from the Standard card; a
+row's own trip wins. One card per entity + client (409 `PRICE_CARD_EXISTS`),
+a trade on one row per card, a fee needs an amount or a note
+(`priceCardProblems`, 400). Clients are text matched by `lower(btrim())`, no
+FK; a card for a name with no client record is kept and drawn **No client
+record** (13 of the sheet's: BW, TCG, JDE, BrandPoint, Front Street, DWM,
+TFG, Addilan, KBS, Ed Shelman, Pet Supermarket, GRM, MaintainX). Sheet names
+were mapped to the records' spelling (Powerhouse = PH, RSM = RSM LEO,
+Outback Steakhouse = the record's "Outback Staekhouse", SUN HOLDING / RMH =
+two cards). Page: one tab per Comp, Search client, Every trade (a client card
+with no row for the picked trade shows the Standard one). Permission path
+`prices` (view / create / edit / delete): 0101 gives all four to the admin
+role and view to every role that views quotes. Audit `price_card_created|
+updated|deleted` (entity `price_card`, whole snapshots). **The quote builder
+reads it**: `findLaborRate` (services/rates.ts) asks `priceFor` first and a
+figure the list gives wins, so a new quote's Trip line opens at the card's
+trip; the Yoda `labor_rate` row fills the rest and still decides "sales tax
+required". The assistant can read it (`prices` in `RESOURCES`). No FK to
+principal and the seed truncates none of the three tables, so the list
+survives a re-seed; no seed twin. The migration's INSERTs were generated from
+the workbook (stable uuid5 ids); a re-import is a new migration.
 
 ## Verify
 
