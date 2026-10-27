@@ -91,6 +91,7 @@ Views: **List**, **Board**, **Tasks**, **Alerts**, **Data quality**, **Performan
 - Asset (needs \`assets\` create / edit / delete): **Add asset**, pick the **Site**, fill **Name** and **Category**, **Add asset**. On an asset: **Edit**, **Record a reading** for its condition.
 - Asset requests, for people who may not change assets directly: Assets › **Requests** › **Request a new asset**, or on an asset **Request a change**, say what and why, **Send the request** (needs \`assets/requests\` create). A manager decides under Assets › **Requests** (\`assets/requests\` approve).
 - Client (needs \`clients\` create / edit / delete): **Add client**, fill **Name**, **Code**, **Account manager**, **Payment terms**, **Add client**. A client with work orders or sites cannot be removed, only made inactive.
+- Account team (needs \`clients\` edit): on a client, the **Account team** card has one row per Comp with Team Lead, Assistant TL, Sales and AM; **Add team**, **Edit**, **Remove**. Add work order fills AM, TL and ATL from the row for its Comp. Names may be first names; a name no single active account matches is flagged and left off the work order.
 
 ### Client Updates (sidebar: Client Updates)
 

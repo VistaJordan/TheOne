@@ -32,7 +32,7 @@ Needs \`work_orders\` view. A person limited to their own work orders sees a "Yo
 2. Optionally pick **Start from a template…**.
 3. Type the **WO #** (required; a number already in use, even in the trash, is refused).
 4. Optionally pick a **Site** and an **Asset**; the site fills in the client, store and address.
-5. Fill the sections; fields marked * are required, and the footer lists what is **Still needs …**.
+5. Fill the sections; fields marked * are required, and the footer lists what is **Still needs …**. The first section, Client, holds Comp, Client, Client Portal and FM. Under People, AM, TL and ATL fill in by themselves from the client's **Account team** for that Comp (they can still be changed); the **Dispatcher** is always picked by hand, with **Who’s available?** beside it.
 6. Optionally add files under **Photos and files**.
 7. Click **Create work order**.
 "Possible duplicates" is a warning only. **Save as template** keeps the filled form for next time. Typing or pasting the Address under Where fills City, State and Zip code from it, and a ZIP alone completes the city and state (they stay editable); the same fill runs on the Drafts form and wherever the Address is saved. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade).

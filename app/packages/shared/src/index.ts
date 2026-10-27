@@ -2062,6 +2062,7 @@ export * from './intakeDrafts';
 export * from './visitStatus';
 // 0041: the manual create form — which fields it offers is configuration.
 export * from './woCreate';
+export * from './clientTeams';
 // 0045: invoices — the bill to the client.
 export * from './invoices';
 // 0043: attachments — the photos and files a work order carries.

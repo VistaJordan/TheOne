@@ -19,6 +19,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
 import { HistoryCard, WorkOrderList, errText } from '../components/portfolio/PortfolioParts';
 import { SharePointFolderChip } from '../components/SharePointFolderChip';
+import { ClientTeamCard } from '../components/portfolio/ClientTeamCard';
 import { useEscape } from '../lib/useEscape';
 
 export function ClientsPage() {
@@ -321,6 +322,10 @@ export function ClientDetailPage() {
               ))}
             </div>
           </section>
+
+          {/* 0096 · who leads this client under each Comp; Add work order
+              fills AM, TL and ATL from it. */}
+          <ClientTeamCard clientId={c.id} />
 
           <section className="card">
             <div className="card-head">

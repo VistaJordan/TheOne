@@ -136,7 +136,10 @@ export async function getCreateForm(): Promise<WoCreateForm> {
 
   // 0064 · the layouts the browser lays over the form once the client and
   // the trade are known; createWorkOrder picks the same one again.
-  return { fields, subcategories, layouts: await loadFormLayouts(true), storage_ready: storageReady() };
+  // 0096 · every client's account team, so the form fills AM / TL / ATL once
+  // the Client and the Comp are picked.
+  const { teamsForForm } = await import('./clientTeams.js');
+  return { fields, subcategories, layouts: await loadFormLayouts(true), storage_ready: storageReady(), client_teams: await teamsForForm() };
 }
 
 // ── Form layouts (0064) ──────────────────────────────────────────────────────
@@ -396,6 +399,12 @@ export async function createWorkOrder(
   {
     const { validateBagValues } = await import('./woFieldValues.js');
     Object.assign(bag, await validateBagValues(bag));
+  }
+  // 0096 · AM, TL and ATL the form left empty come from the client's account
+  // team for the Comp (after the Client is put in its record's spelling).
+  {
+    const { fillFromClientTeam } = await import('./clientTeams.js');
+    await fillFromClientTeam(bag);
   }
   // #22 / M22 (D3): the assignee is an active dispatcher — asked before the
   // insert, so a refused pick leaves no work order behind.

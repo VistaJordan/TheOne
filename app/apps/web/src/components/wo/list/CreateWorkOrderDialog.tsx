@@ -33,6 +33,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
+  CLIENT_TEAM_FIELDS,
   WO_CREATE_MORE_SECTION,
   WO_CREATE_SECTIONS,
   WO_NEAR_DUPLICATE_DAYS,
@@ -40,8 +41,10 @@ import {
   WO_SUBCATEGORY_KEY,
   WO_TRADE_KEY,
   applyFormLayout,
+  clientTeamValues,
   describeMissing,
   formatBytes,
+  pickClientTeam,
   pickFormLayout,
   subcategoriesFor,
   woCreateMissing,
@@ -83,6 +86,9 @@ type Values = Record<string, string>;
 
 /** The bag key of the Assignee seat — drawn as a people picker, like intake. */
 const ASSIGNEE_KEY = 'Assignee';
+/** 0096 · the Comp the account team is chosen by. */
+const COMP_KEY = '21. Comp';
+const TEAM_KEYS = new Set(CLIENT_TEAM_FIELDS.map((f) => f.key));
 
 /** A datetime-local input wants 'YYYY-MM-DDTHH:mm'; a date input wants ten
     characters. Anything else goes through as typed. */
@@ -189,6 +195,48 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       filled.current = {};
     }
   };
+  // ── 0096 · the account team ─────────────────────────────────────────────────
+  // Once the Client and the Comp are picked (or the Client has only one team),
+  // AM, TL and ATL fill from Clients › Account team — each only while it is
+  // empty or still holds what the team last put there, like the site fill. A
+  // client with a single team also fills an empty Comp. The dispatcher is
+  // never filled.
+  const humanNames = useMemo(
+    () => (people.data?.items ?? []).filter((p) => p.kind === 'human').map((p) => p.name),
+    [people.data],
+  );
+  const team = useMemo(
+    () => pickClientTeam(configured.client_teams ?? [], values['Client'], values[COMP_KEY]),
+    [configured.client_teams, values],
+  );
+  const teamFill = useMemo(() => clientTeamValues(team, humanNames), [team, humanNames]);
+  const teamFilled = useRef<Values>({});
+  useEffect(() => {
+    if (!people.isSuccess) return;
+    setValues((cur) => {
+      let changed = false;
+      const next = { ...cur };
+      const put = (key: string, incoming: string) => {
+        if (!onForm.has(key)) return;
+        const current = (cur[key] ?? '').trim();
+        if (current !== '' && current !== (teamFilled.current[key] ?? '')) return;
+        if (current === incoming) return;
+        next[key] = incoming;
+        changed = true;
+      };
+      if (team && (cur[COMP_KEY] ?? '').trim() === '') {
+        put(COMP_KEY, team.billing_entity);
+        teamFilled.current[COMP_KEY] = team.billing_entity;
+      }
+      for (const { key } of CLIENT_TEAM_FIELDS) {
+        const incoming = teamFill.values[key] ?? '';
+        put(key, incoming);
+        teamFilled.current[key] = incoming;
+      }
+      return changed ? next : cur;
+    });
+  }, [team, teamFill, onForm, people.isSuccess]);
+
   const assets = siteDetail?.asset_list.filter((a) => a.status !== 'retired') ?? [];
   const asset = assets.find((a) => a.id === assetId) ?? null;
 
@@ -322,6 +370,30 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       );
     }
 
+    // 0096 · AM, TL and ATL: a person, filled from the client's account team
+    // and still changeable here.
+    if (TEAM_KEYS.has(f.key)) {
+      const humans = people.data?.items.filter((p) => p.kind === 'human') ?? [];
+      const unmatched = teamFill.unmatched[f.key];
+      return (
+        <>
+          <select id={domId} className="fld" value={val} onChange={(e) => set(f.key, e.target.value)} disabled={busy}>
+            <option value="">Nobody</option>
+            {val && !humans.some((p) => p.name === val) && <option value={val}>{val}</option>}
+            {humans.map((p) => (
+              <option key={p.id} value={p.name}>{p.name}</option>
+            ))}
+          </select>
+          {team && val !== '' && val === (teamFilled.current[f.key] ?? '') && (
+            <span className="hint">From the {team.billing_entity} account team</span>
+          )}
+          {unmatched && val === '' && (
+            <span className="hint">The account team says “{unmatched}”, which matches no single active account. Fix it under Clients › Account team.</span>
+          )}
+        </>
+      );
+    }
+
     // 0063 · a tick. Unticked sends nothing, so "required" means "must be ticked".
     if (f.type === 'checkbox') {
       return (
@@ -390,9 +462,19 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     );
   };
 
+  // Inside a section the fields follow the section's own list (Comp, Client,
+  // Client Portal, FM; AM, TL, ATL, Dispatcher), then whatever else lands there.
+  const rank = (keys: readonly string[], k: string) => {
+    const i = keys.indexOf(k);
+    return i === -1 ? keys.length : i;
+  };
   const sections = [...WO_CREATE_SECTIONS, WO_CREATE_MORE_SECTION].map((s) => ({
     ...s,
-    fields: form.fields.filter((f) => f.section === s.id),
+    fields: form.fields
+      .filter((f) => f.section === s.id)
+      .map((f, i) => ({ f, i }))
+      .sort((x, y) => rank(s.keys, x.f.key) - rank(s.keys, y.f.key) || x.i - y.i)
+      .map((x) => x.f),
   }));
   // The site step sits between the number and the configured sections.
   const stepOffset = seesSites ? 3 : 2;
@@ -541,7 +623,8 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
                       key={f.key}
                     >
                       <label className="lbl" htmlFor={`new-wo-${f.key.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
-                        {f.label}
+                        {/* 2026-10-27 · the Assignee seat reads as what it is here. */}
+                        {f.key === ASSIGNEE_KEY ? 'Dispatcher' : f.label}
                         {f.mode === 'required' && (
                           <span className="req" aria-hidden="true"> *</span>
                         )}

@@ -217,6 +217,7 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
     keys: [
       'fields.AM',
       'fields.TL',
+      'fields.ATL',
       'fields.Assignee',
       'fields.Completion Assignee',
       'fields.Previous Assignees',

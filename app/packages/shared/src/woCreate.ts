@@ -62,6 +62,9 @@ export const WO_CREATE_DEFAULT_KEYS: readonly string[] = [
   '22. FM',
   '21. Comp',
   'AM',
+  // 0096 · the account team, filled from the client's team for its Comp.
+  'TL',
+  'ATL',
   'Assignee',
 ];
 
@@ -81,9 +84,10 @@ export interface WoCreateSection {
 export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
   {
     id: 'identity',
-    title: 'Identity',
-    hint: 'The number the client knows this job by. One work order per number.',
-    keys: ['Client Portal Type', 'Client'],
+    title: 'Client',
+    hint: 'Who the job is for, which of our companies bills it, and the FM company it came through.',
+    // 2026-10-27 · Comp, Client, Client Portal and FM together (Elise).
+    keys: ['21. Comp', 'Client', 'Client Portal Type', '22. FM'],
   },
   {
     id: 'where',
@@ -106,14 +110,14 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
   {
     id: 'money',
     title: 'Money',
-    hint: 'The NTE the client authorised, and the entity that bills the job.',
-    keys: ['16. Client NTE 🔴', '21. Comp'],
+    hint: 'The NTE the client authorised.',
+    keys: ['16. Client NTE 🔴'],
   },
   {
     id: 'people',
     title: 'People',
-    hint: 'The FM company the job came through, and who carries it.',
-    keys: ['22. FM', 'AM', 'Assignee'],
+    hint: 'AM, TL and ATL come from the client’s account team for this Comp (Clients › Account team). The dispatcher is yours to pick.',
+    keys: ['AM', 'TL', 'ATL', 'Assignee'],
   },
 ];
 
@@ -147,6 +151,8 @@ export interface WoCreateForm {
   layouts?: import('./woRecord').WoFormLayout[];
   /** 0064 · false = no file store is connected, so the form offers no files. */
   storage_ready?: boolean;
+  /** 0096 · every client's account team per Comp, names as stored. */
+  client_teams?: import('./clientTeams').ClientTeamForForm[];
 }
 
 /** 0063 · bag keys the form treats specially. */

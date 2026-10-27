@@ -483,6 +483,9 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: 'State',                    label: 'State',                type: 'dropdown', options: US_STATES },
   { key: 'Store',                    label: 'Store',                type: 'short_text' },
   { key: 'TL',                       label: 'Team Lead',            type: 'users' },
+  // 0096 · the account team's Assistant Team Lead, filled on Add work order
+  // from Clients › Account team. Kept in step with the migration.
+  { key: 'ATL',                      label: 'Assistant Team Lead',  type: 'users' },
   { key: 'Tech Map',                 label: 'Tech Map',             type: 'short_text' },
   { key: 'Tech Quote',               label: 'Tech Quote',           type: 'long_text' },
   { key: 'Zip Code',                 label: 'Zip Code',             type: 'short_text' },

@@ -2774,6 +2774,36 @@ on unassign: the Unassigned tab is where such a work order shows.
 says from and to; the confirm dialog and the note are gone for
 `status_change` (like a payment since 0090); Reject still asks the reason.
 
+**Account team per client and Comp; the Add work order form regrouped**
+(migration 0096, Elise 2026-10-27; `packages/shared/src/clientTeams.ts` pure,
+`services/clientTeams.ts`, `routes/clientTeams.ts`,
+`components/portfolio/ClientTeamCard.tsx`, `tests/client-teams.test.ts`).
+Who leads a client depends on which of our companies bills it (PH has a team
+under BKR, AF, TPM and RF), so `client_team` is one row per (client, Comp):
+Team Lead, Assistant Team Lead, salesperson, Account Manager, edited on
+**Clients › a client › Account team** (`clients` view / edit; one team per
+Comp, 409 on a second; logged on the client as `client_team_added|updated|
+removed`). No FK to principal (`updated_by` plain uuid) and the seed truncates
+neither `client` nor `client_team`, so the teams survive a re-seed; 0096 also
+creates a client record for every client on Elise's sheet and loads the sheet
+(TPM / PRS appeared twice, the first row kept). Names are stored as typed
+(first names; "House" = no salesperson); `resolvePersonName` turns one into an
+active account's display name only when exactly one person answers to it, and
+a name nobody matches is flagged on the card and left off the work order,
+never guessed. **The form:** the first section is Client (`21. Comp`,
+`Client`, `Client Portal Type`, `22. FM`, drawn in that order); Money is the
+NTE alone; People is AM, TL, ATL and the Assignee seat drawn as
+**Dispatcher** (always picked by hand, with Who's available?). AM / TL / ATL
+fill from `pickClientTeam` (the team for the Comp, or a client's only team,
+which also fills an empty Comp) while empty or still holding what the team
+put there, and `createWorkOrder` fills the three again when the form left
+them empty (`fillFromClientTeam`, after `validateBagValues`). 0096 adds the
+`ATL` field (users, People section) and declares `TL`, both on the form —
+seed.ts and `WO_CREATE_DEFAULT_KEYS` carry the same, keep in step. Sales is
+stored but writes no work-order field (the `Sales Owner` dropdown is
+separate). Only the create form fills: intake drafts, the CSV import and the
+Ecotrak ingest do not.
+
 **No work order goes to a disabled account** (Elise, 2026-10-23, no
 migration; `tests/assignee-disabled.test.ts`). The person paths already
 refused one through `assertDispatchers` (`status <> 'disabled'`). The paths

@@ -151,3 +151,11 @@
 .near-box .near-dupes { margin: 6px 0; }
 .near-box .near-dupes li { margin: 2px 0; }
 .near-box .chip { margin: 0 4px; }
+
+/* 0096 · Clients › Account team: one row per Comp, edited in place. */
+.client-team-hint { margin: 0; padding: 0 16px 10px; }
+.client-team-table td { vertical-align: middle; }
+.client-team-table .fld { min-width: 0; width: 100%; }
+.client-team-edit td { padding-top: 6px; padding-bottom: 6px; }
+.client-team-acts { white-space: nowrap; text-align: right; }
+.client-team-acts > * + * { margin-left: 8px; }

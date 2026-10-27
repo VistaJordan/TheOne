@@ -33,6 +33,7 @@ import vendorRoutes from './routes/vendors.js';
 import vendorWorkRoutes from './routes/vendorWork.js';
 import noticeRoutes from './routes/notices.js';
 import portfolioRoutes from './routes/portfolio.js';
+import clientTeamRoutes from './routes/clientTeams.js';
 import woRecordRoutes from './routes/woRecord.js';
 import maintenanceRoutes from './routes/maintenance.js';
 import vendorExtraRoutes from './routes/vendorExtras.js';
@@ -118,6 +119,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(vendorWorkRoutes, { prefix: '/api' });
   await app.register(noticeRoutes, { prefix: '/api' });
   await app.register(portfolioRoutes, { prefix: '/api' });
+  // 0096 · Clients › Account team.
+  await app.register(clientTeamRoutes, { prefix: '/api' });
   await app.register(woRecordRoutes, { prefix: '/api' });
   await app.register(maintenanceRoutes, { prefix: '/api' });
   await app.register(vendorExtraRoutes, { prefix: '/api' });

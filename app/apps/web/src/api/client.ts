@@ -3333,6 +3333,8 @@ import type {
   ClientDetail,
   ClientInput,
   ClientsListResponse,
+  ClientTeamInput,
+  ClientTeamsResponse,
   PortfolioListName,
 } from '@theone/shared';
 
@@ -3358,6 +3360,27 @@ export function deleteClient(id: string): Promise<{ ok: true }> {
 
 export function getClientHistory(id: string): Promise<{ history: PortfolioHistoryEntry[] }> {
   return request(`/clients/${encodeURIComponent(id)}/history`);
+}
+
+// ── 0096 · the account team per client and Comp ────────────────────────────
+
+export function getClientTeams(id: string): Promise<ClientTeamsResponse> {
+  return request(`/clients/${encodeURIComponent(id)}/teams`);
+}
+
+export function saveClientTeam(
+  id: string,
+  teamId: string | null,
+  input: ClientTeamInput,
+): Promise<ClientTeamsResponse> {
+  return request(`/clients/${encodeURIComponent(id)}/teams${teamId ? `/${encodeURIComponent(teamId)}` : ''}`, {
+    method: teamId ? 'PATCH' : 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteClientTeam(id: string, teamId: string): Promise<ClientTeamsResponse> {
+  return request(`/clients/${encodeURIComponent(id)}/teams/${encodeURIComponent(teamId)}`, { method: 'DELETE' });
 }
 
 // ── 0071 · SharePoint folders ───────────────────────────────────────────────
