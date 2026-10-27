@@ -1,6 +1,7 @@
 // 0096 · Clients › a client › Account team: who leads the client under each
 // of our companies (services/clientTeams.ts).
 //
+//   GET    /client-teams                 every client's teams (the Clients list)
 //   GET    /clients/:id/teams
 //   POST   /clients/:id/teams            add a team (one per Comp)
 //   PATCH  /clients/:id/teams/:teamId    replace it
@@ -10,7 +11,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse } from '../errors.js';
 import { actingPrincipalFromRequest } from '../services/activity.js';
-import { deleteClientTeam, listClientTeams, saveClientTeam } from '../services/clientTeams.js';
+import { deleteClientTeam, listClientTeams, saveClientTeam, teamsOverview } from '../services/clientTeams.js';
 
 const idParams = z.object({ id: z.string().max(40) });
 const teamParams = z.object({ id: z.string().max(40), teamId: z.string().max(40) });
@@ -20,6 +21,7 @@ const teamBody = z
   .strict();
 
 export default async function clientTeamRoutes(app: FastifyInstance): Promise<void> {
+  app.get('/client-teams', async (req) => teamsOverview(actingPrincipalFromRequest(req)));
   app.get('/clients/:id/teams', async (req) => {
     const { id } = parse(idParams, req.params);
     return listClientTeams(id, actingPrincipalFromRequest(req));

@@ -3334,6 +3334,7 @@ import type {
   ClientInput,
   ClientsListResponse,
   ClientTeamInput,
+  ClientTeamsOverview,
   ClientTeamsResponse,
   PortfolioListName,
 } from '@theone/shared';
@@ -3363,6 +3364,10 @@ export function getClientHistory(id: string): Promise<{ history: PortfolioHistor
 }
 
 // ── 0096 · the account team per client and Comp ────────────────────────────
+
+export function getClientTeamsOverview(): Promise<ClientTeamsOverview> {
+  return request('/client-teams');
+}
 
 export function getClientTeams(id: string): Promise<ClientTeamsResponse> {
   return request(`/clients/${encodeURIComponent(id)}/teams`);

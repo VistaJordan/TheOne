@@ -16,7 +16,7 @@ import {
   permAllows,
   pickClientTeam,
 } from '@theone/shared';
-import type { ClientTeam, ClientTeamForForm, ClientTeamInput, ClientTeamsResponse } from '@theone/shared';
+import type { ClientTeam, ClientTeamForForm, ClientTeamInput, ClientTeamsOverview, ClientTeamsResponse } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -164,6 +164,25 @@ export async function deleteClientTeam(clientId: string, teamId: string, actor: 
     before: { name, ...snap(mapTeam(r.rows[0])) },
   });
   return listClientTeams(clientId, actor);
+}
+
+/** Every client's teams, for the Clients list. Like the form's read, a
+ *  database without the table answers "not ready" instead of failing the page. */
+export async function teamsOverview(actor: ActingPrincipal): Promise<ClientTeamsOverview> {
+  requirePerm(actor, CLIENTS_PERM_KEY, 'view', 'You cannot open Clients');
+  try {
+    const r = await query<ClientTeamsOverview['teams'][number]>(
+      `SELECT t.id::text AS id, t.client_id::text AS client_id, t.billing_entity, t.tl, t.atl, t.sales, t.am
+         FROM client_team t JOIN client c ON c.id = t.client_id
+        WHERE c.deleted_at IS NULL
+        ORDER BY upper(t.billing_entity)`,
+    );
+    return { teams: r.rows, ready: true };
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    if (err.code !== '42P01') throw e;
+    return { teams: [], ready: false };
+  }
 }
 
 /** Every active client's teams, for the create form (names as stored).

@@ -13,7 +13,7 @@ import { useLinkNav } from '../lib/linkNav';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CLIENT_PORTAL_TYPES } from '@theone/shared';
 import type { ClientDetail, ClientInput, ClientsListResponse } from '@theone/shared';
-import { ApiRequestError, createClient, deleteClient, getClient, getClientHistory, listClients, updateClient } from '../api/client';
+import { ApiRequestError, createClient, deleteClient, getClient, getClientHistory, getClientTeamsOverview, listClients, updateClient } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
@@ -52,6 +52,11 @@ export function ClientsPage() {
     </th>
   );
   const rows = q.data?.items ?? [];
+  // 0096 · each client's account team per Comp, drawn in the Account team column.
+  const teamsQ = useQuery({ queryKey: ['client-teams-overview'], queryFn: getClientTeamsOverview, staleTime: 60_000 });
+  const teamsBy = new Map<string, NonNullable<typeof teamsQ.data>['teams']>();
+  for (const t of teamsQ.data?.teams ?? []) teamsBy.set(t.client_id, [...(teamsBy.get(t.client_id) ?? []), t]);
+  const showTeams = teamsQ.data?.ready === true;
 
   return (
     <AppShell active="Clients">
@@ -91,6 +96,7 @@ export function ClientsPage() {
                 <thead>
                   <tr>
                     {th('Client', 'name')}
+                    {showTeams && <th>Account team</th>}
                     <th>Contact</th>
                     {th('Account manager', 'manager')}
                     <th>Portal</th>
@@ -112,6 +118,15 @@ export function ClientsPage() {
                           </span>
                         )}
                       </td>
+                      {showTeams && (
+                        <td className="client-teams-cell">
+                          {(teamsBy.get(c.id) ?? []).length === 0 ? '—' : (teamsBy.get(c.id) ?? []).map((t) => (
+                            <span key={t.id} className="client-teams-line">
+                              <b className="mono">{t.billing_entity}</b> TL {t.tl ?? '—'} · ATL {t.atl ?? '—'} · AM {t.am ?? '—'}
+                            </span>
+                          ))}
+                        </td>
+                      )}
                       <td>{[c.contact_name, c.contact_email ?? c.contact_phone].filter(Boolean).join(' · ') || '—'}</td>
                       <td>{c.account_manager?.name ?? '—'}</td>
                       <td>{c.portal_type ?? '—'}</td>

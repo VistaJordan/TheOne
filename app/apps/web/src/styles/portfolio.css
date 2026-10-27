@@ -159,3 +159,6 @@
 .client-team-edit td { padding-top: 6px; padding-bottom: 6px; }
 .client-team-acts { white-space: nowrap; text-align: right; }
 .client-team-acts > * + * { margin-left: 8px; }
+.client-teams-cell { white-space: nowrap; }
+.client-teams-line { display: block; }
+.client-teams-line + .client-teams-line { margin-top: 2px; }

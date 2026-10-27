@@ -42,6 +42,13 @@ export interface ClientTeamForForm extends Omit<ClientTeam, 'id' | 'updated_at'>
   client: string;
 }
 
+/** GET /client-teams — every client's teams, for the Clients list. */
+export interface ClientTeamsOverview {
+  teams: (Omit<ClientTeam, 'updated_at'> & { client_id: string })[];
+  /** false = this database has no account teams yet (0096 not applied). */
+  ready: boolean;
+}
+
 export interface ClientTeamInput {
   billing_entity: string;
   tl?: string | null;
