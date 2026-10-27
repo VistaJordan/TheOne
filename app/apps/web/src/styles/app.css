@@ -107,6 +107,14 @@ input {
   align-items: center;
 }
 
+/* The toggle sits over the right end of the first nav row, so that row keeps
+   its tags clear of it (the V2 tag on Dashboard was under the arrow): the
+   button's left edge is 40px from the sidebar's edge (12 + 28), the row's
+   right edge 10px (the nav's pad), plus a 6px gap. */
+@media (min-width: 901px) {
+  .shell:not(.is-collapsed) .side-nav > :first-child > .side-item { padding-right: 36px; }
+}
+
 .side-collapse {
   flex: none;
   width: 28px;
