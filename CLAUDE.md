@@ -1271,7 +1271,7 @@ removed, open `wo_nte_request` rows are still decided), the right rail (`RecordR
 Responsibility, Location, Time with a live timer, Cost; drawn only on
 Overview and the four new tabs, `RAIL_TABS`) and the tabs Checklist (`tasks`),
 Cost breakdown (`costs`), Timelog & metrics (`timelog`) and Related. Since
-2026-10-20 the strip in `WorkOrderDetailPage.tsx` groups tabs (`TAB_GROUPS`; since 2026-10-26 Finances is ONE panel, `FINANCE_TABS`: the money cards, then Payables, then Cost breakdown, each part behind its own tab permission, `?tab=payables|costs` opens it scrolled to that part; since 2026-10-27 the Client quote card is on its own **Quotes** tab beside it, `work_orders/tabs/quotes` view + `quotes` view):
+2026-10-20 the strip in `WorkOrderDetailPage.tsx` groups tabs (`FINANCE_TABS`: the Finances strip button over the sub-tabs Finances · Payables · Cost breakdown, each its own panel, id and tab permission — the one-panel layout of 2026-10-26 was undone on 2026-10-27; the Finances sub-tab holds the money card (with Profitability exception + Manager notes, an open box, `NoteField`), the invoice card and the **Penalties** card, `components/wo/ManagerFlags.tsx`; since 2026-10-27 the Client quote card is on its own **Quotes** tab beside it, `work_orders/tabs/quotes` view + `quotes` view):
 People is one tab again since 0095 (Our team, with Assignment history;
 Technicians became the Tech Hub tab, below), and `TAB_GROUPS` is gone. Flags is gone (checkboxes in All fields); Checklist and
 Related have no button but a link still opens them; Timelog is no tab, its

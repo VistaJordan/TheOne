@@ -36,7 +36,7 @@ export const WORK_ORDERS_PART: DocPart = {
             'Cancel moves the work order to the first status whose name starts with "Cancel", ends an open pause, and keeps its stamp even if a gate refuses the move (the bar says why); Pause and Complete service are refused on a cancelled work order; Complete needs a note, a fault code or an action code, and codes must be active catalogue codes.',
             'UAT #15 (0085): Pause / Resume, Complete service, Cancel and Reopen need work_orders/lifecycle edit, off for every role that must request status changes, so the buttons are not drawn for them.',
             'UAT M9: Cancel is not offered, and is refused (409 CANCEL_BILLED), once the client invoice is sent or paid or a vendor payment is paid. UAT M31: Reopen needs a reason and moves the work order back to the status it had before the cancel, through the ordinary status change (a refusal is said on the bar).',
-            'The Increase NTE button ("Ask for a higher NTE") was removed on 2026-10-20. Requests already open are still decided on Finances, in the Cost breakdown card (Approve — set the NTE to $X / Reject with why / the requester may Withdraw) and in Approvals › NTE increase requests; approval writes Client NTE through the ordinary field path.',
+            'The Increase NTE button ("Ask for a higher NTE") was removed on 2026-10-20. Requests already open are still decided on Finances › Cost breakdown (Approve — set the NTE to $X / Reject with why / the requester may Withdraw) and in Approvals › NTE increase requests; approval writes Client NTE through the ordinary field path.',
             'A pause is a marker only; no clock stops (rule 2.4.4). Assigning a blacklisted vendor is refused.',
           ],
           permissions: ['work_orders edit', 'vendor_map view or vendors view (vendor controls)', 'approvals/nte approve (decide an open NTE increase)', 'work_orders/pdf view, unset = work_orders view'],
@@ -74,8 +74,8 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Finances',
-          what: 'The NTE meter ("Not fully paid"), the NTE override banner (awaiting a manager / approved / rejected), the Client invoice card (Raise invoice, "Proposed — waiting to be confirmed", Send to client, Mark paid, Open in Receivables, Print / PDF, "N d overdue"), Total Invoiced and Profit.',
-          value: 'The money side of the work order with the invoice beside the numbers, then Payables and the Cost breakdown on the same page.',
+          what: 'The NTE meter ("Not fully paid"), the NTE override banner (awaiting a manager / approved / rejected), the Client invoice card (Raise invoice, "Proposed — waiting to be confirmed", Send to client, Mark paid, Open in Receivables, Print / PDF, "N d overdue"), Total Invoiced and Profit, the Profitability exception checkbox with its Manager notes box, and the Penalties card (Bad quote, Penalty, Late quote, Missed ETA, Recall, Manager description; managers edit, the dispatcher tiers read). Since 2026-10-27 Finances is again a strip button over three sub-tabs: Finances, Payables, Cost breakdown (the client quote has its own Quotes tab).',
+          value: 'The money side of the work order with the invoice beside the numbers and what went wrong on the job beside the money.',
           permissions: ['work_orders/tabs/money view', 'approvals view for the override banner'],
         },
         {

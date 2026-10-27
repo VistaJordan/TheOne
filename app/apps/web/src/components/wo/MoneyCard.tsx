@@ -7,6 +7,7 @@ import { DASH, FIELD, field, isCostOverNte, money, num, numericDate, str } from 
 import { NTE_WARN_PCT, nteBasis, resolveMoney } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 import { InlineField } from './fieldEdit';
+import { NoteField } from './ManagerFlags';
 import { PROFITABILITY_EXCEPTION_KEY, PROFITABILITY_NOTES_KEY } from '@theone/shared';
 
 interface MoneyCardProps {
@@ -106,10 +107,15 @@ export function MoneyCard({ wo }: MoneyCardProps) {
             <InlineField wo={wo} fieldKey={`fields.${PROFITABILITY_EXCEPTION_KEY}`} label="Profitability exception" />
           </dd>
         </div>
-        <div className="kvrow">
+        <div className="kvrow is-note">
           <dt>Manager notes</dt>
           <dd>
-            <InlineField wo={wo} fieldKey={`fields.${PROFITABILITY_NOTES_KEY}`} label="Manager notes" />
+            <NoteField
+              wo={wo}
+              fieldKey={`fields.${PROFITABILITY_NOTES_KEY}`}
+              label="Manager notes"
+              placeholder="Why this margin is accepted"
+            />
           </dd>
         </div>
         <div className="kvrow is-total">
