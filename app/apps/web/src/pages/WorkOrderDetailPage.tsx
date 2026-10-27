@@ -59,7 +59,7 @@ const TAB_IDS = [
   'overview', 'fields', 'money', 'quotes', 'payables', 'people', 'technicians', 'site', 'dates', 'cico', 'parts',
   // 2026-10-22 · Drive: the work order's files (the Photos card, moved off
   // Overview). Overview leads the strip and is the landing tab.
-  'drive', 'messages', 'audit',
+  'drive', 'messages', 'penalties', 'audit',
   // 0064 · the record's own tabs. Checklist (tasks) and Related have no button
   // on the strip since 2026-10-20; a link to them (Maintenance › Work permits,
   // a vendor's consumables) still opens them.
@@ -102,7 +102,13 @@ export function WorkOrderDetailPage() {
   const { can } = useAuth();
   // The Quotes tab also needs the quotes section itself: without it the tab
   // would hold nothing.
-  const visibleTabs = TAB_IDS.filter((t) => can(tabPerm(t), 'view') && (t !== 'quotes' || can('quotes', 'view')));
+  // Penalties likewise needs its field section (0094).
+  const visibleTabs = TAB_IDS.filter(
+    (t) =>
+      can(tabPerm(t), 'view') &&
+      (t !== 'quotes' || can('quotes', 'view')) &&
+      (t !== 'penalties' || can('work_orders/fields/penalties', 'view')),
+  );
   const show = (t: Tab) => visibleTabs.includes(t);
   const rawTab = searchParams.get('tab');
   // 2026-10-20 · Timelog lives on CICO now: an old ?tab=timelog link opens
@@ -350,6 +356,7 @@ export function WorkOrderDetailPage() {
             </TabButton>
           )}
           {show(TECH_HUB_TAB) && <TabButton id={TECH_HUB_TAB} tab={tab} onSelect={setTab}>Tech Hub</TabButton>}
+          {show('penalties') && <TabButton id="penalties" tab={tab} onSelect={setTab}>Penalties</TabButton>}
           {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Audit trail</TabButton>}
         </div>
       </div>
@@ -462,15 +469,21 @@ export function WorkOrderDetailPage() {
           )}
 
           {/* 2026-10-27 · Finances › Finances: the money card (Profitability
-              exception + Manager notes inside it), the invoice, and Penalties. */}
+              exception + Manager notes inside it) and the invoice. */}
           {tab === 'money' && (
             <div role="tabpanel" aria-label="Finances" className="fin-grid">
               <MoneyCard wo={wo} />
               {/* 0045 · what the client was actually billed. This tab used to
                   stop at the quote, which is only what we proposed. */}
               <InvoiceCard wo={wo} />
-              {/* 0094 · Bad quote, Penalty, Late quote, Missed ETA, Recall and
-                  the manager's description (also a section of All fields). */}
+            </div>
+          )}
+
+          {/* 2026-10-27 · Penalties, a tab of its own after Tech Hub: Bad
+              quote, Penalty, Late quote, Missed ETA, Recall and the manager's
+              description (also a section of All fields). */}
+          {tab === 'penalties' && (
+            <div role="tabpanel" aria-label="Penalties" className="penalties-tab">
               <PenaltiesCard wo={wo} />
             </div>
           )}

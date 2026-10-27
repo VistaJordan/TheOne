@@ -60,7 +60,7 @@ const PENALTY_LABEL: Record<string, string> = {
   'Penalty Description': 'Manager description',
 };
 
-/** 2026-10-27 · the Penalties section (0094) as a card on Finances: the five
+/** 2026-10-27 · the Penalties section (0094) as the card of the Penalties tab: the five
     flags as checkboxes, then the manager's description as an open text box.
     Shown to anyone who may see the section; editing follows each field's own
     grant (managers edit, the dispatcher tiers only read). */

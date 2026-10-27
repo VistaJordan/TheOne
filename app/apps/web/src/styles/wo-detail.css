@@ -1252,6 +1252,10 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .quote-tab { max-width: 760px; }
 .quote-tab > .card { margin-top: 0; }
 
+/* 2026-10-27 · the Penalties tab: one card at a readable width. */
+.penalties-tab { max-width: 560px; }
+.penalties-tab > .card { margin-top: 0; }
+
 /* Sub-tabs under the Finances strip button: Finances · Payables · Cost breakdown. */
 .tabs.wo-subtabs { margin: 0 0 12px; }
 

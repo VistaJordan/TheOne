@@ -74,9 +74,15 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Finances',
-          what: 'The NTE meter ("Not fully paid"), the NTE override banner (awaiting a manager / approved / rejected), the Client invoice card (Raise invoice, "Proposed — waiting to be confirmed", Send to client, Mark paid, Open in Receivables, Print / PDF, "N d overdue"), Total Invoiced and Profit, the Profitability exception checkbox with its Manager notes box, and the Penalties card (Bad quote, Penalty, Late quote, Missed ETA, Recall, Manager description; managers edit, the dispatcher tiers read). Since 2026-10-27 Finances is again a strip button over three sub-tabs: Finances, Payables, Cost breakdown (the client quote has its own Quotes tab).',
-          value: 'The money side of the work order with the invoice beside the numbers and what went wrong on the job beside the money.',
+          what: 'The NTE meter ("Not fully paid"), the NTE override banner (awaiting a manager / approved / rejected), the Client invoice card (Raise invoice, "Proposed — waiting to be confirmed", Send to client, Mark paid, Open in Receivables, Print / PDF, "N d overdue"), Total Invoiced and Profit, the Profitability exception checkbox with its Manager notes box. Since 2026-10-27 Finances is again a strip button over three sub-tabs: Finances, Payables, Cost breakdown (the client quote has its own Quotes tab, the penalties their own Penalties tab).',
+          value: 'The money side of the work order with the invoice beside the numbers.',
           permissions: ['work_orders/tabs/money view', 'approvals view for the override banner'],
+        },
+        {
+          name: 'Penalties',
+          what: 'A tab of its own after Tech Hub since 2026-10-27: the Bad quote, Penalty, Late quote, Missed ETA and Recall checkboxes and the Manager description box (the 0094 Penalties section, also on All fields). Managers edit; the dispatcher tiers, VR Officer and OP Admin read.',
+          value: 'What went wrong on a job is recorded in one place, apart from the money.',
+          permissions: ['work_orders/tabs/penalties view', 'work_orders/fields/penalties view'],
         },
         {
           name: 'Quotes',

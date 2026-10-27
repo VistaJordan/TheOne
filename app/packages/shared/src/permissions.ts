@@ -339,6 +339,9 @@ export const WO_TABS: { id: string; label: string }[] = [
   // 0095 · Tech Hub (was People › Technicians, which rode on People's row):
   // suggested vendors, hiring, technician calls and texts, the AI quote draft.
   { id: 'technicians', label: 'Tech Hub' },
+  // 2026-10-27 · the Penalties fields (0094) on a tab of their own (they sat
+  // on Finances for a day).
+  { id: 'penalties', label: 'Penalties' },
   { id: 'audit', label: 'Audit trail' },
   // 0064 · the record's own tabs. Since 2026-10-20 Checklist and Related have
   // no button on the work-order page (a link to them still opens them);
