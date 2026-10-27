@@ -187,6 +187,9 @@ export async function updateWorkOrderFields(
   // City / State / Zip Code read off an address this save wrote, logged
   // `via: 'address'` (services/addressFill.ts).
   const addressLog: TaskChange[] = [];
+  // AM / TL / ATL re-filled from the account team after a Client or Comp
+  // change, logged `via: 'client_team'` (services/clientTeams.ts).
+  const teamLog: TaskChange[] = [];
   await withTransaction(async (tx) => {
     // THE lock strength for a bag write — here and in every other writer of
     // task.fields (woBulk, visits, signoff, assigneeHistory, moneySync), which
@@ -254,6 +257,24 @@ export async function updateWorkOrderFields(
       }
     }
 
+    // 2026-10-27 (Elise): a new Client or Comp brings its account team —
+    // AM, TL and ATL follow it while they are empty or still hold the old
+    // team's names; a seat this same save set is left as typed.
+    if (log.some((c) => c.field === 'fields.Client' || c.field === 'fields.21. Comp')) {
+      // Imported where used, as woCreate does: clientTeams sits above this module.
+      const { refillTeamOnEdit } = await import('./clientTeams.js');
+      const fills = await refillTeamOnEdit(
+        { client: fields['Client'], comp: fields['21. Comp'] },
+        merged,
+        new Set(patch.map((p) => p.jsonKey)),
+      );
+      for (const f of fills) {
+        teamLog.push({ field: `fields.${f.key}`, before: f.before, after: f.after });
+        const mirror = MIRROR_BY_JSON_KEY[f.key];
+        if (mirror) mirrorSets.push({ ...mirror, value: mirrorValue(mirror.cast, f.after) });
+      }
+    }
+
     // M2 (Wave D): Received on ≤ Due date, against the bag as this save leaves it.
     assertDateOrder(merged, log.map((c) => c.field.slice('fields.'.length)));
     // #22 / M22 (Wave D, D3): a name ADDED to the Assignee seat is an active
@@ -294,10 +315,11 @@ export async function updateWorkOrderFields(
     );
     await logTaskChanges(tx, actorId, task.id, log, auto?.by);
     if (addressLog.length > 0) await logTaskChanges(tx, actorId, task.id, addressLog, 'address');
+    if (teamLog.length > 0) await logTaskChanges(tx, actorId, task.id, teamLog, 'client_team');
   });
   if (log.length > 0) {
     // Automations react after the commit, before the fresh detail is read.
-    await dispatchAutomations({ taskId: task.id, kind: 'changed', changes: [...log, ...addressLog] }, auto);
+    await dispatchAutomations({ taskId: task.id, kind: 'changed', changes: [...log, ...addressLog, ...teamLog] }, auto);
   }
 
   // The fresh detail, whether or not anything changed — saving the value a

@@ -214,10 +214,11 @@ in the app today, so `source: 'manual'` is reserved.
 
 **Ready to Assign gate** (migration 0037, rules 11.1.1 / 11.1.2). A work
 order cannot be assigned until Received on, Due date, SLA, Address, City,
-State, Zip code, Store, Trade, WO description, FM, Comp and Client NTE are
-filled (WO# is the row key; a $0.00 NTE counts as filled; Received on / WO
-description / Client NTE also accept their promoted `task` columns, which is
-what the Ecotrak ingest writes). Vocabulary in `packages/shared/src/
+State, Zip code, Store, Trade, WO description, Client, Comp and Client NTE
+are filled (WO# is the row key; a $0.00 NTE counts as filled; Received on /
+WO description / Client NTE / Client also accept their promoted `task`
+columns, which is what the Ecotrak ingest writes). The Client stands in the
+rule's FM place since 2026-10-27 (0103, below). Vocabulary in `packages/shared/src/
 intakeGate.ts` (`INTAKE_REQUIRED_FIELDS`, `intakeMissing`,
 `describeIntakeGate`); `apps/api/src/services/intakeGate.ts` reads the row
 and `assertReadyToAssign` throws a **409 `CONFLICT`** (`details.code =
@@ -2921,6 +2922,35 @@ an Email row with no detail shows its mailbox. `WoVisitsResponse` carries
 CICO composer prints. The seed truncates neither `client` nor the new table.
 Where the sheet and 0099 disagree (the Service Channel clients: IVR on the
 sheet, Portal in 0099's FM rows) the client row wins.
+
+**Client follows the Comp; the team follows an edit; FM off the form; a
+closed form is a draft; Pulse and Dashboard parked for Version 2** (migration
+0103, Elise 2026-10-27; `tests/client-comp-team-edit.test.ts`). **FM = the
+Client** under ClickUp's spelling ("Powerhouse" for PH), so 0103 sets `22. FM`
+`create_mode` off (`WO_CREATE_DEFAULT_KEYS` / `WO_CREATE_REQUIRED_KEYS` /
+the identity section no longer list it — seed in step) and
+`INTAKE_REQUIRED_FIELDS` asks for `Client` in FM's place (`intakeMissing`
+accepts `task.client`; `INTAKE_DRAFT_EXTRA_REQUIRED` is now empty). FM stays
+on the record for ClickUp and the check-in fallback. **Client options carry
+`comps`** (`WoFieldOption.comps`, `clientCompsByName` in `woFields.ts`: every
+billing entity the client has a `client_team` or `client_cico_method` row
+under) and `clientOptionsForComp` narrows the Client picker on Add work order
+and in the field editor (`FieldEditContext.comp`) to the chosen Comp; no Comp,
+or a Comp nobody is filed under, offers everyone, the current value always
+stays; UI only, the API takes any client on file. **Editing Client or Comp**
+in `updateWorkOrderFields` runs `refillTeamOnEdit` → `refillFromClientTeam`
+(shared, pure): AM / TL / ATL that are empty or still hold the OLD team's
+name take the new team's (a seat the new team leaves blank is cleared, a
+hand-picked name and a seat the same save set are kept), an empty Comp is
+filled from a one-team client; logged `via: 'client_team'`. Bulk edit does
+not refill. **Add work order** closed by the ✕ or the scrim files what was
+typed as an intake draft (`dismiss`, needs `intake` create; an untouched form
+just closes); **Cancel** discards. **Version 2**: `apps/web/src/lib/
+versionTwo.ts` `VERSION_TWO_SECTIONS` (Dashboard, Pulse) dims the sidebar item
+(`.is-v2`, a V2 tag) and `VersionTwo` in `App.tsx` answers its route with a
+"coming in Version 2" screen; pages, API and permissions are untouched —
+remove a name from the list to reopen it. The bell still shows Pulse notices,
+and the Sales role (Dashboard only) sees just the V2 screen.
 
 **No work order goes to a disabled account** (Elise, 2026-10-23, no
 migration; `tests/assignee-disabled.test.ts`). The person paths already

@@ -31,8 +31,10 @@ export const INTAKE_ASSIGNEE_KEY = 'Assignee';
 /** UAT round 1, Wave D (#22): the Client is required on a draft too —
     11.1.1 does not ask for it (so the Accept gate does not), but a manual
     work order without its client reads badly everywhere and falls outside
-    every client list. It must be a client RECORD's name (#11). */
-export const INTAKE_DRAFT_EXTRA_REQUIRED: readonly IntakeField[] = [{ key: 'Client', label: 'Client' }];
+    every client list. It must be a client RECORD's name (#11). Since
+    2026-10-27 the 11.1.1 list itself asks for the Client (in FM's place),
+    so nothing extra is left here; the hook stays for the next one. */
+export const INTAKE_DRAFT_EXTRA_REQUIRED: readonly IntakeField[] = [];
 
 /** Optional bag keys the form also offers (none since Wave D). */
 export const INTAKE_OPTIONAL_FIELDS: readonly IntakeField[] = [];

@@ -2,7 +2,9 @@
 //
 // A work order cannot be assigned to a dispatcher until the intake fields
 // are filled: WO#, Received on, Due date, SLA, Address, City, State, Zip
-// code, Store, Trade, WO description, FM, Comp and Client NTE (11.1.1). A
+// code, Store, Trade, WO description, Client, Comp and Client NTE (11.1.1;
+// the rule's FM is read as the Client since 2026-10-27 — Elise: FM and
+// Client name the same company, so the form asks only for the Client). A
 // Client NTE of $0.00 counts as filled (11.1.2) — only an EMPTY NTE blocks.
 //
 // The check itself needs the database (apps/api/src/services/intakeGate.ts):
@@ -23,11 +25,11 @@ export interface IntakeField {
 
 /**
  * The intake fields, in the rule's order. WO# is `task.wo_number`, NOT NULL
- * by schema, so it is never missing and is not listed. Three keys also have
+ * by schema, so it is never missing and is not listed. Four keys also have
  * a promoted column the check accepts as filled (`intakeMissing` below):
  * Received on ↔ `task.date_received`, WO description ↔ `task.description`,
- * Client NTE ↔ `task.nte` — the Ecotrak ingest writes the columns, not the
- * bag keys.
+ * Client NTE ↔ `task.nte`, Client ↔ `task.client` — the Ecotrak ingest
+ * writes the columns, not the bag keys.
  */
 export const INTAKE_REQUIRED_FIELDS: readonly IntakeField[] = [
   { key: 'Date-Time Received', label: 'Received on' },
@@ -40,7 +42,9 @@ export const INTAKE_REQUIRED_FIELDS: readonly IntakeField[] = [
   { key: 'Store', label: 'Store' },
   { key: 'Trade', label: 'Trade' },
   { key: '35. WO Description', label: 'WO description' },
-  { key: '22. FM', label: 'FM' },
+  // 2026-10-27 (Elise): the Client in FM's place — the same company, and the
+  // one the form asks for. FM stays on the record, no longer required.
+  { key: 'Client', label: 'Client' },
   { key: '21. Comp', label: 'Comp' },
   { key: '16. Client NTE 🔴', label: 'Client NTE' },
 ];
@@ -49,9 +53,10 @@ export const INTAKE_REQUIRED_FIELDS: readonly IntakeField[] = [
     carries the labels. */
 export const INTAKE_GATE_ERROR_CODE = 'INTAKE_GATE';
 
-/** What the check reads: the bag plus the three promoted columns. */
+/** What the check reads: the bag plus the four promoted columns. */
 export interface IntakeRow {
   fields: Record<string, unknown> | null | undefined;
+  client?: string | null;
   date_received?: string | null;
   description?: string | null;
   nte?: number | string | null;
@@ -80,6 +85,7 @@ export function intakeMissing(row: IntakeRow): IntakeField[] {
     'Date-Time Received': row.date_received,
     '35. WO Description': row.description,
     '16. Client NTE 🔴': row.nte,
+    Client: row.client,
   };
   return INTAKE_REQUIRED_FIELDS.filter(
     (f) => !intakeValueFilled(bag[f.key]) && !intakeValueFilled(column[f.key]),

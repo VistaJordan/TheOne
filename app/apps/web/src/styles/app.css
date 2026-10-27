@@ -209,6 +209,35 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
+/* lib/versionTwo.ts · a section parked for Version 2: still clickable (its
+   page says so), drawn dimmed with a small tag. */
+.side-item.is-v2:not(.is-active) { opacity: 0.55; }
+.side-item.is-v2:not(.is-active):hover { opacity: 0.8; }
+.side-v2 {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--side-ink);
+}
+.is-collapsed .side-v2 { display: none; }
+
+.v2-state .v2-tag {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--tab-on-bg);
+  color: var(--accent-text);
+}
+
 .side-user {
   display: flex;
   align-items: center;

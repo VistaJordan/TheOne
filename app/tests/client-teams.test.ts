@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   WO_CREATE_DEFAULT_KEYS,
+  WO_CREATE_REQUIRED_KEYS,
   WO_CREATE_SECTIONS,
   clientTeamValues,
   pickClientTeam,
@@ -65,9 +66,11 @@ describe('clientTeamValues', () => {
 });
 
 describe('the create form', () => {
-  it('keeps Comp, Client, Client Portal and FM together, and AM / TL / ATL / Dispatcher under People', () => {
+  it('keeps Comp, Client and Client Portal together (FM left the form, 0103), and AM / TL / ATL / Dispatcher under People', () => {
     const keys = (id: string) => WO_CREATE_SECTIONS.find((s) => s.id === id)?.keys;
-    expect(keys('identity')).toEqual(['21. Comp', 'Client', 'Client Portal Type', '22. FM']);
+    expect(keys('identity')).toEqual(['21. Comp', 'Client', 'Client Portal Type']);
+    expect(WO_CREATE_DEFAULT_KEYS).not.toContain('22. FM');
+    expect(WO_CREATE_REQUIRED_KEYS).not.toContain('22. FM');
     expect(keys('people')).toEqual(['AM', 'TL', 'ATL', 'Assignee']);
     expect(keys('money')).toEqual(['16. Client NTE 🔴']);
   });

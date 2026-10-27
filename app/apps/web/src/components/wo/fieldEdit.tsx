@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { COMPUTED_KEYS, HISTORY_FIELD_KEYS, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
+import { COMPUTED_KEYS, HISTORY_FIELD_KEYS, clientOptionsForComp, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
 import {
   ApiRequestError,
   getWoFields,
@@ -20,11 +20,16 @@ import { AvailabilityPanel } from './AssigneeAvailability';
 
 /** The seat whose picker also offers "Who's available?" (AssigneeAvailability). */
 const ASSIGNEE_FIELD_KEY = `fields.${FIELD.assignee}`;
+/** The Client field, whose choices follow the work order's Comp. */
+const CLIENT_FIELD_KEY = 'fields.Client';
 
 /** What an editor may need to know about the work order it edits on — today
     only the client, for the Assignee picker's "for this client" list. */
 export interface FieldEditContext {
   client: string | null;
+  /** The work order's Comp: the Client picker offers only the clients that
+      work under it (`clientOptionsForComp`, 2026-10-27). */
+  comp?: string | null;
 }
 
 const isUrlValue = (s: string) => /^https?:\/\//i.test(s);
@@ -200,7 +205,7 @@ export function InlineField({ wo, fieldKey, children, label, className }: Inline
           onPick={(v) => save.mutate({ key: fieldKey, value: v === '' ? null : v })}
           onCancel={() => { setEditing(false); save.clearError(); }}
           saving={save.isPending}
-          context={{ client: wo.client }}
+          context={{ client: wo.client, comp: wo.billing_entity ?? null }}
         />
         {save.error && <span className="ife-err" role="alert">{save.error}</span>}
       </span>
@@ -257,7 +262,11 @@ export function FieldEditor({
   if (field.type === 'select') {
     input = (
       <ComboSelect
-        options={field.options ?? []}
+        options={
+          field.key === CLIENT_FIELD_KEY
+            ? clientOptionsForComp(field.options ?? [], context?.comp, draft)
+            : (field.options ?? [])
+        }
         current={draft}
         saving={saving}
         onPick={onPick}

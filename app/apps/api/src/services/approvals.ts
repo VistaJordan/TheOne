@@ -237,6 +237,7 @@ function mapListItem(r: Row): ApprovalListItem {
             date_received: r.wo_received,
             description: r.wo_description,
             nte: r.wo_nte,
+            client: r.client,
           }).map((f) => f.label)
         : [],
   };

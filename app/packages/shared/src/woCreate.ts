@@ -59,7 +59,8 @@ export const WO_CREATE_DEFAULT_KEYS: readonly string[] = [
   'Due Date',
   'SLA Due Date',
   '16. Client NTE 🔴',
-  '22. FM',
+  // 2026-10-27 (Elise): FM is the Client under another spelling — off the
+  // form (0103); it stays on the record for ClickUp and the check-in fallback.
   '21. Comp',
   'AM',
   // 0096 · the account team, filled from the client's team for its Comp.
@@ -80,7 +81,6 @@ export const WO_CREATE_DEFAULT_KEYS: readonly string[] = [
 export const WO_CREATE_REQUIRED_KEYS: readonly string[] = [
   '21. Comp',
   'Client',
-  '22. FM',
   'Store',
   '17. Address',
   'City',
@@ -109,9 +109,10 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
   {
     id: 'identity',
     title: 'Client',
-    hint: 'Who the job is for, which of our companies bills it, and the FM company it came through.',
-    // 2026-10-27 · Comp, Client, Client Portal and FM together (Elise).
-    keys: ['21. Comp', 'Client', 'Client Portal Type', '22. FM'],
+    hint: 'Which of our companies bills the job, and who it is for.',
+    // 2026-10-27 · Comp first, then the Client it narrows, then its portal.
+    // FM left the form the same day (0103): it named the Client again.
+    keys: ['21. Comp', 'Client', 'Client Portal Type'],
   },
   {
     id: 'where',

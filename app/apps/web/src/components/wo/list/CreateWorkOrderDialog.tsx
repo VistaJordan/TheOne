@@ -49,6 +49,7 @@ import {
   WO_SUBCATEGORY_KEY,
   WO_TRADE_KEY,
   applyFormLayout,
+  clientOptionsForComp,
   clientTeamValues,
   describeMissing,
   formatBytes,
@@ -100,6 +101,8 @@ type Values = Record<string, string>;
 const ASSIGNEE_KEY = 'Assignee';
 /** 0096 · the Comp the account team is chosen by. */
 const COMP_KEY = '21. Comp';
+/** The Client, whose choices follow the Comp. */
+const CLIENT_KEY = 'Client';
 const TEAM_KEYS = new Set(CLIENT_TEAM_FIELDS.map((f) => f.key));
 /** Received on — pre-filled with now when the form opens. */
 const RECEIVED_KEY = 'Date-Time Received';
@@ -400,10 +403,23 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     },
     onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Could not save the draft'),
   });
-  const somethingTyped = woNumber.trim() !== '' || Object.keys(bag).length > 0;
+  // What the form opens holding (Received on, filled in by itself) is not
+  // "something typed": a form closed untouched leaves no draft behind.
+  const somethingTyped =
+    woNumber.trim() !== '' || Object.keys(bag).some((k) => k !== RECEIVED_KEY) || site !== null || files.length > 0;
   const lostOnDraft = [site ? 'the site' : null, assetId ? 'the asset' : null, files.length > 0 ? 'the files' : null].filter(Boolean);
 
   const busy = create.isPending || uploading !== null || saveDraft.isPending;
+
+  // 2026-10-27 (Elise): leaving the form by the ✕ or a click outside it keeps
+  // what was typed as a draft in Incoming › Drafts — an accidental exit loses
+  // nothing. Only Cancel throws it away. Someone who may not start drafts
+  // (`intake` create), or a form nothing was typed into, just closes.
+  const dismiss = () => {
+    if (busy) return;
+    if (canDraft && somethingTyped) saveDraft.mutate();
+    else onClose();
+  };
   const blocked = taken || missing.length > 0 || busy;
 
   // ── Drawing one field ──────────────────────────────────────────────────────
@@ -474,7 +490,11 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       );
     }
 
-    const options = d?.options ?? f.options.map((o) => ({ value: o, label: o }));
+    const all = d?.options ?? f.options.map((o) => ({ value: o, label: o }));
+    // 2026-10-27 (Elise): once a Comp is picked, Client offers only the
+    // clients that work under it (their account team or check-in row is filed
+    // under that Comp); no Comp yet = every client.
+    const options = f.key === CLIENT_KEY ? clientOptionsForComp(all, values[COMP_KEY], val) : all;
     if ((d?.type === 'select' || f.type === 'dropdown') && options.length > 0) {
       const extra = val && !options.some((o) => o.value === val) ? [{ value: val, label: val }] : [];
       return (
@@ -538,7 +558,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   const stepOffset = seesSites ? 3 : 2;
 
   return (
-    <div className="modal-scrim" onClick={onClose} role="presentation">
+    <div className="modal-scrim" onClick={dismiss} role="presentation">
       <div
         className="modal is-wide"
         role="dialog"
@@ -548,7 +568,13 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       >
         <div className="modal-head">
           <h2>Add work order</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={dismiss}
+            aria-label={canDraft && somethingTyped ? 'Close and keep as a draft' : 'Close'}
+            title={canDraft && somethingTyped ? 'Close — what is typed is kept in Incoming › Drafts' : undefined}
+          >
             <Icon name="x" size={16} />
           </button>
         </div>
@@ -769,7 +795,13 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
               Save as template
             </button>
           )}
-          <button type="button" className="btn-sm is-ghost" onClick={onClose} disabled={busy}>
+          <button
+            type="button"
+            className="btn-sm is-ghost"
+            onClick={onClose}
+            disabled={busy}
+            title={canDraft && somethingTyped ? 'Throw this work order away — nothing is kept' : undefined}
+          >
             Cancel
           </button>
           {canDraft && (

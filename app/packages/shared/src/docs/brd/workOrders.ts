@@ -283,7 +283,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Ready to Assign gate',
-          what: 'Received on, Due date, SLA, Address, City, State, Zip code, Store, Trade, WO description, FM, Comp and Client NTE must be filled before Accept and assign, and before a direct or bulk Assignee write while an acceptance is open (checked against the bag as the save leaves it, so filling Address and Assignee together is fine). 409 INTAKE_GATE with the missing labels.',
+          what: 'Received on, Due date, SLA, Address, City, State, Zip code, Store, Trade, WO description, Client, Comp and Client NTE must be filled before Accept and assign, and before a direct or bulk Assignee write while an acceptance is open (checked against the bag as the save leaves it, so filling Address and Assignee together is fine). 409 INTAKE_GATE with the missing labels.',
           value: 'A dispatcher never opens a work order to find the address missing.',
           brd: ['11.1.1', '11.1.2'],
           since: '0037',
@@ -302,7 +302,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Drafts (WO Intake)',
-          what: 'Columns WO # ("No WO# yet"), Client · Store, Trade, FM, Still to fill, Assignee ("Not assigned"), Last touched; chips Draft / Ready to submit. New draft opens an empty draft, and Save as draft on Add work order files what was typed there as one (the WO # may be blank; fields the draft form does not draw are listed under "Also on this draft" and carried to Submit; the site, asset and files are not kept). A draft has with the WO # ("The client\'s work order number"), the 13 intake fields, Client and Assignee ("Pick the dispatcher it goes to", Who\'s available?); Save draft keeps it; Submit & assign creates the work order already assigned (no acceptance task); Discard this draft? keeps the row as discarded. Result pages Submitted / Discarded with Open the work order / Back to the drafts.',
+          what: 'Columns WO # ("No WO# yet"), Client · Store, Trade, FM, Still to fill, Assignee ("Not assigned"), Last touched; chips Draft / Ready to submit. New draft opens an empty draft, and Save as draft on Add work order files what was typed there as one (the WO # may be blank; fields the draft form does not draw are listed under "Also on this draft" and carried to Submit; the site, asset and files are not kept). A draft has with the WO # ("The client\'s work order number"), the 13 intake fields and Assignee ("Pick the dispatcher it goes to", Who\'s available?); Save draft keeps it; Submit & assign creates the work order already assigned (no acceptance task); Discard this draft? keeps the row as discarded. Result pages Submitted / Discarded with Open the work order / Back to the drafts.',
           value: 'The Operations Admin\'s staging area for emails and phone calls, with the same completeness rule as acceptance.',
           rules: ['Submit refuses (409, rule 14.2.2) until every required field and an active assignee are in, refuses a WO # that exists even in Trash, needs a status named Open, stamps Date Created, inserts like the import (title = first line of the description, promoted columns, Profit), logs created (source intake), runs the create rules, files the SharePoint folder and writes the Assignee as an audited edit.', 'A draft cannot be edited after it is submitted or discarded; discard is idempotent.'],
           permissions: ['intake view / create / edit'],

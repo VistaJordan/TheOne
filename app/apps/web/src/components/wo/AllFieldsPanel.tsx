@@ -326,7 +326,7 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
                 onPick={(v) => save.mutate({ key: f.key, value: v === '' ? null : v })}
                 onCancel={() => { setEditing(null); setSaveError(null); }}
                 saving={save.isPending}
-                context={{ client: wo.client }}
+                context={{ client: wo.client, comp: wo.billing_entity ?? null }}
               />
             ) : isLongText ? (
               <LongTextValue text={fieldValueToString(raw)} />

@@ -25,7 +25,8 @@ const FULL: Record<string, unknown> = {
   Store: '#4411',
   Trade: 'HVAC',
   '35. WO Description': 'Walk-in freezer not holding temp',
-  '22. FM': 'Seamless',
+  // 2026-10-27: the Client in FM's place (FM and Client name one company).
+  Client: 'Walmart',
   '21. Comp': 'SFM',
   '16. Client NTE 🔴': 750,
 };
@@ -43,7 +44,7 @@ describe('INTAKE_REQUIRED_FIELDS — rule 11.1.1, in order', () => {
       'Store',
       'Trade',
       'WO description',
-      'FM',
+      'Client',
       'Comp',
       'Client NTE',
     ]);
@@ -104,6 +105,12 @@ describe('intakeMissing — the fields still empty on a row', () => {
         nte: '0.00',
       }),
     ).toEqual([]);
+  });
+
+  it('takes the client column for the Client (the Ecotrak ingest writes task.client)', () => {
+    const { Client: _c, ...rest } = FULL;
+    expect(intakeMissing({ fields: rest }).map((f) => f.label)).toEqual(['Client']);
+    expect(intakeMissing({ fields: rest, client: 'Walmart' })).toEqual([]);
   });
 
   it('lets a $0.00 NTE through but not an empty one (11.1.2)', () => {

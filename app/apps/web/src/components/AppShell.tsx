@@ -19,6 +19,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed';
 import { ADMIN_SECTIONS } from '../lib/adminSections';
 import { initialsOf, roleLabel } from '../lib/actor';
+import { isVersionTwo } from '../lib/versionTwo';
 
 /** The nav items that lead somewhere. Everything else still renders (the
     shape of the product is part of the design) but stays inert. */
@@ -462,14 +463,17 @@ export function AppShell({
                     // A real link, so a middle-click or Ctrl-click opens it in a new tab.
                     <Link
                       to={item.to}
-                      className={`side-item${isActive ? ' is-active' : ''}`}
+                      className={`side-item${isActive ? ' is-active' : ''}${isVersionTwo(item.label) ? ' is-v2' : ''}`}
                       aria-current={isActive ? 'page' : undefined}
+                      title={isVersionTwo(item.label) ? `${item.label} — coming in Version 2` : undefined}
                       onFocus={(e) => previewable && openFlyout(item, e.currentTarget)}
                     >
                       <span className="side-icon">
                         <NavIcon name={item.icon} />
                       </span>
                       <span className="side-label">{item.label}</span>
+                      {/* lib/versionTwo.ts · parked until the next version. */}
+                      {isVersionTwo(item.label) && <span className="side-v2">V2</span>}
                       {count != null && (
                         <span className="side-badge">{count.toLocaleString('en-US')}</span>
                       )}

@@ -188,6 +188,10 @@ export interface WoFieldOption {
   value: string;
   label: string;
   color?: string;
+  /** Client options only (2026-10-27): the Comps (billing entities) the
+      client works under — from its account teams and check-in rows. Empty /
+      absent = not known. `clientOptionsForComp` filters on it. */
+  comps?: string[];
 }
 
 export interface WoFieldDescriptor {

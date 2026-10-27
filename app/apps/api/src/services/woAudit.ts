@@ -38,7 +38,7 @@ export interface TaskChange {
 // — the actor is the 'Ecotrak sync' service principal.
 // 'address': City / State / Zip Code read off the address a save wrote
 // (services/addressFill.ts) — the actor is whoever wrote the address.
-export type ChangeSource = 'address' | 'import' | 'bulk' | 'visit' | 'webhook' | 'payment' | 'quote' | 'invoice' | 'signoff' | 'assignment' | 'ecotrak' | AutomationSource | ApprovalSource;
+export type ChangeSource = 'address' | 'import' | 'bulk' | 'visit' | 'webhook' | 'payment' | 'quote' | 'invoice' | 'signoff' | 'assignment' | 'ecotrak' | 'client_team' | AutomationSource | ApprovalSource;
 
 /** The rule that made this change, when an automation did. */
 export interface AutomationSource {

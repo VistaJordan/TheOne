@@ -15,9 +15,10 @@ import {
   clientTeamValues,
   permAllows,
   pickClientTeam,
+  refillFromClientTeam,
   seatNames,
 } from '@theone/shared';
-import type { ClientTeam, ClientTeamForForm, ClientTeamInput, ClientTeamsOverview, ClientTeamsResponse } from '@theone/shared';
+import type { ClientTeam, ClientTeamForForm, ClientTeamInput, ClientTeamsOverview, ClientTeamsResponse, TeamRefillChange } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -231,5 +232,28 @@ export async function fillFromClientTeam(bag: Record<string, unknown>): Promise<
   for (const [k, v] of Object.entries(values)) {
     const cur = bag[k];
     if (cur === undefined || cur === null || (typeof cur === 'string' && cur.trim() === '')) bag[k] = v;
+  }
+}
+
+/**
+ * `updateWorkOrderFields`' half (Elise, 2026-10-27): a save that changed the
+ * Client or the Comp re-fills AM, TL and ATL from the new team — only seats
+ * that are empty or still hold the previous team's name, never one the same
+ * save set (`refillFromClientTeam` in shared). Reads configuration only, so
+ * the pool is fine inside the caller's transaction. Never throws: the teams
+ * are a convenience, a failure leaves the seats as they were.
+ */
+export async function refillTeamOnEdit(
+  before: { client: unknown; comp: unknown },
+  bag: Record<string, unknown>,
+  explicit: ReadonlySet<string>,
+): Promise<TeamRefillChange[]> {
+  try {
+    const [teams, people] = await Promise.all([teamsForForm(), activePeople()]);
+    return refillFromClientTeam(before, bag, explicit, teams, bySeat(people));
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    console.error('client team refill skipped', { code: err.code, message: err.message });
+    return [];
   }
 }

@@ -32,8 +32,9 @@ export async function intakeMissingFor(
     date_received: string | null;
     description: string | null;
     nte: number | string | null;
+    client: string | null;
   }>(
-    `SELECT t.fields, t.date_received::text AS date_received, t.description, t.nte
+    `SELECT t.fields, t.date_received::text AS date_received, t.description, t.nte, t.client
        FROM task t WHERE t.id = $1 LIMIT 1`,
     [taskId],
   );
@@ -44,6 +45,7 @@ export async function intakeMissingFor(
     date_received: r.date_received,
     description: r.description,
     nte: r.nte,
+    client: r.client,
   }).map((f) => f.label);
 }
 

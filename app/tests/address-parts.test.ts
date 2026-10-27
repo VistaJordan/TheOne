@@ -126,7 +126,7 @@ describe('every writer of the address fills the parts', () => {
     expect(src).toMatch(/fillFromAddress\(merged, new Set\(patch\.map/);
     expect(src).toMatch(/logTaskChanges\(tx, actorId, task\.id, addressLog, 'address'\)/);
     expect(src).toMatch(/MIRROR_BY_JSON_KEY\[f\.key\]/);
-    expect(src).toMatch(/changes: \[\.\.\.log, \.\.\.addressLog\]/);
+    expect(src).toMatch(/changes: \[\.\.\.log, \.\.\.addressLog[\],]/);
   });
   it('bulk edit and both halves of the CSV import', () => {
     const src = read('apps', 'api', 'src', 'services', 'woBulk.ts');

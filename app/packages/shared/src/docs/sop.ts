@@ -88,7 +88,7 @@ export const SOP: SopDocument = {
         { kind: 'sub', title: 'Accept and assign' },
         { kind: 'steps', items: [
           'Open **Incoming Work Orders**. Rows are oldest first and read "New work order · From Ecotrak | CSV import · <trade> · accept and assign, or reject".',
-          'If the row says **Fill before assigning: …**, click **open the work order** and fill the listed fields on **All fields**. The 13 intake fields are Received on, Due date, SLA, Address, City, State, Zip code, Store, Trade, WO description, FM, Comp and Client NTE ($0.00 counts as filled).',
+          'If the row says **Fill before assigning: …**, click **open the work order** and fill the listed fields on **All fields**. The 13 intake fields are Received on, Due date, SLA, Address, City, State, Zip code, Store, Trade, WO description, Client, Comp and Client NTE ($0.00 counts as filled).',
           'Click **Accept**. In "Accept this work order?" pick the dispatcher under **Assign to** (Dispatchers first, then Everyone else). Click **Who\'s available?** to see the people listed on this client (or **All dispatchers**) with the number of active work orders each holds across every client; **Fewest first / Most first** flips the order; the chevron shows their work orders per status; clicking a name picks them. Add a **Note** if useful.',
           'Click **Accept and assign**. The work order is assigned as your own edit (audited, "Assigned to <name>"), appears in that dispatcher\'s list, a sign-off sheet is drawn for it, and an internal comment records the decision.',
         ] },

@@ -347,6 +347,33 @@ export interface FieldCatalogue {
   default_columns: string[];
 }
 
+/**
+ * The Comps each client works under (2026-10-27): every billing entity it has
+ * an account team (0096) or a check-in row (0100) filed under, keyed by
+ * lower(btrim(name)). Feeds `comps` on the Client options, which the pickers
+ * narrow by the chosen Comp. Decoration: a database before 0096 / 0100
+ * answers 42P01 and the options simply carry no Comps.
+ */
+async function clientCompsByName(): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  try {
+    const r = await query<{ k: string; comps: string[] }>(
+      `SELECT lower(btrim(c.name)) AS k, array_agg(DISTINCT upper(btrim(x.e)) ORDER BY upper(btrim(x.e))) AS comps
+         FROM client c
+         JOIN (SELECT client_id, billing_entity AS e FROM client_team
+               UNION ALL
+               SELECT client_id, billing_entity AS e FROM client_cico_method) x ON x.client_id = c.id
+        WHERE c.deleted_at IS NULL AND btrim(coalesce(x.e, '')) <> ''
+        GROUP BY 1`,
+    );
+    for (const row of r.rows) out.set(row.k, row.comps);
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    console.error('client comps unavailable', { code: err.code, message: err.message });
+  }
+  return out;
+}
+
 /** Everything the filter builder and column picker need, in one round trip. */
 export async function getFieldCatalogue(): Promise<FieldCatalogue> {
   const [custom, distinct, statuses, groups] = await Promise.all([
@@ -385,9 +412,17 @@ export async function getFieldCatalogue(): Promise<FieldCatalogue> {
       [[...DISPATCHER_ROLE_CODES]],
     ),
   ]);
+  const clientComps = await clientCompsByName();
   const customWithOptions = custom.map((f) => {
     if (f.key === `fields.${CLIENT_FIELD_KEY}`) {
-      return { ...f, type: 'select' as const, options: clientRecords.rows.map((r) => ({ value: r.v, label: r.v })) };
+      return {
+        ...f,
+        type: 'select' as const,
+        options: clientRecords.rows.map((r) => {
+          const comps = clientComps.get(r.v.trim().toLowerCase());
+          return comps ? { value: r.v, label: r.v, comps } : { value: r.v, label: r.v };
+        }),
+      };
     }
     if (f.key === 'fields.Assignee') {
       return { ...f, options: dispatchers.rows.map((r) => ({ value: r.v, label: r.v })) };

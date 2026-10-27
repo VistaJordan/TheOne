@@ -52,6 +52,7 @@ import { PaymentsPage } from './pages/PaymentsPage';
 import { ApprovalsPage } from './pages/ApprovalsPage';
 import { IntakePage } from './pages/IntakePage';
 import { INCOMING_ACCEPT_PERM } from './components/IncomingTabs';
+import { VERSION_TWO_SECTIONS, isVersionTwo } from './lib/versionTwo';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -105,6 +106,22 @@ function RequireCan({
   const { can } = useAuth();
   if (!can(perm, 'view')) return <Locked nav={nav} />;
   return <>{children}</>;
+}
+
+/** A section parked for Version 2 (lib/versionTwo.ts): its page is kept
+    and answers again the moment its name leaves VERSION_TWO_SECTIONS. */
+function VersionTwo({ nav, children }: { nav: NavKey; children: ReactNode }) {
+  if (!isVersionTwo(nav)) return <>{children}</>;
+  return (
+    <AppShell active={nav}>
+      <div className="wo-state v2-state">
+        <span className="v2-tag">Version 2</span>
+        <b>{nav} is coming in Version 2</b>
+        <span>{VERSION_TWO_SECTIONS[nav]}</span>
+        <span>It is already built and kept safe; it opens with the next version.</span>
+      </div>
+    </AppShell>
+  );
 }
 
 function Locked({ nav }: { nav: NavKey }) {
@@ -163,7 +180,7 @@ export function App() {
 
               <Route
                 path="/dashboard"
-                element={<RequireAuth><RequireCan perm="dashboard" nav="Dashboard"><DashboardPage /></RequireCan></RequireAuth>}
+                element={<RequireAuth><RequireCan perm="dashboard" nav="Dashboard"><VersionTwo nav="Dashboard"><DashboardPage /></VersionTwo></RequireCan></RequireAuth>}
               />
               <Route path="/" element={<RequireAuth><HomeRoute /></RequireAuth>} />
               {/* S2 — WO detail. Addressed by wo_number; the API resolves either
@@ -244,7 +261,7 @@ export function App() {
               {/* 0065 — the maintenance modules. */}
               <Route path="/maintenance" element={<RequireAuth><RequireCan perm="maintenance" nav="Maintenance"><MaintenancePage /></RequireCan></RequireAuth>} />
               {/* S5 — the Pulse: every open obligation, by how much clock is left. */}
-              <Route path="/pulse" element={<RequireAuth><RequireCan perm={PULSE_PERM_KEY} nav="Pulse"><PulsePage /></RequireCan></RequireAuth>} />
+              <Route path="/pulse" element={<RequireAuth><RequireCan perm={PULSE_PERM_KEY} nav="Pulse"><VersionTwo nav="Pulse"><PulsePage /></VersionTwo></RequireCan></RequireAuth>} />
               {/* AR — Receivables: the completion audit (a browser-side prototype
                   over the lists) and the invoicing pipeline. :tab is 'invoicing';
                   bare = /audit. Gated on `invoicing`, the same permission the

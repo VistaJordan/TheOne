@@ -160,3 +160,80 @@ export function clientTeamValues(
   }
   return { values, unmatched };
 }
+
+/** One seat a client / Comp change re-fills on an existing work order. */
+export interface TeamRefillChange {
+  key: string;
+  before: unknown;
+  after: string | null;
+}
+
+const blank = (v: unknown): boolean => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
+
+/**
+ * Editing a work order (Elise, 2026-10-27): when a save changes the Client or
+ * the Comp, AM, TL and ATL follow the account team the way the create form
+ * fills them. A seat is re-filled only while it is empty or still holds
+ * exactly what the PREVIOUS client / Comp's team would have put there, so a
+ * name picked by hand is never overwritten; a seat the same save sets is left
+ * as typed. A seat the new team leaves blank is cleared only when it held the
+ * old team's name. An empty Comp is filled when the new client has a single
+ * team, as on the form. Pure: `bag` is the bag as the save leaves it and is
+ * changed in place; the changes are returned for the audit trail.
+ */
+export function refillFromClientTeam<T extends { client?: string; billing_entity: string; am: string | null; tl: string | null; atl: string | null }>(
+  before: { client: unknown; comp: unknown },
+  bag: Record<string, unknown>,
+  explicit: ReadonlySet<string>,
+  teams: readonly T[],
+  names: TeamNames,
+): TeamRefillChange[] {
+  const changes: TeamRefillChange[] = [];
+  const oldTeam = pickClientTeam(teams, str(before.client), str(before.comp));
+  const newTeam = pickClientTeam(teams, str(bag['Client']), str(bag['21. Comp']));
+  if (newTeam && blank(bag['21. Comp']) && !explicit.has('21. Comp')) {
+    changes.push({ key: '21. Comp', before: bag['21. Comp'] ?? null, after: newTeam.billing_entity });
+    bag['21. Comp'] = newTeam.billing_entity;
+  }
+  if (newTeam === oldTeam) return changes;
+  const was = clientTeamValues(oldTeam, names).values;
+  const now = clientTeamValues(newTeam, names).values;
+  for (const { key } of CLIENT_TEAM_FIELDS) {
+    if (explicit.has(key)) continue;
+    const cur = bag[key];
+    const held = str(cur);
+    if (held !== null && held !== (was[key] ?? null)) continue;
+    const next = now[key] ?? null;
+    if ((held ?? null) === next) continue;
+    if (next === null) delete bag[key];
+    else bag[key] = next;
+    changes.push({ key, before: cur ?? null, after: next });
+  }
+  return changes;
+}
+
+/**
+ * The Client choices once a Comp is picked (Elise, 2026-10-27): only the
+ * clients that work under that Comp — those with an account team or a
+ * check-in row filed under it (`WoFieldOption.comps`). No Comp, or a Comp no
+ * client is filed under yet, offers every client, so the list is never empty
+ * by accident. The value already chosen always stays offered. A narrowing of
+ * the choices only: the API still takes any client on file.
+ */
+export function clientOptionsForComp<O extends { value: string; comps?: string[] }>(
+  options: readonly O[],
+  comp: string | null | undefined,
+  current?: string | null,
+): O[] {
+  const e = norm(comp);
+  if (e === '') return [...options];
+  const under = options.filter((o) => (o.comps ?? []).some((c) => norm(c) === e));
+  if (under.length === 0) return [...options];
+  const cur = norm(current);
+  if (cur !== '' && !under.some((o) => norm(o.value) === cur)) {
+    const held = options.find((o) => norm(o.value) === cur);
+    if (held) return [held, ...under];
+  }
+  return under;
+}
