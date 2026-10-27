@@ -35,6 +35,12 @@ export const QUOTE_SUBMIT_ACTION: Record<QuoteSubmitTarget, string> = {
   pending_approval: 'quote_submitted',
 };
 
+/** 2026-10-27 (Elise): "when the client approved, all OA+ positions can
+    edit the status to approved". Roles that record the client's decision
+    without the quote-approve grant; the managers above OA hold that grant
+    already. */
+export const QUOTE_CLIENT_DECISION_ROLES: readonly string[] = ['oa'];
+
 /** Why a dispatcher's Submit is locked while the quote waits for correction. */
 export const QUOTE_CORRECTION_PENDING_CODE = 'QUOTE_CORRECTION_PENDING';
 export const QUOTE_CORRECTION_PENDING_TEXT =

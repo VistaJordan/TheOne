@@ -432,11 +432,12 @@ describe('L5 — the BRD / SOP registry is served, not bundled', () => {
 });
 
 describe('L6 — one label set for the quote acts', () => {
-  it('Approve · Send to client · Record client decision', () => {
+  it('Send to client · Record client decision', () => {
     const b = read('apps', 'web', 'src', 'pages', 'QuoteBuilderPage.tsx');
     expect(b).toContain("const CLIENT_DECISION_LABEL = 'Record client decision';");
     expect(b).toContain("gated('Send to client'");
-    expect(b).toContain("gated('Approve'");
+    // 2026-10-27: the manager's Approve became the one-click Send to client.
+    expect(b).not.toContain("gated('Approve'");
     expect(b).not.toContain("'Client chose this'");
   });
 });

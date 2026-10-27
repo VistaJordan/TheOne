@@ -23,6 +23,7 @@ import { assertQuoteHeld } from './statusGates.js';
 import {
   CLIENT_APPROVAL_EVIDENCE_CODE,
   isDispatcherRole,
+  QUOTE_CLIENT_DECISION_ROLES,
   quoteEventStatusName,
   quoteSubmitTarget,
   QUOTE_CORRECTION_PENDING_CODE,
@@ -55,7 +56,6 @@ import {
   DEFAULT_OT_MULTIPLIER,
   QUOTE_DEFAULT_DAY,
   QUOTE_DEFAULT_TRIP_DESCRIPTION,
-  QUOTE_OVER_NTE_CODE,
   defaultScopeLines,
   optionDisplayLabel,
   permAllows,
@@ -516,6 +516,8 @@ export function canApproveQuote(actor: ActingPrincipal): boolean {
     list of dispatchers. */
 export function canClientDecide(actor: ActingPrincipal, snap: WoStatusSnapshot | null): boolean {
   if (canApproveQuote(actor)) return true;
+  // 2026-10-27 (Elise): OA and up record the client's approval at any time.
+  if (QUOTE_CLIENT_DECISION_ROLES.includes(actor.role ?? '')) return true;
   return isDispatcherRole(actor.role) && snap?.phase === 'Approval';
 }
 
@@ -553,7 +555,7 @@ export function assertCanApprove(actor: ActingPrincipal): void {
 export function assertCanClientDecide(actor: ActingPrincipal, snap: WoStatusSnapshot): void {
   if (!canClientDecide(actor, snap)) {
     throw forbidden(
-      'Recording the client decision needs quotes:approve (or a dispatcher while the work order is awaiting approval)',
+      'Recording the client decision needs quotes:approve or the OA role (or a dispatcher while the work order is awaiting approval)',
       { actor: actor.name, role: actor.roleLabel ?? actor.role, required_permission: 'quotes:approve', phase: snap.phase },
     );
   }
@@ -1890,24 +1892,28 @@ const QUOTE_APPROVABLE_FROM: QuoteStatus[] = ['draft', 'pending_correction', 'pe
  * approved → sent (atl+). Stamps sent_by/sent_at, posts the client-visible
  * update to the WO feed, snapshots the revision and queues the ClickUp
  * ClientQuote push — all in the SAME transaction.
+ *
+ * 2026-10-27 (Elise): "a dispatcher writes the quote, the manager corrects
+ * it and submits it to the client" — one click. A quote still in draft,
+ * pending correction or pending approval is approved first (approveQuote,
+ * its own checks and `quote_approved` row) and then sent. A quote above the
+ * NTE is sent like any other: asking the client to approve more than the
+ * NTE is what the quote is for (the 0083 #23 refusal is gone); the client's
+ * approval then sets the NTE (clientApproveQuote).
  */
 export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.send');
   await assertNoOpenNteOverride(taskId, 'Sending the quote');
 
+  const cur = await currentStatus(taskId);
+  if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');
+  if (QUOTE_APPROVABLE_FROM.includes(cur.status)) await approveQuote(taskId, actor);
+
   // Read the numbers on the pool BEFORE the transaction opens: a read that
   // needs no lock (an approved quote is no longer editable).
   const pre = await getQuote(taskId, actor);
   if (!pre) throw new ApiError('NOT_FOUND', 'No quote on this work order');
-  // 0083 (#23): a quote above the NTE is not sent until the NTE is raised
-  // (Increase NTE on the work order, decided by a manager).
-  if (pre.permissions.over_nte) {
-    throw conflict(
-      `The quote totals ${money(pre.totals.grand_total)}, above the work order's NTE — request an NTE increase and have it approved before sending`,
-      { code: QUOTE_OVER_NTE_CODE, grand_total: pre.totals.grand_total },
-    );
-  }
   const summaryText = pre.summary.pinned ?? pre.summary.auto;
   const firstLine = summaryText.split('\n').find((l) => l.trim().length > 0) ?? pre.wo_number;
   // M4 (Wave C): this is THE client-visible quote message, posted when the
@@ -2091,8 +2097,34 @@ export async function clientApproveQuote(
     'approved_section_id = $3, client_decided_at = now(), client_decided_by = $4, client_decision_note = $5, client_approved_on_site = $6, client_decision_attachment_id = $7',
     [option.id, actor.id, evidenceNote, input.on_site === true, evidenceFile?.id ?? null],
   );
+  await setNteFromApproval(taskId, amount, actor);
   return withStatusMove(taskId, approved, 'client_approved', actor);
 }
+
+/**
+ * 2026-10-27 (Elise): "whenever a quote is approved, change the NTE to that
+ * approved amount". After the client's yes commits, the work order's Client
+ * NTE becomes the approved option's grand total (incurred work of earlier
+ * rounds included — the Yoda total rule). Written through the ordinary field
+ * path, so it is audited as the recorder's edit, mirrored to task.nte, and
+ * the cost-vs-NTE rules run on it. Never undoes the approval: a refusal is
+ * logged and the NTE is left as it was.
+ */
+async function setNteFromApproval(taskId: string, amount: number, actor: ActingPrincipal): Promise<void> {
+  if (!Number.isFinite(amount) || amount < 0) return;
+  try {
+    const { updateWorkOrderFields } = await import('./woFieldValues.js');
+    await updateWorkOrderFields(taskId, { [`fields.${QUOTE_NTE_KEY}`]: Math.round(amount * 100) / 100 }, actor.id);
+  } catch (err) {
+    console.error('[quotes] could not set the NTE from the approved quote', {
+      task_id: taskId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** The work order's Client NTE (the bag key woRecord.ts writes too). */
+const QUOTE_NTE_KEY = '16. Client NTE 🔴';
 
 export interface ClientDeclineInput {
   note: string;

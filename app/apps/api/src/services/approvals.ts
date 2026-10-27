@@ -657,7 +657,14 @@ async function decide(
     const won = await tx.query(
       `UPDATE approval_task
           SET status = $1, decided_by = $2, decided_at = now(), decision_note = $3,
-              assigned_to = COALESCE(assigned_to, $2), updated_at = now()
+              assigned_to = COALESCE(assigned_to, $2), updated_at = now(),
+              -- 0102 (Elise): an approved status change needs no Continue
+              -- from the requester — the status moves right after this
+              -- commit — so it is acknowledged as it is approved and leaves
+              -- My requests and the header chip. A rejection still waits
+              -- for the requester's Understood.
+              acknowledged_by = CASE WHEN $1 = 'approved' AND type = 'status_change' THEN created_by ELSE acknowledged_by END,
+              acknowledged_at = CASE WHEN $1 = 'approved' AND type = 'status_change' THEN now() ELSE acknowledged_at END
         WHERE id = $4 AND status = 'open'
         RETURNING id`,
       [to, actor.id, note, id],

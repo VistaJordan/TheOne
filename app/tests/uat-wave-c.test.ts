@@ -274,7 +274,10 @@ describe('M4 · the client message goes on send', () => {
     const builder = src('apps/web/src/pages/QuoteBuilderPage.tsx');
     const approve = builder.slice(builder.indexOf('const approveMutation'), builder.indexOf('const sendMutation'));
     expect(approve).not.toContain('sendQuote');
-    expect(src('apps/web/src/components/quote/QuoteDecision.tsx')).not.toContain('sendQuote');
+    // 2026-10-27 (Elise): outside the builder the manager's one click sends
+    // (the API approves on the way).
+    expect(src('apps/web/src/components/quote/QuoteDecision.tsx')).toContain('sendQuote');
+    expect(fn(q, 'export async function sendQuote(')).toContain('QUOTE_APPROVABLE_FROM.includes(cur.status)) await approveQuote(');
   });
 });
 

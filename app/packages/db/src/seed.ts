@@ -15,7 +15,7 @@ import { seedAllowed } from './seedGuard.js';
 import { describeSeedUnpooledMismatch } from './migrateLedger.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { REQUEST_HIDDEN_STATUS_NAMES, STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, cicoMethodText, clientUnsafeDefaultBagKeys, type StatusGroup } from '@theone/shared';
+import { REQUEST_HIDDEN_STATUS_NAMES, STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, WO_CREATE_REQUIRED_KEYS,cicoMethodText, clientUnsafeDefaultBagKeys, type StatusGroup } from '@theone/shared';
 // S5 · the demo-state anchors below are computed with the SAME business-time
 // arithmetic the obligation engine evaluates with, so the seeded tiers are
 // exact rather than approximated by calendar offsets — a 4-business-hour clock
@@ -970,6 +970,11 @@ async function main() {
   // other. WO # is task.wo_number, not a field_def, so it is not listed here.
   await query(`UPDATE field_def SET create_mode = 'optional' WHERE key = ANY($1::text[])`, [
     [...WO_CREATE_DEFAULT_KEYS],
+  ]);
+  // 0102 · the fields Create refuses without. Kept in step with
+  // migrations/0102_quote_flow_create_required.sql through WO_CREATE_REQUIRED_KEYS.
+  await query(`UPDATE field_def SET create_mode = 'required' WHERE key = ANY($1::text[])`, [
+    [...WO_CREATE_REQUIRED_KEYS],
   ]);
 
   // 0084 · #17 — the fields that may not go out on a shared Client Update

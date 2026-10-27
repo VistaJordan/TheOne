@@ -2710,6 +2710,29 @@ printed through `reportedSentence` under PROPOSED); the Work Orders and
 Vendors **Import** buttons use the new `import` icon (a document with an
 arrow going in), `upload` stays for file uploads.
 
+**Send to client is one click; the client's yes sets the NTE; required
+create fields; Received on pre-filled; no Continue** (migration 0102, Elise
+2026-10-27). `sendQuote` approves on the way when the quote is still in
+draft / pending correction / pending approval (`approveQuote`, its own
+`quote_approved` row), then sends; the builder, the Quotes list
+(`QuoteDecision`) and Approvals › Quotes draw **Send to client** where they
+drew Approve, and the inbox link reads **Correct and send**. The 0083 #23
+refusal is gone: a quote above the NTE is sent (`over_nte` stays on the
+payload, informational). `clientApproveQuote` then writes the approved
+option's grand total into `16. Client NTE 🔴` through
+`updateWorkOrderFields` as the recorder (`setNteFromApproval`, after the
+commit, never undoes the approval). The client decision may also be recorded
+by `QUOTE_CLIENT_DECISION_ROLES` (`oa`) at any time, beside quote approvers
+and the dispatchers' Approval-phase rule. **Add work order:** 0102 and
+`seed.ts` set `create_mode = 'required'` on `WO_CREATE_REQUIRED_KEYS`
+(Comp, Client, FM, Store, Address, City, State, Zip Code, Trade, WO
+Description, Date-Time Received, Client NTE — keep the three in step; Admin ›
+Custom fields still changes any of them), and the form pre-fills Received on
+with the browser's now, editable. **Status requests:** `decide` stamps an
+approved `status_change` acknowledged (by its requester) as it approves, so
+no Continue; 0102 back-fills the approved ones on file; the header chip draws
+nothing for an approval. Rejections still wait for Understood.
+
 **What a quote opens with, and the builder's trims** (no migration, Elise
 2026-10-22; `packages/shared/src/quoteDefaults.ts` pure,
 `tests/quote-defaults.test.ts`). `createQuote` inserts the Incurred section

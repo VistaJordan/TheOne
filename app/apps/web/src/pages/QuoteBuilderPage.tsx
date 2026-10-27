@@ -166,11 +166,8 @@ export function QuoteBuilderPage() {
   /** Rule 1.5.2: an NTE override waits on a manager, so approve / send / the
       client's yes are on hold (the API refuses them with a 409) until decided. */
   const nteHold = quote?.nte_override_open ?? false;
-  // 0083 (#23): a quote above the NTE is not sent until the NTE is raised.
-  // (Its D2 half — a second manager approves — was dropped 2026-10-27: one
-  // dispatcher, then one manager, then the client.)
-  const overNte = permissions?.over_nte ?? false;
-  const OVER_NTE_TIP = 'The quote is above the work order’s NTE — have the work order’s Client NTE raised before sending';
+  // 2026-10-27 (Elise): a quote above the NTE is sent like any other — the
+  // client's approval is what raises the NTE (to the approved amount).
   const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
   const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
   /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */
@@ -273,7 +270,10 @@ export function QuoteBuilderPage() {
     // "quote sent" status — is its own deliberate click, "Send to client".
     mutationFn: () => flushThen(() => approveQuote(woNumber)),
   });
-  const sendMutation = useMutation({ mutationFn: () => runAction(() => sendQuote(woNumber)) });
+  // 2026-10-27 (Elise): the manager's one click — Send to client approves a
+  // quote not yet approved and sends it (the API does both), so edits are
+  // flushed first.
+  const sendMutation = useMutation({ mutationFn: () => flushThen(() => sendQuote(woNumber)) });
   const cancelMutation = useMutation({ mutationFn: () => runAction(() => cancelQuoteSubmission(woNumber)) });
   const newRoundMutation = useMutation({ mutationFn: () => runAction(() => startQuoteRound(woNumber)) });
   const rejectMutation = useMutation({
@@ -535,11 +535,13 @@ export function QuoteBuilderPage() {
       ? lockedButton(label, blockedReason(action) ?? 'Not allowed in this work-order status', tipId)
       : nteHold && NTE_HOLD_ACTIONS.has(action)
         ? lockedButton(label, NTE_HOLD_TIP, tipId)
-        : overNte && action === 'quote.send'
-          ? lockedButton(label, OVER_NTE_TIP, tipId)
-          : roleOk
-            ? primary(label, icon, run, needsValid)
-            : lockedButton(label, roleTip, tipId);
+        : roleOk
+          ? primary(label, icon, run, needsValid)
+          : lockedButton(label, roleTip, tipId);
+
+  /** Draft / pending correction / pending approval → approved and sent. */
+  const sendToClient = () =>
+    gated('Send to client', 'send', canApprove, 'Needs the quote-approve permission', 'quote.send', () => sendMutation.mutate(), 'lockTipSend');
 
   const decisionButton = (sectionKey: string | null, compact: boolean) =>
     !allows('quote.client_decide')
@@ -661,14 +663,14 @@ export function QuoteBuilderPage() {
               </button>
             )}
 
-            {/* 2026-10-27 · a manager approves their own draft directly (no
-                second manager); everyone else submits it. */}
+            {/* 2026-10-27 · a manager sends their own draft to the client in
+                one click (approved on the way); everyone else submits it. */}
             {status === 'draft' &&
               (canApprove ? (
-                gated('Approve', 'check', canApprove, 'Needs the quote-approve permission', 'quote.approve', () => approveMutation.mutate(), 'lockTipApprove')
+                sendToClient()
               ) : (
                 <>
-                  {lockedButton('Approve', 'Needs the quote-approve permission', 'lockTipApprove')}
+                  {lockedButton('Send to client', 'Needs the quote-approve permission', 'lockTipSend')}
                   {gated(submitLabel, 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')}
                 </>
               ))}
@@ -685,7 +687,7 @@ export function QuoteBuilderPage() {
                   </button>
                 )}
                 {canApprove
-                  ? gated('Approve', 'check', canApprove, 'Needs the quote-approve permission', 'quote.approve', () => approveMutation.mutate(), 'lockTipApprove')
+                  ? sendToClient()
                   : submitTarget
                     ? gated('Submit for approval', 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')
                     : lockedButton('Submit for approval', QUOTE_CORRECTION_PENDING_TEXT, 'lockTipSubmit')}
@@ -700,7 +702,7 @@ export function QuoteBuilderPage() {
                     Reject with note
                   </button>
                 )}
-                {gated('Approve', 'check', canApprove, 'Needs the quote-approve permission', 'quote.approve', () => approveMutation.mutate(), 'lockTipApprove')}
+                {sendToClient()}
               </>
             )}
 
@@ -782,7 +784,7 @@ export function QuoteBuilderPage() {
               <b>Needs the quote-approve permission.</b> Dispatchers build and revise quotes; approving and
               sending the summary to the client is reserved for ATL, TL, AM and admin.
               {submitTarget === 'pending_correction'
-                ? ' Submit for correction and a manager corrects and approves it — the control stays visible so you always know it exists.'
+                ? ' Submit for correction and a manager corrects it and sends it to the client — the control stays visible so you always know it exists.'
                 : ' Submit for approval and an ATL picks it up — the control stays visible so you always know it exists.'}
             </span>
           </div>
@@ -801,7 +803,7 @@ export function QuoteBuilderPage() {
             <Icon name="info" size={14} />
             <span>
               <b>Correct this quote in place.</b> Your edits autosave here and do not return it to draft. When it
-              is right, <b>Approve</b> it, then <b>Send to client</b> — no second manager is needed.
+              is right, <b>Send to client</b> — one click approves and sends it; no second manager is needed.
             </span>
           </div>
         )}
@@ -809,9 +811,8 @@ export function QuoteBuilderPage() {
           <div className="callout">
             <Icon name="check-circle" size={14} />
             <span>
-              <b>You can approve this quote.</b> Approving fills <span className="mono">money.quote</span>{' '}
-              on {quote.wo_number}, writes the state change to the activity log and sends the summary
-              text to the client. Rejecting returns it to <b>Draft</b> with your note attached.
+              <b>You can send this quote.</b> <b>Send to client</b> approves it and sends the summary
+              text to the client in one click. Rejecting returns it to <b>Draft</b> with your note attached.
             </span>
           </div>
         )}

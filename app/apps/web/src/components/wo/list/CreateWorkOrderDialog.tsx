@@ -101,6 +101,15 @@ const ASSIGNEE_KEY = 'Assignee';
 /** 0096 · the Comp the account team is chosen by. */
 const COMP_KEY = '21. Comp';
 const TEAM_KEYS = new Set(CLIENT_TEAM_FIELDS.map((f) => f.key));
+/** Received on — pre-filled with now when the form opens. */
+const RECEIVED_KEY = 'Date-Time Received';
+
+/** This browser's clock as a datetime-local value, 'YYYY-MM-DDTHH:mm'. */
+function localNowInput(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 /** A datetime-local input wants 'YYYY-MM-DDTHH:mm'; a date input wants ten
     characters. Anything else goes through as typed. */
@@ -172,6 +181,21 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     });
   };
   useAddressFill(values[ADDRESS_KEY], (fill) => setValues(fill));
+
+  // 2026-10-27 (Elise): Received on opens at the moment the form is filled
+  // in, local time, and stays editable. Set once, when the form arrives, and
+  // only while the box is still empty.
+  const receivedSeeded = useRef(false);
+  useEffect(() => {
+    if (receivedSeeded.current) return;
+    const f = form.fields.find((x) => x.key === RECEIVED_KEY);
+    if (!f) return;
+    receivedSeeded.current = true;
+    const d = catalogue.get(`fields.${RECEIVED_KEY}`);
+    const isDate = d?.type === 'date' || f.type === 'date';
+    const now = localNowInput();
+    setValues((cur) => ((cur[RECEIVED_KEY] ?? '').trim() !== '' ? cur : { ...cur, [RECEIVED_KEY]: isDate ? now.slice(0, 10) : now }));
+  }, [form.fields, catalogue]);
 
   // ── The site and the asset ─────────────────────────────────────────────────
   const siteQuery = useQuery({ queryKey: ['site', site?.id], queryFn: () => getSite(site!.id), enabled: Boolean(site) });

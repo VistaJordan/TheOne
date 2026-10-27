@@ -71,7 +71,7 @@ import {
   acknowledgeApprovalTask,
   approveApprovalTask,
   approvePayment,
-  approveQuote,
+  sendQuote,
   claimApprovalTask,
   getPrincipals,
   listApprovals,
@@ -650,7 +650,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
             : rejectApprovalTask(d.item.id, text ?? '');
         case 'quote':
           return kind === 'approve'
-            ? approveQuote(d.item.wo_number)
+            ? sendQuote(d.item.wo_number)
             : rejectQuote(d.item.wo_number, text ?? '');
         case 'payment':
           return kind === 'approve' ? approvePayment(d.item.id) : rejectPayment(d.item.id, text ?? '');
@@ -947,7 +947,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
 
       {pending?.kind === 'approve' && pending.row.data.kind === 'quote' && (
         <ConfirmDialog
-          title="Approve this quote?"
+          title="Send this quote to the client?"
           icon="check-circle"
           message={
             <>
@@ -955,11 +955,11 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
               {pending.row.client ? ` · ${pending.row.client}` : ''}.
             </>
           }
-          note="Approving fills the work order's quote amount. Sending it to the client's CMMS is a separate step in the quote builder."
+          note="One click approves the quote and sends it to the client. The client's approval later sets the work order's NTE to the approved amount."
           noteTone="info"
-          confirmLabel="Approve quote"
+          confirmLabel="Send to client"
           busy={busy}
-          busyLabel="Approving…"
+          busyLabel="Sending…"
           onConfirm={() => decide.mutate({ ...pending, text: null })}
           onCancel={() => setPending(null)}
         />
@@ -1336,7 +1336,7 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
   const OWN = 'You raised this — someone else has to approve it (maker ≠ checker)';
   const verb = (
     label: string,
-    icon: 'check' | 'x' | 'user' | 'user-plus' | 'check-check' | 'refresh',
+    icon: 'check' | 'x' | 'user' | 'user-plus' | 'check-check' | 'refresh' | 'send',
     allowed: boolean,
     reason: string,
     onClick: () => void,
@@ -1430,7 +1430,7 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
             {verb('Reject', 'x', canApproveQuotes, 'Requires quote approval rights', () => onDecide('reject'), 'danger')}
             <Link className="btn-sm" to={`/work-orders/${encodeURIComponent(d.item.wo_number)}/quote`}>
               <Icon name="pencil" size={12} />
-              Correct and approve
+              Correct and send
             </Link>
           </>
         );
@@ -1439,9 +1439,10 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
         <>
           {verb('Reject', 'x', canApproveQuotes, 'Requires quote approval rights', () => onDecide('reject'), 'danger')}
           {verb(
-            'Approve',
-            'check',
-            // 2026-10-27: quotes have no maker ≠ checker (one manager approves).
+            // 2026-10-27 (Elise): one click approves the quote and sends it
+            // to the client; quotes have no maker ≠ checker.
+            'Send to client',
+            'send',
             canApproveQuotes && !row.held,
             !canApproveQuotes ? 'Requires quote approval rights' : NTE_HOLD,
             () => onDecide('approve'),

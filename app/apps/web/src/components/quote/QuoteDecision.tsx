@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { QuoteStatus } from '@theone/shared';
-import { ApiRequestError, approveQuote, rejectQuote } from '../../api/client';
+import { ApiRequestError, rejectQuote, sendQuote } from '../../api/client';
 import { Icon } from '../Icon';
 
 interface QuoteDecisionProps {
@@ -50,11 +50,11 @@ export function QuoteDecision({ woNumber, status, canApprove, nteHold, lockReaso
   const fail = (err: unknown) =>
     setError(err instanceof ApiRequestError ? err.message : 'That did not go through');
 
-  // UAT Wave C (M4): Approve is the internal yes only; sending to the client
-  // (the client-visible message) is the builder's Send to client.
+  // 2026-10-27 (Elise): the manager's one click — approved and sent to the
+  // client together (the API approves on the way).
   const approve = useMutation({
     mutationFn: async () => {
-      await approveQuote(woNumber);
+      await sendQuote(woNumber);
     },
     onSuccess: settle,
     onError: fail,
@@ -76,11 +76,11 @@ export function QuoteDecision({ woNumber, status, canApprove, nteHold, lockReaso
         type="button"
         className={primary}
         disabled={busy || nteHold || !!lockReason}
-        title={lockReason ?? (nteHold ? NTE_HOLD_TIP : 'Approve the quote. Sending it to the client is the next step, Send to client in the builder.')}
+        title={lockReason ?? (nteHold ? NTE_HOLD_TIP : 'Approve the quote and send it to the client')}
         onClick={() => approve.mutate()}
       >
-        <Icon name="check" size={12} />
-        {approve.isPending ? 'Approving…' : 'Approve'}
+        <Icon name="send" size={12} />
+        {approve.isPending ? 'Sending…' : 'Send to client'}
       </button>
       <button type="button" className={plain} disabled={busy} onClick={() => setDeclining(true)}>
         <Icon name="x" size={12} />

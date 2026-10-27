@@ -233,11 +233,11 @@ describe('#21 · purchasing', () => {
 });
 
 describe('#23 · quotes', () => {
-  it('a pending quote edited goes back to draft, logged, and one over the NTE is not sent', () => {
+  it('a pending quote edited goes back to draft, logged; one over the NTE is sent (2026-10-27)', () => {
     const upd = fn(quotes, 'export async function updateQuote(');
     expect(upd).toContain("SET status = 'draft', submitted_by = NULL, submitted_at = NULL");
     expect(upd).toContain("'quote_returned_to_draft'");
-    expect(fn(quotes, 'export async function sendQuote(')).toContain('QUOTE_OVER_NTE_CODE');
+    expect(fn(quotes, 'export async function sendQuote(')).not.toContain('QUOTE_OVER_NTE_CODE');
     expect(quoteOverNte(1000.01, 1000)).toBe(true);
     expect(quoteOverNte(1000, 1000)).toBe(false);
     expect(quoteOverNte(1000, null)).toBe(false);

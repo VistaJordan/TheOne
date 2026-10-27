@@ -69,6 +69,30 @@ export const WO_CREATE_DEFAULT_KEYS: readonly string[] = [
 ];
 
 /**
+ * 0102 (Elise, 2026-10-27): the fields Create refuses without — who the job
+ * is for, where it is, what is wrong, when it came in and the NTE. Still
+ * configuration: Admin › Custom fields › "Add work order" turns any of them
+ * back to "On the form" (or any other field to "Required"). Kept in step with
+ * `migrations/0102_quote_flow_create_required.sql` AND `seed.ts`. Due date
+ * and SLA stay optional: they are often not known when the call comes in
+ * (rule 11.1.1 still asks for them before assignment).
+ */
+export const WO_CREATE_REQUIRED_KEYS: readonly string[] = [
+  '21. Comp',
+  'Client',
+  '22. FM',
+  'Store',
+  '17. Address',
+  'City',
+  'State',
+  'Zip Code',
+  'Trade',
+  '35. WO Description',
+  'Date-Time Received',
+  '16. Client NTE 🔴',
+];
+
+/**
  * The order the form draws its sections in. A field whose key is listed here
  * lands in that section; anything else an admin switches on lands in "More
  * details" at the foot, so a new field is never invisible.
