@@ -71,6 +71,8 @@ import {
   INTAKE_PERM_KEY,
   addressPartValues,
   parseAddressParts,
+  ADDRESS_ZIP_KEY,
+  zipInputValue,
 } from '@theone/shared';
 import {
   ApiRequestError,
@@ -542,6 +544,8 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       : d?.type === 'money' || d?.type === 'number' || f.type === 'currency' || f.type === 'number' ? 'number'
       : d?.subtype === 'phone' || f.type === 'phone' ? 'tel'
       : 'text';
+    // Zip Code takes digits only; letters never reach the box.
+    const zip = f.key === ADDRESS_ZIP_KEY;
 
     return (
       <input
@@ -550,7 +554,10 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
         type={type}
         step={d?.type === 'money' || f.type === 'currency' ? '0.01' : undefined}
         value={val}
-        onChange={(e) => set(f.key, e.target.value)}
+        onChange={(e) => set(f.key, zip ? zipInputValue(e.target.value) : e.target.value)}
+        inputMode={zip ? 'numeric' : undefined}
+        maxLength={zip ? 10 : undefined}
+        placeholder={zip ? '77002' : undefined}
         disabled={busy}
       />
     );

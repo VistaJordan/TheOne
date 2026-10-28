@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { COMPUTED_KEYS, HISTORY_FIELD_KEYS, clientOptionsForComp, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
+import { ADDRESS_ZIP_KEY, COMPUTED_KEYS, HISTORY_FIELD_KEYS, clientOptionsForComp, zipInputValue, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
 import {
   ApiRequestError,
   getWoFields,
@@ -22,6 +22,7 @@ import { AvailabilityPanel } from './AssigneeAvailability';
 const ASSIGNEE_FIELD_KEY = `fields.${FIELD.assignee}`;
 /** The Client field, whose choices follow the work order's Comp. */
 const CLIENT_FIELD_KEY = 'fields.Client';
+const ZIP_FIELD_KEY = `fields.${ADDRESS_ZIP_KEY}`;
 
 /** What an editor may need to know about the work order it edits on — today
     only the client, for the Assignee picker's "for this client" list. */
@@ -292,12 +293,16 @@ export function FieldEditor({
       : field.subtype === 'phone' ? 'tel'
       : field.subtype === 'url' ? 'url'
       : 'text';
+    // Zip Code takes digits only; letters never reach the box.
+    const zip = field.key === ZIP_FIELD_KEY;
     input = (
       <input
         type={type}
         step={field.type === 'money' ? '0.01' : undefined}
         value={draft}
-        onChange={(e) => onDraft(e.target.value)}
+        onChange={(e) => onDraft(zip ? zipInputValue(e.target.value) : e.target.value)}
+        inputMode={zip ? 'numeric' : undefined}
+        maxLength={zip ? 10 : undefined}
         onKeyDown={onKeyDown}
         autoFocus
       />

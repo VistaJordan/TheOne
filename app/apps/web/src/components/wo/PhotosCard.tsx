@@ -7,7 +7,7 @@
  *
  * Rules 1.3.1–1.3.4: an upload lands Pending and is hidden from everyone but
  * the reviewers and the person who uploaded it. A reviewer names it, says
- * what it is (before photo, after photo, sign-off, other) and approves or
+ * what it is (before photo, after photo, sign-off, from client, other) and approves or
  * declines it — one decision per file. Only approved files are drawn in the
  * groups below, and those are what the Job is Done gate reads (11.3.4).
  *
@@ -15,6 +15,10 @@
  * Before · After · Sign-off — with anything else (kind "other", or a
  * non-image marked before / after) listed underneath. The columns stack on a
  * narrow screen.
+ *
+ * 2026-10-28 (Elise) · a fourth column, From client: the pictures and files
+ * the client shares with us (kind "client", 0106). Like a sign-off, any file
+ * type belongs there. It is not proof of work — the Done gate never reads it.
  */
 
 import { useState } from 'react';
@@ -84,7 +88,10 @@ export function PhotosCard({ wo }: PhotosCardProps) {
   const after = approved.filter((a) => a.kind === 'after' && isImageType(a.content_type));
   // A sign-off is a scan or a PDF as often as a photo: any type belongs here.
   const signoff = approved.filter((a) => a.kind === 'signoff');
-  const files = approved.filter((a) => !before.includes(a) && !after.includes(a) && !signoff.includes(a));
+  const fromClient = approved.filter((a) => a.kind === 'client');
+  const files = approved.filter(
+    (a) => !before.includes(a) && !after.includes(a) && !signoff.includes(a) && !fromClient.includes(a),
+  );
 
   const onRemove = canRemove ? (id: string) => remove.mutate(id) : undefined;
   const viewerItems = viewer ? (viewer.list === 'pending' ? pending : declined) : [];
@@ -94,7 +101,7 @@ export function PhotosCard({ wo }: PhotosCardProps) {
       <div className="card-head">
         <h2 className="card-title">Photos</h2>
         <span className="card-meta">
-          {before.length} before · {after.length} after · {signoff.length} sign-off
+          {before.length} before · {after.length} after · {signoff.length} sign-off · {fromClient.length} from client
           {files.length > 0 && ` · ${files.length} file${files.length === 1 ? '' : 's'}`}
           {pending.length > 0 && ` · ${pending.length} waiting`}
         </span>
@@ -156,6 +163,13 @@ export function PhotosCard({ wo }: PhotosCardProps) {
           label="Sign-off"
           items={signoff}
           empty="The signed sheet shows here once it is approved as a sign-off"
+          onRemove={onRemove}
+        />
+        <PhotoColumn
+          woId={woId}
+          label="From client"
+          items={fromClient}
+          empty="Pictures the client shares show here once approved as From client"
           onRemove={onRemove}
         />
       </div>
@@ -279,7 +293,7 @@ function ReviewRow({
   );
 }
 
-/** One of the three columns: its images as a grid, any other file (a PDF
+/** One of the four columns: its images as a grid, any other file (a PDF
     sign-off sheet, say) as a list under them. */
 function PhotoColumn({
   woId,

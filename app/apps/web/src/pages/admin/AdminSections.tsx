@@ -2335,11 +2335,29 @@ export function AdminFieldsPage() {
   const fail = (err: unknown) =>
     setError(err instanceof ApiRequestError ? err.message : 'The change did not save');
 
+  // Optimistic: the row shows the new value at once. Without it the controlled
+  // select snapped back to the old value until the refetch landed, and `busy`
+  // greyed out every select on the page meanwhile — the "glitch".
   const update = useMutation({
     mutationFn: (v: { id: string; input: Parameters<typeof updateAdminField>[1] }) =>
       updateAdminField(v.id, v.input),
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: ['admin-fields'] });
+      const prev = qc.getQueryData<{ items: AdminFieldItem[] }>(['admin-fields']);
+      const { options: _options, ...patch } = v.input;
+      if (prev) {
+        qc.setQueryData(['admin-fields'], {
+          ...prev,
+          items: prev.items.map((f) => (f.id === v.id ? { ...f, ...patch } : f)),
+        });
+      }
+      return { prev };
+    },
     onSuccess: () => { done(); setRenaming(null); },
-    onError: fail,
+    onError: (err, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['admin-fields'], ctx.prev);
+      fail(err);
+    },
   });
 
   const create = useMutation({
@@ -2366,7 +2384,9 @@ export function AdminFieldsPage() {
     reorderMutation.mutate(ids);
   });
 
-  const busy = update.isPending || create.isPending || reorderMutation.isPending;
+  // Only creating or reordering locks the whole table; a cell edit locks nothing
+  // (it is optimistic above, and edits to different rows do not collide).
+  const busy = create.isPending || reorderMutation.isPending;
 
   return (
     <AdminShell

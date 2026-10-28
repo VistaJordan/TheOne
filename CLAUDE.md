@@ -3056,6 +3056,20 @@ options (`addSalesperson` in `services/clientTeams.ts`, logged
 or from Admin › Custom fields. ClickUp has no "Rocio" option: a pushed Rocio
 is a remembered value error until ClickUp's list is renamed too.
 
+**From client on the Drive tab; Zip Code digits only** (migration 0106,
+Elise 2026-10-28; `tests/zip-and-client-files.test.ts`). A fifth attachment
+kind, `client` ("From client", `ATTACHMENT_KINDS`): what the client shared
+with us, picked in the viewer's **What is it?** like the others and drawn as
+a fourth Drive column after Before · After · Sign-off (any file type, like a
+sign-off). It is not proof of work: the Done gate never reads it. 0106
+replaces the 0061 CHECK with a named `attachment_kind_check`; the review
+route's zod enum carries the same list — keep the three in step. **Zip
+Code** takes 5 digits or ZIP+4: `normalizeZip` (shared `addressParts.ts`) in
+`checkFieldValue` refuses anything else (400 `VALIDATION`, nine bare digits
+get their dash), and the Add work order, draft and inline-editor boxes run
+`zipInputValue` on every keystroke so letters never get in. Stored values are
+not re-checked.
+
 ## Verify
 
 ```

@@ -32,6 +32,8 @@ import {
   INTAKE_FORM_FIELDS,
   addressPartValues,
   parseAddressParts,
+  ADDRESS_ZIP_KEY,
+  zipInputValue,
   intakeDraftMissing,
   intakeValueFilled,
   type IntakeDraft,
@@ -461,6 +463,8 @@ function DraftForm({ id }: { id: string }) {
       : d?.type === 'money' || d?.type === 'number' ? 'number'
       : d?.subtype === 'phone' ? 'tel'
       : 'text';
+    // Zip Code takes digits only; letters never reach the box.
+    const zip = f.key === ADDRESS_ZIP_KEY;
     return (
       <input
         id={domId}
@@ -468,7 +472,9 @@ function DraftForm({ id }: { id: string }) {
         type={type}
         step={d?.type === 'money' ? '0.01' : undefined}
         value={val}
-        onChange={(e) => set(f.key, e.target.value)}
+        onChange={(e) => set(f.key, zip ? zipInputValue(e.target.value) : e.target.value)}
+        inputMode={zip ? 'numeric' : undefined}
+        maxLength={zip ? 10 : undefined}
         disabled={busy}
       />
     );

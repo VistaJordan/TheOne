@@ -17,6 +17,7 @@
 // a 400 with `details.code` and `details.field`.
 
 import {
+  ADDRESS_ZIP_KEY,
   ASSIGNEE_DISABLED_CODE,
   ASSIGNEE_NOT_DISPATCHER_CODE,
   assigneeDisabledMessage,
@@ -37,6 +38,7 @@ import {
   matchClientRecord,
   matchOption,
   normalizeUsState,
+  normalizeZip,
 } from '@theone/shared';
 import { query, type Queryable } from '../db.js';
 import { ApiError } from '../errors.js';
@@ -218,6 +220,11 @@ export async function checkFieldValue(f: ResolvedField, value: unknown, q: Query
     const st = normalizeUsState(value);
     if (!st) throw refuse(f, `"${f.label}" needs a US state code (for example TX)`);
     return st;
+  }
+  if (jsonKey === ADDRESS_ZIP_KEY) {
+    const zip = normalizeZip(value);
+    if (!zip) throw refuse(f, `"${f.label}" takes digits only: a 5-digit ZIP (for example 77002) or ZIP+4 (77002-1234)`);
+    return zip;
   }
   if (f.type === 'money' && typeof value === 'number' && value < 0) {
     throw refuse(f, `"${f.label}" cannot be negative`);

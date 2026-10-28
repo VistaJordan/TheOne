@@ -73,7 +73,7 @@ export const COMMUNICATION_PART: DocPart = {
         },
         {
           name: 'Approval',
-          what: 'The Photos card: "Hidden from everyone else until approved. Say what each one is, then approve or decline it."; per pending file What is it? (Before photo, After photo, Sign-off, Other), File name, Approve / Decline; Before / After badges once approved. A pending or declined file is visible only to reviewers and the uploader (anyone else gets a 404); a decision is reversible; approving triggers the SharePoint copy.',
+          what: 'The Photos card: "Hidden from everyone else until approved. Say what each one is, then approve or decline it."; per pending file What is it? (Before photo, After photo, Sign-off, From client, Other), File name, Approve / Decline; Before / After badges once approved. A pending or declined file is visible only to reviewers and the uploader (anyone else gets a 404); a decision is reversible; approving triggers the SharePoint copy.',
           value: 'Rules 1.3.1 to 1.3.4.',
           rules: ['Approving without a kind is refused ("Say what this file is…").'],
           permissions: ['work_orders/attachments approve'],

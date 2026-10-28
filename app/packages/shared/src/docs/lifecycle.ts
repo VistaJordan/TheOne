@@ -370,7 +370,7 @@ export const LIFECYCLE: LifecycleModel = {
       title: 'Photos, approval and proof before Done',
       statuses: ['On Site (Assessment)', 'On Site (Job)', 'Done / Incurred'],
       brd: ['1.3.1', '1.3.2', '1.3.3', '1.3.4', '11.3.4'],
-      summary: 'Every upload is quarantined until a reviewer approves it with a kind (before, after, sign-off, other); Done needs an approved after photo, or for Bill For Incurred a before photo and a sign-off.',
+      summary: 'Every upload is quarantined until a reviewer approves it with a kind (before, after, sign-off, from client, other); Done needs an approved after photo, or for Bill For Incurred a before photo and a sign-off.',
       steps: ['Pending files are visible only to reviewers and the uploader.', 'Approved files are copied to the work order\'s SharePoint folder when that switch is on.'],
     },
     {

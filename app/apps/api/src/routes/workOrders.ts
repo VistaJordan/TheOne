@@ -228,7 +228,7 @@ const attachmentSchema = z
 const attachmentReviewSchema = z
   .object({
     decision: z.enum(['approve', 'decline']),
-    kind: z.enum(['before', 'after', 'signoff', 'other']).optional(),
+    kind: z.enum(['before', 'after', 'signoff', 'client', 'other']).optional(),
     file_name: z.string().trim().min(1).max(200).optional(),
     // M14 (Wave D): the full-size viewer says the file was looked at.
     viewed: z.boolean().optional(),

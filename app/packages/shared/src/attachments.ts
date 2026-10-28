@@ -57,14 +57,17 @@ export function isImageType(contentType: string | null | undefined): boolean {
 
 export type AttachmentReviewStatus = 'pending' | 'approved' | 'declined';
 
-export type AttachmentKind = 'before' | 'after' | 'signoff' | 'other';
+/** `client` (0106, Elise 2026-10-28) = what the client shared with us; it is
+    not proof of work, so the Done gate never reads it. */
+export type AttachmentKind = 'before' | 'after' | 'signoff' | 'client' | 'other';
 
-export const ATTACHMENT_KINDS: readonly AttachmentKind[] = ['before', 'after', 'signoff', 'other'];
+export const ATTACHMENT_KINDS: readonly AttachmentKind[] = ['before', 'after', 'signoff', 'client', 'other'];
 
 export const ATTACHMENT_KIND_LABEL: Record<AttachmentKind, string> = {
   before: 'Before photo',
   after: 'After photo',
   signoff: 'Sign-off',
+  client: 'From client',
   other: 'Other',
 };
 

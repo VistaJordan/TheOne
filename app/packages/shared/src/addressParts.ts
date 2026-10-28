@@ -35,6 +35,25 @@ const COUNTRY_RE = /[,\s]*\b(?:u\.?s\.?a\.?|u\.?s\.?|united states(?: of america
 const ZIP_RE = /^(\d{5}(?:-\d{4})?)$/;
 const TAIL_ZIP_RE = /^(.*?)[\s,]*\b(\d{5}(?:-\d{4})?)$/;
 
+/** Zip Code takes digits only (Elise, 2026-10-28): five, or ZIP+4. Returns
+    the stored spelling ("77002", "77002-1234"; nine bare digits get their
+    dash) or null when the value is not a ZIP. */
+export function normalizeZip(raw: unknown): string | null {
+  const s = String(raw ?? '').replace(/\s+/g, '');
+  if (ZIP_RE.test(s)) return s;
+  if (/^\d{9}$/.test(s)) return `${s.slice(0, 5)}-${s.slice(5)}`;
+  return null;
+}
+
+/** What a Zip Code box keeps of a keystroke or a paste: digits, and a dash
+    after the fifth one, ten characters at most — letters never get in. */
+export function zipInputValue(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 9);
+  return digits.length > 5 || (digits.length === 5 && /-\s*$/.test(raw))
+    ? `${digits.slice(0, 5)}-${digits.slice(5)}`
+    : digits;
+}
+
 /** The state at the END of `text` (a code or a name of up to four words), and
  *  the words before it. */
 function stateAtEnd(text: string): { state: string; rest: string } | null {

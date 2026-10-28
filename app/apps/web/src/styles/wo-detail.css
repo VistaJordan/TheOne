@@ -914,16 +914,22 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .photo-group { padding: 12px 16px 14px; }
 .photo-group + .photo-group { border-top: 1px solid var(--row-border); }
 
-/* 2026-10-27 · Before · After · Sign-off side by side on the Drive tab. */
+/* 2026-10-27 · Before · After · Sign-off side by side on the Drive tab;
+   2026-10-28 · From client is the fourth. Two by two on a medium screen. */
 .photo-columns {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .photo-group + .photo-columns { border-top: 1px solid var(--row-border); }
 .photo-columns > .photo-column { min-width: 0; }
 .photo-columns > .photo-column + .photo-column { border-top: 0; border-left: 1px solid var(--row-border); }
 .photo-columns .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .photo-columns + .photo-group { border-top: 1px solid var(--row-border); }
+@media (max-width: 1280px) and (min-width: 901px) {
+  .photo-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .photo-columns > .photo-column:nth-child(odd) { border-left: 0; }
+  .photo-columns > .photo-column:nth-child(n + 3) { border-top: 1px solid var(--row-border); }
+}
 @media (max-width: 900px) {
   .photo-columns { grid-template-columns: minmax(0, 1fr); }
   .photo-columns > .photo-column + .photo-column { border-left: 0; border-top: 1px solid var(--row-border); }

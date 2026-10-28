@@ -254,7 +254,7 @@ export const SOP: SopDocument = {
         { kind: 'sub', title: 'Photos and files' },
         { kind: 'steps', items: [
           'In the message box click the camera (**Add photo**) or **Attach file**, paste a screenshot straight into the message box, or drag files from a folder onto the message box. Photos are shrunk in the browser first; the cap is 4 MB; PDFs, images, text, CSV and Office files are accepted.',
-          'Every upload waits for approval ("Hidden from everyone else until approved"). On the **Drive** tab, under **Waiting for approval**, a reviewer picks **What is it?** (Before photo, After photo, Sign-off, Other), optionally renames the file, then **Approve** or **Decline**. Until then only reviewers and the uploader can see it.',
+          'Every upload waits for approval ("Hidden from everyone else until approved"). On the **Drive** tab, under **Waiting for approval**, a reviewer picks **What is it?** (Before photo, After photo, Sign-off, From client, Other), optionally renames the file, then **Approve** or **Decline**. Until then only reviewers and the uploader can see it.',
           'Approved photos group by kind and, when the SharePoint switch is on, are copied into the work order\'s SharePoint folder.',
         ] },
         { kind: 'note', title: 'WHY', text: 'Done / Incurred needs an approved After photo (or Before photo plus Sign-off for Bill For Incurred): rules 1.3.1 to 1.3.4 and 11.3.4. The "Needs after photo" / "Needs sign-off" tag clears the moment the file is approved.' },
