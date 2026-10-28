@@ -258,9 +258,25 @@ export async function updateWorkOrderFields(
     }
 
     // 2026-10-27 (Elise): a new Client or Comp brings its account team —
-    // AM, TL and ATL follow it while they are empty or still hold the old
-    // team's names; a seat this same save set is left as typed.
-    if (log.some((c) => c.field === 'fields.Client' || c.field === 'fields.21. Comp')) {
+    // AM, TL, ATL and (2026-10-28) Sales Owner follow it while they are empty
+    // or still hold the old team's names; a seat this same save set is left as typed.
+    // 2026-10-28 (Elise: "FM and Client are the same thing"): a new FM that
+    // names a client record sets the Client too, unless this same save set the
+    // Client; logged with the team fills (`via: 'client_team'`).
+    const fmChange = log.find((c) => c.field === 'fields.22. FM');
+    let fmSetClient = false;
+    if (fmChange && !patch.some((p) => p.jsonKey === 'Client')) {
+      const { clientForFm } = await import('./clientTeams.js');
+      const client = await clientForFm(fmChange.after);
+      if (client && client !== (merged['Client'] ?? null)) {
+        teamLog.push({ field: 'fields.Client', before: merged['Client'] ?? null, after: client });
+        merged['Client'] = client;
+        const mirror = MIRROR_BY_JSON_KEY['Client'];
+        if (mirror) mirrorSets.push({ ...mirror, value: mirrorValue(mirror.cast, client) });
+        fmSetClient = true;
+      }
+    }
+    if (fmSetClient || log.some((c) => c.field === 'fields.Client' || c.field === 'fields.21. Comp')) {
       // Imported where used, as woCreate does: clientTeams sits above this module.
       const { refillTeamOnEdit } = await import('./clientTeams.js');
       const fills = await refillTeamOnEdit(

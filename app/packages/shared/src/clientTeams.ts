@@ -218,12 +218,15 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !=
  * team, as on the form. Pure: `bag` is the bag as the save leaves it and is
  * changed in place; the changes are returned for the audit trail.
  */
-export function refillFromClientTeam<T extends { client?: string; billing_entity: string; am: string | null; tl: string | null; atl: string | null }>(
+export function refillFromClientTeam<T extends { client?: string; billing_entity: string; am: string | null; tl: string | null; atl: string | null; sales?: string | null }>(
   before: { client: unknown; comp: unknown },
   bag: Record<string, unknown>,
   explicit: ReadonlySet<string>,
   teams: readonly T[],
   names: TeamNames,
+  /** 2026-10-28 (Elise) · the Sales Owner options. Given, Sales Owner follows
+      the team too, as the create form fills it (`salesOwnerFromTeam`). */
+  salesOptions?: readonly string[],
 ): TeamRefillChange[] {
   const changes: TeamRefillChange[] = [];
   const oldTeam = pickClientTeam(teams, str(before.client), str(before.comp));
@@ -235,7 +238,15 @@ export function refillFromClientTeam<T extends { client?: string; billing_entity
   if (newTeam === oldTeam) return changes;
   const was = clientTeamValues(oldTeam, names).values;
   const now = clientTeamValues(newTeam, names).values;
-  for (const { key } of CLIENT_TEAM_FIELDS) {
+  const seats = CLIENT_TEAM_FIELDS.map((f) => f.key);
+  if (salesOptions) {
+    const oldSales = salesOwnerFromTeam(oldTeam ? { sales: oldTeam.sales ?? null } : null, salesOptions);
+    const newSales = salesOwnerFromTeam(newTeam ? { sales: newTeam.sales ?? null } : null, salesOptions);
+    if (oldSales) was[SALES_OWNER_KEY] = oldSales;
+    if (newSales) now[SALES_OWNER_KEY] = newSales;
+    seats.push(SALES_OWNER_KEY);
+  }
+  for (const key of seats) {
     if (explicit.has(key)) continue;
     const cur = bag[key];
     const held = str(cur);

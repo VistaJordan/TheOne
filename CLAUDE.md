@@ -2948,8 +2948,12 @@ in `updateWorkOrderFields` runs `refillTeamOnEdit` → `refillFromClientTeam`
 (shared, pure): AM / TL / ATL that are empty or still hold the OLD team's
 name take the new team's (a seat the new team leaves blank is cleared, a
 hand-picked name and a seat the same save set are kept), an empty Comp is
-filled from a one-team client; logged `via: 'client_team'`. Bulk edit does
-not refill. **Add work order** closed by the ✕ or the scrim files what was
+filled from a one-team client; logged `via: 'client_team'`. Since 2026-10-28 (Elise: "FM and
+Client are the same thing") Sales Owner follows too (`salesOwnerFromTeam`,
+the dropdown's options), and an FM edit that names an active client record
+(`clientForFm`, `lower(btrim())`) sets the Client in the same save, then
+refills; an FM spelled the ClickUp way ("Powerhouse") names no record and
+moves nothing. Bulk edit does not refill. **Add work order** closed by the ✕ or the scrim files what was
 typed as an intake draft (`dismiss`, needs `intake` create; an untouched form
 just closes); **Cancel** discards. **Version 2**: `apps/web/src/lib/
 versionTwo.ts` `VERSION_TWO_SECTIONS` (Dashboard, Pulse) dims the sidebar item

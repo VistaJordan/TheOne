@@ -301,6 +301,30 @@ export async function fillFromClientTeam(bag: Record<string, unknown>): Promise<
 }
 
 /**
+ * FM and Client are the same thing (Elise, 2026-10-28): the client record an
+ * FM value names — an active one, matched as the 0062 join matches,
+ * `lower(btrim())` — in the record's own spelling, else null (an FM spelled
+ * the ClickUp way, "Powerhouse" for PH, names no record and moves nothing).
+ * Never throws.
+ */
+export async function clientForFm(fm: unknown): Promise<string | null> {
+  if (typeof fm !== 'string' || fm.trim() === '') return null;
+  try {
+    const r = await query<{ name: string }>(
+      `SELECT name FROM client
+        WHERE deleted_at IS NULL AND is_active AND lower(btrim(name)) = lower(btrim($1))
+        LIMIT 1`,
+      [fm],
+    );
+    return r.rows[0]?.name ?? null;
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    console.error('client for FM skipped', { code: err.code, message: err.message });
+    return null;
+  }
+}
+
+/**
  * `updateWorkOrderFields`' half (Elise, 2026-10-27): a save that changed the
  * Client or the Comp re-fills AM, TL and ATL from the new team — only seats
  * that are empty or still hold the previous team's name, never one the same
@@ -314,8 +338,8 @@ export async function refillTeamOnEdit(
   explicit: ReadonlySet<string>,
 ): Promise<TeamRefillChange[]> {
   try {
-    const [teams, people] = await Promise.all([teamsForForm(), activePeople()]);
-    return refillFromClientTeam(before, bag, explicit, teams, bySeat(people));
+    const [teams, people, sales] = await Promise.all([teamsForForm(), activePeople(), salespeople()]);
+    return refillFromClientTeam(before, bag, explicit, teams, bySeat(people), sales);
   } catch (e) {
     const err = e as { code?: string; message?: string };
     console.error('client team refill skipped', { code: err.code, message: err.message });

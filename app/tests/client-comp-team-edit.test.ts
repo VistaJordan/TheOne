@@ -58,6 +58,31 @@ describe('refillFromClientTeam', () => {
     expect(bag['21. Comp']).toBe('SFM');
     expect(ch[0]).toEqual({ key: '21. Comp', before: null, after: 'SFM' });
   });
+  it('Sales Owner follows the team when the options are given (2026-10-28)', () => {
+    const sales = ['Rocio', 'Kevin', 'House'];
+    const t = [
+      { client: 'PH', billing_entity: 'AF', am: 'Bea Am', tl: 'Tom Tl', atl: null, sales: 'rocio' },
+      { client: 'Vuori', billing_entity: 'SFM', am: 'Cy Am', tl: 'Ted Tl', atl: null, sales: 'Kevin' },
+    ];
+    const bag: Record<string, unknown> = { Client: 'Vuori', '21. Comp': 'SFM', 'Sales Owner': 'Rocio' };
+    refillFromClientTeam({ client: 'PH', comp: 'AF' }, bag, new Set(['Client']), t, names, sales);
+    expect(bag['Sales Owner']).toBe('Kevin');
+    // a hand-picked salesperson stays
+    const kept: Record<string, unknown> = { Client: 'Vuori', '21. Comp': 'SFM', 'Sales Owner': 'House' };
+    refillFromClientTeam({ client: 'PH', comp: 'AF' }, kept, new Set(['Client']), t, names, sales);
+    expect(kept['Sales Owner']).toBe('House');
+    // without the options, Sales Owner is not touched
+    const off: Record<string, unknown> = { Client: 'Vuori', '21. Comp': 'SFM' };
+    refillFromClientTeam({ client: null, comp: 'SFM' }, off, new Set(['Client']), t, names);
+    expect('Sales Owner' in off).toBe(false);
+  });
+  it('an FM change sets the Client when it names a client record (2026-10-28)', () => {
+    const src = readFileSync(new URL('../apps/api/src/services/woFieldValues.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/fields\.22\. FM[\s\S]{0,300}clientForFm/);
+    expect(src).toMatch(/fmSetClient \|\| log\.some/);
+    const svc = readFileSync(new URL('../apps/api/src/services/clientTeams.ts', import.meta.url), 'utf8');
+    expect(svc).toContain("return refillFromClientTeam(before, bag, explicit, teams, bySeat(people), sales)");
+  });
   it('is wired into the single-field save, logged via client_team', () => {
     const src = readFileSync(new URL('../apps/api/src/services/woFieldValues.ts', import.meta.url), 'utf8');
     expect(src).toContain('refillTeamOnEdit');
