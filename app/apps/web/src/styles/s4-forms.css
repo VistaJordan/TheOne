@@ -297,6 +297,11 @@ button.chip { cursor: pointer; }
   position: absolute;
   inset: -10px;
 }
+/* The expander must be anchored to its own label. Without this it sized itself
+   to the nearest positioned ancestor — in Admin › Custom fields the whole table
+   — so a click on any dropdown in a row ticked a Client-safe box instead and
+   scrolled to it. */
+.ck { position: relative; }
 
 .qmk:hover { background: var(--border-strong); color: var(--ink); }
 
