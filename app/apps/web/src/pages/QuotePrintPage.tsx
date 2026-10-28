@@ -11,14 +11,19 @@
  * print stylesheet (quote.css, @media print) and the button calls
  * window.print(), which every browser offers to save as PDF. No server-side
  * renderer, no template engine, nothing to keep in step with the builder —
- * the document is the same React tree the builder's numbers come from. */
+ * the document is the same React tree the builder's numbers come from.
+ *
+ * 2026-10-28 (Elise) · the document itself is `QuoteDocument`, so the quote
+ * builder (and the work order's Quotes tab) draws the same page at its top,
+ * live, as the client would see it. */
 
 import { useEffect } from 'react';
 import { optionDisplayLabel, visibleScopeLines } from '@theone/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { QUOTE_DOCUMENT_TYPE_LABELS, type QuoteSection } from '@theone/shared';
-import { getWorkOrder, getWorkOrderQuote } from '../api/client';
+import { getWorkOrder, getWorkOrderQuote, type Quote } from '../api/client';
+import type { PrintTemplate } from '@theone/shared';
 import { Icon } from '../components/Icon';
 import { deriveSite } from '../lib/woDerive';
 import { usd } from '../lib/quoteTotals';
@@ -62,6 +67,29 @@ export function QuotePrintPage() {
     );
   }
 
+  const backHref = `/work-orders/${encodeURIComponent(quote.wo_number)}/quote`;
+
+  return (
+    <div className="qprint">
+      <div className="qprint-bar no-print">
+        <Link className="btn" to={backHref}>
+          <Icon name="arrow-l" size={14} /> Back to the builder
+        </Link>
+        <span className="hint">Save as PDF from the print dialog.</span>
+        <button type="button" className="btn btn-primary" onClick={() => window.print()}>
+          <Icon name="file" size={14} /> Print / Save as PDF
+        </button>
+      </div>
+      <QuoteDocument quote={quote} wo={wo} tpl={tpl} />
+    </div>
+  );
+}
+
+type WoDetail = Awaited<ReturnType<typeof getWorkOrder>>;
+
+/** The quote as the client receives it: the printed page, and the preview at
+    the top of the builder. Internal figures never appear here. */
+export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail | undefined; tpl: PrintTemplate | null }) {
   const site = wo ? deriveSite(wo) : null;
   const title = QUOTE_DOCUMENT_TYPE_LABELS[quote.document_type] ?? 'Quote';
   const entity = wo?.billing_entity ?? '';
@@ -79,145 +107,132 @@ export function QuotePrintPage() {
   const priced = quote.totals.option_totals.find((o) => o.section_id === quote.totals.priced_section_id) ?? null;
   const offered = quote.totals.option_totals.filter((o) => o.include_in_summary && options.some((s) => s.id === o.section_id));
   const summaryText = quote.summary.pinned ?? quote.summary.auto;
-  const backHref = `/work-orders/${encodeURIComponent(quote.wo_number)}/quote`;
 
   return (
-    <div className="qprint">
-      <div className="qprint-bar no-print">
-        <Link className="btn" to={backHref}>
-          <Icon name="arrow-l" size={14} /> Back to the builder
-        </Link>
-        <span className="hint">Save as PDF from the print dialog.</span>
-        <button type="button" className="btn btn-primary" onClick={() => window.print()}>
-          <Icon name="file" size={14} /> Print / Save as PDF
-        </button>
-      </div>
+    <article className="qdoc">
+      <header className="qdoc-head">
+        <div>
+          <div className="qdoc-entity">{tpl?.company_name || entity || 'Seamless FM'}</div>
+          <div className="qdoc-kind">{title}</div>
+          <DocLetterhead template={tpl} />
+        </div>
+        <table className="qdoc-meta">
+          <tbody>
+            <tr><th>{title} #</th><td className="mono">{quote.number ?? '—'}</td></tr>
+            <tr><th>Date</th><td>{issued}</td></tr>
+            <tr><th>Work order</th><td className="mono">{quote.wo_number}</td></tr>
+            {wo?.ext_name && <tr><th>Client ref</th><td className="mono">{wo.ext_name}</td></tr>}
+            <tr><th>Revision</th><td>{quote.rev}</td></tr>
+            <tr><th>Currency</th><td>{quote.currency}</td></tr>
+          </tbody>
+        </table>
+      </header>
 
-      <article className="qdoc">
-        <header className="qdoc-head">
-          <div>
-            <div className="qdoc-entity">{tpl?.company_name || entity || 'Seamless FM'}</div>
-            <div className="qdoc-kind">{title}</div>
-            <DocLetterhead template={tpl} />
+      <section className="qdoc-parties">
+        <div>
+          <h3>Bill to</h3>
+          <p>{quote.bill_to?.trim() || wo?.client || '—'}</p>
+        </div>
+        <div>
+          <h3>Ship to / site</h3>
+          <p>
+            {quote.ship_to?.trim() ||
+              [site?.name, ...(site?.addressLines ?? [])].filter(Boolean).join('\n') ||
+              '—'}
+          </p>
+        </div>
+        {wo?.title && (
+          <div className="qdoc-wide">
+            <h3>Subject</h3>
+            <p>{wo.title}</p>
           </div>
-          <table className="qdoc-meta">
-            <tbody>
-              <tr><th>{title} #</th><td className="mono">{quote.number ?? '—'}</td></tr>
-              <tr><th>Date</th><td>{issued}</td></tr>
-              <tr><th>Work order</th><td className="mono">{quote.wo_number}</td></tr>
-              {wo?.ext_name && <tr><th>Client ref</th><td className="mono">{wo.ext_name}</td></tr>}
-              <tr><th>Revision</th><td>{quote.rev}</td></tr>
-              <tr><th>Currency</th><td>{quote.currency}</td></tr>
-            </tbody>
-          </table>
-        </header>
-
-        <section className="qdoc-parties">
-          <div>
-            <h3>Bill to</h3>
-            <p>{quote.bill_to?.trim() || wo?.client || '—'}</p>
-          </div>
-          <div>
-            <h3>Ship to / site</h3>
-            <p>
-              {quote.ship_to?.trim() ||
-                [site?.name, ...(site?.addressLines ?? [])].filter(Boolean).join('\n') ||
-                '—'}
-            </p>
-          </div>
-          {wo?.title && (
-            <div className="qdoc-wide">
-              <h3>Subject</h3>
-              <p>{wo.title}</p>
-            </div>
-          )}
-        </section>
-
-        {incurred && incurred.lines.length > 0 && (
-          <LinesBlock section={incurred} heading="Work performed" note="Billed with the work order" />
         )}
+      </section>
 
-        {approvedEarlier.map((s) => (
-          <LinesBlock
-            key={s.id}
-            section={s}
-            heading={`${s.name ?? 'Approved work'} (approved, round ${s.round})`}
-            note="Billed with the work order"
-          />
-        ))}
+      {incurred && incurred.lines.length > 0 && (
+        <LinesBlock section={incurred} heading="Work performed" note="Billed with the work order" />
+      )}
 
-        {/* A lone option is "Proposed work" with no letter and no name (2026-10-22). */}
-        {options.map((s) => (
-          <LinesBlock
-            key={s.id}
-            section={s}
-            heading={options.length > 1 ? `${s.label}${s.name ? ` — ${s.name}` : ''}` : 'Proposed work'}
-          />
-        ))}
+      {approvedEarlier.map((s) => (
+        <LinesBlock
+          key={s.id}
+          section={s}
+          heading={`${s.name ?? 'Approved work'} (approved, round ${s.round})`}
+          note="Billed with the work order"
+        />
+      ))}
 
-        {/* The Yoda rule (0076): each option is priced as the work performed +
-            that option, plus sales tax; the Total is the approved option's
-            price, or the first offered one's until the client decides. */}
-        <section className="qdoc-totals">
-          <table>
-            <tbody>
-              {yoda && quote.totals.incurred_subtotal !== 0 && (
-                <tr><th>Work performed</th><td>{usd(quote.totals.incurred_subtotal)}</td></tr>
-              )}
-              {offered.map((o) => (
-                <tr key={o.section_id}>
-                  <th>{offered.length > 1 ? `${o.label}${o.name ? ` — ${o.name}` : ''}` : optionDisplayLabel(o.label, 1) + ' work'}</th>
-                  <td>{usd(o.total)}</td>
-                </tr>
-              ))}
-              {quote.totals.line_tax > 0 && (
-                <tr><th>Tax</th><td>{usd(quote.totals.line_tax)}</td></tr>
-              )}
-              {quote.totals.sales_tax > 0 && (
-                <tr><th>Sales tax ({quote.totals.sales_tax_pct}%)</th><td>{usd(quote.totals.sales_tax)}</td></tr>
-              )}
-              <tr className="qdoc-grand">
-                <th>Total{yoda && priced && offered.length > 1 ? ` — ${priced.label}` : ''}</th>
-                <td>{usd(quote.totals.grand_total)}</td>
+      {/* A lone option is "Proposed work" with no letter and no name (2026-10-22). */}
+      {options.map((s) => (
+        <LinesBlock
+          key={s.id}
+          section={s}
+          heading={options.length > 1 ? `${s.label}${s.name ? ` — ${s.name}` : ''}` : 'Proposed work'}
+        />
+      ))}
+
+      {/* The Yoda rule (0076): each option is priced as the work performed +
+          that option, plus sales tax; the Total is the approved option's
+          price, or the first offered one's until the client decides. */}
+      <section className="qdoc-totals">
+        <table>
+          <tbody>
+            {yoda && quote.totals.incurred_subtotal !== 0 && (
+              <tr><th>Work performed</th><td>{usd(quote.totals.incurred_subtotal)}</td></tr>
+            )}
+            {offered.map((o) => (
+              <tr key={o.section_id}>
+                <th>{offered.length > 1 ? `${o.label}${o.name ? ` — ${o.name}` : ''}` : optionDisplayLabel(o.label, 1) + ' work'}</th>
+                <td>{usd(o.total)}</td>
               </tr>
-              {yoda &&
-                offered.length > 1 &&
-                offered
-                  .filter((o) => o.section_id !== priced?.section_id)
-                  .map((o) => (
-                    <tr key={`alt-${o.section_id}`}>
-                      <th>Total with {o.label} instead</th>
-                      <td>{usd(o.grand_total)}</td>
-                    </tr>
-                  ))}
-            </tbody>
-          </table>
+            ))}
+            {quote.totals.line_tax > 0 && (
+              <tr><th>Tax</th><td>{usd(quote.totals.line_tax)}</td></tr>
+            )}
+            {quote.totals.sales_tax > 0 && (
+              <tr><th>Sales tax ({quote.totals.sales_tax_pct}%)</th><td>{usd(quote.totals.sales_tax)}</td></tr>
+            )}
+            <tr className="qdoc-grand">
+              <th>Total{yoda && priced && offered.length > 1 ? ` — ${priced.label}` : ''}</th>
+              <td>{usd(quote.totals.grand_total)}</td>
+            </tr>
+            {yoda &&
+              offered.length > 1 &&
+              offered
+                .filter((o) => o.section_id !== priced?.section_id)
+                .map((o) => (
+                  <tr key={`alt-${o.section_id}`}>
+                    <th>Total with {o.label} instead</th>
+                    <td>{usd(o.grand_total)}</td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
+      </section>
+
+      {summaryText.trim() !== '' && (
+        <section className="qdoc-summary">
+          <h3>Summary</h3>
+          <pre>{summaryText}</pre>
         </section>
+      )}
 
-        {summaryText.trim() !== '' && (
-          <section className="qdoc-summary">
-            <h3>Summary</h3>
-            <pre>{summaryText}</pre>
-          </section>
-        )}
+      {quote.note_to_customer && (
+        <section className="qdoc-note">
+          <h3>Note</h3>
+          <p>{quote.note_to_customer}</p>
+        </section>
+      )}
 
-        {quote.note_to_customer && (
-          <section className="qdoc-note">
-            <h3>Note</h3>
-            <p>{quote.note_to_customer}</p>
-          </section>
-        )}
-
-        <footer className="qdoc-foot">
-          {quote.rates.contract
-            ? `Priced under ${quote.rates.contract.name}.`
-            : ''}
-          {' '}
-          This {title.toLowerCase()} is valid for 30 days from the date above.
-        </footer>
-        <DocTerms template={tpl} />
-      </article>
-    </div>
+      <footer className="qdoc-foot">
+        {quote.rates.contract
+          ? `Priced under ${quote.rates.contract.name}.`
+          : ''}
+        {' '}
+        This {title.toLowerCase()} is valid for 30 days from the date above.
+      </footer>
+      <DocTerms template={tpl} />
+    </article>
   );
 }
 

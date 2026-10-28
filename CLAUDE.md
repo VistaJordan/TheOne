@@ -3074,6 +3074,14 @@ get their dash), and the Add work order, draft and inline-editor boxes run
 `zipInputValue` on every keystroke so letters never get in. Stored values are
 not re-checked.
 
+**Client view at the top of the quote** (no migration, Elise 2026-10-28). The
+quote builder (its page and the work order's Quotes tab) opens with a **Client
+view** card: `QuoteDocument` (exported from `QuotePrintPage.tsx`, which now
+renders it under its print bar) drawn from the SAVED quote, so it follows each
+autosave ("Updating after the save…" while one is pending). **Hide** / **Show**
+folds it, remembered per browser (`theone.quote.preview`); it scrolls inside
+the card (`.qpreview-body`, max 70vh) and is hidden in print.
+
 ## Verify
 
 ```

@@ -775,3 +775,24 @@
 
 /* "Tech reported that…" is one line that grows with its text (2026-10-22). */
 .qb textarea.fld-grow { resize: none; overflow: hidden; min-height: 34px; }
+
+/* 2026-10-28 · the Client view at the top of the builder: the printed
+   document as it stands, inside a card, scrolling on its own so the editor
+   below stays one scroll away. */
+.qpreview .card-head { gap: 12px; }
+.qpreview .card-head .btn { margin-left: auto; }
+.qpreview-body {
+  max-height: 70vh;
+  overflow: auto;
+  padding: 16px;
+  background: var(--canvas);
+  border-top: 1px solid var(--row-border);
+}
+.qpreview-body .qdoc { box-shadow: none; }
+@media (max-width: 700px) {
+  .qpreview-body { padding: 8px; }
+  .qpreview-body .qdoc { padding: 20px 16px; }
+}
+@media print {
+  .qpreview { display: none; }
+}

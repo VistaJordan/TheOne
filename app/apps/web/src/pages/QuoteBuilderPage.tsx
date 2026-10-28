@@ -60,9 +60,12 @@ import {
 import { FIELD, field, str } from '../lib/fields';
 import { deriveSite } from '../lib/woDerive';
 import { useInvalidateObligations } from '../hooks/useObligations';
+import { QuoteDocument } from './QuotePrintPage';
+import { usePrintTemplate } from './DocPrintPages';
 
 /** How long the form sits still before the draft is flushed (§3.9 autosave). */
 const AUTOSAVE_MS = 900;
+const PREVIEW_PREF_KEY = 'theone.quote.preview';
 
 type DecisionSheet =
   | { kind: 'approve'; sectionKey: string | null }
@@ -110,6 +113,27 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     enabled: woNumber.length > 0,
     staleTime: 5 * 60_000,
   });
+
+  // 2026-10-28 (Elise) · the quote as the client sees it, at the top: the
+  // printed document drawn from the SAVED quote, so it follows each autosave.
+  // Open or folded is remembered per browser.
+  const printTpl = usePrintTemplate('quote');
+  const [previewOpen, setPreviewOpen] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(PREVIEW_PREF_KEY) !== 'closed';
+    } catch {
+      return true;
+    }
+  });
+  const togglePreview = () =>
+    setPreviewOpen((open) => {
+      try {
+        window.localStorage.setItem(PREVIEW_PREF_KEY, open ? 'closed' : 'open');
+      } catch {
+        /* the choice just is not remembered */
+      }
+      return !open;
+    });
 
   const quote = quoteQuery.data?.quote ?? null;
   const permissions: QuotePermissions | null =
@@ -608,6 +632,25 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
   return shell(
     <>
+      {/* ══ Client view: the document as it stands ═══════════════════════ */}
+      <section className={`card qpreview${previewOpen ? '' : ' is-folded'}`}>
+        <div className="card-head">
+          <h2 className="card-title">Client view</h2>
+          <span className="card-meta">
+            {dirty || saveMutation.isPending ? 'Updating after the save…' : 'What the client receives, as saved now'}
+          </span>
+          <button type="button" className="btn btn-sm" onClick={togglePreview} aria-expanded={previewOpen}>
+            <Icon name={previewOpen ? 'chev-u' : 'chev-d'} size={12} />
+            {previewOpen ? 'Hide' : 'Show'}
+          </button>
+        </div>
+        {previewOpen && (
+          <div className="qpreview-body">
+            <QuoteDocument quote={quote} wo={wo} tpl={printTpl} />
+          </div>
+        )}
+      </section>
+
       {/* ══ Header band ══════════════════════════════════════════════════ */}
       <section className="card qhead">
         <div className="qhead-top">
