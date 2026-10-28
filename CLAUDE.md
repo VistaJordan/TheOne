@@ -3041,6 +3041,21 @@ dispatchers, 0038) is drawn locked, since `assertFieldWrites` would refuse it.
 The header has **Mark as Emergency** beside Mark as Escalated (`WoHeader`,
 the field's edit permission, red `.btn.is-emergency`).
 
+**Sales is a dropdown of the salespeople** (migration 0105, Elise
+2026-10-28). The Sales seat of an account team (Clients list cell, the
+client's Account team card, Add client) is `SalesSelect`
+(`components/portfolio/ClientTeamCells.tsx`), whose names are the `Sales
+Owner` field's options (`salespeople` on `ClientTeamsResponse` /
+`ClientTeamsOverview`; House always among them). 0105 renames ClickUp's "Ro"
+to "Rocio" in place and appends Teresa / Kevin / House when missing (seed.ts
+and `SALES_OWNER_DEFAULT_OPTIONS` carry the same — keep in step); work orders
+already holding "Ro" keep it. **+ Add someone…** turns the dropdown into a
+box; saving a team with a name the list lacks appends it to the Sales Owner
+options (`addSalesperson` in `services/clientTeams.ts`, logged
+`field_def_updated` with `via: 'client_team'`), so the list grows from there
+or from Admin › Custom fields. ClickUp has no "Rocio" option: a pushed Rocio
+is a remembered value error until ClickUp's list is renamed too.
+
 ## Verify
 
 ```

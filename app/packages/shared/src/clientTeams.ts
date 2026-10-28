@@ -55,6 +55,10 @@ export const CLIENT_TEAM_HOUSE = 'House';
     names, "House" included. */
 export const SALES_OWNER_KEY = 'Sales Owner';
 
+/** The Sales Owner options a fresh database starts with (0105, seed.ts —
+    KEEP IN STEP). */
+export const SALES_OWNER_DEFAULT_OPTIONS = ['Rocio', 'Teresa', 'Kevin', 'House'] as const;
+
 /**
  * The Sales Owner a team puts on a new work order: the dropdown option that
  * matches the team's salesperson (any case; "House" is an option like any
@@ -95,6 +99,8 @@ export interface ClientTeamsOverview {
   billing_entities?: string[];
   people?: string[];
   people_by_seat?: Record<'am' | 'tl' | 'atl', string[]>;
+  /** 2026-10-28 · the Sales column's dropdown: the Sales Owner options. */
+  salespeople?: string[];
   can_edit?: boolean;
 }
 
@@ -115,6 +121,11 @@ export interface ClientTeamsResponse {
   /** The active people holding each seat's role (`CLIENT_TEAM_SEAT_ROLE`):
       what the AM / TL / ATL columns suggest and resolve against. */
   people_by_seat: Record<'am' | 'tl' | 'atl', string[]>;
+  /** 2026-10-28 (Elise) · what the Sales column offers: the Sales Owner
+      dropdown's options, "House" included. A team saved with a name the list
+      lacks adds it there (`addSalesperson`), so the list grows from here or
+      from Admin › Custom fields. */
+  salespeople: string[];
   can_edit: boolean;
 }
 

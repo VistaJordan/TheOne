@@ -21,7 +21,7 @@ import { HistoryCard, WorkOrderList, errText } from '../components/portfolio/Por
 import { SharePointFolderChip } from '../components/SharePointFolderChip';
 import { ClientCicoCard } from '../components/portfolio/ClientCicoCard';
 import { ClientTeamCard } from '../components/portfolio/ClientTeamCard';
-import { ClientTeamCells, ClientTeamDatalists, teamListId } from '../components/portfolio/ClientTeamCells';
+import { ClientTeamCells, ClientTeamDatalists, SalesSelect, salespeopleOf, teamListId } from '../components/portfolio/ClientTeamCells';
 import { useEscape } from '../lib/useEscape';
 
 export function ClientsPage() {
@@ -247,7 +247,11 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
                 {(['am', 'tl', 'atl', 'sales'] as const).map((k) => (
                   <label key={k}>
                     <span className="lbl">{k === 'am' ? 'AM' : k === 'tl' ? 'TL' : k === 'atl' ? 'ATL' : 'Sales'}</span>
-                    <input className="fld" list={teamListId(k)} value={team[k]} onChange={(e) => setTeam({ ...team, [k]: e.target.value })} />
+                    {k === 'sales' ? (
+                      <SalesSelect value={team.sales} options={salespeopleOf(vocab.data)} onChange={(v) => setTeam({ ...team, sales: v })} />
+                    ) : (
+                      <input className="fld" list={teamListId(k)} value={team[k]} onChange={(e) => setTeam({ ...team, [k]: e.target.value })} />
+                    )}
                   </label>
                 ))}
               </div>

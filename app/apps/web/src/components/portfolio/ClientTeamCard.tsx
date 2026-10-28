@@ -13,6 +13,7 @@ import type { ClientTeam, ClientTeamInput, ClientTeamsResponse } from '@theone/s
 import { deleteClientTeam, getClientTeams, saveClientTeam } from '../../api/client';
 import { Icon } from '../Icon';
 import { errText } from './PortfolioParts';
+import { SalesSelect, salespeopleOf } from './ClientTeamCells';
 
 type Draft = Record<'billing_entity' | 'tl' | 'atl' | 'sales' | 'am', string>;
 const COLS: { key: Exclude<keyof Draft, 'billing_entity'>; label: string }[] = [
@@ -108,7 +109,11 @@ export function ClientTeamCard({ clientId }: { clientId: string }) {
       </td>
       {COLS.map((c) => (
         <td key={c.key}>
-          <input className="fld" list={listId(c.key)} value={draft[c.key]} onChange={(e) => setDraft({ ...draft, [c.key]: e.target.value })} disabled={busy} aria-label={c.label} />
+          {c.key === 'sales' ? (
+            <SalesSelect value={draft.sales} options={salespeopleOf(data)} onChange={(v) => setDraft({ ...draft, sales: v })} disabled={busy} />
+          ) : (
+            <input className="fld" list={listId(c.key)} value={draft[c.key]} onChange={(e) => setDraft({ ...draft, [c.key]: e.target.value })} disabled={busy} aria-label={c.label} />
+          )}
         </td>
       ))}
       <td className="client-team-acts">
@@ -166,10 +171,9 @@ export function ClientTeamCard({ clientId }: { clientId: string }) {
           </table>
         </div>
       )}
-      {COLS.map((col) => (
+      {COLS.filter((col) => col.key !== 'sales').map((col) => (
         <datalist key={col.key} id={listId(col.key)}>
           {poolFor(col.key).map((p) => <option key={p} value={p} />)}
-          {col.key === 'sales' && <option value={CLIENT_TEAM_HOUSE} />}
         </datalist>
       ))}
       {problem && <p className="modal-error" role="alert">{problem}</p>}

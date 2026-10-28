@@ -19,24 +19,96 @@ type Editing = { teamId: string | 'new'; col: Col; old: string };
 const COLS: readonly Col[] = ['billing_entity', 'am', 'tl', 'atl', 'sales'];
 const LABEL: Record<Col, string> = { billing_entity: 'Comp', am: 'AM', tl: 'TL', atl: 'ATL', sales: 'Sales' };
 
+const ADD = '__add__';
+
+/**
+ * 2026-10-28 (Elise) · the Sales seat is a dropdown of the salespeople (the
+ * Sales Owner options: Rocio, Teresa, Kevin, House…). **Add someone…** turns
+ * it into a box for a new name; saving the team adds that name to the list.
+ * `onDone` (the list's cell) is called with a final pick; the forms only need
+ * `onChange`.
+ */
+export function SalesSelect({ value, options, onChange, onDone, onCancel, autoFocus, className = 'fld', disabled }: {
+  value: string;
+  options: readonly string[];
+  onChange: (v: string) => void;
+  onDone?: (v: string) => void;
+  onCancel?: () => void;
+  autoFocus?: boolean;
+  className?: string;
+  disabled?: boolean;
+}) {
+  const [typing, setTyping] = useState(false);
+  const adding = useRef(false);
+  const listed = options.some((o) => o.toLowerCase() === value.trim().toLowerCase());
+  const shownValue = listed ? (options.find((o) => o.toLowerCase() === value.trim().toLowerCase()) ?? value) : value;
+  if (typing) {
+    return (
+      <input
+        className={className}
+        autoFocus
+        value={value}
+        placeholder="New salesperson"
+        aria-label="New salesperson"
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => onDone?.(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); onDone?.((e.target as HTMLInputElement).value); }
+          if (e.key === 'Escape') { e.stopPropagation(); setTyping(false); onCancel?.(); }
+        }}
+      />
+    );
+  }
+  return (
+    <select
+      className={className}
+      autoFocus={autoFocus}
+      value={shownValue}
+      aria-label="Sales"
+      disabled={disabled}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v === ADD) {
+          adding.current = true;
+          onChange('');
+          setTyping(true);
+          return;
+        }
+        onChange(v);
+        onDone?.(v);
+      }}
+      onBlur={() => { if (!adding.current) onCancel?.(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel?.(); } }}
+    >
+      <option value="">—</option>
+      {value.trim() !== '' && !listed && <option value={value}>{value}</option>}
+      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      <option value={ADD}>+ Add someone…</option>
+    </select>
+  );
+}
+
 /** The datalist a seat's input suggests from (`ClientTeamDatalists`). */
 export const teamListId = (seat: Seat): string => `client-team-people-${seat}`;
 
 /** One set of suggestions for every editable team cell on the page: AM, TL and
-    ATL list the people holding that role, Sales everyone plus "House". */
+    ATL list the people holding that role (Sales is a dropdown, `SalesSelect`). */
 export function ClientTeamDatalists({ vocab }: { vocab: ClientTeamsOverview | undefined }) {
-  const seats: Seat[] = ['am', 'tl', 'atl', 'sales'];
+  const seats: Exclude<Seat, 'sales'>[] = ['am', 'tl', 'atl'];
   return (
     <>
       {seats.map((s) => (
         <datalist key={s} id={teamListId(s)}>
-          {(s === 'sales' ? (vocab?.people ?? []) : (vocab?.people_by_seat?.[s] ?? [])).map((p) => <option key={p} value={p} />)}
-          {s === 'sales' && <option value={CLIENT_TEAM_HOUSE} />}
+          {(vocab?.people_by_seat?.[s] ?? []).map((p) => <option key={p} value={p} />)}
         </datalist>
       ))}
     </>
   );
 }
+
+/** The Sales dropdown's names; an older API without the list offers House. */
+export const salespeopleOf = (v: { salespeople?: string[] } | undefined): string[] => v?.salespeople ?? [CLIENT_TEAM_HOUSE];
 
 /** The five team cells of one client's row. */
 export function ClientTeamCells({ clientId, teams, vocab }: {
@@ -119,7 +191,17 @@ export function ClientTeamCells({ clientId, teams, vocab }: {
     );
   };
 
-  const nameInput = (col: Seat) => (
+  const nameInput = (col: Seat) => col === 'sales' ? (
+    <SalesSelect
+      className="fld fld-sm client-team-input"
+      autoFocus
+      value={val}
+      options={salespeopleOf(vocab)}
+      onChange={setVal}
+      onDone={commit}
+      onCancel={() => setEditing(null)}
+    />
+  ) : (
     <input
       className="fld fld-sm client-team-input"
       autoFocus

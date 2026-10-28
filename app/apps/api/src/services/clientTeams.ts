@@ -11,7 +11,9 @@
 // whole row before / after.
 
 import {
+  CLIENT_TEAM_HOUSE,
   CLIENTS_PERM_KEY,
+  SALES_OWNER_KEY,
   clientTeamValues,
   permAllows,
   pickClientTeam,
@@ -24,6 +26,7 @@ import { badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
 import { requirePerm } from './permissions.js';
+import { invalidateFieldCache } from './woFields.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const clean = (v: string | null | undefined): string | null => {
@@ -50,6 +53,57 @@ async function billingEntities(): Promise<string[]> {
   );
   const opts = r.rows[0]?.options;
   return Array.isArray(opts) ? opts.map((o) => String(typeof o === 'string' ? o : (o as { name?: string })?.name ?? '')).filter(Boolean) : [];
+}
+
+/** The Sales column's dropdown: the Sales Owner field's options, "House"
+    always among them. */
+async function salespeople(): Promise<string[]> {
+  const r = await query<{ options: unknown }>(
+    `SELECT type_config->'options' AS options FROM field_def WHERE key = $1 ORDER BY position NULLS LAST LIMIT 1`,
+    [SALES_OWNER_KEY],
+  );
+  const opts = r.rows[0]?.options;
+  const names = Array.isArray(opts) ? opts.map((o) => String(typeof o === 'string' ? o : (o as { name?: string })?.name ?? '').trim()).filter(Boolean) : [];
+  return names.some((n) => n.toLowerCase() === CLIENT_TEAM_HOUSE.toLowerCase()) ? names : [...names, CLIENT_TEAM_HOUSE];
+}
+
+/**
+ * 2026-10-28 (Elise: "the option to add more") · a team saved with a
+ * salesperson the Sales Owner dropdown does not offer adds the name to it, so
+ * the next team (and Add work order's Sales Owner) can pick it. Logged as the
+ * field's own `field_def_updated`, as an edit in Admin › Custom fields is.
+ */
+async function addSalesperson(name: string | null, actorId: string): Promise<void> {
+  if (!name) return;
+  const cur = await query<{ id: string; options: unknown }>(
+    `SELECT id::text AS id, type_config->'options' AS options FROM field_def
+      WHERE key = $1 AND type = 'dropdown' ORDER BY position NULLS LAST LIMIT 1`,
+    [SALES_OWNER_KEY],
+  );
+  const row = cur.rows[0];
+  if (!row) return;
+  const before = Array.isArray(row.options) ? row.options.map((o) => String(typeof o === 'string' ? o : (o as { name?: string })?.name ?? '')) : [];
+  if (before.some((o) => o.trim().toLowerCase() === name.toLowerCase())) return;
+  const r = await query(
+    `UPDATE field_def
+        SET type_config = jsonb_set(COALESCE(type_config, '{}'::jsonb), '{options}',
+                                    COALESCE(type_config->'options', '[]'::jsonb) || to_jsonb($2::text))
+      WHERE id = $1
+        AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(type_config->'options', '[]'::jsonb)) o
+                         WHERE lower(btrim(CASE WHEN jsonb_typeof(o) = 'string' THEN o #>> '{}' ELSE o ->> 'name' END)) = lower($2))`,
+    [row.id, name],
+  );
+  if (!r.rowCount) return;
+  invalidateFieldCache();
+  await logAdminEvent({
+    actorId,
+    entity: 'field_def',
+    entityId: row.id,
+    action: 'field_def_updated',
+    field: `fields.${SALES_OWNER_KEY}`,
+    before: { name: SALES_OWNER_KEY, key: SALES_OWNER_KEY, options: before },
+    after: { name: SALES_OWNER_KEY, key: SALES_OWNER_KEY, options: [...before, name], via: 'client_team' },
+  });
 }
 
 /** Active people with their role — what a team name is matched against. */
@@ -86,12 +140,13 @@ async function loadTeams(clientId: string): Promise<ClientTeam[]> {
 export async function listClientTeams(clientId: string, actor: ActingPrincipal): Promise<ClientTeamsResponse> {
   requirePerm(actor, CLIENTS_PERM_KEY, 'view', 'You cannot open Clients');
   await clientName(clientId);
-  const [teams, entities, people] = await Promise.all([loadTeams(clientId), billingEntities(), activePeople()]);
+  const [teams, entities, people, sales] = await Promise.all([loadTeams(clientId), billingEntities(), activePeople(), salespeople()]);
   return {
     teams,
     billing_entities: entities,
     people: people.map((p) => p.name),
     people_by_seat: bySeat(people),
+    salespeople: sales,
     can_edit: permAllows(actor.perms, CLIENTS_PERM_KEY, 'edit', actor.isSuperAdmin),
   };
 }
@@ -141,6 +196,7 @@ export async function saveClientTeam(
     );
     return { before: prev, after: mapTeam(r.rows[0]) };
   });
+  await addSalesperson(after.sales, actor.id);
   const changed = !before || JSON.stringify(snap(before)) !== JSON.stringify(snap(after));
   if (changed) {
     await logAdminEvent({
@@ -187,13 +243,14 @@ export async function teamsOverview(actor: ActingPrincipal): Promise<ClientTeams
         WHERE c.deleted_at IS NULL
         ORDER BY upper(t.billing_entity)`,
     );
-    const [entities, people] = await Promise.all([billingEntities(), activePeople()]);
+    const [entities, people, sales] = await Promise.all([billingEntities(), activePeople(), salespeople()]);
     return {
       teams: r.rows,
       ready: true,
       billing_entities: entities,
       people: people.map((p) => p.name),
       people_by_seat: bySeat(people),
+      salespeople: sales,
       can_edit: permAllows(actor.perms, CLIENTS_PERM_KEY, 'edit', actor.isSuperAdmin),
     };
   } catch (e) {

@@ -478,7 +478,7 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: 'MOD Date',                 label: 'MOD Date',             type: 'date' },
   { key: 'Previous Assignees',       label: 'Previous Assignees',   type: 'users' },
   { key: 'Profit',                   label: 'Profit',               type: 'formula' },
-  { key: 'Sales Owner',              label: 'Sales Owner',          type: 'dropdown', options: ['Ro', 'Teresa', 'Kevin', 'House'] }, // 0104 · Kevin, House
+  { key: 'Sales Owner',              label: 'Sales Owner',          type: 'dropdown', options: ['Rocio', 'Teresa', 'Kevin', 'House'] }, // 0104 · Kevin, House; 0105 · Ro → Rocio (SALES_OWNER_DEFAULT_OPTIONS)
   { key: 'Show in CA',               label: 'Show in CA',           type: 'checkbox' },
   { key: 'State',                    label: 'State',                type: 'dropdown', options: US_STATES },
   { key: 'Store',                    label: 'Store',                type: 'short_text' },
