@@ -58,6 +58,7 @@ import { tradeSlot } from '../lib/mapPoints';
 import { useTheme } from '../theme/ThemeProvider';
 
 import { VendorPerformanceTab } from '../components/vendors/VendorExtras';
+import { QUIET_MUTATION } from '../lib/queryClient';
 
 const VendorMap = lazy(() => import('../components/map/VendorMap'));
 
@@ -136,6 +137,7 @@ export function VendorsPage() {
   const cols = useMemo(() => resolveVendorColumns(colPref.data?.value), [colPref.data]);
   const saveCols = useMutation({
     mutationFn: (next: string[]) => setUserPref(VENDOR_COLUMNS_PREF, next),
+    meta: QUIET_MUTATION,
     onMutate: (next) => qc.setQueryData(COLUMNS_KEY, { key: VENDOR_COLUMNS_PREF, value: next }),
   });
 

@@ -1,4 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { Suspense, lazy, type ReactNode } from 'react';
 import { ThemeProvider } from './theme/ThemeProvider';
@@ -53,12 +54,6 @@ import { ApprovalsPage } from './pages/ApprovalsPage';
 import { IntakePage } from './pages/IntakePage';
 import { INCOMING_ACCEPT_PERM } from './components/IncomingTabs';
 import { VERSION_TWO_SECTIONS, isVersionTwo } from './lib/versionTwo';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false },
-  },
-});
 
 /**
  * S5 · nothing renders until the session is known.

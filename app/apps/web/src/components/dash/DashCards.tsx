@@ -27,6 +27,7 @@ import {
 } from '../../lib/dashCards';
 import { Icon } from '../Icon';
 import { FieldPicker } from '../wo/list/FieldPicker';
+import { QUIET_MUTATION } from '../../lib/queryClient';
 
 /**
  * The Main Dashboard's build-your-own cards.
@@ -51,6 +52,7 @@ export function DashCards() {
   // so a save paints immediately and the server catches up.
   const save = useMutation({
     mutationFn: (next: DashCard[]) => setUserPref(DASH_CARDS_PREF, next),
+    meta: QUIET_MUTATION,
     onMutate: (next) => {
       qc.setQueryData(['prefs', DASH_CARDS_PREF], { key: DASH_CARDS_PREF, value: next });
     },

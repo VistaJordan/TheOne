@@ -62,6 +62,7 @@ import { deriveSite } from '../lib/woDerive';
 import { useInvalidateObligations } from '../hooks/useObligations';
 import { QuoteDocument } from './QuotePrintPage';
 import { usePrintTemplate } from './DocPrintPages';
+import { QUIET_MUTATION } from '../lib/queryClient';
 
 /** How long the form sits still before the draft is flushed (§3.9 autosave). */
 const AUTOSAVE_MS = 900;
@@ -229,6 +230,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   // ── Autosave ───────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: (next: DraftQuote) => putWorkOrderQuote(woNumber, toUpdateInput(next)),
+    meta: QUIET_MUTATION,
     onSuccess: (res) => {
       // Keep the server's canonical numbers/summary, but do NOT let the response
       // re-seed the form (see loadedSignature above).

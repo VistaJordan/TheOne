@@ -37,6 +37,7 @@ import { blankOption, fromDraftBody, removeAt, replaceAt, toDraftBody } from '..
 import { quoteProblems, sumLines, usd } from '../lib/quoteTotals';
 import { feedTime } from '../lib/fields';
 import { callDuration } from '../lib/quo';
+import { QUIET_MUTATION } from '../lib/queryClient';
 
 const AUTOSAVE_MS = 900;
 /** The house OT multiplier; the quote applies its contract's own once submitted. */
@@ -102,6 +103,7 @@ export function AiQuoteReviewPage() {
   // ── Autosave the reviewer's edits to the draft ────────────────────────────
   const save = useMutation({
     mutationFn: (d: DraftQuote) => saveAiQuoteDraft(woNumber, callId, toDraftBody(d)),
+    meta: QUIET_MUTATION,
     onSuccess: () => setDirty(false),
   });
   useEffect(() => {

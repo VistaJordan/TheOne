@@ -10,6 +10,7 @@ import { NOTIFICATIONS_KEY, useNotifications } from '../../hooks/useObligations'
 import { useNow } from '../../hooks/useNow';
 import { TIER_LABEL, tierClass, tierOf } from '../../lib/obligations';
 import { Icon } from '../Icon';
+import { QUIET_MUTATION } from '../../lib/queryClient';
 
 /** How many entries the dropdown shows before deferring to the Pulse page. */
 const MAX_ROWS = 12;
@@ -42,11 +43,13 @@ export function PulseBell() {
 
   const readOne = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
+    meta: QUIET_MUTATION,
     onSettled: () => qc.invalidateQueries({ queryKey: NOTIFICATIONS_KEY }),
   });
 
   const readAll = useMutation({
     mutationFn: () => markAllNotificationsRead(),
+    meta: QUIET_MUTATION,
     onSettled: () => qc.invalidateQueries({ queryKey: NOTIFICATIONS_KEY }),
   });
 
@@ -61,10 +64,12 @@ export function PulseBell() {
   const badge = unread + noticeUnread;
   const readNotice = useMutation({
     mutationFn: (id: string) => markNoticeRead(id),
+    meta: QUIET_MUTATION,
     onSettled: () => qc.invalidateQueries({ queryKey: NOTICES_KEY }),
   });
   const readAllNotices = useMutation({
     mutationFn: () => markAllNoticesRead(),
+    meta: QUIET_MUTATION,
     onSettled: () => qc.invalidateQueries({ queryKey: NOTICES_KEY }),
   });
 
