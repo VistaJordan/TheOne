@@ -2647,6 +2647,34 @@ unchanged (the fold shows the AI's marked-up rate). **Labor:** picking the
 Labor type on a line with a blank description fills "Labor tech N"
 (`nextLaborDescription`: the section's other labor lines + 1).
 
+**A payment that goes over asks for a reason** (migration 0107, Elise
+2026-10-28; `paymentOverage` / `paymentOverageSentence` /
+`mayDecideOverQuote` in shared `moneyGuards.ts`, `tests/payment-overage.test.ts`).
+Before 0107 a request that took Cost past the NTE or the approved quote was
+filed (an OM's under $500 even auto-approved) and the hold appeared only at
+the first Approve / Pay. Now `createPaymentRequest` (and `updatePaymentRequest`
+on a new amount) asks `overageFor` — Cost + this amount against the NTE less an
+approved override's `covers`, and against the approved quote's price / cost
+side less an approved over-quote's — and, when over, refuses with **409
+`PAYMENT_OVERAGE_REASON`** (`details.over_nte`, `over_quote`, `projected`)
+until `overage_reason` (≥ `OVERAGE_REASON_MIN` 5 chars) is sent. The Request
+payment form catches it and opens `OverageReasonDialog`; submitting resends
+with the reason. With it the request is filed `requested` (never
+auto-approved), the reason is stored on `payment_request.overage_reason`
+(Payables row, Payments queue) and, after the commit, `raiseOverageHolds`
+raises / refreshes the `nte_override` and / or `over_quote` task with
+`detail.reason` + `requested_by` — the Approvals inbox prints them on the row
+and in the decision dialog (AM and the other `approvals/nte` deciders see the
+NTE one). `assertPaymentNotHeld` at Approve / Pay is unchanged and is the
+backstop (it copies the row's reason onto a hold it raises). **Over-the-quote
+holds are decided by ATL, TL, AM, Admin** (`OVER_QUOTE_DECIDER_ROLES`, a super
+admin always) — `requireOverQuoteLevel` refuses approve / reject / claim to
+anyone else with 403 `OVER_QUOTE_DECIDER_LEVEL` whatever their Money holds
+grant (so never OP Admin), and the inbox draws no decision for them. Rejecting
+or deleting a payment now runs `reconcileApprovalTasks`, so its hold is
+cancelled ("The payment it was raised for is no longer waiting") instead of
+holding every other payment on the work order.
+
 **Statuses a dispatcher may not even request** (migration 0091, Elise
 2026-10-22; `REQUEST_HIDDEN_STATUS_NAMES` / `requestableStatuses` /
 `STATUS_REQUEST_HIDDEN_CODE` in `packages/shared/src/workflow.ts`,

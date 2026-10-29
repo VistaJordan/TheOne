@@ -18,6 +18,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { OVERAGE_REASON_MAX } from '@theone/shared';
 import { parse, notFound } from '../errors.js';
 import { resolveTaskId, actingPrincipalFromRequest } from '../services/activity.js';
 import {
@@ -82,6 +83,8 @@ const createSchema = z
     recipient_is_store: z.boolean().optional(),
     attachment_id: z.string().uuid().nullable().optional(),
     override_blacklist: z.boolean().optional(),
+    // Elise, 2026-10-28: the reason for taking Cost past the NTE or the quote.
+    overage_reason: z.string().trim().max(OVERAGE_REASON_MAX).nullable().optional(),
   })
   .strict();
 
@@ -95,6 +98,7 @@ const editSchema = z
     recipient_name: z.string().trim().max(200).nullable().optional(),
     recipient_phone: z.string().trim().max(40).nullable().optional(),
     recipient_is_store: z.boolean().optional(),
+    overage_reason: z.string().trim().max(OVERAGE_REASON_MAX).nullable().optional(),
   })
   .strict();
 

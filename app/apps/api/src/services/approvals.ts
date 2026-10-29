@@ -48,7 +48,9 @@ import {
   checkEcotrakTransition,
   describeEcotrakRefusal,
   ecotrakTransitionRefused,
+  OVER_QUOTE_DECIDER_CODE,
   SELF_APPROVAL_CODE,
+  mayDecideOverQuote,
   selfApprovalMessage,
   selfApprovalVerdict,
   STATUS_REQUEST_HIDDEN_CODE,
@@ -536,6 +538,16 @@ function requireDecide(actor: ActingPrincipal, type: ApprovalTaskType, verb: str
   );
 }
 
+/** Elise, 2026-10-28: paying more than the approved quote is decided by ATL
+    and above (ATL, TL, AM, Admin; a super admin always) — never OP Admin,
+    whatever the Money holds grant says. Approve, reject and claim alike. */
+function requireOverQuoteLevel(actor: ActingPrincipal, type: ApprovalTaskType, verb: string): void {
+  if (type !== 'over_quote' || mayDecideOverQuote(actor.role, actor.isSuperAdmin)) return;
+  throw forbidden(`Only ATL and above can ${verb} paying more than the approved quote`, {
+    code: OVER_QUOTE_DECIDER_CODE,
+  });
+}
+
 /**
  * approve / reject. The status, its stamps, the activity row and an internal
  * comment on the work order all land in one transaction — the decision is
@@ -785,6 +797,7 @@ export async function approveApprovalTask(
 ): Promise<ApprovalTask> {
   const cur = await getApprovalTask(id);
   requireDecide(actor, cur.type, 'approve');
+  requireOverQuoteLevel(actor, cur.type, 'approve');
   return decide(id, 'approved', note, actor, opts);
 }
 
@@ -796,6 +809,7 @@ export async function rejectApprovalTask(
 ): Promise<ApprovalTask> {
   const cur = await getApprovalTask(id);
   requireDecide(actor, cur.type, 'reject');
+  requireOverQuoteLevel(actor, cur.type, 'reject');
   return decide(id, 'rejected', note, actor);
 }
 
@@ -804,6 +818,7 @@ export async function rejectApprovalTask(
 export async function claimApprovalTask(id: string, actor: ActingPrincipal): Promise<ApprovalTask> {
   const cur = await getApprovalTask(id);
   requireDecide(actor, cur.type, 'claim');
+  requireOverQuoteLevel(actor, cur.type, 'claim');
   if (cur.status !== 'open') {
     throw badRequest(`This task is already ${cur.status}`, { status: cur.status });
   }
@@ -1134,9 +1149,11 @@ async function reconcileNteOverride(taskId: string, actorId: string): Promise<vo
   if (typeof d.covers === 'number' && m.nte !== null && d.covers > m.nte && (await holdSubjectLive(d))) return;
 
   const why =
-    m.cost === null || m.nte === null
-      ? 'Cost or NTE was cleared'
-      : `Cost ${money(m.cost)} is back within the NTE ${money(m.nte)}`;
+    typeof d.payment_request_id === 'string'
+      ? 'The payment it was raised for is no longer waiting'
+      : m.cost === null || m.nte === null
+        ? 'Cost or NTE was cleared'
+        : `Cost ${money(m.cost)} is back within the NTE ${money(m.nte)}`;
   await cancelTask(taskId, open.rows[0].id, 'nte_override', open.rows[0].title, why, actorId);
 }
 

@@ -174,6 +174,66 @@ export function paymentLockReason(r: PaymentLockInput): string | null {
   return null;
 }
 
+// ── Overage at request time (Elise, 2026-10-28) ──────────────────────────────
+//
+// A payment request that would take Cost past the NTE or past the approved
+// quote is still filed, but only with the requester's reason: the API answers
+// 409 PAYMENT_OVERAGE_REASON until one is sent, the form asks for it in a
+// popup, and the hold is raised as the request is filed (not at the first
+// Approve), carrying the reason to the manager's inbox.
+
+/** details.code of the 409 that asks the requester for the reason. */
+export const PAYMENT_OVERAGE_REASON_CODE = 'PAYMENT_OVERAGE_REASON';
+/** The shortest reason accepted (trimmed). */
+export const OVERAGE_REASON_MIN = 5;
+export const OVERAGE_REASON_MAX = 2000;
+
+export interface PaymentOverage {
+  /** What Cost would read once this payment is paid. */
+  projected: number;
+  /** Set when the projection is past the NTE and no approved override covers it. */
+  nte: { nte: number; over_by: number } | null;
+  /** Set when the projection is past the approved quote (the sentence why). */
+  quote: { reason: string; total: number | null; cost: number | null } | null;
+}
+
+/** The overage a new (or re-priced) request would cause, or null when none. */
+export function paymentOverage(r: {
+  cost: number | null;
+  amount: number;
+  nte: number | null;
+  nteCovers: number | null;
+  quote: { total: number | null; cost: number | null } | null;
+  quoteCovers: number | null;
+}): PaymentOverage | null {
+  const projected = projectedCost(r.cost, r.amount);
+  const nte =
+    r.nte !== null && overNte(projected, r.nte, r.nteCovers)
+      ? { nte: r.nte, over_by: (cents(projected) - cents(r.nte)) / 100 }
+      : null;
+  const reason = overQuoteReason(projected, r.quote, r.quoteCovers);
+  const quote = reason ? { reason, total: r.quote?.total ?? null, cost: r.quote?.cost ?? null } : null;
+  return nte || quote ? { projected, nte, quote } : null;
+}
+
+/** The sentence the 409 carries and the popup shows. */
+export function paymentOverageSentence(o: PaymentOverage): string {
+  const parts: string[] = [];
+  if (o.nte) parts.push(`takes Cost to ${usd(o.projected)}, ${usd(o.nte.over_by)} over the client NTE ${usd(o.nte.nte)}`);
+  if (o.quote) parts.push(o.quote.reason.replace(/^Cost would be/, 'takes Cost to'));
+  return `This payment ${parts.join('; it also ')}. Give the reason — it goes to the manager who decides the hold.`;
+}
+
+/** Elise, 2026-10-28: paying more than the approved quote is decided by ATL
+    and above — never OP Admin, whatever the inbox grant says. A super admin
+    always may. */
+export const OVER_QUOTE_DECIDER_ROLES = ['atl', 'tl', 'am', 'admin'] as const;
+export const OVER_QUOTE_DECIDER_CODE = 'OVER_QUOTE_DECIDER_LEVEL';
+
+export function mayDecideOverQuote(role: string | null | undefined, isSuperAdmin: boolean): boolean {
+  return isSuperAdmin || (typeof role === 'string' && (OVER_QUOTE_DECIDER_ROLES as readonly string[]).includes(role));
+}
+
 /** UAT T5b: why Approve is locked on a quote row for this viewer — they
     submitted it (D2) — or null. A super admin may decide their own. */
 export function quoteSelfApprovalLock(

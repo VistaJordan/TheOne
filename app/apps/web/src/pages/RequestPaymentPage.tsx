@@ -28,7 +28,13 @@ import {
   postPaymentRequest,
 } from '../api/client';
 import type { PaymentMethod, PaymentRequest, Vendor } from '../api/client';
-import { PAYMENT_PURPOSE_CODES, PAYMENT_PURPOSE_LABEL, nextPurpose, type PaymentPurposeCode } from '@theone/shared';
+import {
+  PAYMENT_OVERAGE_REASON_CODE,
+  PAYMENT_PURPOSE_CODES,
+  PAYMENT_PURPOSE_LABEL,
+  nextPurpose,
+  type PaymentPurposeCode,
+} from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { CopyButton } from '../components/CopyButton';
 import { Icon } from '../components/Icon';
@@ -41,6 +47,7 @@ import {
 } from '../components/payments/PaymentAddressFields';
 import type { AddressDraft } from '../components/payments/PaymentAddressFields';
 import { VendorPicker } from '../components/payments/VendorPicker';
+import { OverageReasonDialog } from '../components/payments/OverageReasonDialog';
 import { parseMoney, usd } from '../lib/quoteTotals';
 import { deriveSite } from '../lib/woDerive';
 import { useInvalidateObligations } from '../hooks/useObligations';
@@ -125,6 +132,9 @@ export function RequestPaymentPage() {
   const [recipientIsStore, setRecipientIsStore] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<PaymentRequest | null>(null);
+  // Elise, 2026-10-28: the API's sentence when this payment takes Cost past
+  // the NTE or the approved quote — the popup that asks for the reason.
+  const [overage, setOverage] = useState<string | null>(null);
 
   // No linked technician → open straight on the search.
   useEffect(() => {
@@ -186,7 +196,7 @@ export function RequestPaymentPage() {
             : 'Complete the payout details to submit';
 
   const submitMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (overageReason: string | null = null) =>
       postPaymentRequest(woNumber, {
         ...(mode === 'manual'
           ? { vendor_id: null, payee_name: manualName.trim(), payee_phone: manualPhone.trim() }
@@ -205,20 +215,31 @@ export function RequestPaymentPage() {
         recipient_name: recipientOpen && recipientName.trim() !== '' ? recipientName.trim() : null,
         recipient_phone: recipientOpen && recipientPhone.trim() !== '' ? recipientPhone.trim() : null,
         recipient_is_store: recipientOpen && recipientIsStore,
+        ...(overageReason ? { overage_reason: overageReason } : {}),
       }),
     onSuccess: (res) => {
       setSubmitted(res.item);
       setSubmitError(null);
+      setOverage(null);
       void queryClient.invalidateQueries({ queryKey: paymentsKey });
       void queryClient.invalidateQueries({ queryKey: ['work-orders', 'detail', woNumber] });
       void queryClient.invalidateQueries({ queryKey: ['vendor-ytd'] });
       // S5: a new request starts the payment_processing clock.
       invalidateObligations();
     },
-    onError: (err) =>
+    onError: (err) => {
+      if (
+        err instanceof ApiRequestError &&
+        (err.details as { code?: string } | null)?.code === PAYMENT_OVERAGE_REASON_CODE
+      ) {
+        setOverage(err.message);
+        setSubmitError(null);
+        return;
+      }
       setSubmitError(
         err instanceof ApiRequestError ? err.message : 'The payment request could not be submitted.',
-      ),
+      );
+    },
   });
 
   const resetForAnother = () => {
@@ -774,7 +795,7 @@ export function RequestPaymentPage() {
                     onClick={() => {
                       setAmountTouched(true);
                       setAddressTouched(true);
-                      if (valid) submitMutation.mutate();
+                      if (valid) submitMutation.mutate(null);
                     }}
                   >
                     <Icon name={woBlocked || blacklisted ? 'lock' : 'send'} size={14} className="btn-ic" />
@@ -783,11 +804,26 @@ export function RequestPaymentPage() {
                   </button>
                 )}
               </div>
-              {submitError && (
+              {submitError && !overage && (
                 <p className="ferr" style={{ flexBasis: '100%' }}>
                   <Icon name="alert-circle" size={12} />
                   {submitError}
                 </p>
+              )}
+              {overage && (
+                <OverageReasonDialog
+                  message={overage}
+                  busy={submitMutation.isPending}
+                  error={submitError}
+                  onSubmit={(reason) => {
+                    setSubmitError(null);
+                    submitMutation.mutate(reason);
+                  }}
+                  onCancel={() => {
+                    setOverage(null);
+                    setSubmitError(null);
+                  }}
+                />
               )}
             </div>
           </section>

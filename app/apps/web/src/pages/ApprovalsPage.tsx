@@ -53,6 +53,7 @@ import {
   describeIntakeGate,
   ecotrakTransitionRefused,
   isDispatcherRole,
+  mayDecideOverQuote,
   statusApprovalNeedsNote,
   type AcceptanceDetail,
   type ApprovalSectionKey,
@@ -279,6 +280,19 @@ function nteNumbers(item: ApprovalListItem): string | null {
   return `Cost ${usd(d.cost)} · NTE ${usd(d.nte)}`;
 }
 
+/** Elise, 2026-10-28: the requester's reason on a money hold raised by a
+    payment that goes past the NTE or the approved quote. */
+function holdReason(item: ApprovalListItem): string | null {
+  if (item.type !== 'nte_override' && item.type !== 'over_quote') return null;
+  const r = (item.detail as { reason?: unknown }).reason;
+  return typeof r === 'string' && r.trim() !== '' ? r.trim() : null;
+}
+
+function holdRequester(item: ApprovalListItem): string | null {
+  const by = (item.detail as { requested_by?: unknown }).requested_by;
+  return typeof by === 'string' && by.trim() !== '' ? by : (item.created_by?.display_name ?? null);
+}
+
 function taskRow(
   item: ApprovalListItem,
   myId: string | null,
@@ -488,6 +502,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   const requestMode = can(STATUS_PERM_KEY, 'create') && !can(STATUS_PERM_KEY, 'edit');
   const myId = actingAs?.id ?? null;
   const myRole = actingAs?.role ?? null;
+  const mySuper = actingAs?.is_super_admin === true;
 
   const [section, setSection] = useState<Section>('all');
   const [nteView, setNteView] = useState(false);
@@ -525,7 +540,17 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
     const held = new Set(
       tasks.filter((t) => t.type === 'nte_override' && t.status === 'open').map((t) => t.task_id),
     );
-    const out: Row[] = tasks.map((t) => taskRow(t, myId, myRole, held, canDecideTask(t.type)));
+    // Elise, 2026-10-28: over-the-quote holds are decided by ATL and above
+    // only (never OP Admin) — the API refuses anyone else the same way.
+    const out: Row[] = tasks.map((t) =>
+      taskRow(
+        t,
+        myId,
+        myRole,
+        held,
+        canDecideTask(t.type) && (t.type !== 'over_quote' || mayDecideOverQuote(myRole, mySuper)),
+      ),
+    );
     for (const q of quotesQuery.data?.items ?? []) {
       // A draft is nobody's to approve yet; it enters the inbox on submit.
       if (q.status === 'draft') continue;
@@ -536,7 +561,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
     // it, and the intake page shows nothing else.
     return out.filter((r) => (r.section === 'intake') === intake);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- canDecideTask closes over `can`
-  }, [approvalsQuery.data, quotesQuery.data, paymentsQuery.data, myId, myRole, canApproveQuotes, canApprovePayments, can, intake]);
+  }, [approvalsQuery.data, quotesQuery.data, paymentsQuery.data, myId, myRole, mySuper, canApproveQuotes, canApprovePayments, can, intake]);
 
   const inLane = (r: Row, l: Lane) =>
     l === 'requests' ? r.requester : l === 'mine' ? r.mine : l === 'open' ? r.open : !r.open;
@@ -1029,6 +1054,12 @@ function facts(row: Row): { k: string; v: string }[] {
           ? [{ k: 'Requested by', v: row.data.item.created_by.display_name }]
           : []),
         ...(numbers ? [{ k: 'Numbers', v: numbers }] : []),
+        ...(holdReason(row.data.item)
+          ? [
+              { k: 'Requested by', v: holdRequester(row.data.item) ?? '—' },
+              { k: 'Reason', v: holdReason(row.data.item) as string },
+            ]
+          : []),
         { k: 'Work order', v: wo },
       ];
     }
@@ -1182,6 +1213,12 @@ function Ask({ row }: { row: Row }) {
               {row.open ? ' · the clock keeps running until this is approved' : ''}
             </small>
           )}
+          {holdReason(d.item) && (
+            <small>
+              {holdRequester(d.item) ? `${holdRequester(d.item)}: ` : 'Reason: '}“{holdReason(d.item)}”
+            </small>
+          )}
+          {d.item.type === 'over_quote' && row.open && <small>ATL and above decide this</small>}
         </div>
       );
     }

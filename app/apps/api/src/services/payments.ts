@@ -65,7 +65,9 @@ import type {
 } from '@theone/shared';
 import {
   NTE_OVERRIDE_REQUIRED_CODE,
+  OVERAGE_REASON_MIN,
   OVER_QUOTE_CODE,
+  PAYMENT_OVERAGE_REASON_CODE,
   PAYMENT_METHOD_LABEL,
   PAYMENT_PROCESS_PERM_KEY,
   SELF_APPROVAL_CODE,
@@ -75,19 +77,28 @@ import {
   overQuoteReason,
   paymentApprovalVerdict,
   paymentLockReason,
+  paymentOverage,
+  paymentOverageSentence,
   permAllows,
   projectedCost,
   purposeBase,
   selfApprovalMessage,
   selfApprovalVerdict,
 } from '@theone/shared';
-import type { PaymentPurposeCode } from '@theone/shared';
+import type { PaymentOverage, PaymentPurposeCode } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
 import { requirePerm } from './permissions.js';
-import { approvedCover, assertNoOpenMoneyHold, assertNoOpenNteOverride, raiseMoneyHold } from './approvals.js';
+import {
+  approvedCover,
+  assertNoOpenMoneyHold,
+  assertNoOpenNteOverride,
+  createApprovalTask,
+  raiseMoneyHold,
+  reconcileApprovalTasks,
+} from './approvals.js';
 import { assertTierAllows, listApprovalTiers, tierSummary } from './approvalTiers.js';
 import { assertWoAllows } from './woPolicy.js';
 import { enqueueOutbox } from './outbox.js';
@@ -155,6 +166,8 @@ interface PaymentRow {
   nte_override_open: boolean;
   /** 0090: landed approved as it was raised (a dispatcher's request under $500). */
   auto_approved: boolean | null;
+  /** Elise, 2026-10-28: the requester's reason for an overage. */
+  overage_reason: string | null;
   wo_due: string | null;
   wo_nte: number | string | null;
   wo_cost: string | null;
@@ -184,6 +197,7 @@ const SELECT_SQL = `
          pr.recipient_name, pr.recipient_phone, pr.recipient_is_store,
          pr.status, pr.needs_w9, pr.pending_delete, pr.delete_reason,
          pr.auto_approved,
+         pr.overage_reason,
          pr.attachment_id::text AS attachment_id,
          rb.id::text        AS requested_by_id,
          rb.display_name    AS requested_by_name,
@@ -377,6 +391,7 @@ function mapPayment(
         ? tierSummary(opts.tiers, 'payment', Number(r.amount ?? 0), opts.viewer)
         : null,
     auto_approved: r.auto_approved === true,
+    overage_reason: r.overage_reason ?? null,
   };
 }
 
@@ -674,6 +689,9 @@ export interface PaymentRequestInput {
   attachment_id?: string | null;
   /** Admin only: pay a blacklisted vendor anyway. */
   override_blacklist?: boolean;
+  /** Elise, 2026-10-28: required (409 PAYMENT_OVERAGE_REASON otherwise)
+      when the request takes Cost past the NTE or the approved quote. */
+  overage_reason?: string | null;
 }
 
 async function loadRow(id: string): Promise<PaymentRow> {
@@ -716,6 +734,118 @@ function assertAddressMatches(method: PaymentMethod, address: PaymentAddress | n
   }
 }
 
+/** What the audit row keeps of an overage (the figures, not the sentence). */
+function overageAudit(o: PaymentOverage): Record<string, unknown> {
+  return {
+    projected_cost: o.projected,
+    ...(o.nte ? { nte: o.nte.nte, over_nte_by: o.nte.over_by } : {}),
+    ...(o.quote ? { quote_total: o.quote.total, quote_cost: o.quote.cost } : {}),
+  };
+}
+
+/**
+ * Elise, 2026-10-28: the overage a request of `amount` would cause on this
+ * work order — Cost past the NTE (less what an approved override covers) or
+ * past the approved quote (less an approved over-quote hold). The same
+ * questions assertPaymentNotHeld asks at Approve and Pay, asked as the
+ * request is filed so the hold does not appear only afterwards.
+ */
+async function overageFor(taskId: string, amount: number): Promise<PaymentOverage | null> {
+  const t = await query<{ cost: string | null; nte: number | string | null }>(
+    `SELECT fields->>'34. Cost' AS cost, nte::float8 AS nte FROM task WHERE id = $1`,
+    [taskId],
+  );
+  if (!t.rows[0]) return null;
+  const [nteCover, quote, quoteCover] = await Promise.all([
+    approvedCover(taskId, 'nte_override'),
+    approvedQuoteFigures(taskId),
+    approvedCover(taskId, 'over_quote'),
+  ]);
+  return paymentOverage({
+    cost: moneyNum(t.rows[0].cost),
+    amount,
+    nte: moneyNum(t.rows[0].nte),
+    nteCovers: nteCover?.covers ?? null,
+    quote,
+    quoteCovers: quoteCover?.covers ?? null,
+  });
+}
+
+/** The reason, trimmed — or the 409 that asks for it (the form's popup). */
+function requireOverageReason(o: PaymentOverage | null, raw: string | null | undefined): string | null {
+  if (!o) return null;
+  const reason = raw?.trim() ?? '';
+  if (reason.length >= OVERAGE_REASON_MIN) return reason;
+  throw conflict(paymentOverageSentence(o), {
+    code: PAYMENT_OVERAGE_REASON_CODE,
+    projected: o.projected,
+    over_nte: o.nte,
+    over_quote: o.quote,
+    min_length: OVERAGE_REASON_MIN,
+  });
+}
+
+/**
+ * Raise (or refresh) the holds an overage needs, after the request committed:
+ * the NTE override (section NTE — AM and the other managers decide it) and
+ * the over-quote hold (Money holds — ATL and above, never OP Admin). Each
+ * carries the requester's reason. Never throws: Approve and Pay ask again
+ * (assertPaymentNotHeld) and raise whatever is missing.
+ */
+async function raiseOverageHolds(
+  taskId: string,
+  paymentId: string,
+  o: PaymentOverage,
+  reason: string,
+  actor: ActingPrincipal,
+  amount: number,
+  payee: string,
+): Promise<void> {
+  try {
+    if (o.nte) {
+      await createApprovalTask({
+        taskId,
+        type: 'nte_override',
+        actorId: actor.id,
+        preset: {
+          title: `Paying ${money(amount)} to ${payee} would take Cost to ${money(o.projected)}, over the client NTE ${money(o.nte.nte)}`,
+          detail: {
+            cost: o.projected,
+            nte: o.nte.nte,
+            over_by: o.nte.over_by,
+            covers: o.projected,
+            projected: true,
+            payment_request_id: paymentId,
+            reason,
+            requested_by: actor.name,
+          },
+        },
+      });
+    }
+    if (o.quote) {
+      await createApprovalTask({
+        taskId,
+        type: 'over_quote',
+        actorId: actor.id,
+        preset: {
+          title: `${o.quote.reason} (paying ${money(amount)} to ${payee})`,
+          detail: {
+            cost: o.projected,
+            quote_total: o.quote.total,
+            quote_cost: o.quote.cost,
+            covers: o.projected,
+            payment_request_id: paymentId,
+            reason,
+            requested_by: actor.name,
+          },
+        },
+      });
+    }
+  } catch (err) {
+    console.error('[payments] could not raise the overage hold for', paymentId, err);
+  }
+}
+
 /**
  * Submit a request (payments:create is checked by the route). The WO status
  * must allow it. The insert, the W9 recompute and the activity row share one
@@ -745,7 +875,13 @@ export async function createPaymentRequest(
   // for AP as it is raised; a probation dispatcher's, and anyone's at $500
   // or over, waits in the queue for the band's approver.
   const approval = paymentApprovalVerdict(actor.role, input.amount);
-  const startStatus: PaymentRequestStatus = approval.needed ? 'requested' : 'approved';
+  // Elise, 2026-10-28: past the NTE or the approved quote the request is
+  // still filed — with the requester's reason — and always waits in the
+  // queue: the hold raised below is what a manager decides first.
+  const overage = await overageFor(taskId, input.amount);
+  const overageReason = requireOverageReason(overage, input.overage_reason);
+  const autoApproved = !approval.needed && !overage;
+  const startStatus: PaymentRequestStatus = autoApproved ? 'approved' : 'requested';
 
   // Yoda resolves the Technician by phone and creates one when unknown, so the
   // W9 / YTD bookkeeping has a record to hang off. Same here: a manual payee
@@ -778,6 +914,7 @@ export async function createPaymentRequest(
   }
 
   let createdId: string | null = null;
+  let payeeLabel = 'the technician';
 
   await withTransaction(async (tx) => {
     // The task row first (the parent-first order of every child insert, and
@@ -802,9 +939,9 @@ export async function createPaymentRequest(
       `INSERT INTO payment_request
          (task_id, vendor_id, payee_name, payee_phone, purpose, amount, method, payment_address, note,
           recipient_name, recipient_phone, recipient_is_store, attachment_id, status, requested_by,
-          auto_approved, approved_at)
+          auto_approved, approved_at, overage_reason)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $15, $14,
-               $16, CASE WHEN $16 THEN now() ELSE NULL END)
+               $16, CASE WHEN $16 THEN now() ELSE NULL END, $17)
        RETURNING id::text AS id`,
       [
         taskId,
@@ -822,7 +959,8 @@ export async function createPaymentRequest(
         input.attachment_id ?? null,
         actor.id,
         startStatus,
-        !approval.needed,
+        autoApproved,
+        overageReason,
       ],
     );
     createdId = ins.rows[0].id;
@@ -830,6 +968,7 @@ export async function createPaymentRequest(
 
     const row = await tx.query<PaymentRow>(`${SELECT_SQL} WHERE pr.id = $1`, [createdId]);
     const full = mapPayment(row.rows[0], { fullAddress: true });
+    payeeLabel = full.payee.name ?? payeeLabel;
     const plain = postedMessage(full, actor);
     await tx.query(`UPDATE payment_request SET posted_message_plain = $2 WHERE id = $1`, [createdId, plain]);
 
@@ -840,7 +979,8 @@ export async function createPaymentRequest(
       method: input.method,
       purpose,
       needs_w9: full.needs_w9,
-      ...(approval.needed ? {} : { auto_approved: true, approval_reason: approval.reason }),
+      ...(autoApproved ? { auto_approved: true, approval_reason: approval.reason } : {}),
+      ...(overage ? { overage: overageAudit(overage), overage_reason: overageReason } : {}),
     });
     await enqueueOutbox(tx, 'payment.requested', 'payment_request', createdId, {
       task_id: taskId,
@@ -850,6 +990,9 @@ export async function createPaymentRequest(
   });
 
   if (!createdId) throw new ApiError('INTERNAL', 'Payment request insert produced no row');
+  if (overage && overageReason) {
+    await raiseOverageHolds(taskId, createdId, overage, overageReason, actor, input.amount, payeeLabel);
+  }
 
   // S5 · a request entering the queue starts the payment_processing clock
   // (2 business days), owed by AP until a decision lands.
@@ -867,6 +1010,9 @@ export interface PaymentEditInput {
   recipient_name?: string | null;
   recipient_phone?: string | null;
   recipient_is_store?: boolean;
+  /** Elise, 2026-10-28: the reason, when a new amount takes Cost past the
+      NTE or the approved quote (the reason on file is kept otherwise). */
+  overage_reason?: string | null;
 }
 
 /** Yoda UpdatePayment: only while `requested`; the requester or a processor. */
@@ -893,6 +1039,11 @@ export async function updatePaymentRequest(
   }
   // A new code is numbered again; the same code keeps the number it has.
   const purposeCode = input.purpose !== undefined ? purposeCodeOf(input.purpose) : null;
+  // Elise, 2026-10-28: a new amount is asked the overage question again.
+  const amountChanged = input.amount !== undefined && input.amount !== Number(row.amount ?? 0);
+  const overage = amountChanged ? await overageFor(row.task_id, input.amount as number) : null;
+  const overageReason = requireOverageReason(overage, input.overage_reason ?? row.overage_reason);
+  const { overage_reason: _reasonInput, ...fields } = input;
 
   await withTransaction(async (tx) => {
     await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [row.task_id]);
@@ -914,6 +1065,7 @@ export async function updatePaymentRequest(
     if (input.recipient_name !== undefined) set('recipient_name', input.recipient_name?.trim() || null);
     if (input.recipient_phone !== undefined) set('recipient_phone', input.recipient_phone?.trim() || null);
     if (input.recipient_is_store !== undefined) set('recipient_is_store', input.recipient_is_store);
+    if (overageReason !== null) set('overage_reason', overageReason);
     if (sets.length > 0) {
       params.push(id);
       // Only while it is still requested, in the statement (#25).
@@ -926,9 +1078,14 @@ export async function updatePaymentRequest(
     if (row.vendor_id) await recomputeNeedsW9(tx, row.vendor_id);
     await logPayment(tx, actor.id, row.task_id, 'payment_updated', null, {
       payment_request_id: id,
-      fields: Object.keys(input),
+      fields: Object.keys(fields),
+      ...(overage ? { overage: overageAudit(overage), overage_reason: overageReason } : {}),
     });
   });
+  if (overage && overageReason) {
+    const payee = (row.vendor_id ? row.vendor_name : row.payee_name) ?? 'the technician';
+    await raiseOverageHolds(row.task_id, id, overage, overageReason, actor, input.amount as number, payee);
+  }
   return mapOne(await loadRow(id), { fullAddress: canProcessPayments(actor), viewer: actor });
 }
 
@@ -1049,6 +1206,7 @@ async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, mov
         covers: projected,
         projected: true,
         payment_request_id: row.id,
+        ...(row.overage_reason ? { reason: row.overage_reason } : {}),
       },
       move,
       code: NTE_OVERRIDE_REQUIRED_CODE,
@@ -1069,6 +1227,7 @@ async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, mov
         quote_cost: quote?.cost ?? null,
         covers: projected,
         payment_request_id: row.id,
+        ...(row.overage_reason ? { reason: row.overage_reason } : {}),
       },
       move,
       code: OVER_QUOTE_CODE,
@@ -1130,7 +1289,7 @@ export async function rejectPaymentRequest(id: string, reason: string, actor: Ac
   assertCanApprove(actor, 'reject');
   const row = await loadRow(id);
   const note = reason.trim();
-  return setStatus(row, ['requested', 'approved', 'sent_to_yoda'], 'rejected', 'payment_rejected', actor,
+  const out = await setStatus(row, ['requested', 'approved', 'sent_to_yoda'], 'rejected', 'payment_rejected', actor,
     'rejected_by = $3, rejected_at = now(), rejection_note = $4', [actor.id, note],
     async (tx) => {
       // The reason a payment was refused is feedback for the dispatcher who
@@ -1149,6 +1308,11 @@ export async function rejectPaymentRequest(id: string, reason: string, actor: Ac
       if (row.vendor_id) await recomputeNeedsW9(tx, row.vendor_id);
       await enqueueOutbox(tx, 'payment.rejected', 'payment_request', id, { task_id: row.task_id, reason: note });
     });
+  // 2026-10-28: a hold raised for this request (at request time, with the
+  // reason) has nothing left to decide once the request is refused; left
+  // open it would hold every other payment on the work order.
+  await reconcileApprovalTasks(row.task_id, actor.id);
+  return out;
 }
 
 /** Yoda ConvertToAch, generalised: a processor changes the method; old payout details are dropped. */
@@ -1190,6 +1354,8 @@ async function deleteNow(row: PaymentRow, reason: string, actor: ActingPrincipal
     changes = await hardDelete(tx, row, reason, actor);
   });
   await afterCost(row.task_id, changes);
+  // Same as a rejection: the request's own hold is closed (never throws).
+  await reconcileApprovalTasks(row.task_id, actor.id);
 }
 
 /**

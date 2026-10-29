@@ -339,6 +339,9 @@ function PaymentRow({ item }: { item: PaymentListItem }) {
             {item.recipient_name && <span className="ctx-sub"> · paid to {item.recipient_name}</span>}
           </strong>
           <small>{[item.purpose, methodLabel(item.method)].filter(Boolean).join(' · ')}</small>
+          {item.overage_reason && (
+            <small title={item.overage_reason}>Over NTE / quote — “{item.overage_reason}”</small>
+          )}
         </div>
       </td>
       <td className="num">{usd(item.amount)}</td>

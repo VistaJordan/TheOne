@@ -183,6 +183,9 @@ export function PaymentsTable({ items, loading, error, woNumber, totalPaid, acti
                   <td>
                     {p.purpose || '—'}
                     {p.rejection_note && <span className="ctx-sub"> · {p.rejection_note}</span>}
+                    {p.overage_reason && (
+                      <span className="ctx-sub" title={p.overage_reason}> · over NTE / quote: “{p.overage_reason}”</span>
+                    )}
                   </td>
                   <td>
                     <PaymentStatusPill status={p.status} pendingDelete={p.pending_delete} />

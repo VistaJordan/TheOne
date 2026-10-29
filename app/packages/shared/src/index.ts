@@ -1198,6 +1198,10 @@ export interface PaymentRequest {
   /** 0090: approved as it was raised (a dispatcher's request under $500,
       `paymentApprovalVerdict`) — nobody clicked Approve. */
   auto_approved: boolean;
+  /** Elise, 2026-10-28: the requester's reason for a request that takes
+      Cost past the NTE or the approved quote (asked in a popup at submit,
+      `PAYMENT_OVERAGE_REASON`); also on the hold it raised. Null = none. */
+  overage_reason: string | null;
 }
 
 /** One row of GET /api/payments — the request plus the work order it sits on. */
