@@ -3,7 +3,7 @@ import { queryClient } from './lib/queryClient';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { Suspense, lazy, type ReactNode } from 'react';
 import { ThemeProvider } from './theme/ThemeProvider';
-import { INTAKE_PERM_KEY, PULSE_PERM_KEY } from '@theone/shared';
+import { INTAKE_PERM_KEY, PAYMENTS_PAGE_PERM_KEY, PULSE_PERM_KEY, QUOTES_PAGE_PERM_KEY } from '@theone/shared';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { AppShell, type NavKey } from './components/AppShell';
 import { Icon } from './components/Icon';
@@ -230,7 +230,7 @@ export function App() {
               />
               <Route
                 path="/quotes"
-                element={<RequireAuth><RequireCan perm="quotes" nav="Quotes"><QuotesPage /></RequireCan></RequireAuth>}
+                element={<RequireAuth><RequireCan perm={QUOTES_PAGE_PERM_KEY} nav="Quotes"><QuotesPage /></RequireCan></RequireAuth>}
               />
               {/* 0046 — the rate cards quotes and invoices price against. */}
               <Route
@@ -272,7 +272,7 @@ export function App() {
               {/* Payables queue — approve, reject, hand to Yoda, mark paid. */}
               <Route
                 path="/payments"
-                element={<RequireAuth><RequireCan perm="payments" nav="Payments"><PaymentsPage /></RequireCan></RequireAuth>}
+                element={<RequireAuth><RequireCan perm={PAYMENTS_PAGE_PERM_KEY} nav="Payments"><PaymentsPage /></RequireCan></RequireAuth>}
               />
               {/* Incoming Work Orders — one page for everything on its way in.
                   Rule 7.1.1 (0036): new work orders waiting to be accepted and

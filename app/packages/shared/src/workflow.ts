@@ -139,12 +139,15 @@ export function fillableOnCreate(catalogueKey: string): boolean {
 // decline sends the work order back to Waiting for Quote (Yoda: re-quote in a
 // new round). Matched by name, and a status that does not exist is skipped.
 
-export type QuoteEvent = 'sent' | 'client_approved' | 'client_declined';
+export type QuoteEvent = 'sent' | 'client_approved' | 'client_declined' | 'client_declined_bfi';
 
 export const QUOTE_EVENT_STATUS_NAME: Record<QuoteEvent, string> = {
   sent: 'Waiting for Approval',
   client_approved: 'Approved',
+  // A challenged quote is re-quoted (Elise, 2026-10-29).
   client_declined: 'Waiting for Quote',
+  // Bill for incurred only: the job ends at the incurred work.
+  client_declined_bfi: 'Done / Incurred',
 };
 
 /** Statuses a quote event may move the work order FROM. A work order that is
@@ -154,6 +157,7 @@ const QUOTE_EVENT_FROM: Record<QuoteEvent, readonly string[]> = {
   sent: ['Open', 'Emergency', 'Assessment Sched', 'On Site (Assessment)', 'Return Trip Needed', 'Waiting for Quote', 'Quote Ready', 'Waiting for Advice'],
   client_approved: ['Waiting for Quote', 'Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
   client_declined: ['Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
+  client_declined_bfi: ['Waiting for Quote', 'Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
 };
 
 /** The status a quote event moves the work order to, or null to leave it. */
@@ -251,4 +255,22 @@ export function statusBeforeCancel(
     }
   }
   return null;
+}
+
+// ── The client's decline, two kinds (Elise, 2026-10-29; migration 0109) ─────
+// challenged — the client pushes back: back to Waiting for Quote, re-quote in
+//              a new round (the behaviour before 0109).
+// bfi        — bill for incurred only: the Incurred section stays, the round's
+//              proposed options come off the live quote (kept, restorable with
+//              "Restore removed options"), Bill For Incurred is ticked and the
+//              work order moves to Done / Incurred.
+export type QuoteDeclineKind = 'challenged' | 'bfi';
+export const QUOTE_DECLINE_KINDS: readonly QuoteDeclineKind[] = ['challenged', 'bfi'];
+export const QUOTE_DECLINE_KIND_LABEL: Record<QuoteDeclineKind, string> = {
+  challenged: 'Challenged',
+  bfi: 'Bill for incurred only',
+};
+/** The work-order status event a decline of this kind follows. */
+export function quoteDeclineEvent(kind: QuoteDeclineKind): QuoteEvent {
+  return kind === 'bfi' ? 'client_declined_bfi' : 'client_declined';
 }

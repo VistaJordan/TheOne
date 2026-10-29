@@ -1068,6 +1068,11 @@ export interface Quote {
   client_decided_by: ActivityActor | null;
   client_decision_note: string | null;
   client_approved_on_site: boolean;
+  /** 0109: which kind of decline (null unless client_declined). */
+  client_decline_kind: 'challenged' | 'bfi' | null;
+  /** 0109: proposed options a BFI decline took off the live quote and that
+      "Restore removed options" can still bring back (0 = none). */
+  bfi_removed_options: number;
   created_at: string;
   updated_at: string;
   /** Live sections only (soft-deleted declined siblings are omitted). */

@@ -9,6 +9,7 @@
 //   POST   /work-orders/:id/quote/submit          (draft → pending_correction for a dispatcher, else → pending_approval; quotes:edit — 0092)
 //   POST   /work-orders/:id/quote/approve|send|reject|cancel-submission   (quotes:approve)
 //   POST   /work-orders/:id/quote/client-approve|client-decline  (quotes:approve, or a dispatcher in Approval)
+//   POST   /work-orders/:id/quote/restore-options  (quotes:edit; what a BFI decline removed)
 //   POST   /work-orders/:id/quote/new-round       (quotes:edit)
 //
 // Two invariants every handler here follows:
@@ -34,6 +35,7 @@ import {
   cancelSubmission,
   clientApproveQuote,
   clientDeclineQuote,
+  restoreBfiOptions,
   startNewRound,
   quoteSalesTax,
 } from '../services/quotes.js';
@@ -108,6 +110,7 @@ const clientApproveSchema = z.object({
 const clientDeclineSchema = z.object({
   note: z.string().trim().min(1).max(2000),
   section_id: z.string().uuid().nullable().optional(),
+  kind: z.enum(['challenged', 'bfi']).optional(),
 });
 const rateSchema = z
   .object({
@@ -216,5 +219,12 @@ export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
     const input = parse(clientDeclineSchema, req.body);
     const actor = actingPrincipalFromRequest(req);
     return { quote: await clientDeclineQuote(taskId, input, actor) };
+  });
+
+  // 0109: bring back the options a bill-for-incurred decline took off.
+  app.post('/work-orders/:id/quote/restore-options', async (req) => {
+    const taskId = await taskIdOf(req);
+    const actor = actingPrincipalFromRequest(req);
+    return { quote: await restoreBfiOptions(taskId, actor) };
   });
 }

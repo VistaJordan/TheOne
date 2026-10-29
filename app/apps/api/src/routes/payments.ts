@@ -18,7 +18,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { OVERAGE_REASON_MAX } from '@theone/shared';
+import { OVERAGE_REASON_MAX, PAYMENTS_PAGE_PERM_KEY, permAllows } from '@theone/shared';
 import { parse, notFound } from '../errors.js';
 import { resolveTaskId, actingPrincipalFromRequest } from '../services/activity.js';
 import {
@@ -40,6 +40,17 @@ import { searchPaymentVendors, getPaymentVendor } from '../services/paymentVendo
 import { requirePerm } from '../services/permissions.js';
 import { assertRawMoney, zMoney } from '../validation.js';
 import { assertRecordInScope } from '../services/recordScope.js';
+
+/** 0108 (Elise, 2026-10-29): payments read outside a work order's page — the
+ *  Payments page, one request by its own link — need the Payments page, or the
+ *  Approvals inbox's Payments lane (which lists the waiting ones). The
+ *  dispatchers have neither: they see payments only on the Payables tab of
+ *  their own work orders. */
+function requirePaymentsOutsideWo(p: ReturnType<typeof actingPrincipalFromRequest>): void {
+  if (permAllows(p.perms, PAYMENTS_PAGE_PERM_KEY, 'view', p.isSuperAdmin)) return;
+  if (permAllows(p.perms, 'approvals/payments', 'view', p.isSuperAdmin)) return;
+  requirePerm(p, PAYMENTS_PAGE_PERM_KEY, 'view', 'Payments are seen on the work order — open its Payables tab');
+}
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
 const pidParamsSchema = z.object({ pid: z.string().uuid() });
@@ -156,10 +167,14 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
   });
 
   // ── The Payments tab / AP queue + single row ───────────────────────────────
-  /** GET /payments — the sidebar tab. Needs payments:view (0015); 0026 scopes the rows. */
+  /** GET /payments — the sidebar tab. Needs payments:view (0015); 0026 scopes the rows.
+      0108: and the Payments page (or the Approvals inbox's Payments lane, which
+      reads it too) — a person who sees payments only inside a work order is
+      refused the list across work orders. */
   app.get('/payments', async (req) => {
     const viewer = actingPrincipalFromRequest(req);
     requirePerm(viewer, 'payments', 'view', 'You cannot view payment requests');
+    requirePaymentsOutsideWo(viewer);
     const q = parse(queueSchema, req.query);
     return listAllPaymentRequests(
       {
@@ -181,6 +196,9 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
     await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     const actor = actingPrincipalFromRequest(req);
     requirePerm(actor, 'payments', 'view', 'You cannot view payment requests');
+    // 0108: one request opened by its own link is a read outside the work
+    // order page (the Payables tab reads /work-orders/:id/payment-requests).
+    requirePaymentsOutsideWo(actor);
     return { item: await getPaymentRequest(pid, actor) };
   });
 

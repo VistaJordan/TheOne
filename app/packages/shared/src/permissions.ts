@@ -426,6 +426,20 @@ export const WO_SCOPE_PERM_KEY = 'work_orders/scope';
     row appeared. The clock chips and the Obligations card on ONE work order
     stay on `work_orders` view: they are part of that work order. */
 export const PULSE_PERM_KEY = 'work_orders/pulse';
+
+/** 0108 (Elise, 2026-10-29): the Payments page in the sidebar — every
+ *  payment across the person's work orders — apart from `payments` view,
+ *  which still opens a work order's Payables. Unset follows `payments` view;
+ *  0108 turns it off for the three dispatcher roles, who see payments only
+ *  inside the work order. */
+export const PAYMENTS_PAGE_PERM_KEY = 'payments/page';
+
+/** 0111 (Elise, 2026-10-29): the Quotes page in the sidebar apart from
+ *  `quotes` view, which also opens a work order's Quotes tab (the builder).
+ *  Unset follows `quotes` view. 0111 copies each dispatcher role's old Quotes
+ *  setting here and turns `quotes` view on, so the tab shows for them whether
+ *  or not the page does. */
+export const QUOTES_PAGE_PERM_KEY = 'quotes/page';
 export const WO_SCOPE_ENTITY_ROOT = `${WO_SCOPE_PERM_KEY}/entity`;
 
 /** Path segments cannot hold '/', so the entity code is URI-encoded. */
@@ -751,7 +765,15 @@ export function buildPermissionTree(
       key: 'quotes',
       label: 'Quotes',
       actions: ['view', 'create', 'edit', 'approve'],
-      note: 'Approve also covers reject and send to the client CMMS.',
+      note: 'View = the Quotes tab on a work order; approve also covers reject and send to the client CMMS.',
+      children: [
+        {
+          key: QUOTES_PAGE_PERM_KEY,
+          label: 'Quotes page',
+          actions: ['view'],
+          note: 'The Quotes page in the sidebar: every quote across the work orders the person sees. Off = quotes only on the Quotes tab of a work order.',
+        },
+      ],
     },
     {
       key: 'payments',
@@ -759,6 +781,12 @@ export function buildPermissionTree(
       actions: ['view', 'create', 'approve'],
       note: 'View = the Payments tab and the ledger on a work order; create = raise a request; approve also covers reject.',
       children: [
+        {
+          key: PAYMENTS_PAGE_PERM_KEY,
+          label: 'Payments page',
+          actions: ['view'],
+          note: 'The Payments page in the sidebar: every payment across the work orders the person sees. Off = payments only on the Payables tab of a work order.',
+        },
         {
           key: 'payments/process',
           label: 'Process (send to Yoda, mark paid)',

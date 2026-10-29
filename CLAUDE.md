@@ -2675,6 +2675,10 @@ or deleting a payment now runs `reconcileApprovalTasks`, so its hold is
 cancelled ("The payment it was raised for is no longer waiting") instead of
 holding every other payment on the work order.
 
+**Dispatchers see payments only inside the work order** (migration 0108, Elise 2026-10-29; `PAYMENTS_PAGE_PERM_KEY` in shared `permissions.ts`, `tests/payments-page.test.ts`). The Payments page has its own path, `payments/page` view ("Payments page" under Payments in Roles; unset follows `payments` view, so no other role changed); `payments` view still opens a work order's Payables. Reads across work orders need the page: `GET /payments` and `GET /payment-requests/:pid` (`requirePaymentsOutsideWo`, which also lets `approvals/payments` view through, since the inbox's Payments lane reads the queue), `GET /vendor-bills` and `GET /vendor-bills/:id`; the sidebar item (`NAV_PERM.Payments`), the `/payments` route and Request payment's **Open Payments** link ask it too. 0108 sets OM, Senior OM and OM Under Probation to `payments` view + create (Elise had switched Payments off for them in Admin › Roles on 2026-10-20/22 as a stopgap), `payments/page` off and `approvals/payments` off. Invoices were already closed to them (0084).
+
+**The Quotes tab stays for the dispatchers** (migration 0111, Elise 2026-10-29; `QUOTES_PAGE_PERM_KEY` in shared `permissions.ts`, `tests/quotes-page.test.ts`). The Quotes page in the sidebar has its own path, `quotes/page` view ("Quotes page" under Quotes in Roles; unset follows `quotes` view); `quotes` view still opens a work order's Quotes tab (the builder). The sidebar item (`NAV_PERM.Quotes`) and the `/quotes` route ask the page; `GET /quotes` still asks `quotes` view (the Approvals lane, Receivables and the search read it). 0111 copies each dispatcher role's old `quotes` view onto `quotes/page` (so their sidebar is as it was), then turns `quotes` view and `work_orders/tabs/quotes` view on for OM, Senior OM and OM Under Probation, and does the same for a dispatcher whose own overrides had Quotes view off.
+
 **Statuses a dispatcher may not even request** (migration 0091, Elise
 2026-10-22; `REQUEST_HIDDEN_STATUS_NAMES` / `requestableStatuses` /
 `STATUS_REQUEST_HIDDEN_CODE` in `packages/shared/src/workflow.ts`,
@@ -2738,6 +2742,24 @@ option has its own optional **Tech reported that…** line (its `narrative`,
 printed through `reportedSentence` under PROPOSED); the Work Orders and
 Vendors **Import** buttons use the new `import` icon (a document with an
 arrow going in), `upload` stays for file uploads.
+
+**The client's decline: Challenged or Bill for incurred only** (migration
+0109, Elise 2026-10-29; `QuoteDeclineKind` / `quoteDeclineEvent` in shared
+`workflow.ts`, `clientDeclineQuote` + `restoreBfiOptions` in
+`services/quotes.ts`, `tests/quote-decline-kind.test.ts`). **Record client
+decision — declined** asks which. `challenged` is the old decline: work order
+→ Waiting for Quote, re-quote in a new round. `bfi` (whole quote only, 400 on
+one option) snapshots the quote to `quote_revision_snapshot`, soft-deletes the
+round's unapproved options with `quote_section.bfi_removed_at`, so the total
+and the invoice prefill are the incurred work. After the commit it ticks
+`Bill For Incurred` (before the move, so the Done gate asks for the BFI proof)
+and moves the work order to **Done / Incurred** (`client_declined_bfi` event;
+a gate refusal rides on `status_move`, the decline stands).
+`quote.client_decline_kind` is on `Quote` and `QuoteListItem`; a BFI decline
+is in Receivables' Ready lane. **Restore removed options** (`POST
+…/quote/restore-options`, `quotes` edit, closed like a new round once the work
+order is Done) brings exactly those options back as the next round's draft and
+unticks BFI (`quote_bfi_options_restored`).
 
 **Send to client is one click; the client's yes sets the NTE; required
 create fields; Received on pre-filled; no Continue** (migration 0102, Elise
@@ -3049,7 +3071,8 @@ Outback Steakhouse = the record's "Outback Staekhouse", SUN HOLDING / RMH =
 two cards). Page: one tab per Comp, Search client, Every trade (a client card
 with no row for the picked trade shows the Standard one). Permission path
 `prices` (view / create / edit / delete): 0101 gives all four to the admin
-role and view to every role that views quotes. Audit `price_card_created|
+role and view to every role that views quotes. 0110 adds view / create / edit
+for oa, atl, tl and am (delete stays admin's). Audit `price_card_created|
 updated|deleted` (entity `price_card`, whole snapshots). **The quote builder
 reads it**: `findLaborRate` (services/rates.ts) asks `priceFor` first and a
 figure the list gives wins, so a new quote's Trip line opens at the card's

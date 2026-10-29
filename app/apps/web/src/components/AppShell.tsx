@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, PULSE_PERM_KEY, adminPermKey } from '@theone/shared';
+import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, PAYMENTS_PAGE_PERM_KEY, PULSE_PERM_KEY, QUOTES_PAGE_PERM_KEY, adminPermKey } from '@theone/shared';
 import { getApprovalCounts, listIntakeDrafts } from '../api/client';
 import { LOGO } from '../lib/brand';
 import { ThemeToggle } from '../theme/ThemeToggle';
@@ -140,9 +140,11 @@ const NAV_PERM: Record<string, string | string[]> = {
   Sites: 'sites',
   Assets: 'assets',
   Clients: 'clients',
-  Quotes: 'quotes',
+  // 0111: the page has its own switch; `quotes` alone is the work order's Quotes tab.
+  Quotes: QUOTES_PAGE_PERM_KEY,
   Prices: 'prices',
-  Payments: 'payments',
+  // 0108: the page has its own switch; `payments` alone is the work order's Payables.
+  Payments: PAYMENTS_PAGE_PERM_KEY,
   'Incoming Work Orders': ['approvals/intake', INTAKE_PERM_KEY],
   Approvals: 'approvals',
   Invoicing: 'invoicing',

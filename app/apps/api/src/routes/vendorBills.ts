@@ -14,7 +14,7 @@
 // (Registered under the /api prefix in app.ts.)
 
 import type { FastifyInstance } from 'fastify';
-import { MONEY_MAX } from '@theone/shared';
+import { MONEY_MAX, PAYMENTS_PAGE_PERM_KEY } from '@theone/shared';
 import { z } from 'zod';
 import { parse } from '../errors.js';
 import { actingPrincipalFromRequest, resolveTaskId } from '../services/activity.js';
@@ -31,6 +31,7 @@ import {
   voidVendorBill,
 } from '../services/vendorBills.js';
 import { assertRecordInScope, assertTaskInScope } from '../services/recordScope.js';
+import { requirePerm } from '../services/permissions.js';
 
 const idParams = z.object({ id: z.string().uuid() });
 const woParams = z.object({ id: z.string().min(1) });
@@ -79,11 +80,19 @@ const paidSchema = z
   .strict();
 
 export default async function vendorBillRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/vendor-bills', async (req) => listVendorBills(actingPrincipalFromRequest(req)));
+  // 0108: the Vendor bills lane of the Payments page, and one bill opened by
+  // its own link, are reads outside the work order page — they need the
+  // Payments page. The work order's own card reads /work-orders/:id/vendor-bills.
+  app.get('/vendor-bills', async (req) => {
+    const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, PAYMENTS_PAGE_PERM_KEY, 'view', 'Vendor bills are seen on the work order — open its Payables tab');
+    return listVendorBills(actor);
+  });
 
   app.get('/vendor-bills/:id', async (req) => {
     const { id } = parse(idParams, req.params);
     await assertRecordInScope('vendor_bill', id, actingPrincipalFromRequest(req)); // #13
+    requirePerm(actingPrincipalFromRequest(req), PAYMENTS_PAGE_PERM_KEY, 'view', 'Vendor bills are seen on the work order — open its Payables tab');
     return { bill: await getVendorBill(id, actingPrincipalFromRequest(req)) };
   });
 

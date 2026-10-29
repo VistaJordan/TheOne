@@ -31,12 +31,22 @@ import {
   listAttachments,
   putWorkOrderQuote,
   rejectQuote,
+  restoreQuoteOptions,
   sendQuote,
   startQuoteRound,
   submitQuote,
 } from '../api/client';
 import type { Quote, QuotePermissions, WoActionMap } from '../api/client';
-import { QUOTE_CORRECTION_PENDING_TEXT, QUOTE_SUBMIT_LABEL } from '@theone/shared';
+import {
+  QUOTE_CORRECTION_PENDING_TEXT,
+  QUOTE_DECLINE_KIND_LABEL,
+  QUOTE_DECLINE_KINDS,
+  QUOTE_SUBMIT_LABEL,
+  QUOTE_SUBMITTED_LOCKED_TEXT,
+  QUOTE_SUBMITTED_STATUSES,
+  quoteEditableBy,
+  type QuoteDeclineKind,
+} from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { CopyButton } from '../components/CopyButton';
 import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
@@ -79,6 +89,8 @@ type DecisionSheet =
 const CLIENT_DECISION_LABEL = 'Record client decision';
 const CLIENT_DECISION_APPROVED = 'Record client decision — approved';
 const CLIENT_DECISION_DECLINED = 'Record client decision — declined';
+// 0109: brings back the options a bill-for-incurred decline took off.
+const RESTORE_OPTIONS_LABEL = 'Restore removed options';
 
 export function QuoteBuilderPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
@@ -174,6 +186,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const [decision, setDecision] = useState<DecisionSheet>(null);
   const [decisionNote, setDecisionNote] = useState('');
   const [decisionOnSite, setDecisionOnSite] = useState(false);
+  // 0109 · a decline is Challenged (re-quote) or Bill for incurred only.
+  const [declineKind, setDeclineKind] = useState<QuoteDeclineKind | null>(null);
   const [leaveTo, setLeaveTo] = useState<string | null>(null);
   // 2026-10-27 · "Reset quote" asks first; the autosave saves the reset.
   const [resetOpen, setResetOpen] = useState(false);
@@ -206,8 +220,10 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
   const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
   /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */
-  const editable =
-    canEdit && (status === 'draft' || status === 'pending_correction' || status === 'pending_approval') && allows('quote.edit');
+  // 2026-10-29 (Elise): once submitted, only a manager (approve grant) edits
+  // it — the shared rule the API's updateQuote enforces.
+  const editable = quoteEditableBy(status, canEdit, canApprove) && allows('quote.edit');
+  const submittedLocked = canEdit && !canApprove && QUOTE_SUBMITTED_STATUSES.includes(status);
   // 0092 · where this person's Submit takes the quote: a dispatcher's draft
   // goes for correction, a manager's (or a corrected one) for approval; null
   // while a dispatcher waits on the manager. An older API says nothing, so a
@@ -354,8 +370,14 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           }),
         );
       } else {
+        if (!declineKind) throw new Error('Pick Challenged or Bill for incurred only');
         await runAction(() =>
-          clientDeclineQuote(woNumber, { note: decisionNote.trim(), section_id: section?.id ?? null }),
+          clientDeclineQuote(woNumber, {
+            note: decisionNote.trim(),
+            // Bill for incurred only is always the whole quote.
+            section_id: declineKind === 'bfi' ? null : section?.id ?? null,
+            kind: declineKind,
+          }),
         );
       }
     },
@@ -364,8 +386,10 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       setDecisionNote('');
       setDecisionOnSite(false);
       setDecisionFile('');
+      setDeclineKind(null);
     },
   });
+  const restoreMutation = useMutation({ mutationFn: () => runAction(() => restoreQuoteOptions(woNumber)) });
   // M6: the work order's files, offered as the client's approval on record.
   const filesQuery = useQuery({
     queryKey: ['wo-attachments', woQuery.data?.id ?? ''],
@@ -552,7 +576,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
   /** Every primary CTA is blocked-until-valid the same way (§3.3): aria-disabled,
       never `disabled`, so the button stays reachable and announces its reason. */
-  const primary = (label: string, icon: 'send' | 'check' | 'plus', run: () => void, needsValid = true) => (
+  const primary = (label: string, icon: 'send' | 'check' | 'plus' | 'history', run: () => void, needsValid = true) => (
     <button
       type="button"
       className={`btn btn-lg btn-primary${busy ? ' is-busy' : ''}`}
@@ -590,7 +614,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       better — then the NTE hold, then the missing grant). */
   const gated = (
     label: string,
-    icon: 'send' | 'check' | 'plus',
+    icon: 'send' | 'check' | 'plus' | 'history',
     roleOk: boolean,
     roleTip: string,
     action: keyof WoActionMap,
@@ -783,6 +807,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               ? blockedReason('quote.edit')
               : editable
                 ? 'You can build and revise this quote.'
+                : submittedLocked
+                  ? QUOTE_SUBMITTED_LOCKED_TEXT
                 : canEdit
                   ? `This quote is ${QUOTE_STATUS[status].label.toLowerCase()} — its line items are read-only.`
                   : 'You can read this quote. Building and revising it is Senior OM and above.'}
@@ -879,10 +905,22 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               <>
                 <span className={`chip ${status === 'client_approved' ? 'chip-accent' : 'chip-danger'}`}>
                   <Icon name={status === 'client_approved' ? 'check-circle' : 'x'} size={12} />
-                  {status === 'client_approved' ? 'Client approved' : 'Client declined'}
+                  {status === 'client_approved'
+                    ? 'Client approved'
+                    : `Client declined${quote.client_decline_kind ? ` · ${QUOTE_DECLINE_KIND_LABEL[quote.client_decline_kind]}` : ''}`}
                   {quote.client_decided_by ? ` · recorded by ${quote.client_decided_by.display_name}` : ''}
                 </span>
-                {gated(
+                {status === 'client_declined' && quote.bfi_removed_options > 0 && gated(
+                  RESTORE_OPTIONS_LABEL,
+                  'history',
+                  canEdit,
+                  'Needs the quote-edit permission',
+                  'quote.new_round',
+                  () => restoreMutation.mutate(),
+                  'lockTipRestore',
+                  false,
+                )}
+                {!(status === 'client_declined' && quote.client_decline_kind === 'bfi') && gated(
                   status === 'client_approved' ? 'Add additional quote' : 'Re-quote',
                   'plus',
                   canEdit,
@@ -1008,7 +1046,31 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               <span className="lbl">
                 {decision.kind === 'approve' ? CLIENT_DECISION_APPROVED : CLIENT_DECISION_DECLINED}
               </span>
-              {options.length > 1 && (
+              {decision.kind === 'decline' && (
+                <div className="radio-list" role="radiogroup" aria-label="Kind of decline">
+                  {QUOTE_DECLINE_KINDS.map((k) => (
+                    <label className="ck" key={k}>
+                      <input
+                        type="radio"
+                        name="decline-kind"
+                        checked={declineKind === k}
+                        onChange={() => {
+                          setDeclineKind(k);
+                          if (k === 'bfi') setDecision({ ...decision, sectionKey: null });
+                        }}
+                      />
+                      <span>
+                        <strong>{QUOTE_DECLINE_KIND_LABEL[k]}</strong>
+                        {' — '}
+                        {k === 'bfi'
+                          ? 'keep the Incurred section, remove the proposed options (kept in the history, restorable), tick Bill For Incurred and move the work order to Done / Incurred.'
+                          : 'the work order goes back to Waiting for Quote to be re-quoted.'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {options.length > 1 && !(decision.kind === 'decline' && declineKind === 'bfi') && (
                 <div className="radio-list" role="radiogroup" aria-label="Which option">
                   {decision.kind === 'decline' && (
                     <label className="ck">
@@ -1054,7 +1116,9 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               <span className="hint">
                 {decision.kind === 'approve'
                   ? 'Posted as a client-visible update on the work order; the Teams ✅ and ClickUp comment are queued.'
-                  : 'Kept internal. The round is locked; re-quote by opening a new round.'}
+                  : declineKind === 'bfi'
+                    ? 'Kept internal. Only the incurred work stays on the quote; the options can be brought back with Restore removed options.'
+                    : 'Kept internal. The round is locked; re-quote by opening a new round.'}
               </span>
             </div>
             {decision.kind === 'approve' && (
@@ -1083,7 +1147,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 aria-disabled={
                   (decision.kind === 'approve' && !decision.sectionKey) ||
                   (decision.kind === 'approve' && decisionNote.trim() === '' && !decisionFile) ||
-                  (decision.kind === 'decline' && decisionNote.trim() === '') ||
+                  (decision.kind === 'decline' && (decisionNote.trim() === '' || !declineKind)) ||
                   decisionMutation.isPending
                     ? true
                     : undefined
@@ -1091,7 +1155,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 onClick={() => {
                   if (decision.kind === 'approve' && !decision.sectionKey) return;
                   if (decision.kind === 'approve' && decisionNote.trim() === '' && !decisionFile) return;
-                  if (decision.kind === 'decline' && decisionNote.trim() === '') return;
+                  if (decision.kind === 'decline' && (decisionNote.trim() === '' || !declineKind)) return;
                   decisionMutation.mutate();
                 }}
               >

@@ -458,6 +458,9 @@ export interface QuoteListItem {
   /** UAT T5b (D2): who submitted it (else who created it) — their Approve is
       drawn locked (quoteSelfApprovalLock). */
   submitted_by: string | null;
+  /** 0109: which kind of decline (null unless client_declined) — a BFI
+      decline is ready to invoice like a client-approved quote. */
+  client_decline_kind: 'challenged' | 'bfi' | null;
 }
 
 export interface QuoteListResponse {
@@ -1244,12 +1247,17 @@ export function clientApproveQuote(
 /** POST …/quote/client-decline — the client declined (one option or the round). */
 export function clientDeclineQuote(
   idOrNumber: string,
-  input: { note: string; section_id: string | null },
+  input: { note: string; section_id: string | null; kind: 'challenged' | 'bfi' },
 ): Promise<QuoteResponse> {
   return request<QuoteResponse>(quotePath(idOrNumber, '/client-decline'), {
     method: 'POST',
     body: JSON.stringify(input),
   });
+}
+
+/** POST …/quote/restore-options — bring back the options a bill-for-incurred decline removed (0109). */
+export function restoreQuoteOptions(idOrNumber: string): Promise<QuoteResponse> {
+  return request<QuoteResponse>(quotePath(idOrNumber, '/restore-options'), { method: 'POST' });
 }
 
 /** POST …/quote/new-round — open the next quote round after a client decision. */

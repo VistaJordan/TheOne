@@ -35,6 +35,8 @@ import {
   nextPurpose,
   type PaymentPurposeCode,
 } from '@theone/shared';
+import { PAYMENTS_PAGE_PERM_KEY } from '@theone/shared';
+import { useCan } from '../auth/AuthProvider';
 import { AppShell } from '../components/AppShell';
 import { CopyButton } from '../components/CopyButton';
 import { Icon } from '../components/Icon';
@@ -69,6 +71,7 @@ export function RequestPaymentPage() {
   const { linkTo } = useLinkNav();
   const queryClient = useQueryClient();
   const invalidateObligations = useInvalidateObligations();
+  const canOpenPaymentsPage = useCan()(PAYMENTS_PAGE_PERM_KEY, 'view');
 
   const woQuery = useQuery({
     queryKey: ['work-orders', 'detail', woNumber],
@@ -763,16 +766,20 @@ export function RequestPaymentPage() {
               <div className="submit-right">
                 {/* §3.5 — the decision lives elsewhere and says so: the
                     Payments tab is where this request gets approved and paid. */}
-                <span className="locked">
-                  <Link className="btn" to="/payments">
-                    <Icon name="card" size={14} />
-                    Open Payments
-                  </Link>
-                  <span className="locked-cap">
-                    <Icon name="info" size={12} />
-                    Approved and paid from the Payments tab
+                {/* 0108: only for someone with the Payments page — the
+                    dispatchers see payments on the work order alone. */}
+                {canOpenPaymentsPage && (
+                  <span className="locked">
+                    <Link className="btn" to="/payments">
+                      <Icon name="card" size={14} />
+                      Open Payments
+                    </Link>
+                    <span className="locked-cap">
+                      <Icon name="info" size={12} />
+                      Approved and paid from the Payments tab
+                    </span>
                   </span>
-                </span>
+                )}
 
                 {!valid && !submitted && (
                   <span className="submit-help" id="submit-help">

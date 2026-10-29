@@ -248,7 +248,8 @@ describe('M5 · the status follows the quote', () => {
     expect(q).toContain("await changeStatus(taskId, st.rows[0].id, actor.id, undefined, 'quote');");
     expect(fn(q, 'export async function sendQuote(')).toContain("return withStatusMove(taskId, sent, 'sent', actor);");
     expect(fn(q, 'export async function clientApproveQuote(')).toContain("return withStatusMove(taskId, approved, 'client_approved', actor);");
-    expect(fn(q, 'export async function clientDeclineQuote(')).toContain("return withStatusMove(taskId, declined, 'client_declined', actor);");
+    // 0109: a challenged decline follows 'client_declined', a BFI one 'client_declined_bfi'.
+    expect(fn(q, 'export async function clientDeclineQuote(')).toContain('return withStatusMove(taskId, declined, quoteDeclineEvent(kind), actor);');
   });
 });
 

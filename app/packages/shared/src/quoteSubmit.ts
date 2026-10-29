@@ -45,3 +45,21 @@ export const QUOTE_CLIENT_DECISION_ROLES: readonly string[] = ['oa'];
 export const QUOTE_CORRECTION_PENDING_CODE = 'QUOTE_CORRECTION_PENDING';
 export const QUOTE_CORRECTION_PENDING_TEXT =
   'A manager corrects this quote and submits it for approval';
+
+/** 2026-10-29 (Elise): once a quote is submitted its sections are locked.
+    A draft is edited by anyone with the quote-edit grant; a quote waiting
+    for correction or approval only by a manager who also holds the approve
+    grant (the correction step needs them), and a manager's edit of a quote
+    pending approval still sends it back to draft (0083 #23). The submitter
+    who is not a manager cannot change a quote they handed over. */
+export type QuoteEditStatus = 'draft' | 'pending_correction' | 'pending_approval' | string;
+export const QUOTE_SUBMITTED_STATUSES: readonly string[] = ['pending_correction', 'pending_approval'];
+export function quoteEditableBy(status: QuoteEditStatus, canEdit: boolean, canApprove: boolean): boolean {
+  if (!canEdit) return false;
+  if (status === 'draft') return true;
+  if (QUOTE_SUBMITTED_STATUSES.includes(status)) return canApprove;
+  return false;
+}
+export const QUOTE_SUBMITTED_LOCKED_CODE = 'QUOTE_SUBMITTED_LOCKED';
+export const QUOTE_SUBMITTED_LOCKED_TEXT =
+  'This quote was submitted — only a manager can change it now. Ask them to reject it back to draft if it needs changing.';

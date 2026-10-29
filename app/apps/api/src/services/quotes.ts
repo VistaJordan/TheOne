@@ -29,6 +29,13 @@ import {
   QUOTE_CORRECTION_PENDING_CODE,
   QUOTE_CORRECTION_PENDING_TEXT,
   QUOTE_SUBMIT_ACTION,
+  QUOTE_SUBMITTED_LOCKED_CODE,
+  QUOTE_SUBMITTED_LOCKED_TEXT,
+  quoteEditableBy,
+  quoteDeclineEvent,
+  BFI_KEY,
+  QUOTE_DECLINE_KIND_LABEL,
+  type QuoteDeclineKind,
   type QuoteEvent,
   type QuoteSubmitFrom,
   type VisitStatusMove,
@@ -597,6 +604,7 @@ interface QuoteRow {
   cd_by_id: string | null;
   cd_by_name: string | null;
   cd_by_kind: 'human' | 'service' | null;
+  client_decline_kind: QuoteDeclineKind | null;
   wo_number: string;
   client: string | null;
   city: string | null;
@@ -637,6 +645,7 @@ export const QUOTE_BASE_SQL = `
          q.specs, q.note_to_customer, q.summary_pinned,
          q.approved_section_id::text      AS approved_section_id,
          q.client_decision_note, q.client_approved_on_site,
+         q.client_decline_kind,
          q.number, q.document_type, q.currency, q.ship_to,
          q.contract_id::text              AS contract_id,
          c.name                           AS contract_name,
@@ -951,6 +960,12 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
   const snap = await woStatusSnapshot(taskId);
   const laborRate = await findLaborRate(q.billing_entity, q.client, q.trade);
   const nteOverride = await openNteOverride(taskId);
+  // 0109: options a BFI decline took off that Restore removed options can bring back.
+  const bfiRemoved = await query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM quote_section
+      WHERE quote_id = $1 AND bfi_removed_at IS NOT NULL AND deleted_at IS NOT NULL`,
+    [q.id],
+  );
 
   const summary: QuoteSummary = {
     auto: buildAutoSummary(
@@ -997,6 +1012,8 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     client_decided_by: actorOf(q.cd_by_id, q.cd_by_name, q.cd_by_kind),
     client_decision_note: q.client_decision_note,
     client_approved_on_site: q.client_approved_on_site === true,
+    client_decline_kind: q.client_decline_kind ?? null,
+    bfi_removed_options: bfiRemoved.rows[0]?.n ?? 0,
     created_at: q.created_at,
     updated_at: q.updated_at,
     sections,
@@ -1129,6 +1146,9 @@ export interface QuoteListItem {
   /** UAT T5b (D2): who sent it for approval, else who created it — the one
       person whose Approve is drawn locked (quoteSelfApprovalLock). */
   submitted_by: string | null;
+  /** 0109: which kind of decline (null unless client_declined) — a BFI
+      decline is ready to invoice like a client-approved quote. */
+  client_decline_kind: 'challenged' | 'bfi' | null;
 }
 
 /** A bag/column value as a finite number ("$1,610" → 1610), else null. */
@@ -1184,6 +1204,7 @@ export async function listQuotes(
       wo_emergency: Boolean(r.wo_emergency),
       wo_escalated: Boolean(r.wo_escalated),
       submitted_by: r.maker_id,
+      client_decline_kind: r.client_decline_kind ?? null,
     });
   }
   return { items, total: items.length };
@@ -1370,6 +1391,11 @@ export async function updateQuote(
       editable_in: EDITABLE_STATUSES,
     });
   }
+  // 2026-10-29 (Elise): a submitted quote is locked — only a manager (the
+  // approve grant) corrects it; the person who handed it over cannot change it.
+  if (!quoteEditableBy(cur.status, true, canApproveQuote(actor))) {
+    throw conflict(QUOTE_SUBMITTED_LOCKED_TEXT, { code: QUOTE_SUBMITTED_LOCKED_CODE, status: cur.status });
+  }
   const round = await currentRoundOfQuote(cur.id);
   if (input.sections && round > 1 && input.sections.some((s) => s.kind === 'incurred')) {
     throw conflict('The incurred section is locked after the first round — only options can change', {
@@ -1382,6 +1408,16 @@ export async function updateQuote(
     // Rule 1.2.1: the row carries what the quote looked like before and after,
     // not just which keys the builder posted. Taken inside the transaction so
     // a concurrent edit cannot slip between the snapshot and the write.
+    // Re-read the status under the row lock: a Submit committed since the read
+    // above locks the quote for this editor too (sections included).
+    const locked = await tx.query<{ status: QuoteStatus }>(`SELECT status FROM quote WHERE id = $1 FOR UPDATE`, [cur.id]);
+    const nowStatus = locked.rows[0]?.status;
+    if (!nowStatus || !EDITABLE_STATUSES.includes(nowStatus)) {
+      throw conflict('The quote was approved while you were editing it — reload it', { code: 'QUOTE_MOVED' });
+    }
+    if (!quoteEditableBy(nowStatus, true, canApproveQuote(actor))) {
+      throw conflict(QUOTE_SUBMITTED_LOCKED_TEXT, { code: QUOTE_SUBMITTED_LOCKED_CODE, status: nowStatus });
+    }
     const before = await snapshotQuote(tx, cur.id);
 
     const sets: string[] = [];
@@ -2128,14 +2164,28 @@ const QUOTE_NTE_KEY = '16. Client NTE 🔴';
 
 export interface ClientDeclineInput {
   note: string;
-  /** Decline ONE option (Yoda DeclineAsync); omitted = the whole round. */
+  /** Decline ONE option (Yoda DeclineAsync); omitted = the whole round.
+      A BFI decline is always the whole round. */
   section_id?: string | null;
+  /** 0109 (Elise, 2026-10-29): challenged (default) or bill for incurred only. */
+  kind?: QuoteDeclineKind;
 }
 
 /**
  * sent → client_declined — Yoda DeclineAsync: the rejection message lands on
  * the option(s), the round is locked, the ClickUp ClientQuote clear is queued.
- * The dispatcher re-quotes by opening a new round.
+ *
+ * 0109 (Elise, 2026-10-29), two kinds:
+ *  - challenged: the dispatcher re-quotes by opening a new round; the work
+ *    order goes back to Waiting for Quote.
+ *  - bfi (bill for incurred only, whole round): a copy of the quote as the
+ *    client saw it goes to quote_revision_snapshot, the round's unapproved
+ *    options come off the live quote (deleted_at + bfi_removed_at, so
+ *    restoreBfiOptions brings exactly those back) and the total becomes the
+ *    incurred work. After the commit Bill For Incurred is ticked (before the
+ *    status move, so the Done gate asks for the BFI proof) and the work order
+ *    moves to Done / Incurred; a gate refusal never undoes the decline and
+ *    rides on the reply as status_move.
  */
 export async function clientDeclineQuote(
   taskId: string,
@@ -2154,10 +2204,17 @@ export async function clientDeclineQuote(
       section_id: input.section_id,
     });
   }
+  const kind: QuoteDeclineKind = input.kind ?? 'challenged';
+  if (kind === 'bfi' && target) {
+    throw badRequest('Bill for incurred only applies to the whole quote, not one option', {
+      section_id: input.section_id,
+    });
+  }
   const note = input.note.trim();
+  const kindText = ` (${QUOTE_DECLINE_KIND_LABEL[kind].toLowerCase()})`;
   const body = target
-    ? `Client declined ${target.label}${target.name ? ` (${target.name})` : ''} — ${note}`
-    : `Client declined the quote — ${note}`;
+    ? `Client declined ${target.label}${target.name ? ` (${target.name})` : ''}${kindText} — ${note}`
+    : `Client declined the quote${kindText} — ${note}`;
 
   const declined = await transition(
     taskId,
@@ -2179,17 +2236,84 @@ export async function clientDeclineQuote(
         [quoteId, pre.current_round],
       );
       await addComment(tx, actor.id, taskId, body, false, { quote_id: quoteId });
+      // The copy is taken BEFORE a BFI removal: the quote as the client saw it.
       await snapshot(tx, pre, 'client_declined', actor.id);
+      if (kind === 'bfi') {
+        await tx.query(
+          `UPDATE quote_section SET deleted_at = now(), bfi_removed_at = now()
+            WHERE quote_id = $1 AND round = $2 AND kind = 'option' AND approved_at IS NULL AND deleted_at IS NULL`,
+          [quoteId, pre.current_round],
+        );
+      }
       await enqueueOutbox(tx, 'quote.client_declined', 'quote', quoteId, {
         task_id: taskId,
         wo_number: pre.wo_number,
         note,
+        kind,
       });
     },
-    'client_decided_at = now(), client_decided_by = $3, client_decision_note = $4',
-    [actor.id, note],
+    'client_decided_at = now(), client_decided_by = $3, client_decision_note = $4, client_decline_kind = $5',
+    [actor.id, note, kind],
   );
-  return withStatusMove(taskId, declined, 'client_declined', actor);
+  if (kind === 'bfi') await setBfiFlag(taskId, true, actor);
+  return withStatusMove(taskId, declined, quoteDeclineEvent(kind), actor);
+}
+
+/** Ticks / unticks Bill For Incurred as the person who recorded the decision
+    (the setNteFromApproval pattern: after the commit, never undoes the quote
+    act; the field write is audited, mirrored and dispatched as usual). */
+async function setBfiFlag(taskId: string, value: boolean, actor: ActingPrincipal): Promise<void> {
+  try {
+    const { updateWorkOrderFields } = await import('./woFieldValues.js');
+    await updateWorkOrderFields(taskId, { [`fields.${BFI_KEY}`]: value }, actor.id);
+  } catch (err) {
+    console.error('[quotes] could not set Bill For Incurred', {
+      task_id: taskId,
+      value,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * 0109: client_declined (bfi) → draft, round + 1 — the options a BFI decline
+ * took off come back, unlocked and without their decline note, as the next
+ * round's draft; Bill For Incurred is unticked. Closed like a new round once
+ * the work order is Done (allowedWoActions 'quote.new_round'): move it back
+ * first. The copy in quote_revision_snapshot stays either way.
+ */
+export async function restoreBfiOptions(taskId: string, actor: ActingPrincipal): Promise<Quote> {
+  assertCanEdit(actor);
+  await assertWoAllows(taskId, 'quote.new_round');
+  const cur = await currentStatus(taskId);
+  if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');
+  const removed = await query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM quote_section
+      WHERE quote_id = $1 AND bfi_removed_at IS NOT NULL AND deleted_at IS NOT NULL`,
+    [cur.id],
+  );
+  if (!removed.rows[0]?.n) {
+    throw badRequest('No options were removed for bill for incurred on this quote', { status: cur.status });
+  }
+  const round = await currentRoundOfQuote(cur.id);
+  const restored = await transition(
+    taskId,
+    ['client_declined'],
+    'draft',
+    'quote_bfi_options_restored',
+    actor,
+    async (tx, quoteId) => {
+      await tx.query(
+        `UPDATE quote_section
+            SET deleted_at = NULL, bfi_removed_at = NULL, locked = false, rejection_note = NULL, round = $2
+          WHERE quote_id = $1 AND bfi_removed_at IS NOT NULL AND deleted_at IS NOT NULL`,
+        [quoteId, round + 1],
+      );
+    },
+    'rev = rev + 1, approved_by = NULL, sent_by = NULL, sent_at = NULL, approved_section_id = NULL, client_decided_at = NULL, client_decided_by = NULL, client_decision_note = NULL, client_approved_on_site = false, client_decision_attachment_id = NULL, client_decline_kind = NULL',
+  );
+  await setBfiFlag(taskId, false, actor);
+  return restored;
 }
 
 /**
@@ -2217,6 +2341,6 @@ export async function startNewRound(taskId: string, actor: ActingPrincipal): Pro
         [quoteId, round + 1],
       );
     },
-    'rev = rev + 1, approved_by = NULL, sent_by = NULL, sent_at = NULL, approved_section_id = NULL, client_decided_at = NULL, client_decided_by = NULL, client_decision_note = NULL, client_approved_on_site = false, client_decision_attachment_id = NULL',
+    'rev = rev + 1, approved_by = NULL, sent_by = NULL, sent_at = NULL, approved_section_id = NULL, client_decided_at = NULL, client_decided_by = NULL, client_decision_note = NULL, client_approved_on_site = false, client_decision_attachment_id = NULL, client_decline_kind = NULL',
   );
 }

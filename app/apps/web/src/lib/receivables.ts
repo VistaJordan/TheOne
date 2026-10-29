@@ -232,7 +232,10 @@ export function isReadyToInvoice(
 ): boolean {
   if (wo.status.group !== 'done') return false;
   const q = quoteByTask.get(wo.id);
-  if (!q || !READY_QUOTE_STATUSES.includes(q.status)) return false;
+  if (!q) return false;
+  // 0109: a bill-for-incurred decline bills the incurred work.
+  const bfi = q.status === 'client_declined' && q.client_decline_kind === 'bfi';
+  if (!bfi && !READY_QUOTE_STATUSES.includes(q.status)) return false;
   return !invoicedTaskIds.has(wo.id);
 }
 
