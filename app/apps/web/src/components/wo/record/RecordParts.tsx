@@ -186,6 +186,9 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
   // #15 (0085): Cancel / Reopen, Pause / Resume and Complete service are not
   // offered to someone who must request status changes.
   const lifecycle = record.can.lifecycle;
+  // 2026-10-29: cancelled = stamped by Cancel OR sitting in a Cancel… status
+  // however it got there; either way the way back is Reopen (to Open, with a reason).
+  const cancelled = Boolean(s.cancelled) || Boolean(record.can.reopen);
   const pick = (d: Exclude<Dialog, null>) => () => {
     setMenu(false);
     onNote(null);
@@ -202,7 +205,7 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
           </button>
           {menu && (
             <div className="rec-pdf-pop" role="menu" aria-label="More actions">
-              {lifecycle && !s.cancelled && (s.paused ? (
+              {lifecycle && !cancelled && (s.paused ? (
                 <button
                   type="button"
                   role="menuitem"
@@ -224,14 +227,14 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
               <button type="button" role="menuitem" className="rec-pdf-item" onClick={pick('tag')}>
                 <Icon name="tag" size={14} /><span><b>Tag</b><small>A short label and why it applies</small></span>
               </button>
-              {lifecycle && !s.cancelled && (
+              {lifecycle && !cancelled && (
                 <button type="button" role="menuitem" className="rec-pdf-item" onClick={pick('complete')}>
                   <Icon name="check-circle" size={14} /><span><b>{s.completion ? 'Edit completion' : 'Complete service'}</b><small>What was found and what was done</small></span>
                 </button>
               )}
-              {lifecycle && (s.cancelled ? (
+              {lifecycle && (cancelled ? (
                 <button type="button" role="menuitem" className="rec-pdf-item" onClick={pick('reopen')}>
-                  <Icon name="clock" size={14} /><span><b>Reopen</b><small>Back to the status it had before</small></span>
+                  <Icon name="clock" size={14} /><span><b>Reopen</b><small>Back to Open, with a reason</small></span>
                 </button>
               ) : (
                 // M9: once an invoice is sent or paid, or a payment paid, Cancel is gone.
@@ -258,7 +261,7 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
       )}
       {dialog === 'reopen' && (
         <ReasonDialog title="Reopen this work order" icon="clock" label="Why is it reopened?" confirm="Reopen"
-          hint="It goes back to the status it had before it was cancelled. The reason is kept on its history."
+          hint="It goes back to Open. The reason is kept on its history."
           woId={woId} woNumber={woNumber} run={async (reason) => report(await reopenWo(woId, reason))} onClose={close} />
       )}
       {dialog === 'tag' && <TagDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}

@@ -228,7 +228,7 @@ export const LIFECYCLE: LifecycleModel = {
     {
       status: 'Cancelled / Postponed',
       meaning: 'Not going ahead, or parked. Off the pipeline; no phase.',
-      enteredBy: 'Reject on Incoming Work Orders (reason required), Cancel work order on the record (reason required; not once the invoice is sent or paid or a payment is paid, UAT M9), or a client rejection. Reopen (reason required) returns it to the status it had before the cancel (UAT M31).',
+      enteredBy: 'Reject on Incoming Work Orders (reason required), Cancel work order on the record (reason required; not once the invoice is sent or paid or a payment is paid, UAT M9), or a client rejection. Reopen (reason required) returns it to Open (UAT M31, as changed 2026-10-29); a direct status pick cannot take it out.',
       who: 'Managers.',
       onEnter: ['Ecotrak would push: CANCELLED.', 'An open acceptance on the work order is cancelled (an open status request stays until it is withdrawn or decided).'],
     },

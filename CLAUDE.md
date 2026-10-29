@@ -2381,7 +2381,7 @@ backfilled from the cancel's `status_changed` row) and is conditional on
 field row beside `Cancelled`) and, while the work order still sits in a
 Cancel… status, moves it back through `changeStatus` (the reply's
 `status_move` says where, or why not — shown on the record bar; Cancel's
-own move is reported the same way now instead of being swallowed). **M18:**
+own move is reported the same way now instead of being swallowed). **Since 2026-10-29 (Elise) Reopen goes to Open** (`REOPEN_STATUS_NAME`), not the status before the cancel, and is offered (`can.reopen`) for any work order in a Cancel… status (`isCancelStatusName`), stamped or not — the status menu, a rejected acceptance or an approved request leave no stamp; a direct `PATCH …/status` out of a Cancel… status is 409 `REOPEN_REQUIRED` and the status menu greys those picks (a status request still goes to a manager); `tests/reopen-to-open.test.ts`. **M18:**
 no migration, seed or code creates a check-in automation — `moveOnSite` is
 the one source; the two on the UAT database are an ops item (spec's
 checklist). New error codes: `CANCEL_BILLED`, `CLIENT_APPROVAL_EVIDENCE`.

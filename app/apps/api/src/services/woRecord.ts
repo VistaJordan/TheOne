@@ -20,14 +20,15 @@
 import {
   CANCEL_BILLED_CODE,
   LIFECYCLE_PERM_KEY,
+  REOPEN_STATUS_NAME,
   approvalSectionPermKey,
   cancelBlockedReason,
   geofenceCheck,
   minutesBetween,
   permAllows,
   recordMarginFrom,
+  isCancelStatusName,
   siteEventPhase,
-  statusBeforeCancel,
 } from '@theone/shared';
 import type {
   FeedActor,
@@ -368,6 +369,7 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
       see_vendors: seeVendors,
       lifecycle: can(actor, 'work_orders', 'edit') && can(actor, LIFECYCLE_PERM_KEY, 'edit'),
       cancel_blocked: t.cancelled_at ? null : await cancelBlocked(taskId),
+      reopen: Boolean(t.cancelled_at) || isCancelStatusName(t.status_name),
     },
   };
 }
@@ -716,39 +718,29 @@ export async function cancelWo(taskId: string, reason: string | null, actor: Act
   return { ...(await getWoRecord(taskId, actor)), status_move };
 }
 
-/** M31: Reopen needs a reason and puts the status back where the cancel found
- *  it — the status kept on the row at cancel time, else the one the cancel's
- *  `status_changed` audit row moved it out of — through changeStatus. */
+/** M31: Reopen needs a reason. Since 2026-10-29 (Elise) it always goes back
+ *  to Open (`REOPEN_STATUS_NAME`), through changeStatus, and it reopens any
+ *  work order sitting in a Cancel… status — stamped by Cancel or moved there
+ *  some other way (the status menu, a rejected acceptance, an approved
+ *  request) — so no cancelled job is left without a way back. */
 export async function reopenWo(taskId: string, reason: string | null, actor: ActingPrincipal): Promise<WoRecord> {
   requireLifecycle(actor);
   const t = await loadTask(taskId);
-  if (!t.cancelled_at) throw conflict('This work order is not cancelled');
+  const inCancelStatus = isCancelStatusName(t.status_name);
+  if (!t.cancelled_at && !inCancelStatus) throw conflict('This work order is not cancelled');
   const why = clean(reason);
   if (!why) throw badRequest('Say why it is reopened', { field: 'reason' });
 
-  let back: { status_id: string; status_name: string | null } | null = null;
-  if (t.cancelled_from_status_id) {
-    back = { status_id: t.cancelled_from_status_id, status_name: null };
-  } else {
-    // Cancelled before 0085: the newest move into a Cancel… status says where from.
-    const rows = await query<{ before: { status_id?: string; status_name?: string } | null; after: { status_name?: string } | null }>(
-      `SELECT a.before, a.after FROM activity_log a
-        WHERE a.entity_type = 'task' AND a.entity_id = $1::text AND a.action = 'status_changed'
-        ORDER BY a.created_at DESC, a.id DESC LIMIT 50`,
-      [taskId],
-    );
-    back = statusBeforeCancel(rows.rows);
-  }
-
   await withTransaction(async (tx) => {
+    // Conditional on the state it was read in: two clicks at once reopen once.
     const won = await tx.query(
       `UPDATE task SET cancelled_at = NULL, cancelled_by = NULL, cancel_reason = NULL, cancelled_from_status_id = NULL
-        WHERE id = $1 AND cancelled_at IS NOT NULL RETURNING id`,
-      [taskId],
+        WHERE id = $1 AND (cancelled_at IS NOT NULL OR status_id = $2::uuid) RETURNING id`,
+      [taskId, t.status_id],
     );
     if (!won.rows[0]) throw conflict('This work order is not cancelled');
     await logTaskChanges(tx, actor.id, taskId, [
-      { field: 'Cancelled', before: t.cancel_reason, after: null },
+      ...(t.cancelled_at ? [{ field: 'Cancelled', before: t.cancel_reason, after: null }] : []),
       { field: 'Reopened', before: null, after: why },
     ]);
   });
@@ -756,11 +748,14 @@ export async function reopenWo(taskId: string, reason: string | null, actor: Act
   let status_move: VisitStatusMove | null = null;
   // Only while it still sits in a Cancel… status: a work order somebody moved
   // on by hand since is left where they put it.
-  if (back && back.status_id !== t.status_id && /^cancel/i.test(t.status_name.trim())) {
-    const st = await query<{ id: string; name: string }>(`SELECT id::text AS id, name FROM status WHERE id = $1`, [back.status_id]);
+  if (inCancelStatus) {
+    const st = await query<{ id: string; name: string }>(
+      `SELECT id::text AS id, name FROM status WHERE lower(btrim(name)) = lower($1) ORDER BY position LIMIT 1`,
+      [REOPEN_STATUS_NAME],
+    );
     status_move = st.rows[0]
       ? await moveStatus(taskId, st.rows[0].id, st.rows[0].name, actor)
-      : { status: back.status_name ?? 'the earlier status', moved: false, reason: 'The status it had before the cancel no longer exists — set the status by hand' };
+      : { status: REOPEN_STATUS_NAME, moved: false, reason: `There is no ${REOPEN_STATUS_NAME} status in the workflow — set the status by hand` };
   }
   return { ...(await getWoRecord(taskId, actor)), status_move };
 }

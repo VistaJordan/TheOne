@@ -222,6 +222,23 @@ export function cancelBlockedReason(state: { invoiceStatuses: readonly string[];
 
 // ── M31 · reopen ─────────────────────────────────────────────────────────────
 
+/** A status whose name says cancelled ("Cancelled / Postponed"). The Cancel
+    button moves there; so can the status menu, a rejected acceptance or an
+    approved status request — none of which leave a cancel stamp. */
+export function isCancelStatusName(name: string | null | undefined): boolean {
+  return /^cancel/i.test((name ?? '').trim());
+}
+
+/** Where Reopen takes a work order (Elise, 2026-10-29): back to Open, the
+    start of the workflow, whatever it was before the cancel. */
+export const REOPEN_STATUS_NAME = 'Open';
+
+/** A cancelled work order leaves its Cancel… status only through Reopen,
+    which asks why. A plain status move out of it is refused with this code. */
+export const REOPEN_REQUIRED_CODE = 'REOPEN_REQUIRED';
+export const REOPEN_REQUIRED_MESSAGE =
+  'This work order is cancelled. Reopen it from More › Reopen, which asks why — it goes back to Open.';
+
 /** The status a reopen returns to: the one the cancel moved the work order
     out of. Null when it was never moved (no cancel status) or nothing says. */
 export function statusBeforeCancel(

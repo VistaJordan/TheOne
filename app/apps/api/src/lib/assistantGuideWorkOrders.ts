@@ -66,7 +66,7 @@ The **More** menu in the header, beside **Save as PDF** (all need \`work_orders\
 - **Pause**: type why, click **Pause**; **Resume** ends it. A pause is a marker: it does not stop any clock.
 - **Tag**: type a **Tag** and a **Reason**, **Add the tag**.
 - **Complete service**: fill the **Completion note**, fault code and action code, click **Complete service**. It records the completion and does not change the status.
-- **Cancel work order**: type why, **Cancel the work order**. The button is gone once the client invoice is sent or paid, or a vendor payment is paid. **Reopen** undoes it: type why, click **Reopen**; the work order goes back to the status it had before the cancel.
+- **Cancel work order**: type why, **Cancel the work order**. The button is gone once the client invoice is sent or paid, or a vendor payment is paid. **Reopen** undoes it: type why, click **Reopen**; the work order goes back to Open. Reopen is offered whenever the work order sits in a Cancelled status, however it got there, and the status menu will not move it out of one — Reopen is the way back.
 
 Elsewhere on the page (need \`work_orders\` edit):
 - **Assign vendor** / **Re-assign vendor**: **Tech Hub** tab, the **Responsible vendor** card; search under **Find a vendor** and click one. Blacklisted vendors cannot be picked.

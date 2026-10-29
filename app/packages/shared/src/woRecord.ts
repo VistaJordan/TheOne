@@ -250,6 +250,9 @@ export interface WoRecord {
     /** M9: why Cancel is refused (an invoice sent or paid, a payment
         paid), or null when it may be cancelled. */
     cancel_blocked: string | null;
+    /** 2026-10-29: Reopen is offered — the work order is stamped cancelled
+        or sits in a Cancel… status, however it got there. */
+    reopen: boolean;
   };
   /** M31: the reply to Cancel / Reopen — the status move it made, or why the
       move was refused (the stamp stands either way). */

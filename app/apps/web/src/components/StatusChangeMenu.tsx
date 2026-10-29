@@ -11,6 +11,8 @@ import {
   quoteSubmitted,
   ecotrakTransitionRefused,
   partsRequiredFilled,
+  REOPEN_REQUIRED_MESSAGE,
+  isCancelStatusName,
   requestableStatuses,
   statusGateFor,
   statusGateTag,
@@ -222,6 +224,10 @@ export function StatusChangeMenu({
     mode === 'request'
       ? requestableStatuses(statusesQuery.data ?? [], current.id)
       : statusesQuery.data ?? [];
+  // 2026-10-29 (Elise): a direct mover cannot pick their way out of a
+  // cancelled status — Reopen (More menu) asks why and goes to Open. A
+  // request still goes to a manager, who decides it.
+  const lockedCancelled = mode !== 'request' && isCancelStatusName(current.name);
   const buckets = bucketStatuses(offered, groups)
     .map((b) => ({ ...b, statuses: b.statuses.filter((s) => !q || s.name.toLowerCase().includes(q)) }))
     .filter((b) => b.statuses.length > 0);
@@ -264,6 +270,7 @@ export function StatusChangeMenu({
           {mutation.isError && <div className="status-menu-note err">{failText}</div>}
           {sent && <div className="status-menu-note ok">Request for {sent} sent for approval</div>}
           {noMatch && <div className="status-menu-note">No status matches “{search.trim()}”</div>}
+          {lockedCancelled && <div className="status-menu-note">{REOPEN_REQUIRED_MESSAGE}</div>}
           {/* data-oknob-own: keep the app-wide O-knob manager (lib/oknob.ts)
               from mounting a rail here — this menu scrolls bare, no bar. */}
           <div className="status-menu-scroll" data-oknob-own="">
@@ -280,14 +287,16 @@ export function StatusChangeMenu({
                   const gateHit = gate && gateHints ? hintedBlock(gate, gateHints) : null;
                   const gateNote = gate && gateHit ? describeStatusGate(gate, s.name, gateHit.missing) : null;
                   const direct = !active && mode === 'request' && statusMoveNeedsNoApproval(s.name);
+                  // 2026-10-29: out of a Cancel… status only through Reopen.
+                  const needsReopen = !active && lockedCancelled && !isCancelStatusName(s.name);
                   return (
                     <button
                       type="button"
                       role="menuitem"
                       key={s.id}
                       className={`status-menu-item${active ? ' is-current' : ''}${refusal || gateNote ? ' is-ecotrak-refused' : ''}`}
-                      disabled={mutation.isPending || sent !== null}
-                      title={gateNote ?? refusal ?? undefined}
+                      disabled={mutation.isPending || sent !== null || needsReopen}
+                      title={needsReopen ? REOPEN_REQUIRED_MESSAGE : (gateNote ?? refusal ?? undefined)}
                       onClick={() => {
                         if (active) {
                           setOpen(false);

@@ -25,6 +25,9 @@ import {
   WO_MESSAGE_MAX,
   fieldPermKey,
   fillableOnCreate,
+  REOPEN_REQUIRED_CODE,
+  REOPEN_REQUIRED_MESSAGE,
+  isCancelStatusName,
   permAllows,
   statusMoveNeedsNoApproval,
   tabPermKey,
@@ -624,7 +627,20 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
         requirePerm(p, STATUS_PERM_KEY, 'edit', 'You cannot change work-order status');
       }
     }
-    if (!(await resolveTaskId(id, p))) throw notFound('Work order not found');
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    // 2026-10-29 (Elise): a cancelled work order comes back only through
+    // Reopen, which asks why and moves it to Open — not by a plain pick.
+    const names = await query<{ cur: string; target: string | null }>(
+      `SELECT cs.name AS cur, (SELECT name FROM status WHERE id = $2) AS target
+         FROM task t JOIN status cs ON cs.id = t.status_id
+        WHERE t.id = $1`,
+      [taskId, status_id],
+    );
+    const row = names.rows[0];
+    if (row && isCancelStatusName(row.cur) && !isCancelStatusName(row.target)) {
+      throw new ApiError('CONFLICT', REOPEN_REQUIRED_MESSAGE, { code: REOPEN_REQUIRED_CODE });
+    }
     return changeStatus(id, status_id, actorIdFromRequest(req));
   });
 
