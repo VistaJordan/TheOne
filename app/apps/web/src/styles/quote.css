@@ -776,11 +776,24 @@
 /* "Tech reported that…" is one line that grows with its text (2026-10-22). */
 .qb textarea.fld-grow { resize: none; overflow: hidden; min-height: 34px; }
 
-/* 2026-10-28 · the Client view at the top of the builder: the printed
-   document as it stands, inside a card, scrolling on its own so the editor
+/* 2026-10-28 · the quote at the top of the builder: plain text, or
+   the client's document, inside a card, scrolling on its own so the editor
    below stays one scroll away. */
-.qpreview .card-head { gap: 12px; }
-.qpreview .card-head .btn { margin-left: auto; }
+.qpreview .card-head { gap: 12px; flex-wrap: wrap; }
+.qpreview-acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qpreview-acts a.btn { text-decoration: none; }
+/* The quote as plain text: the summary the client gets, as it reads. */
+.qpreview-text {
+  margin: 0;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--row-border);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font: 13px/1.55 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .qpreview-body {
   max-height: 70vh;
   overflow: auto;

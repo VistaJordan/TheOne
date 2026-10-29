@@ -3102,13 +3102,19 @@ get their dash), and the Add work order, draft and inline-editor boxes run
 `zipInputValue` on every keystroke so letters never get in. Stored values are
 not re-checked.
 
-**Client view at the top of the quote** (no migration, Elise 2026-10-28). The
-quote builder (its page and the work order's Quotes tab) opens with a **Client
-view** card: `QuoteDocument` (exported from `QuotePrintPage.tsx`, which now
-renders it under its print bar) drawn from the SAVED quote, so it follows each
-autosave ("Updating after the save…" while one is pending). **Hide** / **Show**
-folds it, remembered per browser (`theone.quote.preview`); it scrolls inside
-the card (`.qpreview-body`, max 70vh) and is hidden in print.
+**The quote at the top of the builder** (no migration, Elise 2026-10-28). The
+quote builder (its page and the work order's Quotes tab) opens with a **Quote**
+card drawn from the SAVED quote, so it follows each autosave ("Updating after
+the save…" while one is pending). It reads as plain text by default — the
+summary the client gets (`summary.pinned ?? summary.auto`, with a copy
+button) — and a **Text** / **Client view** switch shows the client's document
+instead (`QuoteDocument`, exported from `QuotePrintPage.tsx`, which renders it
+under its print bar); the choice is remembered per browser
+(`theone.quote.preview`). **PDF** opens the print page in a new tab with
+`?pdf=1`, which opens the print dialog once the document has drawn. **Share
+with client** is drawn locked ("not decided yet") until Elise picks how quotes
+reach clients. The body scrolls inside the card (`.qpreview-body`, max 70vh)
+and the card is hidden in print.
 
 ## Verify
 

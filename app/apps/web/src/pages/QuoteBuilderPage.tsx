@@ -114,25 +114,26 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     staleTime: 5 * 60_000,
   });
 
-  // 2026-10-28 (Elise) · the quote as the client sees it, at the top: the
-  // printed document drawn from the SAVED quote, so it follows each autosave.
-  // Open or folded is remembered per browser.
+  // 2026-10-28 (Elise) · the quote at the top of the builder, drawn from the
+  // SAVED quote so it follows each autosave: plain text by default (the
+  // summary that goes to the client), or the client's document. Which one is
+  // remembered per browser.
   const printTpl = usePrintTemplate('quote');
-  const [previewOpen, setPreviewOpen] = useState<boolean>(() => {
+  const [previewMode, setPreviewMode] = useState<'text' | 'client'>(() => {
     try {
-      return window.localStorage.getItem(PREVIEW_PREF_KEY) !== 'closed';
+      return window.localStorage.getItem(PREVIEW_PREF_KEY) === 'client' ? 'client' : 'text';
     } catch {
-      return true;
+      return 'text';
     }
   });
-  const togglePreview = () =>
-    setPreviewOpen((open) => {
+  const pickPreview = (mode: 'text' | 'client') =>
+    setPreviewMode(() => {
       try {
-        window.localStorage.setItem(PREVIEW_PREF_KEY, open ? 'closed' : 'open');
+        window.localStorage.setItem(PREVIEW_PREF_KEY, mode);
       } catch {
         /* the choice just is not remembered */
       }
-      return !open;
+      return mode;
     });
 
   const quote = quoteQuery.data?.quote ?? null;
@@ -632,23 +633,70 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
   return shell(
     <>
-      {/* ══ Client view: the document as it stands ═══════════════════════ */}
-      <section className={`card qpreview${previewOpen ? '' : ' is-folded'}`}>
+      {/* ══ The quote as it stands: plain text, or the client's document ═══ */}
+      <section className="card qpreview">
         <div className="card-head">
-          <h2 className="card-title">Client view</h2>
+          <h2 className="card-title">Quote</h2>
           <span className="card-meta">
-            {dirty || saveMutation.isPending ? 'Updating after the save…' : 'What the client receives, as saved now'}
+            {dirty || saveMutation.isPending ? 'Updating after the save…' : 'As saved now'}
           </span>
-          <button type="button" className="btn btn-sm" onClick={togglePreview} aria-expanded={previewOpen}>
-            <Icon name={previewOpen ? 'chev-u' : 'chev-d'} size={12} />
-            {previewOpen ? 'Hide' : 'Show'}
-          </button>
-        </div>
-        {previewOpen && (
-          <div className="qpreview-body">
-            <QuoteDocument quote={quote} wo={wo} tpl={printTpl} />
+          <div className="qpreview-acts">
+            <div className="seg" role="group" aria-label="How to show the quote">
+              <button
+                type="button"
+                className={`seg-btn${previewMode === 'text' ? ' is-on' : ''}`}
+                aria-pressed={previewMode === 'text'}
+                onClick={() => pickPreview('text')}
+              >
+                Text
+              </button>
+              <button
+                type="button"
+                className={`seg-btn${previewMode === 'client' ? ' is-on' : ''}`}
+                aria-pressed={previewMode === 'client'}
+                onClick={() => pickPreview('client')}
+              >
+                Client view
+              </button>
+            </div>
+            {previewMode === 'text' && (
+              <CopyButton value={quote.summary.pinned ?? quote.summary.auto} label="Copy the quote text" size={14} />
+            )}
+            <a
+              className="btn btn-sm"
+              href={`/work-orders/${encodeURIComponent(quote.wo_number)}/quote/print?pdf=1`}
+              target="_blank"
+              rel="noopener"
+              title="Open the client's document and save it as a PDF from the print dialog"
+            >
+              <Icon name="download" size={12} />
+              PDF
+            </a>
+            {/* How a quote reaches the client is still to be decided (Elise,
+                2026-10-28): the button holds the place and says so. */}
+            <span className="tipwrap">
+              <button
+                type="button"
+                className="btn btn-sm btn-locked"
+                aria-disabled="true"
+                aria-describedby="qShareTip"
+              >
+                <Icon name="send" size={12} />
+                Share with client
+              </button>
+              <span className="tip tip-below" id="qShareTip" role="tooltip">
+                How quotes are shared with clients is not decided yet
+              </span>
+            </span>
           </div>
-        )}
+        </div>
+        <div className="qpreview-body">
+          {previewMode === 'text' ? (
+            <pre className="qpreview-text">{quote.summary.pinned ?? quote.summary.auto}</pre>
+          ) : (
+            <QuoteDocument quote={quote} wo={wo} tpl={printTpl} />
+          )}
+        </div>
       </section>
 
       {/* ══ Header band ══════════════════════════════════════════════════ */}

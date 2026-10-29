@@ -20,7 +20,7 @@
 import { useEffect } from 'react';
 import { optionDisplayLabel, visibleScopeLines } from '@theone/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { QUOTE_DOCUMENT_TYPE_LABELS, type QuoteSection } from '@theone/shared';
 import { getWorkOrder, getWorkOrderQuote, type Quote } from '../api/client';
 import type { PrintTemplate } from '@theone/shared';
@@ -45,6 +45,16 @@ export function QuotePrintPage() {
   const tpl = usePrintTemplate('quote');
   const quote = quoteQuery.data?.quote ?? null;
   const wo = woQuery.data;
+  // ?pdf=1 (the builder's PDF button): open the print dialog once the
+  // document has drawn, so saving it as a PDF is one more click.
+  const [params] = useSearchParams();
+  const wantsPdf = params.get('pdf') === '1';
+  const ready = quote !== null && !woQuery.isLoading;
+  useEffect(() => {
+    if (!wantsPdf || !ready) return;
+    const t = window.setTimeout(() => window.print(), 300);
+    return () => window.clearTimeout(t);
+  }, [wantsPdf, ready]);
 
   useEffect(() => {
     if (quote) document.title = `${quote.number ?? 'Quote'} · ${quote.wo_number}`;
