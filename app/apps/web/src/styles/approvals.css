@@ -121,6 +121,9 @@
 .scr .scr-act.is-primary { background: currentColor; }
 .scr .scr-act.is-primary::after { content: none; }
 .scr-approved .scr-act.is-primary, .scr-rejected .scr-act.is-primary { color: var(--on-accent); }
+/* An open request's Approve: solid amber with its own ink (with color
+   inherited the label was amber on amber and read as a blank pill). */
+.scr-open .scr-act.is-primary { background: var(--warn); border-color: var(--warn); color: var(--on-warn); }
 .scr-approved .scr-act.is-primary { background: var(--accent); border-color: var(--accent); }
 .scr-rejected .scr-act.is-primary { background: var(--danger); border-color: var(--danger); }
 .scr .scr-act:disabled { opacity: .55; cursor: default; }

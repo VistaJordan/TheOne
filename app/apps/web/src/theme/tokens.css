@@ -86,9 +86,11 @@
    (On Site (Assessment) / On Site (Job)) for night, and its already-certified day
    ink #7c5700 (SPRINT1-SPEC §6 pill override table) for day.
      night  #f8ae00 on #0c0d0e = 10.23:1     day  #7c5700 on #ffffff = 6.52:1
-   --warn-solid is a NON-TEXT fill (meter bars, dots) only.                  */
-:root[data-theme="night"]{ --warn:#f8ae00; --warn-solid:#f8ae00; --warn-bg:rgba(248,174,0,.13); --warn-border:rgba(248,174,0,.34); }
-:root[data-theme="day"]  { --warn:#7c5700; --warn-solid:#d98c00; --warn-bg:#fdf3e0;            --warn-border:#f0d49a; }
+   --warn-solid is a NON-TEXT fill (meter bars, dots) only.
+   --on-warn is text ON a solid --warn fill (the status request's Approve):
+     night  #1a1200 on #f8ae00 = 10.9:1      day  #ffffff on #7c5700 = 6.52:1  */
+:root[data-theme="night"]{ --warn:#f8ae00; --warn-solid:#f8ae00; --warn-bg:rgba(248,174,0,.13); --warn-border:rgba(248,174,0,.34); --on-warn:#1a1200; }
+:root[data-theme="day"]  { --warn:#7c5700; --warn-solid:#d98c00; --warn-bg:#fdf3e0;            --warn-border:#f0d49a; --on-warn:#ffffff; }
 
 /* ══ 0021 — ok ramp (the visit log: a finished visit, a "Completed" chip) ═══
    The product's own status green: #6bed5e (the ClickUp "Done" pill) for night,
