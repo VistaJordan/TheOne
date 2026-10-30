@@ -61,10 +61,12 @@ import { Icon } from '../Icon';
 
 import { CicoCard } from './CicoCard';
 import { SignoffPanel } from './SignoffPanel';
-import { FieldEditor, displayValue as display, draftOf } from './fieldEdit';
+import { FieldEditor, displayValue as display, draftOf, woCompForPicker } from './fieldEdit';
 import { FieldHistory } from './FieldHistory';
 
 const ORDER_PREF_KEY = 'wo.fields.order';
+/** Not drawn: the Client row says the same thing (2026-10-30). */
+const FM_FIELD_KEY = `fields.${FIELD.fm}`;
 
 /** The check-in/out fields the VISIT LOG renders (0021): not list rows. */
 const VISIT_HIDDEN = new Set(VISIT_HIDDEN_KEYS.map((k) => `fields.${k}`));
@@ -111,10 +113,13 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   // sorted by field_def.position. Comp is pulled out of the list (it renders
   // as a toolbar control beside the search box), and so are the five fields
   // the visit log owns — the CICO card below shows those as the log itself.
+  // FM is the Client under ClickUp's spelling (Elise, 2026-10-30: "keep only
+  // one"), so the card shows Client alone; FM stays on the record for ClickUp
+  // and the check-in fallback, and keeps its permission path in FIELD_SECTIONS.
   const fields = useMemo(
     () =>
       (catalogue.data?.fields ?? []).filter(
-        (f) => f.custom && f.key !== COMP_FIELD_KEY && !VISIT_HIDDEN.has(f.key),
+        (f) => f.custom && f.key !== COMP_FIELD_KEY && f.key !== FM_FIELD_KEY && !VISIT_HIDDEN.has(f.key),
       ),
     [catalogue.data],
   );
@@ -326,7 +331,7 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
                 onPick={(v) => save.mutate({ key: f.key, value: v === '' ? null : v })}
                 onCancel={() => { setEditing(null); setSaveError(null); }}
                 saving={save.isPending}
-                context={{ client: wo.client, comp: wo.billing_entity ?? null }}
+                context={{ client: wo.client, comp: woCompForPicker(wo) }}
               />
             ) : isLongText ? (
               <LongTextValue text={fieldValueToString(raw)} />

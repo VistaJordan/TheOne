@@ -33,17 +33,8 @@ export function SiteCard({ wo }: SiteCardProps) {
             <span className="site-addr">No address on file.</span>
           )}
         </InlineField>
-        {site.fm && (
-          <div className="site-fm">
-            <span>22. FM company</span>
-            <InlineField wo={wo} fieldKey={`fields.${FIELD.fm}`} label="FM company">
-              <span className="chip chip-sm">
-                <Icon name="store" size={12} />
-                {site.fm}
-              </span>
-            </InlineField>
-          </div>
-        )}
+        {/* FM is not drawn here (2026-10-30): it is the Client under
+            ClickUp's spelling, and the Client card already shows it. */}
         {hasLocation && (
           <div className="map" role="img" aria-label={`Approximate site location, ${site.mapCaption ?? 'unknown'}`}>
             <span className="map-pin"><Icon name="pin" size={22} /></span>

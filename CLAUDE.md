@@ -2987,11 +2987,15 @@ Client** under ClickUp's spelling ("Powerhouse" for PH), so 0103 sets `22. FM`
 the identity section no longer list it — seed in step) and
 `INTAKE_REQUIRED_FIELDS` asks for `Client` in FM's place (`intakeMissing`
 accepts `task.client`; `INTAKE_DRAFT_EXTRA_REQUIRED` is now empty). FM stays
-on the record for ClickUp and the check-in fallback. **Client options carry
+on the record for ClickUp and the check-in fallback; since 2026-10-30 the work
+order page no longer draws it (All fields skips `fields.22. FM`, the Site card
+lost its "FM company" line; the key keeps its permission path in
+`FIELD_SECTIONS`). **Client options carry
 `comps`** (`WoFieldOption.comps`, `clientCompsByName` in `woFields.ts`: every
 billing entity the client has a `client_team` or `client_cico_method` row
 under) and `clientOptionsForComp` narrows the Client picker on Add work order
-and in the field editor (`FieldEditContext.comp`) to the chosen Comp; no Comp,
+and in the field editor (`FieldEditContext.comp`, from `woCompForPicker`: the `21. Comp` field,
+else `billing_entity`) to the chosen Comp; no Comp,
 or a Comp nobody is filed under, offers everyone, the current value always
 stays; UI only, the API takes any client on file. **Editing Client or Comp**
 in `updateWorkOrderFields` runs `refillTeamOnEdit` → `refillFromClientTeam`

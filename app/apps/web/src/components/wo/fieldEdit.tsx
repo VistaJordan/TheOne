@@ -33,6 +33,15 @@ export interface FieldEditContext {
   comp?: string | null;
 }
 
+/** The work order's Comp as the Client picker should read it: the '21. Comp'
+    field itself (what the Add work order form reads), else the mirrored
+    billing_entity column — a row whose mirror is blank still narrows. */
+export function woCompForPicker(wo: WorkOrderDetailV2): string | null {
+  const bag = (wo.fields ?? {})[FIELD.comp];
+  if (typeof bag === 'string' && bag.trim() !== '') return bag;
+  return wo.billing_entity ?? null;
+}
+
 const isUrlValue = (s: string) => /^https?:\/\//i.test(s);
 
 /** Catalogue keys the API derives (visit mirrors, Quote Due Date). */
@@ -206,7 +215,7 @@ export function InlineField({ wo, fieldKey, children, label, className }: Inline
           onPick={(v) => save.mutate({ key: fieldKey, value: v === '' ? null : v })}
           onCancel={() => { setEditing(false); save.clearError(); }}
           saving={save.isPending}
-          context={{ client: wo.client, comp: wo.billing_entity ?? null }}
+          context={{ client: wo.client, comp: woCompForPicker(wo) }}
         />
         {save.error && <span className="ife-err" role="alert">{save.error}</span>}
       </span>
