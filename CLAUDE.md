@@ -2424,7 +2424,7 @@ written custom value (money not negative, a dropdown one of its options in the
 option's spelling, a State a US code upper-cased, no date before 2000) and
 `assertDateOrder` (Received on ≤ Due date, asked only when the patch touches
 one of them, against the bag as the save leaves it, under the row lock); a new
-WO # is 3–40 letters, digits or dashes (`woNumberProblem`, Add work order and
+WO # is required, its format not checked since 2026-10-30, Elise (`woNumberProblem`, Add work order and
 a draft's Submit). 400 with `details.code = VALIDATION` and `details.field`.
 Stored values are never re-checked. **M10:** `raiseNext` refuses (409
 `PM_ALREADY_RAISED`) while an occurrence on or after today already has its

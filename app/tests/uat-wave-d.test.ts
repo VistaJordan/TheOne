@@ -121,11 +121,10 @@ describe('#22 / M22 — assignees are dispatchers', () => {
 // ── M2 · field values ─────────────────────────────────────────────────────────
 
 describe('M2 — values are checked for their type', () => {
-  it('WO # is letters, digits and dashes, 3 to 40', () => {
+  it('WO # is required, its format is not checked (2026-10-30)', () => {
     expect(woNumberProblem('WO-1234')).toBeNull();
-    expect(woNumberProblem('ab')).not.toBeNull();
-    expect(woNumberProblem('WO 1234')).not.toBeNull();
-    expect(woNumberProblem('x'.repeat(41))).not.toBeNull();
+    expect(woNumberProblem('ab')).toBeNull();
+    expect(woNumberProblem('WO 1234 / A.2')).toBeNull();
     expect(woNumberProblem('')).toBe('A work order needs its WO #');
   });
   it('a State is a US code, stored upper-case', () => {

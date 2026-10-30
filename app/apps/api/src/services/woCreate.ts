@@ -376,7 +376,7 @@ export async function createWorkOrder(
   requireWoCreate(actor);
 
   const woNumber = String(input.wo_number ?? '').trim();
-  // M2 (Wave D): letters, digits and dashes, 3 to 40 characters.
+  // M2 (Wave D): a WO # is required (its format is not checked since 2026-10-30).
   const woProblem = woNumberProblem(woNumber);
   if (woProblem) throw badRequest(woProblem, { code: VALIDATION_CODE, field: 'wo_number' });
 

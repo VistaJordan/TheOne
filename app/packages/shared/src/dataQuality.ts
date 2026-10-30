@@ -122,13 +122,12 @@ export function addedAssignees(before: unknown, after: unknown): string[] {
 
 // ── M2 · field values ────────────────────────────────────────────────────────
 
-/** WO # on create: letters, digits and dashes, 3 to 40 characters. */
-export const WO_NUMBER_RE = /^[A-Za-z0-9-]{3,40}$/;
-
+/** WO # on create: only that there is one. (Elise, 2026-10-30: the
+    "3 to 40 letters, digits or dashes" format check of M2 was not a business
+    rule and is gone — a client's own number is taken as typed.) */
 export function woNumberProblem(raw: string | null | undefined): string | null {
   const s = String(raw ?? '').trim();
   if (s === '') return 'A work order needs its WO #';
-  if (!WO_NUMBER_RE.test(s)) return 'A WO # is 3 to 40 letters, digits or dashes (no spaces or other punctuation)';
   return null;
 }
 
