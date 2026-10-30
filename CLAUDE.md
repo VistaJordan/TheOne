@@ -364,7 +364,7 @@ code — 0031 already makes OM / OM Under Probation / Senior OM request-only on
 the status). The Emergency pattern again, in amber: one checkbox custom
 field `Escalated` (`FIELD.escalated`, Overview section, permission path
 `work_orders/fields/overview/fields.Escalated`; 0038 sets the three
-dispatcher tiers to view-only on it, so **Mark as Escalated** in the
+dispatcher tiers to view-only on it, so **Escalation** (was Mark as Escalated) in the
 work-order header is a manager's button — whoever has the field's edit).
 Rows project it as `escalated` / `wo_escalated`; `components/
 EscalatedBadge.tsx` + `is-escalated` (`.esc` styles; the red rail wins when
@@ -3145,7 +3145,7 @@ salesperson when the dropdown offers that name (`salesOwnerFromTeam` in shared
 `clientTeams.ts`; browser only — the API's `fillFromClientTeam` still fills
 AM / TL / ATL alone). A tick the person may not set (Escalated for the
 dispatchers, 0038) is drawn locked, since `assertFieldWrites` would refuse it.
-The header has **Mark as Emergency** beside Mark as Escalated (`WoHeader`,
+The header has **Emergency** (was Mark as Emergency) beside **Escalation** (`WoHeader`,
 the field's edit permission, red `.btn.is-emergency`).
 
 **Sales is a dropdown of the salespeople** (migration 0105, Elise

@@ -1,7 +1,7 @@
 // The built-in "Escalation Tracker" view (rules 7.3.1–7.3.3, 0038).
 //
 // Rule 7.3.3's team-wide tracker: every live work order whose `Escalated`
-// checkbox is ticked — by a manager's Mark as Escalated button (7.3.1) or by
+// checkbox is ticked — by a manager's Escalation button (7.3.1) or by
 // the email tool's webhook (7.3.2). Like Due Today it is not a saved view: it
 // cannot be renamed, deleted or pinned, and its filter is rebuilt from this
 // constant. Unlike Due Today it is an ordinary filter set, so the status

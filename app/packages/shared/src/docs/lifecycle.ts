@@ -398,7 +398,7 @@ export const LIFECYCLE: LifecycleModel = {
       statuses: ['Open', 'Waiting for Approval', 'Job Sched'],
       brd: ['2.5.1', '7.3.1', '7.3.2', '7.3.3'],
       summary: 'Two checkbox fields colour the work order everywhere: Emergency (red) and Escalated (amber). Escalated rows pin to the top of the Approvals inbox and fill the Escalation Tracker tab.',
-      steps: ['Mark as Escalated is a manager\'s button (dispatcher tiers are view-only on the field).', 'An email tool can set Escalated through the escalation webhook; it never clears it.'],
+      steps: ['Escalation is a manager\'s button (dispatcher tiers are view-only on the field).', 'An email tool can set Escalated through the escalation webhook; it never clears it.'],
     },
   ],
 };

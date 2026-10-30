@@ -98,13 +98,13 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
   // Rule 2.5.1: the Emergency flag reads red here as in every other view.
   const emergency = isEmergency(f);
   // Rules 7.3.1 / 7.3.3: the Escalated flag reads amber here and everywhere.
-  // Mark as Escalated is a manager's button: the field's own edit permission
+  // The Escalation button is a manager's: the field's own edit permission
   // decides who sees it (0038 locks the dispatcher tiers out).
   const escalated = isEscalated(f);
   const escalatedKey = `fields.${FIELD.escalated}`;
   const canEscalate = useCanEditField(escalatedKey);
   const escalateSave = useWoFieldSave(wo.id);
-  // 2026-10-27 · Mark as Emergency beside it, same pattern in red: whoever may
+  // 2026-10-27 · the Emergency button beside it, same pattern in red: whoever may
   // edit the Emergency field sees it (rule 2.5.1, ticked by hand until the
   // client portals decide it).
   const emergencyKey = `fields.${FIELD.emergency}`;
@@ -265,7 +265,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               }
             >
               <Icon name="alert" size={14} />
-              {emergency ? 'Emergency · Clear' : 'Mark as Emergency'}
+              {emergency ? 'Emergency · Clear' : 'Emergency'}
             </button>
           )}
           {canEscalate && (
@@ -282,7 +282,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               }
             >
               <Icon name="alert-circle" size={14} />
-              {escalated ? 'Escalated · Clear' : 'Mark as Escalated'}
+              {escalated ? 'Escalated · Clear' : 'Escalation'}
             </button>
           )}
           {actions}

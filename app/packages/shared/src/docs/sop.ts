@@ -241,7 +241,7 @@ export const SOP: SopDocument = {
         { kind: 'sub', title: 'Flags' },
         { kind: 'bullets', items: [
           '**Emergency**: the checkbox in All fields. Turns the work order red in every list, queue and board.',
-          '**Mark as Escalated** in the header (managers; dispatcher tiers see the field read-only). Turns it amber, pins it at the top of the Approvals inbox and lists it on the Escalation Tracker tab. **Escalated · Clear** removes it. An email tool can set it through the escalation webhook (never clear it) when that integration is on.',
+          '**Escalation** in the header (managers; dispatcher tiers see the field read-only). Turns it amber, pins it at the top of the Approvals inbox and lists it on the Escalation Tracker tab. **Escalated · Clear** removes it. An email tool can set it through the escalation webhook (never clear it) when that integration is on.',
         ] },
         { kind: 'sub', title: 'Messages' },
         { kind: 'steps', items: [

@@ -130,7 +130,7 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       // first, and its permission path is work_orders/fields/overview/….
       'fields.Emergency',
       // Rules 7.3.x: the Escalated flag sits beside it (0038); the dispatcher
-      // tiers are view-only on it, so Mark as Escalated is a manager's button.
+      // tiers are view-only on it, so the Escalation button is a manager's.
       'fields.Escalated',
       'fields.35. WO Description',
       // Rule 11.2.2's Parts_Required_List (0035): the Parts tab edits it and
