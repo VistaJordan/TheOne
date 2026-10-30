@@ -21,7 +21,7 @@ export const FIELD = {
   fm: '22. FM',
   comp: '21. Comp',
   am: 'AM',
-  /** Stored under its ClickUp short key; the catalogue labels it 'Team Lead'. */
+  /** Stored under its ClickUp short key; the catalogue labels it 'TL' (0112). */
   teamLead: 'TL',
   /** Associate Team Lead (0096, People section); filled from the account team. */
   associateTeamLead: 'ATL',

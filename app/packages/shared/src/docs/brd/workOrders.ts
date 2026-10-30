@@ -104,7 +104,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Right rail',
-          what: 'Responsibility (Vendor "Nobody assigned", Dispatcher "Unassigned", Account manager, Technicians), Location (Site "No site record linked", Asset, Getting in), Time ("On site · live", Open for, In this status, Received, Scheduled, Due, SLA due, First check-in, Last check-out, On site "N over M visits", ETA, Paused) and Cost ("Over NTE", Client NTE, Quote and its status, Invoiced, Cost, Paid out "X of Y", Profit · margin; shown with the money grant), on Overview and the four record tabs.',
+          what: 'Responsibility (Vendor "Nobody assigned", Dispatcher "Unassigned", AM, Technicians), Location (Site "No site record linked", Asset, Getting in), Time ("On site · live", Open for, In this status, Received, Scheduled, Due, SLA due, First check-in, Last check-out, On site "N over M visits", ETA, Paused) and Cost ("Over NTE", Client NTE, Quote and its status, Invoiced, Cost, Paid out "X of Y", Profit · margin; shown with the money grant), on Overview and the four record tabs.',
           value: 'The numbers a manager asks about, always visible.',
         },
         {

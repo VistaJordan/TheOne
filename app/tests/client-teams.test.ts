@@ -82,7 +82,7 @@ describe('the create form', () => {
     expect(mig).toMatch(/\('ATL', 'Assistant Team Lead', 'users'/);
     expect(mig).toMatch(/create_mode = 'optional' WHERE key IN \('TL', 'ATL'\)/);
     const seed = readFileSync('packages/db/src/seed.ts', 'utf8');
-    expect(seed).toMatch(/key: 'ATL',\s+label: 'Assistant Team Lead',\s+type: 'users'/);
+    expect(seed).toMatch(/key: 'ATL',\s+label: 'ATL',\s+type: 'users'/);
   });
 });
 

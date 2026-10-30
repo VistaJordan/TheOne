@@ -96,11 +96,11 @@ export function derivePeople(wo: WorkOrderDetailV2): WoPeople {
   // is also the only previous assignee — silently erased the whole Previous
   // assignees row. Each seat answers for itself.
   const slots: PersonSlot[] = [
-    { role: 'Account manager', names: names(field(f, FIELD.am)), accent: true,
+    { role: 'AM', names: names(field(f, FIELD.am)), accent: true,
       fieldKey: `fields.${FIELD.am}` },
-    { role: 'Team lead', names: names(field(f, FIELD.teamLead)),
+    { role: 'TL', names: names(field(f, FIELD.teamLead)),
       fieldKey: `fields.${FIELD.teamLead}` },
-    { role: 'Associate team lead (ATL)', names: names(field(f, FIELD.associateTeamLead)),
+    { role: 'ATL', names: names(field(f, FIELD.associateTeamLead)),
       fieldKey: `fields.${FIELD.associateTeamLead}` },
     // The dropdown is the field the list filters on; the older free-text
     // 'Assignee Name TXT' backstops WOs imported before it existed. The editor

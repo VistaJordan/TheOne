@@ -623,7 +623,7 @@ export function RecordRail({ woId, record, loading }: { woId: string; record: Wo
             ) : <span className="pf-muted">Nobody assigned</span>}
           </Row>
           <Row label="Dispatcher">{r.assignee ?? <span className="pf-muted">Unassigned</span>}</Row>
-          <Row label="Account manager">{r.am ?? '—'}</Row>
+          <Row label="AM">{r.am ?? '—'}</Row>
           {record.can.see_vendors && r.technicians.length > 0 && (
             <Row label="Technicians">{r.technicians.map((x) => x.name).join(', ')}</Row>
           )}
