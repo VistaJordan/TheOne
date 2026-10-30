@@ -142,7 +142,7 @@ describe('the histories name both people', () => {
     'vendors.ts',
   ])('services/%s reads the actor name through it', (f) => {
     const s = readFileSync(resolve(__dirname, '..', 'apps', 'api', 'src', 'services', f), 'latin1');
-    expect(s).toContain("import { ACTOR_NAME_SQL } from '../lib/actorName.js';");
+    expect(s).toMatch(/import \{[^}]*ACTOR_NAME_SQL[^}]*\} from '\.\.\/lib\/actorName\.js';/);
     expect(s).toContain('${ACTOR_NAME_SQL}');
   });
 

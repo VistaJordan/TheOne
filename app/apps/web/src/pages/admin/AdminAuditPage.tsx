@@ -47,6 +47,7 @@ import {
   unwrap,
   viaLabel,
   type SnapshotChange,
+  statusRequesterName,
 } from '../../lib/auditFormat';
 
 const PAGE = 100;
@@ -371,12 +372,19 @@ function changeOf(
       // Rules 2.6.3 / 2.7: a move Ecotrak would have refused says so here.
       const v = e.after?.ecotrak as EcotrakTransitionVerdict | undefined;
       const refused = v && ecotrakTransitionRefused(v) ? describeEcotrakRefusal(v) : null;
+      // 2026-10-30: through a request → who asked and who approved.
+      const requester = statusRequesterName(e.after);
       return {
         field: 'Status',
         value: (
           <>
             <span className="audit-val">{nameOf(e.before, 'status_name')}</span> →{' '}
             <span className="audit-val">{nameOf(e.after, 'status_name')}</span>
+            {requester && (
+              <span className="audit-via">
+                {' '}· requested by <b>{requester}</b> · approved by <b>{e.actor.display_name}</b>
+              </span>
+            )}
             {refused && <span className="audit-ecotrak"> · {refused}</span>}
           </>
         ),

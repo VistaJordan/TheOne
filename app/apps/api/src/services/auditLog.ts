@@ -20,7 +20,7 @@ import {
 } from '@theone/shared';
 import { query } from '../db.js';
 import { CREATED_AT_SQL } from './activity.js';
-import { VIEWING_AS_NAME_SQL } from '../lib/actorName.js';
+import { AFTER_WITH_REQUESTER_SQL, VIEWING_AS_NAME_SQL } from '../lib/actorName.js';
 import { toCsv } from './woBulk.js';
 import { activityValuesVisible, redactActivityValues, type Allow } from './permissions.js';
 
@@ -171,7 +171,7 @@ export async function listAuditLog(
   const { sql: whereSql, params } = buildAuditWhere(f, visible);
 
   const rows = await query<Row>(
-    `SELECT a.id, a.action, a.field, a.before, a.after, a.entity_type, a.entity_id,
+    `SELECT a.id, a.action, a.field, a.before, ${AFTER_WITH_REQUESTER_SQL} AS after, a.entity_type, a.entity_id,
             ${ENTITY_NAME_SQL} AS entity_name,
             t.wo_number, t.ext_name,
             p.id AS actor_id, p.display_name AS actor_name, p.kind AS actor_kind,
@@ -284,6 +284,14 @@ function snapshotDiff(before: unknown, after: unknown): { from: string; to: stri
   return { from: fromLines.join('\n'), to: toLines.join('\n') };
 }
 
+/** 2026-10-30 · " (requested by X, approved by Y)" on a status change that
+    went through a request — Y is the row's own User. */
+function requestNote(e: AuditLogEntryRow): string {
+  if (e.action !== 'status_changed') return '';
+  const rq = (e.after as { requested_by?: { name?: string } | null } | null)?.requested_by;
+  return rq?.name ? ` (requested by ${rq.name}, approved by ${e.actor.display_name})` : '';
+}
+
 export async function exportAuditCsv(
   f: Omit<AuditLogFilters, 'limit' | 'offset'>,
   allow: Allow,
@@ -307,7 +315,7 @@ export async function exportAuditCsv(
         e.ext_name ?? '',
         e.field ?? '',
         diff ? diff.from : plainValue(e.before),
-        diff ? diff.to : plainValue(e.after),
+        diff ? diff.to : plainValue(e.after) + requestNote(e),
       ];
     }),
   );

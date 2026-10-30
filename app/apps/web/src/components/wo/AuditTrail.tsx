@@ -23,6 +23,7 @@ import {
   quoteChanges,
   unwrap,
   viaLabel,
+  statusRequesterName,
 } from '../../lib/auditFormat';
 import { Icon } from '../Icon';
 import { useAuth } from '../../auth/AuthProvider';
@@ -129,6 +130,7 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
           changed <b>Status</b> from <Val>{nameOf(e.before, 'status_name')}</Val> to{' '}
           <Val>{nameOf(e.after, 'status_name')}</Val>
           {via}
+          {requestNote(e)}
           {ecotrakNote(e.after)}
         </>
       );
@@ -359,6 +361,18 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
 
 function Val({ children }: { children: ReactNode }) {
   return <span className="audit-val">{children}</span>;
+}
+
+/** 2026-10-30: a status change that went through a request names both
+    people — "· requested by A · approved by B". */
+function requestNote(e: ActivityEntry): ReactNode {
+  const requester = statusRequesterName(e.after);
+  if (!requester) return null;
+  return (
+    <span className="audit-via">
+      {' '}· requested by <b>{requester}</b> · approved by <b>{e.actor?.display_name ?? 'System'}</b>
+    </span>
+  );
 }
 
 /** Rules 2.6.3 / 2.7: the status_changed row carries `ecotrak` when Ecotrak

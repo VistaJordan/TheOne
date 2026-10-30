@@ -16,7 +16,7 @@
 
 import type { FastifyRequest } from 'fastify';
 import { query } from '../db.js';
-import { ACTOR_NAME_SQL } from '../lib/actorName.js';
+import { ACTOR_NAME_SQL, AFTER_WITH_REQUESTER_SQL } from '../lib/actorName.js';
 import { unauthorized, type Capabilities, type SessionPrincipal } from './auth.js';
 import { Params } from './woFields.js';
 import { outOfScope, woScopeSql } from './woScope.js';
@@ -180,7 +180,7 @@ export async function resolveTaskId(idOrWo: string, actor?: ActingPrincipal): Pr
 /** A task's activity newest-first (§5 GET /api/activity). */
 export async function getActivityForTask(taskId: string, limit: number): Promise<ActivityEntry[]> {
   const res = await query<ActivityRow>(
-    `SELECT a.id, a.action, a.field, a.before, a.after,
+    `SELECT a.id, a.action, a.field, a.before, ${AFTER_WITH_REQUESTER_SQL} AS after,
             p.id AS actor_id, ${ACTOR_NAME_SQL} AS actor_name, p.kind AS actor_kind,
             ${CREATED_AT_SQL} AS created_at
        FROM activity_log a

@@ -14,3 +14,19 @@
 export const VIEWING_AS_NAME_SQL = `(SELECT v.display_name FROM principal v WHERE v.id = a.viewing_as_id)`;
 
 export const ACTOR_NAME_SQL = `(p.display_name || COALESCE(' (viewing as ' || ${VIEWING_AS_NAME_SQL} || ')', ''))`;
+
+// Who asked for a status change a manager approved (Elise, 2026-10-30). The
+// `status_changed` row is signed by the approver and carries
+// `via: 'approval_task'` + `approval_task_id`; this fragment adds
+// `requested_by: {id, name}` — the person who raised that status-change
+// request — so the work order's Audit trail and Admin › Audit (screen and
+// CSV) name both people. Read from the request itself, so rows written before
+// this change read the same. Needs the row as `a` (activity_log).
+export const AFTER_WITH_REQUESTER_SQL = `(CASE
+    WHEN a.action = 'status_changed' AND a.after ->> 'via' = 'approval_task'
+     AND a.after ? 'approval_task_id' AND NOT (a.after ? 'requested_by')
+    THEN a.after || jsonb_build_object('requested_by',
+           (SELECT jsonb_build_object('id', rq.id, 'name', rq.display_name)
+              FROM approval_task rt JOIN principal rq ON rq.id = rt.created_by
+             WHERE rt.id::text = a.after ->> 'approval_task_id' AND rt.type = 'status_change'))
+    ELSE a.after END)`;

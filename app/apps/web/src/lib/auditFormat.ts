@@ -640,3 +640,12 @@ export function snapshotSummary(snap: unknown): SnapshotChange[] {
       to: snapshotValue(s[key]),
     }));
 }
+
+/** 2026-10-30 (Elise) · the person who requested a status change a manager
+    approved. The API adds `requested_by` to such a `status_changed` row
+    (AFTER_WITH_REQUESTER_SQL); the row's own actor is the approver. */
+export function statusRequesterName(after: unknown): string | null {
+  const rq = after && typeof after === 'object' ? (after as Record<string, unknown>).requested_by : null;
+  const name = rq && typeof rq === 'object' ? (rq as Record<string, unknown>).name : null;
+  return typeof name === 'string' && name.trim() !== '' ? name : null;
+}

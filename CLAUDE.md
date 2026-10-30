@@ -172,6 +172,15 @@ needs no code: nothing pauses a timer and the quote clock keys off visits.
 The status button reads "Request status change" for request-mode users and
 the bulk bar hides its status move for them.
 
+**Who asked and who approved** (Elise, 2026-10-30, no migration;
+`AFTER_WITH_REQUESTER_SQL` in `apps/api/src/lib/actorName.ts`,
+`statusRequesterName` in `apps/web/src/lib/auditFormat.ts`,
+`tests/status-request-audit.test.ts`): the `status_changed` row of an
+approved request is signed by the approver; `getActivityForTask` and
+`listAuditLog` add `requested_by` {id, name} to it from the request's
+`created_by` (read time, so older rows show it too), and the work order's
+Audit trail, Admin › Audit and its CSV print "requested by A · approved by B".
+
 **Pending acceptance / Incoming Work Orders** (migration 0036, rules
 7.1.1–7.1.4) is the third kind riding the same table: an `approval_task` of
 type `wo_acceptance`, section `intake` (permission path `approvals/intake`,
