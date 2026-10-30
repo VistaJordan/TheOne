@@ -729,6 +729,11 @@ export async function dispatchAutomations(event: AutomationEvent, ctx?: AutoCtx)
       }
     }
     await signoffOnAssignment(event);
+    // 2026-10-30 · the person given the work order hears about it in the bell.
+    {
+      const { notifyAssignment } = await import('./assignmentNotices.js');
+      await notifyAssignment(event);
+    }
 
     const rules = await query<AutomationRow>(
       `SELECT ${AUTOMATION_COLS} FROM automation

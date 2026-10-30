@@ -94,6 +94,16 @@ export function assigneeDisabledMessage(names: readonly string[]): string {
     : `${list} are disabled accounts — a work order cannot be assigned to them`;
 }
 
+/** The bell notice a person gets when a work order is assigned to them
+    (2026-10-30, services/assignmentNotices.ts). */
+export const WO_ASSIGNED_NOTICE_KIND = 'wo_assigned';
+
+/** "Josh assigned you WO-1234" — or, when a rule or the system did it,
+    "WO-1234 was assigned to you". */
+export function assignedNoticeTitle(woNumber: string, byName: string | null): string {
+  return byName && byName.trim() !== '' ? `${byName.trim()} assigned you ${woNumber}` : `${woNumber} was assigned to you`;
+}
+
 /** Names in a comma-joined `users` value, trimmed, blanks dropped. */
 export function assigneeNames(v: unknown): string[] {
   return String(v ?? '')

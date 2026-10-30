@@ -21,6 +21,9 @@ export interface NotifyInput {
   link?: string | null;
   /** Who did it — they are skipped if they are among the recipients. */
   actorId?: string | null;
+  /** One notice per person per key (0059's unique index): a second call
+      with the same key writes nothing. */
+  dedupeKey?: string | null;
 }
 
 export async function notify(principalIds: (string | null | undefined)[], n: NotifyInput): Promise<void> {
@@ -28,11 +31,12 @@ export async function notify(principalIds: (string | null | undefined)[], n: Not
   if (to.length === 0) return;
   try {
     await query(
-      `INSERT INTO app_notice (principal_id, kind, title, body, link, actor_id)
-       SELECT p.id, $2, $3, $4, $5, $6
+      `INSERT INTO app_notice (principal_id, kind, title, body, link, actor_id, dedupe_key)
+       SELECT p.id, $2, $3, $4, $5, $6, $7
          FROM principal p
-        WHERE p.id = ANY($1::uuid[]) AND p.kind = 'human' AND p.status <> 'disabled'`,
-      [to, n.kind, n.title.slice(0, 300), n.body ? n.body.slice(0, 1000) : null, n.link ?? null, n.actorId ?? null],
+        WHERE p.id = ANY($1::uuid[]) AND p.kind = 'human' AND p.status <> 'disabled'
+       ON CONFLICT (principal_id, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
+      [to, n.kind, n.title.slice(0, 300), n.body ? n.body.slice(0, 1000) : null, n.link ?? null, n.actorId ?? null, n.dedupeKey ?? null],
     );
   } catch (err) {
     console.error('[notices] could not write a notification', err);

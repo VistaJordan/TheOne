@@ -3040,6 +3040,19 @@ versionTwo.ts` `VERSION_TWO_SECTIONS` (Dashboard, Pulse) dims the sidebar item
 remove a name from the list to reopen it. The bell still shows Pulse notices,
 and the Sales role (Dashboard only) sees just the V2 screen.
 
+**"Assigned to you" in the bell** (Elise, 2026-10-30, no migration;
+`services/assignmentNotices.ts`, `WO_ASSIGNED_NOTICE_KIND` /
+`assignedNoticeTitle` in shared `dataQuality.ts`,
+`tests/assignment-notice.test.ts`). `dispatchAutomations` (every write path
+reports there after its commit) calls `notifyAssignment`: each name ADDED to
+the Assignee seat (`addedAssignees`; on a `created` event every name) that is
+an active human gets an `app_notice` of kind `wo_assigned` — "<who> assigned
+you <WO #>" (a rule or a service: "<WO #> was assigned to you"), body = the
+title, link `/work-orders/<WO #>`. The assigner is skipped (`notify`'s
+actorId, read off the newest audit row that set the seat), and `notify` now
+takes a `dedupeKey` (0059's unique index) — keyed by that audit row, so one
+assignment is one notice. Never throws.
+
 **No work order goes to a disabled account** (Elise, 2026-10-23, no
 migration; `tests/assignee-disabled.test.ts`). The person paths already
 refused one through `assertDispatchers` (`status <> 'disabled'`). The paths
