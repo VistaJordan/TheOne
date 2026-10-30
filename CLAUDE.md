@@ -3136,9 +3136,10 @@ replaces the 0061 CHECK with a named `attachment_kind_check`; the review
 route's zod enum carries the same list — keep the three in step. **Zip
 Code** takes 5 digits or ZIP+4: `normalizeZip` (shared `addressParts.ts`) in
 `checkFieldValue` refuses anything else (400 `VALIDATION`, nine bare digits
-get their dash), and the Add work order, draft and inline-editor boxes run
-`zipInputValue` on every keystroke so letters never get in. Stored values are
-not re-checked.
+get their dash), and the Add work order, draft, inline-editor and (since
+2026-10-30) bulk-edit and site ZIP boxes run `zipInputValue` on every
+keystroke so letters never get in; a site's ZIP is checked by `normalizeZip`
+in `checkSiteInput` too. Stored values are not re-checked.
 
 **The quote at the top of the builder** (no migration, Elise 2026-10-28). The
 quote builder (its page and the work order's Quotes tab) opens with a **Quote**

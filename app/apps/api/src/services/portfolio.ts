@@ -20,6 +20,8 @@ import {
   permAllows,
   warrantyState,
   zip5,
+  normalizeZip,
+  VALIDATION_CODE,
 } from '@theone/shared';
 import type {
   AssetCondition,
@@ -444,6 +446,12 @@ function checkSiteInput(input: SiteInput): void {
   if (hasLat !== hasLng) throw badRequest('Give both the latitude and the longitude, or neither', { field: 'lat' });
   if (hasLat && (Math.abs(input.lat!) > 90 || Math.abs(input.lng!) > 180)) throw badRequest('Those are not coordinates', { field: 'lat' });
   if (input.managed_by && !UUID_RE.test(input.managed_by)) throw badRequest('That is not a person', { field: 'managed_by' });
+  // 2026-10-30 (Elise): a ZIP is digits — 5, or ZIP+4 with its dash — never text.
+  if (typeof input.zip === 'string' && input.zip.trim() !== '') {
+    const zip = normalizeZip(input.zip);
+    if (!zip) throw badRequest('A ZIP is 5 digits, or ZIP+4 (12345-6789)', { field: 'zip', code: VALIDATION_CODE });
+    input.zip = zip;
+  }
 }
 
 /** Put the pin where the address says, unless a person placed it by hand. */

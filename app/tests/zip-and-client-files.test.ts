@@ -40,9 +40,23 @@ describe('Zip Code is digits only', () => {
       'apps/web/src/components/wo/list/CreateWorkOrderDialog.tsx',
       'apps/web/src/pages/IntakePage.tsx',
       'apps/web/src/components/wo/fieldEdit.tsx',
+      // 2026-10-30: bulk edit and a site's ZIP too.
+      'apps/web/src/components/wo/list/BulkBar.tsx',
+      'apps/web/src/components/portfolio/PortfolioParts.tsx',
     ]) {
       expect(read(f)).toContain('zipInputValue(e.target.value)');
     }
+  });
+
+  it('a site ZIP is checked on the API too (2026-10-30)', () => {
+    expect(read('apps/api/src/services/portfolio.ts')).toMatch(/const zip = normalizeZip\(input\.zip\);[\s\S]{0,160}input\.zip = zip;/);
+  });
+
+  it('allows digits with one dash, and nothing else', () => {
+    expect(zipInputValue('77a0b02')).toBe('77002');
+    expect(zipInputValue('77002-')).toBe('77002-');
+    expect(zipInputValue('77002 - 1234')).toBe('77002-1234');
+    expect(normalizeZip('7700A')).toBeNull();
   });
 });
 

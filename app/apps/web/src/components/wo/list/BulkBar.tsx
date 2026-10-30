@@ -16,6 +16,7 @@ import { StatusCircle } from '../../StatusCircle';
 import { bucketStatuses, useStatusGroups } from '../../../lib/statusGroups';
 import { Popover } from './Popover';
 import { FieldPicker } from './FieldPicker';
+import { ADDRESS_ZIP_KEY, zipInputValue } from '@theone/shared';
 
 interface BulkBarProps {
   ids: string[];
@@ -463,7 +464,15 @@ function BulkEditMenu({
                       }
                       value={value ?? ''}
                       placeholder="— clear —"
-                      onChange={(e) => setEdits({ ...edits, [key]: e.target.value })}
+                      // Zip Code takes digits and one dash (12345 or 12345-6789).
+                      inputMode={key === `fields.${ADDRESS_ZIP_KEY}` ? 'numeric' : undefined}
+                      maxLength={key === `fields.${ADDRESS_ZIP_KEY}` ? 10 : undefined}
+                      onChange={(e) =>
+                        setEdits({
+                          ...edits,
+                          [key]: key === `fields.${ADDRESS_ZIP_KEY}` ? zipInputValue(e.target.value) : e.target.value,
+                        })
+                      }
                     />
                   )}
                   <button

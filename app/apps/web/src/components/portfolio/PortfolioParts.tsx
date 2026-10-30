@@ -19,6 +19,7 @@ import {
   WARRANTY_STATE_LABELS,
   flattenLocations,
   locationTree,
+  zipInputValue,
 } from '@theone/shared';
 import type {
   AssetCondition,
@@ -278,7 +279,7 @@ export function SiteFormDialog({ site, meta, onClose, onSaved }: {
               {US_STATE_CODES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </Field>
-          <Field label="ZIP"><input className="fld" value={d.zip} disabled={locked('zip')} onChange={(e) => set('zip', e.target.value)} /></Field>
+          <Field label="ZIP"><input className="fld" value={d.zip} disabled={locked('zip')} inputMode="numeric" maxLength={10} onChange={(e) => set('zip', zipInputValue(e.target.value))} /></Field>
 
           <Field label="Site type"><Suggest id="pf-types" value={d.site_type} onChange={(v) => set('site_type', v)} options={meta?.site_types ?? []} /></Field>
           <Field label="Ownership">
