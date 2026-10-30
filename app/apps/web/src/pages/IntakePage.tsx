@@ -59,6 +59,7 @@ import { AddWorkOrderButton } from '../components/wo/list/AddWorkOrderButton';
 import { useAddressFill } from '../lib/addressFill';
 import { AssigneeSelect } from '../components/wo/AssigneeAvailability';
 import { useWoCatalogue } from '../components/wo/fieldEdit';
+import { useAuth } from '../auth/AuthProvider';
 
 const DASH = '—';
 
@@ -141,6 +142,21 @@ function DraftsList() {
   const qc = useQueryClient();
   const drafts = useQuery({ queryKey: ['intake-drafts'], queryFn: listIntakeDrafts });
   const [error, setError] = useState<string | null>(null);
+  // 2026-10-30 (Elise): a draft is discarded from the list without opening
+  // it — the same POST …/discard as the draft's own button (intake edit),
+  // asked once in the row.
+  const { can } = useAuth();
+  const mayDiscard = can('intake', 'edit');
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const discard = useMutation({
+    mutationFn: (id: string) => discardIntakeDraft(id),
+    onSuccess: () => {
+      setConfirming(null);
+      void qc.invalidateQueries({ queryKey: ['intake-drafts'] });
+    },
+    onError: (err) => setError(err instanceof ApiRequestError ? err.message : 'Could not discard the draft'),
+  });
+  const cols = mayDiscard ? 8 : 7;
 
   const start = useMutation({
     mutationFn: () => createIntakeDraft({}),
@@ -192,14 +208,15 @@ function DraftsList() {
                   <th>Still to fill</th>
                   <th>Assignee</th>
                   <th>Last touched</th>
+                  {mayDiscard && <th aria-label="Discard" />}
                 </tr>
               </thead>
               <tbody>
                 {drafts.isLoading && (
-                  <tr className="ct-empty"><td colSpan={7}>Loading the intake…</td></tr>
+                  <tr className="ct-empty"><td colSpan={cols}>Loading the intake…</td></tr>
                 )}
                 {!drafts.isLoading && items.length === 0 && (
-                  <tr className="ct-empty"><td colSpan={7}>No drafts are waiting. Start one with New draft, or Save as draft on Add work order.</td></tr>
+                  <tr className="ct-empty"><td colSpan={cols}>No drafts are waiting. Start one with New draft, or Save as draft on Add work order.</td></tr>
                 )}
                 {items.map((d) => {
                   const need = d.missing.length + (intakeValueFilled(d.assignee) ? 0 : 1);
@@ -230,6 +247,41 @@ function DraftsList() {
                         {when(d.updated_at)}
                         {d.updated_by && <span className="intake-dim"> · {d.updated_by.display_name}</span>}
                       </td>
+                      {mayDiscard && (
+                        <td
+                          className="intake-row-actions"
+                          onClick={(e) => e.stopPropagation()}
+                          onAuxClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          {confirming === d.id ? (
+                            <span className="intake-row-confirm">
+                              <span className="intake-dim">Discard?</span>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-danger"
+                                onClick={() => discard.mutate(d.id)}
+                                disabled={discard.isPending}
+                              >
+                                Yes, discard
+                              </button>
+                              <button type="button" className="btn btn-sm" onClick={() => setConfirming(null)} disabled={discard.isPending}>
+                                Keep
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-ghost"
+                              title="Discard this draft"
+                              aria-label={`Discard draft ${d.wo_number?.trim() || ''}`.trim()}
+                              onClick={() => setConfirming(d.id)}
+                            >
+                              <Icon name="trash" size={14} />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

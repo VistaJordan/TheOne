@@ -131,3 +131,7 @@
 }
 .intake-extras dt { font-size: 11px; color: var(--ink-3); }
 .intake-extras dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+
+/* 2026-10-30 · Discard from the drafts list. */
+.intake-row-actions { width: 1%; white-space: nowrap; text-align: right; cursor: default; }
+.intake-row-confirm { display: inline-flex; align-items: center; gap: 6px; }
