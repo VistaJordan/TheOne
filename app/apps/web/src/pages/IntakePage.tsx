@@ -34,6 +34,7 @@ import {
   parseAddressParts,
   ADDRESS_ZIP_KEY,
   zipInputValue,
+  clientOptionsForComp,
   intakeDraftMissing,
   intakeValueFilled,
   type IntakeDraft,
@@ -495,7 +496,11 @@ function DraftForm({ id }: { id: string }) {
     const val = v[f.key] ?? '';
     const cls = 'fld';
     if (d?.type === 'select' && (d.options?.length ?? 0) > 0) {
-      const opts = d.options ?? [];
+      // 2026-10-30 (Elise): once a Comp is picked, Client offers only the
+      // clients filed under it — Add work order's rule (clientOptionsForComp);
+      // no Comp, or a Comp nobody is filed under, offers every client.
+      const all = d.options ?? [];
+      const opts = f.key === 'Client' ? clientOptionsForComp(all, v['21. Comp'], val) : all;
       const extra = val && !opts.some((o) => o.value === val) ? [{ value: val, label: val }] : [];
       return (
         <select id={domId} className={cls} value={val} onChange={(e) => set(f.key, e.target.value)} disabled={busy}>

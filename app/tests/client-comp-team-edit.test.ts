@@ -89,3 +89,11 @@ describe('refillFromClientTeam', () => {
     expect(src).toContain("teamLog, 'client_team'");
   });
 });
+
+describe('the Client picker follows the Comp everywhere (2026-10-30)', () => {
+  it('Add work order and the draft form both narrow it', () => {
+    for (const f of ['../apps/web/src/components/wo/list/CreateWorkOrderDialog.tsx', '../apps/web/src/pages/IntakePage.tsx']) {
+      expect(readFileSync(new URL(f, import.meta.url), 'utf8')).toMatch(/clientOptionsForComp\(all, (values\[COMP_KEY\]|v\['21\. Comp'\]), val\)/);
+    }
+  });
+});
