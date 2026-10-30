@@ -289,6 +289,15 @@ export async function updateWorkOrderFields(
         const mirror = MIRROR_BY_JSON_KEY[f.key];
         if (mirror) mirrorSets.push({ ...mirror, value: mirrorValue(mirror.cast, f.after) });
       }
+      // 2026-10-30 (Elise): Client Portal Type follows the client's check-in
+      // row the same way (empty, or still the old client's), same audit row.
+      const { refillPortalTypeOnEdit } = await import('./clientCico.js');
+      const portal = await refillPortalTypeOnEdit(
+        { client: fields['Client'], comp: fields['21. Comp'] },
+        merged,
+        new Set(patch.map((p) => p.jsonKey)),
+      );
+      if (portal) teamLog.push({ field: 'fields.Client Portal Type', before: portal.before, after: portal.after });
     }
 
     // M2 (Wave D): Received on ≤ Due date, against the bag as this save leaves it.

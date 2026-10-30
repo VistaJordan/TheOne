@@ -139,8 +139,17 @@ export async function getCreateForm(): Promise<WoCreateForm> {
   // the trade are known; createWorkOrder picks the same one again.
   // 0096 · every client's account team, so the form fills AM / TL / ATL once
   // the Client and the Comp are picked.
+  // 2026-10-30 · and each client + Comp's Client Portal Type.
   const { teamsForForm } = await import('./clientTeams.js');
-  return { fields, subcategories, layouts: await loadFormLayouts(true), storage_ready: storageReady(), client_teams: await teamsForForm() };
+  const { portalTypesForForm } = await import('./clientCico.js');
+  return {
+    fields,
+    subcategories,
+    layouts: await loadFormLayouts(true),
+    storage_ready: storageReady(),
+    client_teams: await teamsForForm(),
+    client_portal_types: await portalTypesForForm(),
+  };
 }
 
 // ── Form layouts (0064) ──────────────────────────────────────────────────────
@@ -406,6 +415,9 @@ export async function createWorkOrder(
   {
     const { fillFromClientTeam } = await import('./clientTeams.js');
     await fillFromClientTeam(bag);
+    // 2026-10-30 · and an empty Client Portal Type from its check-in row.
+    const { fillPortalType } = await import('./clientCico.js');
+    await fillPortalType(bag);
   }
   // #22 / M22 (D3): the assignee is an active dispatcher — asked before the
   // insert, so a refused pick leaves no work order behind.

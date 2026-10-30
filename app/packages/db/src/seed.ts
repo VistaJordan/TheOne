@@ -473,7 +473,7 @@ const CURATED_FIELDS: CuratedField[] = [
   // Which client CMMS the work order came from (rule 2.6.1's Client_Portal_Type,
   // 0033). Extra portals are added from Admin › Custom fields; an integration
   // that pulls a work order stamps its own name here.
-  { key: 'Client Portal Type',       label: 'Client Portal Type',   type: 'dropdown', options: ['Ecotrak', 'Corrigo', 'ServiceChannel'] },
+  { key: 'Client Portal Type',       label: 'Client Portal Type',   type: 'dropdown', options: ['Ecotrak', 'Corrigo', 'ServiceChannel', '7-Eleven'] },
   { key: 'GTG',                      label: 'GTG',                  type: 'checkbox' },
   { key: 'MOD Date',                 label: 'MOD Date',             type: 'date' },
   { key: 'Previous Assignees',       label: 'Previous Assignees',   type: 'users' },

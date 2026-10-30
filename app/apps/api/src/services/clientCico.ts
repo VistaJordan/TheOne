@@ -9,8 +9,8 @@
 // `client_cico_added | client_cico_updated | client_cico_removed`, with the
 // whole row before / after — the Account team's pattern.
 
-import { CICO_PORTAL_METHOD, CLIENTS_PERM_KEY, VISIT_METHODS, permAllows, pickClientTeam } from '@theone/shared';
-import type { ClientCicoInput, ClientCicoMethod, ClientCicoResponse } from '@theone/shared';
+import { CICO_PORTAL_METHOD, CLIENTS_PERM_KEY, PORTAL_TYPE_KEY, VISIT_METHODS, permAllows, pickClientTeam, portalTypeFromCico } from '@theone/shared';
+import type { ClientCicoInput, ClientCicoMethod, ClientCicoResponse, ClientPortalTypeForForm } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -178,6 +178,101 @@ export async function cicoForClient(
   } catch (e) {
     const err = e as { code?: string; message?: string };
     if (err.code !== '42P01') throw e;
+    return null;
+  }
+}
+
+// ── Client Portal Type follows the client (Elise, 2026-10-30) ─────────────────
+// `portalTypeFromCico` (shared) is the rule; these read the rows and the
+// dropdown's options. Decoration-grade like `cicoForClient`: a failure fills
+// nothing and never takes the save down.
+
+const blankValue = (v: unknown): boolean => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
+
+async function portalTypeOptions(): Promise<string[]> {
+  const r = await query<{ options: unknown }>(
+    `SELECT type_config->'options' AS options FROM field_def WHERE key = $1 AND type = 'dropdown' ORDER BY position NULLS LAST LIMIT 1`,
+    [PORTAL_TYPE_KEY],
+  );
+  const opts = r.rows[0]?.options;
+  return Array.isArray(opts) ? opts.map((o) => String(typeof o === 'string' ? o : (o as { name?: string })?.name ?? '').trim()).filter(Boolean) : [];
+}
+
+type PortalRow = { client: string; billing_entity: string; method: string; portal: string | null; detail: string | null };
+
+async function cicoRows(): Promise<PortalRow[]> {
+  const r = await query<PortalRow>(
+    `SELECT c.name AS client, m.billing_entity, m.method, m.portal, m.detail
+       FROM client_cico_method m JOIN client c ON c.id = m.client_id
+      WHERE c.deleted_at IS NULL
+      ORDER BY lower(c.name), upper(m.billing_entity)`,
+  );
+  return r.rows;
+}
+
+/** Every client + Comp whose check-in row names a Client Portal Type option —
+    the Add work order form fills the field from it. */
+export async function portalTypesForForm(): Promise<ClientPortalTypeForForm[]> {
+  try {
+    const [rows, options] = await Promise.all([cicoRows(), portalTypeOptions()]);
+    const out: ClientPortalTypeForForm[] = [];
+    for (const r of rows) {
+      const portal_type = portalTypeFromCico(r, options);
+      if (portal_type) out.push({ client: r.client, billing_entity: r.billing_entity, portal_type });
+    }
+    return out;
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    console.error('client portal types unavailable', { code: err.code, message: err.message });
+    return [];
+  }
+}
+
+function portalTypeIn(rows: PortalRow[], options: string[], client: unknown, comp: unknown): string | null {
+  return portalTypeFromCico(pickClientTeam(rows, text(client), text(comp)), options);
+}
+
+/** `createWorkOrder`'s half: an empty Client Portal Type takes the client's. */
+export async function fillPortalType(bag: Record<string, unknown>): Promise<void> {
+  if (!blankValue(bag[PORTAL_TYPE_KEY]) || !text(bag['Client'])) return;
+  try {
+    const [rows, options] = await Promise.all([cicoRows(), portalTypeOptions()]);
+    const v = portalTypeIn(rows, options, bag['Client'], bag['21. Comp']);
+    if (v) bag[PORTAL_TYPE_KEY] = v;
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    console.error('client portal type fill skipped', { code: err.code, message: err.message });
+  }
+}
+
+/**
+ * `updateWorkOrderFields`' half: a save that changed the Client or the Comp
+ * moves Client Portal Type with it while it is empty or still holds what the
+ * OLD client / Comp implied (a value picked by hand stays, as the account
+ * team's seats do); one the same save set is left alone. Changes `bag` in
+ * place and returns the change for the audit trail, or null.
+ */
+export async function refillPortalTypeOnEdit(
+  before: { client: unknown; comp: unknown },
+  bag: Record<string, unknown>,
+  explicit: ReadonlySet<string>,
+): Promise<{ before: unknown; after: string | null } | null> {
+  if (explicit.has(PORTAL_TYPE_KEY)) return null;
+  try {
+    const [rows, options] = await Promise.all([cicoRows(), portalTypeOptions()]);
+    const was = portalTypeIn(rows, options, before.client, before.comp);
+    const now = portalTypeIn(rows, options, bag['Client'], bag['21. Comp']);
+    const cur = bag[PORTAL_TYPE_KEY];
+    const held = text(cur);
+    if (held !== null && held !== was) return null;
+    if (held === now) return null;
+    if (now === null) delete bag[PORTAL_TYPE_KEY];
+    else bag[PORTAL_TYPE_KEY] = now;
+    return { before: cur ?? null, after: now };
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    console.error('client portal type refill skipped', { code: err.code, message: err.message });
     return null;
   }
 }

@@ -2979,6 +2979,21 @@ CICO composer prints. The seed truncates neither `client` nor the new table.
 Where the sheet and 0099 disagree (the Service Channel clients: IVR on the
 sheet, Portal in 0099's FM rows) the client row wins.
 
+**Client Portal Type follows the client; 7-Eleven** (migration 0113, Elise
+2026-10-30; `portalTypeFromCico` / `portalTypeOption` in shared
+`clientCico.ts`, `tests/client-portal-type.test.ts`). The dropdown gains
+`7-Eleven` (seed.ts in step). The field fills from the client's check-in row
+for the Client + Comp (`pickClientTeam`'s matching): a Portal row's portal,
+else the portal in front of an IVR detail ("Service Channel · …"), written
+only when it names an option of the dropdown (aliases: 7-11 / 7 Eleven,
+EcoTrack, Service Channel) — so adding "Metryx" to the list in Admin › Custom
+fields is enough for PH to fill. On Add work order (`client_portal_types` on
+the form payload; only while empty or still the fill's own value), on create
+(`fillPortalType`, when empty) and when an edit changes the Client or the
+Comp (`refillPortalTypeOnEdit`: empty or still the old client's value, never
+one the same save set; logged with the team fills, `via: 'client_team'`).
+Nothing back-filled; bulk edit, the import and the Ecotrak ingest do not fill.
+
 **Client follows the Comp; the team follows an edit; FM off the form; a
 closed form is a draft; Pulse and Dashboard parked for Version 2** (migration
 0103, Elise 2026-10-27; `tests/client-comp-team-edit.test.ts`). **FM = the

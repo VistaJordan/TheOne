@@ -57,6 +57,7 @@ import {
   describeMissing,
   formatBytes,
   pickClientTeam,
+  PORTAL_TYPE_KEY,
   pickFormLayout,
   seatNames,
   seatRoleForField,
@@ -290,6 +291,24 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       return changed ? next : cur;
     });
   }, [team, teamFill, salesFill, onForm, people.isSuccess]);
+
+  // 2026-10-30 · Client Portal Type follows the client's check-in method
+  // (Clients › a client › Check-in method) for the Comp — only while it is
+  // empty or still holds what this fill last put there.
+  const portalFill = useMemo(
+    () => pickClientTeam(configured.client_portal_types ?? [], values['Client'], values[COMP_KEY])?.portal_type ?? '',
+    [configured.client_portal_types, values],
+  );
+  const portalFilled = useRef('');
+  useEffect(() => {
+    if (!onForm.has(PORTAL_TYPE_KEY)) return;
+    setValues((cur) => {
+      const current = (cur[PORTAL_TYPE_KEY] ?? '').trim();
+      if (current !== '' && current !== portalFilled.current) return cur;
+      portalFilled.current = portalFill;
+      return current === portalFill ? cur : { ...cur, [PORTAL_TYPE_KEY]: portalFill };
+    });
+  }, [portalFill, onForm]);
 
   const assets = siteDetail?.asset_list.filter((a) => a.status !== 'retired') ?? [];
   const asset = assets.find((a) => a.id === assetId) ?? null;

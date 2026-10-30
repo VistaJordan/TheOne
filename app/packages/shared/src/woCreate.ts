@@ -189,6 +189,8 @@ export interface WoCreateForm {
   storage_ready?: boolean;
   /** 0096 · every client's account team per Comp, names as stored. */
   client_teams?: import('./clientTeams').ClientTeamForForm[];
+  /** 2026-10-30 · each client + Comp's Client Portal Type, from its check-in row. */
+  client_portal_types?: import('./clientCico').ClientPortalTypeForForm[];
 }
 
 /** 0063 · bag keys the form treats specially. */
