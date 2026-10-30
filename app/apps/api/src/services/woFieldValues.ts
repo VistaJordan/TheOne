@@ -22,8 +22,8 @@ import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { ActivityEntry } from '@theone/shared';
-import { MONEY_MAX, VALIDATION_CODE, addedAssignees, withinMoneyBound } from '@theone/shared';
-import { assertDateOrder, assertDispatchers, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
+import { COMPLETION_ASSIGNEE_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, withinMoneyBound } from '@theone/shared';
+import { assertCompletionAssignees, assertDateOrder, assertDispatchers, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
 
@@ -303,6 +303,15 @@ export async function updateWorkOrderFields(
       await assertDispatchers(addedAssignees(seat.before, seat.after), 'fields.Assignee', tx);
     } else if (seat) {
       await assertNoDisabledAssignees(addedAssignees(seat.before, seat.after), 'fields.Assignee', tx);
+    }
+    // 2026-10-30 (Elise): a name ADDED to Completion Assignee holds the AR
+    // role — the same split as the Assignee seat (a rule's own write is
+    // asked only that the account is not disabled).
+    const closer = log.find((c) => c.field === `fields.${COMPLETION_ASSIGNEE_KEY}`);
+    if (closer && !auto && !opts.system) {
+      await assertCompletionAssignees(addedAssignees(closer.before, closer.after), closer.field, tx);
+    } else if (closer) {
+      await assertNoDisabledAssignees(addedAssignees(closer.before, closer.after), closer.field, tx);
     }
 
     // Rule 11.1.1: filling the Assignee seat on a work order still waiting in

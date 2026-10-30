@@ -3024,6 +3024,17 @@ for Incoming › Unassigned), and the CSV import (whole file refused, rows in
 `details.wo_numbers`). Only a name ADDED to the seat is asked, so work orders
 already held by someone who is then disabled stay as they are.
 
+**Completion Assignee is AR only** (Elise, 2026-10-30, no migration;
+`COMPLETION_ASSIGNEE_*` / `ROLE_LIMITED_PERSON_FIELDS` in shared
+`dataQuality.ts`, `tests/completion-assignee-ar.test.ts`). The field's
+options (field editor, bulk edit, filters, Add work order) list only active
+users with role `ar` (`customDistinctOptions`, like the AM / TL / ATL seats; a
+name on a work order that is no account stays reachable). A name ADDED to it
+by a person is checked by `assertCompletionAssignees` (`dataRules.ts`, 400
+`COMPLETION_ASSIGNEE_NOT_AR`) in the field editor, bulk edit and Add work
+order; a rule's own write is asked only that the account is not disabled.
+Values already on file are not re-checked; the CSV import is not asked.
+
 **Tech Hub: technicians off the client conversation** (migration 0095,
 Elise 2026-10-27; `callSide` / `TECH_HUB_TAB` in `packages/shared/src/
 calls.ts`, `components/wo/tech/TechTextsCard.tsx`, `tests/tech-hub.test.ts`).

@@ -51,6 +51,7 @@ import {
   assigneeNames,
   woNumberProblem,
   ADDRESS_KEY,
+  COMPLETION_ASSIGNEE_KEY,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict } from '../errors.js';
@@ -62,7 +63,7 @@ import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { INTAKE_START_STATUS_NAME } from './intake.js';
 import { dispatchAutomations } from './automations.js';
-import { assertDispatchers } from './dataRules.js';
+import { assertCompletionAssignees, assertDispatchers } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 
 const PERM_KEY = 'work_orders';
@@ -409,6 +410,8 @@ export async function createWorkOrder(
   // #22 / M22 (D3): the assignee is an active dispatcher — asked before the
   // insert, so a refused pick leaves no work order behind.
   if (str(bag[ASSIGNEE_KEY])) await assertDispatchers(assigneeNames(bag[ASSIGNEE_KEY]), `fields.${ASSIGNEE_KEY}`);
+  // 2026-10-30: a Completion Assignee is an active AR user.
+  if (str(bag[COMPLETION_ASSIGNEE_KEY])) await assertCompletionAssignees(assigneeNames(bag[COMPLETION_ASSIGNEE_KEY]));
 
   const missing = woCreateMissing(form, bag, woNumber);
   if (missing.length > 0) {

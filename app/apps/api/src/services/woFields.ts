@@ -18,7 +18,7 @@
 import { AGE_BANDS } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
-import { CLIENT_FIELD_KEY, DISPATCHER_ROLE_CODES, defaultClientSafe, seatRoleForField } from '@theone/shared';
+import { CLIENT_FIELD_KEY, DISPATCHER_ROLE_CODES, ROLE_LIMITED_PERSON_FIELDS, defaultClientSafe, seatRoleForField } from '@theone/shared';
 
 export type FieldType = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'boolean';
 
@@ -310,7 +310,8 @@ async function distinctOptions(): Promise<Record<string, FieldOption[]>> {
  * The AM, TL and ATL seats (Elise, 2026-10-27) offer only the people whose
  * role is that seat's (`seatRoleForField`); a name on a work order that is no
  * active account (a lead typed from the team sheet before they had one) stays
- * reachable, an account in another role does not.
+ * reachable, an account in another role does not. Completion Assignee
+ * (2026-10-30) offers only AR users the same way (`ROLE_LIMITED_PERSON_FIELDS`).
  */
 async function customDistinctOptions(): Promise<Record<string, FieldOption[]>> {
   const out: Record<string, FieldOption[]> = {};
@@ -323,7 +324,7 @@ async function customDistinctOptions(): Promise<Record<string, FieldOption[]>> {
   );
   const accounts = new Set(people.rows.map((r) => r.v));
   for (const key of distinctCustomKeys) {
-    const seatRole = seatRoleForField(key);
+    const seatRole = seatRoleForField(key) ?? ROLE_LIMITED_PERSON_FIELDS[key] ?? null;
     const users = seatRole ? { rows: people.rows.filter((r) => r.role === seatRole) } : people;
     const onTasks = await query<{ v: string }>(
       `SELECT DISTINCT (t.fields->>$1) AS v

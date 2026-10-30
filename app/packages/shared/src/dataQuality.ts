@@ -59,6 +59,30 @@ export function assigneeNotDispatcherMessage(names: readonly string[]): string {
     : `${list} are not active dispatchers — a work order is assigned to an OM Under Probation, OM or Senior OM`;
 }
 
+// ── Completion Assignee is AR (Elise, 2026-10-30) ───────────────────────────
+
+/** The work-order field naming who closes the job out with the client. */
+export const COMPLETION_ASSIGNEE_KEY = 'Completion Assignee';
+
+/** The roles a Completion Assignee holds: Accounts Receivable only. */
+export const COMPLETION_ASSIGNEE_ROLE_CODES = ['ar'] as const;
+
+/** `details.code` when a Completion Assignee is not an active AR user. */
+export const COMPLETION_ASSIGNEE_NOT_AR_CODE = 'COMPLETION_ASSIGNEE_NOT_AR';
+
+export function completionAssigneeNotArMessage(names: readonly string[]): string {
+  const list = names.map((n) => `"${n}"`).join(', ');
+  return names.length === 1
+    ? `${list} is not an active AR user — the Completion Assignee must hold the AR role`
+    : `${list} are not active AR users — the Completion Assignee must hold the AR role`;
+}
+
+/** Person fields whose picker lists one role only (besides the AM / TL / ATL
+    seats, `seatRoleForField`): bag key → role code. */
+export const ROLE_LIMITED_PERSON_FIELDS: Readonly<Record<string, string>> = {
+  [COMPLETION_ASSIGNEE_KEY]: 'ar',
+};
+
 /** `details.code` when an assignee names a disabled account — asked of every
     writer of the seat, the automations, the PM raise and the CSV import too. */
 export const ASSIGNEE_DISABLED_CODE = 'ASSIGNEE_DISABLED';

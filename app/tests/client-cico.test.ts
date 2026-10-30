@@ -59,7 +59,7 @@ describe('each seat lists only its role', () => {
   });
 
   it('the pickers are wired to the seat', () => {
-    expect(read('apps/api/src/services/woFields.ts')).toContain('const seatRole = seatRoleForField(key);');
+    expect(read('apps/api/src/services/woFields.ts')).toContain('const seatRole = seatRoleForField(key) ?? ROLE_LIMITED_PERSON_FIELDS[key] ?? null;');
     expect(read('apps/web/src/components/wo/list/CreateWorkOrderDialog.tsx')).toContain("p.kind === 'human' && p.role === role");
     expect(read('apps/api/src/services/clientTeams.ts')).toContain('people_by_seat: bySeat(people)');
     expect(read('apps/web/src/components/portfolio/ClientTeamCard.tsx')).toContain('data?.people_by_seat?.[k]');

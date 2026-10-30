@@ -23,6 +23,10 @@ import {
   assigneeDisabledMessage,
   CLIENT_FIELD_KEY,
   CLIENT_NOT_ON_FILE_CODE,
+  COMPLETION_ASSIGNEE_KEY,
+  COMPLETION_ASSIGNEE_NOT_AR_CODE,
+  COMPLETION_ASSIGNEE_ROLE_CODES,
+  completionAssigneeNotArMessage,
   DISPATCHER_ROLE_CODES,
   DUE_DATE_KEY,
   HISTORY_FIELD_KEYS,
@@ -137,21 +141,47 @@ export async function assertDispatchers(
   field = 'Assignee',
   q: Queryable = pool,
 ): Promise<string[]> {
+  return assertRoleHolders(names, DISPATCHER_ROLE_CODES, field, ASSIGNEE_NOT_DISPATCHER_CODE, assigneeNotDispatcherMessage, q);
+}
+
+/** Each Completion Assignee must be an active human with the AR role
+    (Elise, 2026-10-30); 400 `COMPLETION_ASSIGNEE_NOT_AR` otherwise. */
+export async function assertCompletionAssignees(
+  names: readonly string[],
+  field = `fields.${COMPLETION_ASSIGNEE_KEY}`,
+  q: Queryable = pool,
+): Promise<string[]> {
+  return assertRoleHolders(
+    names,
+    COMPLETION_ASSIGNEE_ROLE_CODES,
+    field,
+    COMPLETION_ASSIGNEE_NOT_AR_CODE,
+    completionAssigneeNotArMessage,
+    q,
+  );
+}
+
+/** Each name must be an active human holding one of `roles`. Returns the
+    names in their display spelling, else a 400 with `code` naming the rest. */
+async function assertRoleHolders(
+  names: readonly string[],
+  roles: readonly string[],
+  field: string,
+  code: string,
+  message: (bad: readonly string[]) => string,
+  q: Queryable,
+): Promise<string[]> {
   if (names.length === 0) return [];
   const res = await q.query<{ name: string }>(
     `SELECT display_name AS name FROM principal
       WHERE kind = 'human' AND status <> 'disabled' AND role = ANY($1::text[])
         AND lower(btrim(display_name)) = ANY($2::text[])`,
-    [[...DISPATCHER_ROLE_CODES], names.map((n) => n.trim().toLowerCase())],
+    [[...roles], names.map((n) => n.trim().toLowerCase())],
   );
   const byKey = new Map(res.rows.map((r) => [r.name.trim().toLowerCase(), r.name]));
   const bad = names.filter((n) => !byKey.has(n.trim().toLowerCase()));
   if (bad.length > 0) {
-    throw new ApiError('BAD_REQUEST', assigneeNotDispatcherMessage(bad), {
-      code: ASSIGNEE_NOT_DISPATCHER_CODE,
-      field,
-      assignees: bad,
-    });
+    throw new ApiError('BAD_REQUEST', message(bad), { code, field, assignees: bad });
   }
   return names.map((n) => byKey.get(n.trim().toLowerCase()) as string);
 }
