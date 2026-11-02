@@ -16,6 +16,7 @@ import {
   PR_STATUS_LABELS,
   RFQ_STATUS_LABELS,
   compareQuotes,
+  purchaseRequestNeedsNoApproval,
   purchaseRequestProblem,
   purchaseTotals,
   quoteTotalFromLines,
@@ -126,6 +127,8 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
   const { actingAs } = useAuth();
   // 0083 (D2): the requester does not approve their own request.
   const ownRequest = Boolean(request?.requested_by && request.requested_by.id === actingAs?.id && actingAs?.is_super_admin !== true);
+  // 0115: the amount band decides who may approve.
+  const tierLocked = request?.tier ? !request.tier.allowed : false;
   const can = meta.can.requests;
   const editable = request ? can.edit && (request.status === 'draft' || request.status === 'rejected') : can.create;
   const [d, setD] = useState({
@@ -164,8 +167,8 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
             <button
               type="button"
               className="btn btn-primary"
-              disabled={busy || ownRequest}
-              title={ownRequest ? 'You raised this request — someone else has to approve it (maker ≠ checker)' : undefined}
+              disabled={busy || ownRequest || tierLocked}
+              title={ownRequest ? 'You raised this request — someone else has to approve it (maker ≠ checker)' : tierLocked ? `${request.tier!.label}: your role cannot approve a request of this amount` : undefined}
               onClick={() => act.mutate('approve', fail('Could not approve it.'))}
             >
               Approve
@@ -177,7 +180,7 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
         {request && (request.status === 'rejected' || request.status === 'cancelled') && can.edit && <button type="button" className="btn" disabled={busy} onClick={() => act.mutate('reopen', fail('Could not reopen it.'))}>Back to draft</button>}
         {request && ['draft', 'submitted', 'approved'].includes(request.status) && can.edit && <button type="button" className="btn is-ghost" disabled={busy} onClick={() => act.mutate('cancel', fail('Could not cancel it.'))}>Cancel the request</button>}
         {editable && <button type="button" className="btn" disabled={busy} onClick={() => save.mutate(undefined, fail('Could not save the request.'))}>{request ? 'Save' : 'Save as draft'}</button>}
-        {editable && can.create && <button type="button" className="btn btn-primary" disabled={busy || submitProblem !== null} title={submitProblem ?? undefined} onClick={() => act.mutate('submit', fail('Could not submit it.'))}>Submit for approval</button>}
+        {editable && can.create && <button type="button" className="btn btn-primary" disabled={busy || submitProblem !== null} title={submitProblem ?? undefined} onClick={() => act.mutate('submit', fail('Could not submit it.'))}>{purchaseRequestNeedsNoApproval(draft) ? 'Submit (under $500, no approval)' : 'Submit for approval'}</button>}
       </>}>
       {request?.status === 'rejected' && request.decision_note && <p className="mt-banner is-danger"><Icon name="alert-circle" size={14} />Rejected by {request.decided_by?.name ?? 'a manager'}: {request.decision_note}</p>}
       {request && (request.orders.length > 0 || request.rfqs.length > 0) && (

@@ -40,7 +40,9 @@ import {
   purchaseLineAmount,
   permAllows,
   poStatusAfterReceipt,
+  purchaseRequestNeedsNoApproval,
   purchaseRequestProblem,
+  APPROVAL_NOT_NEEDED_UNDER,
   purchaseTotals,
   quoteTotalFromLines,
   taxOn,
@@ -82,6 +84,7 @@ import { query, withTransaction, type Queryable } from '../db.js';
 import { badRequest, conflict, forbidden, notFound } from '../errors.js';
 import { resolveTaskId, type ActingPrincipal } from './activity.js';
 import { logAdminEvent, snapshotsDiffer, type Snapshot } from './adminAudit.js';
+import { assertTierAllows, listApprovalTiers, tierSummary } from './approvalTiers.js';
 import { notify } from './notices.js';
 import { requirePerm } from './permissions.js';
 import { logTaskChanges } from './woAudit.js';
@@ -687,10 +690,12 @@ const PR_SELECT = `
     LEFT JOIN vendor v ON v.id = r.vendor_id
     LEFT JOIN cost_center c ON c.id = r.cost_center_id`;
 
-async function hydrateRequests(rows: PrRow[]): Promise<PurchaseRequest[]> {
+/** `viewer` (0115) adds each request's approval band and whether the viewer
+    may approve inside it, read once for the whole page. */
+async function hydrateRequests(rows: PrRow[], viewer?: ActingPrincipal): Promise<PurchaseRequest[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
-  const [lines, orders, rfqs, people] = await Promise.all([
+  const [lines, orders, rfqs, people, tiers] = await Promise.all([
     query<{ id: string; request_id: string; description: string; qty: string; unit: string; est_unit_cost: string | null }>(
       `SELECT id::text AS id, request_id::text AS request_id, description, qty, unit, est_unit_cost FROM purchase_request_line WHERE request_id = ANY($1::uuid[]) ORDER BY position`,
       [ids],
@@ -698,10 +703,12 @@ async function hydrateRequests(rows: PrRow[]): Promise<PurchaseRequest[]> {
     query<{ id: string; po_number: string; request_id: string }>(`SELECT id::text AS id, po_number, request_id::text AS request_id FROM purchase_order WHERE request_id = ANY($1::uuid[]) AND status <> 'cancelled'`, [ids]),
     query<{ id: string; rfq_number: string; request_id: string }>(`SELECT id::text AS id, rfq_number, request_id::text AS request_id FROM rfq WHERE request_id = ANY($1::uuid[]) AND status <> 'cancelled'`, [ids]),
     peopleByIds(rows.flatMap((r) => [r.requested_by, r.decided_by])),
+    viewer ? listApprovalTiers() : Promise.resolve(null),
   ]);
   return rows.map((r) => {
     const mine: PurchaseLine[] = lines.rows.filter((l) => l.request_id === r.id).map((l) => ({ id: l.id, description: l.description, qty: Number(l.qty), unit: l.unit, unit_cost: numOrNull(l.est_unit_cost) }));
     const name = r.v_name ?? r.vendor_name;
+    const estimate = round2(mine.reduce((s, l) => s + purchaseLineAmount(l.qty, l.unit_cost), 0));
     return {
       id: r.id,
       pr_number: r.pr_number,
@@ -713,7 +720,7 @@ async function hydrateRequests(rows: PrRow[]): Promise<PurchaseRequest[]> {
       cost_center: r.cc_id ? { id: r.cc_id, code: r.cc_code!, name: r.cc_name! } : null,
       status: r.status,
       lines: mine,
-      estimate: round2(mine.reduce((s, l) => s + purchaseLineAmount(l.qty, l.unit_cost), 0)),
+      estimate,
       requested_by: r.requested_by ? (people.get(r.requested_by) ?? null) : null,
       submitted_at: iso(r.submitted_at),
       decided_by: r.decided_by ? (people.get(r.decided_by) ?? null) : null,
@@ -722,6 +729,7 @@ async function hydrateRequests(rows: PrRow[]): Promise<PurchaseRequest[]> {
       created_at: r.created_at.toISOString(),
       orders: orders.rows.filter((o) => o.request_id === r.id).map((o) => ({ id: o.id, po_number: o.po_number })),
       rfqs: rfqs.rows.filter((o) => o.request_id === r.id).map((o) => ({ id: o.id, rfq_number: o.rfq_number })),
+      tier: tiers && viewer ? tierSummary(tiers, 'purchase_request', estimate, viewer) : null,
     };
   });
 }
@@ -743,7 +751,7 @@ export async function listRequests(actor: ActingPrincipal, opts: { status?: stri
     where.push(`(lower(r.pr_number) LIKE ${h} OR lower(r.title) LIKE ${h} OR lower(COALESCE(t.wo_number, '')) LIKE ${h} OR lower(COALESCE(v.name, r.vendor_name, '')) LIKE ${h})`);
   }
   const res = await query<PrRow>(`${PR_SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY r.created_at DESC LIMIT 500`, p.values);
-  const all = await hydrateRequests(res.rows);
+  const all = await hydrateRequests(res.rows, actor);
   return { items: opts.status ? all.filter((r) => r.status === opts.status) : all, counts: countBy(all) };
 }
 
@@ -754,7 +762,7 @@ async function loadRequest(id: string, actor: ActingPrincipal): Promise<Purchase
   const scope = scopeOr(actor, p, 'r.task_id');
   const res = await query<PrRow>(`${PR_SELECT} WHERE r.id = ${hole}${scope ? ` AND ${scope}` : ''}`, p.values);
   if (!res.rows[0]) throw notFound('That purchase request does not exist');
-  return (await hydrateRequests(res.rows))[0];
+  return (await hydrateRequests(res.rows, actor))[0];
 }
 
 async function vendorRef(q: Queryable, vendorId: string | null | undefined, vendorName: string | null | undefined): Promise<{ id: string | null; name: string | null }> {
@@ -835,6 +843,7 @@ export async function actOnRequest(id: string, action: PrAction, note: string | 
   const cur = await loadRequest(id, actor);
   const link = '/purchasing?tab=requests';
   let selfApproved = false;
+  let autoApproved = false;
   // Every move is ONE conditional statement on the status the request was
   // read in: a move another save committed since (a cancel under an approve,
   // an order under a cancel) matches no row and is refused (409), never
@@ -848,9 +857,16 @@ export async function actOnRequest(id: string, action: PrAction, note: string | 
     if (cur.status !== 'draft' && cur.status !== 'rejected') throw conflict('Only a draft can be submitted');
     const problem = purchaseRequestProblem(cur.title, cur.lines);
     if (problem) throw badRequest(problem);
-    await set('submitted', 'Only a draft can be submitted', ', submitted_at = now(), requested_by = COALESCE(requested_by, $4), decided_by = NULL, decided_at = NULL, decision_note = NULL', [actor.id]);
-    await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} submitted for approval`);
-    await notify(await holders(PURCHASING_PERM.requests, 'approve'), { kind: 'purchasing', title: `${cur.pr_number} needs approval`, body: `${cur.title} — about $${cur.estimate.toFixed(2)}${cur.task ? ` · ${cur.task.wo_number}` : ''}.`, link, actorId: actor.id });
+    // 0115 (Elise, 2026-11-02): under $500, every item priced, needs no
+    // approval — Submit approves it on the spot, signed by nobody.
+    if (purchaseRequestNeedsNoApproval(cur.lines)) {
+      autoApproved = true;
+      await set('approved', 'Only a draft can be submitted', ', submitted_at = now(), requested_by = COALESCE(requested_by, $4), decided_by = NULL, decided_at = now(), decision_note = $5', [actor.id, `Under $${APPROVAL_NOT_NEEDED_UNDER} — approved as submitted`]);
+    } else {
+      await set('submitted', 'Only a draft can be submitted', ', submitted_at = now(), requested_by = COALESCE(requested_by, $4), decided_by = NULL, decided_at = NULL, decision_note = NULL', [actor.id]);
+      await notify(await holders(PURCHASING_PERM.requests, 'approve'), { kind: 'purchasing', title: `${cur.pr_number} needs approval`, body: `${cur.title} — about $${cur.estimate.toFixed(2)}${cur.task ? ` · ${cur.task.wo_number}` : ''}.`, link, actorId: actor.id });
+    }
+    await logWo(cur.task?.id ?? null, actor, 'Purchase request', autoApproved ? `${cur.pr_number} submitted and approved (under ${APPROVAL_NOT_NEEDED_UNDER})` : `${cur.pr_number} submitted for approval`);
   } else if (action === 'approve' || action === 'reject') {
     requirePerm(actor, PURCHASING_PERM.requests, 'approve', 'Deciding a purchase request is a manager’s job');
     if (cur.status !== 'submitted') throw conflict('This request is not waiting for a decision');
@@ -861,6 +877,8 @@ export async function actOnRequest(id: string, action: PrAction, note: string | 
       const verdict = selfApprovalVerdict(cur.requested_by?.id ?? null, actor.id, actor.isSuperAdmin);
       if (verdict === 'blocked') throw forbidden(selfApprovalMessage(cur.pr_number), { code: SELF_APPROVAL_CODE });
       selfApproved = verdict === 'self_approved';
+      // 0115: the amount band decides who may say yes (403 APPROVAL_TIER).
+      await assertTierAllows('purchase_request', cur.estimate, actor, 'Approving a purchase request');
     }
     await set(action === 'approve' ? 'approved' : 'rejected', 'This request is not waiting for a decision', ', decided_by = $4, decided_at = now(), decision_note = $5', [actor.id, reason]);
     await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} ${action === 'approve' ? `approved${selfApproved ? ' (self-approved by a super admin)' : ''}` : `rejected: ${reason}`}`);
@@ -879,8 +897,8 @@ export async function actOnRequest(id: string, action: PrAction, note: string | 
   // The request's own row for every move above (each threw before here if
   // its conditional statement matched nothing).
   const after = await loadRequest(id, actor);
-  const verb = action === 'submit' ? 'submitted' : action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'cancel' ? 'cancelled' : 'returned_to_draft';
-  await logDoc(actor, 'purchase_request', id, `purchase_request_${verb}`, requestSnapshot(cur), { ...requestSnapshot(after), ...(selfApproved ? { self_approved: true } : {}) });
+  const verb = autoApproved ? 'approved' : action === 'submit' ? 'submitted' : action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action === 'cancel' ? 'cancelled' : 'returned_to_draft';
+  await logDoc(actor, 'purchase_request', id, `purchase_request_${verb}`, requestSnapshot(cur), { ...requestSnapshot(after), ...(selfApproved ? { self_approved: true } : {}), ...(autoApproved ? { auto_approved: true } : {}) });
   return after;
 }
 
@@ -1657,7 +1675,7 @@ export async function woPurchasing(taskId: string, actor: ActingPrincipal): Prom
   ]);
   const f = filing.rows[0];
   return {
-    requests: await hydrateRequests(pr.rows),
+    requests: await hydrateRequests(pr.rows, actor),
     rfqs: await hydrateRfqs(rq.rows),
     orders: await hydrateOrders(po.rows),
     cost_center: meta.can.budgets.view && f?.cc_id ? { id: f.cc_id, code: f.cc_code!, name: f.cc_name! } : null,

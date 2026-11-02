@@ -5,6 +5,7 @@
 
 import type { FeedActor } from './index';
 import type { PermNode } from './permissions';
+import { APPROVAL_NOT_NEEDED_UNDER } from './paymentApproval';
 
 export const PURCHASING_PERM_KEY = 'purchasing';
 export const PURCHASING_PERM = {
@@ -213,6 +214,9 @@ export interface PurchaseRequest {
   /** The order(s) and request(s) for quotation raised from it. */
   orders: { id: string; po_number: string }[];
   rfqs: { id: string; rfq_number: string }[];
+  /** 0115 · the approval band its estimate falls in, and whether the viewer's
+      role may approve inside it (null = no band set, or read with no viewer). */
+  tier: { label: string; allowed: boolean } | null;
 }
 
 export interface PurchaseRequestInput {
@@ -235,6 +239,15 @@ export function purchaseRequestProblem(title: string, lines: { description: stri
   if (real.length === 0) return 'List at least one item.';
   if (real.some((l) => !(l.qty > 0))) return 'Every item needs a quantity above zero.';
   return null;
+}
+
+/** 0115 (Elise, 2026-11-02) · a request under $500 needs no approval: Submit
+    approves it on the spot. Only when EVERY item carries a price — an
+    unpriced line would make a large request look like $0. */
+export function purchaseRequestNeedsNoApproval(lines: { description: string; qty: number; unit_cost: number | null }[]): boolean {
+  const real = lines.filter((l) => l.description.trim() !== '');
+  if (real.length === 0 || real.some((l) => l.unit_cost === null || l.unit_cost === undefined || !(l.unit_cost >= 0))) return false;
+  return purchaseTotals(real, 0).subtotal < APPROVAL_NOT_NEEDED_UNDER;
 }
 
 // ── Requests for quotation and vendor quotes ─────────────────────────────────

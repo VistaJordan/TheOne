@@ -330,6 +330,7 @@ export const MONEY_PART: DocPart = {
           rules: [
             'A purchase order never writes the work order\'s Cost ("A purchase order is a document beside the work order: it does not change the work order\'s Cost.").',
             'UAT #21 (0083): the vendor is a vendor record (409 VENDOR_REQUIRED for a typed name); one live order per purchase request (409 PO_EXISTS, backed by a partial unique index); an order with no request above the PO limit (Admin › Settings › Purchase order limit, default $5,000) needs Approve over limit from someone other than whoever drafted it before Issue the order (409 PO_OVER_LIMIT); saving the draft again clears that approval.',
+            '0115: a purchase request under $500 with every item priced is approved as it is submitted; above that the approval tiers decide who may approve ($500 to $3,000 TL / ATL, $3,000 and over AM; 403 APPROVAL_TIER) and Approve is drawn locked with the band. Payment requests follow the same bands, and under $500 is approved as raised for every requester.',
           ],
           permissions: ['purchasing/orders view / create / edit / approve (issue, approve over limit)', 'admin/settings edit (the PO limit)'],
           audit: ['field row "Purchase order" (… approved over the limit)', 'purchasing_setting_updated'],

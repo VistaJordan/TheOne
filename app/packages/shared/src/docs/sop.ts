@@ -391,7 +391,7 @@ export const SOP: SopDocument = {
           ['Status changes', 'Requests from request-mode roles, with from → to, "Requested by <name>", and an Ecotrak tag when Ecotrak would refuse.', 'Approve moves the work order (the gate and the Ecotrak check run again); Reject (reason) sends it back.'],
           ['Manager reviews', 'Review tasks raised by automations (the section appears once one exists).', 'Approve / Reject with a note.'],
           ['Quotes', 'Quotes pending approval.', 'Send to client (approves the quote and sends it in one click) / Return this quote to draft with a note.'],
-          ['Payments', 'Payment requests in requested — an OM / Senior OM\'s request under $500 never lands here (approved as it is raised); an OM Under Probation\'s always does.', 'Approve (one click, no confirm step; clears it for AP to pay — $500 to $3,000 needs TL / ATL, $3,000 and over AM) / Reject this payment with a note.'],
+          ['Payments', 'Payment requests in requested — a request under $500 never lands here (approved as it is raised, whoever raised it).', 'Approve (one click, no confirm step; clears it for AP to pay — $500 to $3,000 needs TL / ATL, $3,000 and over AM) / Reject this payment with a note.'],
         ] },
         { kind: 'bullets', items: [
           'Lanes: **For me**, **Open**, **Done**, **My requests**. Filters **Entity / Client / Trade / For**; **Columns** adds Client, Waiting for, NTE, Cost, WO Due Date, For, Raised, Status; pages of rows, up to 500. Escalated rows pin to the top; open rows are oldest first and every decision is per row.',

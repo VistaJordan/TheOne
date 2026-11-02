@@ -2,8 +2,9 @@
  * Approval tiers by amount (0047, rule 6.2.3).
  *
  * A tier is a band of money and the roles allowed to say yes inside it.
- * Three kinds of decision read them: approving a payment request, approving
- * a vendor bill, and sending a client invoice. Empty `roles` means anyone
+ * Four kinds of decision read them: approving a payment request, approving
+ * a vendor bill, sending a client invoice and (0115) approving a purchase
+ * request. Empty `roles` means anyone
  * holding the base permission — the band still exists so the audit row can
  * say which one the amount fell in.
  *
@@ -11,13 +12,14 @@
  * beyond the vocabulary; the seed of 0047 puts rule 6.2.3's bands in place.
  */
 
-export const APPROVAL_TIER_KINDS = ['payment', 'vendor_bill', 'invoice'] as const;
+export const APPROVAL_TIER_KINDS = ['payment', 'vendor_bill', 'invoice', 'purchase_request'] as const;
 export type ApprovalTierKind = (typeof APPROVAL_TIER_KINDS)[number];
 
 export const APPROVAL_TIER_KIND_LABELS: Record<ApprovalTierKind, string> = {
   payment: 'Payment requests',
   vendor_bill: 'Vendor bills',
   invoice: 'Client invoices',
+  purchase_request: 'Purchase requests',
 };
 
 /** What "approve" means for each kind, for the settings card's wording. */
@@ -25,6 +27,7 @@ export const APPROVAL_TIER_KIND_VERBS: Record<ApprovalTierKind, string> = {
   payment: 'approve a payment request',
   vendor_bill: 'approve a vendor bill',
   invoice: 'send an invoice to the client',
+  purchase_request: 'approve a purchase request',
 };
 
 export interface ApprovalTier {

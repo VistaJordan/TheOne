@@ -1,9 +1,8 @@
 /* 0090 (Elise, 2026-10-22) — who has to say yes.
  *
  * Two pure rules and the source pins that keep them wired:
- *   - paymentApprovalVerdict: an OM Under Probation's payment request always
- *     waits; an OM / Senior OM's under $500 is approved as it is raised;
- *     everyone else's waits (unchanged).
+ *   - paymentApprovalVerdict: under $500 is approved as it is raised, for
+ *     every requester since 0115; $500 and over waits.
  *   - statusMoveNeedsNoApproval: Quote Ready is internal, so a request-mode
  *     person moves to it directly instead of raising a status request.
  *   - Approve on a payment asks the 6.2.3 amount band again (0076 had
@@ -21,29 +20,21 @@ import { NO_APPROVAL_STATUS_NAMES, statusMoveNeedsNoApproval } from '../packages
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
-describe('paymentApprovalVerdict — who has to ask', () => {
-  it('an OM Under Probation always waits, whatever the amount', () => {
-    expect(paymentApprovalVerdict('om_probation', 1).needed).toBe(true);
-    expect(paymentApprovalVerdict('om_probation', 499.99).needed).toBe(true);
-    expect(paymentApprovalVerdict('om_probation', 10_000).needed).toBe(true);
-  });
-
-  it.each(['om', 'senior_om'])('%s: under $500 is approved as requested, $500 and over waits', (role) => {
-    expect(paymentApprovalVerdict(role, 0).needed).toBe(false);
-    expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER - 0.01).needed).toBe(false);
-    expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER).needed).toBe(true);
-    expect(paymentApprovalVerdict(role, 3_500).needed).toBe(true);
-  });
-
-  it('everyone else still waits, including a request with no role', () => {
-    for (const role of ['tl', 'atl', 'am', 'admin', 'oa', 'ar', 'ap', null, undefined]) {
-      expect(paymentApprovalVerdict(role, 10).needed).toBe(true);
-    }
-  });
+describe('paymentApprovalVerdict — who has to ask (0115: the amount alone)', () => {
+  it.each(['om_probation', 'om', 'senior_om', 'tl', 'atl', 'am', 'admin', 'oa', 'ar', 'ap', null, undefined])(
+    '%s: under $500 is approved as requested, $500 and over waits',
+    (role) => {
+      expect(paymentApprovalVerdict(role, 0).needed).toBe(false);
+      expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER - 0.01).needed).toBe(false);
+      expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER).needed).toBe(true);
+      expect(paymentApprovalVerdict(role, 3_500).needed).toBe(true);
+    },
+  );
 
   it('never auto-approves a nonsense amount', () => {
     expect(paymentApprovalVerdict('om', Number.NaN).needed).toBe(true);
     expect(paymentApprovalVerdict('om', Number.POSITIVE_INFINITY).needed).toBe(true);
+    expect(paymentApprovalVerdict('om', -1).needed).toBe(true);
   });
 
   it('the threshold is the bottom of the second band', () => {

@@ -2695,6 +2695,20 @@ unchanged (the fold shows the AI's marked-up rate). **Labor:** picking the
 Labor type on a line with a blank description fills "Labor tech N"
 (`nextLaborDescription`: the section's other labor lines + 1).
 
+**One set of approval bands for payments and purchase requests** (migration
+0115, Elise 2026-11-02; `tests/approval-bands-0115.test.ts`). Under $500 needs
+no approval: `paymentApprovalVerdict` now reads the amount alone, so a payment
+request under `APPROVAL_NOT_NEEDED_UNDER` lands `approved` whoever raises it
+(OM Under Probation included; an overage still waits), and a purchase request
+under $500 with every item priced (`purchaseRequestNeedsNoApproval`) is approved
+on Submit (`decided_by` NULL, logged `auto_approved`). Above it the approval
+tiers decide, `purchase_request` being a fourth `APPROVAL_TIER_KINDS` entry:
+$500 to $3,000 TL / ATL, $3,000 and over AM, for both kinds (0115 rewrites the
+payment bands too and drops Admin from them; a super admin always may).
+`actOnRequest` approve asks `assertTierAllows` (403 `APPROVAL_TIER`), each
+`PurchaseRequest` carries `tier` and the dialog locks Approve with the band.
+Still editable in Admin › Settings › Approval tiers.
+
 **A payment that goes over asks for a reason** (migration 0107, Elise
 2026-10-28; `paymentOverage` / `paymentOverageSentence` /
 `mayDecideOverQuote` in shared `moneyGuards.ts`, `tests/payment-overage.test.ts`).
