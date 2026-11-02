@@ -12,7 +12,7 @@ import type { ClickUpOverview, EcotrakOverview, IntegrationsResponse } from '@th
 import type { DocsContent, DocsMarkdownKind, DocsSnapshot } from '@theone/shared';
 import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
 // Who is free to take a work order (the Assignee pickers' availability view).
-import type { AssigneeAvailabilityResponse } from '@theone/shared';
+import type { AssigneeAvailabilityResponse, WoLatestChange } from '@theone/shared';
 import type {
   AssistantAskInput,
   AssistantAskResponse,
@@ -754,6 +754,12 @@ export function getMetricDuration(
     on one work order, whether or not any page displays it. */
 export function getWorkOrderFieldTimes(idOrNumber: string): Promise<{ items: WoFieldTime[] }> {
   return request(`/work-orders/${encodeURIComponent(idOrNumber)}/field-times`);
+}
+
+/** GET /api/activity/latest — the newest change on a work order this person may
+    see; the live-updates poll (useWoLiveUpdates). */
+export function getLatestChange(wo: string): Promise<WoLatestChange> {
+  return request<WoLatestChange>(`/activity/latest${toQuery({ wo })}`);
 }
 
 export function getActivity(wo: string): Promise<ActivityEntry[]> {

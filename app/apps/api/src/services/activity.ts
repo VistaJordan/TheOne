@@ -193,4 +193,29 @@ export async function getActivityForTask(taskId: string, limit: number): Promise
   return res.rows.map(mapActivity);
 }
 
+/** The newest rows of a task's activity with who and when but no values —
+    what GET /activity/latest picks the viewer's newest visible change from.
+    Cheap enough to poll: the activity_entity_idx range, newest first. */
+export async function getRecentChangeHeads(
+  taskId: string,
+  limit: number,
+): Promise<{ id: number; field: string | null; actor: ActivityEntry['actor']; created_at: string }[]> {
+  const res = await query<Pick<ActivityRow, 'id' | 'field' | 'actor_id' | 'actor_name' | 'actor_kind' | 'created_at'>>(
+    `SELECT a.id, a.field, p.id AS actor_id, ${ACTOR_NAME_SQL} AS actor_name, p.kind AS actor_kind,
+            ${CREATED_AT_SQL} AS created_at
+       FROM activity_log a
+       JOIN principal p ON p.id = a.actor_principal_id
+      WHERE a.entity_type = 'task' AND a.entity_id = $1::text
+      ORDER BY a.created_at DESC, a.id DESC
+      LIMIT $2`,
+    [taskId, limit],
+  );
+  return res.rows.map((r) => ({
+    id: Number(r.id),
+    field: r.field,
+    actor: { id: r.actor_id, display_name: r.actor_name, kind: r.actor_kind },
+    created_at: r.created_at,
+  }));
+}
+
 export { UUID_RE, CREATED_AT_SQL };

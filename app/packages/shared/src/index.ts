@@ -1810,6 +1810,15 @@ export interface ActivityEntry {
   created_at: string;
 }
 
+/** GET /activity/latest?wo= — the newest change on a work order the viewer
+    may see, polled by an open work order so other people's changes appear
+    without a refresh. `id` null = nothing logged yet. */
+export interface WoLatestChange {
+  id: number | null;
+  actor: ActivityActor | null;
+  created_at: string | null;
+}
+
 // ── KPIs ─────────────────────────────────────────────────────────────────────
 export interface Kpis {
   active: { count: number };

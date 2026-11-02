@@ -192,13 +192,20 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   // 2026-10-27 · "Reset quote" asks first; the autosave saves the reset.
   const [resetOpen, setResetOpen] = useState(false);
 
-  // Re-seed the form from the server only when the quote's IDENTITY changes —
-  // its id, its status or its revision. An autosave round-trip changes none of
-  // those, so nothing the operator is typing is ever clobbered by a response.
-  const signature = quote ? `${quote.id}:${quote.status}:${quote.rev}` : null;
+  // Re-seed the form from the server when the quote's IDENTITY changes — its
+  // id, its status or its revision — or, since live updates (2026-11-02), when
+  // somebody else saved it (`updated_at` moved) while this person has nothing
+  // unsaved. This person's own autosave sets the signature from its response
+  // (onSuccess below), so a round-trip never re-seeds; and while they are
+  // typing, or a save is in flight, another person's save waits.
+  const identity = quote ? `${quote.id}:${quote.status}:${quote.rev}` : null;
+  const signature = quote ? `${identity}:${quote.updated_at}` : null;
   const loadedSignature = useRef<string | null>(null);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (!quote || signature === loadedSignature.current) return;
+    const sameQuote = loadedSignature.current?.startsWith(`${identity}:`) ?? false;
+    if (sameQuote && (dirty || saving)) return;
     loadedSignature.current = signature;
     setDraft(fromQuote(quote));
     setDirty(false);
@@ -206,7 +213,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     // greet its author with "not saved yet".
     const t = Date.parse(quote.updated_at);
     setSavedAt(Number.isNaN(t) ? null : t);
-  }, [quote, signature]);
+  }, [quote, signature, identity, dirty, saving]);
 
   const status = quote?.status ?? 'draft';
   const canEdit = permissions?.can_edit ?? false;
@@ -247,10 +254,12 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const saveMutation = useMutation({
     mutationFn: (next: DraftQuote) => putWorkOrderQuote(woNumber, toUpdateInput(next)),
     meta: QUIET_MUTATION,
+    onMutate: () => setSaving(true),
+    onSettled: () => setSaving(false),
     onSuccess: (res) => {
       // Keep the server's canonical numbers/summary, but do NOT let the response
       // re-seed the form (see loadedSignature above).
-      loadedSignature.current = `${res.quote.id}:${res.quote.status}:${res.quote.rev}`;
+      loadedSignature.current = `${res.quote.id}:${res.quote.status}:${res.quote.rev}:${res.quote.updated_at}`;
       queryClient.setQueryData(quoteKey, { quote: res.quote, permissions });
       setSavedAt(Date.now());
       setDirty(false);

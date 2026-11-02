@@ -2959,3 +2959,29 @@ a.photo-img.is-real img {
 @media (max-width: 600px) {
   .prv-foot { flex-direction: column; align-items: stretch; }
 }
+
+/* Live updates (2026-11-02): "Updated by …" when somebody else changed this
+   work order and the page reloaded it. Fixed, so the pinned header never
+   reflows; gone after a few seconds (useWoLiveUpdates). */
+.wo-live-note {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+.wo-live-note .ic { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .wo-live-note { animation: wo-live-in 180ms ease-out; }
+  @keyframes wo-live-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}

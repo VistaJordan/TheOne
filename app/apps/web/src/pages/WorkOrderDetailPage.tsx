@@ -47,6 +47,7 @@ import { WoPurchasingCard } from './PurchasingPage';
 import { MessagesRail } from '../components/wo/messages/MessagesRail';
 import { ObligationsCard, OBLIGATIONS_CARD_ID } from '../components/obligations/ObligationsCard';
 import { useWoObligations } from '../hooks/useObligations';
+import { useWoLiveUpdates } from '../hooks/useWoLiveUpdates';
 import { daysSince } from '../lib/fields';
 import { plainStatus } from '../lib/quo';
 import { phaseForStatus } from '../lib/phases';
@@ -96,7 +97,7 @@ export function WorkOrderDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   // 0015 · each tab is its own permission; a tab the acting principal may not
   // view is not drawn, and a link to it lands on the first one they may.
-  const { can } = useAuth();
+  const { can, user, actingAs } = useAuth();
   // The Quotes tab also needs the quotes section itself: without it the tab
   // would hold nothing.
   // Penalties likewise needs its field section (0094).
@@ -192,6 +193,10 @@ export function WorkOrderDetailPage() {
   // read; decoration-grade like the cards above (a failure hides the bar and
   // the rail, never the page).
   const recordQuery = useWoRecord(wo?.id);
+
+  // Live updates (2026-11-02): somebody else's change on this work order
+  // reloads what is on screen within a few seconds, and says who made it.
+  const liveNote = useWoLiveUpdates(wo?.id, woNumber, [user?.id, actingAs?.id]);
 
   // Sidebar badge parity with the list page (cached under the same key family).
   const totalQuery = useQuery({
@@ -333,6 +338,12 @@ export function WorkOrderDetailPage() {
 
   return shell(
     <>
+      {liveNote && (
+        <div className="wo-live-note" role="status" key={liveNote.at}>
+          <Icon name="refresh" size={14} />
+          {liveNote.actor ? `Updated by ${liveNote.actor.display_name}` : 'Updated'} · just now
+        </div>
+      )}
       {/* The pinned block: header card + tab strip stick as ONE opaque unit
           (.wo-pin) while the panels scroll underneath and re-emerge below it. */}
       <div className="wo-pin" ref={pinRef}>
