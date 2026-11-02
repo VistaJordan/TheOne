@@ -72,6 +72,30 @@ export interface EcotrakWorkOrder {
   notes?: Array<{ description?: string | null; created_date?: string | null }> | null;
 }
 
+/** One note (comment) on a work order, GET /v1/workorders/:id/note. The
+ *  author's first name really is spelled `user_fist_name` in their API. */
+export interface EcotrakNote {
+  id: number | string;
+  work_order_id?: number | string | null;
+  description?: string | null;
+  created_date?: string | null;
+  updated_date?: string | null;
+  customer_name?: string | null;
+  user_fist_name?: string | null;
+  user_first_name?: string | null;
+  user_last_name?: string | null;
+}
+
+/** A webhook on our Ecotrak account, GET /api/webhook. */
+export interface EcotrakWebhookRow {
+  id?: number | string;
+  name?: string | null;
+  url?: string | null;
+  status?: number | null;
+  method?: string | null;
+  permission?: { action?: string | null } | null;
+}
+
 export interface EcotrakConfig {
   tokenUrl: string;
   baseUrl: string;
@@ -117,6 +141,16 @@ export class EcotrakClient implements WorkOrderSource {
   constructor(private readonly cfg: EcotrakConfig) {}
 
   /** Cached bearer token. Ecotrak issues 1-hour tokens; refresh 60s early. */
+  /** The bearer token, for services/ecotrakWebhooks.ts — the one module
+   *  allowed a single write (registering our webhooks). */
+  async bearer(): Promise<string> {
+    return this.accessToken();
+  }
+
+  get baseUrl(): string {
+    return this.cfg.baseUrl;
+  }
+
   private async accessToken(): Promise<string> {
     if (!integrationOn('ecotrak')) throw new Error('Ecotrak → The One is switched off in Admin › Integrations');
     if (this.token && Date.now() < this.token.expiresAt - 60_000) return this.token.value;
@@ -195,10 +229,38 @@ export class EcotrakClient implements WorkOrderSource {
 
   async fetchWorkOrder(externalId: string): Promise<EcotrakWorkOrder | null> {
     try {
-      return await this.get<EcotrakWorkOrder>(`/v1/workorders/${encodeURIComponent(externalId)}`);
+      // The single read answers { work_order: {...} } (their docs); older
+      // payloads came bare. Either is accepted.
+      const r = await this.get<EcotrakWorkOrder | { work_order?: EcotrakWorkOrder }>(
+        `/v1/workorders/${encodeURIComponent(externalId)}`,
+      );
+      const wo = (r as { work_order?: EcotrakWorkOrder }).work_order ?? (r as EcotrakWorkOrder);
+      return wo && wo.id != null ? wo : null;
     } catch (e) {
       if ((e as Error).message.includes('404')) return null;
       throw e;
     }
+  }
+
+  /** 0114 · every note on a work order. A work order with none (or one
+   *  Ecotrak no longer shows us) answers []. */
+  async fetchNotes(externalId: string): Promise<EcotrakNote[]> {
+    try {
+      const r = await this.get<{ notes?: EcotrakNote[]; note?: EcotrakNote }>(
+        `/v1/workorders/${encodeURIComponent(externalId)}/note`,
+      );
+      const list = Array.isArray(r?.notes) ? r.notes : r?.note ? [r.note] : [];
+      return list.filter((n) => n && n.id != null);
+    } catch (e) {
+      if ((e as Error).message.includes('404')) return [];
+      throw e;
+    }
+  }
+
+  /** 0114 · the webhooks on our Ecotrak account (read). */
+  async listWebhooks(): Promise<EcotrakWebhookRow[]> {
+    const r = await this.get<EcotrakWebhookRow[] | { data?: EcotrakWebhookRow[]; webhooks?: EcotrakWebhookRow[] }>('/api/webhook');
+    if (Array.isArray(r)) return r;
+    return r?.data ?? r?.webhooks ?? [];
   }
 }

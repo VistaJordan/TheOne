@@ -11,7 +11,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { EcotrakOverview } from '@theone/shared';
-import { getEcotrak, syncEcotrakNow } from '../../api/client';
+import { getEcotrak, registerEcotrakWebhooks, syncEcotrakNow } from '../../api/client';
+import { useAuth } from '../../auth/AuthProvider';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Icon } from '../../components/Icon';
 import { errText } from '../../components/ui/Sheet';
 
@@ -24,6 +26,38 @@ export function EcotrakPanel({ canEdit, enabled }: { canEdit: boolean; enabled: 
   const qc = useQueryClient();
   const q = useQuery({ queryKey: [...KEY, enabled], queryFn: getEcotrak, retry: false });
   const [error, setError] = useState<string | null>(null);
+  const [confirmHooks, setConfirmHooks] = useState(false);
+  const [hookNote, setHookNote] = useState<string | null>(null);
+  const { user, isImpersonating } = useAuth();
+  const mayRegister = Boolean(user?.is_super_admin) && !isImpersonating;
+
+  // 0114 · the one write to Ecotrak: our own webhook settings there.
+  const hooks = useMutation({
+    mutationFn: registerEcotrakWebhooks,
+    onMutate: () => {
+      setError(null);
+      setHookNote(null);
+    },
+    onSuccess: (res) => {
+      qc.setQueryData<EcotrakOverview>([...KEY, enabled], res.overview);
+      setConfirmHooks(false);
+      const say: Record<string, string> = {
+        registered: 'registered',
+        already_ours: 'already registered',
+        already_on_ecotrak: 'already on Ecotrak, left as it is',
+        failed: 'failed',
+      };
+      setHookNote(
+        res.outcomes
+          .map((o) => `${o.action === 'WEBHOOK_WORKORDER_COMMENT' ? 'Comments' : 'Work order changes'}: ${say[o.result]}${o.detail && o.result === 'failed' ? ` (${o.detail})` : ''}`)
+          .join(' · '),
+      );
+    },
+    onError: (e) => {
+      setConfirmHooks(false);
+      setError(errText(e, 'The webhooks were not registered.'));
+    },
+  });
 
   const sync = useMutation({
     mutationFn: syncEcotrakNow,
@@ -41,6 +75,8 @@ export function EcotrakPanel({ canEdit, enabled }: { canEdit: boolean; enabled: 
   const d = q.data;
   if (!d) return <p className="intg-note cu-panel">Loading Ecotrak…</p>;
   const run = d.last_run;
+  const wh = d.webhooks;
+  const hooksOn = (wh?.registered.length ?? 0) >= 2;
 
   return (
     <div className="cu-panel">
@@ -56,15 +92,17 @@ export function EcotrakPanel({ canEdit, enabled }: { canEdit: boolean; enabled: 
         </p>
       )}
       <p className="intg-note">
-        {d.enabled
-          ? 'On: The One reads Ecotrak every minute. It only reads; nothing is changed on Ecotrak.'
-          : 'Off: The One does not contact Ecotrak at all. Turn the switch on to start reading.'}
+        {!d.enabled
+          ? 'Off: The One does not contact Ecotrak at all. Turn the switch on to start reading.'
+          : hooksOn
+            ? 'On: Ecotrak tells The One the moment a work order changes or gets a comment, and The One also reads Ecotrak every 15 minutes in case a call was missed. It only reads; nothing is changed on Ecotrak.'
+            : 'On: The One reads Ecotrak every minute. It only reads; nothing is changed on Ecotrak.'}
       </p>
       <div className="cu-stats">
         <span>
           <b>{d.linked}</b> work order{d.linked === 1 ? '' : 's'} from Ecotrak
         </span>
-        <span className="cu-run">Last look {when(run?.at ?? d.last_synced_at)}{run ? ` (${run.trigger === 'cron' ? 'automatic' : 'Sync now'})` : ''}</span>
+        <span className="cu-run">Last look {when(run?.at ?? d.last_synced_at)}{run ? ` (${run.trigger === 'cron' ? 'automatic' : run.trigger === 'webhook' ? 'Ecotrak called' : 'Sync now'})` : ''}</span>
         {canEdit && d.enabled && d.credentials_set && (
           <button type="button" className="btn btn-sm" disabled={sync.isPending} onClick={() => sync.mutate()}>
             <Icon name="refresh" size={14} /> {sync.isPending ? 'Reading Ecotrak…' : 'Sync now'}
@@ -81,6 +119,45 @@ export function EcotrakPanel({ canEdit, enabled }: { canEdit: boolean; enabled: 
             </>
           )}
         </p>
+      )}
+      {wh && (
+        <div className="cu-stats">
+          <span>
+            <b>Webhooks</b>{' '}
+            {hooksOn
+              ? `on · ${wh.deliveries_24h} call${wh.deliveries_24h === 1 ? '' : 's'} from Ecotrak in 24 h · last ${when(wh.last_delivery_at)}`
+              : wh.registered.length === 1
+                ? 'one of two registered'
+                : 'not registered'}
+          </span>
+          {!hooksOn && mayRegister && d.enabled && d.credentials_set && wh.url && (
+            <button type="button" className="btn btn-sm" disabled={hooks.isPending} onClick={() => setConfirmHooks(true)}>
+              <Icon name="plug" size={14} /> Register webhooks
+            </button>
+          )}
+        </div>
+      )}
+      {wh && !hooksOn && !wh.url && (
+        <p className="intg-note">Webhooks need this app’s public https address; they can only be registered from the live site.</p>
+      )}
+      {hookNote && <p className="intg-note">{hookNote}</p>}
+      {confirmHooks && (
+        <ConfirmDialog
+          title="Register the Ecotrak webhooks?"
+          message={
+            <>
+              Ecotrak will call <code>{wh?.url}</code> whenever one of our work orders changes or gets a comment, and The
+              One will read that work order back.
+            </>
+          }
+          note="This adds two webhooks to our own integration settings on Ecotrak. It does not change any work order, comment or anything our clients see, and it never edits or removes a webhook that is already there."
+          noteTone="info"
+          confirmLabel="Register webhooks"
+          busyLabel="Registering…"
+          busy={hooks.isPending}
+          onCancel={() => setConfirmHooks(false)}
+          onConfirm={() => hooks.mutate()}
+        />
       )}
       {run && run.errors.length > 0 && (
         <ul className="intg-note is-warn">

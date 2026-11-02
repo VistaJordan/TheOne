@@ -2343,6 +2343,15 @@ export function syncEcotrakNow(): Promise<{ overview: EcotrakOverview }> {
   return request('/admin/integrations/ecotrak/sync', { method: 'POST', body: '{}' });
 }
 
+/** 0114 · the one write to Ecotrak: adds our two webhooks to our own
+    integration settings there. Super admins only. */
+export function registerEcotrakWebhooks(): Promise<{
+  outcomes: Array<{ action: string; result: 'registered' | 'already_ours' | 'already_on_ecotrak' | 'failed'; detail?: string }>;
+  overview: EcotrakOverview;
+}> {
+  return request('/admin/integrations/ecotrak/webhooks', { method: 'POST', body: '{}' });
+}
+
 // 0078 · ClickUp's panel under its row.
 export function getClickUp(): Promise<ClickUpOverview> {
   return request('/admin/integrations/clickup');

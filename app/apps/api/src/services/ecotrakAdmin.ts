@@ -10,6 +10,7 @@ import { query } from '../db.js';
 import { getEcotrakConnection, ingestEcotrak, type IngestResult } from '../modules/integrations/ecotrak/ingest.js';
 import { logAdminEvent } from './adminAudit.js';
 import { integrationOnNow } from './integrations.js';
+import { ecotrakPollDue, ecotrakWebhookState, registerEcotrakWebhooks, type RegisterOutcome } from './ecotrakWebhooks.js';
 import { allowFor, requirePerm, type PermissionBearer } from './permissions.js';
 
 type Admin = PermissionBearer & { id: string };
@@ -48,8 +49,20 @@ export async function ecotrakOverview(user: Admin): Promise<EcotrakOverview> {
     last_synced_at: lastSynced,
     last_run: lastRun,
     linked,
+    webhooks: await ecotrakWebhookState(),
     can: { edit: allowFor(user)(INTEGRATIONS_PERM_KEY, 'edit') },
   };
+}
+
+/** 0114 · Register webhooks: the one write to Ecotrak (our own integration
+ *  settings there, never a work order). `realUser` is the person signed in,
+ *  never the one viewed as. */
+export async function registerEcotrakWebhooksNow(
+  realUser: Admin & { isSuperAdmin: boolean },
+): Promise<{ outcomes: RegisterOutcome[]; overview: EcotrakOverview }> {
+  requirePerm(realUser, INTEGRATIONS_PERM_KEY, 'edit', 'You cannot register the Ecotrak webhooks');
+  const outcomes = await registerEcotrakWebhooks(realUser);
+  return { outcomes, overview: await ecotrakOverview(realUser) };
 }
 
 /** Sync now: the same run as the cron, started by an administrator. */
@@ -78,7 +91,10 @@ export async function syncEcotrakNow(user: Admin): Promise<{ result: IngestResul
 /** The cron's tick. Switched off = return at once, Ecotrak never contacted. */
 export async function runEcotrakCron(): Promise<{ ran: boolean; note: string }> {
   if (!(await integrationOnNow('ecotrak'))) return { ran: false, note: 'Ecotrak → The One is switched off.' };
-  if (!(await getEcotrakConnection())) return { ran: false, note: 'No Ecotrak connection on file.' };
+  const conn = await getEcotrakConnection();
+  if (!conn) return { ran: false, note: 'No Ecotrak connection on file.' };
+  // 0114 · once Ecotrak calls us on every change, this is the safety net.
+  if (!(await ecotrakPollDue(conn.last_synced_at))) return { ran: false, note: 'Webhooks are on; the safety-net read is not due yet.' };
   const res = await ingestEcotrak({ trigger: 'cron' });
   return { ran: true, note: res.note };
 }

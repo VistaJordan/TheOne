@@ -55,6 +55,9 @@ const PUBLIC_PATHS = new Set([
   // 0079: the once-a-minute cron that reads Ecotrak while Ecotrak → The One
   // is on (CRON_SECRET; read only).
   '/api/webhooks/ecotrak-sync',
+  // 0114: Ecotrak's own webhook calls; the route checks the key in the URL
+  // (hashed in ecotrak_webhook) and only ever reads Ecotrak back.
+  '/api/webhooks/ecotrak',
 ]);
 
 // 0055: a client's read-only tracker link. Exactly a 32-character share token

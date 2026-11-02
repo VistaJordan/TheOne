@@ -13,7 +13,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ApiError, parse } from '../errors.js';
 import { listIntegrations, setIntegration } from '../services/integrations.js';
-import { ecotrakOverview, syncEcotrakNow } from '../services/ecotrakAdmin.js';
+import { ecotrakOverview, registerEcotrakWebhooksNow, syncEcotrakNow } from '../services/ecotrakAdmin.js';
 import {
   clickUpOverview,
   refreshClickUp,
@@ -59,6 +59,14 @@ export default async function adminIntegrationRoutes(app: FastifyInstance): Prom
   //   POST /admin/integrations/ecotrak/sync         read Ecotrak now
   app.get('/admin/integrations/ecotrak', async (req) => ecotrakOverview(realUser(req)));
   app.post('/admin/integrations/ecotrak/sync', async (req) => syncEcotrakNow(realUser(req)));
+  // 0114 · Register webhooks — the one write to Ecotrak (our own integration
+  // settings there). The person signed in, a super admin, never while
+  // viewing as someone else.
+  app.post('/admin/integrations/ecotrak/webhooks', async (req) => {
+    if (!req.auth) throw new ApiError('UNAUTHORIZED', 'Sign in to continue');
+    if (req.auth.isImpersonating) throw new ApiError('FORBIDDEN', 'Stop viewing as someone else to register the Ecotrak webhooks');
+    return registerEcotrakWebhooksNow(req.auth.user);
+  });
 
   //   GET  /admin/integrations/clickup              the panel
   //   PUT  /admin/integrations/clickup/list         { list: URL or id }

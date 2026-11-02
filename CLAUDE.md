@@ -1877,6 +1877,40 @@ old Ecotrak → ClickUp integration (fires on the Ecotrak accept, creates the
 task with few details, sends no updates) has made its task before the 0081
 lookup links to it. Updates to an already-linked task are never held.
 
+**Ecotrak webhooks, comments and the address** (migration 0114, Elise
+2026-11-02; `packages/shared/src/ecotrakInbound.ts` pure,
+`services/ecotrakWebhooks.ts`, `services/ecotrakNotes.ts`,
+`tests/ecotrak-inbound.test.ts`; API reference: api-docs.ecotrak.com, a
+Postman collection). **Still read only for anything a client sees.** The one
+write outside the OAuth token is **Register webhooks** on the Ecotrak panel:
+super admins only, never while viewing as, logged
+`ecotrak_webhooks_registered`; it sends `POST /api/webhook` for
+`WEBHOOK_WORKORDER_ACTIVITY` and `WEBHOOK_WORKORDER_COMMENT` to our own
+integration settings, never PATCH / DELETE, and skips an action Ecotrak
+already holds for our URL; the test pins that file to one POST and that no
+`registerClientMessageAdapter` call exists. Ecotrak calls `POST
+/api/webhooks/ecotrak?key=…` (allowlisted; the key's sha256 is in
+`ecotrak_webhook`; https `WEB_ORIGIN` required). A delivery is only a
+signal: it is kept verbatim in `ecotrak_webhook_delivery` (30 days — the
+payload is undocumented, that table is how we learn it), the work-order ids
+it names are read back with `GET /v1/workorders/:id` (`refreshEcotrakWorkOrders`,
+the poll's own `processOrders` pass), else an ordinary sync runs. Once both
+webhooks are registered the minute cron reads Ecotrak only every
+`ECOTRAK_SAFETY_NET_MINUTES` (15) — Ecotrak retries at most 5 times and no
+event announces a new work order. **Comments:** every created / changed work
+order's notes are read (`GET /v1/workorders/:id/note`, 40 per pass, the rest
+marked for later) and filed by `receiveClientMessage` as client-sourced,
+client-visible messages keyed by Ecotrak's note id; an edit there updates the
+body (`client_message_updated`); `cmms_wo_link.notes_synced_at` NULL = never
+read, backfilled 15 per run. Authors read "Person · Company"; our own staff's
+notes written on Ecotrak land the same way. **Address:** the ingest writes
+`17. Address` ("street, suite, City, ST ZIP"), City, State and Zip Code when
+Ecotrak sends them (a blank there never empties ours). Due date / SLA are not
+in Ecotrak's payload. **Messages** has two tabs, Internal and Client visible
+(`MessagesPanel`); the tab decides how the composer posts (the visibility
+segment is gone), Internal is the default, a `?msg=` link opens the tab that
+holds the message.
+
 **ClickUp sync** (migrations 0078 + 0080 + 0081, `services/clickup.ts`, `lib/clickupApi.ts`,
 `lib/clickupValues.ts`, `pages/admin/ClickUpPanel.tsx`, `tests/clickup.test.ts`).
 Every work order created after the ClickUp switch was FIRST turned on

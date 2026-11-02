@@ -16,20 +16,23 @@ interface MessageComposerProps {
       in the same cache entry the thread renders from. */
   queryKey: readonly unknown[];
   clientSystem: ClientSystem | null;
+  /** 0114 · which tab of Messages the composer sits under: the Client
+      visible tab posts client-visible, the Internal tab internal. */
+  clientVisible: boolean;
 }
 
 /** 0052 · the Messages tab's composer (the Overview composer, moved). The
     visibility segment DEFAULTS TO INTERNAL — an accidental client-visible post
     is the expensive mistake, so the safe option is the one you get by not
     choosing. Client-visible is its own permission ("Message the client" in
-    Admin › Roles); without it the segment is drawn locked. */
-export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: MessageComposerProps) {
-  const [clientVisible, setClientVisible] = useState(false);
+    Admin › Roles). 0114 · the segment became the Messages tabs: Internal
+    (the default tab) or Client visible decides it, and the composer says
+    which in its help line. */
+export function MessageComposer({ woId, woNumber, queryKey, clientSystem, clientVisible }: MessageComposerProps) {
   const [body, setBody] = useState('');
   const qc = useQueryClient();
   const invalidateObligations = useInvalidateObligations();
   const { can } = useAuth();
-  const canMessageClient = can('work_orders/comments/client', 'create');
 
   // 0089 · @mentions: the people picked from the list; only those whose
   // "@Name" is still in the text are sent.
@@ -47,7 +50,6 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
     onSuccess: (res) => {
       setBody('');
       setPicked([]);
-      setClientVisible(false);
       qc.setQueryData<WoMessagesResponse>(queryKey, (curr) =>
         curr ? { ...curr, items: [...curr.items, res.item] } : curr,
       );
@@ -189,28 +191,6 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem }: Mess
         </div>
       )}
       <div className="composer-head">
-        <div className="seg" role="group" aria-label="Message visibility">
-          <button
-            type="button"
-            className={`seg-btn${clientVisible ? '' : ' is-on'}`}
-            aria-pressed={!clientVisible}
-            onClick={() => setClientVisible(false)}
-          >
-            <Icon name="lock" size={12} />
-            Internal
-          </button>
-          <button
-            type="button"
-            className={`seg-btn${clientVisible ? ' is-on' : ''}`}
-            aria-pressed={clientVisible}
-            disabled={!canMessageClient}
-            title={canMessageClient ? undefined : 'Your role cannot message the client'}
-            onClick={() => setClientVisible(true)}
-          >
-            <Icon name="globe" size={12} />
-            Client-visible
-          </button>
-        </div>
         <span className="composer-help">
           <Icon name={clientVisible ? 'ext' : 'lock'} size={12} />
           {help}

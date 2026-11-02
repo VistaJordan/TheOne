@@ -10,11 +10,13 @@ interface WoThreadProps {
   woId: string;
   queryKey: readonly unknown[];
   clientSystem: ClientSystem | null;
+  /** 0114 · which Messages tab this is, for its empty state. */
+  lane: 'internal' | 'client';
 }
 
 /** 0052 · the work order's own conversation, oldest-first with day dividers,
     exactly as the API returns it. */
-export function WoThread({ items, woId, queryKey, clientSystem }: WoThreadProps) {
+export function WoThread({ items, woId, queryKey, clientSystem, lane }: WoThreadProps) {
   // 0089 · a mention notice links to ?tab=messages&msg=<id>: scroll to that
   // message once it is in the list, and draw it highlighted.
   const [params] = useSearchParams();
@@ -30,11 +32,20 @@ export function WoThread({ items, woId, queryKey, clientSystem }: WoThreadProps)
       <div className="thread">
         <div className="tab-empty">
           <Icon name="msg" size={22} />
-          <b>No messages yet</b>
-          <span>
-            Post the first one below. Internal messages stay with the team; client-visible ones
-            go to the client{clientSystem ? ` on ${clientSystem.label}` : ''}.
-          </span>
+          {lane === 'internal' ? (
+            <>
+              <b>No internal messages yet</b>
+              <span>Notes posted here stay with the team; the client never sees them.</span>
+            </>
+          ) : (
+            <>
+              <b>No client messages yet</b>
+              <span>
+                What the client writes{clientSystem ? ` on ${clientSystem.label}` : ''} shows here, with our
+                replies in between.
+              </span>
+            </>
+          )}
         </div>
       </div>
     );

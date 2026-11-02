@@ -607,13 +607,36 @@ export interface InboundClientMessage {
 
 /** A note the client wrote in their CMMS, landing in the thread as a
  *  client-sourced, client-visible message. Idempotent on (target, external_id):
- *  a second sync of the same note returns the existing id and writes nothing. */
-export async function receiveClientMessage(input: InboundClientMessage): Promise<{ id: string; created: boolean }> {
-  const existing = await query<{ id: string }>(
-    `SELECT id::text AS id FROM comment WHERE external_target = $1 AND external_id = $2`,
+ *  a second sync of the same note returns the existing id and writes nothing.
+ *  0114 · a note edited on their side since (a different body) is updated in
+ *  place, stamped `edited_at` and logged `client_message_updated`. */
+export async function receiveClientMessage(
+  input: InboundClientMessage,
+): Promise<{ id: string; created: boolean; updated?: boolean }> {
+  const existing = await query<{ id: string; body: string; task_id: string }>(
+    `SELECT id::text AS id, body, task_id::text AS task_id FROM comment WHERE external_target = $1 AND external_id = $2`,
     [input.target, input.external_id],
   );
-  if (existing.rows[0]) return { id: existing.rows[0].id, created: false };
+  const prior = existing.rows[0];
+  if (prior) {
+    if (prior.body === input.body) return { id: prior.id, created: false };
+    const actorId = await messagingActorId();
+    await withTransaction(async (tx) => {
+      await tx.query(`UPDATE comment SET body = $2, edited_at = now() WHERE id = $1`, [prior.id, input.body]);
+      await tx.query(
+        `INSERT INTO activity_log
+           (actor_principal_id, entity_type, entity_id, action, field, before, after)
+         VALUES ($1, 'task', $2, 'client_message_updated', NULL, $3::jsonb, $4::jsonb)`,
+        [
+          actorId,
+          prior.task_id,
+          JSON.stringify({ comment_id: prior.id, body: prior.body }),
+          JSON.stringify({ comment_id: prior.id, body: input.body, target: input.target, external_id: input.external_id }),
+        ],
+      );
+    });
+    return { id: prior.id, created: false, updated: true };
+  }
 
   const actorId = await messagingActorId();
   let id: string | null = null;

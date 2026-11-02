@@ -129,6 +129,25 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
   app.get('/webhooks/ecotrak-sync', async (req) => ecotrakRun(req));
   app.post('/webhooks/ecotrak-sync', async (req) => ecotrakRun(req));
 
+  // 0114 · Ecotrak calls us when a work order changes or gets a comment
+  // (registered from Admin › Integrations › Ecotrak). The key in the URL is
+  // the credential (its sha256 is in ecotrak_webhook). The delivery is only a
+  // signal: services/ecotrakWebhooks.ts reads the work order back from
+  // Ecotrak with GETs. A good key always gets a 200, so Ecotrak never retries
+  // something we already kept.
+  const ecotrakDelivery = async (req: { query: unknown; body: unknown }) => {
+    if (config.demoMode) throw new ApiError('FORBIDDEN', 'Webhooks are disabled in the public demo.');
+    const key = (req.query as { key?: unknown } | null)?.key;
+    const { ecotrakWebhookKeyOk, handleEcotrakDelivery } = await import('../services/ecotrakWebhooks.js');
+    if (!(await ecotrakWebhookKeyOk(typeof key === 'string' ? key : null))) {
+      throw new ApiError('UNAUTHORIZED', 'Webhook key missing or invalid');
+    }
+    return { ok: true, ...(await handleEcotrakDelivery(req.body)) };
+  };
+  app.post('/webhooks/ecotrak', async (req) => ecotrakDelivery(req));
+  app.put('/webhooks/ecotrak', async (req) => ecotrakDelivery(req));
+  app.patch('/webhooks/ecotrak', async (req) => ecotrakDelivery(req));
+
   app.post('/webhooks/email-escalation', async (req) => {
     // The public demo runs on seed data with the dev bypass; a reachable
     // receiver there would let anyone flag demo rows from the internet.

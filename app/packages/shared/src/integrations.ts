@@ -344,7 +344,7 @@ export const INTEGRATION_OFF = 'INTEGRATION_OFF';
 
 export interface EcotrakRun {
   at: string;
-  trigger: 'cron' | 'manual';
+  trigger: 'cron' | 'manual' | 'webhook';
   ok: boolean;
   fetched: number;
   created: number;
@@ -364,5 +364,12 @@ export interface EcotrakOverview {
   last_run: EcotrakRun | null;
   /** Work orders that came from Ecotrak and are tied to it. */
   linked: number;
+  /** 0114 · Ecotrak calling us: what is registered and when it last called. */
+  webhooks?: {
+    url: string | null;
+    registered: Array<{ action: string; registered_at: string }>;
+    last_delivery_at: string | null;
+    deliveries_24h: number;
+  };
   can: { edit: boolean };
 }

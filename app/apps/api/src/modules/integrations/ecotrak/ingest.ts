@@ -10,6 +10,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { ecotrakAddressLine, normalizeZip } from '@theone/shared';
 import { query, withTransaction, type Queryable } from '../../../db.js';
 import { EcotrakClient, configFromEnv, type EcotrakWorkOrder } from './client.js';
 import { classifyInbound } from './statusMap.js';
@@ -20,6 +21,7 @@ import { adoptClientsFromRecords } from '../../../services/dataRules.js';
 import { integrationOnNow, requireIntegration } from '../../../services/integrations.js';
 import { logTaskChanges, type TaskChange } from '../../../services/woAudit.js';
 import { ecotrakSyncActorId } from '../../../services/serviceActors.js';
+import { syncEcotrakNotes } from '../../../services/ecotrakNotes.js';
 
 export const MAP_VERSION = '2026-09-01.1';
 
@@ -91,6 +93,9 @@ export interface IngestResult {
   /** Incoming items closed because Ecotrak says accepted / rejected. */
   accepted: number;
   declined: number;
+  /** 0114 · Ecotrak comments filed in Messages / updated after an edit there. */
+  notesAdded: number;
+  notesUpdated: number;
   unmappedStatus: string[];
   unmappedTrade: string[];
   errors: string[];
@@ -115,6 +120,9 @@ export function ecotrakAcceptance(status: string | null | undefined): 'waiting' 
 interface Settle {
   accepted: string[];
   rejected: string[];
+  /** 0114 · every work order this pass created or changed: its notes are
+   *  read after the commits. */
+  touched: Array<{ taskId: string; externalId: string }>;
 }
 
 interface ConnectionRow {
@@ -135,7 +143,7 @@ export async function getEcotrakConnection(): Promise<ConnectionRow | null> {
 }
 
 /** Who started a run: Vercel's 10-minute cron, or Sync now in Admin. */
-export type IngestTrigger = 'cron' | 'manual';
+export type IngestTrigger = 'cron' | 'manual' | 'webhook';
 
 /**
  * Pull work orders updated since the last sync (or `sinceDays` back on a cold
@@ -152,10 +160,7 @@ export async function ingestEcotrak(opts: { sinceDays?: number; trigger?: Ingest
   await integrationOnNow('ecotrak');
   requireIntegration('ecotrak');
   const trigger: IngestTrigger = opts.trigger ?? 'manual';
-  const res: IngestResult = {
-    fetched: 0, created: 0, updated: 0, skippedHumanMoved: 0, unchanged: 0, accepted: 0, declined: 0,
-    unmappedStatus: [], unmappedTrade: [], errors: [], note: '',
-  };
+  const res: IngestResult = emptyResult();
 
   const conn = await getEcotrakConnection();
   if (!conn) {
@@ -200,45 +205,8 @@ export async function ingestEcotrak(opts: { sinceDays?: number; trigger?: Ingest
     fetchedOk = true;
     res.fetched = orders.length;
 
-    // Resolve status ids once — the pipeline is small and static.
-    const statusRows = await query<{ id: string; name: string; status_group: string }>(
-      `SELECT s.id, s.name, s.status_group FROM status s`,
-    );
-    const statusByName = new Map(statusRows.rows.map((s) => [s.name.toLowerCase(), s]));
-    const actorId = await ecotrakSyncActorId();
-
-    // Rule 7.1.1 (0036): every work order this run CREATES goes to the
-    // manager's Pending Acceptance queue. Raised after each commit (the queue
-    // row must never fail the sync), signed by the sync's own service
-    // principal so the trail says which system put it there.
-    const createdIds: string[] = [];
-    const settle: Settle = { accepted: [], rejected: [] };
-    for (const wo of orders) {
-      try {
-        await withTransaction(async (tx) => {
-          await upsertOne(tx, conn, wo, statusByName, res, createdIds, actorId, settle);
-        });
-      } catch (e) {
-        res.errors.push(`WO ${wo.id}: ${(e as Error).message}`);
-      }
-    }
-    if (createdIds.length > 0) {
-      try {
-        await raiseAcceptanceTasks(createdIds, actorId, 'ecotrak');
-      } catch (e) {
-        res.errors.push(`acceptance queue: ${(e as Error).message}`);
-      }
-    }
-    // #11 (Wave D): a client Ecotrak names for the first time gets its client
-    // record, after the commits (our database only — nothing goes to Ecotrak).
-    if (res.created > 0 || res.updated > 0) await adoptClientsFromRecords();
-    // accepted (or rejected) on Ecotrak = answered here too.
-    for (const id of settle.accepted) {
-      if (await settleAcceptanceFromClient(id, 'accepted', 'Ecotrak', actorId)) res.accepted++;
-    }
-    for (const id of settle.rejected) {
-      if (await settleAcceptanceFromClient(id, 'rejected', 'Ecotrak', actorId)) res.declined++;
-    }
+    await processOrders(client, conn, orders, res);
+    await backfillNotes(client, conn, res);
   } catch (e) {
     // Never the response body: an auth error can echo the request back.
     res.errors.push((e as Error).message);
@@ -247,6 +215,7 @@ export async function ingestEcotrak(opts: { sinceDays?: number; trigger?: Ingest
       fetchedOk ? `${res.fetched} read from Ecotrak` : 'Could not read from Ecotrak',
       res.created > 0 && `${res.created} new`,
       res.accepted > 0 && `${res.accepted} accepted on Ecotrak`,
+      res.notesAdded > 0 && `${res.notesAdded} new comment${res.notesAdded === 1 ? '' : 's'}`,
       res.declined > 0 && `${res.declined} rejected on Ecotrak`,
       res.updated + res.skippedHumanMoved > 0 && `${res.updated + res.skippedHumanMoved} updated`,
       res.unchanged > 0 && `${res.unchanged} unchanged`,
@@ -275,6 +244,155 @@ export async function ingestEcotrak(opts: { sinceDays?: number; trigger?: Ingest
     );
   }
   return res;
+}
+
+/** Notes read per pass, at most: each is one GET, and a pass must finish
+ *  well inside the function's time. */
+const NOTES_PER_PASS = 40;
+/** Work orders whose notes were never read, caught up a few per run. */
+const NOTES_BACKFILL_PER_RUN = 15;
+
+/**
+ * Upsert a batch of Ecotrak work orders, then everything that waits for the
+ * commits: the acceptance queue, client records, acceptances answered on
+ * Ecotrak, and (0114) the notes of every work order that changed. Shared by
+ * the poll and the webhook so both do exactly the same thing.
+ */
+async function processOrders(
+  client: EcotrakClient,
+  conn: ConnectionRow,
+  orders: EcotrakWorkOrder[],
+  res: IngestResult,
+): Promise<void> {
+  // Resolve status ids once — the pipeline is small and static.
+  const statusRows = await query<{ id: string; name: string; status_group: string }>(
+    `SELECT s.id, s.name, s.status_group FROM status s`,
+  );
+  const statusByName = new Map(statusRows.rows.map((s) => [s.name.toLowerCase(), s]));
+  const actorId = await ecotrakSyncActorId();
+
+  // Rule 7.1.1 (0036): every work order this run CREATES goes to the
+  // manager's Pending Acceptance queue. Raised after each commit (the queue
+  // row must never fail the sync), signed by the sync's own service
+  // principal so the trail says which system put it there.
+  const createdIds: string[] = [];
+  const settle: Settle = { accepted: [], rejected: [], touched: [] };
+  for (const wo of orders) {
+    try {
+      await withTransaction(async (tx) => {
+        await upsertOne(tx, conn, wo, statusByName, res, createdIds, actorId, settle);
+      });
+    } catch (e) {
+      res.errors.push(`WO ${wo.id}: ${(e as Error).message}`);
+    }
+  }
+  if (createdIds.length > 0) {
+    try {
+      await raiseAcceptanceTasks(createdIds, actorId, 'ecotrak');
+    } catch (e) {
+      res.errors.push(`acceptance queue: ${(e as Error).message}`);
+    }
+  }
+  // #11 (Wave D): a client Ecotrak names for the first time gets its client
+  // record, after the commits (our database only — nothing goes to Ecotrak).
+  if (res.created > 0 || res.updated > 0) await adoptClientsFromRecords();
+  // accepted (or rejected) on Ecotrak = answered here too.
+  for (const id of settle.accepted) {
+    if (await settleAcceptanceFromClient(id, 'accepted', 'Ecotrak', actorId)) res.accepted++;
+  }
+  for (const id of settle.rejected) {
+    if (await settleAcceptanceFromClient(id, 'rejected', 'Ecotrak', actorId)) res.declined++;
+  }
+  // 0114 · the comments on what changed, client-visible in Messages.
+  for (const t of settle.touched.slice(0, NOTES_PER_PASS)) {
+    try {
+      const n = await syncEcotrakNotes(client, conn.id, t.taskId, t.externalId);
+      res.notesAdded += n.added;
+      res.notesUpdated += n.updated;
+    } catch (e) {
+      res.errors.push(`notes for WO ${t.externalId}: ${(e as Error).message}`);
+    }
+  }
+  // Past the cap: marked unread, so the backfill below reads them next.
+  const later = settle.touched.slice(NOTES_PER_PASS).map((t) => t.externalId);
+  if (later.length > 0) {
+    await query(
+      `UPDATE cmms_wo_link SET notes_synced_at = NULL WHERE connection_id = $1 AND external_id = ANY($2::text[])`,
+      [conn.id, later],
+    );
+  }
+}
+
+/** 0114 · work orders linked before notes were read: a few per run, newest
+ *  first, so their existing comments arrive without a burst of calls. */
+async function backfillNotes(client: EcotrakClient, conn: ConnectionRow, res: IngestResult): Promise<void> {
+  const r = await query<{ task_id: string; external_id: string }>(
+    `SELECT l.task_id::text AS task_id, l.external_id
+       FROM cmms_wo_link l JOIN task t ON t.id = l.task_id
+      WHERE l.connection_id = $1 AND l.notes_synced_at IS NULL AND t.deleted_at IS NULL
+      ORDER BY l.created_at DESC
+      LIMIT $2`,
+    [conn.id, NOTES_BACKFILL_PER_RUN],
+  );
+  for (const row of r.rows) {
+    try {
+      const n = await syncEcotrakNotes(client, conn.id, row.task_id, row.external_id);
+      res.notesAdded += n.added;
+      res.notesUpdated += n.updated;
+    } catch (e) {
+      res.errors.push(`notes for WO ${row.external_id}: ${(e as Error).message}`);
+    }
+  }
+}
+
+/**
+ * 0114 · the webhook's path: read the named work orders back from Ecotrak
+ * (never trusting the delivery's own copy) and run them through the same
+ * pass as the poll. Answers which ids Ecotrak knew. Read only against Ecotrak.
+ */
+export async function refreshEcotrakWorkOrders(externalIds: string[]): Promise<{ found: string[]; result: IngestResult }> {
+  await integrationOnNow('ecotrak');
+  requireIntegration('ecotrak');
+  const res = emptyResult();
+  const conn = await getEcotrakConnection();
+  if (!conn) {
+    res.errors.push('no active ecotrak connection');
+    return { found: [], result: res };
+  }
+  const client = new EcotrakClient(configFromEnv(conn.credentials_ref));
+  const orders: EcotrakWorkOrder[] = [];
+  for (const id of externalIds) {
+    const wo = await client.fetchWorkOrder(id);
+    if (wo) {
+      orders.push(wo);
+      break; // the first id Ecotrak knows is the one the delivery meant
+    }
+  }
+  res.fetched = orders.length;
+  await processOrders(client, conn, orders, res);
+  // A comment does not always move the work order's own payload: read its
+  // notes even when the work order itself came back unchanged.
+  if (orders.length > 0 && res.created + res.updated + res.skippedHumanMoved === 0) {
+    const ext = String(orders[0].id);
+    const link = await query<{ task_id: string }>(
+      `SELECT task_id::text AS task_id FROM cmms_wo_link WHERE connection_id = $1 AND external_id = $2`,
+      [conn.id, ext],
+    );
+    if (link.rows[0]) {
+      const n = await syncEcotrakNotes(client, conn.id, link.rows[0].task_id, ext);
+      res.notesAdded += n.added;
+      res.notesUpdated += n.updated;
+    }
+  }
+  return { found: orders.map((o) => String(o.id)), result: res };
+}
+
+function emptyResult(): IngestResult {
+  return {
+    fetched: 0, created: 0, updated: 0, skippedHumanMoved: 0, unchanged: 0, accepted: 0, declined: 0,
+    notesAdded: 0, notesUpdated: 0,
+    unmappedStatus: [], unmappedTrade: [], errors: [], note: '',
+  };
 }
 
 /** What the payload looked like last time, to leave an unchanged one alone. */
@@ -381,6 +499,17 @@ async function upsertOne(
     // refresh keeps whatever is already stored — see the UPDATEs below.
     'Date Created': wo.date_created ? wo.date_created.replace(' ', 'T').slice(0, 16) : null,
   };
+  // 0114 · the address, as the team writes it, and its parts (rule 11.1.1
+  // asks for all four). Only what Ecotrak actually sends: a blank there never
+  // empties what is on file here.
+  const stateCode = stateAbbr(wo.location?.state) ?? (wo.location?.state?.trim() || null);
+  const place: Record<string, unknown> = {
+    '17. Address': ecotrakAddressLine(wo.location, stateCode),
+    City: wo.location?.city?.trim() || null,
+    State: stateCode,
+    'Zip Code': normalizeZip(wo.location?.zip) ?? (wo.location?.zip?.trim() || null),
+  };
+  for (const [k, v] of Object.entries(place)) if (v) fields[k] = v;
 
   const common = [
     titleOf(wo),
@@ -437,6 +566,7 @@ async function upsertOne(
     // Incoming Work Orders; one first seen already accepted (or rejected)
     // there has had its answer.
     if (ecotrakAcceptance(wo.status) === 'waiting') createdIds.push(taskId);
+    settle.touched.push({ taskId, externalId });
     return;
   }
 
@@ -533,6 +663,7 @@ async function upsertOne(
       WHERE connection_id = $2 AND external_id = $3`,
     [wo.status, conn.id, externalId, hash],
   );
+  settle.touched.push({ taskId, externalId });
 
   await markProcessed(tx, conn.id, externalId);
 }
