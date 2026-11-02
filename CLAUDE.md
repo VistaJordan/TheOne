@@ -263,7 +263,7 @@ it is untouched. Rules: the parts OVERWRITE what the three fields held; a
 part the same save sets explicitly wins; a bare street changes nothing; the
 City / State mirror columns follow; updates are logged `via: 'address'`
 (creations are part of the `created` row). Going forward only: nothing
-back-filled the work orders on file.
+back-filled the work orders on file. **Street Address** (migration 0117, Elise 2026-11-02) is the fourth part: everything before the city (a suite written as its own part stays with it), `ADDRESS_STREET_KEY`, filled by the same writers under the same rules; on Add work order it follows Address, and Store moved to the Client section. seed.ts and `WO_CREATE_DEFAULT_KEYS` carry it — keep in step.
 
 **Which work orders a person sees** (migration 0032, rule 8.5, the
 roadmap's "my book / my entity") is two more paths in the same permission

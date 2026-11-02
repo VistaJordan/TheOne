@@ -1,4 +1,6 @@
-// City, State and Zip Code read off a work order's address.
+// Street Address, City, State and Zip Code read off a work order's address.
+// (Street Address joined the parts on 2026-11-02, Elise: everything before the
+// city — the street, and a suite written as its own part.)
 //
 // Whenever `17. Address` is written — the field editor, bulk edit, an
 // automation, Add work order, an intake draft's Submit, the CSV import, a
@@ -21,10 +23,14 @@ export const ADDRESS_KEY = '17. Address';
 export const ADDRESS_CITY_KEY = 'City';
 export const ADDRESS_STATE_KEY = 'State';
 export const ADDRESS_ZIP_KEY = 'Zip Code';
-export const ADDRESS_PART_KEYS = [ADDRESS_CITY_KEY, ADDRESS_STATE_KEY, ADDRESS_ZIP_KEY] as const;
+export const ADDRESS_STREET_KEY = 'Street Address';
+export const ADDRESS_PART_KEYS = [ADDRESS_STREET_KEY, ADDRESS_CITY_KEY, ADDRESS_STATE_KEY, ADDRESS_ZIP_KEY] as const;
 export type AddressPartKey = (typeof ADDRESS_PART_KEYS)[number];
 
 export interface AddressParts {
+  /** Everything before the city ("7898 Bradley Long Dr", "500 Elm Ave,
+      Suite 4"); null when the text does not show where the street ends. */
+  street: string | null;
   city: string | null;
   state: string | null;
   /** As written: five digits, or ZIP+4 ("28673-1234"). */
@@ -77,7 +83,7 @@ const clean = (s: string | null | undefined): string | null => {
 /** Read the city, state and ZIP from the end of an address. Every part that
  *  cannot be read is null; nothing is guessed. */
 export function parseAddressParts(address: unknown): AddressParts {
-  const none: AddressParts = { city: null, state: null, zip: null };
+  const none: AddressParts = { street: null, city: null, state: null, zip: null };
   if (typeof address !== 'string') return none;
   const text = address.replace(/\s+/g, ' ').trim().replace(COUNTRY_RE, '').trim();
   if (text === '') return none;
@@ -88,6 +94,10 @@ export function parseAddressParts(address: unknown): AddressParts {
   let zip: string | null = null;
   let state: string | null = null;
   let city: string | null = null;
+  // Where the street ends (exclusive part index): the part holding the city,
+  // else the part holding the state. Null = the text does not say.
+  let cityIdx: number | null = null;
+  let stateIdx: number | null = null;
 
   // The ZIP: the end of the last part, or the whole last part.
   let last = parts[parts.length - 1];
@@ -103,7 +113,7 @@ export function parseAddressParts(address: unknown): AddressParts {
       zipAlone = true;
     } else parts[parts.length - 1] = last;
   }
-  if (parts.length === 0) return { city, state, zip };
+  if (parts.length === 0) return { street: null, city, state, zip };
 
   // The state: the end of what is now the last part.
   const tail = parts[parts.length - 1];
@@ -113,26 +123,42 @@ export function parseAddressParts(address: unknown): AddressParts {
     if (st.rest !== '') {
       // "Dallas TX" in one part: the words before the state are the city —
       // unless that part is the only one (it is the street then, "123 Main St TX").
-      if (parts.length >= 2) city = clean(st.rest);
-    } else if (parts.length >= 3) {
-      // "…, Sherrills Ford, NC": the part before the state is the city. With
-      // only two parts the one before is the street, not a city.
-      city = clean(parts[parts.length - 2]);
+      if (parts.length >= 2) {
+        city = clean(st.rest);
+        cityIdx = parts.length - 1;
+      }
+    } else {
+      stateIdx = parts.length - 1;
+      if (parts.length >= 3) {
+        // "…, Sherrills Ford, NC": the part before the state is the city. With
+        // only two parts the one before is the street, not a city.
+        city = clean(parts[parts.length - 2]);
+        cityIdx = parts.length - 2;
+      }
     }
   } else if (zipAlone && parts.length >= 2 && !ZIP_RE.test(tail)) {
     // "…, Sherrills Ford, 28673": no state written, the city still is.
     city = clean(tail);
+    cityIdx = parts.length - 1;
   }
 
-  // A city that is a street number or a suite is not a city.
-  if (city && (/^\d/.test(city) || /^(?:suite|ste|unit|apt|#)\b/i.test(city))) city = null;
+  // A city that is a street number or a suite is not a city — it is part of
+  // the street ("123 Main St, Suite 4, NC 28673").
+  if (city && (/^\d/.test(city) || /^(?:suite|ste|unit|apt|#)\b/i.test(city))) {
+    city = null;
+    cityIdx = null;
+  }
 
-  return { city, state, zip };
+  const streetEnd = cityIdx ?? stateIdx;
+  const street = streetEnd !== null && streetEnd > 0 ? clean(parts.slice(0, streetEnd).join(', ')) : null;
+
+  return { street, city, state, zip };
 }
 
 /** The bag values the parts give, keyed by field. Only parts that were read. */
 export function addressPartValues(parts: AddressParts): Partial<Record<AddressPartKey, string>> {
   const out: Partial<Record<AddressPartKey, string>> = {};
+  if (parts.street) out[ADDRESS_STREET_KEY] = parts.street;
   if (parts.city) out[ADDRESS_CITY_KEY] = parts.city;
   if (parts.state) out[ADDRESS_STATE_KEY] = parts.state;
   if (parts.zip) out[ADDRESS_ZIP_KEY] = parts.zip;

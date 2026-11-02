@@ -46,6 +46,7 @@ export const WO_CREATE_DEFAULT_KEYS: readonly string[] = [
   'Client',
   'Store',
   '17. Address',
+  'Street Address',
   'City',
   'State',
   'Zip Code',
@@ -117,13 +118,15 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
     hint: 'Which of our companies bills the job, and who it is for.',
     // 2026-10-27 · Comp first, then the Client it narrows, then its portal.
     // FM left the form the same day (0103): it named the Client again.
-    keys: ['21. Comp', 'Client', 'Client Portal Type'],
+    // 2026-11-02 · Store moved here from Where (Elise).
+    keys: ['21. Comp', 'Client', 'Client Portal Type', 'Store'],
   },
   {
     id: 'where',
     title: 'Where',
-    hint: 'The store, and the address a technician drives to.',
-    keys: ['Store', '17. Address', 'City', 'State', 'Zip Code'],
+    hint: 'The address a technician drives to. Paste the whole address: the street, city, state and ZIP fill themselves.',
+    // 2026-11-02 · Street Address after Address, filled from it like the rest.
+    keys: ['17. Address', 'Street Address', 'City', 'State', 'Zip Code'],
   },
   {
     id: 'what',

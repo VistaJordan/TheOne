@@ -20,13 +20,14 @@ const p = (s: string) => parseAddressParts(s);
 describe('parseAddressParts', () => {
   it('reads the team’s usual shape', () => {
     expect(p('7898 Bradley Long Dr, Sherrills Ford, NC 28673, USA')).toEqual({
+      street: '7898 Bradley Long Dr',
       city: 'Sherrills Ford',
       state: 'NC',
       zip: '28673',
     });
   });
   it('without the country, with other spellings of it', () => {
-    const want = { city: 'Dallas', state: 'TX', zip: '75201' };
+    const want = { street: '123 Main St', city: 'Dallas', state: 'TX', zip: '75201' };
     expect(p('123 Main St, Dallas, TX 75201')).toEqual(want);
     expect(p('123 Main St, Dallas, TX 75201, United States')).toEqual(want);
     expect(p('123 Main St, Dallas, TX 75201 US')).toEqual(want);
@@ -34,40 +35,49 @@ describe('parseAddressParts', () => {
   });
   it('a suite as its own part, ZIP+4, a spelled-out state', () => {
     expect(p('500 Elm Ave, Suite 4, Charlotte, North Carolina 28202-1234, USA')).toEqual({
+      street: '500 Elm Ave, Suite 4',
       city: 'Charlotte',
       state: 'NC',
       zip: '28202-1234',
     });
   });
   it('two-word states and a city named like a state', () => {
-    expect(p('1 Broadway, New York, New York 10004')).toEqual({ city: 'New York', state: 'NY', zip: '10004' });
-    expect(p('9 Oak Rd, Charleston, West Virginia 25301')).toEqual({ city: 'Charleston', state: 'WV', zip: '25301' });
-    expect(p('22 Pine St, Kansas City, MO 64105')).toEqual({ city: 'Kansas City', state: 'MO', zip: '64105' });
+    expect(p('1 Broadway, New York, New York 10004')).toEqual({ street: '1 Broadway', city: 'New York', state: 'NY', zip: '10004' });
+    expect(p('9 Oak Rd, Charleston, West Virginia 25301')).toEqual({ street: '9 Oak Rd', city: 'Charleston', state: 'WV', zip: '25301' });
+    expect(p('22 Pine St, Kansas City, MO 64105')).toEqual({ street: '22 Pine St', city: 'Kansas City', state: 'MO', zip: '64105' });
   });
   it('"City ST ZIP" with no comma before the state', () => {
-    expect(p('123 Main St, Dallas TX 75201')).toEqual({ city: 'Dallas', state: 'TX', zip: '75201' });
+    expect(p('123 Main St, Dallas TX 75201')).toEqual({ street: '123 Main St', city: 'Dallas', state: 'TX', zip: '75201' });
   });
   it('a ZIP with no state still gives the city before it', () => {
-    expect(p('7898 Bradley Long Dr, Sherrills Ford, 28673')).toEqual({ city: 'Sherrills Ford', state: null, zip: '28673' });
+    expect(p('7898 Bradley Long Dr, Sherrills Ford, 28673')).toEqual({ street: '7898 Bradley Long Dr', city: 'Sherrills Ford', state: null, zip: '28673' });
   });
   it('no commas at all: the state and ZIP only (the ZIP table names the city)', () => {
-    expect(p('123 Main St Dallas TX 75201')).toEqual({ city: null, state: 'TX', zip: '75201' });
+    expect(p('123 Main St Dallas TX 75201')).toEqual({ street: null, city: null, state: 'TX', zip: '75201' });
   });
   it('never takes the street for the city', () => {
-    expect(p('123 Main St, TX 75201')).toEqual({ city: null, state: 'TX', zip: '75201' });
-    expect(p('Suite 4, NC 28673')).toEqual({ city: null, state: 'NC', zip: '28673' });
+    expect(p('123 Main St, TX 75201')).toEqual({ street: '123 Main St', city: null, state: 'TX', zip: '75201' });
+    expect(p('Suite 4, NC 28673')).toEqual({ street: 'Suite 4', city: null, state: 'NC', zip: '28673' });
   });
   it('reads nothing from a bare street or a non-address', () => {
-    expect(p('123 Main St')).toEqual({ city: null, state: null, zip: null });
-    expect(p('Behind the loading dock')).toEqual({ city: null, state: null, zip: null });
-    expect(p('')).toEqual({ city: null, state: null, zip: null });
-    expect(parseAddressParts(null)).toEqual({ city: null, state: null, zip: null });
+    const none = { street: null, city: null, state: null, zip: null };
+    expect(p('123 Main St')).toEqual(none);
+    expect(p('Behind the loading dock')).toEqual(none);
+    expect(p('')).toEqual(none);
+    expect(parseAddressParts(null)).toEqual(none);
   });
   it('a lower-case word at the end of a street is not a state', () => {
-    expect(p('10 Walk in Way')).toEqual({ city: null, state: null, zip: null });
+    expect(p('10 Walk in Way')).toEqual({ street: null, city: null, state: null, zip: null });
+  });
+  it('a suite that sat where the city goes stays with the street (2026-11-02)', () => {
+    expect(p('123 Main St, Suite 4, NC 28673')).toEqual({ street: '123 Main St, Suite 4', city: null, state: 'NC', zip: '28673' });
+    expect(p('175 W Jackson Blvd, Ste 201, Chicago, IL 60604, USA')).toEqual({
+      street: '175 W Jackson Blvd, Ste 201', city: 'Chicago', state: 'IL', zip: '60604',
+    });
   });
   it('addressPartValues keys only the parts read', () => {
-    expect(addressPartValues({ city: null, state: 'TX', zip: '75201' })).toEqual({ State: 'TX', 'Zip Code': '75201' });
+    expect(addressPartValues({ street: null, city: null, state: 'TX', zip: '75201' })).toEqual({ State: 'TX', 'Zip Code': '75201' });
+    expect(addressPartValues({ street: '1 A St', city: 'Dallas', state: null, zip: null })).toEqual({ 'Street Address': '1 A St', City: 'Dallas' });
   });
 });
 
@@ -84,6 +94,7 @@ describe('fillFromAddress', () => {
     const changes = await fillFromAddress(bag, new Set(['17. Address']), q);
     expect(bag).toMatchObject({ City: 'Sherrills Ford', State: 'NC', 'Zip Code': '28673' });
     expect(changes).toEqual([
+      { key: 'Street Address', before: null, after: '7898 Bradley Long Dr' },
       { key: 'City', before: 'Old Town', after: 'Sherrills Ford' },
       { key: 'Zip Code', before: null, after: '28673' },
     ]);

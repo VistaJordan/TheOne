@@ -443,6 +443,9 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: 'Audited',                  label: 'Audited',              type: 'checkbox' },
   { key: 'CICO Method',              label: 'CICO Method',          type: 'short_text' },
   { key: 'City',                     label: 'City',                 type: 'short_text' },
+  // 0117 · read off the address with City / State / Zip Code (migration 0117
+  // carries the same row; keep in step).
+  { key: 'Street Address',           label: 'Street Address',       type: 'short_text' },
   { key: 'Client',                   label: 'Client',               type: 'dropdown', options: null },
   // `users`, like AM/Assignee/TL: the editor then picks from the people in
   // the system (woFields.customDistinctOptions) instead of free text.

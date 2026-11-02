@@ -68,7 +68,9 @@ describe('clientTeamValues', () => {
 describe('the create form', () => {
   it('keeps Comp, Client and Client Portal together (FM left the form, 0103), and AM / TL / ATL / Sales / Dispatcher under People', () => {
     const keys = (id: string) => WO_CREATE_SECTIONS.find((s) => s.id === id)?.keys;
-    expect(keys('identity')).toEqual(['21. Comp', 'Client', 'Client Portal Type']);
+    // 2026-11-02 · Store joined the Client section; Street Address follows Address.
+    expect(keys('identity')).toEqual(['21. Comp', 'Client', 'Client Portal Type', 'Store']);
+    expect(keys('where')).toEqual(['17. Address', 'Street Address', 'City', 'State', 'Zip Code']);
     expect(WO_CREATE_DEFAULT_KEYS).not.toContain('22. FM');
     expect(WO_CREATE_REQUIRED_KEYS).not.toContain('22. FM');
     expect(keys('people')).toEqual(['AM', 'TL', 'ATL', 'Sales Owner', 'Assignee']);

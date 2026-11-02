@@ -156,7 +156,7 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
   {
     title: 'Site',
     slug: 'site',
-    keys: ['fields.17. Address', 'fields.City', 'fields.State', 'fields.Zip Code'],
+    keys: ['fields.17. Address', 'fields.Street Address', 'fields.City', 'fields.State', 'fields.Zip Code'],
   },
   {
     title: 'Finances',

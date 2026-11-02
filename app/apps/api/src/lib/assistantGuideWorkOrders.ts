@@ -36,7 +36,7 @@ Needs \`work_orders\` view. A person limited to their own work orders sees a "Yo
 6. Under Flags, tick **Emergency** or **Escalated** when the job already is one (a role that cannot set the field sees the tick locked).
 7. Optionally add files under **Photos and files**.
 8. Click **Create work order**.
-"Possible duplicates" is a warning only. **Save as template** keeps the filled form for next time. Typing or pasting the Address under Where fills City, State and Zip code from it, and a ZIP alone completes the city and state (they stay editable); the same fill runs on the Drafts form and wherever the Address is saved. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade).
+"Possible duplicates" is a warning only. **Save as template** keeps the filled form for next time. Store is in the Client section. Typing or pasting the Address under Where fills Street Address, City, State and Zip code from it, and a ZIP alone completes the city and state (they stay editable); the same fill runs on the Drafts form and wherever the Address is saved. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade).
 
 ### The work-order page
 
