@@ -41,7 +41,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px 18px;
-  padding: 4px 0 14px;
+  padding: 14px 16px;
 }
 
 .intake-grid .intake-wide { grid-column: 1 / -1; }
@@ -69,7 +69,7 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding-top: 12px;
+  padding: 12px 16px;
   border-top: 1px solid var(--border);
 }
 
@@ -119,8 +119,7 @@
 .intake-extras {
   display: grid;
   gap: 6px;
-  margin-top: 16px;
-  padding-top: 12px;
+  padding: 12px 16px;
   border-top: 1px solid var(--border);
 }
 .intake-extras dl {
@@ -135,3 +134,6 @@
 /* 2026-10-30 · Discard from the drafts list. */
 .intake-row-actions { width: 1%; white-space: nowrap; text-align: right; cursor: default; }
 .intake-row-confirm { display: inline-flex; align-items: center; gap: 6px; }
+
+/* The card has no body padding of its own; the error line sits in line with the fields. */
+.intake > .card > .payq-err { margin-left: 16px; margin-right: 16px; }
