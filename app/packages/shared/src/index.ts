@@ -1290,6 +1290,50 @@ export interface PaymentRequestCreatedResponse {
   item: PaymentRequest;
 }
 
+/** One step in a payment request's life, read off the work order's audit log
+    (every `logPayment` row, field `payment_request.status`). */
+export type PaymentHistoryAction =
+  | 'payment_requested'
+  | 'payment_updated'
+  | 'payment_approved'
+  | 'payment_paid'
+  | 'payment_rejected'
+  | 'payment_method_changed'
+  | 'payment_delete_requested'
+  | 'payment_delete_rejected'
+  | 'payment_deleted';
+
+export interface PaymentHistoryEvent {
+  id: string;
+  action: PaymentHistoryAction;
+  at: string;
+  actor_name: string;
+  payment_request_id: string | null;
+  /** The payee as the request names it now (vendor record, else typed name). */
+  payee: string | null;
+  purpose: string | null;
+  /** The amount the row recorded, else the request's current amount. */
+  amount: number | null;
+  /** Status before → after, for the moves (approve, pay, reject). */
+  from_status: PaymentRequestStatus | null;
+  to_status: PaymentRequestStatus | null;
+  from_method: PaymentMethod | null;
+  to_method: PaymentMethod | null;
+  /** Rejection note, delete reason or overage reason, whichever the step carries. */
+  reason: string | null;
+  /** payment_updated: which fields changed. */
+  fields: string[];
+  auto_approved: boolean;
+  self_approved: boolean;
+  /** The request was deleted since (its events stay in the history). */
+  request_deleted: boolean;
+}
+
+/** GET /api/work-orders/:id/payment-history — newest first. */
+export interface PaymentHistoryResponse {
+  items: PaymentHistoryEvent[];
+}
+
 // ── Obligations / notifications (S5) ─────────────────────────────────────────
 // An OBLIGATION is who owes what, on which work order, by when — and what
 // evidence silences it. Notifications are VIEWS of obligations.

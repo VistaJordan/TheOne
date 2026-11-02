@@ -2720,6 +2720,20 @@ holding every other payment on the work order.
 
 **Dispatchers see payments only inside the work order** (migration 0108, Elise 2026-10-29; `PAYMENTS_PAGE_PERM_KEY` in shared `permissions.ts`, `tests/payments-page.test.ts`). The Payments page has its own path, `payments/page` view ("Payments page" under Payments in Roles; unset follows `payments` view, so no other role changed); `payments` view still opens a work order's Payables. Reads across work orders need the page: `GET /payments` and `GET /payment-requests/:pid` (`requirePaymentsOutsideWo`, which also lets `approvals/payments` view through, since the inbox's Payments lane reads the queue), `GET /vendor-bills` and `GET /vendor-bills/:id`; the sidebar item (`NAV_PERM.Payments`), the `/payments` route and Request payment's **Open Payments** link ask it too. 0108 sets OM, Senior OM and OM Under Probation to `payments` view + create (Elise had switched Payments off for them in Admin › Roles on 2026-10-20/22 as a stopgap), `payments/page` off and `approvals/payments` off. Invoices were already closed to them (0084).
 
+**Payment history on the work order** (Elise, 2026-11-02, no migration;
+`listPaymentHistory` in `services/payments.ts`, `GET
+/work-orders/:id/payment-history` (`payments` view + the scope through
+`resolveTaskId`), `PaymentTimelineCard` in `components/wo/PayablesCard.tsx`,
+`tests/payment-history.test.ts`). A **Payment history** card under Payables
+lists every step of every request — requested (auto-approved said so),
+edited (which fields), approved, paid, rejected (the note), method changed,
+delete asked / refused / done (the reason) — with who and when, newest
+first, eight then **Show all**. It reads the `activity_log` rows
+`logPayment` writes (field `payment_request.status`), so a deleted request
+keeps its history and nothing new is stored; a new payment action must join
+`HISTORY_ACTIONS` (the test fails until it does). The query key sits under
+`['wo-payments', wo]`, so every payment action's invalidation refreshes it.
+
 **The Quotes tab stays for the dispatchers** (migration 0111, Elise 2026-10-29; `QUOTES_PAGE_PERM_KEY` in shared `permissions.ts`, `tests/quotes-page.test.ts`). The Quotes page in the sidebar has its own path, `quotes/page` view ("Quotes page" under Quotes in Roles; unset follows `quotes` view); `quotes` view still opens a work order's Quotes tab (the builder). The sidebar item (`NAV_PERM.Quotes`) and the `/quotes` route ask the page; `GET /quotes` still asks `quotes` view (the Approvals lane, Receivables and the search read it). 0111 copies each dispatcher role's old `quotes` view onto `quotes/page` (so their sidebar is as it was), then turns `quotes` view and `work_orders/tabs/quotes` view on for OM, Senior OM and OM Under Probation, and does the same for a dispatcher whose own overrides had Quotes view off.
 
 **Statuses a dispatcher may not even request** (migration 0091, Elise

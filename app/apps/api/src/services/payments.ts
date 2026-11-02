@@ -56,6 +56,8 @@ import type {
   PaymentAddress,
   PaymentListItem,
   PaymentListResponse,
+  PaymentHistoryAction,
+  PaymentHistoryResponse,
   PaymentMethod,
   PaymentRequest,
   PaymentRequestStatus,
@@ -89,6 +91,7 @@ import type { PaymentOverage, PaymentPurposeCode } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { Params } from './woFields.js';
+import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import { woScopeSql } from './woScope.js';
 import { requirePerm } from './permissions.js';
 import {
@@ -477,6 +480,90 @@ export async function listPaymentRequests(taskId: string, viewer?: ActingPrincip
     total_requested: round2(
       items.filter((i) => i.status !== 'rejected').reduce((sum, i) => sum + i.amount, 0),
     ),
+  };
+}
+
+const HISTORY_ACTIONS: PaymentHistoryAction[] = [
+  'payment_requested', 'payment_updated', 'payment_approved', 'payment_paid', 'payment_rejected',
+  'payment_method_changed', 'payment_delete_requested', 'payment_delete_rejected', 'payment_deleted',
+];
+
+interface HistoryRow {
+  id: string;
+  action: PaymentHistoryAction;
+  at: string;
+  actor_name: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  payment_request_id: string | null;
+  payee: string | null;
+  purpose: string | null;
+  pr_amount: number | null;
+  rejection_note: string | null;
+  delete_reason: string | null;
+  request_deleted: boolean | null;
+}
+
+/**
+ * Every step of every payment request on the work order — requested,
+ * edited, approved, paid, rejected, method changed, delete asked / refused /
+ * done — newest first. Read off the audit log the actions already write
+ * (`logPayment`), so it covers deleted requests too and needs no new table.
+ */
+export async function listPaymentHistory(taskId: string): Promise<PaymentHistoryResponse> {
+  const res = await query<HistoryRow>(
+    `SELECT a.id::text AS id, a.action, ${ISO('a.created_at')} AS at,
+            ${ACTOR_NAME_SQL} AS actor_name, a.before, a.after,
+            pr.id::text AS payment_request_id,
+            COALESCE(v.name, pr.payee_name, a.after->>'payee') AS payee,
+            COALESCE(a.after->>'purpose', pr.purpose) AS purpose,
+            pr.amount::float8 AS pr_amount,
+            pr.rejection_note, pr.delete_reason,
+            (pr.deleted_at IS NOT NULL) AS request_deleted
+       FROM activity_log a
+       LEFT JOIN principal p ON p.id = a.actor_principal_id
+       LEFT JOIN payment_request pr
+              ON pr.id::text = COALESCE(a.after->>'payment_request_id', a.before->>'payment_request_id')
+             AND pr.task_id = $1
+       LEFT JOIN vendor v ON v.id = pr.vendor_id
+      WHERE a.entity_type = 'task' AND a.entity_id = $1::text
+        AND a.field = 'payment_request.status'
+        AND a.action = ANY($2::text[])
+      ORDER BY a.created_at DESC, a.id DESC
+      LIMIT 500`,
+    [taskId, HISTORY_ACTIONS],
+  );
+  const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  return {
+    items: res.rows.map((r) => {
+      const before = r.before ?? {};
+      const after = r.after ?? {};
+      const reason =
+        str(after.reason) ??
+        str(after.overage_reason) ??
+        (r.action === 'payment_rejected' ? str(r.rejection_note) : null) ??
+        (r.action === 'payment_delete_requested' || r.action === 'payment_deleted' ? str(r.delete_reason) : null);
+      return {
+        id: r.id,
+        action: r.action,
+        at: r.at,
+        actor_name: r.actor_name ?? 'Someone',
+        payment_request_id: r.payment_request_id ?? str(after.payment_request_id) ?? str(before.payment_request_id),
+        payee: r.payee,
+        purpose: r.purpose,
+        amount: num(after.amount) ?? r.pr_amount,
+        from_status: (str(before.status) as PaymentRequestStatus | null),
+        to_status: (str(after.status) as PaymentRequestStatus | null),
+        from_method: (str(before.method) as PaymentMethod | null),
+        to_method: (str(after.method) as PaymentMethod | null),
+        reason,
+        fields: Array.isArray(after.fields) ? after.fields.filter((f): f is string => typeof f === 'string') : [],
+        auto_approved: after.auto_approved === true,
+        self_approved: after.self_approved === true,
+        request_deleted: r.request_deleted === true,
+      };
+    }),
   };
 }
 

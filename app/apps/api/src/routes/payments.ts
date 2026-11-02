@@ -1,6 +1,7 @@
 // Routes: technician payment requests at Yoda parity (on the 0015 permission tree).
 //   GET    /work-orders/:id/payment-requests        (list + totals — payments:view)
 //   POST   /work-orders/:id/payment-requests        (201 requested — payments:create; WO status gated)
+//   GET    /work-orders/:id/payment-history         (every step of every request, deleted ones too — payments:view)
 //   GET    /payments                                (the Payments tab / AP queue — payments:view, 0026 scoped)
 //   GET    /payment-requests/:pid                   (one row; full payout address for a processor)
 //   PATCH  /payment-requests/:pid                   (edit while requested — requester | processor)
@@ -23,6 +24,7 @@ import { parse, notFound } from '../errors.js';
 import { resolveTaskId, actingPrincipalFromRequest } from '../services/activity.js';
 import {
   listPaymentRequests,
+  listPaymentHistory,
   listAllPaymentRequests,
   createPaymentRequest,
   getPaymentRequest,
@@ -154,6 +156,12 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
     requirePerm(actingPrincipalFromRequest(req), 'payments', 'view', 'You cannot view payment requests');
     const taskId = await taskIdOf(req);
     return listPaymentRequests(taskId, actingPrincipalFromRequest(req));
+  });
+
+  app.get('/work-orders/:id/payment-history', async (req) => {
+    requirePerm(actingPrincipalFromRequest(req), 'payments', 'view', 'You cannot view payment requests');
+    const taskId = await taskIdOf(req);
+    return listPaymentHistory(taskId);
   });
 
   app.post('/work-orders/:id/payment-requests', async (req, reply) => {

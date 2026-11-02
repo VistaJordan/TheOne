@@ -26,7 +26,7 @@ import { MoneyCard } from '../components/wo/MoneyCard';
 import { QuoteBuilder } from './QuoteBuilderPage';
 import { InvoiceCard } from '../components/wo/InvoiceCard';
 import { VendorBillsCard } from '../components/wo/VendorBillsCard';
-import { PayablesFieldsCard, PaymentHistoryCard } from '../components/wo/PayablesCard';
+import { PayablesFieldsCard, PaymentHistoryCard, PaymentTimelineCard } from '../components/wo/PayablesCard';
 import { AssignmentHistoryCard, PeopleCard } from '../components/wo/PeopleCard';
 import { SuggestedVendorsCard } from '../components/wo/tech/SuggestedVendorsCard';
 import { TechniciansCard } from '../components/wo/tech/TechniciansCard';
@@ -498,6 +498,8 @@ export function WorkOrderDetailPage() {
                       loading={paymentsQuery.isLoading}
                       requestAction={wo.actions?.['payment.request'] ?? null}
                     />
+                    {/* 2026-11-02 · every step of every request, deleted ones too. */}
+                    <PaymentTimelineCard woNumber={wo.wo_number} />
                   </div>
                 </section>
               )}

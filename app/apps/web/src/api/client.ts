@@ -109,6 +109,7 @@ import type {
   QuoteTotalRule as SharedQuoteTotalRule,
   PaymentRequest as SharedPaymentRequest,
   PaymentRequestsResponse as SharedPaymentRequestsResponse,
+  PaymentHistoryResponse,
   PaymentListResponse,
   PaymentRequestResponse,
   PaymentDeleteResponse,
@@ -860,6 +861,12 @@ export function getPaymentRequests(idOrNumber: string): Promise<SharedPaymentReq
   return request<SharedPaymentRequestsResponse>(
     `/work-orders/${encodeURIComponent(idOrNumber)}/payment-requests`,
   );
+}
+
+/** GET /api/work-orders/:id/payment-history — every step of every request
+    on the work order (deleted ones too), newest first. */
+export function getPaymentHistory(idOrNumber: string): Promise<PaymentHistoryResponse> {
+  return request<PaymentHistoryResponse>(`/work-orders/${encodeURIComponent(idOrNumber)}/payment-history`);
 }
 
 /** POST /api/work-orders/:id/payment-requests — submits into the AP queue. */
