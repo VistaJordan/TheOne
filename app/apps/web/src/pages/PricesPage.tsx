@@ -357,10 +357,14 @@ function PriceCardDialog({ card, entity, meta, onClose, onSaved }: {
                   {t} <Icon name="x" size={12} />
                 </button>
               ))}
-              <select className="fld" value="" onChange={(e) => e.target.value && setRate(r.key, { trades: [...r.trades, e.target.value] })} aria-label="Add a trade">
-                <option value="">+ Trade</option>
-                {meta.trades.filter((t) => !r.trades.includes(t)).map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              {/* A trade sits on one rate per card (priceCardProblems), so the
+                  list offers only the trades no rate of this card names yet. */}
+              {meta.trades.some((t) => !rates.some((x) => x.trades.includes(t))) && (
+                <select className="fld" value="" onChange={(e) => e.target.value && setRate(r.key, { trades: [...r.trades, e.target.value] })} aria-label="Add a trade">
+                  <option value="">+ Trade</option>
+                  {meta.trades.filter((t) => !rates.some((x) => x.trades.includes(t))).map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              )}
             </div>
             <div className="price-rate-nums">
               {RATE_FIELDS.map(([k, label]) => (
