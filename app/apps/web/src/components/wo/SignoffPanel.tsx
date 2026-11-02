@@ -165,9 +165,6 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
                 </span>
               </span>
             </a>
-            <a className="icon-btn so-dl" href={fileUrl} download={fileName ?? undefined} aria-label="Download the sheet" title="Download">
-              <Icon name="download" size={14} />
-            </a>
           </>
         ) : (
           <div className="so-empty">
@@ -176,13 +173,17 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
               : 'Set Comp on the work order to pick the sheet\'s branding.'}
           </div>
         )}
+        {/* Beside the sheet: download and the chips on top, the buttons under them. */}
         <div className="so-side">
-          {s && (s.signed_at || s.shares.length > 0 || s.stale) && (
-            <span className="so-chips">
+          {s && (
+            <div className="so-side-top">
+              <a className="icon-btn so-dl" href={fileUrl} download={fileName ?? undefined} aria-label="Download the sheet" title="Download">
+                <Icon name="download" size={14} />
+              </a>
               {s.signed_at && <span className="chip chip-ok chip-sm">Signed copy received</span>}
               {!s.signed_at && s.shares.length > 0 && <span className="chip chip-warn chip-sm">Waiting for the signed copy</span>}
               {s.stale && <span className="chip chip-outline chip-sm" title="The work order's number or address changed after this sheet was drawn">Details changed</span>}
-            </span>
+            </div>
           )}
           {actions}
         </div>
