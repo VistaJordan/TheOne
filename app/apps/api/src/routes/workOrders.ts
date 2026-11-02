@@ -52,6 +52,7 @@ import { getFeed } from '../services/feed.js';
 import { getMessages as getQuoMessages, resolveConversationId, sendMessage } from '../services/messages.js';
 import { editMessage, listMessages, mentionCandidates, postMessage } from '../services/woMessages.js';
 import { evaluateForTask } from '../services/obligations.js';
+import { listWorkOrderNotices } from '../services/notices.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
 import { assertIdsInScope } from '../services/woScope.js';
 import { boardViewer, requireBoardView } from '../services/dashboards.js';
@@ -718,6 +719,23 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
     return listMessages(taskId, p, allow);
+  });
+
+  // 2026-11-02 · the Notifications tab: every notice and Pulse ping raised
+  // about this work order, to whoever got it. A notice that points at a tab
+  // the viewer may not open (Payables, Messages…) is left out.
+  app.get('/work-orders/:id/notifications', async (req) => {
+    const { p, allow } = requireView(req);
+    requirePerm(p, tabPermKey('notifications'), 'view', 'You cannot view the Notifications tab');
+    const { id } = parse(idParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    const wo = await query<{ wo_number: string }>(`SELECT wo_number FROM task WHERE id = $1`, [taskId]);
+    const canOpenLink = (link: string | null): boolean => {
+      const tab = link ? new URLSearchParams(link.split('?')[1]?.split('#')[0] ?? '').get('tab') : null;
+      return !tab || allow(tabPermKey(tab), 'view');
+    };
+    return listWorkOrderNotices(taskId, wo.rows[0]?.wo_number ?? '', canOpenLink);
   });
 
   // 0089 · the people the composer's @ list offers: active people who can

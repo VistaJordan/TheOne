@@ -259,6 +259,27 @@ export interface AppNotificationsResponse {
   unread: number;
 }
 
+/** 2026-11-02 · the work order's Notifications tab: every notice raised about
+    it, to whoever got it. `source` = an `app_notice` (the bell's "For you")
+    or a Pulse ping (`notification`, an obligation's escalation). */
+export interface WoNotification {
+  id: string;
+  source: 'notice' | 'pulse';
+  kind: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  recipient: { id: string; name: string };
+  actor: { id: string; name: string } | null;
+  read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface WoNotificationsResponse {
+  items: WoNotification[];
+}
+
 // ── The board (0059) ─────────────────────────────────────────────────────────
 
 export interface VendorBoardColumn {

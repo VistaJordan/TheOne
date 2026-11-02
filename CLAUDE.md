@@ -2753,6 +2753,17 @@ keeps its history and nothing new is stored; a new payment action must join
 `HISTORY_ACTIONS` (the test fails until it does). The query key sits under
 `['wo-payments', wo]`, so every payment action's invalidation refreshes it.
 
+**Notifications tab on the work order** (Elise, 2026-11-02, no migration;
+`listWorkOrderNotices` in `services/notices.ts`, `GET
+/work-orders/:id/notifications`, `components/wo/NotificationsTab.tsx`). Every
+`app_notice` whose link is `/work-orders/<WO #>` (with or without `?tab=` /
+`#`) plus every Pulse `notification` whose obligation is on the work order, to
+whoever got it, newest first (300 max), with read / unread; an **Everyone /
+Only mine** switch. Permission row `work_orders/tabs/notifications` (unset
+follows the other tabs); the scope applies through `resolveTaskId`, and a
+notice whose link points at a tab the viewer may not open is left out. A new
+work-order notice shows up here only if its `link` starts with that path.
+
 **The Quotes tab stays for the dispatchers** (migration 0111, Elise 2026-10-29; `QUOTES_PAGE_PERM_KEY` in shared `permissions.ts`, `tests/quotes-page.test.ts`). The Quotes page in the sidebar has its own path, `quotes/page` view ("Quotes page" under Quotes in Roles; unset follows `quotes` view); `quotes` view still opens a work order's Quotes tab (the builder). The sidebar item (`NAV_PERM.Quotes`) and the `/quotes` route ask the page; `GET /quotes` still asks `quotes` view (the Approvals lane, Receivables and the search read it). 0111 copies each dispatcher role's old `quotes` view onto `quotes/page` (so their sidebar is as it was), then turns `quotes` view and `work_orders/tabs/quotes` view on for OM, Senior OM and OM Under Probation, and does the same for a dispatcher whose own overrides had Quotes view off.
 
 **Statuses a dispatcher may not even request** (migration 0091, Elise

@@ -343,6 +343,8 @@ export const WO_TABS: { id: string; label: string }[] = [
   // on Finances for a day).
   { id: 'penalties', label: 'Penalties' },
   { id: 'audit', label: 'Audit trail' },
+  // 2026-11-02 · every notice and Pulse ping raised about the work order.
+  { id: 'notifications', label: 'Notifications' },
   // 0064 · the record's own tabs. Since 2026-10-20 Checklist and Related have
   // no button on the work-order page (a link to them still opens them);
   // Timelog is no tab of its own, its row decides whether its cards show on

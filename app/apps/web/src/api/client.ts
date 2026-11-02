@@ -6,6 +6,7 @@ import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@
 import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
 // 0073: a work order saved as a PDF.
 import type { WoPdfKind, WoPdfLayoutInput, WoPdfLayoutsResponse } from '@theone/shared';
+import type { WoNotificationsResponse } from '@theone/shared';
 // 0074: Admin › Integrations.
 import type { ClickUpOverview, EcotrakOverview, IntegrationsResponse } from '@theone/shared';
 // 0075: Admin › Documentation.
@@ -296,6 +297,12 @@ export interface MessageCreatedResponse { item: ThreadMessage }
 
 /** The API's Zod bound on the outbound text body. */
 export const MESSAGE_MAX = 1600;
+
+/** GET /api/work-orders/:id/notifications (2026-11-02) — every notice and
+    Pulse ping raised about the work order, to whoever got it. */
+export function getWorkOrderNotifications(idOrNumber: string): Promise<WoNotificationsResponse> {
+  return request<WoNotificationsResponse>(`/work-orders/${encodeURIComponent(idOrNumber)}/notifications`);
+}
 
 /** GET /api/work-orders/:id/messages (0052) — the work order's own thread
     (oldest-first), the client system it is linked to, and the Quo technician

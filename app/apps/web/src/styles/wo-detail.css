@@ -2998,3 +2998,17 @@ a.photo-img.is-real img {
   .wo-live-note { animation: wo-live-in 180ms ease-out; }
   @keyframes wo-live-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 }
+
+/* ── Notifications tab (2026-11-02) ───────────────────────────────────────── */
+/* The audit trail's rows: avatar = who got it, then the notice, then when. */
+.wo-notices-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.wo-notice-read {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.wo-notice-read.is-unread { color: var(--accent-text); font-weight: 600; }
+.wo-notice-title { color: var(--ink); font-weight: 500; }
+.wo-notice-title a { color: var(--accent-text); text-decoration: none; }
+.wo-notice-title a:hover { text-decoration: underline; }
+.wo-notice-body { color: var(--ink-3); font-size: 12px; }

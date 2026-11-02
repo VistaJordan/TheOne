@@ -7,7 +7,7 @@
 // Nothing here sends an email (held on purpose).
 
 import { VENDOR_REVIEW_PERM_KEY } from '@theone/shared';
-import type { AppNotification, AppNotificationsResponse } from '@theone/shared';
+import type { AppNotification, AppNotificationsResponse, WoNotification, WoNotificationsResponse } from '@theone/shared';
 import { query } from '../db.js';
 import { notFound } from '../errors.js';
 
@@ -168,4 +168,76 @@ export async function pruneNotifications(principalId: string): Promise<void> {
     `DELETE FROM app_notice WHERE principal_id = $1 AND read_at IS NOT NULL AND created_at < now() - interval '60 days'`,
     [principalId],
   );
+}
+
+// ── One work order's notifications (2026-11-02) ─────────────────────────────
+//
+// The work order's Notifications tab: every notice raised ABOUT it, to
+// whoever got it — the bell's own rows (`app_notice`, matched by their link,
+// which every work-order notice points at `/work-orders/<WO #>`, with or
+// without `?tab=…`) and the Pulse's escalation pings (`notification`, through
+// their obligation's work order). The route has already resolved the work
+// order through the viewer's scope; a notice that points at a tab the viewer
+// may not open is left out by the caller (`canOpenLink`).
+
+const WO_NOTICE_LIMIT = 300;
+
+type WoNoticeRow = {
+  id: string;
+  source: 'notice' | 'pulse';
+  kind: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  r_id: string;
+  r_name: string | null;
+  a_id: string | null;
+  a_name: string | null;
+  read_at: Date | null;
+  created_at: Date;
+};
+
+export async function listWorkOrderNotices(
+  taskId: string,
+  woNumber: string,
+  canOpenLink: (link: string | null) => boolean,
+): Promise<WoNotificationsResponse> {
+  const base = `/work-orders/${encodeURIComponent(woNumber)}`;
+  const res = await query<WoNoticeRow>(
+    `SELECT * FROM (
+       SELECT n.id::text AS id, 'notice' AS source, n.kind, n.title, n.body, n.link,
+              r.id::text AS r_id, r.display_name AS r_name,
+              a.id::text AS a_id, a.display_name AS a_name, n.read_at, n.created_at
+         FROM app_notice n
+         JOIN principal r ON r.id = n.principal_id
+         LEFT JOIN principal a ON a.id = n.actor_id
+        WHERE n.link = $1 OR left(n.link, length($1) + 1) IN ($1 || '?', $1 || '#')
+       UNION ALL
+       SELECT n.id::text, 'pulse', o.rule_key, n.title, n.body, $1,
+              r.id::text, r.display_name, NULL, NULL, n.read_at, n.created_at
+         FROM notification n
+         JOIN obligation o ON o.id = n.obligation_id
+         JOIN principal r ON r.id = n.principal_id
+        WHERE o.task_id = $2
+     ) x
+     ORDER BY created_at DESC
+     LIMIT ${WO_NOTICE_LIMIT}`,
+    [base, taskId],
+  );
+  const items: WoNotification[] = res.rows
+    .filter((r) => canOpenLink(r.link))
+    .map((r) => ({
+      id: r.id,
+      source: r.source,
+      kind: r.kind,
+      title: r.title,
+      body: r.body,
+      link: r.link,
+      recipient: { id: r.r_id, name: r.r_name ?? 'Unknown' },
+      actor: r.a_id ? { id: r.a_id, name: r.a_name ?? 'Unknown' } : null,
+      read: r.read_at !== null,
+      read_at: r.read_at ? r.read_at.toISOString() : null,
+      created_at: r.created_at.toISOString(),
+    }));
+  return { items };
 }

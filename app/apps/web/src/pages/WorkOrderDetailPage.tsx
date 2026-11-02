@@ -20,6 +20,7 @@ import { Icon } from '../components/Icon';
 import { WoHeader } from '../components/wo/WoHeader';
 import { UpdatesFeed } from '../components/wo/UpdatesFeed';
 import { PhotosCard } from '../components/wo/PhotosCard';
+import { NotificationsTab } from '../components/wo/NotificationsTab';
 import { SoftCloseChecklist } from '../components/wo/SoftCloseChecklist';
 import { PenaltiesCard } from '../components/wo/ManagerFlags';
 import { MoneyCard } from '../components/wo/MoneyCard';
@@ -60,7 +61,7 @@ const TAB_IDS = [
   'overview', 'fields', 'money', 'quotes', 'payables', 'people', 'technicians', 'site', 'dates', 'cico', 'parts',
   // 2026-10-22 · Drive: the work order's files (the Photos card, moved off
   // Overview). Overview leads the strip and is the landing tab.
-  'drive', 'messages', 'penalties', 'audit',
+  'drive', 'messages', 'penalties', 'audit', 'notifications',
   // 0064 · the record's own tabs. Checklist (tasks) and Related have no button
   // on the strip since 2026-10-20; a link to them (Maintenance › Work permits,
   // a vendor's consumables) still opens them.
@@ -382,6 +383,7 @@ export function WorkOrderDetailPage() {
           {show(TECH_HUB_TAB) && <TabButton id={TECH_HUB_TAB} tab={tab} onSelect={setTab}>Tech Hub</TabButton>}
           {show('penalties') && <TabButton id="penalties" tab={tab} onSelect={setTab}>Penalties</TabButton>}
           {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Audit trail</TabButton>}
+          {show('notifications') && <TabButton id="notifications" tab={tab} onSelect={setTab}>Notifications</TabButton>}
         </div>
       </div>
 
@@ -462,6 +464,8 @@ export function WorkOrderDetailPage() {
               />
             </div>
           )}
+
+          {tab === 'notifications' && <NotificationsTab woId={wo.id} />}
 
           {tab === 'fields' && (
             // No outer card: the toolbar and each section are cards of their
