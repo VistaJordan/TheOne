@@ -172,13 +172,13 @@ describe('the admin routes act as the viewed person (D6), never wider', () => {
 });
 
 describe('the web: plain download links and an honest chip', () => {
-  it('the five downloads are ordinary links again', () => {
+  // The work-order PDF link was the fourth; Save as PDF was removed 2026-11-02.
+  it('the downloads are ordinary links again', () => {
     expect(webSrc('lib', 'actor.ts')).not.toMatch(/downloadLinkProps|READ_ONLY_HINT/);
     for (const [file, href] of [
       [['pages', 'WorkOrdersPage.tsx'], 'href={workOrdersExportUrl(criteria)}'],
       [['pages', 'VendorsPage.tsx'], 'href={vendorExportUrl(filterParams)} download'],
       [['pages', 'ClientUpdatesPage.tsx'], 'href={clientUpdateCsvUrl(tracker.id)}'],
-      [['components', 'wo', 'record', 'RecordParts.tsx'], 'href={workOrderPdfUrl(woNumber, k)} download'],
     ] as const) {
       const src = webSrc(...file);
       expect(src, file.join('/')).toContain(href);

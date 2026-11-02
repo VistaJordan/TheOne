@@ -7,7 +7,7 @@
  *                   cancelled, an ETA, service completed, its tags, a site
  *                   event running).
  *   RecordActions   in the header: More (Pause, Tag, Complete service,
- *                   Cancel / Reopen) and Save as PDF.
+ *                   Cancel / Reopen).
  *   ResponsibleVendorCard, EtaCard   Assign vendor on People ›
  *                   Technicians, Add ETA on CICO.
  *   RecordRail      the right rail: Responsibility · Location · Time · Cost.
@@ -23,15 +23,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   GEOFENCE_RESULT_LABELS,
   SITE_EVENT_KIND_LABELS,
-  WO_PDF_KINDS,
-  WO_PDF_KIND_LABELS,
-  WO_PDF_PERM_KEY,
   formatFeet,
   formatMinutes,
   minutesBetween,
 } from '@theone/shared';
-import type { WoPdfKind, WoRecord } from '@theone/shared';
-import { useAuth, useCan } from '../../../auth/AuthProvider';
+import type { WoRecord } from '@theone/shared';
+import { useAuth } from '../../../auth/AuthProvider';
 import {
   ApiRequestError,
   addWoTag,
@@ -48,7 +45,6 @@ import {
   resumeWo,
   setWoEta,
   setWoVendor,
-  workOrderPdfUrl,
 } from '../../../api/client';
 import { feedTime } from '../../../lib/fields';
 import { useEscape } from '../../../lib/useEscape';
@@ -88,7 +84,7 @@ export function useRecordWrite<T>(woId: string, woNumber: string, fn: (arg: T) =
 // ═══ The bar under the header ════════════════════════════════════════════════
 // The bar is the job's state chips only. Its buttons moved (2026-10-20): Pause,
 // Tag, Complete service and Cancel / Reopen into the header's More menu
-// (RecordActions), Save as PDF beside it, Assign vendor onto People ›
+// (RecordActions), Assign vendor onto People ›
 // Technicians (ResponsibleVendorCard), Add ETA onto CICO (EtaCard). Increase NTE
 // was removed; requests already open are still decided on Cost breakdown and
 // in Approvals.
@@ -153,7 +149,7 @@ export function RecordBar({ woId, woNumber, record, note }: { woId: string; woNu
 type Dialog = 'pause' | 'cancel' | 'reopen' | 'complete' | 'tag' | null;
 
 /** The header's More menu (Pause / Resume, Tag, Complete service, Cancel /
-    Reopen) and Save as PDF. What a click could not do — a refused status move
+    Reopen). What a click could not do — a refused status move
     on Cancel or Reopen, a failed Resume — goes back to the page through
     `onNote`, which the bar under the header prints. */
 export function RecordActions({ woId, woNumber, record, onNote }: { woId: string; woNumber: string; record: WoRecord | undefined; onNote: (note: string | null) => void }) {
@@ -169,8 +165,6 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
     onNote(m && !m.moved && m.reason ? `Status not moved to ${m.status}: ${m.reason}` : null);
     return r;
   };
-  // 0073 · Save as PDF is for readers too: its own permission, not edit.
-  const canPdf = useCan()(WO_PDF_PERM_KEY, 'view');
   useEscape(() => setMenu(false));
   useEffect(() => {
     if (!menu) return;
@@ -195,7 +189,7 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
     setDialog(d);
   };
 
-  if (!edit && !canPdf) return null;
+  if (!edit) return null;
   return (
     <>
       {edit && (
@@ -248,7 +242,6 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
           )}
         </div>
       )}
-      {canPdf && <PdfMenu woNumber={woNumber} />}
 
       {dialog === 'pause' && (
         <ReasonDialog title="Pause this work order" icon="clock" label="Why is it paused?" confirm="Pause" hint="A pause is a marker everyone sees. It does not stop the Pulse clocks or the SLA."
@@ -553,48 +546,6 @@ function useMinute(): number {
     return () => window.clearInterval(t);
   }, []);
   return now;
-}
-
-/** 0073 · Save as PDF: the two documents, each a plain download link. The
-    API draws the file under the person's own field permissions, so there is
-    nothing to ask here — pick one and the browser saves it. */
-const PDF_MENU_HINTS: Record<WoPdfKind, string> = {
-  full: 'The main fields, as set in Admin › Settings',
-  request: 'Client, site and what they asked for',
-};
-
-function PdfMenu({ woNumber }: { woNumber: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEscape(() => setOpen(false));
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-  return (
-    <div className="rec-pdf" ref={ref}>
-      <button type="button" className="btn btn-sm is-ghost" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <Icon name="download" size={12} /> Save as PDF <span className="pill-caret">▾</span>
-      </button>
-      {open && (
-        <div className="rec-pdf-pop" role="menu" aria-label="Save as PDF">
-          {WO_PDF_KINDS.map((k) => (
-            <a key={k} className="rec-pdf-item" href={workOrderPdfUrl(woNumber, k)} download role="menuitem" onClick={() => setOpen(false)}>
-              <Icon name="file" size={14} />
-              <span>
-                <b>{WO_PDF_KIND_LABELS[k]}</b>
-                <small>{PDF_MENU_HINTS[k]}</small>
-              </span>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function RecordRail({ woId, record, loading }: { woId: string; record: WoRecord | undefined; loading: boolean }) {

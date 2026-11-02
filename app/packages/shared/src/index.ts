@@ -2219,7 +2219,6 @@ export * from './signoff';
 export * from './sharepoint';
 
 // 0073: a work order saved as a PDF — the full layout and the request layout.
-export * from './woPdf';
 
 // Who is free to take a work order: the availability view behind the Assignee pickers.
 export * from './assigneeAvailability';

@@ -47,7 +47,6 @@ import automationsRoutes from './routes/automations.js';
 import approvalRoutes from './routes/approvals.js';
 import visitRoutes from './routes/visits.js';
 import signoffRoutes from './routes/signoff.js';
-import woPdfRoutes from './routes/woPdf.js';
 import adminIntegrationRoutes from './routes/adminIntegrations.js';
 import adminDocsRoutes from './routes/adminDocs.js';
 import webhookRoutes from './routes/webhooks.js';
@@ -142,7 +141,6 @@ export async function buildApp(): Promise<FastifyInstance> {
   // 0070: sign-off sheets — blank per entity, shared through Quo, signed copy filed.
   await app.register(signoffRoutes, { prefix: '/api' });
   // 0073: a work order saved as a PDF, and the two layouts in Admin › Settings.
-  await app.register(woPdfRoutes, { prefix: '/api' });
   // 0074: Admin › Integrations — every connector's on / off switch.
   await app.register(adminIntegrationRoutes, { prefix: '/api' });
   // 0075 — Admin › Documentation: the live snapshot the BRD / SOP / lifecycle read.

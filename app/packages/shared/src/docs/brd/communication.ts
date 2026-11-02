@@ -84,20 +84,11 @@ export const COMMUNICATION_PART: DocPart = {
     },
     {
       key: 'pdf',
-      title: 'Save as PDF and SharePoint folders',
-      where: 'Save as PDF on the record bar; the SharePoint chip on a work order and a client; Admin › Settings › Work-order PDFs and SharePoint folders.',
-      purpose: 'A branded PDF of the work order or of the client\'s request, and the SharePoint folder tree the team files every work order in, created by the app.',
-      value: 'The document the client or the technician needs is one click, and the SharePoint filing that used to be a manual chore happens on creation.',
+      title: 'SharePoint folders',
+      where: 'The SharePoint chip on a work order and a client; Admin › Settings › SharePoint folders.',
+      purpose: 'The SharePoint folder tree the team files every work order in, created by the app.',
+      value: 'The SharePoint filing that used to be a manual chore happens on creation.',
       features: [
-        {
-          name: 'Work order and Request PDFs',
-          what: 'Two documents, each a download (or inline view) of GET /work-orders/:id/pdf?kind=full|request: Work order (the main fields) and Request (what the client sent: client, entity, store, address, contact, trade, NTE, SLA, description; titled "Service request", empty fields hidden by default). Drawn by pdf-lib in the billing entity\'s branding (a neutral page when Comp is unset or unknown), US Letter, a two-column grid, long text across the width, a running head on page two onwards, "Page n of m"; values formatted on the server (money, days, Chicago date-times, Yes / No, lists); the ClickUp numbering and emoji dropped from labels. Which fields, in what order, the title, hide-empty and a note are one layout per kind in Admin › Settings (up to 80 items).',
-          value: 'Printable, consistent, permission-safe.',
-          rules: ['The layout never widens what a person sees: the PDF is built from the redacted detail and skips every field the viewer may not see.'],
-          permissions: ['work_orders/pdf view (unset = work_orders view)', 'admin/settings edit for the layouts'],
-          audit: ['work_order_pdf_saved (kind, file name, field count)', 'wo_pdf_layout_updated'],
-          since: '0073',
-        },
         {
           name: 'SharePoint folders',
           what: 'Admin › Settings › SharePoint folders: Site URL, Library, Year folder, Billing-entity folder and Work-order folder templates ({year}, {entity} = Comp, {number}, {city}, {state}; ECO- orders use the Ecotrak number, a WO- prefix is dropped), Save / Discard, Test connection, Run now; status "connected / site not set / credentials not set / not set up"; three switches — A folder for each new client (under its entity), A folder for each new work order, Copy approved files into the work-order folder — each stamped "on since <date>" and filing only records created after it; a "Filed so far" table (Made / Waiting / Failed / Not filed) and a "Could not be filed" table ("tried again every hour, up to six times; Run now gives every failed row its tries back"). The path is Documents / General / Work Orders - {year} / {year} - {Comp} / {Client} / WO#{number}, {City}, {ST}; the client must exist under Clients so a typo never forks the tree; existing folders are reused; nothing is ever deleted or renamed in SharePoint. The chip on a work order and a client shows the folder link, the status, or No SharePoint folder with Make it / Retry.',

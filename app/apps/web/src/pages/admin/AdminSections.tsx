@@ -7,7 +7,6 @@ import { SubcategoriesCard } from './SubcategoriesCard';
 import { CodesCard, FormLayoutsCard } from './WoRecordSettings';
 import { FinanceSetupCards } from './FinanceSetupCards';
 import { SharePointCard } from './SharePointCard';
-import { PdfLayoutsCard } from './PdfLayoutsCard';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -164,8 +163,6 @@ export function AdminSettingsPage() {
       <CodesCard />
       {/* 0067 · tax rates and the templates of printed documents. */}
       <FinanceSetupCards />
-      {/* 0073 · which fields "Save as PDF" prints, for each of the two documents. */}
-      <PdfLayoutsCard />
       <ApprovalTiersCard />
     </AdminShell>
   );

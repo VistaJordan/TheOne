@@ -64,7 +64,7 @@ interface WoHeaderProps {
   /** 11.2.1 (2026-10-22): the quote's status — null = no quote, undefined =
       not loaded yet. */
   quoteStatus?: string | null;
-  /** The record's actions (More, Save as PDF), drawn after the header's own buttons. */
+  /** The record's actions (the More menu), drawn after the header's own buttons. */
   actions?: ReactNode;
 }
 

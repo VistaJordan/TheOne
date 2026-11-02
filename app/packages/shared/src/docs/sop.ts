@@ -182,7 +182,7 @@ export const SOP: SopDocument = {
       lead: 'The dispatcher\'s core loop: find the technician, log the visits, move the status.',
       who: ['OM (dispatcher)', 'Senior OM', 'OM Under Probation'],
       where: 'The work-order page: header, People and CICO tabs',
-      needs: ['work_orders edit', 'work_orders/fields/cico edit', 'vendor_map view / create', 'work_orders/status edit or create', 'work_orders/calls create', 'work_orders/fields/cico/fields.24. Sign-Off Link edit (sheets)', 'work_orders/pdf view'],
+      needs: ['work_orders edit', 'work_orders/fields/cico edit', 'vendor_map view / create', 'work_orders/status edit or create', 'work_orders/calls create', 'work_orders/fields/cico/fields.24. Sign-Off Link edit (sheets)'],
       blocks: [
         { kind: 'sub', title: 'A. Find and hire the technician' },
         { kind: 'steps', items: [
@@ -220,7 +220,6 @@ export const SOP: SopDocument = {
           '**Tag**: a **Tag** (suggestions offered) and a **Reason**, **Add the tag**; remove from the chip.',
           '**Complete service** / **Edit completion**: **Completion note**, **Fault code — what was wrong**, **Action code — what was done**, **Is this a temporary fix?**; it records the completion and does not move the status; **Clear the completion** undoes it.',
           '**Cancel work order** ("Why is it cancelled?") / **Reopen** ("Why is it reopened?"): Cancel moves to the Cancelled status and ends an open pause; it is gone once the invoice is sent or paid or a payment is paid. Reopen returns the work order to the status it had before. Neither (nor Pause or Complete service) is offered to people who must request status changes.',
-          '**Save as PDF** (beside **More**): **Work order** ("The main fields, as set in Admin › Settings") or **Request** ("Client, site and what they asked for"), in the billing entity\'s branding.',
         ] },
         { kind: 'sub', title: 'E. The other record tabs' },
         { kind: 'bullets', items: [
@@ -548,7 +547,6 @@ export const SOP: SopDocument = {
           ['Document templates', 'Per kind (quote, invoice, purchase order): company name, letterhead, terms, footer; Use it.'],
           ['Approval tiers by amount', 'One table per kind (Payment requests / Vendor bills / Client invoices): From $, Up to $ (blank = no ceiling), Roles, Add band; Remove this band.'],
           ['SharePoint folders', 'Three switches (A folder for each new client / A folder for each new work order / Copy approved files into the work-order folder), the site URL, library and path templates, Test connection, Run now, and the filed-so-far tables. A switch files only records created after it was turned on.'],
-          ['Work-order PDFs', 'Per kind (Work order, Request): Title on the document, hide empty fields, Note under the fields, the ordered field list (Add a field, Standard list), Save.'],
         ] },
         { kind: 'sub', title: 'E. Automations' },
         { kind: 'steps', items: [

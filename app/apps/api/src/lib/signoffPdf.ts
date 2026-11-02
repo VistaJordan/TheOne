@@ -15,8 +15,6 @@ import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb, type RGB }
 import type { SignoffLayout, SignoffSheetData } from '@theone/shared';
 import { SIGNOFF_ASSETS, type SignoffAssetName } from './signoffAssets.js';
 
-// Shared with lib/woPdf.ts (0073), which draws the work-order PDF in the same
-// branding: page geometry, colours and the brand table are exported for it.
 export const PAGE_W = 612;
 export const PAGE_H = 792;
 export const MARGIN = 36;

@@ -113,7 +113,7 @@ export const ADMIN_PART: DocPart = {
         { name: 'Fault and action codes', what: 'Fault or Action, the CODE and What it means, Add; Reword; switched off, not deleted; a code\'s letters never change.', value: 'Completion is coded for reporting.', audit: ['wo_code_added', 'wo_code_updated'] },
         { name: 'Tax rates and document templates', what: 'Tax rates (Name, %, State, Make default) and document templates per printed kind (quote, invoice, purchase order). Detailed under Purchasing.', value: 'The printed paper carries the right letterhead and the right tax without hand editing.' },
         { name: 'Approval tiers by amount', what: 'One table per kind (Payment requests / Vendor bills / Client invoices): From $, Up to $ (blank = no ceiling), Roles, Add band; Remove this band. Detailed under Technician payments.', value: 'Rule 6.2.3.' },
-        { name: 'SharePoint folders and Work-order PDFs', what: 'The SharePoint card (site URL, library, the three path templates, the three switches, Test connection, Run now, the filed-so-far tables) and the Work-order PDFs card (per kind: Edit / Open; Title on the document, hide empty fields, Note under the fields, the ordered field list with Add a field by section, Standard list, Save). Detailed under Save as PDF and SharePoint folders.', value: 'Filing and printing are configured by the business, not deployed.' },
+        { name: 'SharePoint folders', what: 'The SharePoint card (site URL, library, the three path templates, the three switches, Test connection, Run now, the filed-so-far tables). Detailed under SharePoint folders.', value: 'Filing is configured by the business, not deployed.' },
       ],
     },
     {
