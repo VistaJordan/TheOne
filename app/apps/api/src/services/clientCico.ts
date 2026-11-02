@@ -16,6 +16,7 @@ import { badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
 import { requirePerm } from './permissions.js';
+import { ensureClientPriceCard } from './prices.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const METHODS = new Set<string>(VISIT_METHODS);
@@ -121,6 +122,7 @@ export async function saveClientCico(
     );
     return { before: null as ClientCicoMethod | null, after: mapRow(r.rows[0]) };
   });
+  await ensureClientPriceCard(name, after.billing_entity, actor.id);
   if (!before || JSON.stringify(snap(before)) !== JSON.stringify(snap(after))) {
     await logAdminEvent({
       actorId: actor.id,

@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 import {
   formatMarkup,
   formatPriceFee,
+  priceCardClientChoices,
   priceCardProblems,
+  priceCardRenamed,
   resolvePrice,
   type PriceCard,
   type PriceCardInput,
@@ -120,5 +122,35 @@ describe('migration 0101 and the gates', () => {
     // Deployed before 0101 runs: quotes keep their old rate card, the page says why.
     expect(svc).toMatch(/if \(notMigrated\(e\)\) return null;/);
     expect(svc).toMatch(/PRICES_NOT_MIGRATED/);
+  });
+});
+
+describe('a card per client of the entity (2026-11-02)', () => {
+  const root = resolve(__dirname, '..');
+  it('a new card offers only the clients of the entity that have no card there', () => {
+    const meta = {
+      clients_by_entity: { AF: ['PH', 'TPM Co', 'Walmart'], BKR: ['PH', 'Dollar'] },
+      cards: [card({ billing_entity: 'AF' }), card({ billing_entity: 'AF', client: 'ph' }), card({ billing_entity: 'BKR', client: 'Walmart' })],
+    };
+    expect(priceCardClientChoices(meta, 'AF')).toEqual(['TPM Co', 'Walmart']);
+    expect(priceCardClientChoices(meta, 'bkr')).toEqual(['PH', 'Dollar']);
+    expect(priceCardClientChoices(meta, 'RF')).toEqual([]);
+  });
+  it('a card keeps its entity and client', () => {
+    expect(priceCardRenamed({ billing_entity: 'AF', client: 'PH' }, { billing_entity: 'af ', client: ' ph' })).toBe(false);
+    expect(priceCardRenamed({ billing_entity: 'AF', client: 'PH' }, { billing_entity: 'AF', client: 'Walmart' })).toBe(true);
+    expect(priceCardRenamed({ billing_entity: 'AF', client: null }, { billing_entity: 'BKR', client: null })).toBe(true);
+    const svc = readFileSync(resolve(root, 'apps/api/src/services/prices.ts'), 'utf8');
+    expect(svc).toMatch(/PRICE_CARD_NAME_LOCKED/);
+    expect(svc).toMatch(/PRICE_CLIENT_NOT_UNDER_ENTITY/);
+    // A client holding a card is not renamed out from under it.
+    expect(readFileSync(resolve(root, 'apps/api/src/services/portfolioExtras.ts'), 'latin1')).toMatch(/FROM price_card WHERE lower\(btrim\(client\)\)/);
+  });
+  it('a client filed under a Comp gets an empty card there', () => {
+    for (const f of ['portfolioExtras.ts', 'clientTeams.ts', 'clientCico.ts']) {
+      expect(readFileSync(resolve(root, 'apps/api/src/services', f), 'latin1')).toMatch(/ensureClientPriceCard\(/);
+    }
+    const svc = readFileSync(resolve(root, 'apps/api/src/services/prices.ts'), 'utf8');
+    expect(svc).toMatch(/ON CONFLICT \(upper\(btrim\(billing_entity\)\), lower\(btrim\(COALESCE\(client, ''\)\)\)\) DO NOTHING/);
   });
 });

@@ -273,6 +273,11 @@ export async function createClient(input: ClientInput, actor: ActingPrincipal): 
     const { fileClient } = await import('./sharepoint.js');
     await fileClient(ins.rows[0].id, actor.id);
   }
+  // An empty price card under its billing entity, to fill later (2026-11-02).
+  {
+    const { ensureClientPriceCard } = await import('./prices.js');
+    await ensureClientPriceCard(name, clean(input.billing_entity as string | null), actor.id);
+  }
   return loadClient(ins.rows[0].id, actor);
 }
 
@@ -302,11 +307,12 @@ export async function updateClient(id: string, input: ClientInput, actor: Acting
       if (!sameKey) {
         const used = await query<{ n: number }>(
           `SELECT (SELECT count(*) FROM task WHERE deleted_at IS NULL AND lower(btrim(client)) = lower(btrim($1)))::int
-                + (SELECT count(*) FROM site WHERE deleted_at IS NULL AND lower(btrim(client)) = lower(btrim($1)))::int AS n`,
+                + (SELECT count(*) FROM site WHERE deleted_at IS NULL AND lower(btrim(client)) = lower(btrim($1)))::int
+                + (SELECT count(*) FROM price_card WHERE lower(btrim(client)) = lower(btrim($1)))::int AS n`,
           [before.name],
         );
         if ((used.rows[0]?.n ?? 0) > 0) {
-          throw conflict('Work orders and sites are filed under this name, so it cannot be changed here. Only its capitals and spacing can.', { field: 'name' });
+          throw conflict('Work orders, sites or price cards are filed under this name, so it cannot be changed here. Only its capitals and spacing can.', { field: 'name' });
         }
         const dup = await query<{ id: string }>(`SELECT id::text AS id FROM client WHERE deleted_at IS NULL AND lower(btrim(name)) = lower($1) AND id <> $2`, [name, id]);
         if (dup.rows[0]) throw conflict(`${name} is already on file`, { field: 'name' });

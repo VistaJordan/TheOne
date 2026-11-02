@@ -8,7 +8,11 @@
 
    Everyone with `prices` view reads it; only `prices` create / edit / delete
    (the admin role, 0101) see New price card, Edit and Remove, and the API
-   refuses the rest. */
+   refuses the rest.
+
+   A new card's Client is picked from the clients filed under its entity, and
+   a card's entity and client are fixed once it exists (Elise, 2026-11-02). A
+   client added under a Comp gets an empty card there automatically. */
 
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -16,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   formatMarkup,
   formatPriceFee,
+  priceCardClientChoices,
   priceCardProblems,
   priceCardTitle,
   priceKey,
@@ -278,7 +283,8 @@ function PriceCardDialog({ card, entity, meta, onClose, onSaved }: {
     onError: (e) => setProblem(errText(e, 'Could not save the card.')),
   });
 
-  const clientKnown = !client.trim() || meta.clients.some((c) => priceKey(c) === priceKey(client));
+  const choices = card ? [] : priceCardClientChoices(meta, ent);
+  const hasStandard = meta.cards.some((c) => c.client === null && priceKey(c.billing_entity) === priceKey(ent));
 
   return (
     <Sheet
@@ -289,22 +295,42 @@ function PriceCardDialog({ card, entity, meta, onClose, onSaved }: {
       footer={
         <>
           <button type="button" className="btn btn-sm" onClick={onClose}>Cancel</button>
-          <button type="button" className="btn btn-primary btn-sm" disabled={save.isPending} onClick={() => { setProblem(null); save.mutate(); }}>
+          <button type="button" className="btn btn-primary btn-sm" disabled={save.isPending || (!card && hasStandard && !client)} onClick={() => { setProblem(null); save.mutate(); }}>
             {save.isPending ? 'Saving…' : 'Save'}
           </button>
         </>
       }
     >
       <div className="pf-form">
-        <F label="Entity">
-          <select className="fld" value={ent} onChange={(e) => setEnt(e.target.value)}>
-            {meta.entities.map((e) => <option key={e} value={e}>{e}</option>)}
-          </select>
-        </F>
-        <F label="Client" hint={!clientKnown ? 'No client record of this name — it will be kept, and flagged.' : 'Leave blank for the Standard card.'}>
-          <input className="fld" list="price-clients" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Standard" />
-          <datalist id="price-clients">{meta.clients.map((c) => <option key={c} value={c} />)}</datalist>
-        </F>
+        {card ? (
+          <>
+            <F label="Entity" hint="A card keeps its entity and client.">
+              <input className="fld" value={card.billing_entity} readOnly disabled />
+            </F>
+            <F label="Client">
+              <input className="fld" value={priceCardTitle(card)} readOnly disabled />
+            </F>
+          </>
+        ) : (
+          <>
+            <F label="Entity">
+              <select className="fld" value={ent} onChange={(e) => { setEnt(e.target.value); setClient(''); }}>
+                {meta.entities.map((e) => <option key={e} value={e}>{e}</option>)}
+              </select>
+            </F>
+            <F
+              label="Client"
+              hint={choices.length === 0
+                ? `Every client of ${ent} has a card. A client is under ${ent} once it has a team or a check-in method there (Clients).`
+                : `The clients of ${ent} without a card.`}
+            >
+              <select className="fld" value={client} onChange={(e) => setClient(e.target.value)}>
+                <option value="" disabled={hasStandard}>{hasStandard ? 'Pick a client' : 'Standard (every other client)'}</option>
+                {choices.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </F>
+          </>
+        )}
         <F label="Trip" hint={client.trim() ? 'Blank = the Standard card’s trip. 0 = no trip.' : '0 = no trip.'}>
           <input className="fld" inputMode="decimal" value={trip} onChange={(e) => setTrip(e.target.value)} />
         </F>

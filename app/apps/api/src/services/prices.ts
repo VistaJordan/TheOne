@@ -11,6 +11,7 @@
 import {
   PRICES_PERM_KEY,
   priceCardProblems,
+  priceCardRenamed,
   priceCardTitle,
   priceKey,
   resolvePrice,
@@ -122,10 +123,32 @@ async function fieldOptions(key: string): Promise<string[]> {
   return Array.isArray(raw) ? raw.filter((o): o is string => typeof o === 'string' && o.trim() !== '') : [];
 }
 
+/**
+ * The active clients filed under each Comp: an account team (0096), a
+ * check-in row (0100) or the client record's own billing entity. The same
+ * reading as `clientCompsByName` (woFields.ts), plus the record's own field.
+ */
+async function clientsByEntity(): Promise<Record<string, string[]>> {
+  const r = await query<{ e: string; names: string[] }>(
+    `SELECT upper(btrim(x.e)) AS e, array_agg(DISTINCT c.name) AS names
+       FROM client c
+       JOIN (SELECT client_id, billing_entity AS e FROM client_team
+             UNION ALL
+             SELECT client_id, billing_entity AS e FROM client_cico_method
+             UNION ALL
+             SELECT id AS client_id, billing_entity AS e FROM client) x ON x.client_id = c.id
+      WHERE c.is_active AND c.deleted_at IS NULL AND btrim(coalesce(x.e, '')) <> ''
+      GROUP BY 1`,
+  );
+  const out: Record<string, string[]> = {};
+  for (const row of r.rows) out[row.e] = [...row.names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+  return out;
+}
+
 export async function listPrices(actor: ActingPrincipal): Promise<PricesResponse> {
   requirePerm(actor, PRICES_PERM_KEY, 'view', 'You cannot see the price list');
   const allow = allowFor(actor);
-  const [cards, comps, trades, clients] = await Promise.all([
+  const [cards, comps, trades, clients, byEntity] = await Promise.all([
     loadCards({ query }).catch((e: unknown) => {
       if (notMigrated(e)) throw new ApiError('CONFLICT', 'The price list is not set up on this server yet (migration 0101 has not been run).', { code: 'PRICES_NOT_MIGRATED' });
       throw e;
@@ -133,6 +156,7 @@ export async function listPrices(actor: ActingPrincipal): Promise<PricesResponse
     fieldOptions('21. Comp'),
     fieldOptions('Trade'),
     query<{ name: string }>(`SELECT name FROM client WHERE is_active AND deleted_at IS NULL ORDER BY lower(name)`),
+    clientsByEntity(),
   ]);
   const entities = [...comps];
   for (const c of cards) if (!entities.some((e) => priceKey(e) === priceKey(c.billing_entity))) entities.push(c.billing_entity);
@@ -141,6 +165,7 @@ export async function listPrices(actor: ActingPrincipal): Promise<PricesResponse
     entities,
     trades,
     clients: clients.rows.map((r) => r.name),
+    clients_by_entity: byEntity,
     can: {
       create: allow(PRICES_PERM_KEY, 'create'),
       edit: allow(PRICES_PERM_KEY, 'edit'),
@@ -224,6 +249,16 @@ async function getCard(id: string): Promise<PriceCard> {
 export async function createPriceCard(input: PriceCardInput, actor: ActingPrincipal): Promise<PriceCard> {
   requirePerm(actor, PRICES_PERM_KEY, 'create', 'You cannot add to the price list');
   const v = cleanInput(input);
+  if (v.client !== null) {
+    // A client card is for a client filed under that Comp (Elise, 2026-11-02).
+    const under = (await clientsByEntity())[v.billing_entity] ?? [];
+    if (!under.some((c) => priceKey(c) === priceKey(v.client))) {
+      throw badRequest(`${v.client} is not a client of ${v.billing_entity}. Give it a team or a check-in method under ${v.billing_entity} first (Clients).`, {
+        code: 'PRICE_CLIENT_NOT_UNDER_ENTITY',
+        field: 'client',
+      });
+    }
+  }
   let id = '';
   await withTransaction(async (tx) => {
     await assertNoTwin(tx, v, null);
@@ -252,7 +287,13 @@ export async function updatePriceCard(id: string, input: PriceCardInput, actor: 
     const locked = await tx.query(`SELECT id FROM price_card WHERE id = $1 FOR UPDATE`, [id]);
     if (locked.rows.length === 0) throw notFound('No such price card');
     before = (await loadCards(tx, `WHERE c.id = $1`, [id]))[0];
-    await assertNoTwin(tx, v, id);
+    // Entity and client are the card's name, fixed once it exists
+    // (Elise, 2026-11-02): a card for another client is a new card.
+    if (priceCardRenamed(before, v)) {
+      throw conflict('A price card keeps its entity and client. Add a new card for another client.', { code: 'PRICE_CARD_NAME_LOCKED' });
+    }
+    v.billing_entity = before.billing_entity;
+    v.client = before.client;
     await tx.query(
       `UPDATE price_card
           SET billing_entity = $2, client = $3, trip_rate = $4, materials_markup = $5, note = $6, updated_by = $7
@@ -275,6 +316,38 @@ export async function deletePriceCard(id: string, actor: ActingPrincipal): Promi
   const before = await getCard(id);
   await query(`DELETE FROM price_card WHERE id = $1`, [id]);
   await logAdminEvent({ actorId: actor.id, entity: 'price_card', entityId: id, action: 'price_card_deleted', before: snapshot(before), after: null });
+}
+
+/**
+ * An empty card for a client newly filed under a Comp (Elise, 2026-11-02:
+ * "each time we add a new client, add a card for them so we can fill it
+ * later"). Called after a client is created with a billing entity and after
+ * an account team or a check-in method is saved under a Comp. A pair that
+ * already has a card is left alone (the 0101 unique index); the card is
+ * signed by the person whose act raised it and logged with `via: 'client'`.
+ * Filling it still needs `prices` edit. Never throws: the client act stands.
+ */
+export async function ensureClientPriceCard(client: string | null | undefined, entity: string | null | undefined, actorId: string): Promise<void> {
+  const name = (client ?? '').trim();
+  const ent = (entity ?? '').trim().toUpperCase();
+  if (!name || !ent) return;
+  try {
+    const ins = await query<{ id: string }>(
+      `INSERT INTO price_card (billing_entity, client, position, updated_by)
+       SELECT $1, $2, COALESCE((SELECT max(position) + 1 FROM price_card WHERE upper(btrim(billing_entity)) = $1), 0), $3
+       ON CONFLICT (upper(btrim(billing_entity)), lower(btrim(COALESCE(client, '')))) DO NOTHING
+       RETURNING id::text AS id`,
+      [ent, name, actorId],
+    );
+    const id = ins.rows[0]?.id;
+    if (!id) return;
+    const created = await getCard(id);
+    await logAdminEvent({ actorId, entity: 'price_card', entityId: id, action: 'price_card_created', after: { ...snapshot(created), via: 'client' } });
+  } catch (e) {
+    if (notMigrated(e)) return;
+    const err = e as { code?: string; message?: string };
+    console.error('price card for a new client not created', { client: name, entity: ent, code: err.code, message: err.message });
+  }
 }
 
 /**

@@ -78,11 +78,37 @@ export interface PricesResponse {
   trades: string[];
   /** The client records' names, for the card editor's picker. */
   clients: string[];
+  /** The active client records filed under each Comp (upper-cased key): an
+      account team (0096), a check-in row (0100) or the record's own billing
+      entity. A new card's Client picker offers only these (2026-11-02). */
+  clients_by_entity: Record<string, string[]>;
   can: { create: boolean; edit: boolean; delete: boolean };
 }
 
 /** How client and entity names are compared (the 0062 join). */
 export const priceKey = (s: string | null | undefined): string => (s ?? '').trim().toLowerCase();
+
+/**
+ * The clients a NEW card under `entity` may be for (Elise, 2026-11-02): the
+ * clients filed under that Comp, less those that already have a card there.
+ */
+export function priceCardClientChoices(
+  meta: Pick<PricesResponse, 'clients_by_entity' | 'cards'>,
+  entity: string,
+): string[] {
+  const e = entity.trim().toUpperCase();
+  const taken = new Set(meta.cards.filter((c) => c.billing_entity.trim().toUpperCase() === e).map((c) => priceKey(c.client)));
+  return (meta.clients_by_entity[e] ?? []).filter((c) => !taken.has(priceKey(c)));
+}
+
+/** A card's entity and client are its name: fixed once it exists. */
+export function priceCardRenamed(
+  before: { billing_entity: string; client: string | null },
+  after: { billing_entity: string; client: string | null },
+): boolean {
+  return before.billing_entity.trim().toUpperCase() !== after.billing_entity.trim().toUpperCase()
+    || priceKey(before.client) !== priceKey(after.client);
+}
 
 export const priceCardTitle = (c: { client: string | null }): string => c.client ?? 'Standard';
 

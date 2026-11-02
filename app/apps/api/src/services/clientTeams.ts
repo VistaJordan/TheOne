@@ -26,6 +26,7 @@ import { badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
 import { requirePerm } from './permissions.js';
+import { ensureClientPriceCard } from './prices.js';
 import { invalidateFieldCache } from './woFields.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -197,6 +198,7 @@ export async function saveClientTeam(
     return { before: prev, after: mapTeam(r.rows[0]) };
   });
   await addSalesperson(after.sales, actor.id);
+  await ensureClientPriceCard(name, after.billing_entity, actor.id);
   const changed = !before || JSON.stringify(snap(before)) !== JSON.stringify(snap(after));
   if (changed) {
     await logAdminEvent({
