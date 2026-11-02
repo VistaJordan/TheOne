@@ -43,6 +43,42 @@ export function signoffLayoutFor(comp: string | null | undefined, client: string
   }
 }
 
+/**
+ * The Paperform each entity's technicians were texted before The One (read
+ * off the ClickUp tasks' '24. Sign-Off Link' values, 2026-11-02). Every form
+ * takes the same two prefill keys: `ed9ra` = the client's work order number,
+ * `bf7ou` = the service address. Elite Drain Solutions never had one: null,
+ * and its work orders offer the PDF only. Add or change a form here.
+ */
+export const SIGNOFF_FORM_URLS: Record<SignoffLayout, string | null> = {
+  sfm: 'https://seamlessfm.paperform.co/',
+  tpm: 'https://bf8xowiy.paperform.co/',
+  af: 'https://alphafixerssignoff.paperform.co/',
+  rf: 'https://repairfected.paperform.co/',
+  eds: null,
+  bkr: 'https://bkrform.paperform.co/',
+  bkr_emcor: 'https://bkremcor.paperform.co/',
+};
+
+export const SIGNOFF_FORM_WO_PARAM = 'ed9ra';
+export const SIGNOFF_FORM_ADDRESS_PARAM = 'bf7ou';
+
+/** The prefilled form link, as the team sent it — or null when the entity
+    has no form or the work order has no number. Spaces as %20 (not +), the
+    way Paperform's own links read. */
+export function signoffFormLink(layout: SignoffLayout | null, woRef: string | null | undefined, address: string | null | undefined): string | null {
+  const base = layout ? SIGNOFF_FORM_URLS[layout] : null;
+  const ref = (woRef ?? '').trim();
+  if (!base || !ref) return null;
+  const parts = [`${SIGNOFF_FORM_WO_PARAM}=${encodeURIComponent(ref)}`];
+  const addr = (address ?? '').trim();
+  if (addr) parts.push(`${SIGNOFF_FORM_ADDRESS_PARAM}=${encodeURIComponent(addr)}`);
+  return `${base}?${parts.join('&')}`;
+}
+
+/** Send to tech: the prefilled form link, or the PDF. */
+export type SignoffShareKind = 'pdf' | 'link';
+
 /** What goes on the sheet. Pure data so the renderer can be tested alone. */
 export interface SignoffSheetData {
   layout: SignoffLayout;
@@ -57,6 +93,8 @@ export interface SignoffShare {
   tech_name: string | null;
   phone: string;
   channel: 'quo_api' | 'quo_app';
+  /** What was sent: the PDF's download link, or the prefilled form (0116). */
+  kind: SignoffShareKind;
   sent_by: { id: string; name: string } | null;
   sent_at: string;
 }
@@ -93,6 +131,13 @@ export interface SignoffReply {
 export interface WoSignoffResponse {
   /** The current sheet, or null when none has been generated yet. */
   signoff: WoSignoff | null;
+  /** The entity's Paperform, prefilled with this work order's number and
+      address as they are NOW — null when the entity has no form (EDS), Comp
+      is unset, or the work order has no number. Needs no drawn sheet. */
+  form_link: string | null;
+  /** Every form-link share on the work order (a PDF share sits under its
+      sheet's `signoff.shares`), newest first. */
+  link_shares: SignoffShare[];
   /** The layout the work order would get now (null = Comp unset / unknown). */
   layout: SignoffLayout | null;
   /** Which technicians the sheet can go to (hired + from visits), deduplicated by phone. */
@@ -116,6 +161,8 @@ export interface SignoffTechnician {
 
 export interface SignoffShareInput {
   phone: string;
+  /** Unset = 'pdf', as before 0116. */
+  kind?: SignoffShareKind;
   tech_name?: string | null;
   vendor_id?: string | null;
 }
@@ -135,6 +182,16 @@ export function signoffMessageText(entityName: string, woRef: string, address: s
     `${entityName}: sign-off sheet for work order ${woRef}${where}. ` +
     `Please have the manager on site sign it and reply to this text with a photo or scan of the signed sheet. ` +
     `Download: ${url}`
+  );
+}
+
+/** The text for the form link: the technician signs on the form itself, so
+    nothing has to be texted back. */
+export function signoffFormMessageText(entityName: string, woRef: string, address: string | null, url: string): string {
+  const where = address ? ` at ${address}` : '';
+  return (
+    `${entityName}: sign-off form for work order ${woRef}${where}. ` +
+    `Please have the manager on site fill in their name and sign it on this link: ${url}`
   );
 }
 

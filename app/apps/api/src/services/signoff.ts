@@ -27,6 +27,8 @@ import {
   SIGNOFF_TOKEN_RE,
   VISIT_MIRROR_KEYS,
   normalizePhone,
+  signoffFormLink,
+  signoffFormMessageText,
   signoffLayoutFor,
   signoffMessageText,
   signoffPublicPath,
@@ -130,13 +132,16 @@ async function currentSheet(q: Queryable, taskId: string): Promise<SheetRow | nu
   return res.rows[0] ?? null;
 }
 
-async function sharesOf(signoffId: string): Promise<SignoffShare[]> {
-  const res = await query<{ id: string; vendor_id: string | null; tech_name: string | null; phone: string; channel: 'quo_api' | 'quo_app'; sent_by_id: string | null; sent_by_name: string | null; sent_at: Date }>(
-    `SELECT s.id::text AS id, s.vendor_id::text AS vendor_id, s.tech_name, s.phone, s.channel,
+/** The PDF shares of one sheet (`signoffId`), or every form-link share on the
+    work order (`taskId`, 0116). */
+async function sharesOf(by: { signoffId: string } | { taskId: string }): Promise<SignoffShare[]> {
+  const where = 'signoffId' in by ? `s.signoff_id = $1 AND s.kind = 'pdf'` : `s.task_id = $1 AND s.kind = 'link'`;
+  const res = await query<{ id: string; vendor_id: string | null; tech_name: string | null; phone: string; channel: 'quo_api' | 'quo_app'; kind: 'pdf' | 'link'; sent_by_id: string | null; sent_by_name: string | null; sent_at: Date }>(
+    `SELECT s.id::text AS id, s.vendor_id::text AS vendor_id, s.tech_name, s.phone, s.channel, s.kind,
             s.sent_by::text AS sent_by_id, p.display_name AS sent_by_name, s.sent_at
        FROM wo_signoff_share s LEFT JOIN principal p ON p.id = s.sent_by
-      WHERE s.signoff_id = $1 ORDER BY s.sent_at DESC`,
-    [signoffId],
+      WHERE ${where} ORDER BY s.sent_at DESC`,
+    ['signoffId' in by ? by.signoffId : by.taskId],
   );
   return res.rows.map((r) => ({
     id: r.id,
@@ -144,6 +149,7 @@ async function sharesOf(signoffId: string): Promise<SignoffShare[]> {
     tech_name: r.tech_name,
     phone: r.phone,
     channel: r.channel,
+    kind: r.kind,
     sent_by: r.sent_by_id ? { id: r.sent_by_id, name: r.sent_by_name ?? 'Unknown' } : null,
     sent_at: iso(r.sent_at)!,
   }));
@@ -164,7 +170,7 @@ async function present(row: SheetRow, f: Facts): Promise<WoSignoff> {
     created_at: iso(row.created_at)!,
     stale: row.wo_ref !== refOf(f) || (row.address ?? '') !== (f.address ?? '') || row.layout !== layoutOf(f),
     url: publicUrl(row.token),
-    shares: await sharesOf(row.id),
+    shares: await sharesOf({ signoffId: row.id }),
     signed_attachment_id: row.signed_attachment_id,
     signed_at: iso(row.signed_at),
   };
@@ -249,9 +255,12 @@ export async function getSignoff(taskId: string, actor: ActingPrincipal): Promis
   const f = await facts({ query }, taskId);
   const row = await currentSheet({ query }, taskId);
   const writable = canWrite(actor);
+  const layout = layoutOf(f);
   return {
     signoff: row ? await present(row, f) : null,
-    layout: layoutOf(f),
+    form_link: signoffFormLink(layout, refOf(f), f.address),
+    link_shares: await sharesOf({ taskId }),
+    layout,
     technicians: await techniciansOf(taskId, f),
     replies: await openRepliesFor(taskId),
     can: { generate: canGenerate(actor), share: writable },
@@ -399,10 +408,31 @@ export async function shareSignoff(taskId: string, input: SignoffShareInput, act
   requireWrite(actor);
   const phone = normalizePhone(input.phone);
   if (!phone) throw badRequest('That is not a phone number we can text', { field: 'phone' });
+  const kind = input.kind ?? 'pdf';
 
-  let row = await currentSheet({ query }, taskId);
-  if (!row) row = await generate(taskId, actor.id, 'button');
-  const text = signoffMessageText(SIGNOFF_ENTITY_NAMES[row.layout], row.wo_ref, row.address, publicUrl(row.token));
+  // 0116: the prefilled Paperform the team used to send. Built from the work
+  // order as it is now; no sheet has to be drawn (nor storage connected).
+  let row: SheetRow | null = null;
+  let text: string;
+  let link: string | null = null;
+  if (kind === 'link') {
+    const f = await facts({ query }, taskId);
+    const layout = layoutOf(f);
+    link = signoffFormLink(layout, refOf(f), f.address);
+    if (!layout || !link) {
+      throw badRequest(
+        !layout
+          ? 'Set the Comp (billing entity) first — it picks which form the link opens'
+          : `${SIGNOFF_ENTITY_NAMES[layout]} has no sign-off form link — send the PDF instead`,
+        { code: 'SIGNOFF_NO_FORM' },
+      );
+    }
+    text = signoffFormMessageText(SIGNOFF_ENTITY_NAMES[layout], refOf(f), f.address, link);
+  } else {
+    row = await currentSheet({ query }, taskId);
+    if (!row) row = await generate(taskId, actor.id, 'button');
+    text = signoffMessageText(SIGNOFF_ENTITY_NAMES[row.layout], row.wo_ref, row.address, publicUrl(row.token));
+  }
 
   let channel: 'quo_api' | 'quo_app';
   let quoMessageId: string | null = null;
@@ -419,12 +449,13 @@ export async function shareSignoff(taskId: string, input: SignoffShareInput, act
   const techName = (input.tech_name ?? '').trim() || null;
   await withTransaction(async (tx) => {
     await tx.query(
-      `INSERT INTO wo_signoff_share (signoff_id, task_id, vendor_id, tech_name, phone, channel, quo_message_id, sent_by)
-       VALUES ($1, $2, $3::uuid, $4, $5, $6, $7, $8)`,
-      [row!.id, taskId, input.vendor_id ?? null, techName, phone, channel, quoMessageId, actor.id],
+      `INSERT INTO wo_signoff_share (signoff_id, task_id, vendor_id, tech_name, phone, channel, quo_message_id, sent_by, kind)
+       VALUES ($1::uuid, $2, $3::uuid, $4, $5, $6, $7, $8, $9)`,
+      [row?.id ?? null, taskId, input.vendor_id ?? null, techName, phone, channel, quoMessageId, actor.id, kind],
     );
-    await logSignoff(tx, actor.id, taskId, 'signoff_shared', row!.id, {
+    await logSignoff(tx, actor.id, taskId, 'signoff_shared', row?.id ?? null, {
       phone, tech_name: techName, vendor_id: input.vendor_id ?? null, channel, quo_message_id: quoMessageId,
+      kind, ...(link ? { link } : {}),
     });
   });
   return { ...(await getSignoff(taskId, actor)), channel, sms };

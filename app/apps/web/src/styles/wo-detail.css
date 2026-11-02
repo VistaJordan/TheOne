@@ -1684,6 +1684,9 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .so-doc-sub { font-size: 11.5px; color: var(--ink-3); }
 .so-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .so-empty { font-size: 12.5px; color: var(--ink-3); }
+.so-link { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
+.so-link-lbl { flex: none; color: var(--ink-3); font-weight: 600; }
+.so-link-url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
 .so-preview { width: 100%; max-width: 640px; aspect-ratio: 8.5 / 11; border: 1px solid var(--row-border); border-radius: 8px; background: #fff; }
 .so-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .so-meta { font-size: 11.5px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 4px 10px; }

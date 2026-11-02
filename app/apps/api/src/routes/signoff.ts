@@ -37,6 +37,7 @@ const tokenParams = z.object({ token: z.string().min(1).max(64) });
 const shareSchema = z
   .object({
     phone: z.string().trim().min(1).max(40),
+    kind: z.enum(['pdf', 'link']).optional(),
     tech_name: z.string().trim().max(200).nullable().optional().transform((v) => (v ? v : null)),
     vendor_id: z.string().uuid().nullable().optional().transform((v) => (v ? v : null)),
   })

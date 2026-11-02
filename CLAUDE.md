@@ -1005,7 +1005,7 @@ acknowledged and dropped. Permission: `work_orders/fields/cico` view / edit
 (+ `work_orders` edit). Audit on the task: `signoff_generated`,
 `signoff_shared`, `signoff_received`, `signoff_reply_held|dismissed`, plus
 the ordinary `attachment_added` and `field_updated`. Self-check:
-`tests/signoff.test.ts` renders every layout and asserts ONE page. Needs on
+`tests/signoff.test.ts` renders every layout and asserts ONE page. **The form link** (migration 0116, Elise 2026-11-02, `tests/signoff-form-link.test.ts`): `SIGNOFF_FORM_URLS` (shared `signoff.ts`) is each layout's Paperform the team texted before The One (EDS: none); `signoffFormLink` prefills `ed9ra` = the client's WO # and `bf7ou` = the address, and `WoSignoffResponse.form_link` carries it (Comp only, no drawn sheet). The panel shows it with Copy link; Send to tech asks Form link or PDF (`kind` on the share; 0116 lets a link share have no `signoff_id`, and reply matching joins the sheet so it never matches one). Needs on
 Vercel: `BLOB_READ_WRITE_TOKEN` (set), `QUO_API_KEY` + `QUO_FROM_NUMBER`
 (not yet), and `message.received` added to the Quo webhook.
 

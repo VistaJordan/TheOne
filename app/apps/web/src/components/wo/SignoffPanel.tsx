@@ -15,6 +15,11 @@
 //     to several work orders waits in a strip until someone claims or
 //     dismisses it.
 //
+// 0116 (Elise, 2026-11-02): the entity's Paperform, prefilled with the work
+// order number and the address — the link the team texted before The One —
+// sits under the sheet with Copy link, and needs no drawn sheet. Send to tech
+// asks which to send: the form link or the PDF.
+//
 // Without the Quo API configured on the server, Send opens the Quo app on
 // this PC with the text pre-filled (an `sms:` link) and still records the
 // share, so the reply can be matched. Who may see / do what is the field's
@@ -24,7 +29,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { normalizePhone, type SignoffReply, type SignoffTechnician, type WoSignoffResponse } from '@theone/shared';
+import { normalizePhone, type SignoffReply, type SignoffShareKind, type SignoffTechnician, type WoSignoffResponse } from '@theone/shared';
 import {
   attachmentUrl,
   claimSignoffReply,
@@ -36,6 +41,7 @@ import {
   type WorkOrderDetailV2,
 } from '../../api/client';
 import { feedTime } from '../../lib/fields';
+import { CopyButton } from '../CopyButton';
 import { Icon } from '../Icon';
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : 'Something went wrong');
@@ -94,6 +100,8 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
   const busy = generate.isPending || claim.isPending || dismiss.isPending;
   const fileName = s ? `Signoff-${s.wo_ref.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf` : null;
   const fileUrl = signoffFileUrl(wo.wo_number);
+  // PDF shares of the current sheet and every form-link share, newest first.
+  const shares = [...(s?.shares ?? []), ...data.link_shares].sort((a, b) => b.sent_at.localeCompare(a.sent_at));
 
   return (
     <div className="so-row">
@@ -127,6 +135,14 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
         </div>
       )}
 
+      {data.form_link && (
+        <div className="so-link">
+          <span className="so-link-lbl">Form link</span>
+          <a className="so-link-url" href={data.form_link} target="_blank" rel="noreferrer" title={data.form_link}>{data.form_link}</a>
+          <CopyButton value={data.form_link} label="Copy link" />
+        </div>
+      )}
+
       <div className="so-actions">
         {s && (
           <>
@@ -144,7 +160,7 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
             </button>
           </>
         )}
-        {s && data.can.share && (
+        {(s || data.form_link) && data.can.share && (
           <button type="button" className="btn btn-sm" onClick={() => { setSent(null); setSharing(true); }} disabled={busy}>
             <Icon name="send" size={14} />
             Send to tech
@@ -198,14 +214,14 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
         </div>
       )}
 
-      {s && (s.signed_at || s.shares.length > 0) && (
+      {(s?.signed_at || shares.length > 0) && (
         <ul className="so-shares">
-          {s.signed_at && (
+          {s?.signed_at && (
             <li><span>Signed copy received {feedTime(s.signed_at)}</span><span>awaiting approval in Photos &amp; files</span></li>
           )}
-          {s.shares.map((sh) => (
+          {shares.map((sh) => (
             <li key={sh.id}>
-              <span>Sent to <b>{sh.tech_name ?? 'Technician'}</b> <span className="mono">{sh.phone}</span></span>
+              <span>{sh.kind === 'link' ? 'Form link' : 'PDF'} sent to <b>{sh.tech_name ?? 'Technician'}</b> <span className="mono">{sh.phone}</span></span>
               <span>{feedTime(sh.sent_at)}{sh.sent_by ? ` by ${sh.sent_by.name}` : ''}</span>
               <span>{sh.channel === 'quo_api' ? 'texted from the Quo line' : 'through the Quo app'}</span>
             </li>
@@ -252,6 +268,9 @@ function ShareSheet({ wo, data, onClose, onSent }: {
   onSent: (next: WoSignoffResponse, note: string) => void;
 }) {
   const techs = data.technicians;
+  // A PDF share draws the sheet when none exists, which needs storage.
+  const pdfPossible = Boolean(data.signoff) || data.storage_ready;
+  const [kind, setKind] = useState<SignoffShareKind>(data.form_link ? 'link' : 'pdf');
   const [pick, setPick] = useState<string>(techs[0]?.key ?? 'other');
   const [otherName, setOtherName] = useState('');
   const [otherPhone, setOtherPhone] = useState('');
@@ -271,14 +290,15 @@ function ShareSheet({ wo, data, onClose, onSent }: {
   const name = chosen ? chosen.name : otherName.trim() || null;
 
   const share = useMutation({
-    mutationFn: () => shareWorkOrderSignoff(wo.id, { phone: phone!, tech_name: name, vendor_id: chosen?.vendor_id ?? null }),
+    mutationFn: () => shareWorkOrderSignoff(wo.id, { phone: phone!, kind, tech_name: name, vendor_id: chosen?.vendor_id ?? null }),
     onSuccess: (res) => {
+      const what = kind === 'link' ? 'the form link' : 'the sheet';
       if (res.channel === 'quo_app' && res.sms) {
         // No API key on the server: the Quo app on this PC takes the text.
         window.location.href = res.sms;
-        onSent(res, `Quo should be opening a text to ${name ?? phone} with the sheet's link. Press send there.`);
+        onSent(res, `Quo should be opening a text to ${name ?? phone} with ${what}. Press send there.`);
       } else {
-        onSent(res, `Texted the sheet to ${name ?? phone} from the Quo line.`);
+        onSent(res, `Texted ${what} to ${name ?? phone} from the Quo line.`);
       }
     },
     onError: (e) => setError(errorText(e)),
@@ -291,9 +311,28 @@ function ShareSheet({ wo, data, onClose, onSent }: {
           <Icon name="send" size={18} />
           Send the sign-off sheet
         </h2>
+        <div className="call-field">
+          <span className="overline">What to send</span>
+          <div className="seg" role="radiogroup" aria-label="What to send">
+            <button type="button" role="radio" aria-checked={kind === 'link'} className={`seg-btn${kind === 'link' ? ' is-on' : ''}`}
+              disabled={!data.form_link} title={data.form_link ? undefined : 'This entity has no sign-off form link'} onClick={() => setKind('link')}>
+              Form link
+            </button>
+            <button type="button" role="radio" aria-checked={kind === 'pdf'} className={`seg-btn${kind === 'pdf' ? ' is-on' : ''}`}
+              disabled={!pdfPossible} title={pdfPossible ? undefined : 'File storage is not connected, so no PDF can be drawn'} onClick={() => setKind('pdf')}>
+              PDF
+            </button>
+          </div>
+        </div>
+
         <p className="sheet-b">
-          The technician gets a text with a link to the blank sheet for <b>{data.signoff?.wo_ref ?? wo.wo_number}</b>, and is
-          asked to reply with a photo or scan once the manager on site has signed it.
+          {kind === 'link' ? (
+            <>The technician gets a text with the sign-off form, already filled in with <b>{data.signoff?.wo_ref ?? wo.wo_number}</b> and
+            the address; the manager on site signs it on the form.</>
+          ) : (
+            <>The technician gets a text with a link to the blank sheet for <b>{data.signoff?.wo_ref ?? wo.wo_number}</b>, and is
+            asked to reply with a photo or scan once the manager on site has signed it.</>
+          )}
           {!data.quo_api_ready && ' Quo is not connected on the server yet, so the text opens in the Quo app on this PC for you to send.'}
         </p>
 
@@ -345,9 +384,9 @@ function ShareSheet({ wo, data, onClose, onSent }: {
 
         <div className="sheet-f">
           <button type="button" className="btn" onClick={onClose} disabled={share.isPending}>Cancel</button>
-          <button type="button" className="btn btn-primary" onClick={() => share.mutate()} disabled={!phone || share.isPending}>
+          <button type="button" className="btn btn-primary" onClick={() => share.mutate()} disabled={!phone || share.isPending || (kind === 'pdf' && !pdfPossible) || (kind === 'link' && !data.form_link)}>
             <Icon name="send" size={14} />
-            {share.isPending ? 'Sending…' : data.quo_api_ready ? 'Text the sheet' : 'Open in Quo'}
+            {share.isPending ? 'Sending…' : !data.quo_api_ready ? 'Open in Quo' : kind === 'link' ? 'Text the link' : 'Text the sheet'}
           </button>
         </div>
       </div>
