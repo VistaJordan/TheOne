@@ -5,8 +5,8 @@
 //     work order is assigned to a dispatcher (the Assignee field); the
 //     Generate button covers the case where Comp was set afterwards, and
 //     "New sheet" redraws it once the number or the address changed;
-//   · the row shows the PDF itself — a document tile that opens it, a
-//     Download, and a fold-out preview — with Send to tech beside it: one
+//   · the row shows the PDF itself — a document tile that opens it and a
+//     download button — with Send to tech beside it: one
 //     technician on file goes straight out, several open a picker, and
 //     "another number" is always there;
 //   · the signed copy the technician texts back is filed as a sign-off
@@ -53,7 +53,6 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
   const data = q.data;
   const [error, setError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
-  const [preview, setPreview] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
 
   const settle = (next: WoSignoffResponse) => {
@@ -103,38 +102,44 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
   // PDF shares of the current sheet and every form-link share, newest first.
   const shares = [...(s?.shares ?? []), ...data.link_shares].sort((a, b) => b.sent_at.localeCompare(a.sent_at));
 
+  // Send to tech, (re)draw and the signed copy: beside the sheet, under its chips.
+  const actions = (
+    <div className="so-actions">
+      {(s || data.form_link) && data.can.share && (
+        <button type="button" className="btn btn-sm" onClick={() => { setSent(null); setSharing(true); }} disabled={busy}>
+          <Icon name="send" size={14} />
+          Send to tech
+        </button>
+      )}
+      {!s && canGenerate && (
+        <button type="button" className="btn btn-sm" onClick={() => generate.mutate()} disabled={busy || generateBlocked !== null} title={generateBlocked ?? undefined}>
+          <Icon name="file" size={14} />
+          {generate.isPending ? 'Drawing…' : 'Generate sheet'}
+        </button>
+      )}
+      {s && canGenerate && (
+        <button
+          type="button"
+          className="btn btn-sm is-ghost"
+          onClick={() => generate.mutate()}
+          disabled={busy || !data.storage_ready}
+          title={!data.storage_ready ? 'File storage is not connected on this deployment yet' : s.stale ? 'Redraw the sheet with the current number and address' : 'Redraw the sheet (the old link stops working)'}
+        >
+          <Icon name="refresh" size={14} />
+          {generate.isPending ? 'Drawing…' : s.stale ? 'Redraw with current details' : 'New sheet'}
+        </button>
+      )}
+      {s?.signed_attachment_id && (
+        <a className="btn btn-sm is-ghost" href={attachmentUrl(wo.id, s.signed_attachment_id)} target="_blank" rel="noreferrer">
+          <Icon name="check-circle" size={14} />
+          Open signed copy
+        </a>
+      )}
+    </div>
+  );
+
   return (
     <div className="so-row">
-      {s ? (
-        <div className="so-tile">
-          <a className="so-doc" href={fileUrl} target="_blank" rel="noreferrer" title="Open the sheet (PDF)">
-            <span className="so-doc-ic" aria-hidden="true">
-              <Icon name="file" size={18} />
-              <span className="so-doc-ext">PDF</span>
-            </span>
-            <span className="so-doc-main">
-              <b>{fileName}</b>
-              <span className="so-doc-sub">
-                {s.entity_name}
-                <span className="sep-dot">·</span>
-                drawn {feedTime(s.created_at)}{s.created_by ? ` by ${s.created_by.name}` : ''}
-              </span>
-            </span>
-          </a>
-          <span className="so-chips">
-            {s.signed_at && <span className="chip chip-ok chip-sm">Signed copy received</span>}
-            {!s.signed_at && s.shares.length > 0 && <span className="chip chip-warn chip-sm">Waiting for the signed copy</span>}
-            {s.stale && <span className="chip chip-outline chip-sm" title="The work order's number or address changed after this sheet was drawn">Details changed</span>}
-          </span>
-        </div>
-      ) : (
-        <div className="so-empty">
-          {data.layout
-            ? 'No sheet drawn yet.'
-            : 'Set Comp on the work order to pick the sheet\'s branding.'}
-        </div>
-      )}
-
       {data.form_link && (
         <div className="so-link">
           <span className="so-link-lbl">Form link</span>
@@ -143,58 +148,45 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
         </div>
       )}
 
-      <div className="so-actions">
-        {s && (
+      <div className="so-tile">
+        {s ? (
           <>
-            <a className="btn btn-sm is-ghost" href={fileUrl} target="_blank" rel="noreferrer">
-              <Icon name="ext" size={14} />
-              Open
+            <a className="so-doc" href={fileUrl} target="_blank" rel="noreferrer" title="Open the sheet (PDF)">
+              <span className="so-doc-ic" aria-hidden="true">
+                <Icon name="file" size={18} />
+                <span className="so-doc-ext">PDF</span>
+              </span>
+              <span className="so-doc-main">
+                <b>{fileName}</b>
+                <span className="so-doc-sub">
+                  {s.entity_name}
+                  <span className="sep-dot">·</span>
+                  drawn {feedTime(s.created_at)}{s.created_by ? ` by ${s.created_by.name}` : ''}
+                </span>
+              </span>
             </a>
-            <a className="btn btn-sm is-ghost" href={fileUrl} download={fileName ?? undefined}>
+            <a className="icon-btn so-dl" href={fileUrl} download={fileName ?? undefined} aria-label="Download the sheet" title="Download">
               <Icon name="download" size={14} />
-              Download
             </a>
-            <button type="button" className="btn btn-sm is-ghost" aria-expanded={preview} onClick={() => setPreview((p) => !p)}>
-              <Icon name={preview ? 'chev-u' : 'chev-d'} size={14} />
-              {preview ? 'Hide preview' : 'Preview'}
-            </button>
           </>
+        ) : (
+          <div className="so-empty">
+            {data.layout
+              ? 'No sheet drawn yet.'
+              : 'Set Comp on the work order to pick the sheet\'s branding.'}
+          </div>
         )}
-        {(s || data.form_link) && data.can.share && (
-          <button type="button" className="btn btn-sm" onClick={() => { setSent(null); setSharing(true); }} disabled={busy}>
-            <Icon name="send" size={14} />
-            Send to tech
-          </button>
-        )}
-        {!s && canGenerate && (
-          <button type="button" className="btn btn-sm" onClick={() => generate.mutate()} disabled={busy || generateBlocked !== null} title={generateBlocked ?? undefined}>
-            <Icon name="file" size={14} />
-            {generate.isPending ? 'Drawing…' : 'Generate sheet'}
-          </button>
-        )}
-        {s && canGenerate && (
-          <button
-            type="button"
-            className="btn btn-sm is-ghost"
-            onClick={() => generate.mutate()}
-            disabled={busy || !data.storage_ready}
-            title={!data.storage_ready ? 'File storage is not connected on this deployment yet' : s.stale ? 'Redraw the sheet with the current number and address' : 'Redraw the sheet (the old link stops working)'}
-          >
-            <Icon name="refresh" size={14} />
-            {generate.isPending ? 'Drawing…' : s.stale ? 'Redraw with current details' : 'New sheet'}
-          </button>
-        )}
-        {s?.signed_attachment_id && (
-          <a className="btn btn-sm is-ghost" href={attachmentUrl(wo.id, s.signed_attachment_id)} target="_blank" rel="noreferrer">
-            <Icon name="check-circle" size={14} />
-            Open signed copy
-          </a>
-        )}
+        <div className="so-side">
+          {s && (s.signed_at || s.shares.length > 0 || s.stale) && (
+            <span className="so-chips">
+              {s.signed_at && <span className="chip chip-ok chip-sm">Signed copy received</span>}
+              {!s.signed_at && s.shares.length > 0 && <span className="chip chip-warn chip-sm">Waiting for the signed copy</span>}
+              {s.stale && <span className="chip chip-outline chip-sm" title="The work order's number or address changed after this sheet was drawn">Details changed</span>}
+            </span>
+          )}
+          {actions}
+        </div>
       </div>
-
-      {preview && s && (
-        <iframe className="so-preview" src={`${fileUrl}#toolbar=0&navpanes=0`} title={fileName ?? 'Sign-off sheet'} />
-      )}
 
       {!data.storage_ready && (
         <div className="so-error">File storage is not connected on the server (BLOB_READ_WRITE_TOKEN), so no sheet can be drawn or filed. Ask an admin.</div>

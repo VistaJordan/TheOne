@@ -1673,6 +1673,8 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .so-row { display: grid; gap: 8px; min-width: 0; flex: 1; }
 .so-loading { color: var(--ink-3); }
 .so-tile { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.so-dl { flex: none; text-decoration: none; }
+.so-side { display: grid; gap: 6px; justify-items: start; min-width: 0; }
 .so-doc { display: inline-flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; color: inherit; padding: 6px 10px 6px 6px; border: 1px solid var(--row-border); border-radius: 10px; background: var(--chip); }
 .so-doc:hover { border-color: var(--accent); }
 .so-doc-ic { position: relative; display: inline-grid; place-items: center; width: 36px; height: 40px; border-radius: 6px; background: var(--surface, var(--card-bg, #fff)); border: 1px solid var(--row-border); color: var(--danger); }
@@ -1687,7 +1689,6 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .so-link { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
 .so-link-lbl { flex: none; color: var(--ink-3); font-weight: 600; }
 .so-link-url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
-.so-preview { width: 100%; max-width: 640px; aspect-ratio: 8.5 / 11; border: 1px solid var(--row-border); border-radius: 8px; background: #fff; }
 .so-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .so-meta { font-size: 11.5px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .so-meta b { color: var(--ink-2); font-weight: 600; }

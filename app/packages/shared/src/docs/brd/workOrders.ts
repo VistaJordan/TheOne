@@ -183,7 +183,7 @@ export const WORK_ORDERS_PART: DocPart = {
           value: 'The sheet exists before anyone asks for it.',
           controls: [
             { label: 'Generate sheet / New sheet / Redraw with current details', does: 'Draws (or redraws) the current sheet.' },
-            { label: 'Open / Download / Preview / Hide preview / Open signed copy', does: 'Reads the blank or the signed copy.' },
+            { label: 'The sheet tile (opens the PDF) / the download button beside it / Open signed copy', does: 'Reads the blank or the signed copy. The Form link sits above the sheet; Send to tech and the redraw button sit beside it, under its chips.' },
           ],
           rules: ['Stale ("Details changed") = the WO reference, the address or the layout differs from the work order now.', 'Without file storage: "File storage is not connected on the server (BLOB_READ_WRITE_TOKEN), so no sheet can be drawn or filed."'],
           audit: ['signoff_generated (via button or assignment, with the replaced sheet ids)', 'field_updated on Sign-Off Link via signoff'],
