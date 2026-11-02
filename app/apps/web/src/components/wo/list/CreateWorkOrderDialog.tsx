@@ -571,7 +571,9 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
         id={domId}
         className="fld"
         type={type}
-        step={d?.type === 'money' || f.type === 'currency' ? '0.01' : undefined}
+        // A datetime's picker offers the minutes in tens (00, 10 … 50; Elise,
+        // 2026-11-02). There is no <form>, so a typed 10:46 is not refused.
+        step={d?.type === 'money' || f.type === 'currency' ? '0.01' : type === 'datetime-local' ? 600 : undefined}
         value={val}
         onChange={(e) => set(f.key, zip ? zipInputValue(e.target.value) : e.target.value)}
         inputMode={zip ? 'numeric' : undefined}
