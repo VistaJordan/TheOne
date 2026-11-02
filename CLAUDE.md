@@ -2237,7 +2237,12 @@ work order under the task lock (`nextPurpose`), free-text rows untouched.
 **Vendor bills (#20):** total > 0, a vendor's bill number once (409
 `VENDOR_BILL_DUPLICATE`, partial unique index), a bill above what is still
 owed (approved quote `total_cost` − paid requests − other approved / paid
-bills) raises `bill_over_owed` (409 `BILL_OVER_OWED`). The two new task
+bills) raises `bill_over_owed` (409 `BILL_OVER_OWED`); since 2026-11-02
+("paying twice", `tests/paying-twice.test.ts`) a bill with no approved
+quote cost raises it too when vendor money already went out on the work
+order (`billNeedsHoldWithoutQuote`), and the payment holds (request time,
+Approve / Pay, the row's `money_hold`) measure Cost PLUS the approved / paid
+vendor bills (`vendorMoneyOut`; bills still never write Cost). The two new task
 types live in the inbox section **Money holds** (`approvals/money`, unset
 inherits `approvals`). **Purchasing (#21):** a vendor is a record
 (409 `VENDOR_REQUIRED`, a typed name is refused on requests and orders), one

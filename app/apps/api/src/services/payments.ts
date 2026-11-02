@@ -83,6 +83,7 @@ import {
   paymentOverageSentence,
   permAllows,
   projectedCost,
+  vendorMoneyOut,
   purposeBase,
   selfApprovalMessage,
   selfApprovalVerdict,
@@ -174,6 +175,8 @@ interface PaymentRow {
   wo_due: string | null;
   wo_nte: number | string | null;
   wo_cost: string | null;
+  /** "Paying twice": the approved and paid vendor bills on the work order. */
+  wo_bills: number | string | null;
   wo_emergency: boolean | null;
   wo_escalated: boolean | null;
   /** 0083: the largest cost an approved NTE override lets through. */
@@ -220,6 +223,9 @@ const SELECT_SQL = `
          t.fields->>'Due Date'   AS wo_due,
          t.nte::float8           AS wo_nte,
          t.fields->>'34. Cost'   AS wo_cost,
+         (SELECT COALESCE(sum(b.total), 0)::float8 FROM vendor_bill b
+           WHERE b.task_id = pr.task_id AND b.status IN ('approved', 'paid'))
+                            AS wo_bills,
          COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS wo_emergency,
          COALESCE(t.fields->'Escalated' = 'true'::jsonb, false) AS wo_escalated,
          EXISTS (SELECT 1 FROM approval_task a
@@ -410,7 +416,7 @@ function moneyHoldOf(r: PaymentRow, quotes?: QuoteFigures): string | null {
     status: r.status,
     overQuoteOpen: Boolean(r.over_quote_open),
     nteOverrideOpen: Boolean(r.nte_override_open),
-    cost: moneyNum(r.wo_cost),
+    cost: vendorMoneyOut(moneyNum(r.wo_cost), moneyNum(r.wo_bills)),
     amount: Number(r.amount ?? 0),
     nte: moneyNum(r.wo_nte),
     nteCovers: moneyNum(r.nte_covers),
@@ -838,8 +844,11 @@ function overageAudit(o: PaymentOverage): Record<string, unknown> {
  * request is filed so the hold does not appear only afterwards.
  */
 async function overageFor(taskId: string, amount: number): Promise<PaymentOverage | null> {
-  const t = await query<{ cost: string | null; nte: number | string | null }>(
-    `SELECT fields->>'34. Cost' AS cost, nte::float8 AS nte FROM task WHERE id = $1`,
+  const t = await query<{ cost: string | null; nte: number | string | null; bills: number | string | null }>(
+    `SELECT fields->>'34. Cost' AS cost, nte::float8 AS nte,
+            (SELECT COALESCE(sum(b.total), 0)::float8 FROM vendor_bill b
+              WHERE b.task_id = task.id AND b.status IN ('approved', 'paid')) AS bills
+       FROM task WHERE id = $1`,
     [taskId],
   );
   if (!t.rows[0]) return null;
@@ -849,7 +858,8 @@ async function overageFor(taskId: string, amount: number): Promise<PaymentOverag
     approvedCover(taskId, 'over_quote'),
   ]);
   return paymentOverage({
-    cost: moneyNum(t.rows[0].cost),
+    // "Paying twice" (2026-11-02): approved / paid vendor bills count too.
+    cost: vendorMoneyOut(moneyNum(t.rows[0].cost), moneyNum(t.rows[0].bills)),
     amount,
     nte: moneyNum(t.rows[0].nte),
     nteCovers: nteCover?.covers ?? null,
@@ -1276,7 +1286,16 @@ async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, mov
   await assertNoOpenNteOverride(row.task_id, move);
   await assertNoOpenMoneyHold(row.task_id, 'over_quote', move, OVER_QUOTE_CODE);
   const amount = Number(row.amount ?? 0);
-  const projected = projectedCost(moneyNum(row.wo_cost), amount);
+  // "Paying twice" (2026-11-02): the approved and paid vendor bills are vendor
+  // money too, though they never feed Cost — a request for work a bill
+  // already paid is measured with them. Read fresh, not from the row.
+  const billsRes = await query<{ bills: number | string | null }>(
+    `SELECT COALESCE(sum(total), 0)::float8 AS bills FROM vendor_bill WHERE task_id = $1 AND status IN ('approved', 'paid')`,
+    [row.task_id],
+  );
+  const bills = moneyNum(billsRes.rows[0]?.bills ?? null) ?? 0;
+  const projected = projectedCost(vendorMoneyOut(moneyNum(row.wo_cost), bills), amount);
+  const withBills = bills > 0 ? ` (with ${money(bills)} of vendor bills)` : '';
   const nte = moneyNum(row.wo_nte);
   const payee = (row.vendor_id ? row.vendor_name : row.payee_name) ?? 'the technician';
   const nteCover = await approvedCover(row.task_id, 'nte_override');
@@ -1285,9 +1304,10 @@ async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, mov
       taskId: row.task_id,
       type: 'nte_override',
       actorId: actor.id,
-      title: `Paying ${money(amount)} to ${payee} would take Cost to ${money(projected)}, over the client NTE ${money(nte ?? 0)}`,
+      title: `Paying ${money(amount)} to ${payee} would take Cost to ${money(projected)}${withBills}, over the client NTE ${money(nte ?? 0)}`,
       detail: {
         cost: projected,
+        vendor_bills: bills,
         nte,
         over_by: Math.round((projected - (nte ?? 0)) * 100) / 100,
         covers: projected,
@@ -1307,9 +1327,10 @@ async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, mov
       taskId: row.task_id,
       type: 'over_quote',
       actorId: actor.id,
-      title: `${reason} (paying ${money(amount)} to ${payee})`,
+      title: `${reason} (paying ${money(amount)} to ${payee}${bills > 0 ? `, with ${money(bills)} of vendor bills` : ''})`,
       detail: {
         cost: projected,
+        vendor_bills: bills,
         quote_total: quote?.total ?? null,
         quote_cost: quote?.cost ?? null,
         covers: projected,

@@ -108,6 +108,16 @@ export const BILL_OVER_OWED_CODE = 'BILL_OVER_OWED';
 
 const cents = (n: number) => Math.round(n * 100);
 
+/**
+ * "Paying twice" (2026-11-02): the vendor money already out on a work order
+ * is Cost (which paid payment requests feed) PLUS the approved and paid vendor
+ * bills (which never feed Cost). The payment holds measure against this, so a
+ * request for work a bill already paid is caught by the NTE and the quote.
+ */
+export function vendorMoneyOut(cost: number | null | undefined, bills: number | null | undefined): number {
+  return (cents(cost ?? 0) + cents(bills ?? 0)) / 100;
+}
+
 /** What Cost would read once this payment is paid. */
 export function projectedCost(cost: number | null | undefined, amount: number): number {
   return (cents(cost ?? 0) + cents(amount)) / 100;
@@ -255,6 +265,18 @@ export function quoteSelfApprovalLock(
 export function vendorOwed(quoteCost: number | null, paid: number, otherBills: number): number | null {
   if (quoteCost === null || !(quoteCost > 0)) return null;
   return (cents(quoteCost) - cents(paid) - cents(otherBills)) / 100;
+}
+
+/**
+ * "Paying twice" (2026-11-02): with no approved quote cost there is no
+ * ceiling to measure a bill against, so a bill on a work order where vendor
+ * money already went out (paid requests, other approved / paid bills) is held
+ * for a manager rather than approved on sight — unless an approved hold
+ * already covers this much.
+ */
+export function billNeedsHoldWithoutQuote(total: number, alreadyOut: number, covered: number | null | undefined): boolean {
+  if (!(cents(alreadyOut) > 0)) return false;
+  return !(covered !== null && covered !== undefined && cents(covered) >= cents(total));
 }
 
 export function billOverOwed(total: number, owed: number | null, covered: number | null | undefined): boolean {

@@ -24,6 +24,7 @@ import {
   MONEY_MAX,
   SELF_APPROVAL_CODE,
   VALIDATION_CODE,
+  billNeedsHoldWithoutQuote,
   billOverOwed,
   selfApprovalMessage,
   selfApprovalVerdict,
@@ -518,7 +519,6 @@ async function assertBillWithinOwed(cur: VendorBill, actor: ActingPrincipal): Pr
     [cur.task_id],
   );
   const quoteCost = q.rows[0] && !q.rows[0].tbd && q.rows[0].cost !== null ? Number(q.rows[0].cost) : null;
-  if (quoteCost === null) return;
   const sums = await query<{ paid: string | number; bills: string | number }>(
     `SELECT
        (SELECT COALESCE(sum(amount), 0) FROM payment_request
@@ -527,10 +527,28 @@ async function assertBillWithinOwed(cur: VendorBill, actor: ActingPrincipal): Pr
          WHERE task_id = $1 AND id <> $2 AND status IN ('approved', 'paid')) AS bills`,
     [cur.task_id, cur.id],
   );
-  const owed = vendorOwed(quoteCost, Number(sums.rows[0]?.paid ?? 0), Number(sums.rows[0]?.bills ?? 0));
+  const paid = Number(sums.rows[0]?.paid ?? 0);
+  const otherBills = Number(sums.rows[0]?.bills ?? 0);
   const cover = await approvedCover(cur.task_id, 'bill_over_owed', cur.id);
-  if (!billOverOwed(cur.total, owed, cover?.covers)) return;
   const usd = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (quoteCost === null) {
+    // "Paying twice" (2026-11-02): no quote to measure against, so a bill
+    // after vendor money already went out waits for a manager.
+    const out = paid + otherBills;
+    if (!billNeedsHoldWithoutQuote(cur.total, out, cover?.covers)) return;
+    await raiseMoneyHold({
+      taskId: cur.task_id,
+      type: 'bill_over_owed',
+      actorId: actor.id,
+      title: `${cur.vendor_name}'s bill${cur.bill_number ? ` ${cur.bill_number}` : ''} for ${usd(cur.total)} comes after ${usd(out)} already paid out to vendors on this work order, with no approved quote to measure it against`,
+      detail: { vendor_bill_id: cur.id, total: cur.total, owed: null, quote_cost: null, paid_requests: paid, other_bills: otherBills, covers: cur.total },
+      move: 'Approving this bill',
+      code: BILL_OVER_OWED_CODE,
+    });
+    return;
+  }
+  const owed = vendorOwed(quoteCost, paid, otherBills);
+  if (!billOverOwed(cur.total, owed, cover?.covers)) return;
   await raiseMoneyHold({
     taskId: cur.task_id,
     type: 'bill_over_owed',
