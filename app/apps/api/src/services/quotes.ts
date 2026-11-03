@@ -413,7 +413,7 @@ export function buildAutoSummary(
     if (section.lines.length > 0) out.push('');
     out.push(...lineRows(section.lines, multiDay));
   }
-  if (incurredLike.length > 0) out.push(...amountRows('Incurred subtotal', totals.incurred_subtotal));
+  if (incurredLike.length > 0) out.push(...amountRows('Total incurred',totals.incurred_subtotal));
 
   // ── Proposed options ──────────────────────────────────────────────────────
   const incurredScope = visibleScopeLines(sections.filter((s) => s.kind === 'incurred').flatMap((s) => s.scope_lines));

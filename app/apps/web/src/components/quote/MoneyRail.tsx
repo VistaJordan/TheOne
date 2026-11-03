@@ -118,7 +118,7 @@ export function MoneyRail({
 
       <dl className="kvlist">
         <div className="kvrow is-muted">
-          <dt>Incurred subtotal</dt>
+          <dt>Total incurred</dt>
           <dd>{usd(totals.incurredSubtotal)}</dd>
         </div>
 

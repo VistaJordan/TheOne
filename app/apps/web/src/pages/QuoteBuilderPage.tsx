@@ -666,9 +666,23 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         )
         : lockedButton(CLIENT_DECISION_APPROVED, 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', `lockDecide-${sectionKey}`, 'sm');
 
+  // Why the quote cannot be edited, when it cannot; nothing while it can.
+  const actorNote =
+    !allows('quote.edit') && (status === 'draft' || status === 'pending_correction' || status === 'pending_approval')
+      ? blockedReason('quote.edit')
+      : editable
+        ? null
+        : submittedLocked
+          ? QUOTE_SUBMITTED_LOCKED_TEXT
+          : canEdit
+            ? `This quote is ${QUOTE_STATUS[status].label.toLowerCase()} — its line items are read-only.`
+            : 'You can read this quote. Building and revising it is Senior OM and above.';
+
   return shell(
     <>
-      {/* ══ The quote as it stands: plain text, or the client's document ═══ */}
+      {/* ══ The quote as it stands: plain text, or the client's document ═══
+          Not on the work order's Quotes tab (Elise, 2026-11-03). */}
+      {!embedded && (
       <section className="card qpreview">
         <div className="card-head">
           <h2 className="card-title">Quote</h2>
@@ -733,10 +747,13 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           )}
         </div>
       </section>
+      )}
 
       {/* ══ Header band ══════════════════════════════════════════════════ */}
       <section className="card qhead">
         <div className="qhead-top">
+          {/* The work order's own header already names it (Elise, 2026-11-03). */}
+          {!embedded && (
           <div className="qhead-idline">
             <h1 className="q-title">Quote</h1>
             <span className="q-wo">
@@ -775,6 +792,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               </span>
             )}
           </div>
+          )}
           <div className="qhead-right">
             {/* 0077 · redraft from a transcript; Submit on the draft asks before replacing. */}
             {editable && <ImportTranscriptButton woNumber={quote.wo_number} />}
@@ -800,28 +818,10 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           </div>
         </div>
 
-        {editable && (
-          <p className="dismiss-note">
-            <Icon name="info" size={12} />
-            Every edit autosaves to the draft. Leaving this screen with unsaved edits asks you to
-            confirm first.
-          </p>
-        )}
-
-        <QuotePipeline status={status} round={currentRound} />
-
-        <div className="actionbar">
-          <span className="actor-note">
-            {!allows('quote.edit') && (status === 'draft' || status === 'pending_correction' || status === 'pending_approval')
-              ? blockedReason('quote.edit')
-              : editable
-                ? 'You can build and revise this quote.'
-                : submittedLocked
-                  ? QUOTE_SUBMITTED_LOCKED_TEXT
-                : canEdit
-                  ? `This quote is ${QUOTE_STATUS[status].label.toLowerCase()} — its line items are read-only.`
-                  : 'You can read this quote. Building and revising it is Senior OM and above.'}
-          </span>
+        {/* The pipeline and the buttons that move the quote along it share
+            one row (Elise, 2026-11-03). */}
+        <div className="qpipe-row">
+          <QuotePipeline status={status} round={currentRound} />
 
           <div className="ctas">
             {blocked && editable && (
@@ -943,6 +943,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             )}
           </div>
         </div>
+
+        {actorNote && <p className="actor-note qactor">{actorNote}</p>}
 
         {actionError && (
           <div className="callout" style={{ marginTop: 12 }}>
@@ -1176,7 +1178,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         )}
       </section>
 
-      {/* ══ Work order context (read-only) ═══════════════════════════════ */}
+      {/* ══ Work order context (read-only; not on the work order itself) ══ */}
+      {!embedded && (
       <section className="card" style={{ marginTop: 14 }}>
         <div className="card-head">
           <h2 className="card-title grow">Work order context</h2>
@@ -1202,6 +1205,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           <CtxCell k="External TaskId" v={wo?.ext_name ?? null} sub="Client CMMS reference" mono />
         </div>
       </section>
+      )}
 
       <div className="q-grid">
         {/* ══ Main column ═══════════════════════════════════════════════ */}
@@ -1246,9 +1250,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 {showErrors && incurredEditable && incurred.narrative.trim() === '' && (
                   <span className="err"><Icon name="alert" size={12} />Tech report is required</span>
                 )}
-                <span className="hint">
-                  Goes to the client verbatim as the first paragraph of the summary.
-                </span>
               </div>
 
               <ScopeList

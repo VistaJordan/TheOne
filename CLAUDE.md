@@ -3239,7 +3239,12 @@ under its print bar); the choice is remembered per browser
 `?pdf=1`, which opens the print dialog once the document has drawn. **Share
 with client** is drawn locked ("not decided yet") until Elise picks how quotes
 reach clients. The body scrolls inside the card (`.qpreview-body`, max 70vh)
-and the card is hidden in print.
+and the card is hidden in print. **On the work order's Quotes tab** (`embedded`,
+Elise 2026-11-03) that card, the header's id line (WO #, Rev, number, Print /
+PDF, status) and the Work order context card are not drawn — the standalone
+page keeps them; the pipeline and the action buttons share one row
+(`.qpipe-row`); the actor note shows only when the quote cannot be edited.
+The summary's incurred line reads "Total incurred".
 
 ## Verify
 
