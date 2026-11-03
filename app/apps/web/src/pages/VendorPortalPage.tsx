@@ -15,7 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { OnboardingPayload, PortalJob, PortalView } from '@theone/shared';
 import { ApiRequestError, addPortalNote, answerPortalOffer, getVendorPortal, setPortalEta, submitVendorOnboarding } from '../api/client';
 import { Icon, IconSprite } from '../components/Icon';
-import { LOGO } from '../lib/brand';
+import { ObiLogo } from '../components/ObiLogo';
 
 const WHEN = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const when = (iso: string | null) => (iso ? WHEN.format(new Date(iso)) : '—');
@@ -26,7 +26,7 @@ function Frame({ children, title }: { children: ReactNode; title: string }) {
     <div className="cu-pub vp">
       <IconSprite />
       <header className="cu-pub-bar">
-        <img className="cu-pub-logo" src={LOGO} alt="" />
+        <ObiLogo className="cu-pub-logo" label="OBI" />
         <span className="cu-pub-brand">Seamless FM · {title}</span>
       </header>
       <main className="cu-pub-main">{children}</main>

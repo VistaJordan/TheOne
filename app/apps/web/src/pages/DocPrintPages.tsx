@@ -43,7 +43,7 @@ export function DocTerms({ template }: { template: PrintTemplate | null }) {
 function PrintShell({ back, backLabel, title, children }: { back: string; backLabel: string; title: string; children: ReactNode }) {
   useEffect(() => {
     document.title = title;
-    return () => { document.title = 'The One'; };
+    return () => { document.title = 'OBI'; };
   }, [title]);
   return (
     <div className="qprint">

@@ -18,7 +18,7 @@ import {
 } from '@theone/shared';
 import { ApiRequestError, getPublicClientUpdate, publicClientUpdateCsvUrl } from '../api/client';
 import { CuChartGrid, CuTiles, NOT_SET } from '../components/cu/CuInsights';
-import { LOGO } from '../lib/brand';
+import { ObiLogo } from '../components/ObiLogo';
 
 const WHEN = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Chicago',
@@ -109,7 +109,7 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="cu-pub">
       <header className="cu-pub-bar">
-        <img className="cu-pub-logo" src={LOGO} alt="" />
+        <ObiLogo className="cu-pub-logo" label="OBI" />
         <span className="cu-pub-brand">Seamless FM · Work order update</span>
       </header>
       <main className="cu-pub-main">{children}</main>

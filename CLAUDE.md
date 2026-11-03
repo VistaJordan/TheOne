@@ -3287,8 +3287,9 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   (light by day, dark at night; paths in `lib/brand.ts`), sized by CSS — `.topbar-brand`
   in `styles/app.css` (62px, 36px on the collapsed rail) and `.signin-logo` in
   `styles/auth.css`. If the art changes, re-measure the viewBox (comment in the
-  component). The old wordmark (`logo-the-one.png`, `LOGO`) still heads the client
-  and vendor share pages.
+  component). The same component heads the client and vendor share pages
+  (`.cu-pub-logo`); the tab icon is `public/brand/OBI-favicon.svg` and the title
+  OBI. The old wordmark PNGs stay in `public/brand/`, referenced nowhere.
 - Motion is always inside `@media (prefers-reduced-motion: no-preference)` or
   disabled under `reduce`.
 - Files are CRLF on disk (`core.autocrlf=true`, no `.gitattributes`); the

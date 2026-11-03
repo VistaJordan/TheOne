@@ -59,7 +59,7 @@ export function QuotePrintPage() {
   useEffect(() => {
     if (quote) document.title = `${quote.number ?? 'Quote'} · ${quote.wo_number}`;
     return () => {
-      document.title = 'The One';
+      document.title = 'OBI';
     };
   }, [quote]);
 
