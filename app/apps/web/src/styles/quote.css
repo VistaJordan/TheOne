@@ -270,6 +270,7 @@
   margin-top: 14px;
 }
 .qb .qpipe-row .pipe { margin-top: 0; }
+.qb .qhead.is-embedded .qpipe-row { margin-top: 0; }
 .qb .qactor { margin: 10px 0 0; }
 
 /* action bar */

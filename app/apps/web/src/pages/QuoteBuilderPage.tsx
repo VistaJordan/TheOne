@@ -678,6 +678,32 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             ? null
             : 'You can read this quote. Building and revising it is Senior OM and above.';
 
+  // Import transcript, Reset quote and the autosave chip.
+  const headTools = (
+    <>
+      {/* 0077 · redraft from a transcript; Submit on the draft asks before replacing. */}
+      {editable && <ImportTranscriptButton woNumber={quote.wo_number} />}
+      {editable && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => setResetOpen(true)}
+          title="Clear the lines, options and notes and start the quote again"
+        >
+          <Icon name="refresh" size={12} />
+          Reset quote
+        </button>
+      )}
+      <AutosaveChip
+        editable={editable}
+        saving={saveMutation.isPending}
+        dirty={dirty}
+        savedAt={savedAt}
+        failed={saveMutation.isError}
+      />
+    </>
+  );
+
   return shell(
     <>
       {/* ══ The quote as it stands: plain text, or the client's document ═══
@@ -750,7 +776,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       )}
 
       {/* ══ Header band ══════════════════════════════════════════════════ */}
-      <section className="card qhead">
+      <section className={`card qhead${embedded ? ' is-embedded' : ''}`}>
+        {!embedded && (
         <div className="qhead-top">
           {/* The work order's own header already names it (Elise, 2026-11-03). */}
           {!embedded && (
@@ -793,36 +820,18 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             )}
           </div>
           )}
-          <div className="qhead-right">
-            {/* 0077 · redraft from a transcript; Submit on the draft asks before replacing. */}
-            {editable && <ImportTranscriptButton woNumber={quote.wo_number} />}
-            {editable && (
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setResetOpen(true)}
-                title="Clear the lines, options and notes and start the quote again"
-              >
-                <Icon name="refresh" size={12} />
-                Reset quote
-              </button>
-            )}
-            <AutosaveChip
-              editable={editable}
-              saving={saveMutation.isPending}
-              dirty={dirty}
-              savedAt={savedAt}
-              failed={saveMutation.isError}
-            />
-          </div>
+          <div className="qhead-right">{headTools}</div>
         </div>
+        )}
 
         {/* The pipeline and the buttons that move the quote along it share
-            one row (Elise, 2026-11-03). */}
+            one row (Elise, 2026-11-03); on the work order the tools join it,
+            so the whole band is one centred line. */}
         <div className="qpipe-row">
           <QuotePipeline status={status} round={currentRound} />
 
           <div className="ctas">
+            {embedded && headTools}
             {blocked && editable && (
               <button type="button" className="chip chip-danger" id="errChip" onClick={focusFirstProblem}>
                 <Icon name="alert" size={12} />
