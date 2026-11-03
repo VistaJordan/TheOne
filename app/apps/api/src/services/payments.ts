@@ -91,6 +91,8 @@ import {
   purposeBase,
   selfApprovalMessage,
   selfApprovalVerdict,
+  formatUsPhone,
+  usPhoneProblem,
 } from '@theone/shared';
 import type { PaymentOverage, PaymentPurposeCode } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
@@ -1017,6 +1019,14 @@ export async function createPaymentRequest(
     );
     vendorId = match.rows[0]?.id ?? null;
   }
+  // Elise, 2026-11-03: a payee that becomes a NEW vendor needs a real US
+  // number, stored as (409) 555-0143; one matched above keeps its record.
+  let newPayeePhone = payeePhone;
+  if (!vendorId && payeePhone) {
+    const problem = usPhoneProblem(payeePhone);
+    if (problem) throw badRequest(problem, { code: 'VALIDATION', field: 'payee_phone' });
+    newPayeePhone = formatUsPhone(payeePhone);
+  }
 
   if (vendorId) {
     const v = await query<{ id: string; is_blacklisted: boolean; blacklist_reason: string | null }>(
@@ -1046,13 +1056,13 @@ export async function createPaymentRequest(
       // A technician record (0057 kind = tech), findable by phone next time.
       const created = await tx.query<{ id: string }>(
         `INSERT INTO vendor (name, phone, trades, kind, created_by) VALUES ($1, $2, '{}', 'tech', $3) RETURNING id::text AS id`,
-        [payeeName, payeePhone, actor.id],
+        [payeeName, newPayeePhone, actor.id],
       );
       vendorId = created.rows[0].id;
       if (payeeDigits) {
         await tx.query(
           `INSERT INTO vendor_phone (vendor_id, digits, display) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-          [vendorId, payeeDigits, payeePhone],
+          [vendorId, payeeDigits, newPayeePhone],
         );
       }
     }
@@ -1068,7 +1078,7 @@ export async function createPaymentRequest(
         taskId,
         vendorId,
         payeeName,
-        payeePhone,
+        newPayeePhone,
         purpose,
         input.amount,
         input.method,

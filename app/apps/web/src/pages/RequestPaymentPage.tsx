@@ -33,6 +33,8 @@ import {
   PAYMENT_PURPOSE_CODES,
   PAYMENT_PURPOSE_LABEL,
   nextPurpose,
+  usPhoneInputValue,
+  usPhoneProblem,
   type PaymentPurposeCode,
 } from '@theone/shared';
 import { PAYMENTS_PAGE_PERM_KEY } from '@theone/shared';
@@ -120,6 +122,7 @@ export function RequestPaymentPage() {
   const [picked, setPicked] = useState<Vendor | null>(null);
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
+  const [phoneTouched, setPhoneTouched] = useState(false);
   // 0083 (#24): J (Job), M (Materials) or A (Assessment); the server numbers
   // repeats on the work order (J, J1, J2…).
   const [purpose, setPurpose] = useState<PaymentPurposeCode | ''>('');
@@ -190,9 +193,12 @@ export function RequestPaymentPage() {
   const purposeValid = purpose !== '';
   // What the server will store for it — shown so a repeat is no surprise.
   const nextCode = purpose === '' ? null : nextPurpose(purpose, items.map((p) => p.purpose));
+  // Elise, 2026-11-03: a new vendor's phone must be a real US number.
+  const phoneProblem = mode === 'manual' ? usPhoneProblem(manualPhone) : null;
+  const phoneError = phoneTouched && manualPhone.trim().length > 0 ? phoneProblem : null;
   const payeeValid =
     mode === 'manual'
-      ? manualName.trim().length > 0 && manualPhone.trim().length > 0
+      ? manualName.trim().length > 0 && phoneProblem === null
       : payee !== null;
   const addrErrs = addressErrors(method, address);
   const addressValid = Object.keys(addrErrs).length === 0;
@@ -209,7 +215,9 @@ export function RequestPaymentPage() {
       ? 'This technician is blacklisted — AP cannot pay them'
       : !payeeValid
         ? mode === 'manual' && manualName.trim().length > 0
-          ? 'Add the technician’s phone to submit'
+          ? manualPhone.trim().length > 0
+            ? 'Enter a valid US phone number to submit'
+            : 'Add the technician’s phone to submit'
           : 'Name the technician to submit'
         : !purposeValid
           ? 'Pick the purpose to submit'
@@ -392,7 +400,7 @@ export function RequestPaymentPage() {
                           onChange={(e) => setManualName(e.target.value)}
                         />
                       </div>
-                      <div className="field">
+                      <div className={`field${phoneError ? ' is-error' : ''}`}>
                         <label className="flabel" htmlFor="payee-phone">
                           Phone <span className="req" aria-hidden="true">*</span>
                           <span className="sr">(required)</span>
@@ -401,14 +409,21 @@ export function RequestPaymentPage() {
                           className="finput"
                           id="payee-phone"
                           type="tel"
+                          inputMode="tel"
+                          autoComplete="tel-national"
                           placeholder="(409) 555-0143"
                           value={manualPhone}
-                          onChange={(e) => setManualPhone(e.target.value)}
+                          aria-invalid={phoneError ? true : undefined}
+                          aria-describedby={phoneError ? 'payee-phone-err' : undefined}
+                          onChange={(e) => setManualPhone(usPhoneInputValue(e.target.value))}
+                          onBlur={() => setPhoneTouched(true)}
                         />
-                        <p className="fhelp">
-                          <Icon name="info" size={12} />
-                          A matching phone links the existing vendor; otherwise a vendor record is created.
-                        </p>
+                        {phoneError && (
+                          <p className="ferr" id="payee-phone-err">
+                            <Icon name="alert-circle" size={12} />
+                            {phoneError}
+                          </p>
+                        )}
                       </div>
                     </div>
                   ) : payee ? (

@@ -748,6 +748,48 @@ export function phoneDigits(raw: string | null | undefined): string | null {
   return d.length === 10 ? `1${d}` : d;
 }
 
+/** The ten digits of a US number ('+1 (409) 555-0143' → '4095550143'): a
+ *  leading country code 1 is dropped. Not checked — see usPhoneProblem. */
+function usTenDigits(raw: string | null | undefined): string {
+  const d = (raw ?? '').replace(/\D/g, '');
+  return d.length === 11 && d.startsWith('1') ? d.slice(1) : d;
+}
+
+/** Why this is not a dialable US number, or null when it is (Elise,
+ *  2026-11-03: a new vendor's phone on Request payment). Ten digits (a
+ *  leading 1 allowed); area code and exchange start 2-9 and are not N11. */
+export function usPhoneProblem(raw: string | null | undefined): string | null {
+  const t = (raw ?? '').trim();
+  if (!t) return 'Enter the phone number.';
+  if (/[^\d\s()+.-]/.test(t)) return 'A phone number takes digits only.';
+  const d = usTenDigits(t);
+  if (d.length !== 10) return 'Enter a 10-digit US phone number.';
+  const area = d.slice(0, 3);
+  const exchange = d.slice(3, 6);
+  if (!/^[2-9]/.test(area) || area.endsWith('11')) return `${area} is not a US area code.`;
+  if (!/^[2-9]/.test(exchange) || exchange.endsWith('11')) return 'That is not a valid US phone number.';
+  return null;
+}
+
+/** '4095550143' → '(409) 555-0143'; null when usPhoneProblem refuses it. */
+export function formatUsPhone(raw: string | null | undefined): string | null {
+  if (usPhoneProblem(raw)) return null;
+  const d = usTenDigits(raw);
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
+/** What a US phone box holds after a keystroke: digits only, ten at most
+ *  (a leading 1 dropped), shaped as (409) 555-0143 as they are typed. */
+export function usPhoneInputValue(raw: string): string {
+  let d = raw.replace(/\D/g, '');
+  if (d.length > 10 && d.startsWith('1')) d = d.slice(1);
+  d = d.slice(0, 10);
+  if (d.length === 0) return '';
+  if (d.length <= 3) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
 /** The lookup key of a city name: lower-cased, punctuation dropped, saint /
  *  mount / fort abbreviated. Must match geo_city.name_key (migration 0056). */
 export function cityKey(raw: string | null | undefined): string {
