@@ -69,7 +69,7 @@ export function SopDoc({ content, snap }: { content: DocsContent; snap: DocsSnap
     <article className="doc doc-sop">
       <header className="doc-cover">
         <p className="doc-kicker">Standard Operating Procedures</p>
-        <h1>{SOP.title.replace(/^The One — /, '')}</h1>
+        <h1>{SOP.title.replace(/^OBI — /, '')}</h1>
         <p className="doc-sub">{SOP.subtitle}</p>
         <p className="doc-version">{versionLine(content.reviewed_on, snap)}</p>
         <DocBox title="Document control">{SOP.control}</DocBox>

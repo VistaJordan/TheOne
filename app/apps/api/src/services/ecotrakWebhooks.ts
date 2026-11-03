@@ -1,5 +1,5 @@
-// 0114 · Ecotrak webhooks: Ecotrak tells The One the moment a work order
-// changes or gets a comment, instead of The One only finding out on its next
+// 0114 · Ecotrak webhooks: Ecotrak tells OBI the moment a work order
+// changes or gets a comment, instead of OBI only finding out on its next
 // look.
 //
 // SAFETY — read this before touching the file. Our clients see our work
@@ -81,7 +81,7 @@ export interface RegisterOutcome {
 export async function registerEcotrakWebhooks(actor: { id: string; isSuperAdmin: boolean }): Promise<RegisterOutcome[]> {
   if (!actor.isSuperAdmin) throw new ApiError('FORBIDDEN', 'Only a super admin can register the Ecotrak webhooks');
   if (!(await integrationOnNow('ecotrak'))) {
-    throw new ApiError('CONFLICT', 'Turn Ecotrak → The One on first: registering needs to sign in to Ecotrak.');
+    throw new ApiError('CONFLICT', 'Turn Ecotrak → OBI on first: registering needs to sign in to Ecotrak.');
   }
   const url = ecotrakWebhookUrl();
   if (!url) {
@@ -111,7 +111,7 @@ export async function registerEcotrakWebhooks(actor: { id: string; isSuperAdmin:
     const key = randomBytes(24).toString('base64url');
     try {
       const created = await postWebhook(client, {
-        name: `The One · ${action === 'WEBHOOK_WORKORDER_COMMENT' ? 'comments' : 'work order changes'}`,
+        name: `OBI · ${action === 'WEBHOOK_WORKORDER_COMMENT' ? 'comments' : 'work order changes'}`,
         url: `${url}?key=${key}`,
         action,
         method: 'post',

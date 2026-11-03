@@ -52,7 +52,7 @@ const PUBLIC_PATHS = new Set([
   // 0078: the once-a-minute cron that pushes work-order changes to ClickUp
   // (CRON_SECRET).
   '/api/webhooks/clickup-sync',
-  // 0079: the once-a-minute cron that reads Ecotrak while Ecotrak → The One
+  // 0079: the once-a-minute cron that reads Ecotrak while Ecotrak → OBI
   // is on (CRON_SECRET; read only).
   '/api/webhooks/ecotrak-sync',
   // 0114: Ecotrak's own webhook calls; the route checks the key in the URL

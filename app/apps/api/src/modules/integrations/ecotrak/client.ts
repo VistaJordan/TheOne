@@ -3,10 +3,10 @@
  * READ ONLY by construction: this module exposes no method that mutates
  * anything on Ecotrak's side. The only POST is the OAuth2 token exchange, which
  * is authentication rather than a data write. Writing (PUT /status, /eta, notes)
- * comes later, behind its own switch (Admin › Integrations › The One → Ecotrak,
+ * comes later, behind its own switch (Admin › Integrations › OBI → Ecotrak,
  * locked off until go-live), and is tested on Ecotrak's test system first.
  *
- * 0079 · every call checks the Ecotrak → The One switch first: off means this
+ * 0079 · every call checks the Ecotrak → OBI switch first: off means this
  * client does not contact Ecotrak at all, not even for a token. The sync
  * checks the table itself before it starts; this is the second lock.
  *
@@ -152,7 +152,7 @@ export class EcotrakClient implements WorkOrderSource {
   }
 
   private async accessToken(): Promise<string> {
-    if (!integrationOn('ecotrak')) throw new Error('Ecotrak → The One is switched off in Admin › Integrations');
+    if (!integrationOn('ecotrak')) throw new Error('Ecotrak → OBI is switched off in Admin › Integrations');
     if (this.token && Date.now() < this.token.expiresAt - 60_000) return this.token.value;
 
     const res = await fetch(this.cfg.tokenUrl, {
@@ -178,7 +178,7 @@ export class EcotrakClient implements WorkOrderSource {
   }
 
   private async get<T>(path: string): Promise<T> {
-    if (!integrationOn('ecotrak')) throw new Error('Ecotrak → The One is switched off in Admin › Integrations');
+    if (!integrationOn('ecotrak')) throw new Error('Ecotrak → OBI is switched off in Admin › Integrations');
     const res = await fetch(`${this.cfg.baseUrl}${path}`, {
       headers: { Authorization: `Bearer ${await this.accessToken()}`, Accept: 'application/json' },
     });

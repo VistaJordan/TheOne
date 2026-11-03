@@ -273,8 +273,8 @@ async function alphaFixers(s: Sheet, data: SignoffSheetData): Promise<void> {
 export async function renderSignoffSheet(data: SignoffSheetData): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.setTitle(`Sign-off sheet ${safeText(data.wo_ref)}`);
-  doc.setProducer('The One');
-  doc.setCreator('The One');
+  doc.setProducer('OBI');
+  doc.setCreator('OBI');
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const s = new Sheet(doc, regular, bold);

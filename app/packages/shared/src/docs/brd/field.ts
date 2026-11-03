@@ -6,7 +6,7 @@ export const FIELD_PART: DocPart = {
   key: 'field',
   title: 'Vendors, technicians and dispatch',
   intro:
-    'Technicians are external subcontractors, so finding the right one near the job is a core module. This part is The One\'s own copy of what VR - CRM and Tech Locator do, plus the suggestion and dispatch logic built on top; those two apps keep running untouched until the data moves.',
+    'Technicians are external subcontractors, so finding the right one near the job is a core module. This part is OBI\'s own copy of what VR - CRM and Tech Locator do, plus the suggestion and dispatch logic built on top; those two apps keep running untouched until the data moves.',
   modules: [
     {
       key: 'vendors',
@@ -42,7 +42,7 @@ export const FIELD_PART: DocPart = {
         },
         {
           name: 'Notes, blacklist, calls and emails',
-          what: 'Notes on the record (and from the map card: Add note, Notes / Hide notes, carrying the WO number); Mark blacklisted with a required reason ("Say why — a blacklist needs a reason"; everyone sees the flag and the reason); Clear blacklist ("Clearing a blacklist is a manager\'s decision"). Log a call (What was said, One-line summary, Link to the recording, Outcome that may set the status); Log an email (Subject, What it said — "This records an email you sent from your own mailbox. The One does not send it."); edit and remove; the last call feeds the Last contact column.',
+          what: 'Notes on the record (and from the map card: Add note, Notes / Hide notes, carrying the WO number); Mark blacklisted with a required reason ("Say why — a blacklist needs a reason"; everyone sees the flag and the reason); Clear blacklist ("Clearing a blacklist is a manager\'s decision"). Log a call (What was said, One-line summary, Link to the recording, Outcome that may set the status); Log an email (Subject, What it said — "This records an email you sent from your own mailbox. OBI does not send it."); edit and remove; the last call feeds the Last contact column.',
           value: 'Bad experiences are shared with the whole team, not just remembered.',
           rules: ['A blacklisted vendor is never suggested, cannot accept a dispatch offer, cannot get a portal link and cannot be set as the responsible vendor; hiring from the map warns and goes through. The owner is told by a notice.'],
           permissions: ['vendors/blacklist create / edit', 'vendors edit (calls, emails)'],
@@ -59,7 +59,7 @@ export const FIELD_PART: DocPart = {
         {
           name: 'List tools',
           what: 'Header chips VR vendors · N, Technicians · N, Blacklisted · N; filters (name, email or phone; trades, states, statuses, owners / No owner, paperwork, a flag: Possible duplicates / Missing information / Not on the map / Blacklisted); advanced filters ("Show vendors that match all / any of these", up to 20 rules over 40 fields and 18 tests); Columns (22, "kept for you on every device", Name always shown); Saved lists… / Save as a list (Name; Who sees it: Only me / Managers / Everyone with the Vendors section); Look up a list (phone numbers, names or emails, up to 300 lines → on file or Not on file); the bulk bar (N selected, Select all N that match; Edit one field: Status, Owner, Primary trade, State, City, Brand source; Remove; "Each record is changed and logged exactly as if you had edited it by hand"); Export CSV (26 columns, 20,000 rows, logged); the Board by status (40 cards a column, drag or Move to…); Performance (Jobs, SLA met / missed, Recalls, Temp. fixes, Response hours from hire to first check-in, Offers taken, Billed, Bill checks, for work orders received in a date range; a job counts when the vendor is responsible or hired on it); Coverage map (every placed location; filters Trade / State / Status and kind chips).',
-          value: 'The CRM\'s list features without leaving The One.',
+          value: 'The CRM\'s list features without leaving OBI.',
           permissions: ['vendors/lists create', 'vendors/export view', 'vendors edit (board moves, bulk edit)'],
           audit: ['vendors_exported'],
           since: '0059',

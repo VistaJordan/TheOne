@@ -1,6 +1,6 @@
 /* Admin › Integrations (0074).
  *
- * Everything The One connects to, one row each: the tool's mark, what it
+ * Everything OBI connects to, one row each: the tool's mark, what it
  * does for the team, whether it is set up on the server, and ONE switch.
  * Off = every button that uses the connector stops, with the reason shown
  * where the button was; the keys and secrets stay on the server untouched,
@@ -55,7 +55,7 @@ export function AdminIntegrationsPage() {
       title="Integrations"
       subtitle={
         <>
-          Everything The One connects to. Turn one off and every button that uses it stops, with the reason shown where the
+          Everything OBI connects to. Turn one off and every button that uses it stops, with the reason shown where the
           button was; the keys and secrets stay on the server, so turning it back on needs nothing else.
           {items.length > 0 && <> {on} of {items.length} on.</>}
         </>
@@ -107,7 +107,7 @@ function IntegrationRow({ it, canEdit, busy, onFlip }: { it: IntegrationStatus; 
   const [imgOk, setImgOk] = useState(true);
   const s = stateOf(it);
   const locked = Boolean(it.locked);
-  // 0079 · a connector whose sending side does not exist yet (The One →
+  // 0079 · a connector whose sending side does not exist yet (OBI →
   // Ecotrak): the switch is drawn off and cannot be turned on.
   const lockedOff = it.locked_off ?? null;
   return (

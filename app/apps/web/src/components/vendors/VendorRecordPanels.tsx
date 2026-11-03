@@ -7,7 +7,7 @@
  * outcome, and a document that changes the paperwork, also change the record,
  * so those refresh it too.
  *
- * Emails are a LOG: The One sends none (held on purpose). The form records an
+ * Emails are a LOG: OBI sends none (held on purpose). The form records an
  * email somebody sent from their own mailbox. */
 
 import { useState } from 'react';
@@ -474,7 +474,7 @@ function EmailsPanel({ v, w, landed, failed }: { v: VendorDetail; w: VendorWorkR
         <div className="vrec-form">
           <input className="fld" autoFocus placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} aria-label="Subject" />
           <textarea className="fld" rows={2} placeholder="What it said (optional)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} aria-label="Notes" />
-          <p className="vrec-note" style={{ padding: 0 }}>This records an email you sent from your own mailbox. The One does not send it.</p>
+          <p className="vrec-note" style={{ padding: 0 }}>This records an email you sent from your own mailbox. OBI does not send it.</p>
           <span style={{ display: 'flex', gap: 6 }}>
             <button type="button" className="btn btn-sm" disabled={(!form.subject.trim() && !form.notes.trim()) || save.isPending} onClick={() => save.mutate()}>Log the email</button>
             <button type="button" className="btn btn-sm is-ghost" onClick={() => setForm(null)}>Cancel</button>

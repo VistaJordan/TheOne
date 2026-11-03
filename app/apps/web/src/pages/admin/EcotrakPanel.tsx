@@ -1,4 +1,4 @@
-/* 0079 · Ecotrak → The One's panel, under its row in Admin › Integrations.
+/* 0079 · Ecotrak → OBI's panel, under its row in Admin › Integrations.
  *
  * What an administrator needs before and after turning it on: are the
  * credentials on the server, when did it last look at Ecotrak, what did that
@@ -93,10 +93,10 @@ export function EcotrakPanel({ canEdit, enabled }: { canEdit: boolean; enabled: 
       )}
       <p className="intg-note">
         {!d.enabled
-          ? 'Off: The One does not contact Ecotrak at all. Turn the switch on to start reading.'
+          ? 'Off: OBI does not contact Ecotrak at all. Turn the switch on to start reading.'
           : hooksOn
-            ? 'On: Ecotrak tells The One the moment a work order changes or gets a comment, and The One also reads Ecotrak every 15 minutes in case a call was missed. It only reads; nothing is changed on Ecotrak.'
-            : 'On: The One reads Ecotrak every minute. It only reads; nothing is changed on Ecotrak.'}
+            ? 'On: Ecotrak tells OBI the moment a work order changes or gets a comment, and OBI also reads Ecotrak every 15 minutes in case a call was missed. It only reads; nothing is changed on Ecotrak.'
+            : 'On: OBI reads Ecotrak every minute. It only reads; nothing is changed on Ecotrak.'}
       </p>
       <div className="cu-stats">
         <span>

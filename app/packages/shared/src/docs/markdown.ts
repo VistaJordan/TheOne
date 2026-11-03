@@ -39,20 +39,20 @@ export function docsVersionLine(snap: DocsSnapshot | null): string {
 
 export function brdMarkdown(snap: DocsSnapshot | null): string {
   const out: string[] = [];
-  out.push('# The One — Business Requirements Document (living)');
+  out.push('# OBI — Business Requirements Document (living)');
   out.push('');
   out.push(`_${docsVersionLine(snap)}_`);
   out.push('');
   out.push('## 1. Introduction');
   out.push('');
   out.push(
-    'This document describes what The One does and why, module by module and feature by feature, with the controls on screen, the rules the system enforces, the permission each action needs and the value each feature brings. Sections 1 to 3 are written by hand beside the code and reviewed against the screens; the appendix is read from the live instance each time the document is generated, so statuses, fields, roles, automations, integrations and the revision history always describe the system as it is.',
+    'This document describes what OBI does and why, module by module and feature by feature, with the controls on screen, the rules the system enforces, the permission each action needs and the value each feature brings. Sections 1 to 3 are written by hand beside the code and reviewed against the screens; the appendix is read from the live instance each time the document is generated, so statuses, fields, roles, automations, integrations and the revision history always describe the system as it is.',
   );
   out.push('');
   out.push('## 2. Business context');
   out.push('');
   out.push(
-    'Seamless FM (Byblos Vista) runs facilities work orders for retail and restaurant clients through external technicians. Work arrives in the clients\' own systems (Ecotrak, Corrigo, ServiceChannel), by email and by phone; it must be accepted, dispatched to a subcontractor, assessed, quoted inside the client\'s clock, approved by the client, fulfilled, closed with proof, paid on the technician side and invoiced on the client side. Before The One this ran across ClickUp, Teams reminders, a tech-locator map, a vendor CRM, Make and Paperform automations and tracking spreadsheets per client. The One replaces them with one record and one set of rules.',
+    'Seamless FM (Byblos Vista) runs facilities work orders for retail and restaurant clients through external technicians. Work arrives in the clients\' own systems (Ecotrak, Corrigo, ServiceChannel), by email and by phone; it must be accepted, dispatched to a subcontractor, assessed, quoted inside the client\'s clock, approved by the client, fulfilled, closed with proof, paid on the technician side and invoiced on the client side. Before OBI this ran across ClickUp, Teams reminders, a tech-locator map, a vendor CRM, Make and Paperform automations and tracking spreadsheets per client. OBI replaces them with one record and one set of rules.',
   );
   out.push('');
   out.push('### 2.1 The lifecycle');
@@ -297,7 +297,7 @@ export function sopMarkdown(snap: DocsSnapshot | null): string {
 
 export function lifecycleMarkdown(snap: DocsSnapshot | null): string {
   const out: string[] = [];
-  out.push('# The One — Work-order lifecycle');
+  out.push('# OBI — Work-order lifecycle');
   out.push('');
   out.push(`_${docsVersionLine(snap)}_`);
   out.push('');

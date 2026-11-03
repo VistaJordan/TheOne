@@ -1,9 +1,9 @@
-// 0114 · Ecotrak → The One, the pure half: who wrote a note, which work order
+// 0114 · Ecotrak → OBI, the pure half: who wrote a note, which work order
 // a webhook delivery is about, and the address line a work order carries.
 // No I/O; the API's ingest and webhook receiver call these
 // (tests/ecotrak-inbound.test.ts).
 
-/** The two webhook events The One registers on Ecotrak. */
+/** The two webhook events OBI registers on Ecotrak. */
 export const ECOTRAK_WEBHOOK_ACTIONS = ['WEBHOOK_WORKORDER_ACTIVITY', 'WEBHOOK_WORKORDER_COMMENT'] as const;
 export type EcotrakWebhookAction = (typeof ECOTRAK_WEBHOOK_ACTIONS)[number];
 

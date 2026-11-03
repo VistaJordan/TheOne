@@ -10,7 +10,7 @@
  * SharePoint folder checks once a reader exists), and the WO stays held until
  * the gate is ticked.
  *
- * Since AUDIT.md W2-1 the engine reads FACTS, never guesses: a fact The One
+ * Since AUDIT.md W2-1 the engine reads FACTS, never guesses: a fact OBI
  * does not carry is `null` and yields one "offline" coverage line, never a
  * finding; a quote the quotes list did not reach is unknown the same way; the
  * SharePoint folder checks are always offline (no reader runs in the
@@ -81,7 +81,7 @@ function quoteFor(taskId: string, i = 0): QuoteListItem {
   };
 }
 
-/** A WO that has passed every check The One can run — the only shape that
+/** A WO that has passed every check OBI can run — the only shape that
     should audit clean. Days and the folder contents are not tracked. */
 function cleanRow(overrides: Partial<AuditRow> = {}): AuditRow {
   return {
@@ -228,7 +228,7 @@ describe('grey flag: individual audit rules', () => {
     expect(findings(cleanRow({ coNumber: '123456' }), GATE_OPEN)).toEqual([]);
   });
 
-  it('a fact The One does not carry is a coverage line, never a finding', () => {
+  it('a fact OBI does not carry is a coverage line, never a finding', () => {
     const row = cleanRow({ cico: null, bfi: null, coNumber: null, hasClientQuote: null });
     const got = ids(row, GATE_OPEN);
     for (const expected of ['cico-offline', 'bfi-offline', 'co-offline', 'client-quote-offline', 'sp-offline']) {

@@ -1,4 +1,4 @@
-// 0075 · The SOP: how the team operates The One, step by step, in the format
+// 0075 · The SOP: how the team operates OBI, step by step, in the format
 // of the Tech Locator Map SOPs (document control, role purpose, scope, who
 // can use it, definitions, numbered procedures with notes and tables, success
 // metric, revision history drawn from the migration ledger, sign-off).
@@ -9,12 +9,12 @@
 import type { SopDocument } from './types';
 
 export const SOP: SopDocument = {
-  title: 'The One — Standard Operating Procedures',
+  title: 'OBI — Standard Operating Procedures',
   subtitle: 'Work-order, quote, vendor and payment platform for Seamless FM (Byblos Vista)',
   control:
-    'This SOP defines how a work order is received, dispatched, quoted, approved, fulfilled, paid and invoiced in The One, who performs each step, which screen and button does it, and the rules the system enforces along the way. It is generated from the application itself: the procedures are kept beside the code, and the appendix (statuses, fields, roles, automations, integrations) is read from the live instance when this page opens.',
+    'This SOP defines how a work order is received, dispatched, quoted, approved, fulfilled, paid and invoiced in OBI, who performs each step, which screen and button does it, and the rules the system enforces along the way. It is generated from the application itself: the procedures are kept beside the code, and the appendix (statuses, fields, roles, automations, integrations) is read from the live instance when this page opens.',
   purpose: [
-    'The One is the single system of record for every work order Seamless FM runs on behalf of its clients: it receives the job from the client\'s system or by hand, finds the technician, logs the visits, builds and approves the quote, pays the technician, invoices the client and keeps the client informed, with every action recorded.',
+    'OBI is the single system of record for every work order Seamless FM runs on behalf of its clients: it receives the job from the client\'s system or by hand, finds the technician, logs the visits, builds and approves the quote, pays the technician, invoices the client and keeps the client informed, with every action recorded.',
     'Four kinds of people operate it. Managers (Team Lead, Assistant TL, Account Manager, Admin) accept work, approve quotes, payments and status changes, and set the rules. Dispatchers (OM, Senior OM, OM Under Probation — the Ops Coordinator position) find technicians, run visits and move the job. The Operations Admin drafts work orders typed in by hand and keeps the client systems in step. Accounts (Accounts Payable, Accounts Receivable, VR Officer, Sales) pay, audit, invoice, recruit vendors and watch their clients.',
     'Trust is tiered. A probation dispatcher requests status changes and cannot change the assignee; a senior dispatcher builds quotes; a manager decides. What each role may do is set in Admin › Roles and can be adjusted per person by a super admin.',
   ],
@@ -34,7 +34,7 @@ export const SOP: SopDocument = {
     { term: 'NTE', definition: 'Not-to-exceed: the client\'s ceiling for the job. Cost above it raises an NTE override task that holds the quote and the payment until a manager decides.' },
     { term: 'Visit (CICO)', definition: 'One technician visit with its check-in and check-out stamps: Assessment, Job or Return trip. A check-in moves the work order On Site.' },
     { term: 'Quote clock', definition: 'Quote Due Date: 48 business hours after the assessment check-out, skipping weekends and the holiday table, Chicago time.' },
-    { term: 'Yoda', definition: 'The standalone quoting and technician-payment tool The One replaces. Its rules (option pricing, client decisions, rounds, W9, two-person delete, Cost on pay) live in The One since 0076; nothing is handed to it any more.' },
+    { term: 'Yoda', definition: 'The standalone quoting and technician-payment tool OBI replaces. Its rules (option pricing, client decisions, rounds, W9, two-person delete, Cost on pay) live in OBI since 0076; nothing is handed to it any more.' },
     { term: 'Scope ("Only theirs")', definition: 'A role or person who sees only the work orders assigned to them, widened by billing entities, assigned clients, or narrowed to a list of sites.' },
     { term: 'Super admin', definition: 'One of the four named people who pass every permission check and alone can adjust one person\'s permissions, restrict a person to sites, view as someone else, or make and unmake another super admin.' },
     { term: 'Audit log', definition: 'The append-only record of every change (who, when, before, after). Nothing in it can be edited or deleted.' },
@@ -46,7 +46,7 @@ export const SOP: SopDocument = {
     {
       n: 1,
       title: 'Signing In',
-      lead: 'Access is Microsoft sign-in only; The One holds no passwords.',
+      lead: 'Access is Microsoft sign-in only; OBI holds no passwords.',
       who: ['Everyone'],
       where: 'The sign-in page',
       needs: [],
@@ -326,7 +326,7 @@ export const SOP: SopDocument = {
     {
       n: 12,
       title: 'Paying the Technician',
-      lead: 'A request per payment, approved, paid by AP in The One (the Yoda payment flow, 0076), rolled into Cost.',
+      lead: 'A request per payment, approved, paid by AP in OBI (the Yoda payment flow, 0076), rolled into Cost.',
       who: ['Dispatchers (request)', 'Team Lead / Assistant TL / Account Manager (approve)', 'Accounts Payable (process)'],
       where: 'Finances › Payables on the work order; Payments',
       needs: ['payments create', 'payments approve', 'payments/process edit'],
@@ -362,7 +362,7 @@ export const SOP: SopDocument = {
         { kind: 'sub', title: 'Audit (prototype)' },
         { kind: 'steps', items: [
           'Open **Receivables › Audit** (needs invoicing view). Lanes **All · Major · Minor · Clean** show "Auto-check results" and "Findings" per Done work order (the 500 most recent) with a suggested QC; a dash in a fact column reads "not tracked yet".',
-          'Fix what the checks flag on the work order (**Open work order**), then tick **GTG**, **Elise**, **Admin** and **Quote**. A clean, ticked row reads "Clean on what The One tracks — release ticked here (not saved); Invoicing › Ready follows the quote"; move its status to **Ready to Invoice**.',
+          'Fix what the checks flag on the work order (**Open work order**), then tick **GTG**, **Elise**, **Admin** and **Quote**. A clean, ticked row reads "Clean on what OBI tracks — release ticked here (not saved); Invoicing › Ready follows the quote"; move its status to **Ready to Invoice**.',
         ] },
         { kind: 'note', title: 'PROTOTYPE', text: 'The banner says it: "Prototype — this tab is worked out in your browser from the work-order and quote lists." Only facts the lists carry are checked (Assignee, CICO status, Bill For Incurred, the quote on file); SharePoint folder contents, closeout numbers and days on Grey are not tracked yet and are never counted as findings; the four ticks live in this browser only and are not saved or audited. Treat it as the shape of the audit, not its verdict.' },
         { kind: 'sub', title: 'Invoicing' },
@@ -404,7 +404,7 @@ export const SOP: SopDocument = {
     {
       n: 15,
       title: 'Vendors and Technicians (Vendor Relations)',
-      lead: 'The One\'s own vendor network: records, documents, compliance, tasks, alerts and the coverage map.',
+      lead: 'OBI\'s own vendor network: records, documents, compliance, tasks, alerts and the coverage map.',
       who: ['VR Officer', 'Team Lead', 'Assistant TL', 'Account Manager', 'Admin'],
       where: 'Vendors (List, Board, Tasks, Alerts, Data quality, Performance, Coverage map)',
       needs: ['vendors view / create / edit / delete', 'vendors/documents create / delete', 'vendors/review approve', 'vendors/blacklist create / edit', 'vendors/lists create', 'vendors/import create', 'vendors/export view', 'vendors/portal view / edit', 'vendors/dispatch edit'],
@@ -415,7 +415,7 @@ export const SOP: SopDocument = {
           'Open the vendor, **Edit**, fill rates, availability, coverage (radius, whole state, nationwide, other states), payment terms, contacts, priority; **Save changes**. The record is placed on the map from its ZIP or city.',
           '**Documents**: pick the type (W-9, MSA, Certificate of insurance with the company it names, Other document) and **Upload** (PDF, image or Word, 3 MB). A W-9 or MSA marks it received; a COI opens a compliance review. Any vendor editor ticks the six checks on the COI card (Certificate holder is correct, Additional insured is named, General liability meets $1M / $2M, Workers comp, Commercial auto, Waiver of subrogation); a reviewer decides **Approve** or **Send back** from Tasks. **Insurance dates** are added on their card (a newer date replaces the old one, which no longer counts).',
           '**Notes**: type a note; to blacklist, tick **Blacklist with this as the reason** and click **Mark blacklisted** (everyone sees the flag and the reason; the owner is told). **Clear blacklist** is a manager\'s decision (the blacklist edit right).',
-          '**Log a call** (what was said, a summary, a recording link, an outcome that may set the status) and **Log an email** (a record of an email you sent from your own mailbox; The One does not send it).',
+          '**Log a call** (what was said, a summary, a recording link, an outcome that may set the status) and **Log an email** (a record of an email you sent from your own mailbox; OBI does not send it).',
         ] },
         { kind: 'note', title: 'COMPLIANCE', text: 'The status is derived, never ticked by hand: EXPIRED when a current insurance date is past; REJECTED when the COI was sent back; APPROVED when W-9, MSA and COI are received and the COI approved; IN_REVIEW when some are in; MISSING_DOCS otherwise. A New / Interested / Ready vendor turns Active when approved. Hiring a vendor whose COI is missing or expired warns; it never blocks. A blacklisted vendor is never suggested, cannot accept a dispatch offer, cannot get a portal link and cannot be set as the responsible vendor; hiring from the map warns.' },
         { kind: 'sub', title: 'Work the queues' },
@@ -577,7 +577,7 @@ export const SOP: SopDocument = {
   ],
 
   successMetric:
-    'The One is working when a work order moves from the client\'s system to a paid invoice without a spreadsheet, a Teams reminder or a re-keyed form: the right dispatcher gets it complete, the technician is found in seconds, the quote is out inside 48 business hours, every approval is taken by the right tier in one inbox, the technician is paid from the record, the client sees exactly what was meant for them, and every step can be read back in the audit log.',
+    'OBI is working when a work order moves from the client\'s system to a paid invoice without a spreadsheet, a Teams reminder or a re-keyed form: the right dispatcher gets it complete, the technician is found in seconds, the quote is out inside 48 business hours, every approval is taken by the right tier in one inbox, the technician is paid from the record, the client sees exactly what was meant for them, and every step can be read back in the audit log.',
 
   matrix: [
     { role: 'Team Lead / Assistant TL / Account Manager', procedures: [1, 2, 3, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19] },

@@ -4,7 +4,7 @@
  * from ClickUp), which of our fields goes to which ClickUp field (matched by
  * name to start with — our field keys ARE the old ClickUp names), and the
  * queue (how many are linked, waiting, failing, with a retry per work order).
- * One-way: The One is the source of truth.
+ * One-way: OBI is the source of truth.
  */
 
 import { useMemo, useState } from 'react';
@@ -231,7 +231,7 @@ export function ClickUpPanel({ canEdit }: { canEdit: boolean }) {
               <table className="ct cu-map">
                 <thead>
                   <tr>
-                    <th>Field in The One</th>
+                    <th>Field in OBI</th>
                     <th>Goes to in ClickUp</th>
                     <th />
                   </tr>

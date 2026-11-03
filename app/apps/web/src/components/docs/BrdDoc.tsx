@@ -38,7 +38,7 @@ export function BrdDoc({ content, snap }: { content: DocsContent; snap: DocsSnap
     <article className="doc doc-brd">
       <header className="doc-cover">
         <p className="doc-kicker">Business Requirements Document · living</p>
-        <h1>The One</h1>
+        <h1>OBI</h1>
         <p className="doc-sub">Work-order, quote, vendor and payment platform for Seamless FM (Byblos Vista)</p>
         <p className="doc-version">{versionLine(content.reviewed_on, snap)}</p>
         <DocBox title="Document control">
@@ -50,7 +50,7 @@ export function BrdDoc({ content, snap }: { content: DocsContent; snap: DocsSnap
         <h2>1. Introduction</h2>
         <h3>1.1 Purpose</h3>
         <p>
-          This document is the contract between the business and the application: it states what The One must do, records how each requirement is met, and names the value each part brings. It is written for stakeholders, reviewers and auditors. The companion SOP says how people operate it; the Lifecycle tab draws the work order&rsquo;s path.
+          This document is the contract between the business and the application: it states what OBI must do, records how each requirement is met, and names the value each part brings. It is written for stakeholders, reviewers and auditors. The companion SOP says how people operate it; the Lifecycle tab draws the work order&rsquo;s path.
         </p>
         <h3>1.2 How to read it</h3>
         <ul>
@@ -66,7 +66,7 @@ export function BrdDoc({ content, snap }: { content: DocsContent; snap: DocsSnap
         <h2>2. Business context</h2>
         <h3>2.1 The company and the problem</h3>
         <p>
-          Seamless FM runs facilities work orders for retail and restaurant clients through external technicians. Work arrives in the clients&rsquo; own systems (Ecotrak, Corrigo, ServiceChannel), by email and by phone. Each job must be accepted, dispatched to a subcontractor, assessed, quoted inside the client&rsquo;s clock, approved by the client, fulfilled, closed with proof, paid on the technician side and invoiced on the client side. Before The One this ran across ClickUp, Teams reminders, a tech-locator map, a vendor CRM, Make and Paperform automations and a tracking spreadsheet per client. The One replaces them with one record and one set of rules.
+          Seamless FM runs facilities work orders for retail and restaurant clients through external technicians. Work arrives in the clients&rsquo; own systems (Ecotrak, Corrigo, ServiceChannel), by email and by phone. Each job must be accepted, dispatched to a subcontractor, assessed, quoted inside the client&rsquo;s clock, approved by the client, fulfilled, closed with proof, paid on the technician side and invoiced on the client side. Before OBI this ran across ClickUp, Teams reminders, a tech-locator map, a vendor CRM, Make and Paperform automations and a tracking spreadsheet per client. OBI replaces them with one record and one set of rules.
         </p>
         <h3>2.2 Principles that shaped what was built</h3>
         <ul>

@@ -31,7 +31,7 @@ Rules: whoever requested a payment cannot approve or pay it, and whoever recorde
 
 Tabs **Audit** and **Invoicing**. Invoicing stages: **All**, **Proposed**, **Ready**, **Drafts**, **Sent**, **Paid**.
 
-- **Audit** is a browser-side prototype (its banner says so): Done work orders checked against what the lists carry. A dash means The One does not track that fact yet; it is never a finding. Filter with **All**, **Major**, **Minor**, **Clean**; click a row for **Auto-check results** and **Findings**. Its ticks are not saved and decide nothing on Invoicing.
+- **Audit** is a browser-side prototype (its banner says so): Done work orders checked against what the lists carry. A dash means OBI does not track that fact yet; it is never a finding. Filter with **All**, **Major**, **Minor**, **Clean**; click a row for **Auto-check results** and **Findings**. Its ticks are not saved and decide nothing on Invoicing.
 - A work order is **Ready** to invoice when it is in the Done group, its quote is approved, sent or client-approved, and it has no invoice yet.
 - Raise an invoice (needs \`invoicing\` create): on a ready row click **Raise invoice**; it is drafted from the approved quote. Only once the work order is done (Done / Incurred or later). One live invoice per work order — raising it again opens the one already there.
 - Send it (needs \`invoicing\` approve): **Send** on the draft row. Not by the person who raised it; amount tiers apply; an invoice totalling zero cannot be sent; its figures are fixed once sent. Sending sets the work order's Total Invoiced to the invoice total.

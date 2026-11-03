@@ -123,7 +123,7 @@ export const INSIGHT_PART: DocPart = {
         },
         {
           name: 'How-to guide',
-          what: 'A hand-written guide to every screen (labels as on screen, the permission each step needs) with "What this person may do" resolved for the asker (admin rows for the signed-in person, the rest for who they act as); anything outside The One is declined in one sentence.',
+          what: 'A hand-written guide to every screen (labels as on screen, the permission each step needs) with "What this person may do" resolved for the asker (admin rows for the signed-in person, the rest for who they act as); anything outside OBI is declined in one sentence.',
           value: 'The SOP, answered in context.',
         },
         {

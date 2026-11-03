@@ -57,7 +57,7 @@ describe('integrationOn', () => {
 });
 
 describe('Ecotrak (0079)', () => {
-  it('The One → Ecotrak cannot be turned on: nothing that writes exists', () => {
+  it('OBI → Ecotrak cannot be turned on: nothing that writes exists', () => {
     expect(INTEGRATION_BY_KEY.ecotrak_outbound.locked_off).toBeTruthy();
     expect(INTEGRATIONS.filter((d) => d.locked_off).map((d) => d.key)).toEqual(['ecotrak_outbound']);
   });

@@ -74,7 +74,7 @@ export function AdminDocsPage() {
   };
 
   const name = tab === 'brd' ? 'The-One-BRD' : tab === 'sop' ? 'The-One-SOP' : 'The-One-Work-Order-Lifecycle';
-  const title = tab === 'brd' ? 'The One — Business Requirements Document' : tab === 'sop' ? 'The One — Standard Operating Procedures' : 'The One — Work-order lifecycle';
+  const title = tab === 'brd' ? 'OBI — Business Requirements Document' : tab === 'sop' ? 'OBI — Standard Operating Procedures' : 'OBI — Work-order lifecycle';
 
   const onMarkdown = () => {
     void getDocsMarkdown(tab).then((r) => downloadText(`${name}-${stamp()}.md`, r.markdown));

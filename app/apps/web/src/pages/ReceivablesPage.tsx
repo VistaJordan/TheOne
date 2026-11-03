@@ -206,7 +206,7 @@ export function ReceivablesPage() {
 
       {AUDIT_TAB_ENABLED && activeTab === 'audit' && <div className="rcv-proto-banner" role="note">
         Prototype — this tab is worked out in your browser from the work-order and quote lists. A
-        dash means The One does not track that fact yet (SharePoint folder contents, closeout
+        dash means OBI does not track that fact yet (SharePoint folder contents, closeout
         numbers, days on Grey); the release ticks are not saved.
       </div>}
 
@@ -517,8 +517,8 @@ function AuditDetail({ r }: { r: AuditedRow }) {
       : r.summary.minor > 0
         ? { cls: 'is-minor', text: `Suggested QC: Minor — ${r.summary.minor} flag${r.summary.minor > 1 ? 's' : ''} to tidy` }
         : r.checks.admin && r.checks.quote
-          ? { cls: 'is-clean', text: 'Clean on what The One tracks — release ticked here (not saved); Invoicing › Ready follows the quote' }
-          : { cls: 'is-clean', text: 'Clean on what The One tracks — tick Admin + Quote to mark the release (not saved); Invoicing › Ready follows the quote' };
+          ? { cls: 'is-clean', text: 'Clean on what OBI tracks — release ticked here (not saved); Invoicing › Ready follows the quote' }
+          : { cls: 'is-clean', text: 'Clean on what OBI tracks — tick Admin + Quote to mark the release (not saved); Invoicing › Ready follows the quote' };
 
   const findings = r.issues.filter((i) => i.severity !== 'info');
 
@@ -545,7 +545,7 @@ function AuditDetail({ r }: { r: AuditedRow }) {
         {findings.length === 0 ? (
           <div className="rcv-nofinding">
             <Icon name="check-circle" size={14} />
-            Nothing unresolved — every check The One can run passed.
+            Nothing unresolved — every check OBI can run passed.
           </div>
         ) : (
           findings.map((issue) => <IssueCard key={issue.id} issue={issue} woNumber={r.row.wo.wo_number} />)
@@ -597,7 +597,7 @@ function IssueCard({ issue, woNumber }: { issue: AuditIssue; woNumber: string })
   );
 }
 
-/** A fact The One does not track yet (or the list did not carry for you). */
+/** A fact OBI does not track yet (or the list did not carry for you). */
 function Dash({ title = 'not tracked yet' }: { title?: string }) {
   return (
     <span className="rcv-none" title={title}>

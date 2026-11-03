@@ -9,7 +9,7 @@
 //
 // The Audit tab is a CLIENT-SIDE PROTOTYPE over the work-order list payload
 // and the quotes list. Every fact a rule reads is either carried by those
-// payloads or `null` = The One does not track it yet; nothing is derived from
+// payloads or `null` = OBI does not track it yet; nothing is derived from
 // the work-order id, seeded, or invented (AUDIT.md W2-1). A null fact yields
 // ONE "offline" line in the evidence panel — coverage, never a finding. The
 // four audit checkboxes are page state (not saved) and do NOT feed invoicing:
@@ -25,7 +25,7 @@
 import { BFI_KEY, VISIT_MIRROR_KEYS } from '@theone/shared';
 import type { QuoteListItem, WorkOrderListItemV2 } from '../api/client';
 
-/** A fact the audit reads. `null` = The One does not track this yet, or the
+/** A fact the audit reads. `null` = OBI does not track this yet, or the
     list did not carry it for this viewer (not asked / redacted); the page
     draws it as a dash titled "not tracked yet". A TEXT fact the record
     carries but holds empty is `''` — tracked, empty — and gets its own dash
@@ -250,7 +250,7 @@ const WO_LINK = { label: 'Open work order', kind: 'wo' as const };
 const CU_LINK = { label: 'ClickUp task', kind: 'clickup' as const };
 const SP_LINK = { label: 'SharePoint folder', kind: 'sharepoint' as const };
 
-/** A fact The One does not carry: one coverage line, never a finding. */
+/** A fact OBI does not carry: one coverage line, never a finding. */
 function notTracked(id: string, key: string, label: string, description: string): AuditIssue {
   return { id: `${id}-${key}-offline`, severity: 'offline', title: `${label} not tracked yet`, description, resolve: [] };
 }
@@ -337,7 +337,7 @@ export function computeAuditIssues(row: AuditRow, checks: AuditChecks): AuditIss
         id,
         'co',
         'CO#',
-        'The One does not track closeout numbers yet, so the 6-digit format check is skipped.',
+        'OBI does not track closeout numbers yet, so the 6-digit format check is skipped.',
       ),
     );
   } else if (!/^\d{6}$/.test(row.coNumber)) {
@@ -392,7 +392,7 @@ export function overallStatus(issues: AuditIssue[]): AuditStatus {
 
 // ── Auto-check lines (the per-WO evidence panel) ────────────────────────────
 // The expanded row shows every check the engine RAN, not only what failed —
-// that read-out is the audit assistant's signature surface. A fact The One
+// that read-out is the audit assistant's signature surface. A fact OBI
 // does not carry reads "not tracked yet".
 
 export type CheckOutcome = 'pass' | 'minor' | 'major' | 'info' | 'na' | 'offline';

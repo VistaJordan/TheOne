@@ -1,4 +1,4 @@
-# The One — guide for Claude Code
+# OBI (formerly The One) — guide for Claude Code
 
 Work-order, quote and vendor-payment platform for Seamless FM (Byblos Vista).
 React + Vite front end, Fastify API, Postgres 16 through node-postgres (a local
@@ -1814,8 +1814,8 @@ falls back to a monogram tile.
 **Ecotrak, two switches** (migration 0079, `services/ecotrakAdmin.ts`,
 `pages/admin/EcotrakPanel.tsx`). Elise, 2026-10-13: nothing may contact
 Ecotrak unless it is switched on in Admin › Integrations, and nothing may
-change what clients see there. Key `ecotrak` is now **"Ecotrak → The One"**
-(read only) and `ecotrak_outbound` **"The One → Ecotrak"** is listed with
+change what clients see there. Key `ecotrak` is now **"Ecotrak → OBI"**
+(read only) and `ecotrak_outbound` **"OBI → Ecotrak"** is listed with
 `locked_off` (cannot be turned on; `setIntegration` 409s) — no write method
 exists in `ecotrak/client.ts` and a test asserts the only POST is the token.
 Both carry `default_on: false`: unset or unreadable = OFF (every other key

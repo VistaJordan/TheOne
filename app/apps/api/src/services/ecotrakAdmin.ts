@@ -1,4 +1,4 @@
-// 0079 · Ecotrak → The One: the panel under its row in Admin › Integrations,
+// 0079 · Ecotrak → OBI: the panel under its row in Admin › Integrations,
 // Sync now, and the 10-minute cron.
 //
 // Read only against Ecotrak, always: the client has no method that writes.
@@ -77,7 +77,7 @@ export async function syncEcotrakNow(user: Admin): Promise<{ result: IngestResul
     entityId: 'ecotrak',
     action: 'ecotrak_sync_requested',
     after: {
-      name: 'Ecotrak → The One',
+      name: 'Ecotrak → OBI',
       fetched: result.fetched,
       created: result.created,
       updated: result.updated,
@@ -90,7 +90,7 @@ export async function syncEcotrakNow(user: Admin): Promise<{ result: IngestResul
 
 /** The cron's tick. Switched off = return at once, Ecotrak never contacted. */
 export async function runEcotrakCron(): Promise<{ ran: boolean; note: string }> {
-  if (!(await integrationOnNow('ecotrak'))) return { ran: false, note: 'Ecotrak → The One is switched off.' };
+  if (!(await integrationOnNow('ecotrak'))) return { ran: false, note: 'Ecotrak → OBI is switched off.' };
   const conn = await getEcotrakConnection();
   if (!conn) return { ran: false, note: 'No Ecotrak connection on file.' };
   // 0114 · once Ecotrak calls us on every change, this is the safety net.

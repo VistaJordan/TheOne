@@ -844,7 +844,7 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
   },
   {
     // 0057 · the Payments dashboard: every technician / vendor payment
-    // request raised in The One, cut the ways the old payments dashboard cut
+    // request raised in OBI, cut the ways the old payments dashboard cut
     // the Teams chat — by vendor, company, client, dispatcher — plus trade,
     // state, method and status. It starts empty and fills as payments are
     // requested here; every card can be edited and more can be added.
@@ -952,7 +952,7 @@ export const PREBUILT_DASHBOARDS: readonly PrebuiltDashboard[] = [
         config: {
           metric: 'count',
           text:
-            'Every payment request raised on a work order in The One. Paid is money that has gone out; Approved, not yet paid is decided and waiting on the payment run; Awaiting approval is what a manager still has to decide. Add a card to cut payments any other way — by FM, purpose, vendor owner, vendor state — from the card editor.',
+            'Every payment request raised on a work order in OBI. Paid is money that has gone out; Approved, not yet paid is decided and waiting on the payment run; Awaiting approval is what a manager still has to decide. Add a card to cut payments any other way — by FM, purpose, vendor owner, vendor state — from the card editor.',
         },
       },
     ],

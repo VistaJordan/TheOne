@@ -13,7 +13,7 @@ export const PLATFORM_PART: DocPart = {
       key: 'signin',
       title: 'Sign-in, sessions and access',
       where: 'The sign-in page; Admin › Users for invitations; the Viewing as control in the top bar.',
-      purpose: 'One Microsoft account per person, no passwords held by The One, and a session that can be revoked at once.',
+      purpose: 'One Microsoft account per person, no passwords held by OBI, and a session that can be revoked at once.',
       value: 'Nobody manages a second password; leavers are cut off the moment they are disabled; every action is attributable to a real person because every session belongs to a verified email.',
       users: ['Everyone'],
       features: [

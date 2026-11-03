@@ -312,7 +312,7 @@ function Chat({ configured, remaining }: { configured: boolean; remaining: numbe
         {empty && configured && (
           <div className="asst-empty">
             <p>
-              Ask about any work order, quote, payment, vendor or site, or how to do something in The One. Answers are looked up live and only cover what your role lets you see.
+              Ask about any work order, quote, payment, vendor or site, or how to do something in OBI. Answers are looked up live and only cover what your role lets you see.
             </p>
             <div className="asst-starters">
               {starters.map((q) => (

@@ -1,4 +1,4 @@
-/* The One — Receivables (AR): completion audit + invoicing.
+/* OBI — Receivables (AR): completion audit + invoicing.
    Look and feel ported from the Support Automation shadow-audit assistant
    (queue stat cards, green audit checkboxes, severity-striped issue cards,
    per-WO evidence panel), translated onto the app's token system so both
@@ -49,7 +49,7 @@
 }
 
 /* The prototype banner (W2-1): the Audit tab is worked out in the browser
-   from the lists, and a dash is a fact The One does not track yet. Tokens
+   from the lists, and a dash is a fact OBI does not track yet. Tokens
    only — --topbar-warn exists in both themes. */
 .rcv-proto-banner {
   margin: 0 0 12px;

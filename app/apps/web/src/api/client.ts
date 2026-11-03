@@ -2334,7 +2334,7 @@ export function setIntegrationEnabled(key: string, enabled: boolean): Promise<In
   return request(`/admin/integrations/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ enabled }) });
 }
 
-// 0079 · Ecotrak → The One's panel under its row (read only against Ecotrak).
+// 0079 · Ecotrak → OBI's panel under its row (read only against Ecotrak).
 export function getEcotrak(): Promise<EcotrakOverview> {
   return request('/admin/integrations/ecotrak');
 }

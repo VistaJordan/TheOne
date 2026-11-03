@@ -542,7 +542,7 @@ export async function deliverPendingMessage(commentId: string): Promise<void> {
         wo_number: row.wo_number,
         client_ref: row.target === 'ecotrak' ? row.ecotrak_id : null,
         body: row.body,
-        author_name: row.author_name ?? 'The One',
+        author_name: row.author_name ?? 'OBI',
         posted_at: row.posted_at,
       });
       externalId = out.external_id;

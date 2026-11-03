@@ -197,7 +197,7 @@ export async function resolvePrincipalForSignIn(identity: EntraIdentity): Promis
       'FORBIDDEN',
       allowedDomains.length > 0
         ? `${identity.email} is not a @${allowedDomains.join(' / @')} account and has not been invited`
-        : `${identity.email} has not been invited to The One`,
+        : `${identity.email} has not been invited to OBI`,
       {
         email: identity.email,
         reason: 'not_invited',

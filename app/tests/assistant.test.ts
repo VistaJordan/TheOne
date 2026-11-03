@@ -248,7 +248,7 @@ describe('knowing whether the person can follow the steps', () => {
 
 describe('the standing instructions', () => {
   it('carry the guide, the permission rule and the limit to this app', () => {
-    expect(STATIC_INSTRUCTIONS).toContain('Anything outside The One is not yours to answer');
+    expect(STATIC_INSTRUCTIONS).toContain('Anything outside OBI is not yours to answer');
     expect(STATIC_INSTRUCTIONS).toContain('You are not allowed to add automations');
     expect(STATIC_INSTRUCTIONS).toContain('click **New automation**');
     expect(STATIC_INSTRUCTIONS).toContain('`admin/automations` edit');

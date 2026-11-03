@@ -1,4 +1,4 @@
-// 0075 · The BRD registry: every module of The One, every feature in it, the
+// 0075 · The BRD registry: every module of OBI, every feature in it, the
 // controls on screen (labels as they are in the JSX), the rules the system
 // enforces, the permission the API checks and the value each feature brings.
 // One file per part under ./brd; this file only assembles them.
@@ -19,7 +19,7 @@ import { INSIGHT_PART } from './brd/insight';
 import { AUTOMATION_PART, ADMIN_PART } from './brd/admin';
 
 /** The date the prose was last reviewed against the screens (YYYY-MM-DD). */
-export const DOCS_REVIEWED_ON = '2026-11-02';
+export const DOCS_REVIEWED_ON = '2026-11-03';
 
 export const BRD_PARTS: DocPart[] = [
   PLATFORM_PART,

@@ -1,5 +1,5 @@
 /*
- * 0114 · Ecotrak → The One: webhooks, comments into Messages, the address.
+ * 0114 · Ecotrak → OBI: webhooks, comments into Messages, the address.
  *
  * The pure helpers, and source pins for the rule that matters most: nothing
  * may change what our clients see on Ecotrak. The only write outside the

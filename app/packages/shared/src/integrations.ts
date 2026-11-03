@@ -1,4 +1,4 @@
-// 0074 · Admin › Integrations — everything The One connects to, each with
+// 0074 · Admin › Integrations — everything OBI connects to, each with
 // one switch.
 //
 // The list is fixed in code (a connector is code), the switch is a row per
@@ -67,24 +67,24 @@ export interface IntegrationDef {
 export const INTEGRATIONS: IntegrationDef[] = [
   {
     key: 'ecotrak',
-    name: 'Ecotrak → The One',
+    name: 'Ecotrak → OBI',
     vendor: 'Ecotrak',
     group: 'clients',
     summary:
-      'New work orders and every change made on Ecotrak (status, NTE, description, site, asset…) come into The One within a minute, or straight away with Sync now. New ones land in Incoming Work Orders, and accepting one on Ecotrak accepts it here. Read only: The One never changes anything on Ecotrak, so clients see nothing.',
+      'New work orders and every change made on Ecotrak (status, NTE, description, site, asset…) come into OBI within a minute, or straight away with Sync now. New ones land in Incoming Work Orders, and accepting one on Ecotrak accepts it here. Read only: OBI never changes anything on Ecotrak, so clients see nothing.',
     off_means:
-      'The One does not contact Ecotrak at all, not even to sign in: no new or changed work orders arrive. Work orders already here stay as they are, and the Ecotrak checks on a status change keep reading what is on file.',
+      'OBI does not contact Ecotrak at all, not even to sign in: no new or changed work orders arrive. Work orders already here stay as they are, and the Ecotrak checks on a status change keep reading what is on file.',
     logo: 'ecotrak.png',
     built: true,
     default_on: false,
   },
   {
     key: 'ecotrak_outbound',
-    name: 'The One → Ecotrak',
+    name: 'OBI → Ecotrak',
     vendor: 'Ecotrak',
     group: 'clients',
     summary:
-      'Changes made in The One (status, ETA, notes) sent back to Ecotrak, where the client sees them. Not connected yet: The One has no code that can write to Ecotrak.',
+      'Changes made in OBI (status, ETA, notes) sent back to Ecotrak, where the client sees them. Not connected yet: OBI has no code that can write to Ecotrak.',
     off_means: 'Nothing is ever sent to Ecotrak. This is the only state today.',
     logo: 'ecotrak.png',
     built: false,
@@ -116,7 +116,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: 'ClickUp',
     vendor: 'ClickUp',
     group: 'team',
-    summary: "Every new work order is created in the team's ClickUp List, and every change made in The One (status, cost, any mapped field) follows it there. One-way: The One is the source of truth.",
+    summary: "Every new work order is created in the team's ClickUp List, and every change made in OBI (status, cost, any mapped field) follows it there. One-way: OBI is the source of truth.",
     off_means: 'Nothing is sent, and what happens while it is off is skipped for good: turning it back on carries on from that moment. Work orders received while it is off are never created in ClickUp.',
     logo: 'clickup.png',
     built: true,
@@ -338,7 +338,7 @@ export interface ClickUpOverview {
 /** The error code every refused call carries when its connector is off. */
 export const INTEGRATION_OFF = 'INTEGRATION_OFF';
 
-// ── Ecotrak → The One (0079) ─────────────────────────────────────────────────
+// ── Ecotrak → OBI (0079) ─────────────────────────────────────────────────
 // The panel under the Ecotrak row: is it set up, when did it last look, and
 // what did that look bring in. Read only against Ecotrak, always.
 

@@ -54,7 +54,7 @@ export default async function adminIntegrationRoutes(app: FastifyInstance): Prom
     return setIntegration(key, enabled, realUser(req));
   });
 
-  // 0079 · Ecotrak → The One's panel: last run, Sync now (read only).
+  // 0079 · Ecotrak → OBI's panel: last run, Sync now (read only).
   //   GET  /admin/integrations/ecotrak              the panel
   //   POST /admin/integrations/ecotrak/sync         read Ecotrak now
   app.get('/admin/integrations/ecotrak', async (req) => ecotrakOverview(realUser(req)));

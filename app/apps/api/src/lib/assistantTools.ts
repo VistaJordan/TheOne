@@ -193,7 +193,7 @@ export const ASSISTANT_TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: 'lookup',
     description:
-      `Read the other records in The One. Give a resource, and an id to open one record. Resources: ${Object.entries(RESOURCES)
+      `Read the other records in OBI. Give a resource, and an id to open one record. Resources: ${Object.entries(RESOURCES)
         .map(([k, r]) => `${k} — ${r.about}${r.one ? ' [opens by id]' : ''}${r.params ? ` [params: ${r.params}]` : ''}`)
         .join('; ')}. A resource with params is searched by the server: pass them in \`params\`. The others return their whole list, which you narrow with \`search\` (words that must all appear in a row), \`where\` (a field that must equal a value) and \`count_by\` (count rows per value of a field); read one row first if you do not know the field names.`,
     input_schema: {
