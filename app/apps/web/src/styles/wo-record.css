@@ -168,11 +168,16 @@
 .dt10-time svg { color: var(--ink-2); }
 .dt10-pop {
   position: absolute; z-index: 30; top: calc(100% + 4px); right: 0;
-  display: flex; gap: 2px; padding: 4px;
+  display: flex; gap: 6px; padding: 4px 6px;
   background: var(--surface); border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm); box-shadow: var(--shadow);
 }
-.dt10-col { display: flex; flex-direction: column; max-height: 196px; overflow-y: auto; min-width: 44px; }
+/* The scrolling hour column keeps room for its scrollbar beside the numbers,
+   not over them (scrollbar-gutter + padding on the right). */
+.dt10-col {
+  display: flex; flex-direction: column; max-height: 196px; overflow-y: auto; min-width: 52px;
+  scrollbar-gutter: stable; padding-right: 4px;
+}
 .dt10-opt {
   padding: 4px 8px; border: 0; border-radius: 3px; background: transparent;
   color: var(--ink); font: inherit; font-size: 12.5px; text-align: center; cursor: pointer;
