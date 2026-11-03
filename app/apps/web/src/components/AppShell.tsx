@@ -4,7 +4,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, PAYMENTS_PAGE_PERM_KEY, PULSE_PERM_KEY, QUOTES_PAGE_PERM_KEY, adminPermKey } from '@theone/shared';
 import { getApprovalCounts, listIntakeDrafts } from '../api/client';
-import { ObiWordmark } from './ObiLogo';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { Icon, IconSprite } from './Icon';
 import { NavIcon } from './NavIcon';
@@ -334,9 +333,9 @@ export function AppShell({
           the trail happens to end. */}
       <header className="topbar">
         <div className="topbar-left">
-          <div className="topbar-brand">
-            <ObiWordmark />
-          </div>
+          {/* Empty until the top-bar logo is decided (Elise, 2026-11-03); the
+              slot keeps the sidebar's width so the trail still lines up. */}
+          <div className="topbar-brand" />
           {/* Detail routes pass their own trail; list routes get the nav item
               they are on, plus its section when the item has children. */}
           {breadcrumb ?? <NavCrumbs active={active} pathname={pathname} />}
