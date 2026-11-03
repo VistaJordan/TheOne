@@ -1254,6 +1254,10 @@ export interface VendorYtd {
   billing_entity: string | null;
   total: number;
   w9_threshold: number;
+  /** The method of this technician's latest request (any work order, any
+   *  company; rejected, deleted and alternate-recipient ones left out) — the
+   *  Request payment form's default. Null = never paid: the form takes credit. */
+  last_method: PaymentMethod | null;
 }
 
 export interface Vendor {

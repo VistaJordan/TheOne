@@ -670,12 +670,22 @@ export async function vendorYtd(vendorId: string, billingEntity: string | null):
         AND date_part('year', pr.created_at) = date_part('year', now())`,
     [vendorId, billingEntity],
   );
+  // Elise, 2026-11-03: the form opens on the method this technician was last paid by.
+  const last = await query<{ method: PaymentMethod }>(
+    `SELECT pr.method FROM payment_request pr
+      WHERE pr.vendor_id = $1 AND pr.deleted_at IS NULL AND pr.status <> 'rejected'
+        AND pr.recipient_name IS NULL
+      ORDER BY pr.created_at DESC, pr.id DESC
+      LIMIT 1`,
+    [vendorId],
+  );
   return {
     vendor_id: vendorId,
     year: new Date().getUTCFullYear(),
     billing_entity: billingEntity,
     total: round2(Number(res.rows[0]?.total ?? 0)),
     w9_threshold: W9_THRESHOLD,
+    last_method: last.rows[0]?.method ?? null,
   };
 }
 

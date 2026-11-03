@@ -125,7 +125,11 @@ export function RequestPaymentPage() {
   const [purpose, setPurpose] = useState<PaymentPurposeCode | ''>('');
   const [amount, setAmount] = useState('');
   const [amountTouched, setAmountTouched] = useState(false);
-  const [method, setMethod] = useState<PaymentMethod>('zelle');
+  // Elise, 2026-11-03: the method this technician was last paid by, else credit.
+  const [method, setMethod] = useState<PaymentMethod>('credit');
+  // The technician the method was picked by hand for — a pick sticks until
+  // the technician changes.
+  const [methodPickedFor, setMethodPickedFor] = useState<string | null>(null);
   const [address, setAddress] = useState<AddressDraft>(blankAddress);
   const [addressTouched, setAddressTouched] = useState(false);
   const [note, setNote] = useState('');
@@ -164,6 +168,21 @@ export function RequestPaymentPage() {
     enabled: !!payee?.vendor_id,
     staleTime: 30_000,
   });
+
+  // Default the method per technician: their last one, else credit (a manual
+  // payee, or one never paid). A method picked by hand for them is kept.
+  const payeeKey = mode === 'manual' ? 'manual' : (payee?.vendor_id ?? payee?.name ?? null);
+  const defaultMethod: PaymentMethod | null = !payee?.vendor_id
+    ? 'credit'
+    : ytdQuery.data
+      ? (ytdQuery.data.last_method ?? 'credit')
+      : null;
+  useEffect(() => {
+    if (defaultMethod === null || methodPickedFor === payeeKey) return;
+    setMethod(defaultMethod);
+    setAddressTouched(false);
+  }, [defaultMethod, payeeKey, methodPickedFor]);
+  const methodHint = PAYMENT_METHODS.find((m) => m.value === method)?.hint ?? '';
 
   const parsedAmount = parseMoney(amount);
   const amountValid = !Number.isNaN(parsedAmount);
@@ -292,11 +311,13 @@ export function RequestPaymentPage() {
         <div className="pghead-top">
           <div className="pghead-idline">
             <h1 className="pg-title">Request payment</h1>
+            {/* Elise, 2026-11-03: the work order's number and client, the
+                status and trade beside them — no context strip under it. */}
             <span className="extref">
-              <span className="extref-k">Work order</span>
               <span className="extref-v">{woNumber}</span>
               <CopyButton value={woNumber} label="Copy work order number" size={12} />
             </span>
+            {wo?.client && <span className="pghead-client">{wo.client}</span>}
             <span className="chip chip-accent">
               <Icon name="dollar" size={12} />
               Technician payment
@@ -305,6 +326,12 @@ export function RequestPaymentPage() {
               <span className="chip chip-sm chip-outline" title="Work-order status">
                 <span className="pill-dot" aria-hidden="true" style={{ background: wo.status.color }} />
                 {wo.status.name}
+              </span>
+            )}
+            {wo?.trade && (
+              <span className="chip chip-sm chip-outline" title="Trade">
+                <Icon name="user" size={12} />
+                {wo.trade}
               </span>
             )}
           </div>
@@ -316,36 +343,6 @@ export function RequestPaymentPage() {
           </div>
         </div>
 
-        <dl className="ctx">
-          <div className="ctx-cell">
-            <dt className="ctx-k"><Icon name="store" size={12} />Work order</dt>
-            <dd className="ctx-v">
-              {woNumber}
-              {site && <span className="ctx-sub">{site.name}</span>}
-            </dd>
-          </div>
-          <div className="ctx-cell">
-            <dt className="ctx-k"><Icon name="user" size={12} />Trade</dt>
-            <dd className="ctx-v">{wo?.trade ?? '—'}</dd>
-          </div>
-          <div className="ctx-cell">
-            <dt className="ctx-k">Company</dt>
-            <dd className="ctx-v">
-              {wo?.billing_entity ?? '—'} <span className="ctx-sub">billing entity</span>
-            </dd>
-          </div>
-          <div className="ctx-cell">
-            <dt className="ctx-k">FM company</dt>
-            <dd className="ctx-v">
-              {wo?.client ?? '—'}
-              {wo?.ext_name && <span className="ctx-sub">ext ref {wo.ext_name}</span>}
-            </dd>
-          </div>
-        </dl>
-        <span className="ro-cap">
-          <Icon name="lock" size={12} />
-          Read-only — pulled from the work order. Edit it on {woNumber}.
-        </span>
         {woBlocked && (
           <div className="callout callout-lock" style={{ marginTop: 12 }}>
             <Icon name="lock" size={14} />
@@ -580,10 +577,11 @@ export function RequestPaymentPage() {
                       <select
                         className="fselect"
                         id="method"
-                        aria-describedby="method-help"
+                        aria-describedby={methodHint ? 'method-help' : undefined}
                         value={method}
                         onChange={(e) => {
                           setMethod(e.target.value as PaymentMethod);
+                          setMethodPickedFor(payeeKey);
                           setAddressTouched(false);
                         }}
                       >
@@ -595,10 +593,12 @@ export function RequestPaymentPage() {
                         <Icon name="chev-d" size={14} />
                       </span>
                     </div>
-                    <p className="fhelp" id="method-help">
-                      <Icon name="info" size={12} />
-                      {PAYMENT_METHODS.find((m) => m.value === method)?.hint}
-                    </p>
+                    {methodHint && (
+                      <p className="fhelp" id="method-help">
+                        <Icon name="info" size={12} />
+                        {methodHint}
+                      </p>
+                    )}
                   </div>
                   <div className="field">
                     <span className="flabel" id="lbl-sendsto">
@@ -663,10 +663,6 @@ export function RequestPaymentPage() {
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   />
-                  <p className="fhelp">
-                    <Icon name="lock" size={12} />
-                    Internal — never synced to the client CMMS.
-                  </p>
                 </div>
               </div>
             </section>
@@ -750,16 +746,11 @@ export function RequestPaymentPage() {
             {/* Submit bar */}
             <div className="submitbar">
               <span className="autosave">
-                {submitted ? (
+                {submitted && (
                   <>
                     <Icon name="check-circle" size={12} />
                     {submitted.auto_approved ? 'Submitted · approved as requested (under $500) · with AP to pay' : 'Submitted · in the AP queue'}
                     {submitted.needs_w9 ? ' · W9 needed' : ''}
-                  </>
-                ) : (
-                  <>
-                    <Icon name="info" size={12} />
-                    Nothing is sent until you submit.
                   </>
                 )}
               </span>
@@ -882,11 +873,11 @@ export function RequestPaymentPage() {
                 );
               })}
             </ol>
-            <p className="life-when">
-              {submitted
-                ? 'Requested just now. A rejected request comes back here as a draft with AP’s reason attached.'
-                : 'Not yet submitted. Submitting adds it to the AP queue. A rejected request comes back here as a draft with AP’s reason attached.'}
-            </p>
+            {submitted && (
+              <p className="life-when">
+                Requested just now. A rejected request comes back here as a draft with AP’s reason attached.
+              </p>
+            )}
           </section>
 
           <section className="card">

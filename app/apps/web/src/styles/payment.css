@@ -37,6 +37,13 @@
 
 :root[data-theme='night'] .pay .pg-title { letter-spacing: 0.005em; }
 
+/* The work order's client, beside its number (2026-11-03). */
+.pay .pghead-client {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
 .pay .pghead-actions { display: flex; align-items: center; gap: 10px; flex: none; }
 
 /* read-only context grid — §3.6 read-only is styled distinctly from disabled:

@@ -483,7 +483,7 @@ export const PAYMENT_METHODS: readonly { value: SharedPaymentMethod; label: stri
   { value: 'ach', label: 'ACH', hint: 'Routing + account number — 1 extra AP day' },
   { value: 'check', label: 'Check', hint: 'Mailed — allow 3–5 business days' },
   { value: 'cashapp', label: 'Cash App', hint: '$cashtag' },
-  { value: 'credit', label: 'Credit card', hint: 'Paid on a company card — does not count toward the W9 threshold' },
+  { value: 'credit', label: 'Credit card', hint: '' },
 ];
 export type PaymentMethod = SharedPaymentMethod;
 export function methodLabel(m: string): string {
