@@ -66,7 +66,9 @@ import type {
   ApprovalTier,
 } from '@theone/shared';
 import {
+  NTE_APPROVAL_REASON_CODE,
   NTE_OVERRIDE_REQUIRED_CODE,
+  NTE_PAYMENT_APPROVER_CODE,
   OVERAGE_REASON_MIN,
   OVER_QUOTE_CODE,
   PAYMENT_OVERAGE_REASON_CODE,
@@ -74,6 +76,7 @@ import {
   PAYMENT_PROCESS_PERM_KEY,
   SELF_APPROVAL_CODE,
   isPaymentPurposeCode,
+  mayApproveOverNtePayment,
   nextPurpose,
   overNte,
   overQuoteReason,
@@ -81,6 +84,7 @@ import {
   paymentLockReason,
   paymentOverage,
   paymentOverageSentence,
+  paymentAboveNte,
   permAllows,
   projectedCost,
   vendorMoneyOut,
@@ -395,6 +399,8 @@ function mapPayment(
     paid_at: r.paid_at,
     nte_override_open: Boolean(r.nte_override_open),
     money_hold: moneyHoldOf(r, quotes),
+    above_nte: aboveNteOf(r),
+    approve_hold: moneyHoldOf(r, quotes, true),
     tier:
       opts.viewer && opts.tiers
         ? tierSummary(opts.tiers, 'payment', Number(r.amount ?? 0), opts.viewer)
@@ -411,8 +417,9 @@ function mapPayment(
  * quote's figures when the caller read them (the queues do, in one batch);
  * without them only the open holds and the NTE projection are drawn.
  */
-function moneyHoldOf(r: PaymentRow, quotes?: QuoteFigures): string | null {
+function moneyHoldOf(r: PaymentRow, quotes?: QuoteFigures, ignoreNte = false): string | null {
   return paymentLockReason({
+    ignoreNte,
     status: r.status,
     overQuoteOpen: Boolean(r.over_quote_open),
     nteOverrideOpen: Boolean(r.nte_override_open),
@@ -423,6 +430,13 @@ function moneyHoldOf(r: PaymentRow, quotes?: QuoteFigures): string | null {
     quote: quotes?.get(r.task_id) ?? null,
     quoteCovers: moneyNum(r.quote_covers),
   });
+}
+
+/** 2026-11-03: a waiting request that takes Cost past the NTE — the AM
+    approves it on the payment, with a reason. */
+function aboveNteOf(r: PaymentRow): boolean {
+  return r.status === 'requested'
+    && paymentAboveNte(vendorMoneyOut(moneyNum(r.wo_cost), moneyNum(r.wo_bills)), Number(r.amount ?? 0), moneyNum(r.wo_nte));
 }
 
 function mapListItem(r: PaymentRow, opts?: MapOpts, quotes?: QuoteFigures): PaymentListItem {
@@ -1220,6 +1234,7 @@ async function setStatus(
   extraParams: unknown[],
   extra?: (tx: Queryable) => Promise<TaskChange[] | void>,
   selfApproved = false,
+  logExtra: Record<string, unknown> = {},
 ): Promise<PaymentRequest> {
   if (!from.includes(row.status)) {
     throw badRequest(`This payment request is already ${LABEL[row.status]}; it cannot be ${LABEL[to]} now`, {
@@ -1252,6 +1267,7 @@ async function setStatus(
       amount: Number(row.amount ?? 0),
       payee: row.vendor_id ? row.vendor_name : row.payee_name,
       ...(selfApproved ? { self_approved: true } : {}),
+      ...logExtra,
     });
   });
   await afterCost(row.task_id, costChanges);
@@ -1292,8 +1308,15 @@ async function approvedQuoteFigures(taskId: string): Promise<{ total: number | n
  * and the move refused with a 409 that names it. A manager's approval stores
  * the projected cost as `covers`, so the retry goes through.
  */
-async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, move: string): Promise<void> {
-  await assertNoOpenNteOverride(row.task_id, move);
+async function assertPaymentNotHeld(
+  row: PaymentRow,
+  actor: ActingPrincipal,
+  move: string,
+  /** 2026-11-03: the AM approving a payment above the NTE decides the NTE in
+      the same act (approveOverNte), so only the quote is asked here. */
+  nteDecidedHere = false,
+): Promise<void> {
+  if (!nteDecidedHere) await assertNoOpenNteOverride(row.task_id, move);
   await assertNoOpenMoneyHold(row.task_id, 'over_quote', move, OVER_QUOTE_CODE);
   const amount = Number(row.amount ?? 0);
   // "Paying twice" (2026-11-02): the approved and paid vendor bills are vendor
@@ -1308,8 +1331,8 @@ async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, mov
   const withBills = bills > 0 ? ` (with ${money(bills)} of vendor bills)` : '';
   const nte = moneyNum(row.wo_nte);
   const payee = (row.vendor_id ? row.vendor_name : row.payee_name) ?? 'the technician';
-  const nteCover = await approvedCover(row.task_id, 'nte_override');
-  if (overNte(projected, nte, nteCover?.covers)) {
+  const nteCover = nteDecidedHere ? null : await approvedCover(row.task_id, 'nte_override');
+  if (!nteDecidedHere && overNte(projected, nte, nteCover?.covers)) {
     await raiseMoneyHold({
       taskId: row.task_id,
       type: 'nte_override',
@@ -1353,22 +1376,157 @@ async function assertPaymentNotHeld(row: PaymentRow, actor: ActingPrincipal, mov
   }
 }
 
-/** requested → approved (payments:approve). Refused (409) while an NTE
-    override waits on a manager — rule 1.5.2 — and (0083) when this payment
-    would go past the NTE or the approved quote; never by its own requester. */
-export async function approvePaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
+/**
+ * 2026-11-03 (Elise): the NTE half of approving a payment above the NTE, in
+ * the payment's own transaction. The open NTE override is approved with the
+ * AM's reason and made to cover the projected cost; with none open, an
+ * approved one is filed. Either way the decision is logged and posted as an
+ * internal comment, as an approval from the inbox would be.
+ */
+async function approveOverNte(
+  tx: Queryable,
+  row: PaymentRow,
+  projected: number,
+  reason: string,
+  actor: ActingPrincipal,
+): Promise<void> {
+  const nte = moneyNum(row.wo_nte) ?? 0;
+  const amount = Number(row.amount ?? 0);
+  const payee = (row.vendor_id ? row.vendor_name : row.payee_name) ?? 'the technician';
+  const title = `Paying ${money(amount)} to ${payee} takes Cost to ${money(projected)}, over the client NTE ${money(nte)}`;
+  const facts = {
+    cost: projected,
+    nte,
+    over_by: Math.round((projected - nte) * 100) / 100,
+    projected: true,
+    payment_request_id: row.id,
+    ...(row.overage_reason ? { reason: row.overage_reason } : {}),
+    approved_with_payment: true,
+  };
+  const open = await tx.query<{ id: string; detail: Record<string, unknown> | null }>(
+    `SELECT id::text AS id, detail FROM approval_task
+      WHERE task_id = $1 AND type = 'nte_override' AND status = 'open' LIMIT 1 FOR UPDATE`,
+    [row.task_id],
+  );
+  let taskId: string;
+  const cur = open.rows[0];
+  if (cur) {
+    const prev = typeof cur.detail?.covers === 'number' ? (cur.detail.covers as number) : 0;
+    await tx.query(
+      `UPDATE approval_task
+          SET status = 'approved', decided_by = $2, decided_at = now(), decision_note = $3,
+              assigned_to = COALESCE(assigned_to, $2), updated_at = now(),
+              detail = detail || $4::jsonb
+        WHERE id = $1`,
+      [cur.id, actor.id, reason, JSON.stringify({ ...facts, covers: Math.max(prev, projected) })],
+    );
+    taskId = cur.id;
+  } else {
+    const ins = await tx.query<{ id: string }>(
+      `INSERT INTO approval_task
+         (type, task_id, title, detail, status, created_by, decided_by, decided_at, decision_note, assigned_to)
+       VALUES ('nte_override', $1, $2, $3::jsonb, 'approved', $4, $4, now(), $5, $4)
+       RETURNING id::text AS id`,
+      [row.task_id, title, JSON.stringify({ ...facts, covers: projected }), actor.id, reason],
+    );
+    taskId = ins.rows[0].id;
+  }
+  await tx.query(
+    `INSERT INTO activity_log
+       (actor_principal_id, entity_type, entity_id, action, field, before, after)
+     VALUES ($1, 'task', $2, 'approval_task_approved', 'approval_task.status', $3::jsonb, $4::jsonb)`,
+    [
+      actor.id,
+      row.task_id,
+      cur ? JSON.stringify({ approval_task_id: taskId, status: 'open' }) : null,
+      JSON.stringify({ approval_task_id: taskId, type: 'nte_override', status: 'approved', title, detail: facts, note: reason }),
+    ],
+  );
+  const c = await tx.query<{ id: string }>(
+    `INSERT INTO comment (task_id, author_principal_id, body, client_visible)
+     VALUES ($1, $2, $3, false) RETURNING id::text AS id`,
+    [row.task_id, actor.id, `NTE override approved with the payment — ${title} — ${reason}`],
+  );
+  await tx.query(
+    `INSERT INTO activity_log
+       (actor_principal_id, entity_type, entity_id, action, field, before, after)
+     VALUES ($1, 'task', $2, 'comment_added', NULL, NULL, $3::jsonb)`,
+    [
+      actor.id,
+      row.task_id,
+      JSON.stringify({
+        comment_id: c.rows[0].id,
+        client_visible: false,
+        approval_task_id: taskId,
+        approval: { type: 'nte_override', title, detail: facts, status: 'approved', note: reason },
+      }),
+    ],
+  );
+}
+
+/**
+ * requested → approved (payments:approve); never by its own requester.
+ * Within the NTE: the amount's band decides who (0090 / 0115), and an open
+ * NTE override or a projection past the NTE / approved quote holds it (0083).
+ * Above the NTE (2026-11-03, Elise): an Account Manager approves it here,
+ * with a reason (409 NTE_APPROVAL_REASON until one is sent), whatever the
+ * amount — and that approval decides the NTE override too. The approved
+ * quote still holds it as before.
+ */
+export async function approvePaymentRequest(
+  id: string,
+  actor: ActingPrincipal,
+  nteReason?: string | null,
+): Promise<PaymentRequest> {
   assertCanApprove(actor, 'approve');
   const row = await loadRow(id);
-  // 0090 (rule 6.2.3): the amount's band says which roles may approve it —
-  // $500–3,000 TL / ATL, $3,000 and over AM (Admin › Settings).
-  await assertTierAllows('payment', Number(row.amount ?? 0), actor, 'Approving a payment');
   const selfApproved = assertNotOwnRequest(row, actor, 'approve');
-  await assertPaymentNotHeld(row, actor, 'Approving this payment');
+  const amount = Number(row.amount ?? 0);
+  const nte = moneyNum(row.wo_nte);
+  const billsRes = await query<{ bills: number | string | null }>(
+    `SELECT COALESCE(sum(total), 0)::float8 AS bills FROM vendor_bill WHERE task_id = $1 AND status IN ('approved', 'paid')`,
+    [row.task_id],
+  );
+  const cost = vendorMoneyOut(moneyNum(row.wo_cost), moneyNum(billsRes.rows[0]?.bills ?? null));
+
+  if (row.status !== 'requested' || !paymentAboveNte(cost, amount, nte)) {
+    // 0090 (rule 6.2.3): the amount's band says which roles may approve it —
+    // $500–3,000 TL / ATL, $3,000 and over AM (Admin › Settings).
+    await assertTierAllows('payment', amount, actor, 'Approving a payment');
+    await assertPaymentNotHeld(row, actor, 'Approving this payment');
+    return setStatus(row, ['requested'], 'approved', 'payment_approved', actor,
+      'approved_by = $3, approved_at = now()', [actor.id],
+      async (tx) => {
+        await enqueueOutbox(tx, 'payment.approved', 'payment_request', id, { task_id: row.task_id });
+      }, selfApproved);
+  }
+
+  const projected = projectedCost(cost, amount);
+  const over = `Paying this takes Cost to ${money(projected)}, over the client NTE ${money(nte ?? 0)}`;
+  if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin)) {
+    throw forbidden(`${over} — an Account Manager approves it`, {
+      code: NTE_PAYMENT_APPROVER_CODE,
+      payment_request_id: id,
+    });
+  }
+  const reason = nteReason?.trim() ?? '';
+  if (reason.length < OVERAGE_REASON_MIN) {
+    throw conflict(`${over}. Say why you are approving it.`, {
+      code: NTE_APPROVAL_REASON_CODE,
+      payment_request_id: id,
+      projected,
+      nte,
+      requester_reason: row.overage_reason,
+      min_length: OVERAGE_REASON_MIN,
+    });
+  }
+  await assertPaymentNotHeld(row, actor, 'Approving this payment', true);
   return setStatus(row, ['requested'], 'approved', 'payment_approved', actor,
     'approved_by = $3, approved_at = now()', [actor.id],
     async (tx) => {
+      await approveOverNte(tx, row, projected, reason, actor);
       await enqueueOutbox(tx, 'payment.approved', 'payment_request', id, { task_id: row.task_id });
-    }, selfApproved);
+    }, selfApproved, { above_nte: true, reason, nte, projected_cost: projected });
 }
 
 /**

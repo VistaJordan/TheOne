@@ -100,10 +100,11 @@ describe('the wiring (source pins)', () => {
     expect(sql).not.toMatch(/\('vendor_bill'|\('invoice'|UPDATE approval_tier/);
   });
 
-  it('the Approvals inbox approves a payment with no confirm dialog', () => {
+  it('the Approvals inbox approves a payment with no confirm dialog (within the NTE)', () => {
     const src = read('apps/web/src/pages/ApprovalsPage.tsx');
     expect(src).not.toContain('Approve this payment?');
-    expect(src).toContain("(kind === 'approve' && r.data.kind === 'payment')");
+    // 2026-11-03: above the NTE the AM is asked the reason instead.
+    expect(src).toContain("(kind === 'approve' && r.data.kind === 'payment' && !r.data.item.above_nte)");
   });
 
   it('the quote builder has no Markup column and Labor fills the description', () => {

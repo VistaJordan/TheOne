@@ -1195,6 +1195,14 @@ export interface PaymentRequest {
       it would take Cost past the NTE with no approved override covering it,
       or an over-the-quote hold waits on a manager. Null = nothing held. */
   money_hold: string | null;
+  /** 2026-11-03: a waiting request that takes Cost past the client NTE —
+      an Account Manager approves it on the payment with a reason
+      (`mayApproveOverNtePayment`), which also decides the NTE override, and
+      the amount band does not apply. */
+  above_nte: boolean;
+  /** What holds Approve when `above_nte` (the NTE left out, since the AM
+      decides it in the same click): an over-the-quote hold. */
+  approve_hold: string | null;
   /** 0090: the amount's approval band (rule 6.2.3, Admin › Settings) and
       whether the VIEWER's role may approve inside it — so Approve locks with
       the reason before the click. Null when no band covers the amount or the

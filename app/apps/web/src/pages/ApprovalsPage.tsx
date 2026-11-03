@@ -53,6 +53,7 @@ import {
   describeIntakeGate,
   ecotrakTransitionRefused,
   isDispatcherRole,
+  mayApproveOverNtePayment,
   mayDecideOverQuote,
   statusApprovalNeedsNote,
   type AcceptanceDetail,
@@ -396,7 +397,7 @@ const PAYMENT_CHIP: Record<PaymentListItem['status'], string> = {
   rejected: 'chip-danger',
 };
 
-function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>): Row {
+function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>, nteApprover: boolean): Row {
   const open = item.status === 'requested';
   const by =
     item.status === 'rejected'
@@ -434,8 +435,9 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
     escalated: item.wo_escalated,
     raised_at: item.created_at,
     open,
-    mine: open && canDecide,
-    owner: 'Payment approvers',
+    // 2026-11-03: a payment above the NTE is the Account Manager's.
+    mine: open && canDecide && (!item.above_nte || nteApprover),
+    owner: item.above_nte ? 'Account Manager' : 'Payment approvers',
     status: {
       label: PAYMENT_STATUS_LABEL[item.status],
       chip: PAYMENT_CHIP[item.status],
@@ -446,7 +448,8 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
             .join(' · ') || null,
       note: item.status === 'rejected' ? item.rejection_note : null,
     },
-    held: item.nte_override_open || held.has(item.task_id),
+    // Above the NTE the AM's Approve decides the NTE override itself.
+    held: !item.above_nte && (item.nte_override_open || held.has(item.task_id)),
     requester: false,
     missing: [],
     data: { kind: 'payment', item },
@@ -556,7 +559,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
       if (q.status === 'draft') continue;
       out.push(quoteRow(q, canApproveQuotes, held));
     }
-    for (const p of paymentsQuery.data?.items ?? []) out.push(paymentRow(p, canApprovePayments, held));
+    for (const p of paymentsQuery.data?.items ?? []) out.push(paymentRow(p, canApprovePayments, held, mayApproveOverNtePayment(myRole, mySuper)));
     // Intake is its own page (Incoming Work Orders): the inbox never shows
     // it, and the intake page shows nothing else.
     return out.filter((r) => (r.section === 'intake') === intake);
@@ -679,7 +682,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
             ? sendQuote(d.item.wo_number)
             : rejectQuote(d.item.wo_number, text ?? '');
         case 'payment':
-          return kind === 'approve' ? approvePayment(d.item.id) : rejectPayment(d.item.id, text ?? '');
+          return kind === 'approve' ? approvePayment(d.item.id, text) : rejectPayment(d.item.id, text ?? '');
       }
     },
     onSuccess: () => {
@@ -885,6 +888,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                   columns={columns}
                   myId={myId}
                   mySuper={actingAs?.is_super_admin === true}
+                  myRole={myRole}
                   canDecideTask={canDecideTask}
                   canApproveQuotes={canApproveQuotes}
                   canApprovePayments={canApprovePayments}
@@ -901,7 +905,8 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                     if (
                       kind === 'acknowledge' ||
                       kind === 'withdraw' ||
-                      (kind === 'approve' && r.data.kind === 'payment') ||
+                      // …unless it takes Cost past the NTE: the AM says why.
+                      (kind === 'approve' && r.data.kind === 'payment' && !r.data.item.above_nte) ||
                       (kind === 'approve' && r.data.kind === 'task' && !approveAsksNote(r) && r.data.item.type !== 'wo_acceptance')
                     ) {
                       decide.mutate({ kind, row: r, text: null });
@@ -954,6 +959,27 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
           idKey={pending.row.key}
           label="How did the client approve?"
           hint={`Required — posted as an internal update on ${pending.row.wo_number} with the decision.`}
+          required
+          multiline
+          confirmLabel="Approve"
+          busy={busy}
+          onConfirm={(text) => decide.mutate({ ...pending, text: text.trim() || null })}
+          onCancel={() => setPending(null)}
+        />
+      )}
+
+      {pending?.kind === 'approve' && pending.row.data.kind === 'payment' && pending.row.data.item.above_nte && (
+        <TextDialog
+          title="Approve this payment above the NTE?"
+          facts={[
+            ...facts(pending.row),
+            ...(pending.row.data.item.overage_reason
+              ? [{ k: 'Requester’s reason', v: pending.row.data.item.overage_reason }]
+              : []),
+          ]}
+          idKey={pending.row.key}
+          label="Why are you approving it over the NTE?"
+          hint={`Required — this also approves the NTE override on ${pending.row.wo_number}, and is posted there as an internal update.`}
           required
           multiline
           confirmLabel="Approve"
@@ -1116,6 +1142,8 @@ interface RowProps {
   myId: string | null;
   /** 0083 (D2): a super admin may decide their own request (logged). */
   mySuper?: boolean;
+  /** 2026-11-03: who approves a payment above the NTE (an Account Manager). */
+  myRole?: string | null;
   /** 0025: per section — approvals/<section>:approve for the task's type. */
   canDecideTask: (type: ApprovalTaskType) => boolean;
   canApproveQuotes: boolean;
@@ -1366,7 +1394,7 @@ function InboxRow(props: RowProps) {
 
 /** The verbs a row offers at its status. A verb the viewer may not use is
     drawn locked with the reason — the rule is "visible, never hidden". */
-function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApprovePayments, busy, onDecide }: RowProps) {
+function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes, canApprovePayments, busy, onDecide }: RowProps) {
   // 0083 (D2): maker ≠ checker — the person who raised a request does not
   // approve it (the API answers 403 SELF_APPROVAL); a super admin may.
   const own = (makerId: string | null | undefined) => !mySuper && !!makerId && makerId === myId;
@@ -1486,6 +1514,30 @@ function Decisions({ row, myId, mySuper, canDecideTask, canApproveQuotes, canApp
         </>
       );
     case 'payment':
+      if (d.item.above_nte) {
+        // 2026-11-03 (Elise): above the NTE an Account Manager approves it
+        // with a reason, whatever the amount band; the click asks the reason.
+        const nteApprover = mayApproveOverNtePayment(myRole, mySuper === true);
+        return (
+          <>
+            {verb('Reject', 'x', canApprovePayments, 'Requires payment approval rights', () => onDecide('reject'), 'danger')}
+            {verb(
+              'Approve',
+              'check',
+              canApprovePayments && nteApprover && !own(d.item.requested_by?.id) && !d.item.approve_hold,
+              !canApprovePayments
+                ? 'Requires payment approval rights'
+                : !nteApprover
+                  ? 'Above the client NTE — an Account Manager approves it'
+                  : own(d.item.requested_by?.id)
+                    ? OWN
+                    : (d.item.approve_hold ?? ''),
+              () => onDecide('approve'),
+              'primary',
+            )}
+          </>
+        );
+      }
       return (
         <>
           {verb('Reject', 'x', canApprovePayments, 'Requires payment approval rights', () => onDecide('reject'), 'danger')}

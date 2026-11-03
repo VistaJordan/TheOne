@@ -2719,6 +2719,27 @@ or deleting a payment now runs `reconcileApprovalTasks`, so its hold is
 cancelled ("The payment it was raised for is no longer waiting") instead of
 holding every other payment on the work order.
 
+**A payment above the NTE is the AM's, with a reason** (Elise, 2026-11-03,
+no migration; `mayApproveOverNtePayment` / `paymentAboveNte` /
+`NTE_PAYMENT_APPROVER_ROLES` in shared `moneyGuards.ts`, `approveOverNte` in
+`services/payments.ts`, `tests/payment-above-nte.test.ts`). Before, an
+over-NTE request sat behind the open NTE override (decide it in Approvals
+first) and then the amount band (TL / ATL for $500–3,000) refused the AM.
+Now a `requested` payment whose Cost + vendor bills + amount pass the NTE
+(`above_nte` on the row, covers ignored) is approved on the payment by role
+`am` or a super admin (403 `NTE_PAYMENT_APPROVER` for anyone else), the band
+is not asked, and the approver must give a reason (`POST …/approve
+{nte_reason}`, 409 `NTE_APPROVAL_REASON` under `OVERAGE_REASON_MIN`). In the
+payment's own transaction the open `nte_override` is approved with that
+reason (covers raised to the projected cost), or one is filed approved, with
+the usual `approval_task_approved` row and internal comment; the
+`payment_approved` row carries `above_nte`, `reason` (Payment history shows
+it). The over-quote hold still applies (`approve_hold` on the row =
+`paymentLockReason` with `ignoreNte`). Payables / Payments open a reason
+sheet on Approve, the Approvals inbox a "Approve this payment above the
+NTE?" dialog showing the requester's reason. The inbox's NTE override lane
+is unchanged.
+
 **Dispatchers see payments only inside the work order** (migration 0108, Elise 2026-10-29; `PAYMENTS_PAGE_PERM_KEY` in shared `permissions.ts`, `tests/payments-page.test.ts`). The Payments page has its own path, `payments/page` view ("Payments page" under Payments in Roles; unset follows `payments` view, so no other role changed); `payments` view still opens a work order's Payables. Reads across work orders need the page: `GET /payments` and `GET /payment-requests/:pid` (`requirePaymentsOutsideWo`, which also lets `approvals/payments` view through, since the inbox's Payments lane reads the queue), `GET /vendor-bills` and `GET /vendor-bills/:id`; the sidebar item (`NAV_PERM.Payments`), the `/payments` route and Request payment's **Open Payments** link ask it too. 0108 sets OM, Senior OM and OM Under Probation to `payments` view + create (Elise had switched Payments off for them in Admin › Roles on 2026-10-20/22 as a stopgap), `payments/page` off and `approvals/payments` off. Invoices were already closed to them (0084).
 
 **Payment history on the work order** (Elise, 2026-11-02, no migration;

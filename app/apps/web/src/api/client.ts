@@ -1181,9 +1181,10 @@ export function getPaymentRequest(id: string): Promise<PaymentItemResponse> {
   return request<PaymentItemResponse>(payPath(id));
 }
 
-/** POST …/approve — requested → approved (payments:approve). */
-export function approvePaymentRequest(id: string): Promise<PaymentRequestResponse> {
-  return decidePayment(id, 'approve');
+/** POST …/approve — requested → approved (payments:approve). Above the
+    client NTE an Account Manager sends `nteReason` (2026-11-03). */
+export function approvePaymentRequest(id: string, nteReason?: string | null): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'approve', nteReason ? { nte_reason: nteReason } : {});
 }
 
 /** POST …/pay — requested | approved → paid; rolls the amount into the WO's

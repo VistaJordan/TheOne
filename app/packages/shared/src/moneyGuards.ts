@@ -170,13 +170,16 @@ export interface PaymentLockInput {
   nteCovers: number | null;
   quote: { total: number | null; cost: number | null } | null;
   quoteCovers: number | null;
+  /** 2026-11-03: leave the NTE out — what holds the AM's Approve of a
+      payment above the NTE, which decides the NTE itself. */
+  ignoreNte?: boolean;
 }
 
 export function paymentLockReason(r: PaymentLockInput): string | null {
   if (r.status !== 'requested' && r.status !== 'approved') return null;
   if (r.overQuoteOpen) return 'On hold — paying more than the approved quote waits on a manager (Approvals › Money holds)';
   const projected = projectedCost(r.cost, r.amount);
-  if (!r.nteOverrideOpen && overNte(projected, r.nte, r.nteCovers)) {
+  if (!r.ignoreNte && !r.nteOverrideOpen && overNte(projected, r.nte, r.nteCovers)) {
     return `Paying this takes Cost to ${usd(projected)}, over the client NTE ${usd(r.nte ?? 0)} — the click raises an NTE override for a manager`;
   }
   const over = overQuoteReason(projected, r.quote, r.quoteCovers);
@@ -242,6 +245,32 @@ export const OVER_QUOTE_DECIDER_CODE = 'OVER_QUOTE_DECIDER_LEVEL';
 
 export function mayDecideOverQuote(role: string | null | undefined, isSuperAdmin: boolean): boolean {
   return isSuperAdmin || (typeof role === 'string' && (OVER_QUOTE_DECIDER_ROLES as readonly string[]).includes(role));
+}
+
+// ── Payments above the NTE (Elise, 2026-11-03) ───────────────────────────────
+//
+// A payment request that takes Cost past the client NTE is approved on the
+// payment itself by an Account Manager, with a reason — no separate trip to
+// Approvals › NTE override first, and the amount band (6.2.3) is not asked:
+// the AM is who says yes to money over the NTE, whatever the amount. That
+// approval also approves (or files, approved) the work order's NTE override
+// for the projected cost, so Pay and the 1.5.2 rule see it covered.
+
+/** The roles that approve a payment above the NTE; a super admin always may. */
+export const NTE_PAYMENT_APPROVER_ROLES = ['am'] as const;
+/** details.code of the 403 for anyone else. */
+export const NTE_PAYMENT_APPROVER_CODE = 'NTE_PAYMENT_APPROVER';
+/** details.code of the 409 that asks the approver for the reason. */
+export const NTE_APPROVAL_REASON_CODE = 'NTE_APPROVAL_REASON';
+
+export function mayApproveOverNtePayment(role: string | null | undefined, isSuperAdmin: boolean): boolean {
+  return isSuperAdmin || (typeof role === 'string' && (NTE_PAYMENT_APPROVER_ROLES as readonly string[]).includes(role));
+}
+
+/** True when paying `amount` takes `cost` (Cost + vendor bills) past the NTE —
+    an approved override does not change that the payment is above it. */
+export function paymentAboveNte(cost: number | null, amount: number, nte: number | null): boolean {
+  return overNte(projectedCost(cost, amount), nte, null);
 }
 
 /** UAT T5b: why Approve is locked on a quote row for this viewer — they

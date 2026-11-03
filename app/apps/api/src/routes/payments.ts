@@ -124,6 +124,10 @@ const reasonSchema = z
   .refine((v) => Boolean(v.reason ?? v.note), { message: 'A reason is required' })
   .transform((v) => ({ reason: (v.reason ?? v.note) as string }));
 const convertSchema = z.object({ method: methodSchema });
+// 2026-11-03: the AM's reason for approving a payment above the NTE.
+const approveSchema = z
+  .object({ nte_reason: z.string().trim().max(OVERAGE_REASON_MAX).nullable().optional() })
+  .optional();
 
 const queueSchema = z.object({
   status: z.enum(['requested', 'approved', 'sent_to_yoda', 'paid', 'rejected']).optional(),
@@ -222,7 +226,8 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
   app.post('/payment-requests/:pid/approve', async (req) => {
     const { pid } = parse(pidParamsSchema, req.params);
     await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
-    return { item: await approvePaymentRequest(pid, actingPrincipalFromRequest(req)) };
+    const body = parse(approveSchema, req.body ?? undefined);
+    return { item: await approvePaymentRequest(pid, actingPrincipalFromRequest(req), body?.nte_reason ?? null) };
   });
 
   app.post('/payment-requests/:pid/pay', async (req) => {

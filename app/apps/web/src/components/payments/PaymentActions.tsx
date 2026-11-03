@@ -17,7 +17,7 @@ import {
   rejectPaymentRequest,
 } from '../../api/client';
 import type { PaymentMethod, PaymentRequest } from '../../api/client';
-import { PAYMENT_PROCESS_PERM_KEY } from '@theone/shared';
+import { OVERAGE_REASON_MIN, PAYMENT_PROCESS_PERM_KEY, mayApproveOverNtePayment } from '@theone/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
 
@@ -28,7 +28,7 @@ interface Props {
   onChanged?: () => void;
 }
 
-type Sheet = 'reject' | 'delete' | 'method' | null;
+type Sheet = 'reject' | 'delete' | 'method' | 'nte' | null;
 
 export function PaymentActions({ item, compact = false, onChanged }: Props) {
   // 0015 · three grants, one per half of the lifecycle (mirrors services/payments.ts):
@@ -63,7 +63,11 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
   };
   const fail = (err: unknown) => setError(err instanceof ApiRequestError ? err.message : 'The action failed.');
 
-  const approve = useMutation({ mutationFn: () => approvePaymentRequest(item.id), onSuccess: done, onError: fail });
+  const approve = useMutation({
+    mutationFn: () => approvePaymentRequest(item.id, sheet === 'nte' ? reason.trim() : null),
+    onSuccess: done,
+    onError: fail,
+  });
   const pay = useMutation({ mutationFn: () => payPaymentRequest(item.id), onSuccess: done, onError: fail });
   const reject = useMutation({ mutationFn: () => rejectPaymentRequest(item.id, reason.trim()), onSuccess: done, onError: fail });
   const convert = useMutation({ mutationFn: () => convertPaymentMethod(item.id, method), onSuccess: done, onError: fail });
@@ -131,6 +135,16 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
       ? `${item.tier.label}: needs a role allowed for this amount (rule 6.2.3)`
       : null;
   const adminLock = isAdmin ? null : 'Requires admin';
+  // 2026-11-03 (Elise): above the client NTE an Account Manager approves it
+  // with a reason, whatever the band — that click also decides the NTE
+  // override, so the NTE hold does not lock it; the approved quote still may.
+  const aboveNte = item.above_nte;
+  const nteApproverLock = mayApproveOverNtePayment(actingAs?.role, actingAs?.is_super_admin === true)
+    ? null
+    : 'Above the client NTE — an Account Manager approves it';
+  const approveLocked = aboveNte
+    ? approveLock ?? nteApproverLock ?? ownLock ?? item.approve_hold
+    : approveLock ?? tierLock ?? ownLock ?? (hold ? HOLD : null) ?? moneyHold;
 
   return (
     <div className={`pay-actions${compact ? ' is-compact' : ''}`}>
@@ -145,7 +159,10 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
         </>
       ) : (
         <>
-          {item.status === 'requested' && btn('Approve', 'check', () => approve.mutate(), { locked: approveLock ?? tierLock ?? ownLock ?? (hold ? HOLD : null) ?? moneyHold })}
+          {item.status === 'requested' &&
+            btn('Approve', 'check', () => (aboveNte ? setSheet(sheet === 'nte' ? null : 'nte') : approve.mutate()), {
+              locked: approveLocked,
+            })}
           {/* 0083 (#4): Pay only once a second person approved the request. */}
           {open && btn('Mark paid', 'dollar', () => pay.mutate(), {
             primary: true,
@@ -167,6 +184,30 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
         </>
       )}
 
+      {sheet === 'nte' && (
+        <div className="pay-sheet">
+          <label className="flabel" htmlFor={`nte-${item.id}`}>Why approve it over the NTE? <span className="req" aria-hidden="true">*</span></label>
+          <input className="finput" id={`nte-${item.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Client agreed by phone, extra parts needed…" />
+          <p className="fhelp">
+            <Icon name="info" size={12} />
+            {item.overage_reason
+              ? `Requester’s reason: ${item.overage_reason}. `
+              : ''}
+            This also approves the NTE override and is posted on the work order as an internal update.
+          </p>
+          <div className="sheet-f">
+            <button type="button" className="btn btn-sm" onClick={() => setSheet(null)}>Cancel</button>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              aria-disabled={reason.trim().length < OVERAGE_REASON_MIN ? true : undefined}
+              onClick={() => reason.trim().length >= OVERAGE_REASON_MIN && !busy && approve.mutate()}
+            >
+              Approve
+            </button>
+          </div>
+        </div>
+      )}
       {sheet === 'reject' && (
         <div className="pay-sheet">
           <label className="flabel" htmlFor={`rej-${item.id}`}>Reason for the requester <span className="req" aria-hidden="true">*</span></label>
