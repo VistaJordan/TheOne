@@ -106,31 +106,22 @@
   padding: 36px 30px 30px;
   display: flex; flex-direction: column; gap: 14px;
 }
-/* The wordmark, cropped the same way the topbar crops it (app.css .topbar-brand):
-   a window onto the PNG (2096×756) sized to the artwork's visible box
-   (x 42–2046, y 70–637 → 2005×568) so its transparent padding does not eat the
-   space. --w is the rendered width of the visible artwork. */
+/* The OBI hologram (public/brand/OBI-hologram-*.svg, 300×180 with its own
+   backdrop). Day shows the light art, night the dark one. */
 .signin-logo {
-  --logo-canvas-w: 2096;
-  --w: 300px;
-  --s: calc(var(--w) / 2005);
-  position: relative;
-  width: var(--w);
-  height: calc(568 * var(--s));
-  overflow: hidden;
   align-self: center;
-  margin: 2px 0 10px;
+  width: 240px;
+  margin: 0 0 6px;
 }
 .signin-logo img {
-  position: absolute;
-  width: calc(var(--logo-canvas-w) * var(--s));
+  display: block;
+  width: 100%;
   height: auto;
-  max-width: none;
-  left: calc(-42 * var(--s));
-  top: calc(-70 * var(--s));
+  border-radius: var(--radius-sm);
 }
-/* Navy on the night card would vanish; same inversion the topbar uses. */
-:root[data-theme="night"] .signin-logo img { filter: invert(1) hue-rotate(180deg); }
+.signin-logo .signin-logo-night { display: none; }
+:root[data-theme="night"] .signin-logo .signin-logo-day { display: none; }
+:root[data-theme="night"] .signin-logo .signin-logo-night { display: block; }
 :root[data-theme="night"] .signin-card { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent), 0 0 60px color-mix(in srgb, var(--accent) 18%, transparent); }
 
 /* Dev-bypass footnote under the Microsoft button: quiet, but it must still be

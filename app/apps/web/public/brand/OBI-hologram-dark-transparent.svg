@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180" width="1500" height="900">
+<defs>
+<pattern id="scan" width="4" height="5" patternUnits="userSpaceOnUse"><rect width="4" height="5" fill="#fff"/><rect width="4" height="1.4" fill="#000" fill-opacity="0.6"/></pattern>
+<mask id="scanmask" maskUnits="userSpaceOnUse" x="0" y="0" width="300" height="180"><rect width="300" height="180" fill="url(#scan)"/></mask>
+</defs>
+
+<g transform="translate(20 6)">
+<polygon points="112,144 148,144 236,22 24,22" fill="#5CE1FF" fill-opacity="0.07"/>
+<path d="M65.15 104.00L55.49 94.34L55.49 54.86L65.15 45.20L95.39 45.20L105.05 54.86L105.05 94.34L95.39 104.00L65.15 104.00ZM71.20 94.26L89.34 94.26L93.62 89.97L93.62 59.23L89.34 54.94L71.20 54.94L66.91 59.23L66.91 89.97L71.20 94.26ZM125.13 104.00L125.13 45.20L162.00 45.20L170.40 53.60L170.40 70.06L167.04 73.51L173.01 79.56L173.01 94.93L163.94 104.00L125.13 104.00ZM136.30 69.81L156.12 69.81L159.15 66.79L159.15 57.72L156.21 54.78L136.30 54.78L136.30 69.81ZM136.30 94.42L158.14 94.42L161.75 90.81L161.75 82.58L158.14 78.97L136.30 78.97L136.30 94.42ZM191.83 104.00L191.83 45.20L203.25 45.20L203.25 104.00L191.83 104.00Z" fill="#5CE1FF" fill-opacity="0.18" stroke="#5CE1FF" stroke-width="1.6" stroke-linejoin="round" mask="url(#scanmask)"/>
+<ellipse cx="130" cy="144" rx="54" ry="7" fill="none" stroke="#5CE1FF" stroke-width="2"/>
+<rect x="104" y="146" width="52" height="7" rx="3.5" fill="#1B3A4A"/>
+</g>
+</svg>

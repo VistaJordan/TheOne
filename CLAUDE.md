@@ -3280,9 +3280,11 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   because hover animations cannot reach inside a `<use>` clone.
 - **The wordmark** (`public/brand/logo-the-one.png`) is rendered through crop
   windows keyed to pixel boxes measured from the PNG (`.topbar-brand` in
-  `styles/app.css`, `.signin-logo` in `styles/auth.css`). If the asset changes
+  `styles/app.css`). If the asset changes
   size or layout, re-measure and update those numbers — the comments list them.
   Night mode inverts the mark with `filter: invert(1) hue-rotate(180deg)`.
+  The sign-in card shows the OBI hologram instead (`public/brand/OBI-hologram-light.svg`
+  by day, `-dark.svg` at night; `SIGNIN_LOGO_*` in `lib/brand.ts`, `.signin-logo` in `auth.css`).
 - Motion is always inside `@media (prefers-reduced-motion: no-preference)` or
   disabled under `reduce`.
 - Files are CRLF on disk (`core.autocrlf=true`, no `.gitattributes`); the

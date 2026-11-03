@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { LOGO } from '../lib/brand';
+import { SIGNIN_LOGO_DAY, SIGNIN_LOGO_NIGHT } from '../lib/brand';
 import { useAuth } from '../auth/AuthProvider';
 import { Icon, IconSprite, type IconName } from '../components/Icon';
 import { devSignIn, listDevCandidates, startMicrosoftSignIn, testSignIn } from '../api/client';
@@ -170,7 +170,8 @@ export function SignInPage() {
         {/* The wordmark IS the heading — it already says "the One". The h1 stays
             for assistive tech and the document outline; it is just not drawn. */}
         <div className="signin-logo">
-          <img src={LOGO} alt="" />
+          <img className="signin-logo-day" src={SIGNIN_LOGO_DAY} alt="" />
+          <img className="signin-logo-night" src={SIGNIN_LOGO_NIGHT} alt="" />
         </div>
         <h1 className="signin-title u-sr-only">The One</h1>
 
