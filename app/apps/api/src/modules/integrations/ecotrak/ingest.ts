@@ -20,6 +20,7 @@ import { raiseAcceptanceTasks, settleAcceptanceFromClient } from '../../../servi
 import { adoptClientsFromRecords } from '../../../services/dataRules.js';
 import { integrationOnNow, requireIntegration } from '../../../services/integrations.js';
 import { logTaskChanges, type TaskChange } from '../../../services/woAudit.js';
+import { K_NTE } from '../../../services/money.js';
 import { ecotrakSyncActorId } from '../../../services/serviceActors.js';
 import { syncEcotrakNotes } from '../../../services/ecotrakNotes.js';
 
@@ -123,6 +124,9 @@ interface Settle {
   /** 0114 · every work order this pass created or changed: its notes are
    *  read after the commits. */
   touched: Array<{ taskId: string; externalId: string }>;
+  /** 0119 · NTEs Ecotrak changed: dispatched to the automations after the
+   *  commits, so the cost-over-NTE task is raised or cleared. */
+  nte: Array<{ taskId: string; change: TaskChange }>;
 }
 
 interface ConnectionRow {
@@ -276,7 +280,7 @@ async function processOrders(
   // row must never fail the sync), signed by the sync's own service
   // principal so the trail says which system put it there.
   const createdIds: string[] = [];
-  const settle: Settle = { accepted: [], rejected: [], touched: [] };
+  const settle: Settle = { accepted: [], rejected: [], touched: [], nte: [] };
   for (const wo of orders) {
     try {
       await withTransaction(async (tx) => {
@@ -302,6 +306,15 @@ async function processOrders(
   }
   for (const id of settle.rejected) {
     if (await settleAcceptanceFromClient(id, 'rejected', 'Ecotrak', actorId)) res.declined++;
+  }
+  // 0119 · an NTE Ecotrak changed is a field change like any other: the
+  // rules see it (and the cost-over-NTE task is reconciled). Never throws.
+  if (settle.nte.length > 0) {
+    // Dynamic: the automations engine imports half the services.
+    const { dispatchAutomations } = await import('../../../services/automations.js');
+    for (const n of settle.nte) {
+      await dispatchAutomations({ taskId: n.taskId, kind: 'changed', changes: [n.change] });
+    }
   }
   // 0114 · the comments on what changed, client-visible in Messages.
   for (const t of settle.touched.slice(0, NOTES_PER_PASS)) {
@@ -437,8 +450,16 @@ async function upsertOne(
   const externalId = String(wo.id);
   const hash = fingerprint(wo);
 
-  const existing = await tx.query<{ task_id: string; last_seen_external_status: string | null; last_payload_hash: string | null }>(
-    `SELECT task_id, last_seen_external_status, last_payload_hash FROM cmms_wo_link
+  const existing = await tx.query<{
+    task_id: string;
+    last_seen_external_status: string | null;
+    last_payload_hash: string | null;
+    ecotrak_nte: string | null;
+    ecotrak_nte_seen_at: string | null;
+  }>(
+    `SELECT task_id, last_seen_external_status, last_payload_hash,
+            ecotrak_nte::text AS ecotrak_nte, ecotrak_nte_seen_at::text AS ecotrak_nte_seen_at
+       FROM cmms_wo_link
       WHERE connection_id = $1 AND external_id = $2`,
     [conn.id, externalId],
   );
@@ -511,6 +532,10 @@ async function upsertOne(
   };
   for (const [k, v] of Object.entries(place)) if (v) fields[k] = v;
 
+  // 0119 · Ecotrak's NTE (the raised one when there is one). It goes into the
+  // Client NTE FIELD, which `task.nte` mirrors — never the column alone.
+  const ecoNte = num(wo.raised_not_to_exceed ?? wo.not_to_exceed);
+
   const common = [
     titleOf(wo),
     wo.description ?? null,
@@ -520,7 +545,7 @@ async function upsertOne(
     tradeRule?.general ?? null,
     wo.location?.city ?? null,
     stateAbbr(wo.location?.state) ?? wo.location?.state ?? null,
-    num(wo.raised_not_to_exceed ?? wo.not_to_exceed),
+    ecoNte,
     wo.date_created ? wo.date_created.slice(0, 10) : null,
     JSON.stringify(fields),
     mapPriority(wo.priority_type),
@@ -529,6 +554,8 @@ async function upsertOne(
   if (existing.rows.length === 0) {
     // 3a. Create. wo_number is namespaced so an Ecotrak import can never
     //     collide with a ClickUp-seeded WO-#####.
+    // 0119 · the new work order's Client NTE field holds Ecotrak's NTE too.
+    if (ecoNte !== null) common[10] = JSON.stringify({ ...fields, [K_NTE]: ecoNte });
     const created = await tx.query<{ id: string }>(
       `INSERT INTO task
          (wo_number, ext_name, title, description, status_id, status_group,
@@ -549,9 +576,10 @@ async function upsertOne(
 
     await tx.query(
       `INSERT INTO cmms_wo_link
-         (connection_id, external_id, task_id, last_seen_external_status, last_seen_at, sharepoint_path, last_payload_hash)
-       VALUES ($1, $2, $3, $4, now(), $5, $6)`,
-      [conn.id, externalId, taskId, wo.status, sp?.fullPath ?? null, hash],
+         (connection_id, external_id, task_id, last_seen_external_status, last_seen_at, sharepoint_path, last_payload_hash,
+          ecotrak_nte, ecotrak_nte_seen_at)
+       VALUES ($1, $2, $3, $4, now(), $5, $6, $7::numeric, now())`,
+      [conn.id, externalId, taskId, wo.status, sp?.fullPath ?? null, hash, ecoNte],
     );
     // 0079 · the creation row every other path writes (source ecotrak).
     await tx.query(
@@ -595,25 +623,28 @@ async function upsertOne(
   // the refresh replaced the whole bag with Ecotrak's ten keys.
   const mergedFields = (p: string) =>
     `COALESCE(fields, '{}'::jsonb) || ${p}::jsonb || jsonb_build_object('Date Created', COALESCE(fields->'Date Created', ${p}::jsonb->'Date Created'))`;
+  // 0119 · neither UPDATE touches the NTE: it is written below, through the
+  // field, and only when Ecotrak's own figure moved.
   if (externalUnchanged) {
     await tx.query(
       `UPDATE task SET title=$2, description=$3, client=$4, trade=$5, city=$6,
-              state=$7, nte=$8, date_received=$9,
-              fields=${mergedFields('$10')},
-              priority=$11, site_id=$12, asset_id=$13
+              state=$7, date_received=$8,
+              fields=${mergedFields('$9')},
+              priority=$10, site_id=$11, asset_id=$12
          WHERE id=$1`,
       [taskId, common[0], common[1], common[4], common[5], common[6],
-       common[7], common[8], common[9], common[10], common[11], siteId, assetId],
+       common[7], common[9], common[10], common[11], siteId, assetId],
     );
     res.skippedHumanMoved++;
   } else {
     await tx.query(
       `UPDATE task SET title=$2, description=$3, status_id=$4, status_group=$5,
-              client=$6, trade=$7, city=$8, state=$9, nte=$10, date_received=$11,
-              fields=${mergedFields('$12')},
-              priority=$13, site_id=$14, asset_id=$15
+              client=$6, trade=$7, city=$8, state=$9, date_received=$10,
+              fields=${mergedFields('$11')},
+              priority=$12, site_id=$13, asset_id=$14
          WHERE id=$1`,
-      [taskId, ...common, siteId, assetId],
+      [taskId, common[0], common[1], common[2], common[3], common[4], common[5],
+       common[6], common[7], common[9], common[10], common[11], siteId, assetId],
     );
     res.updated++;
     // Ecotrak's status moved: if that answers the acceptance, the
@@ -644,7 +675,6 @@ async function upsertOne(
     col('trade', before.trade, common[5]);
     col('city', before.city, common[6]);
     col('state', before.state, common[7]);
-    col('nte', before.nte, common[8], true);
     col('date_received', before.date_received, common[9]);
     col('priority', before.priority, common[11]);
     col('site_id', before.site_id, siteId);
@@ -654,14 +684,37 @@ async function upsertOne(
       if (k === 'Date Created' && bagBefore[k] != null) continue; // kept, never overwritten
       col(`fields.${k}`, bagBefore[k], v);
     }
+
+    // 0119 · the NTE follows Ecotrak when ECOTRAK's figure changed since the
+    // last one it sent (not when it differs from ours: an NTE raised here
+    // stands until Ecotrak's next moves — the last change wins). A work order
+    // first seen after 0119 only records Ecotrak's figure; a blank there never
+    // empties ours.
+    const nteSeen = link.ecotrak_nte_seen_at !== null;
+    if (nteSeen && ecoNte !== null && !same(link.ecotrak_nte, ecoNte, true)) {
+      const ours = bagBefore[K_NTE] ?? before.nte ?? null;
+      if (!same(ours, ecoNte, true)) {
+        await tx.query(
+          `UPDATE task SET fields = COALESCE(fields, '{}'::jsonb) || jsonb_build_object($2::text, $3::numeric),
+                  nte = $3::numeric
+            WHERE id = $1`,
+          [taskId, K_NTE, ecoNte],
+        );
+        const change: TaskChange = { field: `fields.${K_NTE}`, before: ours, after: ecoNte };
+        changes.push(change);
+        settle.nte.push({ taskId, change });
+      }
+    }
     await logTaskChanges(tx, actorId, taskId, changes, 'ecotrak');
   }
 
   await tx.query(
     `UPDATE cmms_wo_link
-        SET last_seen_external_status = $1, last_seen_at = now(), last_payload_hash = $4
+        SET last_seen_external_status = $1, last_seen_at = now(), last_payload_hash = $4,
+            ecotrak_nte = COALESCE($5::numeric, ecotrak_nte),
+            ecotrak_nte_seen_at = COALESCE(ecotrak_nte_seen_at, now())
       WHERE connection_id = $2 AND external_id = $3`,
-    [wo.status, conn.id, externalId, hash],
+    [wo.status, conn.id, externalId, hash, ecoNte],
   );
   settle.touched.push({ taskId, externalId });
 

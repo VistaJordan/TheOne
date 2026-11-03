@@ -1879,7 +1879,16 @@ read, backfilled 15 per run. Authors read "Person · Company"; our own staff's
 notes written on Ecotrak land the same way. **Address:** the ingest writes
 `17. Address` ("street, suite, City, ST ZIP"), City, State and Zip Code when
 Ecotrak sends them (a blank there never empties ours). Due date / SLA are not
-in Ecotrak's payload. **Messages** has two tabs, Internal and Client visible
+in Ecotrak's payload. **The NTE follows Ecotrak** (migration 0119, Elise
+2026-11-03, `tests/ecotrak-nte.test.ts`): the Client NTE field is the one
+NTE (`task.nte` its mirror). The ingest writes the field and the mirror
+together, signed "Ecotrak sync" `via: 'ecotrak'`, then dispatches the change
+to the automations after the commit, and only when Ecotrak's OWN figure
+moved since the last one it sent (`cmms_wo_link.ecotrak_nte`). So an NTE
+edited here stands until Ecotrak's next change (last change wins), a blank
+on Ecotrak never empties ours, and a link with no `ecotrak_nte_seen_at`
+(every work order on file before 0119) only records Ecotrak's figure on its
+first sighting. Who may edit the NTE here is unchanged. **Messages** has two tabs, Internal and Client visible
 (`MessagesPanel`); the tab decides how the composer posts (the visibility
 segment is gone), Internal is the default, a `?msg=` link opens the tab that
 holds the message.
@@ -3286,8 +3295,11 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   `<svg>` whose viewBox frames the hologram art in `public/brand/OBI-hologram-*-transparent.svg`
   (light by day, dark at night; paths in `lib/brand.ts`), sized by CSS — `.signin-logo`
   in `styles/auth.css`. The top bar's logo slot (`.topbar-brand` in `styles/app.css`)
-  is EMPTY until a top-bar logo is decided (Elise, 2026-11-03); it keeps the sidebar's
-  width so the trail lines up. If the art changes, re-measure the viewBox (comment in the
+  holds the OBI badge, `public/brand/obi-logo-header.png` (190×41, with `@2x` / `@3x`
+  through `srcset`; `OBI_HEADER_LOGO*` in `lib/brand.ts`, Elise 2026-11-03), at the
+  sidebar's width so the trail lines up; on the collapsed 64px rail it crossfades to the
+  square mark in the badge's colours (`obi-logo-header-mark.svg`, `OBI_HEADER_MARK`, 36px). The badge
+  carries its own light tile, so both themes draw it as is. If the hologram art changes, re-measure the viewBox (comment in the
   component). The same component heads the client and vendor share pages
   (`.cu-pub-logo`); the tab icon is `public/brand/OBI-favicon.svg` and the title
   OBI. The old wordmark PNGs stay in `public/brand/`, referenced nowhere.
