@@ -363,7 +363,8 @@ export function WorkOrderDetailPage() {
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
           {/* Elise, 2026-11-03 · Overview, CICO, Quote, Finances, Drive, Tech Hub,
-              Parts, People, Logs, All fields, then the rest. */}
+              Parts, People, Logs, All fields, then the rest. Notifications has no
+              button since the same day; ?tab=notifications still opens it. */}
           {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
           {show('cico') && <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>}
           {show('quotes') && <TabButton id="quotes" tab={tab} onSelect={setTab}>Quote</TabButton>}
@@ -384,7 +385,6 @@ export function WorkOrderDetailPage() {
             </TabButton>
           )}
           {show('penalties') && <TabButton id="penalties" tab={tab} onSelect={setTab}>Penalties</TabButton>}
-          {show('notifications') && <TabButton id="notifications" tab={tab} onSelect={setTab}>Notifications</TabButton>}
         </div>
       </div>
 

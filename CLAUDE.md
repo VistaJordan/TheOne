@@ -620,7 +620,8 @@ like every tab; links that pointed at photos say `?tab=drive`), Overview
 leads the strip and is the landing tab (bare URL). Since 2026-11-03 (Elise)
 the strip reads Overview · CICO · Quote (was Quotes) · Finances · Drive ·
 Tech Hub · Parts · People · Logs (was Audit trail) · All fields · Dates · Site
-· Messages · Penalties · Notifications; tab ids and `?tab=` links are unchanged.
+· Messages · Penalties; tab ids and `?tab=` links are unchanged. Notifications
+has no button (same day); `?tab=notifications` still opens it.
 
 **Photo approval and proof before Done** (migration 0061, rules 1.3.1–1.3.4
 and 11.3.4). Every upload lands `attachment.review_status = 'pending'` and is
