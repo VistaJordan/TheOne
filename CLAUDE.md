@@ -617,8 +617,10 @@ anything else lists underneath. Logged `attachment_added|removed` under field
 delete); reading needs only `work_orders` view. Since 2026-10-22 the Photos card
 sits on its own **Drive** tab (`work_orders/tabs/drive`, unset inherits
 like every tab; links that pointed at photos say `?tab=drive`), Overview
-leads the strip and is the landing tab (bare URL; All fields second, reached
-by `?tab=fields`).
+leads the strip and is the landing tab (bare URL). Since 2026-11-03 (Elise)
+the strip reads Overview · CICO · Quote (was Quotes) · Finances · Drive ·
+Tech Hub · Parts · People · Logs (was Audit trail) · All fields · Dates · Site
+· Messages · Penalties · Notifications; tab ids and `?tab=` links are unchanged.
 
 **Photo approval and proof before Done** (migration 0061, rules 1.3.1–1.3.4
 and 11.3.4). Every upload lands `attachment.review_status = 'pending'` and is

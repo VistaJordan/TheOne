@@ -226,7 +226,7 @@ export const PLATFORM_PART: DocPart = {
     {
       key: 'audit',
       title: 'Audit and traceability',
-      where: 'Admin › Audit log; the Audit trail tab on every work order; the field history panel.',
+      where: 'Admin › Audit log; the Logs tab on every work order; the field history panel.',
       purpose: 'Every button in the application writes to one append-only log with who, when, what changed and the whole before and after.',
       value: 'Disputes ("who changed the NTE?") are settled in seconds; the log is also the raw material for the "time between" dashboard cards, the obligations engine and the AR audit.',
       features: [

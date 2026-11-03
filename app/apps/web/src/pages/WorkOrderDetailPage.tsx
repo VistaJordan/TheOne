@@ -362,16 +362,20 @@ export function WorkOrderDetailPage() {
         <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} note={recordNote} />
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
+          {/* Elise, 2026-11-03 · Overview, CICO, Quote, Finances, Drive, Tech Hub,
+              Parts, People, Logs, All fields, then the rest. */}
           {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
-          {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
-          {canOpen('money') && <TabButton id="money" tab={tab} onSelect={setTab}>Finances</TabButton>}
-          {show('quotes') && <TabButton id="quotes" tab={tab} onSelect={setTab}>Quotes</TabButton>}
-          {show('dates') && <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>}
           {show('cico') && <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>}
-          {show('people') && <TabButton id="people" tab={tab} onSelect={setTab}>People</TabButton>}
-          {show('site') && <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>}
-          {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
+          {show('quotes') && <TabButton id="quotes" tab={tab} onSelect={setTab}>Quote</TabButton>}
+          {canOpen('money') && <TabButton id="money" tab={tab} onSelect={setTab}>Finances</TabButton>}
           {show('drive') && <TabButton id="drive" tab={tab} onSelect={setTab}>Drive</TabButton>}
+          {show(TECH_HUB_TAB) && <TabButton id={TECH_HUB_TAB} tab={tab} onSelect={setTab}>Tech Hub</TabButton>}
+          {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
+          {show('people') && <TabButton id="people" tab={tab} onSelect={setTab}>People</TabButton>}
+          {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Logs</TabButton>}
+          {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
+          {show('dates') && <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>}
+          {show('site') && <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>}
           {show('messages') && (
             <TabButton id="messages" tab={tab} onSelect={setTab}>
               <Icon name="msg" size={12} />
@@ -379,9 +383,7 @@ export function WorkOrderDetailPage() {
               {threadCount !== null && <span className="seg-count">{threadCount}</span>}
             </TabButton>
           )}
-          {show(TECH_HUB_TAB) && <TabButton id={TECH_HUB_TAB} tab={tab} onSelect={setTab}>Tech Hub</TabButton>}
           {show('penalties') && <TabButton id="penalties" tab={tab} onSelect={setTab}>Penalties</TabButton>}
-          {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Audit trail</TabButton>}
           {show('notifications') && <TabButton id="notifications" tab={tab} onSelect={setTab}>Notifications</TabButton>}
         </div>
       </div>
@@ -455,7 +457,7 @@ export function WorkOrderDetailPage() {
           )}
 
           {tab === 'audit' && (
-            <div className="card audit-card" role="tabpanel" aria-label="Audit trail">
+            <div className="card audit-card" role="tabpanel" aria-label="Logs">
               <AuditTrail
                 entries={activityQuery.data ?? wo.recent_activity ?? []}
                 loading={activityQuery.isLoading}
