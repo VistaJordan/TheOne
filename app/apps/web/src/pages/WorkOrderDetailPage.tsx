@@ -485,12 +485,27 @@ export function WorkOrderDetailPage() {
 
           {/* 2026-10-27 · Finances, Payables and Cost breakdown on one panel,
               each part behind its own tab permission. */}
-          {tab === 'money' && (
+          {tab === 'money' && (() => {
+            // 2026-11-02 (Elise) · Payment requests, with Request payment, sits
+            // beside the money card when both parts are open to this person;
+            // otherwise it stays with the rest of Payables.
+            const paymentRequests = (
+              <PaymentHistoryCard
+                woNumber={wo.wo_number}
+                items={paymentsQuery.data?.items ?? []}
+                totalPaid={paymentsQuery.data?.total_paid ?? null}
+                loading={paymentsQuery.isLoading}
+                requestAction={wo.actions?.['payment.request'] ?? null}
+              />
+            );
+            const besideMoney = show('money') && show('payables');
+            return (
             <div role="tabpanel" aria-label="Finances" className="fin-stack">
               {show('money') && (
                 <div className="fin-grid">
                   {/* The money card (Profitability exception + Manager notes inside it). */}
                   <MoneyCard wo={wo} />
+                  {besideMoney && paymentRequests}
                   {/* 0045 · what the client was actually billed. */}
                   <InvoiceCard wo={wo} />
                 </div>
@@ -506,13 +521,7 @@ export function WorkOrderDetailPage() {
                     <VendorBillsCard wo={wo} />
                     {/* 0067 · what was requested, quoted and ordered for this job. */}
                     <WoPurchasingCard woId={wo.id} woNumber={wo.wo_number} />
-                    <PaymentHistoryCard
-                      woNumber={wo.wo_number}
-                      items={paymentsQuery.data?.items ?? []}
-                      totalPaid={paymentsQuery.data?.total_paid ?? null}
-                      loading={paymentsQuery.isLoading}
-                      requestAction={wo.actions?.['payment.request'] ?? null}
-                    />
+                    {!besideMoney && paymentRequests}
                     {/* 2026-11-02 · every step of every request, deleted ones too. */}
                     <PaymentTimelineCard woNumber={wo.wo_number} />
                   </div>
@@ -532,7 +541,8 @@ export function WorkOrderDetailPage() {
                 </section>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {/* 2026-10-27 · Penalties, a tab of its own after Tech Hub: Bad
               quote, Penalty, Late quote, Missed ETA, Recall and the manager's

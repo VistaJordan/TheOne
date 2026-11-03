@@ -113,7 +113,7 @@ export const MONEY_PART: DocPart = {
     {
       key: 'payments',
       title: 'Technician payments and vendor bills',
-      where: 'Sidebar › Payments; the Payment requests and Vendor bills cards on the Payables tab; Request payment on a work order.',
+      where: 'Sidebar › Payments; on a work order’s Finances tab the Payment requests card (with Request payment) sits beside the money card — under Payables when the person sees Payables but not the money card — and Vendor bills under Payables.',
       purpose: 'The payables queue at Yoda parity (0076 — The One is the payment tool): a request per technician payment, approved, paid by AP and rolled into the work order\'s Cost; the vendor\'s own bills and credit notes beside it.',
       value: 'Technicians are paid fast and traceably, which keeps good technicians; the work order\'s Cost is the sum of what was actually paid, not a typed guess.',
       users: ['OM (dispatcher)', 'Team Lead', 'Assistant TL', 'Account Manager', 'Accounts Payable'],
