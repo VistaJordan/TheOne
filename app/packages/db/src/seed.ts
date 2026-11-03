@@ -15,7 +15,7 @@ import { seedAllowed } from './seedGuard.js';
 import { describeSeedUnpooledMismatch } from './migrateLedger.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { REQUEST_HIDDEN_STATUS_NAMES, STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, WO_CREATE_REQUIRED_KEYS,cicoMethodText, clientUnsafeDefaultBagKeys, type StatusGroup } from '@theone/shared';
+import { REQUEST_HIDDEN_STATUS_NAMES, RETIRED_FIELD_LABELS, STATUS_GROUP_BY_TYPE, WO_CREATE_DEFAULT_KEYS, WO_CREATE_REQUIRED_KEYS,cicoMethodText, clientUnsafeDefaultBagKeys, type StatusGroup } from '@theone/shared';
 // S5 · the demo-state anchors below are computed with the SAME business-time
 // arithmetic the obligation engine evaluates with, so the seeded tiers are
 // exact rather than approximated by calendar offsets — a 4-business-hour clock
@@ -401,7 +401,6 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: '24. Sign-Off Link',        label: 'Sign-Off Link',        type: 'short_text' },
   { key: '25. IVR Link',             label: 'IVR Link',             type: 'short_text' },
   { key: '26. PPR Link',             label: 'PPR Link',             type: 'short_text' },
-  { key: '27. Yoda Link',            label: 'Yoda Link',            type: 'short_text' },
   { key: '29. PDF Link',             label: 'PDF Link',             type: 'short_text' },
   { key: '34. Cost',                 label: 'Cost',                 type: 'currency' },
   { key: 'Admin Comment',            label: 'Admin Comment',        type: 'long_text' },
@@ -411,17 +410,13 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: 'Checked-in At',            label: 'Checked-in At',        type: 'datetime' },
   { key: 'Checked-out At',           label: 'Checked-out At',       type: 'datetime' },
   { key: 'Client Quote',             label: 'Client Quote',         type: 'long_text' },
-  { key: '28. Sharepoint Link',      label: 'Sharepoint Link',      type: 'url' },
   { key: 'Days since Done',          label: 'Days Since Done',      type: 'formula' },
   { key: 'Grey Flag Date',           label: 'Grey Flag Date',       type: 'date' },
   { key: 'Invoice #',                label: 'Invoice #',            type: 'short_text' },
   { key: 'Invoice Date',             label: 'Invoice Date',         type: 'date' },
-  { key: 'MoD Call',                 label: 'MoD Call',             type: 'dropdown', options: [] },
-  { key: 'MoD Call Notes',           label: 'MoD Call Notes',       type: 'long_text' },
   { key: 'QC Date',                  label: 'QC Date',              type: 'date' },
   { key: 'Quote Check',              label: 'Quote Check',          type: 'checkbox' },
   { key: 'Total Invoiced',           label: 'Total Invoiced',       type: 'currency' },
-  { key: '❌Today',                  label: 'Today',                type: 'checkbox' },
   { key: '🚨 SLA Requested',         label: 'SLA Requested',        type: 'checkbox' },
   { key: '🚨 SLA Updated',           label: 'SLA Updated',          type: 'checkbox' },
   { key: '30. IVR Pin',              label: 'IVR Pin',              type: 'short_text' },
@@ -432,12 +427,12 @@ const CURATED_FIELDS: CuratedField[] = [
   // an already-seeded database; keep in step). One part per line; a move to
   // Waiting for Parts / Please Order Parts is refused while it is empty.
   { key: 'Parts Required',           label: 'Parts Required',       type: 'long_text' },
-  // 0063 · the rest of the create form (migration 0063 carries the SAME four
-  // rows for an already-seeded database; keep in step).
+  // 0063 · the rest of the create form (migration 0063 carries the SAME
+  // rows for an already-seeded database; keep in step). Supplier Type and
+  // Work Permit Needed left in 0121 (Elise, 2026-11-03) with ten more —
+  // RETIRED_FIELD_LABELS in shared woCreate.ts; the seed no longer creates them.
   { key: 'Problem Type',             label: 'Problem Type',         type: 'dropdown', options: ['Not working', 'Damaged', 'Leaking water', 'Leak inspection', 'Power loss', 'Electrical', 'Gas', 'Temperature', 'High temperature', 'Physical damage', 'Noise', 'Safety hazard', 'Other'] },
   { key: 'Sub Category',             label: 'Sub Category',         type: 'short_text' },
-  { key: 'Supplier Type',            label: 'Supplier Type',        type: 'dropdown', options: ['External supplier', 'Internal'] },
-  { key: 'Work Permit Needed',       label: 'Work Permit Needed',   type: 'checkbox' },
   { key: '37. PDF',                  label: 'PDF',                  type: 'attachment' },
   { key: 'AM',                       label: 'AM',                   type: 'users' },
   { key: 'Audited',                  label: 'Audited',              type: 'checkbox' },
@@ -477,20 +472,15 @@ const CURATED_FIELDS: CuratedField[] = [
   // 0033). Extra portals are added from Admin › Custom fields; an integration
   // that pulls a work order stamps its own name here.
   { key: 'Client Portal Type',       label: 'Client Portal Type',   type: 'dropdown', options: ['Ecotrak', 'Corrigo', 'ServiceChannel', '7-Eleven'] },
-  { key: 'GTG',                      label: 'GTG',                  type: 'checkbox' },
-  { key: 'MOD Date',                 label: 'MOD Date',             type: 'date' },
   { key: 'Previous Assignees',       label: 'Previous Assignees',   type: 'users' },
   { key: 'Profit',                   label: 'Profit',               type: 'formula' },
   { key: 'Sales Owner',              label: 'Sales Owner',          type: 'dropdown', options: ['Rocio', 'Teresa', 'Kevin', 'House'] }, // 0104 · Kevin, House; 0105 · Ro → Rocio (SALES_OWNER_DEFAULT_OPTIONS)
-  { key: 'Show in CA',               label: 'Show in CA',           type: 'checkbox' },
   { key: 'State',                    label: 'State',                type: 'dropdown', options: US_STATES },
   { key: 'Store',                    label: 'Store',                type: 'short_text' },
   { key: 'TL',                       label: 'TL',                   type: 'users' },
   // 0096 · the account team's Assistant Team Lead, filled on Add work order
   // from Clients › Account team. Kept in step with the migration.
   { key: 'ATL',                      label: 'ATL',                  type: 'users' },
-  { key: 'Tech Map',                 label: 'Tech Map',             type: 'short_text' },
-  { key: 'Tech Quote',               label: 'Tech Quote',           type: 'long_text' },
   { key: 'Zip Code',                 label: 'Zip Code',             type: 'short_text' },
   { key: 'Trade',                    label: 'Trade',                type: 'dropdown', options: null },
   // System field, kept OUT of the founder's curated order: the dispatcher
@@ -952,7 +942,11 @@ async function main() {
   // `users` field, same shape as "AM").
   const ASSIGNEE_FIELD = 'Assignee';
   const exportOptionsByName = new Map(data.fields.map((f) => [f.name, f.options ?? []]));
+  // 0121 · the retired fields (Supplier Type, Work Permit Needed, …) are not
+  // created: the migration retires them on a seeded database, the seed leaves
+  // them out (RETIRED_FIELD_LABELS, keep in step).
   for (const f of CURATED_FIELDS) {
+    if (RETIRED_FIELD_LABELS.includes(f.label)) continue;
     let typeConfig: Record<string, unknown> = {};
     if (f.type === 'dropdown') {
       // `null` = inherit the ClickUp export's vocabulary; an array = curated.

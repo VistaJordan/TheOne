@@ -62,7 +62,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Overview',
-          what: 'The Obligations card first ("Nothing owed on this work order."; Snooze per row), the Updates & activity feed (read-only, "N events · newest first", with a Write a message button) and the Soft-close checklist (Quote created, Before photos, Quote check, Admin check, GTG; an n / 5 meter). The landing tab since 2026-10-22.',
+          what: 'The Obligations card first ("Nothing owed on this work order."; Snooze per row), the Updates & activity feed (read-only, "N events · newest first", with a Write a message button) and the Soft-close checklist (Quote created, Before photos, Quote check, Admin check; an n / 4 meter — GTG retired, 0121). The landing tab since 2026-10-22.',
           value: 'The story of the job on one tab.',
         },
         {

@@ -18,7 +18,7 @@
 import { AGE_BANDS } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
-import { CLIENT_FIELD_KEY, DISPATCHER_ROLE_CODES, ROLE_LIMITED_PERSON_FIELDS, defaultClientSafe, seatRoleForField } from '@theone/shared';
+import { CLIENT_FIELD_KEY, DISPATCHER_ROLE_CODES, ROLE_LIMITED_PERSON_FIELDS, SCREEN_HIDDEN_FIELD_KEYS, defaultClientSafe, seatRoleForField } from '@theone/shared';
 
 export type FieldType = 'text' | 'number' | 'money' | 'date' | 'datetime' | 'select' | 'boolean';
 
@@ -205,9 +205,10 @@ interface FieldDefRow {
   type: string;
   type_config: { options?: unknown } | null;
   client_safe: boolean | null;
+  retired: boolean;
 }
 
-let customCache: { at: number; fields: FieldDescriptor[] } | null = null;
+let customCache: { at: number; fields: FieldDescriptor[]; retired: Set<string> } | null = null;
 const CUSTOM_TTL_MS = 30_000;
 
 /** Called by the admin field-def writes: without this, a rename or a new field
@@ -222,13 +223,19 @@ let distinctCustomKeys: string[] = [];
 
 /** Custom fields, keyed as they appear inside `task.fields`. Cached briefly:
     the catalogue is read on every list render and changes only when an
-    administrator adds a field. */
-export async function listCustomFields(): Promise<FieldDescriptor[]> {
+    administrator adds a field. A RETIRED field (0121) is left out unless
+    `includeRetired` — resolveField asks for it, so a saved view, tracker or
+    automation that still names one keeps resolving instead of failing. */
+export async function listCustomFields(opts: { includeRetired?: boolean } = {}): Promise<FieldDescriptor[]> {
   const now = Date.now();
-  if (customCache && now - customCache.at < CUSTOM_TTL_MS) return customCache.fields;
+  if (!customCache || now - customCache.at >= CUSTOM_TTL_MS) customCache = await loadCustomFields(now);
+  const { fields, retired } = customCache;
+  return opts.includeRetired || retired.size === 0 ? fields : fields.filter((f) => !retired.has(f.key));
+}
 
+async function loadCustomFields(now: number): Promise<{ at: number; fields: FieldDescriptor[]; retired: Set<string> }> {
   const res = await query<FieldDefRow>(
-    `SELECT key, label, type::text AS type, type_config, client_safe
+    `SELECT key, label, type::text AS type, type_config, client_safe, retired_at IS NOT NULL AS retired
        FROM field_def
       ORDER BY position NULLS LAST, key ASC`,
   );
@@ -237,10 +244,12 @@ export async function listCustomFields(): Promise<FieldDescriptor[]> {
   // so the first definition of a key wins and the duplicate is dropped.
   const seen = new Set<string>();
   const fields: FieldDescriptor[] = [];
+  const retired = new Set<string>();
   distinctCustomKeys = [];
   for (const r of res.rows) {
     if (seen.has(r.key)) continue;
     seen.add(r.key);
+    if (r.retired) retired.add(`fields.${r.key}`);
     const type = CUSTOM_TYPE_MAP[r.type] ?? 'text';
     const raw = r.type_config?.options;
     const options = Array.isArray(raw)
@@ -261,8 +270,7 @@ export async function listCustomFields(): Promise<FieldDescriptor[]> {
     if (type === 'select' && !options) distinctCustomKeys.push(r.key);
   }
 
-  customCache = { at: now, fields };
-  return fields;
+  return { at: now, fields, retired };
 }
 
 /** Dropdown options arrive as `"Yes"` or `{name|label|value, color}` depending
@@ -431,7 +439,9 @@ export async function getFieldCatalogue(): Promise<FieldCatalogue> {
     return customDistinct[f.key] ? { ...f, options: customDistinct[f.key] } : f;
   });
 
-  return { fields: [...core, ...customWithOptions], default_columns: [...DEFAULT_COLUMNS] };
+  // 2026-11-03 (0121): Ecotrak ID stays written and synced but is never drawn.
+  const shown = customWithOptions.filter((f) => !SCREEN_HIDDEN_FIELD_KEYS.includes(f.key));
+  return { fields: [...core, ...shown], default_columns: [...DEFAULT_COLUMNS] };
 }
 
 // ── Resolution ───────────────────────────────────────────────────────────────
@@ -467,7 +477,7 @@ export async function resolveField(key: string): Promise<ResolvedField> {
   }
   if (key.startsWith('fields.')) {
     const jsonKey = key.slice('fields.'.length);
-    const custom = (await listCustomFields()).find((f) => f.key === key);
+    const custom = (await listCustomFields({ includeRetired: true })).find((f) => f.key === key);
     if (custom) {
       return {
         key,

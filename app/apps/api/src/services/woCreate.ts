@@ -93,7 +93,7 @@ export async function getCreateForm(): Promise<WoCreateForm> {
             CASE WHEN jsonb_typeof(f.type_config->'options') = 'array'
                  THEN f.type_config->'options' ELSE '[]'::jsonb END AS options
        FROM field_def f
-      WHERE f.create_mode <> 'off'
+      WHERE f.create_mode <> 'off' AND f.retired_at IS NULL
       ORDER BY f.position NULLS LAST, f.key ASC`,
   );
 

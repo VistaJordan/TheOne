@@ -329,11 +329,6 @@ export function deriveChecklist(wo: WorkOrderDetailV2): ChecklistItem[] {
       done: bool(field(f, FIELD.adminCheck)),
       note: bool(field(f, FIELD.adminCheck)) ? (invoiceOn ?? 'Checked') : 'Pending',
     },
-    {
-      label: 'GTG',
-      done: bool(field(f, FIELD.gtg)),
-      note: bool(field(f, FIELD.gtg)) ? 'Good to go' : 'Pending',
-    },
   ];
 }
 

@@ -36,7 +36,6 @@ export const FIELD = {
   quoteReadyToSend: '✅ Quote Ready To Send',
   quoteCheck: 'Quote Check',
   adminCheck: 'Admin Check',
-  gtg: 'GTG',
   pdf: '37. PDF',
   dateReceived: 'Date-Time Received',
   slaDue: 'SLA Due Date',

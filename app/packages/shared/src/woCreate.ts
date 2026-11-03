@@ -29,6 +29,19 @@ export function isWoCreateMode(v: unknown): v is WoCreateMode {
   return typeof v === 'string' && (WO_CREATE_MODES as readonly string[]).includes(v);
 }
 
+/** 2026-11-03 (Elise, migration 0121): fields RETIRED from the app — out of
+    the catalogue, Admin › Custom fields, Add work order, the import and the
+    ClickUp push, yet still resolvable so a saved view or an automation that
+    names one keeps loading. By label; 0121 matches these and their keys. */
+export const RETIRED_FIELD_LABELS: readonly string[] = [
+  'Today', 'Yoda Link', 'GTG', 'MOD Date', 'Show in CA', 'Sharepoint Link',
+  'MoD Call', 'MoD Call Notes', 'Tech Quote', 'Tech Map', 'Work Permit Needed', 'Supplier Type',
+];
+
+/** Same day: kept and still written (the Ecotrak sync stores it, ClickUp
+    matches and pushes it) but never drawn — left out of the field catalogue. */
+export const SCREEN_HIDDEN_FIELD_KEYS: readonly string[] = ['fields.Ecotrak ID'];
+
 /** How the Admin › Custom fields control names each setting. */
 export const WO_CREATE_MODE_LABELS: Record<WoCreateMode, string> = {
   off: 'Not on the form',
@@ -54,8 +67,6 @@ export const WO_CREATE_DEFAULT_KEYS: readonly string[] = [
   'Sub Category',
   'Problem Type',
   '35. WO Description',
-  'Supplier Type',
-  'Work Permit Needed',
   'Date-Time Received',
   'Due Date',
   'SLA Due Date',
@@ -129,7 +140,7 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
   {
     id: 'what',
     title: 'What is wrong',
-    keys: ['Trade', 'Sub Category', 'Problem Type', '35. WO Description', 'Supplier Type', 'Work Permit Needed'],
+    keys: ['Trade', 'Sub Category', 'Problem Type', '35. WO Description'],
   },
   {
     id: 'when',

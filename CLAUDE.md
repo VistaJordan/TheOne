@@ -1274,7 +1274,8 @@ batch 3). The form has existed since 0041 (`services/woCreate.ts`,
 - **Four fields**, on the form by default, in the Overview section of the
   record: `Problem Type` (dropdown), `Sub Category` (text), `Supplier Type`
   (External supplier / Internal), `Work Permit Needed` (checkbox). Seed and
-  migration carry the same rows — KEEP IN STEP. A trade IS the category;
+  migration carry the same rows — KEEP IN STEP. (The last two were retired
+  by 0121, below.) A trade IS the category;
   `wo_subcategory` (trade → names, Admin › Settings card, grant
   `admin/settings`) feeds the Sub Category suggestions through
   `subcategoriesFor`; the field still takes anything typed.
@@ -3277,6 +3278,23 @@ get their dash), and the Add work order, draft, inline-editor and (since
 2026-10-30) bulk-edit and site ZIP boxes run `zipInputValue` on every
 keystroke so letters never get in; a site's ZIP is checked by `normalizeZip`
 in `checkSiteInput` too. Stored values are not re-checked.
+
+**Twelve fields retired; Ecotrak ID off the screens** (migration 0121, Elise
+2026-11-03; `RETIRED_FIELD_LABELS` / `SCREEN_HIDDEN_FIELD_KEYS` in shared
+`woCreate.ts`, `tests/retired-fields.test.ts`). Today, Yoda Link, GTG, MOD
+Date, Show in CA, Sharepoint Link, MoD Call, MoD Call Notes, Tech Quote, Tech
+Map, Work Permit Needed and Supplier Type carry `field_def.retired_at` (0121
+matches key or label; `create_mode` off). There is no field delete in the
+app, and a deleted `field_def` would make every saved view, tracker or
+automation naming it fail with "Unknown field", so retired is the delete:
+`listCustomFields()` leaves them out (catalogue, All fields, column picker,
+filters, bulk edit, CSV import, ClickUp push), Admin › Custom fields, the
+Add work order form and the field counts skip them, and only `resolveField`
+(`includeRetired: true`) still knows them. Values in `task.fields` stay.
+seed.ts no longer creates them — keep in step. The soft-close checklist lost
+its GTG step (n / 4). **Ecotrak ID** is not retired: `getFieldCatalogue`
+drops `SCREEN_HIDDEN_FIELD_KEYS`, while the Ecotrak sync still writes it and
+ClickUp still matches and pushes it. Parts Required and Total Invoiced stay.
 
 **The quote at the top of the builder** (no migration, Elise 2026-10-28). The
 quote builder (its page and the work order's Quotes tab) opens with a **Quote**

@@ -90,7 +90,7 @@ export async function docsSnapshot(user: PermissionBearer & { id: string }): Pro
               (SELECT COUNT(*)::int FROM principal WHERE kind = 'human' AND status <> 'disabled') AS users,
               (SELECT COUNT(*)::int FROM role)                                                   AS roles,
               (SELECT COUNT(*)::int FROM status)                                                 AS statuses,
-              (SELECT COUNT(*)::int FROM field_def)                                              AS fields,
+              (SELECT COUNT(*)::int FROM field_def WHERE retired_at IS NULL)                                              AS fields,
               (SELECT COUNT(*)::int FROM automation)                                             AS automations,
               (SELECT COUNT(*)::int FROM saved_view)                                             AS saved_views,
               (SELECT COUNT(*)::int FROM dashboard)                                              AS dashboards,

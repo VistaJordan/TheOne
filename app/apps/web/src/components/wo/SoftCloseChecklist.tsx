@@ -6,8 +6,9 @@ interface SoftCloseChecklistProps {
   wo: WorkOrderDetailV2;
 }
 
-/** Five gates derived from the fields bag: 'Quote Check', 'Admin Check', 'GTG'
-    plus the quote-created and before-photos heuristics. n/5 meter in the head. */
+/** Four gates derived from the fields bag: 'Quote Check', 'Admin Check' plus
+    the quote-created and before-photos heuristics (GTG retired, 0121). n/4
+    meter in the head. */
 export function SoftCloseChecklist({ wo }: SoftCloseChecklistProps) {
   const items = deriveChecklist(wo);
   const done = items.filter((i) => i.done).length;

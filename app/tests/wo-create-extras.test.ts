@@ -2,6 +2,7 @@
 // offers, what a site fills in, and where the new fields sit on the form.
 import { describe, expect, it } from 'vitest';
 import {
+  RETIRED_FIELD_LABELS,
   WO_CREATE_DEFAULT_KEYS,
   WO_CREATE_SECTIONS,
   WO_SITE_AUTOFILL,
@@ -26,11 +27,19 @@ describe('sub-categories follow the trade', () => {
 });
 
 describe('the form as it ships', () => {
-  it('has the four 0063 fields on it, under "What is wrong"', () => {
+  it('has two of the 0063 fields on it, under "What is wrong"', () => {
     const what = WO_CREATE_SECTIONS.find((s) => s.id === 'what')!;
-    for (const k of ['Sub Category', 'Problem Type', 'Supplier Type', 'Work Permit Needed']) {
+    for (const k of ['Sub Category', 'Problem Type']) {
       expect(WO_CREATE_DEFAULT_KEYS).toContain(k);
       expect(what.keys).toContain(k);
+    }
+  });
+
+  it('Supplier Type and Work Permit Needed are retired (0121) and off the form', () => {
+    for (const k of ['Supplier Type', 'Work Permit Needed']) {
+      expect(RETIRED_FIELD_LABELS).toContain(k);
+      expect(WO_CREATE_DEFAULT_KEYS).not.toContain(k);
+      for (const s of WO_CREATE_SECTIONS) expect(s.keys).not.toContain(k);
     }
   });
 

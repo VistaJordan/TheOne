@@ -45,6 +45,7 @@ export async function listFieldDefs(): Promise<FieldDefItem[]> {
               WHERE t.deleted_at IS NULL AND t.fields ? f.key) AS used_by
        FROM field_def f
        LEFT JOIN container c ON c.id = f.container_id
+      WHERE f.retired_at IS NULL -- 0121: a retired field is gone from Admin › Custom fields
       ORDER BY f.position NULLS LAST, f.key ASC`,
   );
   // Older exports stored options as {name,color} objects; the editor works on
@@ -171,7 +172,7 @@ export async function getSettings(): Promise<SettingsResponse> {
             (SELECT COUNT(*)::int FROM role)                                 AS roles,
             (SELECT COUNT(*)::int FROM task WHERE deleted_at IS NULL)        AS work_orders,
             (SELECT COUNT(*)::int FROM status)                               AS statuses,
-            (SELECT COUNT(*)::int FROM field_def)                            AS fields`,
+            (SELECT COUNT(*)::int FROM field_def WHERE retired_at IS NULL)                            AS fields`,
   );
 
   const enrol = await query<{ label: string }>(`SELECT label FROM role WHERE code = $1`, [config.signIn.autoEnrolRole]);
