@@ -363,8 +363,9 @@ export function WorkOrderDetailPage() {
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
           {/* Elise, 2026-11-03 · Overview, CICO, Quote, Finances, Drive, Tech Hub,
-              Parts, People, Logs, All fields, then the rest. Notifications has no
-              button since the same day; ?tab=notifications still opens it. */}
+              Parts, People, Logs, All fields, then the rest. Site and Notifications
+              have no button since the same day; ?tab=site / ?tab=notifications still
+              open them. */}
           {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
           {show('cico') && <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>}
           {show('quotes') && <TabButton id="quotes" tab={tab} onSelect={setTab}>Quote</TabButton>}
@@ -376,7 +377,6 @@ export function WorkOrderDetailPage() {
           {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Logs</TabButton>}
           {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
           {show('dates') && <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>}
-          {show('site') && <TabButton id="site" tab={tab} onSelect={setTab}>Site</TabButton>}
           {show('messages') && (
             <TabButton id="messages" tab={tab} onSelect={setTab}>
               <Icon name="msg" size={12} />
