@@ -134,13 +134,21 @@ function valueForApi(raw: string, d: WoFieldDescriptor | undefined, type?: strin
   return s;
 }
 
+/**
+ * The "Site and asset" step (0063). Off since 2026-11-03 (Elise): the team
+ * does not pick sites on intake yet. Everything behind it — the picker, the
+ * site → address fill, a template's site, `site_id` / `asset_id` on the API —
+ * is kept; set this back to true to bring the step back.
+ */
+const SHOW_SITE_ON_CREATE = false;
+
 export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { can } = useAuth();
   const catalogue = useWoCatalogue();
   const numberRef = useRef<HTMLInputElement>(null);
-  const seesSites = can('sites', 'view');
+  const seesSites = SHOW_SITE_ON_CREATE && can('sites', 'view');
   const seesAssets = can('assets', 'view');
 
   const formQuery = useQuery({ queryKey: ['wo-create-form'], queryFn: getWoCreateForm, staleTime: 60_000 });

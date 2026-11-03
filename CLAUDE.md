@@ -1266,7 +1266,9 @@ batch 3). The form has existed since 0041 (`services/woCreate.ts`,
   at it) and sets `task.site_id` / `task.asset_id`. In the browser a picked
   site fills `WO_SITE_AUTOFILL` (client, store, address, city, state, ZIP) —
   each field only while it is empty or still holds what the last site put
-  there, so typing is never overwritten.
+  there, so typing is never overwritten. **Hidden since 2026-11-03** (Elise):
+  `SHOW_SITE_ON_CREATE = false` in `CreateWorkOrderDialog.tsx` drops the step
+  (and a template's site); the code and the API stay — flip it to bring it back.
 - **Four fields**, on the form by default, in the Overview section of the
   record: `Problem Type` (dropdown), `Sub Category` (text), `Supplier Type`
   (External supplier / Internal), `Work Permit Needed` (checkbox). Seed and
