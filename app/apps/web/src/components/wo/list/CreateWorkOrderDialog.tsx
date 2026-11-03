@@ -113,27 +113,71 @@ const TEAM_KEYS = new Set(CLIENT_TEAM_FIELDS.map((f) => f.key));
 /** Received on — pre-filled with now when the form opens. */
 const RECEIVED_KEY = 'Date-Time Received';
 
-/** This browser's clock as a datetime-local value, 'YYYY-MM-DDTHH:mm'. */
+/** This browser's clock as a datetime-local value, 'YYYY-MM-DDTHH:mm', with
+    the minutes taken down to the ten (04:07 → 04:00): the form's times go in
+    tens (Elise, 2026-11-03). */
 function localNowInput(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(Math.floor(d.getMinutes() / 10) * 10)}`;
 }
 
-/** A datetime-local value with its minutes rounded to the nearest ten
-    (10:46 → 10:50, 10:56 → 11:00); anything else comes back as it is. */
-function snapToTenMinutes(s: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(s);
-  if (!m || Number(m[5]) % 10 === 0) return s;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Math.round(Number(m[5]) / 10) * 10);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+const TEN_MINUTES = ['00', '10', '20', '30', '40', '50'];
+const HOURS_12 = ['12', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
+
+type LooseDateTime = { date: string; h: string; mi: string; ap: 'AM' | 'PM' };
+
+function parseDateTimeInput(v: string): LooseDateTime | null {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(v);
+  if (!m) return null;
+  const h24 = Number(m[2]);
+  return { date: m[1], h: String(h24 % 12 === 0 ? 12 : h24 % 12), mi: m[3], ap: h24 < 12 ? 'AM' : 'PM' };
 }
-/** The step base of the datetime pickers. Without a `min` the browser counts
-    the steps from the box's own value (React mirrors it into the attribute),
-    so a value at 04:07 offered 07, 17, 27 …; 2000 is also the earliest date
-    a field takes (M2). */
-const DATETIME_MIN = '2000-01-01T00:00';
+
+/**
+ * A date and a time whose minutes go in tens (Elise, 2026-11-03). The
+ * browser's own datetime picker always slips the current minute into its
+ * list (04:08 among 10, 20 …) and nothing switches that off, so the time is
+ * three selects instead: hour, minute (00, 10 … 50) and AM / PM. The value is
+ * the datetime-local shape the rest of the form reads, '' until a date is in;
+ * a date with no time picked yet means 12:00 AM.
+ */
+function TenMinuteDateTime({ id, value, onChange, disabled }: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const [loose, setLoose] = useState<LooseDateTime>({ date: '', h: '', mi: '', ap: 'AM' });
+  const cur = parseDateTimeInput(value) ?? loose;
+  const emit = (next: LooseDateTime) => {
+    setLoose(next);
+    if (next.date === '') { onChange(''); return; }
+    const h12 = Number(next.h || '12') % 12;
+    const h24 = next.ap === 'PM' ? h12 + 12 : h12;
+    onChange(`${next.date}T${String(h24).padStart(2, '0')}:${next.mi || '00'}`);
+  };
+  // A value set elsewhere (an older template) may hold any minute; keep it on offer.
+  const minutes = cur.mi && !TEN_MINUTES.includes(cur.mi) ? [cur.mi, ...TEN_MINUTES] : TEN_MINUTES;
+  return (
+    <div className="dt10">
+      <input id={id} className="fld" type="date" min="2000-01-01" value={cur.date}
+        onChange={(e) => emit({ ...cur, date: e.target.value })} disabled={disabled} />
+      <select className="fld" aria-label="Hour" value={cur.h} onChange={(e) => emit({ ...cur, h: e.target.value })} disabled={disabled}>
+        {cur.h === '' && <option value="">--</option>}
+        {HOURS_12.map((h) => <option key={h} value={h}>{h}</option>)}
+      </select>
+      <select className="fld" aria-label="Minutes" value={cur.mi} onChange={(e) => emit({ ...cur, mi: e.target.value })} disabled={disabled}>
+        {cur.mi === '' && <option value="">--</option>}
+        {minutes.map((m) => <option key={m} value={m}>{m}</option>)}
+      </select>
+      <select className="fld" aria-label="AM or PM" value={cur.ap} onChange={(e) => emit({ ...cur, ap: e.target.value as 'AM' | 'PM' })} disabled={disabled}>
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+    </div>
+  );
+}
 
 /** A datetime-local input wants 'YYYY-MM-DDTHH:mm'; a date input wants ten
     characters. Anything else goes through as typed. */
@@ -218,9 +262,6 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   // in, local time, and stays editable. Set once, when the form arrives, and
   // only while the box is still empty.
   const receivedSeeded = useRef(false);
-  /** The value the form put in Received on; left as it is (not rounded to
-      ten minutes) until someone changes it. */
-  const receivedAuto = useRef<string | null>(null);
   useEffect(() => {
     if (receivedSeeded.current) return;
     const f = form.fields.find((x) => x.key === RECEIVED_KEY);
@@ -229,7 +270,6 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     const d = catalogue.get(`fields.${RECEIVED_KEY}`);
     const isDate = d?.type === 'date' || f.type === 'date';
     const now = localNowInput();
-    if (!isDate) receivedAuto.current = now;
     setValues((cur) => ((cur[RECEIVED_KEY] ?? '').trim() !== '' ? cur : { ...cur, [RECEIVED_KEY]: isDate ? now.slice(0, 10) : now }));
   }, [form.fields, catalogue]);
 
@@ -592,26 +632,16 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       : 'text';
     // Zip Code takes digits only; letters never reach the box.
     const zip = f.key === ADDRESS_ZIP_KEY;
-    const datetime = type === 'datetime-local';
+    if (type === 'datetime-local') {
+      return <TenMinuteDateTime id={domId} value={val} onChange={(v) => set(f.key, v)} disabled={busy} />;
+    }
 
     return (
       <input
         id={domId}
         className="fld"
         type={type}
-        // A datetime's picker offers the minutes in tens (00, 10 … 50; Elise,
-        // 2026-11-02), counted from DATETIME_MIN. A minute typed by hand, or
-        // the clock the picker fills in on an empty box, is rounded to the
-        // nearest ten on leaving the box — except Received on's automatic
-        // value, which stays to the minute until someone changes it.
-        step={d?.type === 'money' || f.type === 'currency' ? '0.01' : datetime ? 600 : undefined}
-        min={datetime ? DATETIME_MIN : undefined}
-        onBlur={datetime ? (e) => {
-          const raw = e.target.value;
-          if (f.key === RECEIVED_KEY && raw === receivedAuto.current) return;
-          const snapped = snapToTenMinutes(raw);
-          if (snapped !== raw) set(f.key, snapped);
-        } : undefined}
+        step={d?.type === 'money' || f.type === 'currency' ? '0.01' : undefined}
         value={val}
         onChange={(e) => set(f.key, zip ? zipInputValue(e.target.value) : e.target.value)}
         inputMode={zip ? 'numeric' : undefined}
@@ -779,7 +809,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
                 <h3>
                   <span className="step-n">{i + stepOffset}</span> {s.title}
                 </h3>
-                <p className="hint">{s.hint}</p>
+                {s.hint && <p className="hint">{s.hint}</p>}
                 <div className="intake-grid">
                   {s.fields.map((f) => (
                     <div
@@ -808,7 +838,6 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
               <h3>
                 <span className="step-n">{sections.filter((s) => s.fields.length > 0).length + stepOffset}</span> Photos and files
               </h3>
-              <p className="hint">Optional. They are uploaded as soon as the work order is created, and wait for review like any other upload.</p>
               <div className="wo-new-files">
                 <label className="btn-sm is-ghost" style={{ width: 'fit-content', cursor: 'pointer' }}>
                   <Icon name="upload" size={12} /> Choose files

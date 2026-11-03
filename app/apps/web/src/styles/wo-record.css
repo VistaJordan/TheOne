@@ -146,6 +146,11 @@
 .wo-new-files { display: grid; gap: 6px; }
 .wo-new-files ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; color: var(--ink-2); }
 .wo-new-files li { display: flex; gap: 8px; align-items: center; }
+/* A date and a time in tens of minutes: the date takes the room, the three
+   time selects keep their own width. */
+.dt10 { display: flex; gap: 4px; min-width: 0; }
+.dt10 input.fld { flex: 1 1 auto; min-width: 0; width: auto; }
+.dt10 select.fld { flex: none; width: auto; padding-left: 6px; padding-right: 6px; }
 .wo-new-layout { margin: 0 0 12px; font-size: 12.5px; color: var(--ink-2); }
 
 /* ── The More menu on the record: its pop-up and items ────────────────────── */
