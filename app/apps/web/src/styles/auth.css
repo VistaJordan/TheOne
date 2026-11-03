@@ -106,8 +106,8 @@
   padding: 36px 30px 30px;
   display: flex; flex-direction: column; gap: 14px;
 }
-/* The OBI hologram (public/brand/OBI-hologram-*.svg, 300×180 with its own
-   backdrop). Day shows the light art, night the dark one. */
+/* The OBI hologram (public/brand/OBI-hologram-*-transparent.svg, 300×180, no
+   backdrop of its own). Day shows the light art, night the dark one. */
 .signin-logo {
   align-self: center;
   width: 240px;
@@ -117,7 +117,6 @@
   display: block;
   width: 100%;
   height: auto;
-  border-radius: var(--radius-sm);
 }
 .signin-logo .signin-logo-night { display: none; }
 :root[data-theme="night"] .signin-logo .signin-logo-day { display: none; }

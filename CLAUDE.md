@@ -3283,8 +3283,8 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   `styles/app.css`). If the asset changes
   size or layout, re-measure and update those numbers — the comments list them.
   Night mode inverts the mark with `filter: invert(1) hue-rotate(180deg)`.
-  The sign-in card shows the OBI hologram instead (`public/brand/OBI-hologram-light.svg`
-  by day, `-dark.svg` at night; `SIGNIN_LOGO_*` in `lib/brand.ts`, `.signin-logo` in `auth.css`).
+  The sign-in card shows the OBI hologram instead (`public/brand/OBI-hologram-light-transparent.svg`
+  by day, `-dark-transparent.svg` at night; `SIGNIN_LOGO_*` in `lib/brand.ts`, `.signin-logo` in `auth.css`).
 - Motion is always inside `@media (prefers-reduced-motion: no-preference)` or
   disabled under `reduce`.
 - Files are CRLF on disk (`core.autocrlf=true`, no `.gitattributes`); the
