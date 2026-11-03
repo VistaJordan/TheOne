@@ -125,6 +125,18 @@ export function PermissionMatrix({
     }
     if (Object.keys(grant).length > 0) next[key] = grant;
     else delete next[key];
+    // Turning View off hides everything beneath. A row's own tick wins over
+    // its parent (resolvePerm), so a child left on "View: yes" — Quotes page
+    // (0111), Payments page (0108), Pulse — kept its sidebar item after the
+    // section above it was switched off. Drop those so they inherit the no.
+    if (v === false && action === 'view') {
+      for (const [k, g] of Object.entries(next)) {
+        if (!k.startsWith(`${key}/`) || g.view !== true) continue;
+        const { view: _drop, ...rest } = g;
+        if (Object.keys(rest).length > 0) next[k] = rest;
+        else delete next[k];
+      }
+    }
     onChange(next);
   };
 
