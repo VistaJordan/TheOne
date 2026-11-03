@@ -61,6 +61,7 @@ import {
 } from '@theone/shared';
 import type {
   ApprovalListItem,
+  ApprovalTask,
   ApprovalTaskStatus,
   ApprovalTaskType,
   PaymentListItem,
@@ -907,7 +908,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                       kind === 'withdraw' ||
                       // …unless it takes Cost past the NTE: the AM says why.
                       (kind === 'approve' && r.data.kind === 'payment' && !r.data.item.above_nte) ||
-                      (kind === 'approve' && r.data.kind === 'task' && !approveAsksNote(r) && r.data.item.type !== 'wo_acceptance')
+                      (kind === 'approve' && r.data.kind === 'task' && !approveAsksNote(r) && !nteHoldForPayment(r) && r.data.item.type !== 'wo_acceptance')
                     ) {
                       decide.mutate({ kind, row: r, text: null });
                     } else setPending({ kind, row: r });
@@ -968,6 +969,29 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
         />
       )}
 
+      {/* 2026-11-03 · an NTE hold raised for a payment is approved WITH that
+          payment (the API runs the payment's approve), so the AM says why. */}
+      {pending?.kind === 'approve' && nteHoldForPayment(pending.row) && (
+        <TextDialog
+          title="Approve this payment above the NTE?"
+          facts={[
+            ...facts(pending.row),
+            ...(typeof (pending.row.data.item.detail as { reason?: unknown }).reason === 'string'
+              ? [{ k: 'Requester’s reason', v: (pending.row.data.item.detail as { reason: string }).reason }]
+              : []),
+          ]}
+          idKey={pending.row.key}
+          label="Why are you approving it over the NTE?"
+          hint={`Required — this approves the payment request and the NTE override on ${pending.row.wo_number}, and is posted there as an internal update.`}
+          required
+          multiline
+          confirmLabel="Approve"
+          busy={busy}
+          onConfirm={(text) => decide.mutate({ ...pending, text: text.trim() || null })}
+          onCancel={() => setPending(null)}
+        />
+      )}
+
       {pending?.kind === 'approve' && pending.row.data.kind === 'payment' && pending.row.data.item.above_nte && (
         <TextDialog
           title="Approve this payment above the NTE?"
@@ -979,7 +1003,6 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
           ]}
           idKey={pending.row.key}
           label="Why are you approving it over the NTE?"
-          hint={`Required — this also approves the NTE override on ${pending.row.wo_number}, and is posted there as an internal update.`}
           required
           multiline
           confirmLabel="Approve"
@@ -1049,6 +1072,13 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
 
 /** 2026-10-27 (Elise): approving asks a note only for a status change into
     Approved (`statusApprovalNeedsNote`; the API refuses it without one). */
+/** An open NTE hold raised for a payment request: approving it approves the
+    payment too (the API's approveApprovalTask), so it asks the AM's reason. */
+function nteHoldForPayment(row: Row): row is Row & { data: { kind: 'task'; item: ApprovalTask } } {
+  if (row.data.kind !== 'task' || row.data.item.type !== 'nte_override' || !row.open) return false;
+  return typeof (row.data.item.detail as { payment_request_id?: unknown }).payment_request_id === 'string';
+}
+
 function approveAsksNote(row: Row): boolean {
   if (row.data.kind !== 'task' || row.data.item.type !== 'status_change') return false;
   return statusApprovalNeedsNote((row.data.item.detail as Partial<StatusChangeDetail>).to_status_name);

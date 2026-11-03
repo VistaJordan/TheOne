@@ -112,7 +112,7 @@ describe('approving a status change is one click', () => {
     const inbox = src('apps/web/src/pages/ApprovalsPage.tsx');
     // 2026-10-27: every task approves in one click; only a move INTO Approved
     // (and accepting a new work order) opens a dialog.
-    expect(inbox).toContain("(kind === 'approve' && r.data.kind === 'task' && !approveAsksNote(r) && r.data.item.type !== 'wo_acceptance')");
+    expect(inbox).toContain("(kind === 'approve' && r.data.kind === 'task' && !approveAsksNote(r) && !nteHoldForPayment(r) && r.data.item.type !== 'wo_acceptance')");
     expect(inbox).toContain('statusApprovalNeedsNote(');
     expect(inbox).not.toContain("onDecide('claim')");
   });

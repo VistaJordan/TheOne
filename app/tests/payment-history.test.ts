@@ -39,7 +39,8 @@ describe('payment history', () => {
     expect(body).toContain('taskIdOf(req)');
   });
 
-  it('refreshes with every payment action (query key under wo-payments)', () => {
-    expect(card).toContain(`queryKey: ['wo-payments', woNumber, 'history']`);
+  it('is not drawn on the work order (Elise, 2026-11-03: payments and their status only)', () => {
+    expect(card).not.toContain('PaymentTimelineCard');
+    expect(card).not.toContain('getPaymentHistory');
   });
 });

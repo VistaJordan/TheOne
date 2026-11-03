@@ -26,8 +26,7 @@ import { PenaltiesCard } from '../components/wo/ManagerFlags';
 import { MoneyCard } from '../components/wo/MoneyCard';
 import { QuoteBuilder } from './QuoteBuilderPage';
 import { InvoiceCard } from '../components/wo/InvoiceCard';
-import { VendorBillsCard } from '../components/wo/VendorBillsCard';
-import { PaymentHistoryCard, PaymentTimelineCard } from '../components/wo/PayablesCard';
+import { PaymentHistoryCard } from '../components/wo/PayablesCard';
 import { AssignmentHistoryCard, PeopleCard } from '../components/wo/PeopleCard';
 import { SuggestedVendorsCard } from '../components/wo/tech/SuggestedVendorsCard';
 import { TechniciansCard } from '../components/wo/tech/TechniciansCard';
@@ -489,7 +488,8 @@ export function WorkOrderDetailPage() {
             // 2026-11-02 (Elise) · Payment requests, with Request payment, sits
             // beside the money card when both parts are open to this person;
             // otherwise it stays with the rest of Payables. 2026-11-03 (Elise) ·
-            // the payment history sits right under it, wherever it goes.
+            // the step-by-step payment timeline is gone: this card's list of
+            // payments and their status is the payment history.
             const paymentRequests = (
               <div className="fin-col">
                 <PaymentHistoryCard
@@ -499,8 +499,6 @@ export function WorkOrderDetailPage() {
                   loading={paymentsQuery.isLoading}
                   requestAction={wo.actions?.['payment.request'] ?? null}
                 />
-                {/* 2026-11-02 · every step of every request, deleted ones too. */}
-                <PaymentTimelineCard woNumber={wo.wo_number} />
               </div>
             );
             const besideMoney = show('money') && show('payables');
@@ -516,17 +514,14 @@ export function WorkOrderDetailPage() {
                 </div>
               )}
 
-              {show('payables') && (
+              {/* 2026-11-03 (Elise) · no Payment links card (PPR / Yoda links
+                  stay in All fields), Purchasing moved to Parts, and no Vendor
+                  bills card — so Payables is the payment requests alone, drawn
+                  here only when they are not beside the money card. */}
+              {show('payables') && !besideMoney && (
                 <section id="fin-payables" className="fin-part" aria-label="Payables">
                   <h2 className="fin-part-title">Payables</h2>
-                  {/* 2026-11-03 (Elise) · no Payment links card (PPR / Yoda
-                      links stay in All fields); Purchasing moved to Parts. */}
-                  <div className="pay-grid">
-                    {!besideMoney && paymentRequests}
-                    {/* 0047 · the vendor's own invoice — the document the payment
-                        request should be settling. */}
-                    <VendorBillsCard wo={wo} />
-                  </div>
+                  <div className="pay-grid">{paymentRequests}</div>
                 </section>
               )}
 

@@ -798,7 +798,32 @@ export async function approveApprovalTask(
   const cur = await getApprovalTask(id);
   requireDecide(actor, cur.type, 'approve');
   requireOverQuoteLevel(actor, cur.type, 'approve');
+  // Elise, 2026-11-03: an NTE hold raised for a payment that is still waiting
+  // is approved WITH the payment — otherwise the hold clears and the payment
+  // sits at Requested. The payment's own approve asks the AM level and the
+  // reason, and approves this open hold in the same transaction.
+  const paymentId = linkedWaitingPayment(cur);
+  if (paymentId && (await paymentStillRequested(paymentId))) {
+    const { approvePaymentRequest } = await import('./payments.js');
+    await approvePaymentRequest(paymentId, actor, note);
+    return getApprovalTask(id);
+  }
   return decide(id, 'approved', note, actor, opts);
+}
+
+/** The payment request an open NTE hold was raised for, when it names one. */
+function linkedWaitingPayment(task: ApprovalTask): string | null {
+  if (task.type !== 'nte_override' || task.status !== 'open') return null;
+  const pid = (task.detail as { payment_request_id?: unknown } | null)?.payment_request_id;
+  return typeof pid === 'string' && pid ? pid : null;
+}
+
+async function paymentStillRequested(paymentId: string): Promise<boolean> {
+  const res = await query<{ status: string }>(
+    `SELECT status FROM payment_request WHERE id = $1 AND deleted_at IS NULL`,
+    [paymentId],
+  );
+  return res.rows[0]?.status === 'requested';
 }
 
 /** open → rejected, with the reason (approvals/<section>:approve). */

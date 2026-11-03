@@ -74,3 +74,21 @@ describe('wiring', () => {
     expect(read('apps/web/src/pages/ApprovalsPage.tsx')).toContain('Approve this payment above the NTE?');
   });
 });
+
+describe('approving the NTE hold in the inbox approves its payment (2026-11-03)', () => {
+  const src = read('apps/api/src/services/approvals.ts');
+  const body = src.slice(src.indexOf('export async function approveApprovalTask'));
+  it('an open nte_override naming a still-requested payment goes through the payment approve', () => {
+    expect(body).toContain("task.type !== 'nte_override' || task.status !== 'open'");
+    expect(body).toContain('payment_request_id');
+    expect(body).toMatch(/paymentStillRequested\(paymentId\)\)\) \{\s+const \{ approvePaymentRequest \} = await import\('\.\/payments\.js'\);\s+await approvePaymentRequest\(paymentId, actor, note\);/);
+    // Before the plain decision, which would clear the hold alone.
+    expect(body.indexOf('approvePaymentRequest(paymentId')).toBeLessThan(body.indexOf("return decide(id, 'approved'"));
+  });
+  it('the inbox asks the AM why before approving such a hold', () => {
+    const page = read('apps/web/src/pages/ApprovalsPage.tsx');
+    expect(page).toContain('function nteHoldForPayment(');
+    expect(page).toContain('!nteHoldForPayment(r)');
+    expect(page).toContain('this approves the payment request and the NTE override');
+  });
+});

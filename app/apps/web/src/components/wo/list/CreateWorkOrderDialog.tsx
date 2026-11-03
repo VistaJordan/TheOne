@@ -135,12 +135,14 @@ function parseDateTimeInput(v: string): LooseDateTime | null {
 }
 
 /**
- * A date and a time whose minutes go in tens (Elise, 2026-11-03). The
- * browser's own datetime picker always slips the current minute into its
- * list (04:08 among 10, 20 …) and nothing switches that off, so the time is
- * three selects instead: hour, minute (00, 10 … 50) and AM / PM. The value is
- * the datetime-local shape the rest of the form reads, '' until a date is in;
- * a date with no time picked yet means 12:00 AM.
+ * A date and a time whose minutes go in tens (Elise, 2026-11-03). It looks
+ * like the browser's datetime box ("11/03/2026, 04:40 AM") but the browser's
+ * own time picker always slips the current minute into its list (04:08 among
+ * 10, 20 …) and nothing switches that off, so the time half is ours: clicking
+ * it opens three columns — hour, minute (00, 10 … 50) and AM / PM. The date
+ * half is the browser's date box. The value is the datetime-local shape the
+ * rest of the form reads, '' until a date is in; a date with no time picked
+ * yet means 12:00 AM.
  */
 function TenMinuteDateTime({ id, value, onChange, disabled }: {
   id: string;
@@ -149,6 +151,8 @@ function TenMinuteDateTime({ id, value, onChange, disabled }: {
   disabled?: boolean;
 }) {
   const [loose, setLoose] = useState<LooseDateTime>({ date: '', h: '', mi: '', ap: 'AM' });
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
   const cur = parseDateTimeInput(value) ?? loose;
   const emit = (next: LooseDateTime) => {
     setLoose(next);
@@ -157,24 +161,54 @@ function TenMinuteDateTime({ id, value, onChange, disabled }: {
     const h24 = next.ap === 'PM' ? h12 + 12 : h12;
     onChange(`${next.date}T${String(h24).padStart(2, '0')}:${next.mi || '00'}`);
   };
+  // Clicking anywhere else, or Escape, closes the time columns. On opening,
+  // each column scrolls to its picked value (inside the column only, so the
+  // dialog itself never jumps).
+  useEffect(() => {
+    if (!open) return;
+    box.current?.querySelectorAll<HTMLElement>('.dt10-opt.is-on').forEach((el) => {
+      const col = el.parentElement;
+      if (col) col.scrollTop = el.offsetTop - col.offsetTop - (col.clientHeight - el.offsetHeight) / 2;
+    });
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc, true);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc, true);
+    };
+  }, [open]);
   // A value set elsewhere (an older template) may hold any minute; keep it on offer.
   const minutes = cur.mi && !TEN_MINUTES.includes(cur.mi) ? [cur.mi, ...TEN_MINUTES] : TEN_MINUTES;
+  const label = cur.h === '' && cur.mi === '' ? '--:-- --' : `${(cur.h || '12').padStart(2, '0')}:${cur.mi || '00'} ${cur.ap}`;
+  const col = (name: string, items: string[], picked: string, show: (v: string) => string, pick: (v: string) => void) => (
+    <div className="dt10-col" role="listbox" aria-label={name}>
+      {items.map((v) => (
+        <button key={v} type="button" role="option" aria-selected={v === picked}
+          className={`dt10-opt${v === picked ? ' is-on' : ''}`}
+          onClick={() => pick(v)}>
+          {show(v)}
+        </button>
+      ))}
+    </div>
+  );
   return (
-    <div className="dt10">
-      <input id={id} className="fld" type="date" min="2000-01-01" value={cur.date}
+    <div className={`fld dt10${disabled ? ' is-disabled' : ''}`} ref={box}>
+      <input id={id} className="dt10-date" type="date" min="2000-01-01" value={cur.date}
         onChange={(e) => emit({ ...cur, date: e.target.value })} disabled={disabled} />
-      <select className="fld" aria-label="Hour" value={cur.h} onChange={(e) => emit({ ...cur, h: e.target.value })} disabled={disabled}>
-        {cur.h === '' && <option value="">--</option>}
-        {HOURS_12.map((h) => <option key={h} value={h}>{h}</option>)}
-      </select>
-      <select className="fld" aria-label="Minutes" value={cur.mi} onChange={(e) => emit({ ...cur, mi: e.target.value })} disabled={disabled}>
-        {cur.mi === '' && <option value="">--</option>}
-        {minutes.map((m) => <option key={m} value={m}>{m}</option>)}
-      </select>
-      <select className="fld" aria-label="AM or PM" value={cur.ap} onChange={(e) => emit({ ...cur, ap: e.target.value as 'AM' | 'PM' })} disabled={disabled}>
-        <option value="AM">AM</option>
-        <option value="PM">PM</option>
-      </select>
+      <button type="button" className="dt10-time" aria-haspopup="listbox" aria-expanded={open}
+        aria-label={`Time, ${label}`} onClick={() => setOpen((o) => !o)} disabled={disabled}>
+        <span>{label}</span>
+        <Icon name="clock" size={12} />
+      </button>
+      {open && (
+        <div className="dt10-pop">
+          {col('Hour', HOURS_12, cur.h, (h) => h.padStart(2, '0'), (h) => emit({ ...cur, h }))}
+          {col('Minutes', minutes, cur.mi, (m) => m, (mi) => emit({ ...cur, mi }))}
+          {col('AM or PM', ['AM', 'PM'], cur.ap, (a) => a, (a) => emit({ ...cur, ap: a as 'AM' | 'PM' }))}
+        </div>
+      )}
     </div>
   );
 }
