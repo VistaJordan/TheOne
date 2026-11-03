@@ -1,16 +1,14 @@
-/* The Payables tab (two cards, side by side):
+/* The payment cards on the Finances tab (the Payment links card left on
+   2026-11-03, Elise — the PPR / Yoda links are still in All fields):
 
-     PayablesFieldsCard   the All-fields "Payments" section (PPR link, Yoda
-                          link, whatever the founder adds to it), as editable
-                          rows — driven by FIELD_SECTIONS so the two views can
-                          never drift apart.
      PaymentHistoryCard   every payment request on this WO, newest first, each
                           with its status (Requested / Approved / Paid /
                           Rejected), plus the "Request payment" entry point.
      PaymentTimelineCard  the history behind them: every step of every
                           request (requested, edited, approved, paid,
                           rejected, method changed, deleted), who and when —
-                          deleted requests included (GET …/payment-history).
+                          deleted requests included (GET …/payment-history);
+                          drawn right under PaymentHistoryCard.
 
    The old rail-era mini card capped the ledger at three rows; the tab has the
    room to show all of it. */
@@ -18,20 +16,15 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import type { PaymentRequest, WoActionState, WorkOrderDetailV2 } from '../../api/client';
+import type { PaymentRequest, WoActionState } from '../../api/client';
 import { getPaymentHistory } from '../../api/client';
-import { FieldHistory, HistoryToggle } from './FieldHistory';
 import { payeeLabel, PAYMENT_STATUS_LABEL } from '../payments/PaymentsTable';
 import { methodLabel } from '../../api/client';
 import type { PaymentHistoryAction, PaymentHistoryEvent, PaymentRequestStatus } from '@theone/shared';
 import { shortDate, shortDateTime } from '../../lib/fields';
 import { usd } from '../../lib/quoteTotals';
-import { FIELD_SECTIONS } from '../../lib/woFieldSections';
 import { Icon } from '../Icon';
 import { useAuth } from '../../auth/AuthProvider';
-import { InlineField, useWoCatalogue } from './fieldEdit';
-
-const PAYMENTS_SECTION_TITLE = 'Payments';
 
 /** Status → chip flavour. Rejected wears the danger tint; Paid the accent. */
 const STATUS_CHIP: Record<PaymentRequestStatus, string> = {
@@ -41,45 +34,6 @@ const STATUS_CHIP: Record<PaymentRequestStatus, string> = {
   paid: 'chip-accent',
   rejected: 'chip-danger',
 };
-
-export function PayablesFieldsCard({ wo }: { wo: WorkOrderDetailV2 }) {
-  const byKey = useWoCatalogue();
-  const [historyFor, setHistoryFor] = useState<string | null>(null);
-  const keys = FIELD_SECTIONS.find((s) => s.title === PAYMENTS_SECTION_TITLE)?.keys ?? [];
-  const fields = keys
-    .map((k) => byKey.get(k))
-    .filter((f): f is NonNullable<typeof f> => Boolean(f));
-
-  return (
-    <section className="card">
-      <div className="card-head">
-        <h2 className="card-title">Payment links</h2>
-      </div>
-      {fields.length === 0 ? (
-        <div className="empty-flat">No payment fields are defined in Admin › Custom fields.</div>
-      ) : (
-        <dl className="fieldlist">
-          {fields.map((f) => (
-            <div key={f.key}>
-              <div className="fieldrow has-hist">
-                <dt>{f.label}</dt>
-                <dd>
-                  <InlineField wo={wo} fieldKey={f.key} label={f.label} />
-                  <HistoryToggle
-                    field={f}
-                    open={historyFor === f.key}
-                    onToggle={() => setHistoryFor(historyFor === f.key ? null : f.key)}
-                  />
-                </dd>
-              </div>
-              {historyFor === f.key && <FieldHistory woId={wo.id} field={f} />}
-            </div>
-          ))}
-        </dl>
-      )}
-    </section>
-  );
-}
 
 interface PaymentHistoryCardProps {
   woNumber: string;

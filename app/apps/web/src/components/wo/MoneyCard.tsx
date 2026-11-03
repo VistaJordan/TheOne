@@ -18,8 +18,8 @@ interface MoneyCardProps {
     Paid, Client NTE, Cost, Total Invoiced, Discount, Profit) in the section's
     own clean labels — no ClickUp key prefixes — plus the one thing this tab
     alone has: the NTE meter (how much of the NTE the invoiced amount has
-    eaten). Profit closes the list with its margin %, as a total row. Every
-    stored value edits in place (InlineField); Profit stays derived. The
+    eaten). The margin (a percentage only) closes the list as a total row. Every
+    stored value edits in place (InlineField); the margin stays derived. The
     Client Quote moved to its own card beside this one (ClientQuoteCard). */
 export function MoneyCard({ wo }: MoneyCardProps) {
   const m = resolveMoney(wo);
@@ -118,19 +118,16 @@ export function MoneyCard({ wo }: MoneyCardProps) {
             />
           </dd>
         </div>
+        {/* 2026-11-03 (Elise) · the margin shows as a percentage only, never
+            as a dollar figure. */}
         <div className="kvrow is-total">
-          <dt>Profit</dt>
+          <dt>Margin</dt>
           <dd className={[
-            m.profit == null ? 'is-none' : '',
-            m.profit != null && m.profit < 0 ? 'is-neg' : '',
+            m.marginPct == null ? 'is-none' : '',
+            m.marginPct != null && m.marginPct < 0 ? 'is-neg' : '',
           ].filter(Boolean).join(' ')}
           >
-            {money(m.profit)}
-            {m.marginPct != null && (
-              <span className={`margin-chip${m.marginPct < 0 ? ' is-neg' : ''}`}>
-                {Math.round(m.marginPct)}%
-              </span>
-            )}
+            {m.marginPct == null ? DASH : `${Math.round(m.marginPct)}%`}
           </dd>
         </div>
       </dl>

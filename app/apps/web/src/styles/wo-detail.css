@@ -1274,6 +1274,9 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 /* The grid's gap is the only spacing — undo the app-wide `.card + .card`
    margin so the second card's top lines up with the money card's. */
 .fin-grid > .card { margin-top: 0; }
+/* Payment requests with the payment history right under it (2026-11-03). */
+.fin-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.fin-col > .card { margin-top: 0; }
 
 /* Blue titles, matching the All-fields section cards. */
 /* Every tab card's title wears the accent — scoped to the detail tabs

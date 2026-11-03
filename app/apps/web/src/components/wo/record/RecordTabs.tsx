@@ -110,6 +110,8 @@ export function CostBreakdownTab({ woId, woNumber, record }: TabProps) {
     decide.mutate(x, { onError: (e) => setError(errText(e, 'Could not decide the request.')), onSuccess: () => setError(null) });
   if (!record.can.see_money) return <section className="card"><div className="empty-flat">Your role does not show the money on a work order.</div></section>;
   const margin = b.revenue !== null && b.cost !== null ? b.revenue - b.cost : null;
+  // 2026-11-03 (Elise) · the margin is shown as a percentage only.
+  const marginPct = margin !== null && b.revenue ? Math.round((margin / b.revenue) * 1000) / 10 : null;
 
   return (
     <>
@@ -124,8 +126,8 @@ export function CostBreakdownTab({ woId, woNumber, record }: TabProps) {
           <div><span>Cost</span><b>{usd(b.cost)}</b><small>{b.cost_basis}</small></div>
           <div className={margin !== null && margin < 0 ? 'is-neg' : undefined}>
             <span>Margin</span>
-            <b>{usd(margin)}</b>
-            <small>{margin !== null && b.revenue ? `${Math.round((margin / b.revenue) * 1000) / 10}% of revenue` : 'Needs both figures'}</small>
+            <b>{marginPct === null ? '—' : `${marginPct}%`}</b>
+            <small>{marginPct === null ? 'Needs both figures' : 'of revenue'}</small>
           </div>
         </div>
         <div className="rec-cost-grid">

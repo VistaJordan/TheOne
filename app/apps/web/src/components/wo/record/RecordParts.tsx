@@ -638,8 +638,9 @@ export function RecordRail({ woId, record, loading }: { woId: string; record: Wo
             <Row label="Invoiced">{usd(c.invoiced)}</Row>
             <Row label="Cost">{usd(c.cost)}</Row>
             <Row label="Paid out">{c.payables_requested === null ? '—' : `${usd(c.payables_paid)} of ${usd(c.payables_requested)}`}</Row>
-            <Row label="Profit">
-              {c.profit === null ? '—' : <b className={`num${c.profit < 0 ? ' rec-neg' : ''}`}>{usd(c.profit)}{c.margin_pct !== null ? ` · ${c.margin_pct}%` : ''}</b>}
+            {/* 2026-11-03 (Elise) · the margin as a percentage only. */}
+            <Row label="Margin">
+              {c.margin_pct === null ? '—' : <b className={`num${c.margin_pct < 0 ? ' rec-neg' : ''}`}>{c.margin_pct}%</b>}
             </Row>
           </div>
         </section>

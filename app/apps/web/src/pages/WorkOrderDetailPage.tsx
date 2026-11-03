@@ -27,7 +27,7 @@ import { MoneyCard } from '../components/wo/MoneyCard';
 import { QuoteBuilder } from './QuoteBuilderPage';
 import { InvoiceCard } from '../components/wo/InvoiceCard';
 import { VendorBillsCard } from '../components/wo/VendorBillsCard';
-import { PayablesFieldsCard, PaymentHistoryCard, PaymentTimelineCard } from '../components/wo/PayablesCard';
+import { PaymentHistoryCard, PaymentTimelineCard } from '../components/wo/PayablesCard';
 import { AssignmentHistoryCard, PeopleCard } from '../components/wo/PeopleCard';
 import { SuggestedVendorsCard } from '../components/wo/tech/SuggestedVendorsCard';
 import { TechniciansCard } from '../components/wo/tech/TechniciansCard';
@@ -488,15 +488,20 @@ export function WorkOrderDetailPage() {
           {tab === 'money' && (() => {
             // 2026-11-02 (Elise) · Payment requests, with Request payment, sits
             // beside the money card when both parts are open to this person;
-            // otherwise it stays with the rest of Payables.
+            // otherwise it stays with the rest of Payables. 2026-11-03 (Elise) ·
+            // the payment history sits right under it, wherever it goes.
             const paymentRequests = (
-              <PaymentHistoryCard
-                woNumber={wo.wo_number}
-                items={paymentsQuery.data?.items ?? []}
-                totalPaid={paymentsQuery.data?.total_paid ?? null}
-                loading={paymentsQuery.isLoading}
-                requestAction={wo.actions?.['payment.request'] ?? null}
-              />
+              <div className="fin-col">
+                <PaymentHistoryCard
+                  woNumber={wo.wo_number}
+                  items={paymentsQuery.data?.items ?? []}
+                  totalPaid={paymentsQuery.data?.total_paid ?? null}
+                  loading={paymentsQuery.isLoading}
+                  requestAction={wo.actions?.['payment.request'] ?? null}
+                />
+                {/* 2026-11-02 · every step of every request, deleted ones too. */}
+                <PaymentTimelineCard woNumber={wo.wo_number} />
+              </div>
             );
             const besideMoney = show('money') && show('payables');
             return (
@@ -514,16 +519,13 @@ export function WorkOrderDetailPage() {
               {show('payables') && (
                 <section id="fin-payables" className="fin-part" aria-label="Payables">
                   <h2 className="fin-part-title">Payables</h2>
+                  {/* 2026-11-03 (Elise) · no Payment links card (PPR / Yoda
+                      links stay in All fields); Purchasing moved to Parts. */}
                   <div className="pay-grid">
-                    <PayablesFieldsCard wo={wo} />
+                    {!besideMoney && paymentRequests}
                     {/* 0047 · the vendor's own invoice — the document the payment
                         request should be settling. */}
                     <VendorBillsCard wo={wo} />
-                    {/* 0067 · what was requested, quoted and ordered for this job. */}
-                    <WoPurchasingCard woId={wo.id} woNumber={wo.wo_number} />
-                    {!besideMoney && paymentRequests}
-                    {/* 2026-11-02 · every step of every request, deleted ones too. */}
-                    <PaymentTimelineCard woNumber={wo.wo_number} />
                   </div>
                 </section>
               )}
@@ -612,7 +614,12 @@ export function WorkOrderDetailPage() {
           )}
 
           {tab === 'parts' && (
-            <div role="tabpanel" aria-label="Parts"><PartsCard wo={wo} /></div>
+            <div role="tabpanel" aria-label="Parts">
+              <PartsCard wo={wo} />
+              {/* 0067 · what was requested, quoted and ordered for this job
+                  (moved here from Payables, 2026-11-03). */}
+              <WoPurchasingCard woId={wo.id} woNumber={wo.wo_number} />
+            </div>
           )}
 
           {/* 0064 · the tabs that read the record (Cost breakdown is on Finances). */}

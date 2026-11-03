@@ -300,7 +300,7 @@ export const MONEY_PART: DocPart = {
     {
       key: 'purchasing',
       title: 'Purchasing, tax rates, document templates and budgets',
-      where: 'Sidebar › Purchasing: Requests, Requests for quotation, Purchase orders, Budgets (each shown with its own view grant); the Purchasing card on a work order\'s Payables tab.',
+      where: 'Sidebar › Purchasing: Requests, Requests for quotation, Purchase orders, Budgets (each shown with its own view grant); the Purchasing card on a work order\'s Parts tab.',
       purpose: 'Purchase request → request for quotation → purchase order, with budgets and AFEs that warn, tax rates to pick from, and the templates that dress the printed quote, invoice and order.',
       value: 'Parts and materials are bought with a paper trail and compared quotes, and never double-counted against the work order\'s Cost.',
       users: ['Accounts Payable', 'Team Lead', 'Admin'],
