@@ -54,7 +54,7 @@ import { Icon } from '../components/Icon';
 import { LineItemsTable, AddLineButton } from '../components/quote/LineItemsTable';
 import { MoneyRail } from '../components/quote/MoneyRail';
 import { OptionCard } from '../components/quote/OptionCard';
-import { QUOTE_STATUS, QuotePipeline, QuoteStatusPill } from '../components/quote/QuoteStatusPill';
+import { QuotePipeline } from '../components/quote/QuoteStatusPill';
 import { ScopeList } from '../components/quote/ScopeList';
 import { SummaryCard } from '../components/quote/SummaryCard';
 import type { DraftLine, DraftQuote, DraftSection } from '../lib/quoteDraft';
@@ -675,7 +675,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         : submittedLocked
           ? QUOTE_SUBMITTED_LOCKED_TEXT
           : canEdit
-            ? `This quote is ${QUOTE_STATUS[status].label.toLowerCase()} — its line items are read-only.`
+            ? null
             : 'You can read this quote. Building and revising it is Senior OM and above.';
 
   return shell(
@@ -814,7 +814,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               savedAt={savedAt}
               failed={saveMutation.isError}
             />
-            <QuoteStatusPill status={status} />
           </div>
         </div>
 

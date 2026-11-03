@@ -3243,7 +3243,9 @@ and the card is hidden in print. **On the work order's Quotes tab** (`embedded`,
 Elise 2026-11-03) that card, the header's id line (WO #, Rev, number, Print /
 PDF, status) and the Work order context card are not drawn — the standalone
 page keeps them; the pipeline and the action buttons share one row
-(`.qpipe-row`); the actor note shows only when the quote cannot be edited.
+(`.qpipe-row`); the actor note shows only when the PERSON may not edit (a
+quote locked by its status says nothing — the pipeline already shows it), and
+the header has no status pill (both pages).
 The summary's incurred line reads "Total incurred".
 
 ## Verify
