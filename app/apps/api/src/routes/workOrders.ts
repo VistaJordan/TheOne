@@ -28,6 +28,7 @@ import {
   REOPEN_REQUIRED_CODE,
   REOPEN_REQUIRED_MESSAGE,
   isCancelStatusName,
+  onlyHeaderFlags,
   permAllows,
   statusMoveNeedsNoApproval,
   tabPermKey,
@@ -277,7 +278,10 @@ function requireView(req: FastifyRequest) {
 /** 403 helper for field writes: the section-level grant, then every key. */
 function requireFieldEdit(req: FastifyRequest, catalogueKeys: string[]): string {
   const { p, allow } = acting(req);
-  requirePerm(p, 'work_orders', 'edit', 'You cannot edit work orders');
+  // 2026-11-03 (0120): the header's Emergency / Escalation flags are
+  // everyone's — a save of only those needs view; the field grants still apply.
+  if (onlyHeaderFlags(catalogueKeys)) requirePerm(p, 'work_orders', 'view', 'You cannot view work orders');
+  else requirePerm(p, 'work_orders', 'edit', 'You cannot edit work orders');
   assertFieldWrites(allow, catalogueKeys);
   return p.id;
 }

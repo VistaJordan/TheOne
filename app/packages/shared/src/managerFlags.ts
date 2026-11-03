@@ -57,3 +57,38 @@ export const PENALTIES_SECTION_KEYS: readonly string[] = PENALTY_FIELDS.map((f) 
 
 /** The roles 0094 makes view-only on the section and the two Finances rows. */
 export const MANAGER_FLAG_LOCKED_ROLES = ['om_probation', 'om', 'senior_om', 'vr_officer', 'oa'] as const;
+
+// ── The two header flags (Elise, 2026-11-03, migration 0120) ────────────────
+//
+// The Emergency and Escalation buttons in the work-order header are
+// everyone's: 0120 grants view + edit on both fields to every role, and a save
+// that writes ONLY these two needs `work_orders` view, not edit. One limit:
+// clearing an escalation is a manager's call — the dispatchers (and anyone
+// else) may raise one, only a TL, an ATL or an AM takes it down (Admin and
+// super admins too). A rule's or the system's own write is not asked.
+
+export const EMERGENCY_KEY = 'Emergency';
+export const ESCALATED_KEY = 'Escalated';
+export const HEADER_FLAG_KEYS = [EMERGENCY_KEY, ESCALATED_KEY] as const;
+
+/** True when every catalogue key of a save is one of the two header flags. */
+export function onlyHeaderFlags(catalogueKeys: readonly string[]): boolean {
+  return (
+    catalogueKeys.length > 0 &&
+    catalogueKeys.every((k) => (HEADER_FLAG_KEYS as readonly string[]).includes(k.replace(/^fields\./, '')))
+  );
+}
+
+export const ESCALATION_CLEAR_ROLES = ['tl', 'atl', 'am', 'admin'] as const;
+export const ESCALATION_CLEAR_CODE = 'ESCALATION_CLEAR_FORBIDDEN';
+export const ESCALATION_CLEAR_SENTENCE = 'Only a TL, ATL or AM can clear an escalation.';
+
+export function mayClearEscalation(roleCode: string | null | undefined, isSuperAdmin: boolean): boolean {
+  return isSuperAdmin || (!!roleCode && (ESCALATION_CLEAR_ROLES as readonly string[]).includes(roleCode));
+}
+
+/** A checkbox value that reads as ticked (stored true, or typed in bulk / CSV). */
+export function flagTicked(v: unknown): boolean {
+  if (v === true || v === 1) return true;
+  return typeof v === 'string' && ['true', 'yes', '1', 'y'].includes(v.trim().toLowerCase());
+}

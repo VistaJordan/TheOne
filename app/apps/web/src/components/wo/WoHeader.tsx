@@ -8,7 +8,9 @@ import {
   PARTS_REQUIRED_KEY,
   VISIT_MIRROR_KEYS,
   ecotrakStatusLabel,
+  ESCALATION_CLEAR_SENTENCE,
   fieldPermKey,
+  mayClearEscalation,
 } from '@theone/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import type { ObligationSummary, Phase, WorkOrderDetailV2 } from '../../api/client';
@@ -90,7 +92,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
   // money roles), the Comp chip the Comp field's, the Ecotrak chip a direct
   // status mover (request-mode dispatchers see it on their request instead),
   // the SharePoint chip someone who files to it.
-  const { can } = useAuth();
+  const { can, actingAs } = useAuth();
   const seesCost = can(fieldPermKey(`fields.${FINAL_COST_KEY}`), 'view');
   const seesComp = can(fieldPermKey('fields.21. Comp'), 'view');
   const movesStatus = can('work_orders/status', 'edit');
@@ -98,17 +100,21 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
   // Rule 2.5.1: the Emergency flag reads red here as in every other view.
   const emergency = isEmergency(f);
   // Rules 7.3.1 / 7.3.3: the Escalated flag reads amber here and everywhere.
-  // The Escalation button is a manager's: the field's own edit permission
-  // decides who sees it (0038 locks the dispatcher tiers out).
+  // 2026-11-03 (Elise, 0120): both header flags are everyone's — a work-order
+  // viewer with the field's view + edit (0120 grants both to every role) —
+  // but only a TL, ATL or AM (Admin, super admins) clears an escalation; for
+  // anyone else a raised one draws locked.
+  const flagEditable = (key: string) =>
+    can('work_orders', 'view') && can(fieldPermKey(key), 'view') && can(fieldPermKey(key), 'edit');
   const escalated = isEscalated(f);
   const escalatedKey = `fields.${FIELD.escalated}`;
-  const canEscalate = useCanEditField(escalatedKey);
+  const canEscalate = flagEditable(escalatedKey);
+  const canClearEscalation = mayClearEscalation(actingAs?.role, !!actingAs?.is_super_admin);
   const escalateSave = useWoFieldSave(wo.id);
-  // 2026-10-27 · the Emergency button beside it, same pattern in red: whoever may
-  // edit the Emergency field sees it (rule 2.5.1, ticked by hand until the
-  // client portals decide it).
+  // 2026-10-27 · the Emergency button beside it, same pattern in red (rule
+  // 2.5.1, ticked by hand until the client portals decide it).
   const emergencyKey = `fields.${FIELD.emergency}`;
-  const canFlagEmergency = useCanEditField(emergencyKey);
+  const canFlagEmergency = flagEditable(emergencyKey);
   const emergencySave = useWoFieldSave(wo.id);
   // 2026-10-22 · reassign or unassign from the top: the assignee chip opens
   // the dispatcher picker for whoever may edit the Assignee field (the
@@ -268,7 +274,18 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               {emergency ? 'Emergency · Clear' : 'Emergency'}
             </button>
           )}
-          {canEscalate && (
+          {canEscalate && escalated && !canClearEscalation ? (
+            <button
+              type="button"
+              className="btn is-escalated btn-locked"
+              aria-disabled="true"
+              aria-pressed
+              title={ESCALATION_CLEAR_SENTENCE}
+            >
+              <Icon name="lock" size={14} />
+              Escalated
+            </button>
+          ) : canEscalate && (
             <button
               type="button"
               className={`btn${escalated ? ' is-escalated' : ''}`}

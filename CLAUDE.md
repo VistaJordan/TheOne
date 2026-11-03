@@ -3233,7 +3233,18 @@ salesperson when the dropdown offers that name (`salesOwnerFromTeam` in shared
 AM / TL / ATL alone). A tick the person may not set (Escalated for the
 dispatchers, 0038) is drawn locked, since `assertFieldWrites` would refuse it.
 The header has **Emergency** (was Mark as Emergency) beside **Escalation** (`WoHeader`,
-the field's edit permission, red `.btn.is-emergency`).
+the field's edit permission, red `.btn.is-emergency`). **Both buttons are
+everyone's** (migration 0120, Elise 2026-11-03; `onlyHeaderFlags` /
+`mayClearEscalation` / `flagTicked` in shared `managerFlags.ts`,
+`tests/header-flags.test.ts`): 0120 grants view + edit on
+`fields.Emergency` and `fields.Escalated` to every role but `service` (0038's
+dispatcher lock included; per-person overrides untouched), and
+`PATCH /work-orders/:id/fields` takes a save of only those two on
+`work_orders` view. Clearing an escalation is `ESCALATION_CLEAR_ROLES` (tl,
+atl, am, admin) or a super admin: `assertMayClearEscalation` in the field
+editor (not a rule's or the system's own write) and bulk edit, 403
+`ESCALATION_CLEAR_FORBIDDEN`; the header draws a raised one as a locked
+**Escalated** for everyone else. The CSV import is not asked.
 
 **Sales is a dropdown of the salespeople** (migration 0105, Elise
 2026-10-28). The Sales seat of an account team (Clients list cell, the

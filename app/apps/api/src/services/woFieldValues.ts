@@ -22,8 +22,8 @@ import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { ActivityEntry } from '@theone/shared';
-import { COMPLETION_ASSIGNEE_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, withinMoneyBound } from '@theone/shared';
-import { assertCompletionAssignees, assertDateOrder, assertDispatchers, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
+import { COMPLETION_ASSIGNEE_KEY, ESCALATED_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, flagTicked, withinMoneyBound } from '@theone/shared';
+import { assertCompletionAssignees, assertDateOrder, assertDispatchers, assertMayClearEscalation, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
 
@@ -300,6 +300,12 @@ export async function updateWorkOrderFields(
       if (portal) teamLog.push({ field: 'fields.Client Portal Type', before: portal.before, after: portal.after });
     }
 
+    // 2026-11-03 (0120): clearing an escalation is a TL / ATL / AM's call;
+    // raising one is anyone's. A rule's or the system's own write is not asked.
+    const esc = log.find((c) => c.field === `fields.${ESCALATED_KEY}`);
+    if (esc && flagTicked(esc.before) && !flagTicked(esc.after) && !auto && !opts.system) {
+      await assertMayClearEscalation(actorId, tx);
+    }
     // M2 (Wave D): Received on ≤ Due date, against the bag as this save leaves it.
     assertDateOrder(merged, log.map((c) => c.field.slice('fields.'.length)));
     // #22 / M22 (Wave D, D3): a name ADDED to the Assignee seat is an active

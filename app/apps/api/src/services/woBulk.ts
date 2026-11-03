@@ -17,14 +17,14 @@ import { Params, listCustomFields, resolveField } from './woFields.js';
 import { woScopeSql } from './woScope.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
-import { ADDRESS_KEY } from '@theone/shared';
+import { ADDRESS_KEY, ESCALATED_KEY, flagTicked } from '@theone/shared';
 import { dispatchAutomations } from './automations.js';
 import { raiseAcceptanceTasks } from './approvals.js';
 import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
-import { assertCompletionAssignees, assertDateOrder, assertDispatchers, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
+import { assertCompletionAssignees, assertDateOrder, assertDispatchers, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
 import { checkWriteValue } from './woFieldValues.js';
 import { assertMoneyNotLocked } from './moneySync.js';
 import { assertGateHoldsFields, doneGateMissingFor, quoteGateMissingFor } from './statusGates.js';
@@ -167,6 +167,9 @@ export async function bulkUpdate(
     // 2026-10-30: a Completion Assignee written in bulk names active AR users.
     const closer = customPatch.find((c) => c.key === COMPLETION_ASSIGNEE_KEY);
     if (closer && closer.value) await assertCompletionAssignees(assigneeNames(closer.value));
+    // 2026-11-03 (0120): unticking Escalated in bulk is a TL / ATL / AM's call.
+    const esc = customPatch.find((c) => c.key === ESCALATED_KEY);
+    if (esc && !flagTicked(esc.value)) await assertMayClearEscalation(actorId);
   }
 
   const rows = await query<{

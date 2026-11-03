@@ -24,7 +24,7 @@ export const WORK_ORDERS_PART: DocPart = {
           value: 'The state of the job in one glance.',
           controls: [
             { label: 'Change status / Request status change', does: 'Opens the status menu ("Search statuses…" or "Request a status…"); picks are tagged Needs quote, Needs quote submitted, Needs photo, Needs parts, Needs check-out, Needs cost, Needs after photo, Needs sign-off, Not ready, Ecotrak; a request confirms "Request for <status> sent for approval".' },
-            { label: 'Escalation / Escalated · Clear', does: 'Sets the Escalated field; shown to whoever may edit that field (managers).' },
+            { label: 'Escalation / Escalated · Clear', does: 'Sets the Escalated field; shown to every role (0120). Anyone may raise it; only a TL, ATL or AM (Admin, super admins) clears it — for anyone else a raised one reads Escalated, locked.' },
           ],
           rules: ['The gate tags are computed from the latest visit\'s mirrored stamps and the approved attachment kinds; the API checks every visit when the move is attempted.'],
         },
@@ -371,7 +371,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Escalated',
-          what: 'A checkbox the dispatcher tiers cannot edit; Escalation / Escalated · Clear in the header; amber badge ("Escalated work order — on the Escalation Tracker and pinned to the top of the inbox") and rail (the red rail wins when both); pinned in Approvals; the Escalation Tracker tab. The email webhook (POST /api/webhooks/email-escalation; the secret in x-webhook-secret or a Bearer header; body wo_number, reason, source_email, subject, message_id) sets the flag as the Email escalations service principal and logs the payload; an unknown number is logged and answered 404; it never clears the flag; refused when the Escalation emails integration is off or in DEMO_MODE.',
+          what: 'A checkbox every role may tick; only a TL, ATL or AM (Admin, super admins) unticks it (403 ESCALATION_CLEAR_FORBIDDEN, 0120); Escalation / Escalated · Clear in the header; amber badge ("Escalated work order — on the Escalation Tracker and pinned to the top of the inbox") and rail (the red rail wins when both); pinned in Approvals; the Escalation Tracker tab. The email webhook (POST /api/webhooks/email-escalation; the secret in x-webhook-secret or a Bearer header; body wo_number, reason, source_email, subject, message_id) sets the flag as the Email escalations service principal and logs the payload; an unknown number is logged and answered 404; it never clears the flag; refused when the Escalation emails integration is off or in DEMO_MODE.',
           value: 'A client escalation is visible to everyone within a minute and tracked until cleared.',
           permissions: ['work_orders/fields/overview/fields.Escalated edit'],
           audit: ['field_updated via webhook', 'escalation_received', 'escalation_unmatched'],

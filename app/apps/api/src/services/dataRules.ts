@@ -29,6 +29,8 @@ import {
   completionAssigneeNotArMessage,
   DISPATCHER_ROLE_CODES,
   DUE_DATE_KEY,
+  ESCALATION_CLEAR_CODE,
+  ESCALATION_CLEAR_SENTENCE,
   HISTORY_FIELD_KEYS,
   RECEIVED_ON_KEY,
   STATE_FIELD_KEY,
@@ -41,6 +43,7 @@ import {
   historyFieldMessage,
   matchClientRecord,
   matchOption,
+  mayClearEscalation,
   normalizeUsState,
   normalizeZip,
 } from '@theone/shared';
@@ -223,6 +226,22 @@ export async function assertNoDisabledAssignees(
 
 const refuse = (field: ResolvedField, message: string, extra: Record<string, unknown> = {}) =>
   new ApiError('BAD_REQUEST', message, { code: VALIDATION_CODE, field: field.key, ...extra });
+
+/** 2026-11-03 (Elise, 0120): anyone may raise an escalation; only a TL, an
+    ATL or an AM (Admin and super admins too) takes one down. Asked of the
+    person a save acts as, never of a rule's or the system's own write. */
+export async function assertMayClearEscalation(actorId: string, q: Queryable = pool): Promise<void> {
+  const res = await q.query<{ role: string | null; is_super_admin: boolean }>(
+    `SELECT role, is_super_admin FROM principal WHERE id = $1`,
+    [actorId],
+  );
+  const who = res.rows[0];
+  if (!who || mayClearEscalation(who.role, who.is_super_admin)) return;
+  throw new ApiError('FORBIDDEN', ESCALATION_CLEAR_SENTENCE, {
+    code: ESCALATION_CLEAR_CODE,
+    field: 'fields.Escalated',
+  });
+}
 
 /** L3: a history field is not written by hand, whoever asks. */
 export function assertNotHistoryField(jsonKeys: readonly string[], labelOf: (k: string) => string = (k) => k): void {
