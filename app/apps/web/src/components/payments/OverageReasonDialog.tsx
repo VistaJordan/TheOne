@@ -63,13 +63,6 @@ export function OverageReasonDialog({ message, busy, error, onSubmit, onCancel }
               onChange={(e) => setReason(e.target.value)}
             />
           </label>
-          <p className="confirm-note is-info">
-            <Icon name="info" size={14} />
-            <span>
-              The request is filed and held. A manager sees your reason under Approvals and decides the hold before it
-              can be approved or paid.
-            </span>
-          </p>
           {error && (
             <p className="ferr" role="alert">
               <Icon name="alert-circle" size={12} />
