@@ -3284,9 +3284,10 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
   because hover animations cannot reach inside a `<use>` clone.
 - **The logo is OBI** (the rebrand from "The One"): `components/ObiLogo.tsx`, an
   `<svg>` whose viewBox frames the hologram art in `public/brand/OBI-hologram-*-transparent.svg`
-  (light by day, dark at night; paths in `lib/brand.ts`), sized by CSS — `.topbar-brand`
-  in `styles/app.css` (62px, 36px on the collapsed rail) and `.signin-logo` in
-  `styles/auth.css`. If the art changes, re-measure the viewBox (comment in the
+  (light by day, dark at night; paths in `lib/brand.ts`), sized by CSS — `.signin-logo`
+  in `styles/auth.css`. The top bar draws only the letters, solid (`ObiWordmark`, same
+  file, one `<svg>` per letter in a space-between row): 196px wide to span the sidebar,
+  40px on the collapsed rail (`.topbar-brand` in `styles/app.css`). If the art changes, re-measure the viewBox (comment in the
   component). The same component heads the client and vendor share pages
   (`.cu-pub-logo`); the tab icon is `public/brand/OBI-favicon.svg` and the title
   OBI. The old wordmark PNGs stay in `public/brand/`, referenced nowhere.

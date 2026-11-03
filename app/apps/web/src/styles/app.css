@@ -496,7 +496,7 @@ a.side-flyout-item {
   grid-template-columns: 1fr minmax(240px, 520px) 1fr;
   align-items: center;
   gap: 16px;
-  /* Tall enough for the 62px OBI logo (see .topbar-brand) with a little air. */
+  /* The bar's height; the OBI letters (see .topbar-brand) sit 40px tall in it. */
   height: 66px;
   flex: none;
   padding: 0 18px;
@@ -523,42 +523,59 @@ a.side-flyout-item {
 }
 
 /* Fixed to the rail width so the trail beside it lines up with the nav below.
-   The OBI logo (components/ObiLogo.tsx, framed to the art, 216:135) sits flush
-   left at the bar's working height; collapsed, the slot is the rail itself
-   (64px, the bar's 18px padding pulled back) and the logo shrinks to centre
-   on the icon column. Same clock as the sidebar. */
+   The OBI letters (ObiWordmark in components/ObiLogo.tsx) span the sidebar's
+   width: from the bar's 18px padding to 18px short of the sidebar's edge
+   (232 − 18 − 18 = 196px), the letters spread apart to fill it. Collapsed, the
+   slot is the rail itself (64px, the bar's padding pulled back) and the row
+   narrows to 40px, centred, where the letters sit at their own spacing.
+   Same clock as the sidebar. */
 .topbar-brand {
   --brand-slot: 214px;
-  --brand-h: 62px;
   position: relative;
   flex: none;
   display: flex;
   align-items: center;
   width: var(--brand-slot);
-  height: var(--brand-h);
+  height: 44px;
   margin-left: 0;
   min-width: 0;
-  transition: width 0.22s ease, height 0.22s ease, margin-left 0.22s ease;
+  color: var(--accent-text);
+  transition: width 0.22s ease, margin-left 0.22s ease;
 }
-.topbar-brand .obi-logo {
-  height: 100%;
-  width: auto;
-  aspect-ratio: 216 / 135;
-  margin-left: 0;
-  transition: margin-left 0.22s ease;
+.topbar-brand .obi-mark {
+  width: 196px;
+  height: 40px;
+  transition: width 0.22s ease, height 0.22s ease;
 }
 .shell.is-collapsed .topbar-brand {
   --brand-slot: 64px;
-  --brand-h: 36px;
   margin-left: -18px;
   justify-content: center;
+}
+.shell.is-collapsed .topbar-brand .obi-mark {
+  width: 40px;
+  height: 16px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .topbar-brand,
-  .topbar-brand .obi-logo {
+  .topbar-brand .obi-mark {
     transition: none;
   }
+}
+
+/* The OBI letters: a row whose width spaces them (ObiWordmark). */
+.obi-mark {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+}
+.obi-mark svg {
+  display: block;
+  height: 100%;
+  width: auto;
+  flex: none;
+  fill: currentColor;
 }
 
 /* The OBI logo's two arts: light by day, dark at night (ObiLogo.tsx). */
@@ -1891,9 +1908,12 @@ a.bd-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; 
   /* The rail is pinned to 64px here, so the bar shows the collapsed logo. */
   .topbar-brand {
     --brand-slot: 64px;
-    --brand-h: 36px;
     margin-left: -18px;
     justify-content: center;
+  }
+  .topbar-brand .obi-mark {
+    width: 40px;
+    height: 16px;
   }
   .side-group.is-open {
     background: transparent;
