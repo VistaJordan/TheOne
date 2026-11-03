@@ -496,8 +496,7 @@ a.side-flyout-item {
   grid-template-columns: 1fr minmax(240px, 520px) 1fr;
   align-items: center;
   gap: 16px;
-  /* Tall enough for the wordmark to span most of the sidebar's width (see
-     .topbar-brand): 190px of artwork at its 3.65:1 ratio is ~52px tall. */
+  /* Tall enough for the 62px OBI logo (see .topbar-brand) with a little air. */
   height: 66px;
   flex: none;
   padding: 0 18px;
@@ -523,139 +522,50 @@ a.side-flyout-item {
   padding-left: 18px;
 }
 
-/* Fixed to the rail width so the trail beside it lines up with the nav below,
-   and so the wordmark can be scaled to span exactly that width. */
+/* Fixed to the rail width so the trail beside it lines up with the nav below.
+   The OBI logo (components/ObiLogo.tsx, framed to the art, 216:135) sits flush
+   left at the bar's working height; collapsed, the slot is the rail itself
+   (64px, the bar's 18px padding pulled back) and the logo shrinks to centre
+   on the icon column. Same clock as the sidebar. */
 .topbar-brand {
-  /* The slot is a set of WINDOWS onto the wordmark PNG. One full-artwork
-     window (the <img>) plus one window per word ("The", "One") drawn as
-     backgrounds. Sidebar open: the word windows sit exactly over their own
-     pixels in the full image, so only the wordmark is seen. Sidebar collapsed
-     (--c: 1): the full image fades and the two word windows TRAVEL — "The"
-     down onto the "O", "One" left under it — into a stack that fits the rail.
-     Every position below is written as open-value·(1 − c) + collapsed-value·c,
-     so one variable drives the whole move and CSS transitions animate it.
-
-     All boxes are in image pixels; re-measure if the asset changes.
-       canvas  2096×756
-       artwork x 42–2046, y 70–637 (the PNG carries transparent padding)
-       "The"   246×103 at (141, 70)   → window padded 20px: 286×143 at (121, 50)
-       "One"   680×340 at (1367, 234)  → window padded 6px left (the curve's
-               tail runs right up to the ring there), 20px elsewhere:
-               706×380 at (1361, 214)
-     The padding keeps sub-pixel rounding of the background position from
-     ever trimming the first pixel of a glyph. */
-  --logo-canvas-w: 2096;
-  --crop-x: 42;   --crop-y: 70;   --crop-w: 2005;  --crop-h: 568;
-  --the-x: 121;   --the-y: 50;    --the-w: 286;    --the-h: 143;
-  --one-x: 1361;  --one-y: 214;   --one-w: 706;    --one-h: 380;
-
-  /* Open: the artwork renders --brand-w wide, flush left, in a slot that spans
-     the sidebar column (232px minus the bar's 18px padding) so the title beside
-     it lines up with the canvas. */
-  --brand-w: 190px;
   --brand-slot: 214px;
-  --logo-scale: calc(var(--brand-w) / var(--crop-w));
-
-  /* Collapsed: how wide each word renders in the stack, and the gap between. */
-  --the-cw: 25px;  --the-s: calc(var(--the-cw) / var(--the-w));
-  --one-cw: 37px;  --one-s: calc(var(--one-cw) / var(--one-w));
-  --stack-gap: 3px;
-  --stack-h: calc(var(--the-h) * var(--the-s) + var(--stack-gap) + var(--one-h) * var(--one-s));
-
-  /* 0 = open, 1 = collapsed. */
-  --c: 0;
-
+  --brand-h: 62px;
   position: relative;
   flex: none;
+  display: flex;
+  align-items: center;
   width: var(--brand-slot);
-  height: calc(var(--crop-h) * var(--logo-scale) * (1 - var(--c)) + var(--stack-h) * var(--c));
-  /* Collapsed, the slot is the rail itself (64px), so the stack centres on the
-     icon column beneath it; the bar's 18px padding is pulled back to do that. */
-  margin-left: calc(-18px * var(--c));
+  height: var(--brand-h);
+  margin-left: 0;
   min-width: 0;
-  overflow: hidden;
   transition: width 0.22s ease, height 0.22s ease, margin-left 0.22s ease;
 }
-
-/* The full artwork. Fades as the words leave it. */
-.topbar-brand img {
-  position: absolute;
-  width: calc(var(--logo-canvas-w) * var(--logo-scale));
-  height: auto;
-  max-width: none;
-  left: calc(-1 * var(--crop-x) * var(--logo-scale));
-  top: calc(-1 * var(--crop-y) * var(--logo-scale));
-  opacity: calc(1 - var(--c));
-  transition: opacity 0.18s ease;
+.topbar-brand .obi-logo {
+  height: 100%;
+  width: auto;
+  aspect-ratio: 216 / 135;
+  margin-left: 0;
+  transition: margin-left 0.22s ease;
 }
-
-/* The word windows. --brand-url is set on the element from lib/brand.ts so the
-   asset path lives in one place. */
-.topbar-brand::before,
-.topbar-brand::after {
-  content: "";
-  position: absolute;
-  background: var(--brand-url) no-repeat;
-  pointer-events: none;
-  transition:
-    left 0.22s ease, top 0.22s ease, width 0.22s ease, height 0.22s ease,
-    background-size 0.22s ease, background-position 0.22s ease;
-}
-
-/* "The": from its place in the wordmark to the top of the stack, centred. */
-.topbar-brand::before {
-  --s: calc(var(--logo-scale) * (1 - var(--c)) + var(--the-s) * var(--c));
-  --l-open: calc((var(--the-x) - var(--crop-x)) * var(--logo-scale));
-  --l-closed: calc((var(--brand-slot) - var(--the-w) * var(--the-s)) / 2);
-  --t-open: calc((var(--the-y) - var(--crop-y)) * var(--logo-scale));
-  --t-closed: 0px;
-  left: calc(var(--l-open) * (1 - var(--c)) + var(--l-closed) * var(--c));
-  top: calc(var(--t-open) * (1 - var(--c)) + var(--t-closed) * var(--c));
-  width: calc(var(--the-w) * var(--s));
-  height: calc(var(--the-h) * var(--s));
-  background-size: calc(var(--logo-canvas-w) * var(--s)) auto;
-  background-position: calc(-1 * var(--the-x) * var(--s)) calc(-1 * var(--the-y) * var(--s));
-}
-
-/* "One": from the right of the wordmark to the bottom of the stack, centred. */
-.topbar-brand::after {
-  --s: calc(var(--logo-scale) * (1 - var(--c)) + var(--one-s) * var(--c));
-  --l-open: calc((var(--one-x) - var(--crop-x)) * var(--logo-scale));
-  --l-closed: calc((var(--brand-slot) - var(--one-w) * var(--one-s)) / 2);
-  --t-open: calc((var(--one-y) - var(--crop-y)) * var(--logo-scale));
-  --t-closed: calc(var(--the-h) * var(--the-s) + var(--stack-gap));
-  left: calc(var(--l-open) * (1 - var(--c)) + var(--l-closed) * var(--c));
-  top: calc(var(--t-open) * (1 - var(--c)) + var(--t-closed) * var(--c));
-  width: calc(var(--one-w) * var(--s));
-  height: calc(var(--one-h) * var(--s));
-  background-size: calc(var(--logo-canvas-w) * var(--s)) auto;
-  background-position: calc(-1 * var(--one-x) * var(--s)) calc(-1 * var(--one-y) * var(--s));
-}
-
-/* Collapsed: flip the switch and make the slot the rail's full 64px so the
-   stack sits centred over the nav icons. Same clock as the sidebar. */
 .shell.is-collapsed .topbar-brand {
-  --c: 1;
   --brand-slot: 64px;
+  --brand-h: 36px;
+  margin-left: -18px;
+  justify-content: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .topbar-brand,
-  .topbar-brand img,
-  .topbar-brand::before,
-  .topbar-brand::after {
+  .topbar-brand .obi-logo {
     transition: none;
   }
 }
 
-/* One wordmark asset, navy on transparent. On night's black bar the navy would
-   vanish, so invert it — and rotate the hue back so the blue and teal stay
-   blue and teal rather than turning orange and pink. */
-:root[data-theme="night"] .topbar-brand img,
-:root[data-theme="night"] .topbar-brand::before,
-:root[data-theme="night"] .topbar-brand::after {
-  filter: invert(1) hue-rotate(180deg);
-}
+/* The OBI logo's two arts: light by day, dark at night (ObiLogo.tsx). */
+.obi-logo { display: block; overflow: visible; }
+.obi-logo .obi-logo-night { display: none; }
+:root[data-theme="night"] .obi-logo .obi-logo-day { display: none; }
+:root[data-theme="night"] .obi-logo .obi-logo-night { display: inline; }
 
 /* ── Global search (the topbar's centre column) ───────────────────────────── */
 .topbar-search {
@@ -1978,10 +1888,12 @@ a.bd-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; 
   .topbar-actor-label {
     display: none;
   }
-  /* The rail is pinned to 64px here, so the bar shows the collapsed stack. */
+  /* The rail is pinned to 64px here, so the bar shows the collapsed logo. */
   .topbar-brand {
-    --c: 1;
     --brand-slot: 64px;
+    --brand-h: 36px;
+    margin-left: -18px;
+    justify-content: center;
   }
   .side-group.is-open {
     background: transparent;

@@ -106,21 +106,16 @@
   padding: 36px 30px 30px;
   display: flex; flex-direction: column; gap: 14px;
 }
-/* The OBI hologram (public/brand/OBI-hologram-*-transparent.svg, 300×180, no
-   backdrop of its own). Day shows the light art, night the dark one. */
+/* The OBI hologram (components/ObiLogo.tsx, framed to the art itself, 216:135).
+   As wide as the card will comfortably take. */
 .signin-logo {
   align-self: center;
-  width: 240px;
-  margin: 0 0 6px;
-}
-.signin-logo img {
-  display: block;
-  width: 100%;
+  width: 300px;
+  max-width: 100%;
   height: auto;
+  aspect-ratio: 216 / 135;
+  margin: 0 0 4px;
 }
-.signin-logo .signin-logo-night { display: none; }
-:root[data-theme="night"] .signin-logo .signin-logo-day { display: none; }
-:root[data-theme="night"] .signin-logo .signin-logo-night { display: block; }
 :root[data-theme="night"] .signin-card { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent), 0 0 60px color-mix(in srgb, var(--accent) 18%, transparent); }
 
 /* Dev-bypass footnote under the Microsoft button: quiet, but it must still be

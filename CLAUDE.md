@@ -3282,13 +3282,13 @@ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5174/api/work-orders   #
 - **Icons** are a `<symbol>` sprite in `components/Icon.tsx` used via `<use>`.
   The six sidebar icons are drawn inline in `components/NavIcon.tsx` instead
   because hover animations cannot reach inside a `<use>` clone.
-- **The wordmark** (`public/brand/logo-the-one.png`) is rendered through crop
-  windows keyed to pixel boxes measured from the PNG (`.topbar-brand` in
-  `styles/app.css`). If the asset changes
-  size or layout, re-measure and update those numbers — the comments list them.
-  Night mode inverts the mark with `filter: invert(1) hue-rotate(180deg)`.
-  The sign-in card shows the OBI hologram instead (`public/brand/OBI-hologram-light-transparent.svg`
-  by day, `-dark-transparent.svg` at night; `SIGNIN_LOGO_*` in `lib/brand.ts`, `.signin-logo` in `auth.css`).
+- **The logo is OBI** (the rebrand from "The One"): `components/ObiLogo.tsx`, an
+  `<svg>` whose viewBox frames the hologram art in `public/brand/OBI-hologram-*-transparent.svg`
+  (light by day, dark at night; paths in `lib/brand.ts`), sized by CSS — `.topbar-brand`
+  in `styles/app.css` (62px, 36px on the collapsed rail) and `.signin-logo` in
+  `styles/auth.css`. If the art changes, re-measure the viewBox (comment in the
+  component). The old wordmark (`logo-the-one.png`, `LOGO`) still heads the client
+  and vendor share pages.
 - Motion is always inside `@media (prefers-reduced-motion: no-preference)` or
   disabled under `reduce`.
 - Files are CRLF on disk (`core.autocrlf=true`, no `.gitattributes`); the
