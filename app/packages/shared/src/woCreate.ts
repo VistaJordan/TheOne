@@ -106,8 +106,8 @@ export const WO_CREATE_REQUIRED_KEYS: readonly string[] = [
 export interface WoCreateSection {
   id: string;
   title: string;
-  /** Why this section exists, shown under its heading. */
-  hint: string;
+  /** Why this section exists, shown under its heading (none = no line). */
+  hint?: string;
   keys: readonly string[];
 }
 
@@ -115,7 +115,6 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
   {
     id: 'identity',
     title: 'Client',
-    hint: 'Which of our companies bills the job, and who it is for.',
     // 2026-10-27 · Comp first, then the Client it narrows, then its portal.
     // FM left the form the same day (0103): it named the Client again.
     // 2026-11-02 · Store moved here from Where (Elise).
@@ -124,38 +123,32 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
   {
     id: 'where',
     title: 'Where',
-    hint: 'The address a technician drives to. Paste the whole address: the street, city, state and ZIP fill themselves.',
     // 2026-11-02 · Street Address after Address, filled from it like the rest.
     keys: ['17. Address', 'Street Address', 'City', 'State', 'Zip Code'],
   },
   {
     id: 'what',
     title: 'What is wrong',
-    hint: 'The trade decides who can take it; the description is what the store told us.',
     keys: ['Trade', 'Sub Category', 'Problem Type', '35. WO Description', 'Supplier Type', 'Work Permit Needed'],
   },
   {
     id: 'when',
     title: 'When it is due',
-    hint: 'The clocks. SLA drives the Pulse; the due date drives the daily list.',
     keys: ['Date-Time Received', 'Due Date', 'SLA Due Date'],
   },
   {
     id: 'flags',
     title: 'Flags',
-    hint: 'Emergency reads red and Escalated amber in every view.',
     keys: ['Emergency', 'Escalated'],
   },
   {
     id: 'money',
     title: 'Money',
-    hint: 'The NTE the client authorised.',
     keys: ['16. Client NTE 🔴'],
   },
   {
     id: 'people',
     title: 'People',
-    hint: 'AM, TL, ATL and Sales come from the client’s account team for this Comp (Clients › Account team). The dispatcher is yours to pick.',
     keys: ['AM', 'TL', 'ATL', 'Sales Owner', 'Assignee'],
   },
 ];
