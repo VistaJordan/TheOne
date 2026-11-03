@@ -58,23 +58,19 @@ export function MoneyRail({
         {comp && <span className="card-meta">Comp {comp}</span>}
       </div>
 
-      {/* 0046 · where the price comes from. A contract names itself; the
-          house default says so, so nobody wonders why OT is 1.5×. */}
-      <p className="money-basis">
-        <Icon name={rates?.contract ? 'briefcase' : 'info'} size={12} />
-        <span>
-          {rates?.contract ? (
-            <>
-              Priced under <b>{rates.contract.name}</b>
-              {rates.standard != null && ` · ${usd(rates.standard)}/h`}
-              {rates.trip_charge != null && rates.trip_charge > 0 && ` · trip ${usd(rates.trip_charge)}`}
-              {` · OT ${mult}×`}
-            </>
-          ) : (
-            <>No contract covers this work order — house rates, OT {mult}×</>
-          )}
-        </span>
-      </p>
+      {/* 0046 · where the price comes from. A contract names itself; with
+          none, nothing is said (Elise, 2026-11-03). */}
+      {rates?.contract && (
+        <p className="money-basis">
+          <Icon name="briefcase" size={12} />
+          <span>
+            Priced under <b>{rates.contract.name}</b>
+            {rates.standard != null && ` · ${usd(rates.standard)}/h`}
+            {rates.trip_charge != null && rates.trip_charge > 0 && ` · trip ${usd(rates.trip_charge)}`}
+            {` · OT ${mult}×`}
+          </span>
+        </p>
+      )}
 
       <div className="nte-row">
         <span className="nte-k">Client NTE</span>
