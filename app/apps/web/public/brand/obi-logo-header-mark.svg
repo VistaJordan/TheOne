@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+<!-- The top bar's square mark for the collapsed sidebar, drawn in the colours of
+     obi-logo-header.png (tile, stripes, border, outlined letters) so the two match.
+     Letters: the OBI path of OBI-favicon.svg. At 36px one stripe period is 4px, as on the badge. -->
+<defs>
+  <pattern id="stripes" width="160" height="17.8" patternUnits="userSpaceOnUse">
+    <rect y="8.9" width="160" height="4.4" fill="#D9EEF4"/>
+  </pattern>
+  <clipPath id="tile"><rect width="160" height="160" rx="28"/></clipPath>
+</defs>
+<g clip-path="url(#tile)">
+  <rect width="160" height="160" fill="#EAF7FB"/>
+  <rect width="160" height="160" fill="url(#stripes)"/>
+</g>
+<rect x="2.2" y="2.2" width="155.6" height="155.6" rx="26" fill="none" stroke="#B1DBE9" stroke-width="4.4"/>
+<g transform="translate(17.3 55) scale(0.85)">
+<path transform="translate(-55.49 -45.20)" d="M65.15 104.00L55.49 94.34L55.49 54.86L65.15 45.20L95.39 45.20L105.05 54.86L105.05 94.34L95.39 104.00L65.15 104.00ZM71.20 94.26L89.34 94.26L93.62 89.97L93.62 59.23L89.34 54.94L71.20 54.94L66.91 59.23L66.91 89.97L71.20 94.26ZM125.13 104.00L125.13 45.20L162.00 45.20L170.40 53.60L170.40 70.06L167.04 73.51L173.01 79.56L173.01 94.93L163.94 104.00L125.13 104.00ZM136.30 69.81L156.12 69.81L159.15 66.79L159.15 57.72L156.21 54.78L136.30 54.78L136.30 69.81ZM136.30 94.42L158.14 94.42L161.75 90.81L161.75 82.58L158.14 78.97L136.30 78.97L136.30 94.42ZM191.83 104.00L191.83 45.20L203.25 45.20L203.25 104.00L191.83 104.00Z" fill="#ABD5E2" stroke="#0A6A8A" stroke-width="5.2" stroke-linejoin="round"/>
+</g>
+</svg>

@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, PAYMENTS_PAGE_PERM_KEY, PULSE_PERM_KEY, QUOTES_PAGE_PERM_KEY, adminPermKey } from '@theone/shared';
 import { getApprovalCounts, listIntakeDrafts } from '../api/client';
+import { OBI_HEADER_LOGO, OBI_HEADER_LOGO_SRCSET, OBI_HEADER_MARK } from '../lib/brand';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { Icon, IconSprite } from './Icon';
 import { NavIcon } from './NavIcon';
@@ -333,9 +334,12 @@ export function AppShell({
           the trail happens to end. */}
       <header className="topbar">
         <div className="topbar-left">
-          {/* Empty until the top-bar logo is decided (Elise, 2026-11-03); the
-              slot keeps the sidebar's width so the trail still lines up. */}
-          <div className="topbar-brand" />
+          {/* The OBI badge, at the sidebar's width so the trail still lines
+              up; on the collapsed rail, too narrow for it, the square mark. */}
+          <div className="topbar-brand">
+            <img className="topbar-brand-full" src={OBI_HEADER_LOGO} srcSet={OBI_HEADER_LOGO_SRCSET} width={190} height={41} alt="OBI" />
+            <img className="topbar-brand-mark" src={OBI_HEADER_MARK} width={36} height={36} alt="" />
+          </div>
           {/* Detail routes pass their own trail; list routes get the nav item
               they are on, plus its section when the item has children. */}
           {breadcrumb ?? <NavCrumbs active={active} pathname={pathname} />}

@@ -496,7 +496,7 @@ a.side-flyout-item {
   grid-template-columns: 1fr minmax(240px, 520px) 1fr;
   align-items: center;
   gap: 16px;
-  /* The bar's height (the logo slot, .topbar-brand, is empty for now). */
+  /* The bar's height; the OBI badge (.topbar-brand) sits 41px tall in it. */
   height: 66px;
   flex: none;
   padding: 0 18px;
@@ -523,25 +523,56 @@ a.side-flyout-item {
 }
 
 /* Fixed to the rail width so the trail beside it lines up with the nav below.
-   Empty until the top-bar logo is decided (Elise, 2026-11-03). Collapsed, the
-   slot is the rail itself (64px, the bar's 18px padding pulled back). Same
-   clock as the sidebar. */
+   It holds the OBI badge (obi-logo-header*.png, 190×41, Elise 2026-11-03).
+   Collapsed, the slot is the rail itself (64px, the bar's 18px padding pulled
+   back) and the badge crossfades to the square OBI mark (obi-logo-header-mark.svg,
+   36px, centred) — at 64px the badge would be too small to read.
+   Same clock as the sidebar. */
 .topbar-brand {
   --brand-slot: 214px;
+  position: relative;
   flex: none;
+  display: flex;
+  align-items: center;
   width: var(--brand-slot);
   height: 44px;
   margin-left: 0;
   min-width: 0;
+  overflow: hidden;
   transition: width 0.22s ease, margin-left 0.22s ease;
+}
+.topbar-brand img {
+  display: block;
+  flex: none;
+  transition: opacity 0.22s ease;
+}
+.topbar-brand-full {
+  width: 190px;
+  height: 41px;
+}
+.topbar-brand-mark {
+  position: absolute;
+  left: 14px; /* (64 − 36) / 2: centred on the collapsed rail */
+  top: 4px;
+  width: 36px;
+  height: 36px;
+  opacity: 0;
+  pointer-events: none;
 }
 .shell.is-collapsed .topbar-brand {
   --brand-slot: 64px;
   margin-left: -18px;
 }
+.shell.is-collapsed .topbar-brand-full {
+  opacity: 0;
+}
+.shell.is-collapsed .topbar-brand-mark {
+  opacity: 1;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .topbar-brand {
+  .topbar-brand,
+  .topbar-brand img {
     transition: none;
   }
 }
@@ -1877,6 +1908,12 @@ a.bd-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; 
   .topbar-brand {
     --brand-slot: 64px;
     margin-left: -18px;
+  }
+  .topbar-brand-full {
+    opacity: 0;
+  }
+  .topbar-brand-mark {
+    opacity: 1;
   }
   .side-group.is-open {
     background: transparent;
