@@ -120,6 +120,21 @@ function localNowInput(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/** A datetime-local value with its minutes rounded to the nearest ten
+    (10:46 → 10:50, 10:56 → 11:00); anything else comes back as it is. */
+function snapToTenMinutes(s: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(s);
+  if (!m || Number(m[5]) % 10 === 0) return s;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Math.round(Number(m[5]) / 10) * 10);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+/** The step base of the datetime pickers. Without a `min` the browser counts
+    the steps from the box's own value (React mirrors it into the attribute),
+    so a value at 04:07 offered 07, 17, 27 …; 2000 is also the earliest date
+    a field takes (M2). */
+const DATETIME_MIN = '2000-01-01T00:00';
+
 /** A datetime-local input wants 'YYYY-MM-DDTHH:mm'; a date input wants ten
     characters. Anything else goes through as typed. */
 function valueForApi(raw: string, d: WoFieldDescriptor | undefined, type?: string): unknown {
@@ -203,6 +218,9 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   // in, local time, and stays editable. Set once, when the form arrives, and
   // only while the box is still empty.
   const receivedSeeded = useRef(false);
+  /** The value the form put in Received on; left as it is (not rounded to
+      ten minutes) until someone changes it. */
+  const receivedAuto = useRef<string | null>(null);
   useEffect(() => {
     if (receivedSeeded.current) return;
     const f = form.fields.find((x) => x.key === RECEIVED_KEY);
@@ -211,6 +229,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     const d = catalogue.get(`fields.${RECEIVED_KEY}`);
     const isDate = d?.type === 'date' || f.type === 'date';
     const now = localNowInput();
+    if (!isDate) receivedAuto.current = now;
     setValues((cur) => ((cur[RECEIVED_KEY] ?? '').trim() !== '' ? cur : { ...cur, [RECEIVED_KEY]: isDate ? now.slice(0, 10) : now }));
   }, [form.fields, catalogue]);
 
@@ -573,6 +592,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       : 'text';
     // Zip Code takes digits only; letters never reach the box.
     const zip = f.key === ADDRESS_ZIP_KEY;
+    const datetime = type === 'datetime-local';
 
     return (
       <input
@@ -580,8 +600,18 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
         className="fld"
         type={type}
         // A datetime's picker offers the minutes in tens (00, 10 … 50; Elise,
-        // 2026-11-02). There is no <form>, so a typed 10:46 is not refused.
-        step={d?.type === 'money' || f.type === 'currency' ? '0.01' : type === 'datetime-local' ? 600 : undefined}
+        // 2026-11-02), counted from DATETIME_MIN. A minute typed by hand, or
+        // the clock the picker fills in on an empty box, is rounded to the
+        // nearest ten on leaving the box — except Received on's automatic
+        // value, which stays to the minute until someone changes it.
+        step={d?.type === 'money' || f.type === 'currency' ? '0.01' : datetime ? 600 : undefined}
+        min={datetime ? DATETIME_MIN : undefined}
+        onBlur={datetime ? (e) => {
+          const raw = e.target.value;
+          if (f.key === RECEIVED_KEY && raw === receivedAuto.current) return;
+          const snapped = snapToTenMinutes(raw);
+          if (snapped !== raw) set(f.key, snapped);
+        } : undefined}
         value={val}
         onChange={(e) => set(f.key, zip ? zipInputValue(e.target.value) : e.target.value)}
         inputMode={zip ? 'numeric' : undefined}
