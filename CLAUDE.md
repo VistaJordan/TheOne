@@ -1189,8 +1189,8 @@ is `packages/shared/src/vendorFilters.ts`.
   vendor handed to you, your vendor blacklisted, and an insurance date on a
   vendor you own coming within 30 days, within 14, and expiring
   (`raiseExpiryNotifications`: lazy, on the bell's read, deduped by
-  `dedupe_key`). The top-bar bell (`PulseBell`) shows them as a "For you"
-  block above the Pulse rows and adds them to its badge. No email is sent.
+  `dedupe_key`). (The top-bar bell, gone since 2026-11-04 — see Notifications in the sidebar — showed them as a "For you"
+  block above the Pulse rows.) No email is sent.
 Tests: `tests/vendor-filters.test.ts`. Still open for CRM parity: the data
 transfer from VR - CRM / Tech Locator, and email (held).
 
@@ -2787,6 +2787,26 @@ keeps its history and nothing new is stored; a new payment action must join
 `HISTORY_ACTIONS` (the test fails until it does). **The card is gone**
 (Elise, 2026-11-03: the work order shows the payments and their status, the
 Payment requests card, not their audit trail); the route stays, unread by the web.
+
+**Notifications in the sidebar; no bell** (Elise, 2026-11-04, no migration;
+`packages/shared/src/notices.ts` pure, `listInbox` / `markInbox` /
+`inboxUnread` in `services/notices.ts`, `routes/notices.ts`,
+`pages/NotificationsPage.tsx`, `styles/notifications.css`,
+`tests/notifications-page.test.ts`). The top-bar bell (`PulseBell`) is gone;
+**Notifications** (`/notifications`, everyone's own, no permission) is a
+sidebar item whose badge is `GET /notices/count`. `GET /notices/inbox`
+merges the person's `app_notice` rows with, for whoever holds
+`work_orders/pulse` view, their Pulse pings (`notification`, kind
+`pulse.<rule_key>`), filtered by `show` (all / unread / read), `kinds`,
+`q`, paged 50 by a `before` cursor (microsecond time + source:id), with
+per-type `{total, unread}` counts. `POST /notices/mark {read, items?|kinds?}`
+marks rows, a type or everything read OR unread (unread = `read_at` NULL).
+`NOTICE_TYPES` names and groups every kind `notify()` raises (Work orders ·
+Approvals & requests · Vendors · Pulse escalations · Other); the test fails
+when a new `notify()` kind has no entry — add it there. The page: a types
+rail (group or one type), All · Unread · Read, search, Mark all read / Mark
+all unread (on the type picked), tick rows to mark several, a toggle per row,
+day bands; the filter rides in the URL. The 0059 routes stay.
 
 **Notifications tab on the work order** (Elise, 2026-11-02, no migration;
 `listWorkOrderNotices` in `services/notices.ts`, `GET

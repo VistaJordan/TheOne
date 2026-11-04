@@ -98,11 +98,10 @@ export const PLATFORM_PART: DocPart = {
         },
         {
           name: 'Top bar',
-          what: 'The wordmark, the breadcrumb trail, the search box, the notifications bell (Pulse rows plus "For you" notices), the assistant sparkle, the theme switch (sun / moon), the Viewing as select for super admins and the account menu with Sign out.',
+          what: 'The wordmark, the breadcrumb trail, the search box, the assistant sparkle, the theme switch (sun / moon), the Viewing as select for super admins and the account menu with Sign out.',
           value: 'The things people reach for most often are in the same place on every screen.',
           controls: [
             { label: 'Search', does: 'Finds work orders by WO #, client WO #, title, client, city, state or trade and opens them.' },
-            { label: 'Notifications', does: 'Opens the bell: obligations due and personal notices (tasks given to you, reviews, decisions, expiring insurance).' },
             { label: 'Ask anything (sparkle)', does: 'Opens the assistant panel.' },
             { label: 'Theme', does: 'Switches between Blackout (night) and Daylight Dispatch (day) for this browser.' },
           ],

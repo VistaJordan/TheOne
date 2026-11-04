@@ -246,7 +246,7 @@ export const SOP: SopDocument = {
         { kind: 'steps', items: [
           'On the **Messages** tab choose **Internal** ("the team only, never the client") or **Client-visible** (what the client\'s system will receive, once one is linked).',
           'Type (up to 4,000 characters) and click **Post internally** or **Send to client**. A client-visible message queues for the client\'s CMMS and the bubble says "Queued …" until it is sent.',
-          'To bring someone in, type **@** and the start of their name, then pick them from the list (only people who can open this work order are offered). They get a notice in the bell that opens the message.',
+          'To bring someone in, type **@** and the start of their name, then pick them from the list (only people who can open this work order are offered). They get a notice on Notifications that opens the message.',
           'Edit your own message with the pencil only until it is sent (the lock reads "Sent to the client — it can no longer be edited"); editing may change its visibility. A note the client wrote in their system is never editable.',
           '**Technician texts** (the Quo thread) are on the **Tech Hub** tab, away from the client conversation: **Send text** sends from your claimed Quo line; the rail shows the technician and the conversation.',
         ] },
@@ -396,7 +396,7 @@ export const SOP: SopDocument = {
           'Lanes: **For me**, **Open**, **Done**, **My requests**. Filters **Entity / Client / Trade / For**; **Columns** adds Client, Waiting for, NTE, Cost, WO Due Date, For, Raised, Status; pages of rows, up to 500. Escalated rows pin to the top; open rows are oldest first and every decision is per row.',
           '**Approve** is one click with no note (a status change into Approved asks how the client approved); **Reject** needs the reason, then **Reject with note**. A locked verb says why ("Requires new work order approval rights", "On hold — the NTE override on this work order has to be decided first").',
           'Under **My requests**: **Withdraw** a request still open; an approved one clears by itself; after a rejection click **Understood** to clear it from the header banner.',
-          'Acceptances are not here: they have their own page, Incoming Work Orders (SOP 3). Approvals raise no bell notice; the badge is the signal.',
+          'Acceptances are not here: they have their own page, Incoming Work Orders (SOP 3). Approvals raise no notice; the badge is the signal.',
         ] },
       ],
     },

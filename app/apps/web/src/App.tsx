@@ -40,6 +40,7 @@ import { RequestPaymentPage } from './pages/RequestPaymentPage';
 import { QuotesPage } from './pages/QuotesPage';
 import { ContractsPage } from './pages/ContractsPage';
 import { PricesPage } from './pages/PricesPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { PlannedMaintenancePage } from './pages/PlannedMaintenancePage';
 import { MaintenancePage } from './pages/MaintenancePage';
 import { VendorPortalPage } from './pages/VendorPortalPage';
@@ -256,6 +257,8 @@ export function App() {
               {/* 0065 — the maintenance modules. */}
               <Route path="/maintenance" element={<RequireAuth><RequireCan perm="maintenance" nav="Maintenance"><MaintenancePage /></RequireCan></RequireAuth>} />
               {/* S5 — the Pulse: every open obligation, by how much clock is left. */}
+              {/* 2026-11-04 · everyone's own notifications; no permission of its own. */}
+              <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
               <Route path="/pulse" element={<RequireAuth><RequireCan perm={PULSE_PERM_KEY} nav="Pulse"><VersionTwo nav="Pulse"><PulsePage /></VersionTwo></RequireCan></RequireAuth>} />
               {/* AR — Receivables: the completion audit (a browser-side prototype
                   over the lists) and the invoicing pipeline. :tab is 'invoicing';

@@ -139,7 +139,7 @@ export const FIELD_PART: DocPart = {
         },
         {
           name: 'In-app notices',
-          what: 'One notice per person per thing that happened to them, in the bell under "For you": a task given to you, a review opened (to everyone whose role may review, plus super admins), a decision on your task, a vendor handed to you, your vendor blacklisted, an insurance date on your vendor within 30 days / 14 days / expired (raised on the bell\'s read, at most every ten minutes), an onboarding form received, a note from the portal, a dispatch answer, a credit note to approve. Read notices are pruned after 60 days; nobody is told about their own act.',
+          what: 'One notice per person per thing that happened to them, on the Notifications page: a task given to you, a review opened (to everyone whose role may review, plus super admins), a decision on your task, a vendor handed to you, your vendor blacklisted, an insurance date on your vendor within 30 days / 14 days / expired (raised when Notifications is read, at most every ten minutes), an onboarding form received, a note from the portal, a dispatch answer, a credit note to approve. Read notices are pruned after 60 days; nobody is told about their own act.',
           value: 'Nobody has to poll the Tasks view.',
           since: '0059',
         },

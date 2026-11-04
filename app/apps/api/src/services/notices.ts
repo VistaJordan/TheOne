@@ -6,8 +6,17 @@
 //
 // Nothing here sends an email (held on purpose).
 
-import { VENDOR_REVIEW_PERM_KEY } from '@theone/shared';
-import type { AppNotification, AppNotificationsResponse, WoNotification, WoNotificationsResponse } from '@theone/shared';
+import { PULSE_NOTICE_PREFIX, VENDOR_REVIEW_PERM_KEY, parseNoticeCursor } from '@theone/shared';
+import type {
+  AppNotification,
+  AppNotificationsResponse,
+  NoticeInboxItem,
+  NoticeInboxResponse,
+  NoticeReadFilter,
+  NoticeSource,
+  WoNotification,
+  WoNotificationsResponse,
+} from '@theone/shared';
 import { query } from '../db.js';
 import { notFound } from '../errors.js';
 
@@ -168,6 +177,206 @@ export async function pruneNotifications(principalId: string): Promise<void> {
     `DELETE FROM app_notice WHERE principal_id = $1 AND read_at IS NOT NULL AND created_at < now() - interval '60 days'`,
     [principalId],
   );
+}
+
+// ── The Notifications page (2026-11-04) ─────────────────────────────────────
+//
+// One inbox over two tables: the person's `app_notice` rows and, when they
+// hold the Pulse (the route decides `withPulse`), the Pulse's pings
+// (`notification`), whose kind is `pulse.<rule_key>`. Both are the person's
+// own rows; nothing here takes another principal's id. Read and unread are
+// both settable: unread is `read_at` back to NULL.
+
+const INBOX_CTE = `WITH inbox AS (
+  SELECT 'notice'::text AS source, n.id::text AS id, n.kind, n.title, n.body, n.link,
+         n.actor_id, NULL::text AS wo_number, NULL::int AS tier, n.read_at, n.created_at
+    FROM app_notice n
+   WHERE n.principal_id = $1
+  UNION ALL
+  SELECT 'pulse', n.id::text, '${PULSE_NOTICE_PREFIX}' || o.rule_key, n.title, n.body, NULL,
+         NULL, n.wo_number, n.tier, n.read_at, n.created_at
+    FROM notification n JOIN obligation o ON o.id = n.obligation_id
+   WHERE $2::boolean AND n.principal_id = $1
+)`;
+
+export interface InboxOptions {
+  read: NoticeReadFilter;
+  /** null = every type. */
+  kinds: string[] | null;
+  q: string | null;
+  before: string | null;
+  limit: number;
+  withPulse: boolean;
+}
+
+type InboxRow = {
+  source: NoticeSource;
+  id: string;
+  kind: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  wo_number: string | null;
+  tier: number | null;
+  a_id: string | null;
+  a_name: string | null;
+  a_kind: 'human' | 'service' | null;
+  read_at: Date | null;
+  created_at: Date;
+  at_us: string;
+};
+
+function likePattern(q: string): string {
+  return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+/** The filter half every inbox query shares, from parameter `$3` on. */
+function inboxFilter(o: Pick<InboxOptions, 'read' | 'kinds' | 'q'>, params: unknown[]): string {
+  const where: string[] = [];
+  if (o.read === 'unread') where.push('read_at IS NULL');
+  if (o.read === 'read') where.push('read_at IS NOT NULL');
+  if (o.kinds) {
+    params.push(o.kinds);
+    where.push(`kind = ANY($${params.length}::text[])`);
+  }
+  if (o.q) {
+    params.push(likePattern(o.q));
+    const p = `$${params.length}`;
+    where.push(`(title ILIKE ${p} OR COALESCE(body, '') ILIKE ${p} OR COALESCE(wo_number, '') ILIKE ${p})`);
+  }
+  return where.length ? `WHERE ${where.join(' AND ')}` : '';
+}
+
+export async function listInbox(principalId: string, o: InboxOptions): Promise<NoticeInboxResponse> {
+  await raiseExpiryNotifications();
+  const base: unknown[] = [principalId, o.withPulse];
+
+  const listParams = [...base];
+  let where = inboxFilter(o, listParams);
+  const cursor = parseNoticeCursor(o.before);
+  if (cursor) {
+    listParams.push(cursor.at, cursor.key);
+    const c = `(created_at, source || ':' || id) < ($${listParams.length - 1}::timestamptz, $${listParams.length})`;
+    where = where ? `${where} AND ${c}` : `WHERE ${c}`;
+  }
+  listParams.push(o.limit + 1);
+
+  const countParams = [...base];
+  const countWhere = inboxFilter(o, countParams);
+
+  const [rows, matching, types] = await Promise.all([
+    query<InboxRow>(
+      `${INBOX_CTE}, page AS (
+         SELECT * FROM inbox
+         ${where}
+         ORDER BY created_at DESC, source || ':' || id DESC
+         LIMIT $${listParams.length}
+       )
+       SELECT x.source, x.id, x.kind, x.title, x.body, x.link, x.wo_number, x.tier,
+              a.id::text AS a_id, a.display_name AS a_name, a.kind AS a_kind, x.read_at, x.created_at,
+              to_char(x.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at_us
+         FROM page x LEFT JOIN principal a ON a.id = x.actor_id
+        ORDER BY x.created_at DESC, x.source || ':' || x.id DESC`,
+      listParams,
+    ),
+    query<{ n: number }>(`${INBOX_CTE} SELECT count(*)::int AS n FROM inbox ${countWhere}`, countParams),
+    query<{ kind: string; total: number; unread: number }>(
+      `${INBOX_CTE}
+       SELECT kind, count(*)::int AS total, count(*) FILTER (WHERE read_at IS NULL)::int AS unread
+         FROM inbox GROUP BY kind ORDER BY kind`,
+      base,
+    ),
+  ]);
+
+  const more = rows.rows.length > o.limit;
+  const page = more ? rows.rows.slice(0, o.limit) : rows.rows;
+  const items: NoticeInboxItem[] = page.map((r) => ({
+    source: r.source,
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    body: r.body,
+    link: r.source === 'pulse' ? (r.wo_number ? `/work-orders/${encodeURIComponent(r.wo_number)}` : '/pulse') : r.link,
+    actor: r.a_id ? { id: r.a_id, name: r.a_name ?? 'Unknown', kind: r.a_kind ?? 'human' } : null,
+    wo_number: r.wo_number,
+    tier: r.tier,
+    read: r.read_at !== null,
+    created_at: r.created_at.toISOString(),
+  }));
+  const last = page[page.length - 1];
+  return {
+    items,
+    matching: matching.rows[0]?.n ?? 0,
+    unread: types.rows.reduce((n, t) => n + t.unread, 0),
+    total: types.rows.reduce((n, t) => n + t.total, 0),
+    types: types.rows,
+    next_before: more && last ? `${last.at_us}|${last.source}:${last.id}` : null,
+    includes_pulse: o.withPulse,
+  };
+}
+
+/** The sidebar badge: every unread row of the inbox. */
+export async function inboxUnread(principalId: string, withPulse: boolean): Promise<number> {
+  await raiseExpiryNotifications();
+  const res = await query<{ n: number }>(
+    `SELECT ((SELECT count(*) FROM app_notice WHERE principal_id = $1 AND read_at IS NULL)
+           + (CASE WHEN $2::boolean
+                   THEN (SELECT count(*) FROM notification WHERE principal_id = $1 AND read_at IS NULL)
+                   ELSE 0 END))::int AS n`,
+    [principalId, withPulse],
+  );
+  return res.rows[0]?.n ?? 0;
+}
+
+export interface MarkInboxInput {
+  read: boolean;
+  /** These rows; absent = every row of `kinds` (absent too = everything). */
+  items?: { source: NoticeSource; id: string }[];
+  kinds?: string[] | null;
+}
+
+/** Marks rows read or unread; answers how many changed. Only rows whose state
+    differs are touched, so a row read last week keeps its read time. */
+export async function markInbox(principalId: string, withPulse: boolean, input: MarkInboxInput): Promise<number> {
+  const set = input.read ? 'now()' : 'NULL';
+  const differs = input.read ? 'read_at IS NULL' : 'read_at IS NOT NULL';
+  let changed = 0;
+  if (input.items) {
+    const ids = (source: NoticeSource) => input.items!.filter((i) => i.source === source && UUID_RE.test(i.id)).map((i) => i.id);
+    const notices = ids('notice');
+    const pings = withPulse ? ids('pulse') : [];
+    if (notices.length) {
+      const r = await query(`UPDATE app_notice SET read_at = ${set} WHERE principal_id = $1 AND id = ANY($2::uuid[]) AND ${differs}`, [principalId, notices]);
+      changed += r.rowCount ?? 0;
+    }
+    if (pings.length) {
+      const r = await query(`UPDATE notification SET read_at = ${set} WHERE principal_id = $1 AND id = ANY($2::uuid[]) AND ${differs}`, [principalId, pings]);
+      changed += r.rowCount ?? 0;
+    }
+    return changed;
+  }
+  const kinds = input.kinds ?? null;
+  const noticeKinds = kinds?.filter((k) => !k.startsWith(PULSE_NOTICE_PREFIX)) ?? null;
+  const rules = kinds?.filter((k) => k.startsWith(PULSE_NOTICE_PREFIX)).map((k) => k.slice(PULSE_NOTICE_PREFIX.length)) ?? null;
+  if (noticeKinds === null || noticeKinds.length > 0) {
+    const r = await query(
+      `UPDATE app_notice SET read_at = ${set}
+        WHERE principal_id = $1 AND ${differs} AND ($2::text[] IS NULL OR kind = ANY($2::text[]))`,
+      [principalId, noticeKinds],
+    );
+    changed += r.rowCount ?? 0;
+  }
+  if (withPulse && (rules === null || rules.length > 0)) {
+    const r = await query(
+      `UPDATE notification n SET read_at = ${set}
+         FROM obligation o
+        WHERE o.id = n.obligation_id AND n.principal_id = $1 AND n.${differs}
+          AND ($2::text[] IS NULL OR o.rule_key = ANY($2::text[]))`,
+      [principalId, rules],
+    );
+    changed += r.rowCount ?? 0;
+  }
+  return changed;
 }
 
 // ── One work order's notifications (2026-11-02) ─────────────────────────────

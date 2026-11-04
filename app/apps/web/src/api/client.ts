@@ -3265,6 +3265,34 @@ export function markAllNoticesRead(): Promise<{ unread: number }> {
   return request('/notices/read-all', { method: 'POST' });
 }
 
+// ── The Notifications page (2026-11-04) — the inbox in the sidebar ───────────
+
+import type { NoticeInboxResponse, NoticeReadFilter, NoticeSource } from '@theone/shared';
+
+export interface NoticeInboxParams {
+  show: NoticeReadFilter;
+  kinds: string[] | null;
+  q: string;
+  before?: string | null;
+}
+
+export function getNoticeInbox(p: NoticeInboxParams): Promise<NoticeInboxResponse> {
+  const qs = new URLSearchParams({ show: p.show });
+  if (p.kinds?.length) qs.set('kinds', p.kinds.join(','));
+  if (p.q.trim()) qs.set('q', p.q.trim());
+  if (p.before) qs.set('before', p.before);
+  return request<NoticeInboxResponse>(`/notices/inbox?${qs.toString()}`);
+}
+
+/** Read or unread: these rows, or (no rows) every row of these types, or all. */
+export function markNotices(input: {
+  read: boolean;
+  items?: { source: NoticeSource; id: string }[];
+  kinds?: string[] | null;
+}): Promise<{ changed: number; unread: number }> {
+  return request('/notices/mark', { method: 'POST', body: JSON.stringify(input) });
+}
+
 // ── 0060 — Portfolio: sites, their buildings / floors / spaces, assets ───────
 
 import type {

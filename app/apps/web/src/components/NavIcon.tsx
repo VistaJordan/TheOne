@@ -15,6 +15,7 @@
      card       the signature strip writes itself in
      inbox      the tray's lip writes itself in
      download   the arrow drops into the tray (Incoming Work Orders)
+     bell       the bell rings (Notifications)
      sliders    the knobs slide
 
    Paths are copied verbatim from the sprite, so the icons look identical at
@@ -96,6 +97,12 @@ const DRAWINGS: Partial<Record<IconName, JSX.Element>> = {
       <path d="M5.5 5.1 3.3 11.3A2 2 0 0 0 3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-.3-.7L18.5 5.1A2 2 0 0 0 16.6 4H7.4a2 2 0 0 0-1.9 1.1Z" />
       <polyline className="ni-line" points="3 12 8 12 9.5 15 14.5 15 16 12 21 12" pathLength={1} />
     </>
+  ),
+  bell: (
+    <g className="ni-bell">
+      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+    </g>
   ),
   download: (
     <>

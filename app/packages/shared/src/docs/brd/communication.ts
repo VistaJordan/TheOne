@@ -26,7 +26,7 @@ export const COMMUNICATION_PART: DocPart = {
         },
         {
           name: '@mentions',
-          what: 'Typing @ in the message box (or while editing their own message) opens a list of the people who can open this work order; arrow keys move, Enter or Tab picks, Esc closes. The pick writes "@Name" into the text and the box says who "will be notified" (on a client-visible message, also that "the client sees the @names too"). In the thread a mention is highlighted, and the reader’s own name stands out. Each person mentioned gets a notice in the bell ("<who> mentioned you on <WO #>", with the start of the message) that opens the Messages tab scrolled to that message, outlined.',
+          what: 'Typing @ in the message box (or while editing their own message) opens a list of the people who can open this work order; arrow keys move, Enter or Tab picks, Esc closes. The pick writes "@Name" into the text and the box says who "will be notified" (on a client-visible message, also that "the client sees the @names too"). In the thread a mention is highlighted, and the reader’s own name stands out. Each person mentioned gets a notice on Notifications ("<who> mentioned you on <WO #>", with the start of the message) that opens the Messages tab scrolled to that message, outlined.',
           value: 'Pulls a specific colleague into a work order without leaving it, as in ClickUp.',
           rules: [
             'Only an active person with Work orders view, the Messages tab and the work order inside THEIR own "Which work orders" scope and site list can be mentioned; any other id is refused (400 MENTION_NOT_ALLOWED).',

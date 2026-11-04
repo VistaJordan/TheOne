@@ -285,7 +285,7 @@ describe('an import refusal names its rows (F7)', () => {
   });
 });
 
-describe('the bell asks the Pulse only for a role with the Pulse grant (F7; work_orders/pulse since 2026-10-27)', () => {
+describe('Pulse pings reach only a role with the Pulse grant (F7; work_orders/pulse since 2026-10-27)', () => {
   it('useNotifications takes `enabled` and hands it to the query', () => {
     const src = webSrc('hooks', 'useObligations.ts');
     const at = src.indexOf('export function useNotifications(');
@@ -295,29 +295,15 @@ describe('the bell asks the Pulse only for a role with the Pulse grant (F7; work
     expect(fn).toMatch(/\n\s+enabled,\r?\n/);
   });
 
-  it("PulseBell gates it on can(PULSE_PERM_KEY, 'view') and leaves the notices half alone", () => {
-    const src = webSrc('components', 'obligations', 'PulseBell.tsx');
-    expect(src).toMatch(/const canPulse = can\(PULSE_PERM_KEY, 'view'\);/);
-    expect(src).toMatch(/useNotifications\(canPulse\)/);
-    // 0059's two queries, exactly as they were.
-    expect(src).toContain('useQuery({ queryKey: NOTICE_COUNT_KEY, queryFn: getNoticeCount, refetchInterval: 60_000, retry: 0 })');
-    expect(src).toContain('useQuery({ queryKey: NOTICES_KEY, queryFn: getNotices, enabled: open, retry: 0 })');
-  });
-
-  it('without the Pulse, "Nothing for you" waits for the notices to load — no empty state flashes while the list is on its way', () => {
-    // The notices list is `enabled: open`, so on the first open forYou is []
-    // until it lands; the dropdown shows the notices' own three states
-    // (loading / unavailable / empty), as the Pulse half does for its rows.
-    const src = webSrc('components', 'obligations', 'PulseBell.tsx');
-    const at = src.indexOf('{!canPulse && (');
-    expect(at).toBeGreaterThan(-1);
-    const block = src.slice(at, src.indexOf('{canPulse && (', at));
-    expect(block).toMatch(/notices\.isLoading && <div className="pulse-pop-note">Loading…<\/div>/);
-    expect(block).toMatch(/notices\.isError && !notices\.isLoading &&/);
-    expect(block).toMatch(
-      /!notices\.isLoading && !notices\.isError && forYou\.length === 0 && \(\s*<div className="pulse-pop-note">Nothing for you right now\.<\/div>/,
-    );
-    expect(src).not.toMatch(/!canPulse && forYou\.length === 0 &&/);
+  it("the Notifications inbox takes the Pulse's pings only with can(PULSE_PERM_KEY, 'view') — the bell is gone (2026-11-04)", () => {
+    const routes = readFileSync(resolve(__dirname, '..', 'apps', 'api', 'src', 'routes', 'notices.ts'), 'utf8');
+    expect(routes).toMatch(/permAllows\(me\.perms, PULSE_PERM_KEY, 'view', me\.isSuperAdmin\)/);
+    expect(routes).toMatch(/if \(pulse\) await evaluateDebounced\(\)/);
+    const shell = webSrc('components', 'AppShell.tsx');
+    expect(shell).not.toMatch(/PulseBell/);
+    // The sidebar badge reads the person's own count, never /notifications.
+    expect(shell).toMatch(/queryFn: getNoticeCount,/);
+    expect(shell).not.toMatch(/useNotifications\(/);
   });
 });
 
@@ -347,7 +333,6 @@ describe('the source readers above are line-ending proof', () => {
       ['apps', 'web', 'src', 'pages', 'VendorsPage.tsx'],
       ['apps', 'web', 'src', 'components', 'wo', 'record', 'RecordParts.tsx'],
       ['apps', 'web', 'src', 'components', 'wo', 'list', 'ImportDialog.tsx'],
-      ['apps', 'web', 'src', 'components', 'obligations', 'PulseBell.tsx'],
       ['apps', 'web', 'src', 'hooks', 'useObligations.ts'],
       ['apps', 'web', 'src', 'styles', 'messages.css'],
       ['apps', 'web', 'src', 'styles', 'wo-list.css'],

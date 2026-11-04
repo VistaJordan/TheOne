@@ -3,14 +3,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ASSISTANT_PERM_KEY, INTAKE_PERM_KEY, PAYMENTS_PAGE_PERM_KEY, PULSE_PERM_KEY, QUOTES_PAGE_PERM_KEY, adminPermKey } from '@theone/shared';
-import { getApprovalCounts, listIntakeDrafts } from '../api/client';
+import { getApprovalCounts, getNoticeCount, listIntakeDrafts } from '../api/client';
 import { OBI_HEADER_LOGO, OBI_HEADER_LOGO_SRCSET, OBI_HEADER_MARK } from '../lib/brand';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { Icon, IconSprite } from './Icon';
 import { NavIcon } from './NavIcon';
 import type { IconName } from './Icon';
 import { ActorSwitcher } from './ActorSwitcher';
-import { PulseBell } from './obligations/PulseBell';
 import { CanvasBackdrop } from './CanvasBackdrop';
 import { GlobalSearch } from './GlobalSearch';
 import { AssistantButton } from './assistant/AssistantPanel';
@@ -26,6 +25,7 @@ import { isVersionTwo } from '../lib/versionTwo';
 export type NavKey =
   | 'Dashboard'
   | 'Pulse'
+  | 'Notifications'
   | 'Work Orders'
   | 'Vendors'
   | 'Sites'
@@ -56,7 +56,7 @@ interface NavItem {
   to?: string;
   /** Marks the item whose badge carries the live work-order count — or, for
       Approvals (0025), what waits on the viewer: to decide, or to acknowledge. */
-  badge?: 'total' | 'approvals' | 'incoming';
+  badge?: 'total' | 'approvals' | 'incoming' | 'notifications';
   /** A section with enough destinations to deserve its own disclosure. The
       header stops navigating and becomes the toggle; the children are the
       routes (Signals in the reference nav works the same way). */
@@ -70,6 +70,10 @@ const NAV: NavItem[] = [
   // S5 — the watchdog's own screen sits ABOVE the work orders: what is owed
   // comes before the list of everything.
   { label: 'Pulse', icon: 'zap', to: '/pulse' },
+  // 2026-11-04 — everything that happened to the person signed in, by type
+  // and read state (pages/NotificationsPage.tsx). It replaced the bell in the
+  // top bar; the badge is their unread count. Everyone's, so no permission.
+  { label: 'Notifications', icon: 'bell', to: '/notifications', badge: 'notifications' },
   { label: 'Work Orders', icon: 'clipboard', to: '/', badge: 'total' },
   // 0057 — vendors and technicians: the records, and the coverage map.
   // Hidden without the `vendors` grant (dispatchers meet vendors on the map
@@ -243,6 +247,17 @@ export function AppShell({
     refetchInterval: 60 * 1000,
     retry: 0,
   });
+  // The Notifications badge: every unread notice (and Pulse ping, for whoever
+  // holds the Pulse). The page invalidates it as rows are read.
+  const noticeCountQuery = useQuery({
+    queryKey: ['notices', 'count', actingAs?.id ?? null],
+    queryFn: getNoticeCount,
+    enabled: !!actingAs,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    retry: 0,
+  });
+  const noticesUnread = noticeCountQuery.data?.unread || undefined;
   const incomingWaiting =
     (countsQuery.data?.to_accept ?? 0) + (draftsQuery.data?.items.length ?? 0) || undefined;
 
@@ -357,8 +372,6 @@ export function AppShell({
           <ActorSwitcher />
           {/* 0068 — ask anything; answers are looked up as the person asking. */}
           {can(ASSISTANT_PERM_KEY, 'view') && <AssistantButton />}
-          {/* S5 — the live Pulse bell (obligation notifications), not a prop. */}
-          <PulseBell />
           <ThemeToggle />
         </div>
       </header>
@@ -392,7 +405,9 @@ export function AppShell({
                     ? approvalsWaiting
                     : item.badge === 'incoming' && incomingWaiting
                       ? incomingWaiting
-                      : undefined;
+                      : item.badge === 'notifications' && noticesUnread
+                        ? noticesUnread
+                        : undefined;
 
               // ── Group: header discloses the children, it does not navigate ──
               if (item.children) {

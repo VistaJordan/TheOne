@@ -188,7 +188,7 @@ export const MONEY_PART: DocPart = {
         },
         {
           name: 'Credit notes',
-          what: 'Credit note (CN-n) against a vendor bill; approved as written at or under the "Credit notes that need approval" threshold (default $250) or when the raiser may approve payments, otherwise it waits for an approver (bell notice); void needs a reason; the author may void their own pending note. Recorded as a field row "Vendor credit note" on the work order.',
+          what: 'Credit note (CN-n) against a vendor bill; approved as written at or under the "Credit notes that need approval" threshold (default $250) or when the raiser may approve payments, otherwise it waits for an approver (a notice on Notifications); void needs a reason; the author may void their own pending note. Recorded as a field row "Vendor credit note" on the work order.',
           value: 'An overbilling is corrected on the record, not by hand in Yoda.',
           permissions: ['payments create (raise)', 'payments approve (approve / void)'],
           since: '0066',

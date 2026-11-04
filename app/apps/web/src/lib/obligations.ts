@@ -5,6 +5,7 @@
 // everywhere.
 
 import type { ObligationSummary, ObligationTier } from '../api/client';
+import { PULSE_RULE_LABELS } from '@theone/shared';
 import { initialsOf, roleLabel } from './actor';
 
 /** Chip wording — short enough for a table cell. */
@@ -18,16 +19,9 @@ const RULE_CHIP_LABEL: Record<string, string> = {
   sla_blown: 'SLA blown',
 };
 
-/** Card wording — the full sentence the Pulse and the rail card print. */
-const RULE_FULL_LABEL: Record<string, string> = {
-  emergency_ack: 'Emergency not acknowledged',
-  quote_owed: 'Quote owed to the client',
-  schedule_owed: 'ETA owed after approval',
-  approval_followup: 'Client approval needs chasing',
-  quote_review_owed: 'Quote waiting on review',
-  payment_processing: 'Payment request unprocessed',
-  sla_blown: 'SLA date blown',
-};
+/** Card wording — the full sentence the Pulse and the rail card print. Kept
+    in shared (notices.ts) since the Notifications page names its types by it. */
+const RULE_FULL_LABEL: Record<string, string> = PULSE_RULE_LABELS;
 
 /** One line of why the clock exists — the card's second line. */
 const RULE_WHY: Record<string, string> = {
