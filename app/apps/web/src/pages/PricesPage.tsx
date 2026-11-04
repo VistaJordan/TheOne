@@ -59,14 +59,14 @@ export function PricesPage() {
   return (
     <AppShell active="Prices">
       <div className="canvas-inner">
-        <div className="vend-head">
-          <div className="page-head" style={{ margin: 0 }}><h1 className="page-title">Prices</h1></div>
-          {d?.can.create && (
+        {/* The top bar already names the page, so no heading here (Elise, 2026-11-04). */}
+        {d?.can.create && (
+          <div className="vend-head" style={{ justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setEditing('new')}>
               <Icon name="plus" size={12} /> New price card
             </button>
-          )}
-        </div>
+          </div>
+        )}
         {q.isError ? (
           <section className="card"><div className="empty-flat">{errText(q.error, 'Could not load the price list.')}</div></section>
         ) : !d ? (
