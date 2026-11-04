@@ -98,6 +98,8 @@ const createSchema = z
     override_blacklist: z.boolean().optional(),
     // Elise, 2026-10-28: the reason for taking Cost past the NTE or the quote.
     overage_reason: z.string().trim().max(OVERAGE_REASON_MAX).nullable().optional(),
+    // 0122: one key per Submit; a repeat answers the request already filed.
+    submit_key: z.string().uuid().nullable().optional(),
   })
   .strict();
 

@@ -811,6 +811,18 @@ export interface PaymentRequestInput {
   /** Elise, 2026-10-28: required (409 PAYMENT_OVERAGE_REASON otherwise)
       when the request takes Cost past the NTE or the approved quote. */
   overage_reason?: string | null;
+  /** 0122: the form's one-time key. A request this person already filed
+      under it is answered as it is, never filed a second time. */
+  submit_key?: string | null;
+}
+
+/** 0122: the request `requestedBy` already filed under `key`, if any. */
+async function filedUnderKey(q: Queryable, requestedBy: string, key: string): Promise<string | null> {
+  const res = await q.query<{ id: string }>(
+    `SELECT id::text AS id FROM payment_request WHERE requested_by = $1 AND submit_key = $2`,
+    [requestedBy, key],
+  );
+  return res.rows[0]?.id ?? null;
 }
 
 async function loadRow(id: string): Promise<PaymentRow> {
@@ -982,6 +994,13 @@ export async function createPaymentRequest(
 ): Promise<PaymentRequest> {
   await assertWoAllows(taskId, 'payment.request');
 
+  // 0122: a second Submit (double click, a retry) answers the first one.
+  const submitKey = input.submit_key ?? null;
+  if (submitKey) {
+    const filed = await filedUnderKey({ query }, actor.id, submitKey);
+    if (filed) return mapOne(await loadRow(filed), { fullAddress: canProcessPayments(actor), viewer: actor });
+  }
+
   let vendorId = input.vendor_id ?? null;
   const payeeName = input.payee_name?.trim() || null;
   const payeePhone = input.payee_phone?.trim() || null;
@@ -1045,12 +1064,23 @@ export async function createPaymentRequest(
   }
 
   let createdId: string | null = null;
+  let replayed = false;
   let payeeLabel = 'the technician';
 
   await withTransaction(async (tx) => {
     // The task row first (the parent-first order of every child insert, and
     // the lock the purpose numbering reads under). NO KEY: see woFieldValues.
     await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [taskId]);
+    // 0122: two posts with one key that both passed the check above meet
+    // here; the second waited on the lock and now sees the first's row.
+    if (submitKey) {
+      const filed = await filedUnderKey(tx, actor.id, submitKey);
+      if (filed) {
+        createdId = filed;
+        replayed = true;
+        return;
+      }
+    }
     const purpose = await numberPurpose(tx, taskId, purposeCode, null);
     if (!vendorId && payeeName && payeePhone) {
       // A technician record (0057 kind = tech), findable by phone next time.
@@ -1070,9 +1100,9 @@ export async function createPaymentRequest(
       `INSERT INTO payment_request
          (task_id, vendor_id, payee_name, payee_phone, purpose, amount, method, payment_address, note,
           recipient_name, recipient_phone, recipient_is_store, attachment_id, status, requested_by,
-          auto_approved, approved_at, overage_reason)
+          auto_approved, approved_at, overage_reason, submit_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $15, $14,
-               $16, CASE WHEN $16 THEN now() ELSE NULL END, $17)
+               $16, CASE WHEN $16 THEN now() ELSE NULL END, $17, $18)
        RETURNING id::text AS id`,
       [
         taskId,
@@ -1092,6 +1122,7 @@ export async function createPaymentRequest(
         startStatus,
         autoApproved,
         overageReason,
+        submitKey,
       ],
     );
     createdId = ins.rows[0].id;
@@ -1121,6 +1152,7 @@ export async function createPaymentRequest(
   });
 
   if (!createdId) throw new ApiError('INTERNAL', 'Payment request insert produced no row');
+  if (replayed) return mapOne(await loadRow(createdId), { fullAddress: canProcessPayments(actor), viewer: actor });
   if (overage && overageReason) {
     await raiseOverageHolds(taskId, createdId, overage, overageReason, actor, input.amount, payeeLabel);
   }

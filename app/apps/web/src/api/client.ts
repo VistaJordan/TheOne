@@ -514,6 +514,8 @@ export interface PaymentRequestInput {
   /** Elise, 2026-10-28: the reason, when the API asked for one
       (409 PAYMENT_OVERAGE_REASON — Cost past the NTE or the approved quote). */
   overage_reason?: string | null;
+  /** 0122: one per Submit; the API answers a repeat with the request already filed. */
+  submit_key?: string;
 }
 
 export interface PaymentRequestCreatedResponse {

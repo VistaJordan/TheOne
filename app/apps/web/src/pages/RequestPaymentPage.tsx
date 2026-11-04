@@ -13,7 +13,7 @@
      $599 this year flags the W9 requirement live, before submit.
 */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useLinkNav } from '../lib/linkNav';
@@ -225,9 +225,17 @@ export function RequestPaymentPage() {
             ? 'Enter an amount to submit'
             : 'Complete the payout details to submit';
 
+  // 0122: one key per request being filled in, renewed by Request another, so
+  // a second click or a retry is answered with the request already filed.
+  const submitKey = useRef<string>(crypto.randomUUID());
+  // Set on the click itself: isPending only lands on the next render, which a
+  // fast double click beats.
+  const sending = useRef(false);
+
   const submitMutation = useMutation({
     mutationFn: (overageReason: string | null = null) =>
       postPaymentRequest(woNumber, {
+        submit_key: submitKey.current,
         ...(mode === 'manual'
           ? { vendor_id: null, payee_name: manualName.trim(), payee_phone: manualPhone.trim() }
           : {
@@ -247,6 +255,9 @@ export function RequestPaymentPage() {
         recipient_is_store: recipientOpen && recipientIsStore,
         ...(overageReason ? { overage_reason: overageReason } : {}),
       }),
+    onSettled: () => {
+      sending.current = false;
+    },
     onSuccess: (res) => {
       setSubmitted(res.item);
       setSubmitError(null);
@@ -272,7 +283,14 @@ export function RequestPaymentPage() {
     },
   });
 
+  const send = (overageReason: string | null) => {
+    if (sending.current) return;
+    sending.current = true;
+    submitMutation.mutate(overageReason);
+  };
+
   const resetForAnother = () => {
+    submitKey.current = crypto.randomUUID();
     setSubmitted(null);
     setPurpose('');
     setAmount('');
@@ -808,7 +826,7 @@ export function RequestPaymentPage() {
                     onClick={() => {
                       setAmountTouched(true);
                       setAddressTouched(true);
-                      if (valid) submitMutation.mutate(null);
+                      if (valid) send(null);
                     }}
                   >
                     <Icon name={woBlocked || blacklisted ? 'lock' : 'send'} size={14} className="btn-ic" />
@@ -830,7 +848,7 @@ export function RequestPaymentPage() {
                   error={submitError}
                   onSubmit={(reason) => {
                     setSubmitError(null);
-                    submitMutation.mutate(reason);
+                    send(reason);
                   }}
                   onCancel={() => {
                     setOverage(null);
