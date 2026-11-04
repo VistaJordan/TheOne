@@ -639,9 +639,10 @@ delete); reading needs only `work_orders` view. Since 2026-10-22 the Photos card
 sits on its own **Drive** tab (`work_orders/tabs/drive`, unset inherits
 like every tab; links that pointed at photos say `?tab=drive`), Overview
 leads the strip and is the landing tab (bare URL). Since 2026-11-03 (Elise)
-the strip reads Overview · CICO · Quote (was Quotes) · Finances · Drive ·
-Tech Hub · Parts · People · Logs (was Audit trail) · All fields · Dates
-· Messages · Penalties; tab ids and `?tab=` links are unchanged. Site and
+the tabs are named Quote (was Quotes) and Logs (was Audit trail); since
+2026-11-04 the strip reads Overview · CICO · Quote · Finances · People ·
+Dates · Drive · Messages · Penalties · Parts · Tech Hub · Logs · All fields;
+tab ids and `?tab=` links are unchanged. Site and
 Notifications have no button (same day); `?tab=site` / `?tab=notifications`
 still open them.
 

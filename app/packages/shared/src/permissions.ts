@@ -323,27 +323,27 @@ export function fieldSectionPermKey(slug: string): string {
 export const WO_TABS: { id: string; label: string }[] = [
   // 2026-10-22 · Overview leads (and is the landing tab); Drive is the
   // work order's photos and files, which used to sit on Overview.
-  // Elise, 2026-11-03 · the order of the work-order tab strip.
+  // Elise, 2026-11-04 · the order of the work-order tab strip.
   { id: 'overview', label: 'Overview' },
   { id: 'cico', label: 'CICO' },
   // 2026-10-27 · the client quote, moved off Finances onto a tab of its own.
   { id: 'quotes', label: 'Quote' },
   { id: 'money', label: 'Finances' },
   { id: 'payables', label: 'Payables' },
-  { id: 'drive', label: 'Drive' },
-  // 0095 · Tech Hub (was People › Technicians, which rode on People's row):
-  // suggested vendors, hiring, technician calls and texts, the AI quote draft.
-  { id: 'technicians', label: 'Tech Hub' },
-  { id: 'parts', label: 'Parts' },
   { id: 'people', label: 'People' },
-  { id: 'audit', label: 'Logs' },
-  { id: 'fields', label: 'All fields' },
   { id: 'dates', label: 'Dates' },
-  { id: 'site', label: 'Site' },
+  { id: 'drive', label: 'Drive' },
   { id: 'messages', label: 'Messages' },
   // 2026-10-27 · the Penalties fields (0094) on a tab of their own (they sat
   // on Finances for a day).
   { id: 'penalties', label: 'Penalties' },
+  { id: 'parts', label: 'Parts' },
+  // 0095 · Tech Hub (was People › Technicians, which rode on People's row):
+  // suggested vendors, hiring, technician calls and texts, the AI quote draft.
+  { id: 'technicians', label: 'Tech Hub' },
+  { id: 'audit', label: 'Logs' },
+  { id: 'fields', label: 'All fields' },
+  { id: 'site', label: 'Site' },
   // 2026-11-02 · every notice and Pulse ping raised about the work order.
   { id: 'notifications', label: 'Notifications' },
   // 0064 · the record's own tabs. Since 2026-10-20 Checklist and Related have

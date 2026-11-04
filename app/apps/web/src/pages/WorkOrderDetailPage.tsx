@@ -362,21 +362,17 @@ export function WorkOrderDetailPage() {
         <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} note={recordNote} />
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
-          {/* Elise, 2026-11-03 · Overview, CICO, Quote, Finances, Drive, Tech Hub,
-              Parts, People, Logs, All fields, then the rest. Site and Notifications
-              have no button since the same day; ?tab=site / ?tab=notifications still
-              open them. */}
+          {/* Elise, 2026-11-04 · Overview, CICO, Quote, Finances, People, Dates,
+              Drive, Messages, Penalties, Parts, Tech Hub, Logs, All fields. Site and
+              Notifications have no button (since 2026-11-03); ?tab=site /
+              ?tab=notifications still open them. */}
           {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
           {show('cico') && <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>}
           {show('quotes') && <TabButton id="quotes" tab={tab} onSelect={setTab}>Quote</TabButton>}
           {canOpen('money') && <TabButton id="money" tab={tab} onSelect={setTab}>Finances</TabButton>}
-          {show('drive') && <TabButton id="drive" tab={tab} onSelect={setTab}>Drive</TabButton>}
-          {show(TECH_HUB_TAB) && <TabButton id={TECH_HUB_TAB} tab={tab} onSelect={setTab}>Tech Hub</TabButton>}
-          {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
           {show('people') && <TabButton id="people" tab={tab} onSelect={setTab}>People</TabButton>}
-          {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Logs</TabButton>}
-          {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
           {show('dates') && <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>}
+          {show('drive') && <TabButton id="drive" tab={tab} onSelect={setTab}>Drive</TabButton>}
           {show('messages') && (
             <TabButton id="messages" tab={tab} onSelect={setTab}>
               <Icon name="msg" size={12} />
@@ -385,6 +381,10 @@ export function WorkOrderDetailPage() {
             </TabButton>
           )}
           {show('penalties') && <TabButton id="penalties" tab={tab} onSelect={setTab}>Penalties</TabButton>}
+          {show('parts') && <TabButton id="parts" tab={tab} onSelect={setTab}>Parts</TabButton>}
+          {show(TECH_HUB_TAB) && <TabButton id={TECH_HUB_TAB} tab={tab} onSelect={setTab}>Tech Hub</TabButton>}
+          {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Logs</TabButton>}
+          {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
         </div>
       </div>
 
@@ -543,7 +543,7 @@ export function WorkOrderDetailPage() {
             );
           })()}
 
-          {/* 2026-10-27 · Penalties, a tab of its own after Tech Hub: Bad
+          {/* 2026-10-27 · Penalties, a tab of its own (after Messages since 2026-11-04): Bad
               quote, Penalty, Late quote, Missed ETA, Recall and the manager's
               description (also a section of All fields). */}
           {tab === 'penalties' && (

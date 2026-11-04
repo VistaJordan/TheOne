@@ -80,7 +80,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Penalties',
-          what: 'A tab of its own after Tech Hub since 2026-10-27: the Bad quote, Penalty, Late quote, Missed ETA and Recall checkboxes and the Manager description box (the 0094 Penalties section, also on All fields). Managers edit; the dispatcher tiers, VR Officer and OP Admin read.',
+          what: 'A tab of its own since 2026-10-27 (after Messages since 2026-11-04): the Bad quote, Penalty, Late quote, Missed ETA and Recall checkboxes and the Manager description box (the 0094 Penalties section, also on All fields). Managers edit; the dispatcher tiers, VR Officer and OP Admin read.',
           value: 'What went wrong on a job is recorded in one place, apart from the money.',
           permissions: ['work_orders/tabs/penalties view', 'work_orders/fields/penalties view'],
         },
