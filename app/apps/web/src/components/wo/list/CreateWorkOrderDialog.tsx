@@ -127,6 +127,12 @@ const HOURS_12 = ['12', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']
 
 type LooseDateTime = { date: string; h: string; mi: string; ap: 'AM' | 'PM' };
 
+/** A local day as 'YYYY-MM-DD'. */
+function isoDay(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 function parseDateTimeInput(v: string): LooseDateTime | null {
   const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(v);
   if (!m) return null;
@@ -138,9 +144,10 @@ function parseDateTimeInput(v: string): LooseDateTime | null {
  * A date and a time whose minutes go in tens (Elise, 2026-11-03). It looks
  * like the browser's datetime box ("11/03/2026, 04:40 AM") but the browser's
  * own time picker always slips the current minute into its list (04:08 among
- * 10, 20 …) and nothing switches that off, so the time half is ours: clicking
- * it opens three columns — hour, minute (00, 10 … 50) and AM / PM. The date
- * half is the browser's date box. The value is the datetime-local shape the
+ * 10, 20 …) and nothing switches that off, so the picker is ours: ONE button
+ * (Elise, 2026-11-04 — the browser's date box beside our time button read as
+ * two) opening a month calendar beside three columns — hour, minute (00, 10 …
+ * 50) and AM / PM. The value is the datetime-local shape the
  * rest of the form reads, '' until a date is in; a date with no time picked
  * yet means 12:00 AM.
  */
@@ -152,6 +159,9 @@ function TenMinuteDateTime({ id, value, onChange, disabled }: {
 }) {
   const [loose, setLoose] = useState<LooseDateTime>({ date: '', h: '', mi: '', ap: 'AM' });
   const [open, setOpen] = useState(false);
+  // The pop-up opens to the right of the box, or to its left when the window
+  // has no room for it there (the last field of a row).
+  const [toLeft, setToLeft] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const cur = parseDateTimeInput(value) ?? loose;
   const emit = (next: LooseDateTime) => {
@@ -166,6 +176,8 @@ function TenMinuteDateTime({ id, value, onChange, disabled }: {
   // dialog itself never jumps).
   useEffect(() => {
     if (!open) return;
+    const pop = box.current?.querySelector<HTMLElement>('.dt10-pop');
+    if (pop && box.current) setToLeft(box.current.getBoundingClientRect().left + pop.offsetWidth > window.innerWidth - 16);
     box.current?.querySelectorAll<HTMLElement>('.dt10-opt.is-on').forEach((el) => {
       const col = el.parentElement;
       if (col) col.scrollTop = el.offsetTop - col.offsetTop - (col.clientHeight - el.offsetHeight) / 2;
@@ -181,7 +193,17 @@ function TenMinuteDateTime({ id, value, onChange, disabled }: {
   }, [open]);
   // A value set elsewhere (an older template) may hold any minute; keep it on offer.
   const minutes = cur.mi && !TEN_MINUTES.includes(cur.mi) ? [cur.mi, ...TEN_MINUTES] : TEN_MINUTES;
-  const label = cur.h === '' && cur.mi === '' ? '--:-- --' : `${(cur.h || '12').padStart(2, '0')}:${cur.mi || '00'} ${cur.ap}`;
+  const timeLabel = cur.h === '' && cur.mi === '' ? '--:-- --' : `${(cur.h || '12').padStart(2, '0')}:${cur.mi || '00'} ${cur.ap}`;
+  const dateLabel = cur.date ? `${cur.date.slice(5, 7)}/${cur.date.slice(8, 10)}/${cur.date.slice(0, 4)}` : 'mm/dd/yyyy';
+  const label = `${dateLabel}, ${timeLabel}`;
+  // The calendar shows the picked date's month, else this month; ‹ › page it.
+  const [month, setMonth] = useState(() => (cur.date || isoDay(new Date())).slice(0, 7));
+  useEffect(() => { if (open) setMonth((cur.date || isoDay(new Date())).slice(0, 7)); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [my, mm] = month.split('-').map(Number);
+  const stepMonth = (by: number) => setMonth(isoDay(new Date(my, mm - 1 + by, 1)).slice(0, 7));
+  const first = new Date(my, mm - 1, 1);
+  const days = Array.from({ length: 42 }, (_, i) => new Date(my, mm - 1, 1 - first.getDay() + i));
+  const today = isoDay(new Date());
   const col = (name: string, items: string[], picked: string, show: (v: string) => string, pick: (v: string) => void) => (
     <div className="dt10-col" role="listbox" aria-label={name}>
       {items.map((v) => (
@@ -194,16 +216,39 @@ function TenMinuteDateTime({ id, value, onChange, disabled }: {
     </div>
   );
   return (
-    <div className={`fld dt10${disabled ? ' is-disabled' : ''}`} ref={box}>
-      <input id={id} className="dt10-date" type="date" min="2000-01-01" value={cur.date}
-        onChange={(e) => emit({ ...cur, date: e.target.value })} disabled={disabled} />
-      <button type="button" className="dt10-time" aria-haspopup="listbox" aria-expanded={open}
-        aria-label={`Time, ${label}`} onClick={() => setOpen((o) => !o)} disabled={disabled}>
+    <div className={`dt10${disabled ? ' is-disabled' : ''}`} ref={box}>
+      <button id={id} type="button" className={`fld dt10-btn${cur.date ? '' : ' is-empty'}`} aria-haspopup="dialog" aria-expanded={open}
+        onClick={() => setOpen((o) => !o)} disabled={disabled}>
         <span>{label}</span>
-        <Icon name="clock" size={12} />
+        <Icon name="calendar" size={14} />
       </button>
       {open && (
-        <div className="dt10-pop">
+        <div className={`dt10-pop${toLeft ? ' is-right' : ''}`} role="dialog" aria-label="Pick a date and time">
+          <div className="dt10-cal">
+            <div className="dt10-cal-head">
+              <button type="button" className="dt10-nav" aria-label="Previous month" onClick={() => stepMonth(-1)}>‹</button>
+              <span>{first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+              <button type="button" className="dt10-nav" aria-label="Next month" onClick={() => stepMonth(1)}>›</button>
+            </div>
+            <div className="dt10-grid">
+              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => <span key={d} className="dt10-wd">{d}</span>)}
+              {days.map((d) => {
+                const iso = isoDay(d);
+                const cls = ['dt10-day', d.getMonth() !== mm - 1 && 'is-out', iso === cur.date && 'is-on', iso === today && 'is-today']
+                  .filter(Boolean).join(' ');
+                return (
+                  <button key={iso} type="button" className={cls} aria-pressed={iso === cur.date}
+                    disabled={iso < '2000-01-01'} onClick={() => emit({ ...cur, date: iso })}>
+                    {d.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="dt10-cal-foot">
+              <button type="button" className="dt10-link" onClick={() => { emit({ ...cur, date: '' }); setOpen(false); }}>Clear</button>
+              <button type="button" className="dt10-link" onClick={() => emit({ ...cur, date: today })}>Today</button>
+            </div>
+          </div>
           {col('Hour', HOURS_12, cur.h, (h) => h.padStart(2, '0'), (h) => emit({ ...cur, h }))}
           {col('Minutes', minutes, cur.mi, (m) => m, (mi) => emit({ ...cur, mi }))}
           {col('AM or PM', ['AM', 'PM'], cur.ap, (a) => a, (a) => emit({ ...cur, ap: a as 'AM' | 'PM' }))}
