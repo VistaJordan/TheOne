@@ -749,8 +749,25 @@ a.side-flyout-item {
    axis but gives its slack back to the flanks, and the panel widens past the
    field so results stay readable. */
 @media (max-width: 1180px) {
+  /* Here the actions cannot live in an equal third without spilling over the
+     search (the "Viewing as" picker alone is ~300px), so the right column sizes
+     to its content and the trail and the search share what is left. */
   .topbar {
-    grid-template-columns: 1fr minmax(180px, 360px) 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 1fr) auto;
+    gap: 12px;
+  }
+  .topbar-search {
+    max-width: 360px;
+    width: 100%;
+    justify-self: center;
+  }
+  /* The swap icon and the select's tooltip still say it; the words go. */
+  .topbar-actor-text,
+  .topbar-actor-chip {
+    display: none;
+  }
+  .topbar-actor-select {
+    max-width: 170px;
   }
 
   .gs-panel {
@@ -893,6 +910,9 @@ a.side-flyout-item {
 }
 
 .topbar-actor-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--topbar-ink-2);
   font-size: 11px;
   letter-spacing: 0.02em;
@@ -929,6 +949,8 @@ a.side-flyout-item {
 
 .topbar-bell,
 .theme-toggle {
+  /* Never squeezed by a crowded bar (they used to shrink under the picker). */
+  flex: none;
   width: 32px;
   height: 32px;
   display: grid;

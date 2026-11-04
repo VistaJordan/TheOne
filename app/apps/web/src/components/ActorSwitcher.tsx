@@ -74,10 +74,10 @@ function ImpersonationPicker({
     <label className={`topbar-actor${isImpersonating ? ' is-impersonating' : ''}`}>
       <span className="topbar-actor-label">
         {isImpersonating && <Icon name="swap" size={12} />}
-        Viewing as
+        <span className="topbar-actor-text">Viewing as</span>
       </span>
       {isImpersonating && (
-        <span className="chip chip-sm" title={VIEWING_AS_HINT}>
+        <span className="chip chip-sm topbar-actor-chip" title={VIEWING_AS_HINT}>
           Changes logged as you
         </span>
       )}
