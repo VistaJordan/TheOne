@@ -165,12 +165,13 @@
   border-radius: var(--radius-sm); box-shadow: var(--shadow);
 }
 .dt10-pop.is-right { left: auto; right: 0; }
-/* The scrolling hour column keeps room for its scrollbar beside the numbers,
-   not over them (scrollbar-gutter + padding on the right). */
+/* The hour column still scrolls (wheel, touch, keyboard) but draws no
+   scrollbar beside the numbers. */
 .dt10-col {
   display: flex; flex-direction: column; max-height: 262px; overflow-y: auto; min-width: 52px;
-  scrollbar-gutter: stable; padding-right: 4px;
+  scrollbar-width: none;
 }
+.dt10-col::-webkit-scrollbar { display: none; }
 .dt10-opt {
   padding: 4px 8px; border: 0; border-radius: 3px; background: transparent;
   color: var(--ink); font: inherit; font-size: 12.5px; text-align: center; cursor: pointer;
