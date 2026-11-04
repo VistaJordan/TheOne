@@ -205,7 +205,8 @@ function TenMinuteDateTime({ id, value, onChange, disabled }: {
   const days = Array.from({ length: 42 }, (_, i) => new Date(my, mm - 1, 1 - first.getDay() + i));
   const today = isoDay(new Date());
   const col = (name: string, items: string[], picked: string, show: (v: string) => string, pick: (v: string) => void) => (
-    <div className="dt10-col" role="listbox" aria-label={name}>
+    // data-oknob-own: no app-wide scrollbar rail in the time columns (Elise, 2026-11-04).
+    <div className="dt10-col" role="listbox" aria-label={name} data-oknob-own="">
       {items.map((v) => (
         <button key={v} type="button" role="option" aria-selected={v === picked}
           className={`dt10-opt${v === picked ? ' is-on' : ''}`}
