@@ -29,6 +29,8 @@ export const FIELD = {
   assignee: 'Assignee',
   salesOwner: 'Sales Owner',
   completionAssignee: 'Completion Assignee',
+  /** 0124 · an OM Under Probation on the job (People section). */
+  supportTrainee: 'Support Trainee',
   assigneeName: 'Assignee Name TXT',
   previousAssignees: 'Previous Assignees',
   facilityManager: 'Facility Manager',

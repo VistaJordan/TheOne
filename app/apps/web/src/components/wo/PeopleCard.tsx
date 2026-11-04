@@ -8,9 +8,9 @@ interface PeopleCardProps {
   wo: WorkOrderDetailV2;
 }
 
-/** The People tab: seven named seats — AM, team lead, associate team lead
+/** The People tab: eight named seats — AM, team lead, associate team lead
     (ATL), assignee, completion
-    assignee, previous assignees, sales owner — as a grid of labelled slots,
+    assignee, support trainee, previous assignees, sales owner — as a grid of labelled slots,
     then the lists the WO is routed through.
 
     It used to be one flat column of avatar rows that mixed the seats with the
