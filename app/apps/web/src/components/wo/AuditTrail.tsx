@@ -312,6 +312,8 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       );
     }
     case 'approval_task_claimed':
+    case 'approval_task_held':
+    case 'approval_task_released':
     case 'approval_task_approved':
     case 'approval_task_rejected':
     case 'approval_task_cancelled':
@@ -321,6 +323,10 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       const verb =
         e.action === 'approval_task_claimed'
           ? 'claimed'
+          : e.action === 'approval_task_held'
+            ? 'put on hold'
+            : e.action === 'approval_task_released'
+              ? 'released the hold on'
           : e.action === 'approval_task_approved'
             ? acceptance ? 'accepted' : 'approved'
             : e.action === 'approval_task_rejected'

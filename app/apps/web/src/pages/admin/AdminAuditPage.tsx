@@ -450,6 +450,8 @@ function changeOf(
     case 'approval_task_created':
     case 'approval_task_updated':
     case 'approval_task_claimed':
+    case 'approval_task_held':
+    case 'approval_task_released':
     case 'approval_task_approved':
     case 'approval_task_rejected':
     case 'approval_task_cancelled':

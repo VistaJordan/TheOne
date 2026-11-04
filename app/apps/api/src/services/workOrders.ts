@@ -601,17 +601,25 @@ async function pendingStatusChange(taskId: string): Promise<StatusChangeState | 
     db_name: string | null;
     decided_at: string | null;
     decision_note: string | null;
+    hb_id: string | null;
+    hb_name: string | null;
+    held_at: string | null;
+    hold_note: string | null;
   }>(
     `SELECT a.id::text AS id, a.status, a.detail,
             s.id::text AS to_id, s.name AS to_name, s.status_group AS to_group, s.color AS to_color,
             rb.id::text AS rb_id, rb.display_name AS rb_name,
             db.id::text AS db_id, db.display_name AS db_name,
             to_char((a.decided_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS decided_at,
-            a.decision_note
+            a.decision_note,
+            hb.id::text AS hb_id, hb.display_name AS hb_name,
+            to_char((a.held_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS held_at,
+            a.hold_note
        FROM approval_task a
        LEFT JOIN status s     ON s.id::text = a.detail->>'to_status_id'
        LEFT JOIN principal rb ON rb.id = a.created_by
        LEFT JOIN principal db ON db.id = a.decided_by
+       LEFT JOIN principal hb ON hb.id = a.held_by
       WHERE a.task_id = $1 AND a.type = 'status_change'
         AND (a.status = 'open' OR (a.status IN ('approved', 'rejected') AND a.acknowledged_at IS NULL))
       ORDER BY CASE a.status WHEN 'open' THEN 0 ELSE 1 END, a.updated_at DESC
@@ -633,6 +641,11 @@ async function pendingStatusChange(taskId: string): Promise<StatusChangeState | 
     decided_by: r.db_id ? { id: r.db_id, display_name: r.db_name ?? '' } : null,
     decided_at: r.decided_at,
     decision_note: r.decision_note,
+    // 0123: on hold = still open, a manager said "not yet".
+    hold:
+      r.status === 'open' && r.held_at
+        ? { by: r.hb_id ? { id: r.hb_id, display_name: r.hb_name ?? '' } : null, at: r.held_at, note: r.hold_note }
+        : null,
   };
 }
 

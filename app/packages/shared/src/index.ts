@@ -1693,6 +1693,17 @@ export interface StatusChangeState {
   decided_by: ActivityActor | null;
   decided_at: string | null;
   decision_note: string | null;
+  /** 0123: a manager put the open request on hold — it stays open and
+      waiting; null when it is not held. */
+  hold: ApprovalHold | null;
+}
+
+/** 0123 · Hold on a status change request: who held it, when, and the
+    optional note. A held request is still open and still decidable. */
+export interface ApprovalHold {
+  by: ActivityActor | null;
+  at: string;
+  note: string | null;
 }
 
 /** GET /api/approvals/counts — the sidebar badge, for the acting principal. */
@@ -1758,6 +1769,8 @@ export interface ApprovalTask {
       decided status_change stays in the requester's "My requests" until then. */
   acknowledged_by: ActivityActor | null;
   acknowledged_at: string | null;
+  /** 0123: an open status change request a manager put on hold. */
+  hold: ApprovalHold | null;
 }
 
 /** One row of GET /api/approvals — the task plus the work order it sits on,
@@ -1800,7 +1813,7 @@ export interface ApprovalTasksResponse {
   total: number;
 }
 
-/** POST /api/approval-tasks/:id/{approve,reject,claim}. */
+/** POST /api/approval-tasks/:id/{approve,reject,claim,hold,release}. */
 export interface ApprovalTaskResponse {
   item: ApprovalTask;
 }

@@ -342,10 +342,10 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Deciding',
-          what: 'Approve ("Approve this NTE increase / status change / task?", "Approve this quote?" — approving fills the quote amount, sending is a separate step in the builder — "Approve this payment?" — clears it for AP) with an optional Note; Reject ("Why is it being rejected?", Reject with note; titles Return this quote to draft / Reject this payment / Reject this NTE increase / Reject this status change / Reject this task); Claim. Locked verbs say why ("Requires new work order approval rights", the NTE hold). Rows show "Requested by <name>" and the Ecotrak tag on a status request the client system would refuse.',
+          what: 'Approve ("Approve this NTE increase / status change / task?", "Approve this quote?" — approving fills the quote amount, sending is a separate step in the builder — "Approve this payment?" — clears it for AP) with an optional Note; Reject ("Why is it being rejected?", Reject with note; titles Return this quote to draft / Reject this payment / Reject this NTE increase / Reject this status change / Reject this task); Claim. A status change request also has Hold (0123, here and on the work order’s header chip): "not yet", with an optional note ("Put this status change on hold", Put on hold) — the request stays open, keeps its place in the oldest-first list, reads On hold with who and why, and any manager can still approve or reject it; Release lifts the hold; a request re-targeted to another status drops it. Locked verbs say why ("Requires new work order approval rights", the NTE hold). Rows show "Requested by <name>" and the Ecotrak tag on a status request the client system would refuse.',
           value: 'The loop closes on both sides: the decider acts, the requester sees it.',
           rules: ['Approvals raise no bell notice; the manual NTE increase (Cost breakdown tab) does.'],
-          audit: ['approval_task_approved', 'approval_task_rejected', 'approval_task_claimed', 'approval_task_cancelled', 'approval_task_acknowledged', 'comment_added'],
+          audit: ['approval_task_approved', 'approval_task_rejected', 'approval_task_claimed', 'approval_task_held', 'approval_task_released', 'approval_task_cancelled', 'approval_task_acknowledged', 'comment_added'],
         },
         {
           name: 'Badge and counts',

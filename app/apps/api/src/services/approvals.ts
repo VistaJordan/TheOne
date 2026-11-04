@@ -121,6 +121,11 @@ interface Row {
   ab_name: string | null;
   ab_kind: 'human' | 'service' | null;
   acknowledged_at: string | null;
+  hb_id: string | null;
+  hb_name: string | null;
+  hb_kind: 'human' | 'service' | null;
+  held_at: string | null;
+  hold_note: string | null;
   wo_number: string;
   wo_title: string | null;
   client: string | null;
@@ -164,6 +169,9 @@ const SELECT_SQL = `
          a.decision_note,
          ab.id::text AS ab_id, ab.display_name AS ab_name, ab.kind::text AS ab_kind,
          ${ISO('a.acknowledged_at')} AS acknowledged_at,
+         hb.id::text AS hb_id, hb.display_name AS hb_name, hb.kind::text AS hb_kind,
+         ${ISO('a.held_at')} AS held_at,
+         a.hold_note,
          t.wo_number, t.title AS wo_title, t.client, t.billing_entity, t.trade,
          t.fields->>'Due Date'   AS wo_due,
          t.nte::float8           AS wo_nte,
@@ -181,6 +189,7 @@ const SELECT_SQL = `
     LEFT JOIN principal cb ON cb.id = a.created_by
     LEFT JOIN principal db ON db.id = a.decided_by
     LEFT JOIN principal ab ON ab.id = a.acknowledged_by
+    LEFT JOIN principal hb ON hb.id = a.held_by
 `;
 
 function actorOf(
@@ -214,6 +223,12 @@ function mapTask(r: Row): ApprovalTask {
     decision_note: r.decision_note,
     acknowledged_by: actorOf(r.ab_id, r.ab_name, r.ab_kind),
     acknowledged_at: r.acknowledged_at,
+    // 0123: only an OPEN request is on hold; a decided one keeps the columns
+    // as history but reads null here.
+    hold:
+      r.status === 'open' && r.held_at
+        ? { by: actorOf(r.hb_id, r.hb_name, r.hb_kind), at: r.held_at, note: r.hold_note ?? null }
+        : null,
   };
 }
 
@@ -459,9 +474,21 @@ export async function createApprovalTask(
       await tx.query(
         `UPDATE approval_task
             SET title = $1, detail = $2::jsonb, updated_at = now(),
-                created_by = CASE WHEN $4::boolean THEN $5::uuid ELSE created_by END
+                created_by = CASE WHEN $4::boolean THEN $5::uuid ELSE created_by END,
+                -- 0123: asking for a different status lifts a hold — it was
+                -- on the old ask.
+                held_by   = CASE WHEN $6::boolean THEN NULL ELSE held_by END,
+                held_at   = CASE WHEN $6::boolean THEN NULL ELSE held_at END,
+                hold_note = CASE WHEN $6::boolean THEN NULL ELSE hold_note END
           WHERE id = $3`,
-        [title, JSON.stringify(detail), open.rows[0].id, input.type === 'status_change' || input.type === 'snooze_request', input.actorId],
+        [
+          title,
+          JSON.stringify(detail),
+          open.rows[0].id,
+          input.type === 'status_change' || input.type === 'snooze_request',
+          input.actorId,
+          input.type === 'status_change' && before.title !== title,
+        ],
       );
       // Rule 1.2.1: the refresh is a change to the record, so it is logged —
       // the trail shows both asks, not just the last one.
@@ -861,6 +888,89 @@ export async function claimApprovalTask(id: string, actor: ActingPrincipal): Pro
         cur.task_id,
         JSON.stringify({ approval_task_id: id, assigned_to: cur.assigned_to?.display_name ?? null }),
         JSON.stringify({ approval_task_id: id, type: cur.type, title: cur.title, detail: cur.detail, assigned_to: actor.name }),
+      ],
+    );
+  });
+  return getApprovalTask(id);
+}
+
+/**
+ * 0123 · Hold (Elise, 2026-11-04): a manager answers a status change request
+ * "not yet". The request stays open — same row, same place in the
+ * oldest-first inbox, still on the work order's header — and anyone who may
+ * decide it can still approve or reject it. The note is optional. Holding a
+ * held request again replaces who / when / why. Not the requester's own ask:
+ * they withdraw it instead.
+ */
+export async function holdApprovalTask(
+  id: string,
+  note: string | null,
+  actor: ActingPrincipal,
+): Promise<ApprovalTask> {
+  const cur = await getApprovalTask(id);
+  if (cur.type !== 'status_change') {
+    throw badRequest('Only a status change request can be put on hold', { type: cur.type });
+  }
+  requireDecide(actor, cur.type, 'hold');
+  if (cur.created_by?.id === actor.id && !actor.isSuperAdmin) {
+    throw forbidden('You cannot put your own request on hold — withdraw it instead', {
+      code: SELF_APPROVAL_CODE,
+      approval_task_id: id,
+    });
+  }
+  await withTransaction(async (tx) => {
+    const upd = await tx.query(
+      `UPDATE approval_task
+          SET held_by = $1, held_at = now(), hold_note = $2, updated_at = now()
+        WHERE id = $3 AND status = 'open'
+        RETURNING id`,
+      [actor.id, note, id],
+    );
+    if (!upd.rowCount) {
+      throw conflict('This request was decided in the meantime', { code: 'ALREADY_DECIDED' });
+    }
+    await tx.query(
+      `INSERT INTO activity_log
+         (actor_principal_id, entity_type, entity_id, action, field, before, after)
+       VALUES ($1, 'task', $2, 'approval_task_held', 'approval_task.hold', $3::jsonb, $4::jsonb)`,
+      [
+        actor.id,
+        cur.task_id,
+        JSON.stringify({ approval_task_id: id, hold: cur.hold }),
+        JSON.stringify({ approval_task_id: id, type: cur.type, title: cur.title, detail: cur.detail, note }),
+      ],
+    );
+  });
+  return getApprovalTask(id);
+}
+
+/** 0123: lift a hold — the request is simply waiting again. Same grant. */
+export async function releaseApprovalTask(id: string, actor: ActingPrincipal): Promise<ApprovalTask> {
+  const cur = await getApprovalTask(id);
+  requireDecide(actor, cur.type, 'release');
+  if (!cur.hold) {
+    throw badRequest('This request is not on hold', { status: cur.status });
+  }
+  await withTransaction(async (tx) => {
+    const upd = await tx.query(
+      `UPDATE approval_task
+          SET held_by = NULL, held_at = NULL, hold_note = NULL, updated_at = now()
+        WHERE id = $1 AND status = 'open' AND held_at IS NOT NULL
+        RETURNING id`,
+      [id],
+    );
+    if (!upd.rowCount) {
+      throw conflict('This request changed in the meantime', { code: 'ALREADY_DECIDED' });
+    }
+    await tx.query(
+      `INSERT INTO activity_log
+         (actor_principal_id, entity_type, entity_id, action, field, before, after)
+       VALUES ($1, 'task', $2, 'approval_task_released', 'approval_task.hold', $3::jsonb, $4::jsonb)`,
+      [
+        actor.id,
+        cur.task_id,
+        JSON.stringify({ approval_task_id: id, hold: cur.hold }),
+        JSON.stringify({ approval_task_id: id, type: cur.type, title: cur.title, detail: cur.detail }),
       ],
     );
   });

@@ -413,6 +413,8 @@ export const ACTION_LABELS: Record<string, string> = {
   // Approval tasks (0026) — the manager's inbox.
   approval_task_created: 'Approval task raised',
   approval_task_claimed: 'Approval task claimed',
+  approval_task_held: 'Request put on hold',
+  approval_task_released: 'Hold released',
   approval_task_approved: 'Approval task approved',
   approval_task_rejected: 'Approval task rejected',
   approval_task_cancelled: 'Approval task cancelled',

@@ -6,6 +6,8 @@
 //   POST /approval-tasks/:id/approve           (open → approved — approvals/<section>:approve)
 //   POST /approval-tasks/:id/reject            (open → rejected + internal note — same)
 //   POST /approval-tasks/:id/claim             (take it into your lane — same)
+//   POST /approval-tasks/:id/hold              (0123: a status change request stays open, on hold — same)
+//   POST /approval-tasks/:id/release           (0123: lift the hold — same)
 //   POST /approval-tasks/:id/acknowledge       (0025: the requester saw the decision)
 //   POST /approval-tasks/:id/withdraw          (0025: the requester takes an open request back)
 //
@@ -25,9 +27,11 @@ import {
   approvalCounts,
   approveApprovalTask,
   claimApprovalTask,
+  holdApprovalTask,
   listApprovalTasks,
   listApprovalTasksForWorkOrder,
   rejectApprovalTask,
+  releaseApprovalTask,
   withdrawApprovalTask,
 } from '../services/approvals.js';
 import { requirePerm } from '../services/permissions.js';
@@ -41,6 +45,8 @@ const approveSchema = z.object({
   assignee: z.string().trim().max(200).nullable().optional(),
 });
 const rejectSchema = z.object({ note: z.string().trim().min(1).max(2000) });
+/** 0123: the reason for a hold is optional. */
+const holdSchema = z.object({ note: z.string().trim().max(2000).nullable().optional() });
 
 async function taskIdOf(req: FastifyRequest): Promise<string> {
   const { id } = parse(idParamsSchema, req.params);
@@ -87,6 +93,21 @@ export default async function approvalRoutes(app: FastifyInstance): Promise<void
     await assertRecordInScope('approval_task', id, actingPrincipalFromRequest(req)); // #13
     const actor = actingPrincipalFromRequest(req);
     return { item: await claimApprovalTask(id, actor) };
+  });
+
+  app.post('/approval-tasks/:id/hold', async (req) => {
+    const { id } = parse(uuidParamsSchema, req.params);
+    await assertRecordInScope('approval_task', id, actingPrincipalFromRequest(req)); // #13
+    const { note } = parse(holdSchema, req.body ?? {});
+    const actor = actingPrincipalFromRequest(req);
+    return { item: await holdApprovalTask(id, note?.trim() || null, actor) };
+  });
+
+  app.post('/approval-tasks/:id/release', async (req) => {
+    const { id } = parse(uuidParamsSchema, req.params);
+    await assertRecordInScope('approval_task', id, actingPrincipalFromRequest(req)); // #13
+    const actor = actingPrincipalFromRequest(req);
+    return { item: await releaseApprovalTask(id, actor) };
   });
 
   app.post('/approval-tasks/:id/acknowledge', async (req) => {

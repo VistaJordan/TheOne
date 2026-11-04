@@ -1351,6 +1351,17 @@ export function claimApprovalTask(id: string): Promise<ApprovalTaskResponse> {
   return decideApproval(id, 'claim');
 }
 
+/** POST …/hold — 0123: a status change request stays open, on hold; the
+    note is optional (approvals/status approve). */
+export function holdApprovalTask(id: string, note: string | null): Promise<ApprovalTaskResponse> {
+  return decideApproval(id, 'hold', { note });
+}
+
+/** POST …/release — 0123: lift the hold; the request is waiting again. */
+export function releaseApprovalTask(id: string): Promise<ApprovalTaskResponse> {
+  return decideApproval(id, 'release');
+}
+
 /** POST …/acknowledge — 0025: the requester saw the decision; the row leaves
     their My requests. */
 export function acknowledgeApprovalTask(id: string): Promise<ApprovalTaskResponse> {

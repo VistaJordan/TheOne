@@ -78,12 +78,14 @@ import {
   sendQuote,
   claimApprovalTask,
   getPrincipals,
+  holdApprovalTask,
   listApprovals,
   listPayments,
   listQuotes,
   rejectApprovalTask,
   rejectPayment,
   rejectQuote,
+  releaseApprovalTask,
   withdrawApprovalTask,
 } from '../api/client';
 import { AppShell } from '../components/AppShell';
@@ -339,12 +341,24 @@ function taskRow(
     owner: item.assigned_to
       ? item.assigned_to.display_name
       : (item.assigned_role_label ?? item.assigned_role ?? 'Any approver'),
-    status: {
-      label: APPROVAL_STATUS_LABEL[item.status],
-      chip: TASK_CHIP[item.status],
-      trail,
-      note: open ? null : item.decision_note,
-    },
+    // 0123: a request on hold is still open (same lane, same place in the
+    // oldest-first order); the Status column says so, who held it and why.
+    status: item.hold
+      ? {
+          label: 'On hold',
+          chip: 'chip-outline',
+          trail:
+            [item.hold.by ? `by ${item.hold.by.display_name}` : null, numericDate(item.hold.at)]
+              .filter(Boolean)
+              .join(' · ') || null,
+          note: item.hold.note,
+        }
+      : {
+          label: APPROVAL_STATUS_LABEL[item.status],
+          chip: TASK_CHIP[item.status],
+          trail,
+          note: open ? null : item.decision_note,
+        },
     // The NTE task IS the hold; it is never held by itself.
     held: item.type !== 'nte_override' && held.has(item.task_id),
     requester:
@@ -461,7 +475,7 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
 
 /** 0025: acknowledge (Continue / Understood) and withdraw are the requester's
     verbs on their own status-change requests. */
-type DecisionKind = 'approve' | 'reject' | 'claim' | 'acknowledge' | 'withdraw';
+type DecisionKind = 'approve' | 'reject' | 'claim' | 'acknowledge' | 'withdraw' | 'hold' | 'release';
 
 interface Pending {
   kind: DecisionKind;
@@ -665,13 +679,17 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
       assignee = null,
     }: Pending & { text: string | null; assignee?: string | null }) => {
       const d = row.data;
-      if (kind === 'claim' || kind === 'acknowledge' || kind === 'withdraw') {
-        if (d.kind !== 'task') throw new Error('Only tasks can be claimed, acknowledged or withdrawn');
+      if (kind === 'claim' || kind === 'acknowledge' || kind === 'withdraw' || kind === 'hold' || kind === 'release') {
+        if (d.kind !== 'task') throw new Error('Only tasks can be claimed, held, acknowledged or withdrawn');
         return kind === 'claim'
           ? claimApprovalTask(d.item.id)
-          : kind === 'acknowledge'
-            ? acknowledgeApprovalTask(d.item.id)
-            : withdrawApprovalTask(d.item.id);
+          : kind === 'hold'
+            ? holdApprovalTask(d.item.id, text)
+            : kind === 'release'
+              ? releaseApprovalTask(d.item.id)
+              : kind === 'acknowledge'
+                ? acknowledgeApprovalTask(d.item.id)
+                : withdrawApprovalTask(d.item.id);
       }
       switch (d.kind) {
         case 'task':
@@ -906,6 +924,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                     if (
                       kind === 'acknowledge' ||
                       kind === 'withdraw' ||
+                      kind === 'release' ||
                       // …unless it takes Cost past the NTE: the AM says why.
                       (kind === 'approve' && r.data.kind === 'payment' && !r.data.item.above_nte) ||
                       (kind === 'approve' && r.data.kind === 'task' && !approveAsksNote(r) && !nteHoldForPayment(r) && r.data.item.type !== 'wo_acceptance')
@@ -1028,6 +1047,22 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
           busy={busy}
           busyLabel="Sending…"
           onConfirm={() => decide.mutate({ ...pending, text: null })}
+          onCancel={() => setPending(null)}
+        />
+      )}
+
+      {/* 0123 · Hold: the request stays open and keeps its place; the note is optional. */}
+      {pending?.kind === 'hold' && (
+        <TextDialog
+          title="Put this status change on hold"
+          facts={facts(pending.row)}
+          idKey={pending.row.key}
+          label="Why is it on hold?"
+          hint="Optional. The request stays open and in its place in the list — any manager can still approve or reject it."
+          multiline
+          confirmLabel="Put on hold"
+          busy={busy}
+          onConfirm={(text) => decide.mutate({ ...pending, text: text.trim() || null })}
           onCancel={() => setPending(null)}
         />
       )}
@@ -1431,7 +1466,7 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
   const OWN = 'You raised this — someone else has to approve it (maker ≠ checker)';
   const verb = (
     label: string,
-    icon: 'check' | 'x' | 'user' | 'user-plus' | 'check-check' | 'refresh' | 'send',
+    icon: 'check' | 'x' | 'user' | 'user-plus' | 'check-check' | 'refresh' | 'send' | 'clock',
     allowed: boolean,
     reason: string,
     onClick: () => void,
@@ -1504,6 +1539,13 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
           {row.requester &&
             verb('Withdraw', 'refresh', true, '', () => onDecide('withdraw'), 'plain')}
           {verb('Reject', 'x', may, need, () => onDecide('reject'), 'danger')}
+          {/* 0123: Hold sits between Reject and Approve on a status change
+              request; on a held one it reads Release. */}
+          {d.item.type === 'status_change' &&
+            !row.requester &&
+            (d.item.hold
+              ? verb('Release', 'refresh', may, need, () => onDecide('release'), 'plain')
+              : verb('Hold', 'clock', may, need, () => onDecide('hold'), 'plain'))}
           {verb(
             accept ? 'Accept' : 'Approve',
             accept ? 'user-plus' : 'check',

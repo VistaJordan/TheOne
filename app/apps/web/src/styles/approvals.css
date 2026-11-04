@@ -103,6 +103,8 @@
 .scr .scr-text small { font-size: 11px; color: var(--ink-3); }
 .scr .scr-note { font-style: italic; }
 .scr-open { border-color: var(--warn); color: var(--warn); }
+/* 0123: a request on hold is still open — the same colour, a dashed edge. */
+.scr-open.is-held { border-style: dashed; }
 .scr-approved { border-color: var(--accent); color: var(--accent); }
 .scr-rejected { border-color: var(--danger); color: var(--danger); }
 .scr .scr-act {

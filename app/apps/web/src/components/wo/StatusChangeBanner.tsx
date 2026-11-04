@@ -1,8 +1,9 @@
 /* The status-change request on a work order's header (0025, rules 2.4.1–3).
 
    Two states, one chip beside the status pill:
-     open       "→ Quote Ready · pending approval"   Approve · Reject (a manager)
+     open       "→ Quote Ready · pending approval"   Reject · Hold · Approve (a manager)
                                                      Withdraw (the requester)
+     on hold    "→ Quote Ready · on hold · by Jordan" Reject · Release · Approve (a manager)
      rejected   "Rejected: <reason> · by Jordan"      Request again · Understood
 
    An approval moves the status directly and is acknowledged as it is decided
@@ -12,7 +13,10 @@
    Anyone may see the chip; only the requester (or an approver) can act.
    2026-10-27 (Elise): a manager decides right here — Approve is one click (a
    move into Approved asks how the client approved, statusApprovalNeedsNote),
-   Reject asks the reason. Same routes as the Approvals inbox. */
+   Reject asks the reason. Same routes as the Approvals inbox.
+   0123 (Elise, 2026-11-04): Hold is the middle answer — "not yet", with an
+   optional note. The request stays open and keeps its chip here and its
+   place in the inbox; Release lifts the hold. */
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -21,7 +25,9 @@ import {
   ApiRequestError,
   acknowledgeApprovalTask,
   approveApprovalTask,
+  holdApprovalTask,
   rejectApprovalTask,
+  releaseApprovalTask,
   withdrawApprovalTask,
 } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
@@ -42,7 +48,7 @@ export function StatusChangeBanner({
   const approver = can(approvalSectionPermKey('status'), 'approve');
   const mayAct = mine || approver;
   /** The note dialog: the rejection reason, or how the client approved. */
-  const [asking, setAsking] = useState<'approve' | 'reject' | null>(null);
+  const [asking, setAsking] = useState<'approve' | 'reject' | 'hold' | null>(null);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const needsNote = statusApprovalNeedsNote(state.to_status.name);
@@ -80,7 +86,18 @@ export function StatusChangeBanner({
     onSuccess: done,
     onError: fail,
   });
-  const busy = ack.isPending || withdraw.isPending || approve.isPending || reject.isPending;
+  const hold = useMutation({
+    mutationFn: (text: string | null) => holdApprovalTask(state.approval_task_id, text),
+    onSuccess: done,
+    onError: fail,
+  });
+  const release = useMutation({
+    mutationFn: () => releaseApprovalTask(state.approval_task_id),
+    onSuccess: done,
+    onError: fail,
+  });
+  const busy =
+    ack.isPending || withdraw.isPending || approve.isPending || reject.isPending || hold.isPending || release.isPending;
   const by = state.decided_by ? ` by ${state.decided_by.display_name}` : '';
   const when = state.decided_at ? numericDate(state.decided_at) : null;
 
@@ -88,12 +105,15 @@ export function StatusChangeBanner({
     // The requester withdraws; a manager (not deciding their own ask) decides.
     const decides = approver && !mine;
     const noteId = `scr-note-${state.approval_task_id}`;
+    const held = state.hold;
     return (
       <>
-        <span className="scr scr-open" role="status">
+        <span className={`scr scr-open${held ? ' is-held' : ''}`} role="status">
           <Icon name="clock" size={12} />
           <span className="scr-text">
-            <b>→ {state.to_status.name}</b> · pending approval
+            <b>→ {state.to_status.name}</b> · {held ? 'on hold' : 'pending approval'}
+            {held?.by && <small> · held by {held.by.display_name}</small>}
+            {held?.note && <small className="scr-note" title={held.note}> · {held.note}</small>}
             {state.requested_by && !mine && <small> · asked by {state.requested_by.display_name}</small>}
             {error && !asking && <small className="scr-note" title={error}> · {error}</small>}
           </span>
@@ -111,6 +131,24 @@ export function StatusChangeBanner({
               >
                 Reject
               </button>
+              {held ? (
+                <button type="button" className="scr-act" disabled={busy} onClick={() => release.mutate()}>
+                  {release.isPending ? 'Releasing…' : 'Release'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="scr-act"
+                  disabled={busy}
+                  onClick={() => {
+                    setError(null);
+                    setNote('');
+                    setAsking('hold');
+                  }}
+                >
+                  Hold
+                </button>
+              )}
               <button
                 type="button"
                 className="scr-act is-primary"
@@ -139,11 +177,23 @@ export function StatusChangeBanner({
               className="modal is-narrow"
               role="dialog"
               aria-modal="true"
-              aria-label={asking === 'reject' ? 'Reject this status change' : `Approve the move to ${state.to_status.name}`}
+              aria-label={
+                asking === 'reject'
+                  ? 'Reject this status change'
+                  : asking === 'hold'
+                    ? 'Put this status change on hold'
+                    : `Approve the move to ${state.to_status.name}`
+              }
               onClick={(e) => e.stopPropagation()}
             >
               <div className="modal-head">
-                <h2>{asking === 'reject' ? 'Reject this status change' : `Approve the move to ${state.to_status.name}?`}</h2>
+                <h2>
+                  {asking === 'reject'
+                    ? 'Reject this status change'
+                    : asking === 'hold'
+                      ? 'Put this status change on hold'
+                      : `Approve the move to ${state.to_status.name}?`}
+                </h2>
                 <button type="button" className="icon-btn" onClick={() => setAsking(null)} aria-label="Close" disabled={busy}>
                   <Icon name="x" size={16} />
                 </button>
@@ -151,8 +201,17 @@ export function StatusChangeBanner({
               <div className="modal-body">
                 <div className="field">
                   <label className="lbl" htmlFor={noteId}>
-                    {asking === 'reject' ? 'Why is it being rejected?' : 'How did the client approve?'}{' '}
-                    <span className="req" aria-hidden="true">*</span>
+                    {asking === 'reject'
+                      ? 'Why is it being rejected?'
+                      : asking === 'hold'
+                        ? 'Why is it on hold? (optional)'
+                        : 'How did the client approve?'}
+                    {asking !== 'hold' && (
+                      <>
+                        {' '}
+                        <span className="req" aria-hidden="true">*</span>
+                      </>
+                    )}
                   </label>
                   <textarea
                     id={noteId}
@@ -162,7 +221,11 @@ export function StatusChangeBanner({
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   />
-                  <span className="hint">Posted as an internal update on this work order — never shown to the client.</span>
+                  <span className="hint">
+                    {asking === 'hold'
+                      ? 'The request stays open and waiting — any manager can still approve or reject it.'
+                      : 'Posted as an internal update on this work order — never shown to the client.'}
+                  </span>
                 </div>
                 {error && <p className="composer-err" role="alert">{error}</p>}
               </div>
@@ -173,12 +236,20 @@ export function StatusChangeBanner({
                 <button
                   type="button"
                   className={`btn ${asking === 'reject' ? 'btn-danger' : 'btn-primary'}`}
-                  disabled={busy || note.trim() === ''}
-                  onClick={() => (asking === 'reject' ? reject.mutate(note.trim()) : approve.mutate(note.trim()))}
+                  disabled={busy || (asking !== 'hold' && note.trim() === '')}
+                  onClick={() =>
+                    asking === 'reject'
+                      ? reject.mutate(note.trim())
+                      : asking === 'hold'
+                        ? hold.mutate(note.trim() || null)
+                        : approve.mutate(note.trim())
+                  }
                 >
                   {asking === 'reject'
                     ? reject.isPending ? 'Rejecting…' : 'Reject with note'
-                    : approve.isPending ? 'Approving…' : 'Approve'}
+                    : asking === 'hold'
+                      ? hold.isPending ? 'Holding…' : 'Put on hold'
+                      : approve.isPending ? 'Approving…' : 'Approve'}
                 </button>
               </div>
             </div>
