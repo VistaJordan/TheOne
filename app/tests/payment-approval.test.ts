@@ -67,7 +67,9 @@ describe('the wiring (source pins)', () => {
 
   it('the status menu skips the request for a no-approval status', () => {
     const src = read('apps/web/src/components/StatusChangeMenu.tsx');
-    expect(src).toContain("if (mode === 'request' && !statusMoveNeedsNoApproval(s.name))");
+    // 2026-11-04: one test for every direct move (Quote Ready, OA's Approved).
+    expect(src).toContain('if (!movesDirectly(s.name))');
+    expect(src).toContain("mode === 'direct' || statusMoveNeedsNoApproval(name)");
   });
 
   it('createPaymentRequest asks the verdict and stores the outcome', () => {

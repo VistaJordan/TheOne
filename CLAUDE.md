@@ -488,6 +488,27 @@ their Assignee writes and the editor draws it read-only; Accept & assign
 (0036) and a manager's edit are untouched. Loosen it per role in Admin ›
 Roles or per person with Adjust.
 
+**Status order per client portal** (BRD 2.7, Elise 2026-11-04, no
+migration; `packages/shared/src/statusOrder.ts` pure,
+`apps/api/src/services/statusOrder.ts`, `tests/status-order.test.ts`). Each
+client follows its portal's steps: `STATUS_ORDER_BY_PORTAL` (Ecotrak, Corrigo,
+ServiceChannel) is the default map in `product/status-maps/*-default-map.md`,
+picked by `Client Portal Type` (`clientMessageTarget`); the test reads the map
+files and fails when a table drifts from them — change the file and the table
+together. **No portal = not restricted** (on hold, Elise). `assertStatusOrder`
+(409 `STATUS_ORDER`) runs in `changeStatus` for a person's move, a check-in,
+an approved request and Cancel / Reopen — not an automation's move nor the
+quote's own (`source 'quote'`: Send, the client's decision) — and in bulk edit
+(whole selection), `requestStatusChange` and `decide` (before the commit);
+`cancelWo` asks before it stamps. The status menu offers only the allowed
+next steps (`portalType` prop, passed by `WoHeader`; the list's row menu does
+not pass it, so there the API refuses). Loose on purpose: a status no table
+names (Emergency, an admin-added one) is never restricted; Approved (ours)
+sits after Waiting for Approval with the "once approved" moves; the
+portal-side conditions ("while the portal shows Accepted") are not asked; the
+maps' New rows are out (a new work order is Open). Not asked: the CSV import.
+Per-client map changes (`ecotrack-<client>.md`, …) are not in yet.
+
 **Status requests vs Ecotrak** (rule 2.6.4). `assertEcotrakAllowsMove` in
 `services/approvals.ts` runs at request time and again in `decide` BEFORE
 the decision commits (so an approval never lands without its move — in
@@ -2843,6 +2864,35 @@ option has its own optional **Tech reported that…** line (its `narrative`,
 printed through `reportedSentence` under PROPOSED); the Work Orders and
 Vendors **Import** buttons use the new `import` icon (a document with an
 arrow going in), `upload` stays for file uploads.
+
+**Submitted = locked, over the NTE = not sent, status Approved = the
+client's yes** (no migration, Elise 2026-11-04, UAT "quote edited after
+submission"; `tests/quote-approved-move.test.ts`). These replace the
+2026-10-27 / 0092 rules where they clash. (1) `quoteEditableBy` is draft
+only: a quote in pending correction or pending approval is locked for
+everyone, managers and super admins included (409 `QUOTE_SUBMITTED_LOCKED`,
+`EDITABLE_STATUSES = ['draft']`, the AI draft replaces only a draft); a
+change is **Reject with note** back to draft. The 0083 #23 return-to-draft
+is gone (nothing can edit a pending quote). The inbox link reads **Review
+and send**. (2) `sendQuote` refuses 409 `QUOTE_OVER_NTE` before approving
+when the dearest option (`quoteTotalForNte`) is above `totals.nte`; the
+builder locks **Send to client** with `quoteOverNteSentence` and draws
+**Request NTE increase** (`components/quote/NteIncreaseButton.tsx`, the 0064
+`wo_nte_request` POST, `work_orders` edit; an open request shows as a chip).
+(3) `PATCH /work-orders/:id/status {status_id, note?, section_id?}` into a
+status of `APPROVAL_NOTE_STATUS_NAMES` runs `planApprovedMove`
+(`services/quotes.ts`, plan = shared `approvedMovePlan`) BEFORE the move:
+no quote or a decided one = just move; a quote not sent = 409
+`QUOTE_NOT_SENT`; a sent one needs the note (400
+`STATUS_APPROVAL_NOTE_REQUIRED`) and, with several current-round options,
+`section_id` (400 `QUOTE_OPTION_REQUIRED`), plus the client-decide grant and
+no open NTE override. After `changeStatus` the route calls
+`clientApproveQuote` (option locked, incurred for later rounds, NTE set). OA
+(`mayMoveToApprovedDirectly`, = `QUOTE_CLIENT_DECISION_ROLES`) moves to
+Approved directly although request-mode; the status menu offers it and opens
+`ApprovedMoveDialog` for every direct move into Approved. Not covered: bulk
+edit, the import, automations and an approved status request still move to
+Approved without touching the quote.
 
 **The client's decline: Challenged or Bill for incurred only** (migration
 0109, Elise 2026-10-29; `QuoteDeclineKind` / `quoteDeclineEvent` in shared

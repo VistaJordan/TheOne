@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BFI_KEY,
   ECOTRAK_STATUS_KEY,
+  CLIENT_PORTAL_TYPE_KEY,
   FINAL_COST_KEY,
   PARTS_REQUIRED_KEY,
   VISIT_MIRROR_KEYS,
@@ -227,6 +228,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
             current={wo.status}
             align="right"
             ecotrakStatus={f[ECOTRAK_STATUS_KEY]}
+            portalType={f[CLIENT_PORTAL_TYPE_KEY]}
             gateHints={{
               quoteFilled: quoteFilled ?? null,
               quoteStatus,

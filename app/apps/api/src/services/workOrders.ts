@@ -35,6 +35,7 @@ import { woScopeSql } from './woScope.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
 import { assertStatusGate } from './statusGates.js';
+import { assertStatusOrder } from './statusOrder.js';
 import { intakeMissingFor } from './intakeGate.js';
 import { obligationsReady, worstObligationsByTask, evaluateForTask } from './obligations.js';
 import { proposeBillingOnCompletion } from './billingProposals.js';
@@ -731,6 +732,14 @@ export async function changeStatus(
     // #2 (Wave C): the billing statuses ask the Done gate too, unless the
     // work order is already done or later — hence the current status.
     await assertStatusGate(tx, task_id, newStatusName, undefined, currentStatusName);
+
+    // BRD 2.7 (2026-11-04): the client's portal decides which status may
+    // follow which. A person's move, a check-in, an approved request and
+    // Cancel / Reopen are asked; an automation and the quote's own moves
+    // (Send, the client's decision — the portal's acts) are not.
+    if (!auto && source !== 'quote') {
+      await assertStatusOrder(tx, task_id, newStatusName, currentStatusName);
+    }
 
     // Rules 2.6.3 / 2.7: would Ecotrak accept the transition this move implies?
     // Only a work order the adapter has stamped with an Ecotrak status is

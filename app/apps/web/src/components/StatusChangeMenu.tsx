@@ -17,12 +17,19 @@ import {
   statusGateFor,
   statusGateTag,
   statusMoveNeedsNoApproval,
+  statusApprovalNeedsNote,
+  mayMoveToApprovedDirectly,
+  STATUS_ORDER_PORTAL_LABEL,
+  checkStatusOrder,
+  statusOrderPortal,
+  statusOrderRefused,
   type GateCheck,
   type StatusGate,
   type StatusRef,
 } from '@theone/shared';
 import { ApiRequestError, getStatuses, patchStatus, requestStatusChange } from '../api/client';
-import { useAuth } from '../auth/AuthProvider';
+import { useActingRole, useAuth } from '../auth/AuthProvider';
+import { ApprovedMoveDialog } from './ApprovedMoveDialog';
 import { useInvalidateObligations } from '../hooks/useObligations';
 import { bucketStatuses, useStatusGroups } from '../lib/statusGroups';
 import { StatusCircle } from './StatusCircle';
@@ -66,6 +73,10 @@ interface StatusChangeMenuProps {
       would refuse is tagged before the click; the API is still the judge
       and answers 409 with the sentence. */
   gateHints?: GateHints;
+  /** BRD 2.7: the work order's `Client Portal Type`, when the caller has it.
+      Only the statuses its portal's steps allow are offered; no portal (or
+      not passed) = every status, and the API is still the judge. */
+  portalType?: unknown;
 }
 
 export interface GateHints {
@@ -113,6 +124,7 @@ export function StatusChangeMenu({
   align = 'left',
   ecotrakStatus,
   gateHints,
+  portalType,
 }: StatusChangeMenuProps) {
   const mode = useStatusMenuMode();
   const [open, setOpen] = useState(false);
@@ -122,6 +134,14 @@ export function StatusChangeMenu({
   const popRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
   const invalidateObligations = useInvalidateObligations();
+  const role = useActingRole();
+  // 2026-11-04 (Elise): the move to Approved records the client's approval
+  // on the quote, so it opens a dialog first (how, which option).
+  const [approving, setApproving] = useState<{ id: string; name: string } | null>(null);
+  /** A move that goes straight through, no request: Quote Ready for anyone
+      in request mode, Approved for OA (managers move everything directly). */
+  const movesDirectly = (name: string) =>
+    mode === 'direct' || statusMoveNeedsNoApproval(name) || (statusApprovalNeedsNote(name) && mayMoveToApprovedDirectly(role));
 
   useEffect(() => {
     if (!open) setSearch('');
@@ -152,19 +172,22 @@ export function StatusChangeMenu({
   };
 
   const mutation = useMutation({
-    mutationFn: async (s: { id: string; name: string }) => {
+    mutationFn: async (s: { id: string; name: string; approval?: { note: string; section_id: string | null } }) => {
       // A status that needs no approval (Quote Ready — internal, nothing
       // changes for the client) moves directly even in request mode; the
       // API lets a create-only actor through for exactly those.
-      if (mode === 'request' && !statusMoveNeedsNoApproval(s.name)) {
+      if (!movesDirectly(s.name)) {
         await requestStatusChange(woId, s.id);
         return s.name;
       }
-      await patchStatus(woId, s.id);
+      await patchStatus(woId, s.id, s.approval);
       return null;
     },
     onSuccess: (askedFor) => {
       invalidate();
+      setApproving(null);
+      // A move to Approved may have decided the quote and set the NTE.
+      qc.invalidateQueries({ queryKey: ['wo-quote'] });
       if (askedFor) {
         // Say so before closing — the header chip carries it from here.
         setSent(askedFor);
@@ -220,10 +243,21 @@ export function StatusChangeMenu({
   const q = search.trim().toLowerCase();
   // 0091: a request-mode person is never offered a "Managers only" status
   // (the one the work order sits at stays, drawn as current).
-  const offered =
+  // 2026-11-04: OA is offered Approved all the same — it moves there directly.
+  const requestableIds = new Set(requestableStatuses(statusesQuery.data ?? [], current.id).map((s) => s.id));
+  const requestable =
     mode === 'request'
-      ? requestableStatuses(statusesQuery.data ?? [], current.id)
+      ? (statusesQuery.data ?? []).filter(
+          (s) => requestableIds.has(s.id) || (statusApprovalNeedsNote(s.name) && mayMoveToApprovedDirectly(role)),
+        )
       : statusesQuery.data ?? [];
+  // BRD 2.7 (2026-11-04): only the next steps the client's portal allows (the
+  // current status stays, drawn as current). The Cancel… status stays out of
+  // a cancelled work order's list as before — Reopen is the way back.
+  const portal = statusOrderPortal(portalType);
+  const offered = portal
+    ? requestable.filter((s) => s.id === current.id || !statusOrderRefused(checkStatusOrder(portalType, current.name, s.name)))
+    : requestable;
   // 2026-10-29 (Elise): a direct mover cannot pick their way out of a
   // cancelled status — Reopen (More menu) asks why and goes to Open. A
   // request still goes to a manager, who decides it.
@@ -271,6 +305,13 @@ export function StatusChangeMenu({
           {sent && <div className="status-menu-note ok">Request for {sent} sent for approval</div>}
           {noMatch && <div className="status-menu-note">No status matches “{search.trim()}”</div>}
           {lockedCancelled && <div className="status-menu-note">{REOPEN_REQUIRED_MESSAGE}</div>}
+          {portal && !lockedCancelled && (
+            <div className="status-menu-note">
+              {offered.length > 1
+                ? `${STATUS_ORDER_PORTAL_LABEL[portal]} work order — the next steps from ${current.name}`
+                : `${STATUS_ORDER_PORTAL_LABEL[portal]} work order — ${current.name} has no next step`}
+            </div>
+          )}
           {/* data-oknob-own: keep the app-wide O-knob manager (lib/oknob.ts)
               from mounting a rail here — this menu scrolls bare, no bar. */}
           <div className="status-menu-scroll" data-oknob-own="">
@@ -286,7 +327,7 @@ export function StatusChangeMenu({
                   const gate = active ? null : statusGateFor(s.name, current.name);
                   const gateHit = gate && gateHints ? hintedBlock(gate, gateHints) : null;
                   const gateNote = gate && gateHit ? describeStatusGate(gate, s.name, gateHit.missing) : null;
-                  const direct = !active && mode === 'request' && statusMoveNeedsNoApproval(s.name);
+                  const direct = !active && mode === 'request' && movesDirectly(s.name);
                   // 2026-10-29: out of a Cancel… status only through Reopen.
                   const needsReopen = !active && lockedCancelled && !isCancelStatusName(s.name);
                   return (
@@ -299,6 +340,12 @@ export function StatusChangeMenu({
                       title={needsReopen ? REOPEN_REQUIRED_MESSAGE : (gateNote ?? refusal ?? undefined)}
                       onClick={() => {
                         if (active) {
+                          setOpen(false);
+                          return;
+                        }
+                        if (statusApprovalNeedsNote(s.name) && movesDirectly(s.name)) {
+                          mutation.reset();
+                          setApproving({ id: s.id, name: s.name });
                           setOpen(false);
                           return;
                         }
@@ -330,6 +377,16 @@ export function StatusChangeMenu({
             ))}
           </div>
         </div>
+      )}
+      {approving && (
+        <ApprovedMoveDialog
+          woId={woId}
+          statusName={approving.name}
+          busy={mutation.isPending}
+          error={mutation.isError ? failText : null}
+          onConfirm={(approval) => mutation.mutate({ ...approving, approval })}
+          onCancel={() => setApproving(null)}
+        />
       )}
     </div>
   );

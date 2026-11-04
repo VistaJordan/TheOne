@@ -31,6 +31,8 @@ import {
   onlyHeaderFlags,
   permAllows,
   statusMoveNeedsNoApproval,
+  statusApprovalNeedsNote,
+  mayMoveToApprovedDirectly,
   tabPermKey,
 } from '@theone/shared';
 import { ApiError, parse, notFound, badRequest } from '../errors.js';
@@ -48,6 +50,7 @@ import {
   actingPrincipalFromRequest,
 } from '../services/activity.js';
 import { updateWorkOrderFields, getFieldHistory } from '../services/woFieldValues.js';
+import { planApprovedMove } from '../services/quotes.js';
 import { getFieldTimes } from '../services/woMetrics.js';
 import { getFeed } from '../services/feed.js';
 import { getMessages as getQuoMessages, resolveConversationId, sendMessage } from '../services/messages.js';
@@ -247,7 +250,13 @@ const attachmentParamsSchema = z.object({
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
 
-const statusBodySchema = z.object({ status_id: z.string().uuid() });
+const statusBodySchema = z.object({
+  status_id: z.string().uuid(),
+  // 2026-11-04: a move to Approved says how the client approved and, with
+  // several options, which one (planApprovedMove).
+  note: z.string().max(2000).nullish(),
+  section_id: z.string().uuid().nullish(),
+});
 
 // S7 · inline field edit: values keyed by CATALOGUE key (`fields.<json key>`).
 const fieldValuesSchema = z.object({
@@ -619,16 +628,19 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
   app.patch('/work-orders/:id/status', async (req) => {
     const { p } = acting(req);
     const { id } = parse(idParamsSchema, req.params);
-    const { status_id } = parse(statusBodySchema, req.body);
+    const { status_id, note, section_id } = parse(statusBodySchema, req.body);
     // A request-mode person (status create without edit, rule 2.4.1) may
     // still move DIRECTLY to a status that needs no approval — Quote Ready,
-    // internal, nothing changes for the client (Elise, 2026-10-22). Anyone
-    // else without edit is refused as before.
+    // internal, nothing changes for the client (Elise, 2026-10-22). OA moves
+    // straight to Approved too (2026-11-04: "all OA+ positions can edit the
+    // status to approved"). Anyone else without edit is refused as before.
     if (!permAllows(p.perms, STATUS_PERM_KEY, 'edit', p.isSuperAdmin)) {
-      const target = permAllows(p.perms, STATUS_PERM_KEY, 'create', p.isSuperAdmin)
-        ? await query<{ name: string }>(`SELECT name FROM status WHERE id = $1 LIMIT 1`, [status_id])
-        : null;
-      if (!statusMoveNeedsNoApproval(target?.rows[0]?.name)) {
+      const target = await query<{ name: string }>(`SELECT name FROM status WHERE id = $1 LIMIT 1`, [status_id]);
+      const name = target.rows[0]?.name;
+      const direct =
+        (permAllows(p.perms, STATUS_PERM_KEY, 'create', p.isSuperAdmin) && statusMoveNeedsNoApproval(name)) ||
+        (statusApprovalNeedsNote(name) && mayMoveToApprovedDirectly(p.role));
+      if (!direct) {
         requirePerm(p, STATUS_PERM_KEY, 'edit', 'You cannot change work-order status');
       }
     }
@@ -646,7 +658,17 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     if (row && isCancelStatusName(row.cur) && !isCancelStatusName(row.target)) {
       throw new ApiError('CONFLICT', REOPEN_REQUIRED_MESSAGE, { code: REOPEN_REQUIRED_CODE });
     }
-    return changeStatus(id, status_id, actorIdFromRequest(req));
+    // 2026-11-04 (Elise): moving to Approved records the client's approval on
+    // a sent quote (the option becomes incurred work). Everything is asked
+    // before the move; the quote is decided right after it.
+    const recordApproval =
+      row && row.cur !== row.target && statusApprovalNeedsNote(row.target)
+        ? await planApprovedMove(taskId, { note, section_id }, p)
+        : null;
+    const detail = await changeStatus(id, status_id, actorIdFromRequest(req));
+    if (!recordApproval) return detail;
+    await recordApproval();
+    return (await getWorkOrderDetail(id)) ?? detail;
   });
 
   // Rule 2.4.1 (0025): a Dispatcher — work_orders/status:create without

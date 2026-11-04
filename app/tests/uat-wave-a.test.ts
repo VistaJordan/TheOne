@@ -27,6 +27,7 @@ import {
   purposeBase,
   purposeLabel,
   quoteOverNte,
+  quoteTotalForNte,
   selfApprovalVerdict,
   vendorOwed,
   withinMoneyBound,
@@ -233,11 +234,15 @@ describe('#21 · purchasing', () => {
 });
 
 describe('#23 · quotes', () => {
-  it('a pending quote edited goes back to draft, logged; one over the NTE is sent (2026-10-27)', () => {
+  it('a submitted quote is not edited; one over the NTE is not sent (2026-11-04)', () => {
     const upd = fn(quotes, 'export async function updateQuote(');
-    expect(upd).toContain("SET status = 'draft', submitted_by = NULL, submitted_at = NULL");
-    expect(upd).toContain("'quote_returned_to_draft'");
-    expect(fn(quotes, 'export async function sendQuote(')).not.toContain('QUOTE_OVER_NTE_CODE');
+    expect(upd).toContain('QUOTE_SUBMITTED_LOCKED_CODE');
+    const send = fn(quotes, 'export async function sendQuote(');
+    expect(send).toContain('QUOTE_OVER_NTE_CODE');
+    // Asked before the quote is approved on the way.
+    expect(send.indexOf('QUOTE_OVER_NTE_CODE')).toBeLessThan(send.indexOf('await approveQuote('));
+    expect(send).toContain('quoteTotalForNte(priced.totals)');
+    expect(quoteTotalForNte({ grand_total: 500, option_totals: [{ grand_total: 500 }, { grand_total: 5000 }] })).toBe(5000);
     expect(quoteOverNte(1000.01, 1000)).toBe(true);
     expect(quoteOverNte(1000, 1000)).toBe(false);
     expect(quoteOverNte(1000, null)).toBe(false);

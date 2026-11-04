@@ -7,10 +7,10 @@ describe('a submitted quote is locked (2026-10-29)', () => {
     expect(quoteEditableBy('draft', true, false)).toBe(true);
     expect(quoteEditableBy('draft', false, true)).toBe(false);
   });
-  it('once submitted only a manager with approve edits it', () => {
+  it('2026-11-04: once submitted nobody edits it, managers included', () => {
     for (const s of ['pending_correction', 'pending_approval']) {
       expect(quoteEditableBy(s, true, false)).toBe(false);
-      expect(quoteEditableBy(s, true, true)).toBe(true);
+      expect(quoteEditableBy(s, true, true)).toBe(false);
     }
   });
   it('approved and later is never edited', () => {

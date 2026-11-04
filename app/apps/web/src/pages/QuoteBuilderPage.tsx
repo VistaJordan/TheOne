@@ -45,9 +45,14 @@ import {
   QUOTE_SUBMITTED_LOCKED_TEXT,
   QUOTE_SUBMITTED_STATUSES,
   quoteEditableBy,
+  quoteOverNte,
+  quoteOverNteSentence,
+  quoteTotalForNte,
   type QuoteDeclineKind,
 } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
+import { NteIncreaseButton } from '../components/quote/NteIncreaseButton';
+import { useAuth } from '../auth/AuthProvider';
 import { CopyButton } from '../components/CopyButton';
 import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
 import { Icon } from '../components/Icon';
@@ -106,6 +111,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const invalidateObligations = useInvalidateObligations();
+  const { can } = useAuth();
 
   const woQuery = useQuery({
     queryKey: ['work-orders', 'detail', woNumber],
@@ -222,15 +228,16 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   /** Rule 1.5.2: an NTE override waits on a manager, so approve / send / the
       client's yes are on hold (the API refuses them with a 409) until decided. */
   const nteHold = quote?.nte_override_open ?? false;
-  // 2026-10-27 (Elise): a quote above the NTE is sent like any other — the
-  // client's approval is what raises the NTE (to the approved amount).
+  // 2026-11-04 (Elise): a quote above the NTE is not sent until the NTE is
+  // raised (overNte below); the client's approval then sets the NTE.
   const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
   const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
   /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */
   // 2026-10-29 (Elise): once submitted, only a manager (approve grant) edits
   // it — the shared rule the API's updateQuote enforces.
   const editable = quoteEditableBy(status, canEdit, canApprove) && allows('quote.edit');
-  const submittedLocked = canEdit && !canApprove && QUOTE_SUBMITTED_STATUSES.includes(status);
+  // 2026-11-04 (Elise): locked for everyone once submitted, managers too.
+  const submittedLocked = canEdit && QUOTE_SUBMITTED_STATUSES.includes(status);
   // 0092 · where this person's Submit takes the quote: a dispatcher's draft
   // goes for correction, a manager's (or a corrected one) for approval; null
   // while a dispatcher waits on the manager. An older API says nothing, so a
@@ -249,6 +256,12 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     [draft, totalCost, otMult],
   );
   const problems = useMemo(() => (draft ? quoteProblems(draft) : []), [draft]);
+  // 2026-11-04 (Elise): above the NTE the quote is not sent until the NTE is
+  // raised — the dearest option, from the live figures, as the API compares.
+  const nteTotal = totals
+    ? quoteTotalForNte({ grand_total: totals.grandTotal, option_totals: totals.options.map((o) => ({ grand_total: o.grandTotal })) })
+    : null;
+  const overNte = nte !== null && nteTotal !== null ? quoteOverNte(nteTotal, nte) : (quote?.permissions?.over_nte ?? false);
 
   // ── Autosave ───────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
@@ -641,7 +654,16 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
   /** Draft / pending correction / pending approval → approved and sent. */
   const sendToClient = () =>
-    gated('Send to client', 'send', canApprove, 'Needs the quote-approve permission', 'quote.send', () => sendMutation.mutate(), 'lockTipSend');
+    overNte && nte !== null && nteTotal !== null ? (
+      <>
+        {lockedButton('Send to client', quoteOverNteSentence(nteTotal, nte), 'lockTipSend')}
+        {can('work_orders', 'edit') && (
+          <NteIncreaseButton woNumber={woNumber} quoteTotal={nteTotal} quoteNumber={quote?.number ?? null} />
+        )}
+      </>
+    ) : (
+      gated('Send to client', 'send', canApprove, 'Needs the quote-approve permission', 'quote.send', () => sendMutation.mutate(), 'lockTipSend')
+    );
 
   const decisionButton = (sectionKey: string | null, compact: boolean) =>
     !allows('quote.client_decide')
@@ -882,8 +904,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               </>
             )}
 
-            {status === 'approved' &&
-              gated('Send to client', 'send', canApprove, 'Needs the quote-approve permission', 'quote.send', () => sendMutation.mutate(), 'lockTipSend', false)}
+            {status === 'approved' && sendToClient()}
 
             {status === 'sent' && (
               <>
@@ -988,21 +1009,15 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             </span>
           </div>
         )}
-        {status === 'pending_correction' && submitTarget !== null && editable && (
-          <div className="callout">
-            <Icon name="info" size={14} />
-            <span>
-              <b>Correct this quote in place.</b> Your edits autosave here and do not return it to draft. When it
-              is right, <b>Send to client</b> — one click approves and sends it; no second manager is needed.
-            </span>
-          </div>
-        )}
-        {status === 'pending_approval' && canApprove && allows('quote.approve') && (
+        {/* 2026-11-04 (Elise): a submitted quote is locked for everyone. */}
+        {QUOTE_SUBMITTED_STATUSES.includes(status) && canApprove && allows('quote.approve') && (
           <div className="callout">
             <Icon name="check-circle" size={14} />
             <span>
-              <b>You can send this quote.</b> <b>Send to client</b> approves it and sends the summary
-              text to the client in one click. Rejecting returns it to <b>Draft</b> with your note attached.
+              <b>Review this quote.</b> It is locked: nobody changes a submitted quote. If it is right,{' '}
+              <b>Send to client</b> approves it and sends the summary text to the client in one click. If it
+              needs changing, <b>Reject with note</b> returns it to <b>Draft</b> with your note attached, to be
+              corrected there.
             </span>
           </div>
         )}

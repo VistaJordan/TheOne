@@ -31,6 +31,13 @@ import {
   QUOTE_SUBMIT_ACTION,
   QUOTE_SUBMITTED_LOCKED_CODE,
   QUOTE_SUBMITTED_LOCKED_TEXT,
+  QUOTE_SUBMITTED_STATUSES,
+  approvedMovePlan,
+  QUOTE_NOT_SENT_CODE,
+  QUOTE_NOT_SENT_TEXT,
+  QUOTE_OPTION_REQUIRED_CODE,
+  QUOTE_OPTION_REQUIRED_TEXT,
+  STATUS_APPROVAL_NOTE_CODE,
   quoteEditableBy,
   quoteDeclineEvent,
   BFI_KEY,
@@ -67,6 +74,9 @@ import {
   optionDisplayLabel,
   permAllows,
   quoteOverNte,
+  QUOTE_OVER_NTE_CODE,
+  quoteOverNteSentence,
+  quoteTotalForNte,
   reportedSentence,
   visibleScopeLines,
 } from '@theone/shared';
@@ -1019,7 +1029,7 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     sections,
     totals,
     summary,
-    permissions: permissionsFor(actor, snap, q, totals.grand_total),
+    permissions: permissionsFor(actor, snap, q, quoteTotalForNte(totals)),
     nte_override_open: nteOverride !== null,
     wo_actions: snap.actions,
     labor_rate: laborRate,
@@ -1256,8 +1266,10 @@ export interface QuoteUpdateInput {
 }
 
 /** Statuses a quote may still be edited in (§1: edits stop once approved).
-    0092: a quote waiting for a manager's correction is edited in place. */
-const EDITABLE_STATUSES: QuoteStatus[] = ['draft', 'pending_correction', 'pending_approval'];
+    2026-11-04 (Elise): a draft only — once submitted (pending correction or
+    pending approval) it is locked for everyone (`quoteEditableBy`); a
+    manager's Reject returns it to draft to be changed. */
+const EDITABLE_STATUSES: QuoteStatus[] = ['draft'];
 
 interface QuoteHead {
   id: string;
@@ -1385,16 +1397,16 @@ export async function updateQuote(
   await assertWoAllows(taskId, 'quote.edit');
   const cur = await currentStatus(taskId);
   if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');
-  if (!EDITABLE_STATUSES.includes(cur.status)) {
+  // 2026-11-04 (Elise): a submitted quote is locked for everyone, managers
+  // included — a change is a Reject back to draft.
+  if (!quoteEditableBy(cur.status, true, canApproveQuote(actor)) || !EDITABLE_STATUSES.includes(cur.status)) {
+    if (QUOTE_SUBMITTED_STATUSES.includes(cur.status)) {
+      throw conflict(QUOTE_SUBMITTED_LOCKED_TEXT, { code: QUOTE_SUBMITTED_LOCKED_CODE, status: cur.status });
+    }
     throw badRequest(`A quote in status "${cur.status}" can no longer be edited`, {
       status: cur.status,
       editable_in: EDITABLE_STATUSES,
     });
-  }
-  // 2026-10-29 (Elise): a submitted quote is locked — only a manager (the
-  // approve grant) corrects it; the person who handed it over cannot change it.
-  if (!quoteEditableBy(cur.status, true, canApproveQuote(actor))) {
-    throw conflict(QUOTE_SUBMITTED_LOCKED_TEXT, { code: QUOTE_SUBMITTED_LOCKED_CODE, status: cur.status });
   }
   const round = await currentRoundOfQuote(cur.id);
   if (input.sections && round > 1 && input.sections.some((s) => s.kind === 'incurred')) {
@@ -1412,11 +1424,11 @@ export async function updateQuote(
     // above locks the quote for this editor too (sections included).
     const locked = await tx.query<{ status: QuoteStatus }>(`SELECT status FROM quote WHERE id = $1 FOR UPDATE`, [cur.id]);
     const nowStatus = locked.rows[0]?.status;
-    if (!nowStatus || !EDITABLE_STATUSES.includes(nowStatus)) {
-      throw conflict('The quote was approved while you were editing it — reload it', { code: 'QUOTE_MOVED' });
-    }
-    if (!quoteEditableBy(nowStatus, true, canApproveQuote(actor))) {
+    if (nowStatus && QUOTE_SUBMITTED_STATUSES.includes(nowStatus)) {
       throw conflict(QUOTE_SUBMITTED_LOCKED_TEXT, { code: QUOTE_SUBMITTED_LOCKED_CODE, status: nowStatus });
+    }
+    if (!nowStatus || !EDITABLE_STATUSES.includes(nowStatus) || !quoteEditableBy(nowStatus, true, canApproveQuote(actor))) {
+      throw conflict('The quote was approved while you were editing it — reload it', { code: 'QUOTE_MOVED' });
     }
     const before = await snapshotQuote(tx, cur.id);
 
@@ -1439,10 +1451,10 @@ export async function updateQuote(
     if (input.ship_to !== undefined) set('ship_to', input.ship_to);
     if (sets.length > 0) {
       params.push(cur.id);
-      // Only while the quote is still editable, in the statement (#25): an
-      // approve committed since the read above leaves the quote approved.
+      // Only while the quote is still a draft, in the statement (#25): a
+      // submit or approve committed since the read above leaves it locked.
       const kept = await tx.query(
-        `UPDATE quote SET ${sets.join(', ')} WHERE id = $${params.length} AND status IN ('draft', 'pending_correction', 'pending_approval') RETURNING id`,
+        `UPDATE quote SET ${sets.join(', ')} WHERE id = $${params.length} AND status = 'draft' RETURNING id`,
         params,
       );
       if (!kept.rows[0]) throw conflict('The quote was approved while you were editing it — reload it', { code: 'QUOTE_MOVED' });
@@ -1511,25 +1523,9 @@ export async function updateQuote(
     const after = await snapshotQuote(tx, cur.id);
     if (JSON.stringify(before) !== JSON.stringify(after)) {
       await logQuoteActivity(tx, actor.id, taskId, 'quote_updated', before, { ...after, round });
-      // 0083 (#23): a quote edited while it waits for approval is not the quote
-      // the approver was asked about — it goes back to draft (logged) and is
-      // submitted again. Conditional on the status it was read in. A quote
-      // waiting for CORRECTION (0092) is the opposite case: editing it is the
-      // point, so it stays where it is until the manager submits it.
-      if (cur.status === 'pending_approval') {
-        const back = await tx.query(
-          `UPDATE quote SET status = 'draft', submitted_by = NULL, submitted_at = NULL
-            WHERE id = $1 AND status = 'pending_approval' RETURNING id`,
-          [cur.id],
-        );
-        if (back.rows[0]) {
-          await logQuoteActivity(tx, actor.id, taskId, 'quote_returned_to_draft', { status: 'pending_approval' }, {
-            status: 'draft',
-            quote_id: cur.id,
-            reason: 'edited after it was submitted for approval',
-          });
-        }
-      }
+      // 0083 (#23) sent a quote edited while pending approval back to draft;
+      // since 2026-11-04 a submitted quote cannot be edited at all (above),
+      // so there is nothing to send back.
     }
   });
 
@@ -1932,10 +1928,12 @@ const QUOTE_APPROVABLE_FROM: QuoteStatus[] = ['draft', 'pending_correction', 'pe
  * 2026-10-27 (Elise): "a dispatcher writes the quote, the manager corrects
  * it and submits it to the client" — one click. A quote still in draft,
  * pending correction or pending approval is approved first (approveQuote,
- * its own checks and `quote_approved` row) and then sent. A quote above the
- * NTE is sent like any other: asking the client to approve more than the
- * NTE is what the quote is for (the 0083 #23 refusal is gone); the client's
- * approval then sets the NTE (clientApproveQuote).
+ * its own checks and `quote_approved` row) and then sent.
+ *
+ * 2026-11-04 (Elise, reversing 2026-10-27): a quote above the NTE is NOT
+ * sent — 409 QUOTE_OVER_NTE until the NTE is raised through an approved NTE
+ * increase request. Compared before anything is approved, against the
+ * dearest option (`quoteTotalForNte`).
  */
 export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
@@ -1944,6 +1942,14 @@ export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise
 
   const cur = await currentStatus(taskId);
   if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');
+  const priced = await getQuote(taskId, actor);
+  if (priced) {
+    const total = quoteTotalForNte(priced.totals);
+    const nte = priced.totals.nte;
+    if (nte !== null && quoteOverNte(total, nte)) {
+      throw conflict(quoteOverNteSentence(total, nte), { code: QUOTE_OVER_NTE_CODE, total, nte });
+    }
+  }
   if (QUOTE_APPROVABLE_FROM.includes(cur.status)) await approveQuote(taskId, actor);
 
   // Read the numbers on the pool BEFORE the transaction opens: a read that
@@ -2161,6 +2167,44 @@ async function setNteFromApproval(taskId: string, amount: number, actor: ActingP
 
 /** The work order's Client NTE (the bag key woRecord.ts writes too). */
 const QUOTE_NTE_KEY = '16. Client NTE 🔴';
+
+/**
+ * 2026-11-04 (Elise): a person's move into Approved IS the client's yes —
+ * the option the client approved is recorded on the quote exactly as Record
+ * client decision — approved does it (locked, incurred for later rounds, the
+ * NTE set to its price). Asked BEFORE the status moves, so a refusal moves
+ * nothing: a quote not yet sent is 409 QUOTE_NOT_SENT, the note ("how did
+ * the client approve?") is required, and with several options the one the
+ * client picked (400 QUOTE_OPTION_REQUIRED). Returns the step the route runs
+ * after the move, or null when there is no quote to decide (none, or the
+ * client already decided it).
+ */
+export async function planApprovedMove(
+  taskId: string,
+  input: { note?: string | null; section_id?: string | null },
+  actor: ActingPrincipal,
+): Promise<(() => Promise<Quote>) | null> {
+  const quote = await getQuote(taskId, actor);
+  const plan = approvedMovePlan(quote);
+  if (plan.kind === 'move') return null;
+  if (plan.kind === 'not_sent') {
+    throw conflict(QUOTE_NOT_SENT_TEXT, { code: QUOTE_NOT_SENT_CODE, quote_status: plan.status });
+  }
+  const note = input.note?.trim() || null;
+  if (!note) {
+    throw badRequest('Say how the client approved before moving the work order to Approved', {
+      code: STATUS_APPROVAL_NOTE_CODE,
+    });
+  }
+  const sectionId = plan.options.length === 1 ? plan.options[0].id : (input.section_id ?? null);
+  if (!sectionId || !plan.options.some((o) => o.id === sectionId)) {
+    throw badRequest(QUOTE_OPTION_REQUIRED_TEXT, { code: QUOTE_OPTION_REQUIRED_CODE, options: plan.options });
+  }
+  const snap = await assertWoAllows(taskId, 'quote.client_decide');
+  assertCanClientDecide(actor, snap);
+  await assertNoOpenNteOverride(taskId, 'Recording the client approval');
+  return () => clientApproveQuote(taskId, { section_id: sectionId, note }, actor);
+}
 
 export interface ClientDeclineInput {
   note: string;

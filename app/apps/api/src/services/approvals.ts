@@ -67,6 +67,7 @@ import { assertDispatchers } from './dataRules.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
 import { assertStatusGate } from './statusGates.js';
+import { assertStatusOrder } from './statusOrder.js';
 import { assertReadyToAssign } from './intakeGate.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
@@ -667,6 +668,8 @@ async function decide(
     await assertStatusGate({ query }, cur.task_id, hit.rows[0].name);
     // Rule 2.6.4: same again for Ecotrak's allowed transitions.
     await assertEcotrakAllowsMove(cur.task_id, hit.rows[0].name);
+    // BRD 2.7: the portal's steps, asked again before the decision commits.
+    await assertStatusOrder({ query }, cur.task_id, hit.rows[0].name);
     moveTo = hit.rows[0].id;
   }
   // Elise, 2026-10-22: a snooze request whose clock already moved — resolved
@@ -1454,6 +1457,8 @@ export async function requestStatusChange(
     await assertStatusGate({ query }, taskId, to.rows[0].name);
     // Rule 2.6.4, at request time.
     await assertEcotrakAllowsMove(taskId, to.rows[0].name);
+    // BRD 2.7: a move the portal's steps refuse is refused up front.
+    await assertStatusOrder({ query }, taskId, to.rows[0].name);
   }
   return createApprovalTask({
     taskId,

@@ -17,7 +17,8 @@ import { Params, listCustomFields, resolveField } from './woFields.js';
 import { woScopeSql } from './woScope.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
-import { ADDRESS_KEY, ESCALATED_KEY, flagTicked } from '@theone/shared';
+import { ADDRESS_KEY, CLIENT_PORTAL_TYPE_KEY, ESCALATED_KEY, STATUS_ORDER_CODE, checkStatusOrder, flagTicked, statusOrderRefused } from '@theone/shared';
+import { statusOrderError } from './statusOrder.js';
 import { dispatchAutomations } from './automations.js';
 import { raiseAcceptanceTasks } from './approvals.js';
 import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
@@ -253,6 +254,28 @@ export async function bulkUpdate(
           wo_numbers: names,
         });
       }
+    }
+  }
+
+  // BRD 2.7: each row follows its portal's steps; one refusal refuses the
+  // whole selection, like the gate above. A portal set in the same patch counts.
+  if (targetStatus) {
+    const target = targetStatus;
+    const portalPatch = customPatch.find((c) => c.key === CLIENT_PORTAL_TYPE_KEY);
+    const refused = rows.rows
+      .filter((r) => r.status_id !== target.id)
+      .map((r) => ({ r, v: checkStatusOrder(portalPatch ? portalPatch.value : r.fields?.[CLIENT_PORTAL_TYPE_KEY], r.status_name, target.name) }))
+      .filter((x) => statusOrderRefused(x.v));
+    if (refused.length > 0) {
+      const err = statusOrderError(refused[0].v);
+      const names = refused.map((x) => x.r.wo_number);
+      throw new ApiError(
+        'CONFLICT',
+        names.length === 1
+          ? `${names[0]}: ${err.message}`
+          : `${names.length} of the selected work orders cannot move to ${target.name} on their portal's steps (${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}). ${err.message}`,
+        { code: STATUS_ORDER_CODE, status: target.name, wo_numbers: names },
+      );
     }
   }
 

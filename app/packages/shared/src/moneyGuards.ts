@@ -358,6 +358,19 @@ export function quoteOverNte(total: number, nte: number | null | undefined): boo
   return cents(total) > cents(nte);
 }
 
+/** 2026-11-04 (Elise): the figure Send to client compares with the NTE — the
+    dearest option the client could pick (each option's grand total carries
+    the incurred work and tax), else the grand total. A quote with options A
+    $500 and B $5,000 under a $1,000 NTE is over: the client may pick B. */
+export function quoteTotalForNte(totals: { grand_total: number; option_totals: readonly { grand_total: number }[] }): number {
+  return totals.option_totals.reduce((max, o) => Math.max(max, o.grand_total), totals.grand_total);
+}
+
+/** Why Send to client is refused while the quote is over the NTE. */
+export function quoteOverNteSentence(total: number, nte: number): string {
+  return `The quote (${usd(total)}) is above the client NTE (${usd(nte)}). Raise the NTE first: request an NTE increase and have a manager approve it, then send the quote.`;
+}
+
 // ── M7 · Mark paid ───────────────────────────────────────────────────────────
 
 export const INVOICE_PAYMENT_DETAILS_CODE = 'INVOICE_PAYMENT_DETAILS';

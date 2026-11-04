@@ -59,7 +59,7 @@ describe('the wiring (source pins)', () => {
     const patch = body.slice(0, body.indexOf('app.post('));
     expect(patch).toContain('isCancelStatusName(row.cur) && !isCancelStatusName(row.target)');
     expect(patch).toContain('code: REOPEN_REQUIRED_CODE');
-    expect(patch.indexOf('REOPEN_REQUIRED_CODE')).toBeLessThan(patch.indexOf('return changeStatus('));
+    expect(patch.indexOf('REOPEN_REQUIRED_CODE')).toBeLessThan(patch.indexOf('await changeStatus('));
     const menu = read('apps/web/src/components/StatusChangeMenu.tsx');
     expect(menu).toContain("const lockedCancelled = mode !== 'request' && isCancelStatusName(current.name);");
   });

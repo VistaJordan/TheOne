@@ -64,13 +64,12 @@ describe('the API honours it', () => {
     expect(fn(quotes, 'export async function rejectQuote(')).toContain("['pending_correction', 'pending_approval', 'approved']");
   });
 
-  it('a quote waiting for correction is edited in place and does not return to draft', () => {
-    expect(quotes).toContain("const EDITABLE_STATUSES: QuoteStatus[] = ['draft', 'pending_correction', 'pending_approval'];");
+  it('2026-11-04: only a draft is edited — a submitted quote is locked for everyone', () => {
+    expect(quotes).toContain("const EDITABLE_STATUSES: QuoteStatus[] = ['draft'];");
     const upd = fn(quotes, 'export async function updateQuote(');
-    expect(upd).toContain("status IN ('draft', 'pending_correction', 'pending_approval')");
-    // 0083 #23 stays for pending_approval alone.
-    expect(upd).toContain("if (cur.status === 'pending_approval') {");
-    expect(upd).not.toContain("cur.status === 'pending_correction'");
+    expect(upd).toContain("AND status = 'draft' RETURNING id");
+    expect(upd).toContain('QUOTE_SUBMITTED_STATUSES.includes(cur.status)');
+    expect(upd).not.toContain("status IN ('draft', 'pending_correction', 'pending_approval')");
   });
 
   it('the permissions carry submit_target for the builder', () => {
@@ -103,7 +102,7 @@ describe('the screens', () => {
     expect(src('apps/web/src/pages/QuotesPage.tsx')).toContain("{ key: 'pending_correction', label: 'Pending correction' }");
     const inbox = src('apps/web/src/pages/ApprovalsPage.tsx');
     expect(inbox).toContain("item.status === 'pending_approval' || item.status === 'pending_correction'");
-    expect(inbox).toContain('Correct and send');
+    expect(inbox).toContain('Review and send');
     const pill = src('apps/web/src/components/quote/QuoteStatusPill.tsx');
     expect(pill).toContain("pending_correction: { label: 'Pending correction'");
     expect(pill).toContain("['draft', 'pending_correction', 'pending_approval', 'approved', 'sent', 'client_approved']");

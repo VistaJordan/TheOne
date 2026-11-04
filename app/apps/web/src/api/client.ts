@@ -697,10 +697,14 @@ export function postWorkOrderQuoText(
 export function patchStatus(
   idOrNumber: string,
   status_id: string,
+  /** 2026-11-04: a move to Approved records the client's approval on a sent
+      quote — how they approved (required then) and, with several options,
+      which one. */
+  approval?: { note: string; section_id: string | null },
 ): Promise<WorkOrderDetail> {
   return request<WorkOrderDetail>(
     `/work-orders/${encodeURIComponent(idOrNumber)}/status`,
-    { method: 'PATCH', body: JSON.stringify({ status_id }) },
+    { method: 'PATCH', body: JSON.stringify({ status_id, ...(approval ?? {}) }) },
   );
 }
 

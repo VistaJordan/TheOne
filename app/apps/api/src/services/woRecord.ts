@@ -695,6 +695,15 @@ export async function cancelWo(taskId: string, reason: string | null, actor: Act
   if (!why) throw badRequest('Say why it is cancelled', { field: 'reason' });
   const blocked = await cancelBlocked(taskId);
   if (blocked) throw conflict(blocked, { code: CANCEL_BILLED_CODE });
+  const cancelStatus = await query<{ name: string }>(
+    `SELECT name FROM status WHERE name ~* '^cancel' ORDER BY position LIMIT 1`,
+  );
+  // BRD 2.7: asked before anything is stamped, so a cancel the portal's
+  // steps refuse (On Site, the billing statuses) leaves the work order as it was.
+  if (cancelStatus.rows[0]) {
+    const { assertStatusOrder } = await import('./statusOrder.js');
+    await assertStatusOrder({ query }, taskId, cancelStatus.rows[0].name, t.status_name);
+  }
   await withTransaction(async (tx) => {
     // Conditional on "not cancelled": two clicks at once leave one cancel.
     const won = await tx.query(

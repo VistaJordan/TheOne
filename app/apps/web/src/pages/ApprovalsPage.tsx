@@ -1565,7 +1565,7 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
             {verb('Reject', 'x', canApproveQuotes, 'Requires quote approval rights', () => onDecide('reject'), 'danger')}
             <Link className="btn-sm" to={`/work-orders/${encodeURIComponent(d.item.wo_number)}/quote`}>
               <Icon name="pencil" size={12} />
-              Correct and send
+              Review and send
             </Link>
           </>
         );

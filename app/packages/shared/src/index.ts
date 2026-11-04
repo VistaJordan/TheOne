@@ -2260,6 +2260,7 @@ export * from './moneyGuards';
 export * from './access';
 // UAT round 1, Wave C (0085): request mode, quote-driven status, visit stamps, cancel / reopen.
 export * from './workflow';
+export * from './statusOrder';
 export * from './quoteSubmit';
 export * from './unassigned';
 export * from './managerFlags';

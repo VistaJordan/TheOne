@@ -277,9 +277,11 @@ export async function submitDraft(
   }
 
   const state = await quoteState(taskId);
-  if (state && state.status !== 'draft' && state.status !== 'pending_correction' && state.status !== 'pending_approval') {
+  // 2026-11-04 (Elise): a submitted quote is locked for everyone, so only a
+  // draft is replaced.
+  if (state && state.status !== 'draft') {
     throw conflict(
-      `The quote on this work order is ${state.status.replace('_', ' ')} — it can only be replaced while it is a draft, pending correction or pending approval`,
+      `The quote on this work order is ${state.status.replace(/_/g, ' ')} — it can only be replaced while it is a draft (a manager rejects a submitted quote back to draft)`,
       { code: 'QUOTE_LOCKED', status: state.status },
     );
   }

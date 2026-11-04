@@ -94,7 +94,8 @@ describe('0091 is wired', () => {
   it('the status menu offers a request-mode person only the requestable statuses', () => {
     const menu = read('apps/web/src/components/StatusChangeMenu.tsx');
     expect(menu).toContain('requestableStatuses(statusesQuery.data ?? [], current.id)');
-    expect(menu).toMatch(/mode === 'request'\s*\?\s*requestableStatuses/);
+    // 2026-11-04: plus Approved for OA, which moves there directly.
+    expect(menu).toMatch(/mode === 'request'\s*\?\s*\(statusesQuery\.data \?\? \[\]\)\.filter\(\s*\(s\) => requestableIds\.has\(s\.id\) \|\| \(statusApprovalNeedsNote\(s\.name\) && mayMoveToApprovedDirectly\(role\)\)/);
   });
 
   it('Admin › Custom fields › Statuses draws a Managers only tick that PATCHes request_hidden', () => {
