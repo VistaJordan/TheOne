@@ -1034,7 +1034,7 @@ export interface SalesTaxLookup {
   required: boolean;
   pct: number;
   zip: string | null;
-  source: 'labor_rate_not_required' | 'cache' | 'provider' | 'state_fallback' | 'unavailable';
+  source: 'labor_rate_not_required' | 'entity_not_taxed' | 'cache' | 'provider' | 'state_fallback' | 'unavailable';
 }
 
 export interface Quote {
@@ -1055,6 +1055,9 @@ export interface Quote {
   current_round: number;
   total_rule: QuoteTotalRule;
   sales_tax_pct: number;
+  /** 2026-11-04 · only an SFM work order's quote carries tax (quoteTaxApplies);
+      false = the sales tax % and line taxes are ignored and not drawn. */
+  tax_applies: boolean;
   is_cost_tbd: boolean;
   specs: string | null;
   note_to_customer: string | null;
@@ -2270,4 +2273,5 @@ export * from './dataQuality';
 // UAT follow-up T1: test sign-in accounts, one per role.
 export * from './testAccounts';
 export * from './quoteDefaults';
+export * from './quoteTax';
 export * from './notices';

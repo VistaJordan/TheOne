@@ -139,6 +139,7 @@ export function hasLineError(line: DraftLine): boolean {
 export function sumLines(
   lines: DraftLine[],
   otMultiplier: number = OT_MULTIPLIER,
+  taxApplies: boolean = true,
 ): { total: number; tax: number; excluded: number[] } {
   let total = 0;
   let tax = 0;
@@ -148,7 +149,7 @@ export function sumLines(
     if (amt == null || hasLineError(line)) excluded.push(i + 1);
     else {
       total = round2(total + amt);
-      tax = round2(tax + (lineTax(line, otMultiplier) ?? 0));
+      if (taxApplies) tax = round2(tax + (lineTax(line, otMultiplier) ?? 0));
     }
   });
   return { total, tax, excluded };
@@ -228,11 +229,13 @@ export function computeQuoteTotals(
   draft: DraftQuote,
   totalCost: number | null = null,
   otMultiplier: number = OT_MULTIPLIER,
+  /** 2026-11-04 · false = no tax at all (quoteTaxApplies: SFM only), as on the server. */
+  taxApplies: boolean = true,
 ): QuoteTotals {
   const mult = otMultiplier > 0 ? otMultiplier : OT_MULTIPLIER;
   const yoda = draft.total_rule !== 'options_only';
   const parsedPct = parsePct(draft.sales_tax_pct);
-  const pct = Number.isNaN(parsedPct) ? 0 : parsedPct;
+  const pct = !taxApplies || Number.isNaN(parsedPct) ? 0 : parsedPct;
   const taxOn = (base: number) => (yoda ? round2((base * pct) / 100) : 0);
 
   const incurredLike = draft.sections.filter(
@@ -242,7 +245,7 @@ export function computeQuoteTotals(
   let incurredLineTax = 0;
   const incurredExcluded: number[] = [];
   for (const s of incurredLike) {
-    const sum = sumLines(s.lines, mult);
+    const sum = sumLines(s.lines, mult, taxApplies);
     incurredSubtotal = round2(incurredSubtotal + sum.total);
     incurredLineTax = round2(incurredLineTax + sum.tax);
     if (s.kind === 'incurred') incurredExcluded.push(...sum.excluded);
@@ -252,7 +255,7 @@ export function computeQuoteTotals(
   const roundOptions = draft.sections.filter((s) => s.kind === 'option' && s.round === draft.current_round);
   const options: OptionTotal[] = roundOptions
     .map((opt, i) => {
-      const sum = sumLines(opt.lines, mult);
+      const sum = sumLines(opt.lines, mult, taxApplies);
       optionLineTax.set(opt.key, sum.tax);
       const base = yoda ? round2(incurredSubtotal + sum.total) : sum.total;
       const tax = taxOn(base);

@@ -251,9 +251,11 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   // 0046 · the OT multiplier the quote was priced with (its contract's, or
   // the house ×1.5). Every live figure on the screen uses the same one.
   const otMult = quote?.rates?.ot_multiplier ?? 1.5;
+  // 2026-11-04 · only an SFM work order's quote carries tax (quoteTaxApplies).
+  const taxApplies = quote?.tax_applies !== false;
   const totals = useMemo(
-    () => (draft ? computeQuoteTotals(draft, draft.is_cost_tbd ? null : totalCost, otMult) : null),
-    [draft, totalCost, otMult],
+    () => (draft ? computeQuoteTotals(draft, draft.is_cost_tbd ? null : totalCost, otMult, taxApplies) : null),
+    [draft, totalCost, otMult, taxApplies],
   );
   const problems = useMemo(() => (draft ? quoteProblems(draft) : []), [draft]);
   // 2026-11-04 (Elise): above the NTE the quote is not sent until the NTE is
@@ -570,7 +572,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       return m;
     }, new Map<number, typeof allOptions>()),
   ).sort((a, b) => a[0] - b[0]);
-  const incurredTotals = sumLines(incurred.lines, otMult);
+  const incurredTotals = sumLines(incurred.lines, otMult, taxApplies);
   const incurredNote = excludedNote(incurredTotals.excluded);
   const includedCount = options.filter((o) => o.s.include_in_summary).length;
   const incurredEditable = editable && !incurred.locked;
@@ -1291,6 +1293,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               showErrors={showErrors && incurredEditable}
               otMultiplier={otMult}
               showDay={dayShown[incurred.key] === true}
+              showTax={taxApplies}
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
 
@@ -1336,6 +1339,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                   editable={false}
                   showErrors={false}
                   otMultiplier={otMult}
+                  taxApplies={taxApplies}
                   onChange={(next) => setSection(i, next)}
                   onRemove={() => undefined}
                 />
@@ -1376,6 +1380,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 rate={quote.labor_rate}
                 decisionActions={status === 'sent' && options.length > 1 ? decisionButton(s.key, true) : undefined}
                 otMultiplier={otMult}
+                taxApplies={taxApplies}
                 showDay={dayShown[s.key] === true}
                 onShowDay={() => showDayFor(s.key)}
                 onChange={(next) => setSection(i, next)}
@@ -1416,6 +1421,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             onSalesTaxPctChange={(sales_tax_pct) => update({ ...draft, sales_tax_pct })}
             onCostTbdChange={(is_cost_tbd) => update({ ...draft, is_cost_tbd })}
             rates={quote.rates}
+            taxApplies={taxApplies}
           />
 
           {/* 0048 · the document fields: what the printed quote calls
@@ -1480,7 +1486,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 <div className="kvrow"><dt>Trip</dt><dd>{usd(quote.labor_rate.trip_rate)}</dd></div>
                 <div className="kvrow"><dt>After-hours / hr</dt><dd>{usd(quote.labor_rate.afterhours_rate)}</dd></div>
                 <div className="kvrow"><dt>Holiday / hr</dt><dd>{usd(quote.labor_rate.holiday_rate)}</dd></div>
-                <div className="kvrow is-muted"><dt>Sales tax</dt><dd>{quote.labor_rate.is_sales_tax_required ? 'Required' : 'Not required'}</dd></div>
+                <div className="kvrow is-muted"><dt>Sales tax</dt><dd>{!taxApplies ? 'Not charged (SFM only)' : quote.labor_rate.is_sales_tax_required ? 'Required' : 'Not required'}</dd></div>
               </dl>
             </section>
           )}

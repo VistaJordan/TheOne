@@ -3369,6 +3369,18 @@ its GTG step (n / 4). **Ecotrak ID** is not retired: `getFieldCatalogue`
 drops `SCREEN_HIDDEN_FIELD_KEYS`, while the Ecotrak sync still writes it and
 ClickUp still matches and pushes it. Parts Required and Total Invoiced stay.
 
+**Only SFM quotes carry tax** (Elise, 2026-11-04, no migration; `quoteTaxApplies` /
+`QUOTE_TAX_ENTITY` in `packages/shared/src/quoteTax.ts`, `tests/quote-tax-sfm.test.ts`).
+A quote on a work order whose billing entity (`21. Comp`, mirrored to
+`task.billing_entity`) is not SFM has no sales tax and no per-line tax:
+`computeQuoteTotals` takes `tax_applies` (API `totalsFor`, the snapshot; web
+4th parameter, `sumLines` too), `getQuote` zeroes each line's `tax` and sends
+`Quote.tax_applies`, the invoice prefill skips both taxes, and
+`/quote/sales-tax` answers `source: 'entity_not_taxed'`. The builder hides the
+Sales tax rows, the Tax % column and the option's tax sub-line; the print page
+and the text summary already draw tax only when it is above zero. The stored
+`sales_tax_pct` / `tax_pct` are kept, so a Comp changed to SFM taxes again.
+
 **The quote at the top of the builder** (no migration, Elise 2026-10-28). The
 quote builder (its page and the work order's Quotes tab) opens with a **Quote**
 card drawn from the SAVED quote, so it follows each autosave ("Updating after

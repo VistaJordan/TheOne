@@ -26,6 +26,9 @@ interface MoneyRailProps {
   onCostTbdChange: (v: boolean) => void;
   /** 0046 · the rates the quote is priced with, and the contract they came from. */
   rates?: QuoteRates | null;
+  /** 2026-11-04 · false = the quote carries no tax (only SFM's do): the tax
+      rows are not drawn. */
+  taxApplies?: boolean;
 }
 
 export function MoneyRail({
@@ -39,6 +42,7 @@ export function MoneyRail({
   onSalesTaxPctChange,
   onCostTbdChange,
   rates,
+  taxApplies = true,
 }: MoneyRailProps) {
   const pct = nte != null && nte > 0 ? (totals.grandTotal / nte) * 100 : null;
   const warn = pct != null && pct >= NTE_WARN_PCT;
@@ -129,12 +133,14 @@ export function MoneyRail({
                 </span>
               )}
               {!opt.approved && opt.include_in_summary && <span className="chip chip-sm chip-accent">Included</span>}
-              {yoda && <span className="kv-sub">lines {usd(opt.total)} · tax {usd(opt.tax)}</span>}
+              {yoda && taxApplies && <span className="kv-sub">lines {usd(opt.total)} · tax {usd(opt.tax)}</span>}
             </dt>
             <dd>{usd(yoda ? opt.grandTotal : opt.total)}</dd>
           </div>
         ))}
 
+        {taxApplies ? (
+        <>
         <div className="kvrow">
           <dt>
             <label htmlFor="sales-tax">Sales tax %</label>
@@ -199,6 +205,13 @@ export function MoneyRail({
             <dd>{usd(totals.lineTax)}</dd>
           </div>
         )}
+        </>
+        ) : (
+          <div className="kvrow is-muted kv-note">
+            <dt>No tax — only SFM quotes carry tax</dt>
+            <dd />
+          </div>
+        )}
 
         <div className="kvrow is-total">
           <dt>Grand Total{yoda && priced ? <span className="kv-sub">{priced.label}</span> : null}</dt>
@@ -251,7 +264,7 @@ export function MoneyRail({
 
       <p className="money-cap">
         {yoda
-          ? 'Each option is priced as incurred work + that option, plus sales tax. Grand Total is the approved option’s price — or the first included option’s until the client decides.'
+          ? `Each option is priced as incurred work + that option${taxApplies ? ', plus sales tax' : ''}. Grand Total is the approved option’s price — or the first included option’s until the client decides.`
           : 'Grand Total is the price of the options included in the summary. Incurred lines are already on the WO and bill with the job — they are shown here for context, not added twice.'}
       </p>
     </section>

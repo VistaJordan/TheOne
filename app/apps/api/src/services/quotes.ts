@@ -77,6 +77,7 @@ import {
   QUOTE_OVER_NTE_CODE,
   quoteOverNteSentence,
   quoteTotalForNte,
+  quoteTaxApplies,
   reportedSentence,
   visibleScopeLines,
 } from '@theone/shared';
@@ -145,6 +146,9 @@ export interface TotalsInput {
   nte: number | null;
   /** 0048 · the quote's own OT multiplier; absent = the house default. */
   ot_multiplier?: number;
+  /** 2026-11-04 · false = no tax at all, sales or per line (quoteTaxApplies:
+      only an SFM work order's quote carries tax). Absent = true. */
+  tax_applies?: boolean;
 }
 
 /**
@@ -189,7 +193,8 @@ export function computeLineTax(line: TotalsLineInput, otMultiplier: number = OT_
  * `margin_pct` is profit / grand_total × 100, to one decimal.
  */
 export function computeQuoteTotals(input: TotalsInput): QuoteTotals {
-  const pct = Number.isFinite(input.sales_tax_pct) ? Math.max(0, input.sales_tax_pct) : 0;
+  const taxed = input.tax_applies !== false;
+  const pct = taxed && Number.isFinite(input.sales_tax_pct) ? Math.max(0, input.sales_tax_pct) : 0;
   const yoda = input.total_rule !== 'options_only';
   const mult = input.ot_multiplier && input.ot_multiplier > 0 ? input.ot_multiplier : OT_MULTIPLIER;
   const taxOn = (base: number) => (yoda ? round2((base * pct) / 100) : 0);
@@ -200,7 +205,7 @@ export function computeQuoteTotals(input: TotalsInput): QuoteTotals {
 
   for (const section of input.sections) {
     const subtotal = round2(section.lines.reduce((sum, line) => sum + computeLineAmount(line, mult), 0));
-    const lineTax = round2(section.lines.reduce((sum, line) => sum + computeLineTax(line, mult), 0));
+    const lineTax = taxed ? round2(section.lines.reduce((sum, line) => sum + computeLineTax(line, mult), 0)) : 0;
     if ((section.priced_as ?? section.kind) === 'incurred') {
       incurred_subtotal = round2(incurred_subtotal + subtotal);
       incurred_line_tax = round2(incurred_line_tax + lineTax);
@@ -910,6 +915,7 @@ function totalsFor(q: QuoteRow, sections: QuoteSection[]): QuoteTotals {
     total_cost: q.is_cost_tbd ? null : q.total_cost === null ? null : Number(q.total_cost),
     nte: q.nte === null ? null : Number(q.nte),
     ot_multiplier: multOf(q),
+    tax_applies: quoteTaxApplies(q.billing_entity),
   });
 }
 
@@ -965,7 +971,13 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
         : null,
   };
 
-  const sections = await loadSections(q.id, otMultiplier);
+  const taxApplies = quoteTaxApplies(q.billing_entity);
+  // 2026-11-04 · a quote that carries no tax shows no per-line tax either
+  // (the printed Tax column reads line.tax).
+  const loaded = await loadSections(q.id, otMultiplier);
+  const sections = taxApplies
+    ? loaded
+    : loaded.map((s) => ({ ...s, lines: s.lines.map((l) => ({ ...l, tax: 0 })) }));
   const totals = totalsFor({ ...q, ot_multiplier: otMultiplier }, sections);
   const snap = await woStatusSnapshot(taskId);
   const laborRate = await findLaborRate(q.billing_entity, q.client, q.trade);
@@ -1009,6 +1021,7 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     current_round: currentRoundOf(sections),
     total_rule: q.total_rule ?? 'incurred_plus_option',
     sales_tax_pct: Number(q.sales_tax_pct ?? 0),
+    tax_applies: taxApplies,
     bill_to: q.bill_to,
     is_cost_tbd: q.is_cost_tbd === true,
     specs: q.specs,
@@ -1044,6 +1057,7 @@ export async function quoteSalesTax(taskId: string): Promise<SalesTaxLookup> {
   );
   if (res.rows.length === 0) throw new ApiError('NOT_FOUND', 'Work order not found');
   const t = res.rows[0];
+  if (!quoteTaxApplies(t.billing_entity)) return { required: false, pct: 0, zip: null, source: 'entity_not_taxed' };
   const rate = await findLaborRate(t.billing_entity, t.client, t.trade);
   return lookupSalesTax({ required: rate?.is_sales_tax_required ?? false, fields: t.fields, state: t.state });
 }
@@ -1570,7 +1584,8 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
       `SELECT sales_tax_pct::float8 AS sales_tax_pct, total_rule, total_cost::float8 AS total_cost,
               bill_to, is_cost_tbd, specs, note_to_customer, summary_pinned,
               approved_section_id::text AS approved_section_id,
-              number, document_type, currency, ship_to, ot_multiplier::float8 AS ot_multiplier
+              number, document_type, currency, ship_to, ot_multiplier::float8 AS ot_multiplier,
+              (SELECT t.billing_entity FROM task t WHERE t.id = quote.task_id) AS billing_entity
          FROM quote WHERE id = $1`,
       [quoteId],
     )
@@ -1589,6 +1604,7 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
     currency: string | null;
     ship_to: string | null;
     ot_multiplier: number | null;
+    billing_entity: string | null;
   };
   const mult = head ? multOf(head) : OT_MULTIPLIER;
   const secRows = (
@@ -1694,6 +1710,7 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
     total_cost,
     nte: null,
     ot_multiplier: mult,
+    tax_applies: quoteTaxApplies(head?.billing_entity),
   });
 
   return {

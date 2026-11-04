@@ -42,6 +42,8 @@ interface LineItemsTableProps {
   otMultiplier?: number;
   /** Draw the Day column (a multi-day job). Forced on when a line is past Day 1. */
   showDay?: boolean;
+  /** 2026-11-04 · draw the Tax % column (only an SFM quote carries tax). */
+  showTax?: boolean;
 }
 
 export function LineItemsTable({
@@ -52,11 +54,12 @@ export function LineItemsTable({
   onChange,
   otMultiplier = OT_MULTIPLIER,
   showDay = false,
+  showTax = true,
 }: LineItemsTableProps) {
   const reorder = useReorder((from, to) => onChange(moveItem(lines, from, to)));
   const otText = `${Number.isInteger(otMultiplier * 100) ? otMultiplier : otMultiplier.toFixed(3)}×`;
   const dayColumn = showDay || linesSpanDays(lines);
-  const columns = dayColumn ? 10 : 9;
+  const columns = 8 + (dayColumn ? 1 : 0) + (showTax ? 1 : 0);
 
   const set = (index: number, patch: Partial<DraftLine>) =>
     onChange(replaceAt(lines, index, { ...lines[index], ...patch }));
@@ -81,6 +84,7 @@ export function LineItemsTable({
               Unit price <span className="req" aria-hidden="true">*</span>
               <span className="sr">required</span>
             </th>
+            {showTax && (
             <th className="c-pct ta-r">
               Tax %
               <button
@@ -92,6 +96,7 @@ export function LineItemsTable({
                 ?
               </button>
             </th>
+            )}
             {dayColumn && (
               <th className="c-day">
                 Day
@@ -242,6 +247,7 @@ export function LineItemsTable({
                     </span>
                   )}
                 </td>
+                {showTax && (
                 <td>
                   <input
                     className={`fld pct-in${errs.tax_pct ? ' is-err' : ''}`}
@@ -254,6 +260,7 @@ export function LineItemsTable({
                     onChange={(e) => set(i, { tax_pct: e.target.value })}
                   />
                 </td>
+                )}
                 {dayColumn && (
                   <td>
                     <select
@@ -287,7 +294,7 @@ export function LineItemsTable({
                   <span className={`ro num${amount == null ? ' is-empty' : ''}`}>
                     {amount == null ? '—' : usd(amount)}
                   </span>
-                  {tax != null && tax > 0 && (
+                  {showTax && tax != null && tax > 0 && (
                     <span className="lt-tax">+ {usd(tax)} tax</span>
                   )}
                 </td>

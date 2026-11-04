@@ -48,6 +48,7 @@ import {
   invoiceTotals,
   isEditable,
   lineAmount,
+  quoteTaxApplies,
   type Invoice,
   type InvoiceLine,
   type InvoiceLineInput,
@@ -297,6 +298,7 @@ interface QuoteLineRow {
   approved: boolean;
   sales_tax_pct: string | number | null;
   total_rule: string | null;
+  billing_entity: string | null;
 }
 
 /**
@@ -313,9 +315,10 @@ interface QuoteLineRow {
 async function prefillFromQuote(taskId: string): Promise<{ lines: InvoiceLineInput[]; tax: number }> {
   const res = await query<QuoteLineRow>(
     `SELECT l.line_type, l.description, l.qty, l.rate, l.ot, l.tax_pct, l.markup_pct,
-            q.ot_multiplier, q.sales_tax_pct, q.total_rule,
+            q.ot_multiplier, q.sales_tax_pct, q.total_rule, t.billing_entity,
             s.kind, s.include_in_summary, s.round, (s.approved_at IS NOT NULL) AS approved, l.position
        FROM quote q
+       JOIN task t ON t.id = q.task_id
        JOIN quote_section s ON s.quote_id = q.id AND s.deleted_at IS NULL
        JOIN quote_line l ON l.section_id = s.id
       WHERE q.task_id = $1
@@ -332,7 +335,9 @@ async function prefillFromQuote(taskId: string): Promise<{ lines: InvoiceLineInp
     // Nothing approved yet: the current round's included options stand in.
     return !anyApproved && n(r.round) === lastRound && r.include_in_summary;
   };
-  const salesPct = yoda ? n(res.rows[0]?.sales_tax_pct) : 0;
+  // 2026-11-04 · only an SFM work order's quote carries tax (quoteTaxApplies).
+  const taxed = quoteTaxApplies(res.rows[0]?.billing_entity);
+  const salesPct = yoda && taxed ? n(res.rows[0]?.sales_tax_pct) : 0;
 
   let taxCents = 0;
   let baseCents = 0;
@@ -351,7 +356,7 @@ async function prefillFromQuote(taskId: string): Promise<{ lines: InvoiceLineInp
       };
       const amount = computeLineAmount(math, mult);
       baseCents += Math.round(amount * 100);
-      if (math.tax_pct > 0) taxCents += Math.round((amount * math.tax_pct) / 100 * 100);
+      if (taxed && math.tax_pct > 0) taxCents += Math.round((amount * math.tax_pct) / 100 * 100);
       // Unit price back out of the amount, so qty × unit price always equals
       // what the quote said — including the overtime multiplier and markup.
       const unit = qty === 0 ? 0 : Math.round((amount / qty) * 100) / 100;

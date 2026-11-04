@@ -47,6 +47,8 @@ interface OptionCardProps {
   /** The "Multi-day job" link revealed the Day column for this option. */
   showDay?: boolean;
   onShowDay?: () => void;
+  /** 2026-11-04 · false = the quote carries no tax (not SFM): no Tax % column. */
+  taxApplies?: boolean;
 }
 
 export function OptionCard({
@@ -63,9 +65,10 @@ export function OptionCard({
   otMultiplier,
   showDay,
   onShowDay,
+  taxApplies = true,
 }: OptionCardProps) {
   const label = optionDisplayLabel(`Option ${optionTag(index)}`, sole ? 1 : 2);
-  const totals = sumLines(section.lines, otMultiplier);
+  const totals = sumLines(section.lines, otMultiplier, taxApplies);
   const note = excludedNote(totals.excluded);
   const nameId = `opt-${section.key}-name`;
   const canEdit = editable && !section.locked;
@@ -201,6 +204,7 @@ export function OptionCard({
           showErrors={showErrors && canEdit}
           otMultiplier={otMultiplier}
           showDay={showDay}
+          showTax={taxApplies}
           onChange={setLines}
         />
       </div>
@@ -217,7 +221,7 @@ export function OptionCard({
           {label} lines <b className="num">{usd(totals.total)}</b>
         </span>
         {grandTotal != null && (
-          <span className="subtotal-chip is-grand" title="Incurred + this option, plus sales tax">
+          <span className="subtotal-chip is-grand" title={taxApplies ? 'Incurred + this option, plus sales tax' : 'Incurred + this option'}>
             Client price <b className="num">{usd(grandTotal)}</b>
           </span>
         )}
