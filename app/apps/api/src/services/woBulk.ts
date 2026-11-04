@@ -25,7 +25,7 @@ import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
-import { assertCompletionAssignees, assertDateOrder, assertDispatchers, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
+import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
 import { checkWriteValue } from './woFieldValues.js';
 import { assertMoneyNotLocked } from './moneySync.js';
 import { assertGateHoldsFields, doneGateMissingFor, quoteGateMissingFor } from './statusGates.js';
@@ -45,6 +45,7 @@ import {
   ASSIGNEE_DISABLED_CODE,
   ASSIGNEE_FIELD_KEY,
   COMPLETION_ASSIGNEE_KEY,
+  SUPPORT_TRAINEE_KEY,
   assigneeNames,
   matchClientRecord,
   normalizeUsState,
@@ -168,6 +169,9 @@ export async function bulkUpdate(
     // 2026-10-30: a Completion Assignee written in bulk names active AR users.
     const closer = customPatch.find((c) => c.key === COMPLETION_ASSIGNEE_KEY);
     if (closer && closer.value) await assertCompletionAssignees(assigneeNames(closer.value));
+    // 0124: a Support Trainee written in bulk names active OMs Under Probation.
+    const trainee = customPatch.find((c) => c.key === SUPPORT_TRAINEE_KEY);
+    if (trainee && trainee.value) await assertSupportTrainees(assigneeNames(trainee.value));
     // 2026-11-03 (0120): unticking Escalated in bulk is a TL / ATL / AM's call.
     const esc = customPatch.find((c) => c.key === ESCALATED_KEY);
     if (esc && !flagTicked(esc.value)) await assertMayClearEscalation(actorId);

@@ -22,8 +22,8 @@ import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { ActivityEntry } from '@theone/shared';
-import { COMPLETION_ASSIGNEE_KEY, ESCALATED_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, flagTicked, withinMoneyBound } from '@theone/shared';
-import { assertCompletionAssignees, assertDateOrder, assertDispatchers, assertMayClearEscalation, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
+import { COMPLETION_ASSIGNEE_KEY, SUPPORT_TRAINEE_KEY, ESCALATED_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, flagTicked, withinMoneyBound } from '@theone/shared';
+import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEscalation, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
 
@@ -327,6 +327,13 @@ export async function updateWorkOrderFields(
       await assertCompletionAssignees(addedAssignees(closer.before, closer.after), closer.field, tx);
     } else if (closer) {
       await assertNoDisabledAssignees(addedAssignees(closer.before, closer.after), closer.field, tx);
+    }
+    // 0124: a name ADDED to Support Trainee holds the OM Under Probation role.
+    const trainee = log.find((c) => c.field === `fields.${SUPPORT_TRAINEE_KEY}`);
+    if (trainee && !auto && !opts.system) {
+      await assertSupportTrainees(addedAssignees(trainee.before, trainee.after), trainee.field, tx);
+    } else if (trainee) {
+      await assertNoDisabledAssignees(addedAssignees(trainee.before, trainee.after), trainee.field, tx);
     }
 
     // Rule 11.1.1: filling the Assignee seat on a work order still waiting in

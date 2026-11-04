@@ -52,6 +52,7 @@ import {
   woNumberProblem,
   ADDRESS_KEY,
   COMPLETION_ASSIGNEE_KEY,
+  SUPPORT_TRAINEE_KEY,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict } from '../errors.js';
@@ -63,7 +64,7 @@ import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { INTAKE_START_STATUS_NAME } from './intake.js';
 import { dispatchAutomations } from './automations.js';
-import { assertCompletionAssignees, assertDispatchers } from './dataRules.js';
+import { assertCompletionAssignees, assertDispatchers, assertSupportTrainees } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 
 const PERM_KEY = 'work_orders';
@@ -424,6 +425,8 @@ export async function createWorkOrder(
   if (str(bag[ASSIGNEE_KEY])) await assertDispatchers(assigneeNames(bag[ASSIGNEE_KEY]), `fields.${ASSIGNEE_KEY}`);
   // 2026-10-30: a Completion Assignee is an active AR user.
   if (str(bag[COMPLETION_ASSIGNEE_KEY])) await assertCompletionAssignees(assigneeNames(bag[COMPLETION_ASSIGNEE_KEY]));
+  // 0124: a Support Trainee is an active OM Under Probation.
+  if (str(bag[SUPPORT_TRAINEE_KEY])) await assertSupportTrainees(assigneeNames(bag[SUPPORT_TRAINEE_KEY]));
 
   const missing = woCreateMissing(form, bag, woNumber);
   if (missing.length > 0) {

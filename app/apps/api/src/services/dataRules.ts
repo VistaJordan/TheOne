@@ -26,6 +26,10 @@ import {
   COMPLETION_ASSIGNEE_KEY,
   COMPLETION_ASSIGNEE_NOT_AR_CODE,
   COMPLETION_ASSIGNEE_ROLE_CODES,
+  SUPPORT_TRAINEE_KEY,
+  SUPPORT_TRAINEE_NOT_PROBATION_CODE,
+  SUPPORT_TRAINEE_ROLE_CODES,
+  supportTraineeNotProbationMessage,
   completionAssigneeNotArMessage,
   DISPATCHER_ROLE_CODES,
   DUE_DATE_KEY,
@@ -160,6 +164,23 @@ export async function assertCompletionAssignees(
     field,
     COMPLETION_ASSIGNEE_NOT_AR_CODE,
     completionAssigneeNotArMessage,
+    q,
+  );
+}
+
+/** Each Support Trainee must be an active human with the OM Under Probation
+    role (0124, Elise 2026-11-04); 400 `SUPPORT_TRAINEE_NOT_PROBATION` otherwise. */
+export async function assertSupportTrainees(
+  names: readonly string[],
+  field = `fields.${SUPPORT_TRAINEE_KEY}`,
+  q: Queryable = pool,
+): Promise<string[]> {
+  return assertRoleHolders(
+    names,
+    SUPPORT_TRAINEE_ROLE_CODES,
+    field,
+    SUPPORT_TRAINEE_NOT_PROBATION_CODE,
+    supportTraineeNotProbationMessage,
     q,
   );
 }

@@ -3239,6 +3239,16 @@ by a person is checked by `assertCompletionAssignees` (`dataRules.ts`, 400
 order; a rule's own write is asked only that the account is not disabled.
 Values already on file are not re-checked; the CSV import is not asked.
 
+**Support Trainee, QC Notes, Portal ID** (migration 0124, Elise 2026-11-04;
+seed.ts carries the three rows — keep in step). `Support Trainee` (users,
+People section) is Completion Assignee's pattern for role `om_probation`
+(`SUPPORT_TRAINEE_*` in shared `dataQuality.ts`, a `ROLE_LIMITED_PERSON_FIELDS`
+entry, `assertSupportTrainees`, 400 `SUPPORT_TRAINEE_NOT_PROBATION`). `QC
+Notes` (long text, QC section) is admins only for now: 0124 sets view / edit
+false on `work_orders/fields/qc/fields.QC Notes` for every role but `admin`
+and `service` (super admins always see it), never client-safe. `Portal ID`
+(short text, Integrations section) is open to whoever sees the section.
+
 **Tech Hub: technicians off the client conversation** (migration 0095,
 Elise 2026-10-27; `callSide` / `TECH_HUB_TAB` in `packages/shared/src/
 calls.ts`, `components/wo/tech/TechTextsCard.tsx`, `tests/tech-hub.test.ts`).

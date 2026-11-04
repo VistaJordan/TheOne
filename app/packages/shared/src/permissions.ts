@@ -222,6 +222,8 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       'fields.Completion Assignee',
       'fields.Previous Assignees',
       'fields.Sales Owner',
+      // 0124 · an OM Under Probation on the job (SUPPORT_TRAINEE_KEY).
+      'fields.Support Trainee',
     ],
   },
   {
@@ -276,6 +278,8 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       'fields.QC Date',
       'fields.Days Since QC',
       'fields.MOD Date',
+      // 0124 · admins only for now (view false for every other role).
+      'fields.QC Notes',
     ],
   },
   {
@@ -286,7 +290,7 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
   {
     title: 'Integrations',
     slug: 'integrations',
-    keys: ['fields.Client Portal Type', 'fields.Ecotrak ID'],
+    keys: ['fields.Client Portal Type', 'fields.Portal ID', 'fields.Ecotrak ID'],
   },
 ];
 

@@ -481,6 +481,12 @@ const CURATED_FIELDS: CuratedField[] = [
   // 0096 · the account team's Assistant Team Lead, filled on Add work order
   // from Clients › Account team. Kept in step with the migration.
   { key: 'ATL',                      label: 'ATL',                  type: 'users' },
+  // 0124 · Support Trainee (an OM Under Probation, People), QC Notes (admins
+  // only, QC) and Portal ID (Integrations). The migration carries the same
+  // rows and the admin-only grant; keep in step.
+  { key: 'Support Trainee',          label: 'Support Trainee',      type: 'users' },
+  { key: 'QC Notes',                 label: 'QC Notes',             type: 'long_text' },
+  { key: 'Portal ID',                label: 'Portal ID',            type: 'short_text' },
   { key: 'Zip Code',                 label: 'Zip Code',             type: 'short_text' },
   { key: 'Trade',                    label: 'Trade',                type: 'dropdown', options: null },
   // System field, kept OUT of the founder's curated order: the dispatcher
@@ -978,6 +984,8 @@ async function main() {
   // (Finances / Payments / Invoicing / AR and the money figures). Kept in step
   // with migrations/0084_uat_access.sql through shared clientUnsafeDefaultBagKeys.
   await query(`UPDATE field_def SET client_safe = false WHERE key = ANY($1::text[])`, [clientUnsafeDefaultBagKeys()]);
+  // 0124 · QC Notes is admins only, so never on a client's tracker either.
+  await query(`UPDATE field_def SET client_safe = false WHERE key = 'QC Notes'`);
 
   // ── 5. Tasks (§4.4) + memberships (§4.5) + created activity (§4.9) ──────────
   let taskCount = 0;

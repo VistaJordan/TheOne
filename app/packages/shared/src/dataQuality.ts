@@ -77,10 +77,28 @@ export function completionAssigneeNotArMessage(names: readonly string[]): string
     : `${list} are not active AR users — the Completion Assignee must hold the AR role`;
 }
 
+/** Support Trainee (0124, Elise 2026-11-04): an OM Under Probation on the
+    work order, People section. Picked from om_probation accounts only. */
+export const SUPPORT_TRAINEE_KEY = 'Support Trainee';
+
+/** The roles a Support Trainee holds: OM Under Probation only. */
+export const SUPPORT_TRAINEE_ROLE_CODES = ['om_probation'] as const;
+
+/** `details.code` when a Support Trainee is not an active OM Under Probation. */
+export const SUPPORT_TRAINEE_NOT_PROBATION_CODE = 'SUPPORT_TRAINEE_NOT_PROBATION';
+
+export function supportTraineeNotProbationMessage(names: readonly string[]): string {
+  const list = names.map((n) => `"${n}"`).join(', ');
+  return names.length === 1
+    ? `${list} is not an active OM Under Probation — the Support Trainee must hold that role`
+    : `${list} are not active OMs Under Probation — the Support Trainee must hold that role`;
+}
+
 /** Person fields whose picker lists one role only (besides the AM / TL / ATL
     seats, `seatRoleForField`): bag key → role code. */
 export const ROLE_LIMITED_PERSON_FIELDS: Readonly<Record<string, string>> = {
   [COMPLETION_ASSIGNEE_KEY]: 'ar',
+  [SUPPORT_TRAINEE_KEY]: 'om_probation',
 };
 
 /** `details.code` when an assignee names a disabled account — asked of every

@@ -15,6 +15,10 @@ import {
   COMPLETION_ASSIGNEE_ROLE_CODES,
   ROLE_LIMITED_PERSON_FIELDS,
   completionAssigneeNotArMessage,
+  FIELD_SECTIONS,
+  SUPPORT_TRAINEE_KEY,
+  SUPPORT_TRAINEE_ROLE_CODES,
+  supportTraineeNotProbationMessage,
 } from '../packages/shared/src/index';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -52,5 +56,40 @@ describe('Completion Assignee is AR only', () => {
     );
     const rules = read('apps/api/src/services/dataRules.ts');
     expect(rules).toMatch(/assertRoleHolders\(\s*names,\s*COMPLETION_ASSIGNEE_ROLE_CODES/);
+  });
+});
+
+/* 0124 (Elise, 2026-11-04) — Support Trainee is picked from OM Under
+ * Probation accounts only, the same way. */
+describe('Support Trainee is OM Under Probation only', () => {
+  it('names the field and the role', () => {
+    expect(SUPPORT_TRAINEE_KEY).toBe('Support Trainee');
+    expect([...SUPPORT_TRAINEE_ROLE_CODES]).toEqual(['om_probation']);
+    expect(ROLE_LIMITED_PERSON_FIELDS[SUPPORT_TRAINEE_KEY]).toBe('om_probation');
+    expect(supportTraineeNotProbationMessage(['Mary Smith'])).toBe(
+      '"Mary Smith" is not an active OM Under Probation — the Support Trainee must hold that role',
+    );
+  });
+
+  it('sits in People; QC Notes in QC, admins only; Portal ID in Integrations', () => {
+    const section = (k: string) => FIELD_SECTIONS.find((s) => s.keys.includes(k))?.slug;
+    expect(section('fields.Support Trainee')).toBe('people');
+    expect(section('fields.QC Notes')).toBe('qc');
+    expect(section('fields.Portal ID')).toBe('integrations');
+    const mig = read('packages/db/migrations/0124_support_trainee_qc_notes_portal_id.sql');
+    expect(mig).toContain(`'work_orders/fields/qc/fields.QC Notes', '{"view": false, "edit": false}'`);
+    expect(mig).toContain(`WHERE r.code NOT IN ('admin', 'service')`);
+    const seed = read('packages/db/src/seed.ts');
+    for (const k of ['Support Trainee', 'QC Notes', 'Portal ID']) expect(seed).toContain(`key: '${k}'`);
+  });
+
+  it('every person write path asks the check', () => {
+    expect(read('apps/api/src/services/woFieldValues.ts')).toContain(
+      'await assertSupportTrainees(addedAssignees(trainee.before, trainee.after), trainee.field, tx);',
+    );
+    expect(read('apps/api/src/services/woBulk.ts')).toContain('await assertSupportTrainees(assigneeNames(trainee.value));');
+    expect(read('apps/api/src/services/woCreate.ts')).toContain(
+      'await assertSupportTrainees(assigneeNames(bag[SUPPORT_TRAINEE_KEY]));',
+    );
   });
 });
