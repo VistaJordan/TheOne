@@ -12,7 +12,8 @@
    saved unit still rides on the line and is saved back unchanged), and the
    Day column is hidden: every line opens on Day 1 and the column is drawn
    only when a line already sits on a later day or the section's "Multi-day
-   job" link was pressed. The OT multiplier comes from the quote's contract
+   job" link was pressed. Since 2026-11-05 (Elise) only a Labor line picks a
+   day — trips, parts and the rest are not repeated per day. The OT multiplier comes from the quote's contract
    when one covers the work order (0046), else ×1.5.
 
    Picking the Labor type on a line whose description is still blank fills it
@@ -177,7 +178,9 @@ export function LineItemsTable({
                         line_type === 'labor' && line.description.trim() === ''
                           ? nextLaborDescription(lines, i)
                           : line.description;
-                      set(i, { line_type, description });
+                      // Only labor repeats per day: any other type sits on Day 1.
+                      const day_value = line_type === 'labor' ? line.day_value : '1';
+                      set(i, { line_type, description, day_value });
                     }}
                   >
                     {/* 2026-10-27 · a new line opens with no type picked. */}
@@ -263,6 +266,10 @@ export function LineItemsTable({
                 )}
                 {dayColumn && (
                   <td>
+                    {/* 2026-11-05 · only a labor line picks its day; a line of
+                        another type saved past Day 1 still shows it so it can be
+                        put back. */}
+                    {(line.line_type === 'labor' || Number(line.day_value || '1') > 1) && (
                     <select
                       className="fld"
                       aria-label={`${label} line ${n} day`}
@@ -274,6 +281,7 @@ export function LineItemsTable({
                         <option key={d} value={d}>Day {d}</option>
                       ))}
                     </select>
+                    )}
                   </td>
                 )}
                 <td>
