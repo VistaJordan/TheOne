@@ -224,7 +224,7 @@ export const SOP: SopDocument = {
         ] },
         { kind: 'sub', title: 'E. The other record tabs' },
         { kind: 'bullets', items: [
-          '**Cost breakdown** (a sub-tab of **Finances**): revenue and cost bases, margin, **Open the quote**, NTE increase requests already open (the button that raised them was removed).',
+          '**Finances** opens on the payment request form (**Submit payment request**), with the Finances card, Money on this WO and the **Payment history** beside it.',
           '**Timelog** (on the **CICO** tab, under the visits): open time, response time, time on site, time in each status, the visits with their locations, pauses; **Start a timer** / **Stop** / **Log time** for technician time.',
           '**Site**: the **Site record** block — **Link** / **Change** / **Unlink** a site, choose the asset; access notes under "Getting in".',
         ] },
@@ -387,7 +387,7 @@ export const SOP: SopDocument = {
       blocks: [
         { kind: 'table', head: ['Section', 'What waits there', 'Deciding it does'], rows: [
           ['NTE override (cost over NTE)', 'NTE override tasks raised when Cost passes the NTE ("Cost $X is over the client NTE $Y by $Z").', 'Approve releases the quote and the payment; Reject keeps the hold.'],
-          ['NTE increase requests', 'Manual NTE increase asks still open (the work order\'s Increase NTE button was removed on 2026-10-20), across every work order you may see (also decided on its Cost breakdown tab).', 'Approve writes the new NTE; Reject needs a reason.'],
+          ['NTE increase requests', 'Manual NTE increase asks still open (the work order\'s Increase NTE button was removed on 2026-10-20), across every work order you may see.', 'Approve writes the new NTE; Reject needs a reason.'],
           ['Status changes', 'Requests from request-mode roles, with from → to, "Requested by <name>", and an Ecotrak tag when Ecotrak would refuse.', 'Approve moves the work order (the gate and the Ecotrak check run again); Reject (reason) sends it back.'],
           ['Manager reviews', 'Review tasks raised by automations (the section appears once one exists).', 'Approve / Reject with a note.'],
           ['Quotes', 'Quotes pending approval.', 'Send to client (approves the quote and sends it in one click) / Return this quote to draft with a note.'],

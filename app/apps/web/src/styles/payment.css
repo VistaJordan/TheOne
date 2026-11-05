@@ -653,3 +653,9 @@
 .payq-actions { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .payq-inline { display: inline-flex; align-items: center; gap: 6px; }
 .payq-inline .fld { min-height: 28px; font-size: 12px; width: 200px; }
+
+/* The form as the work order's Finances tab (2026-11-05): no page header
+   above it, so the grid starts at the top. */
+.pay.pay-embedded > .pay-grid:first-child { margin-top: 0; }
+.pay.pay-embedded > .callout + .pay-grid { margin-top: 12px; }
+.pay.pay-embedded .rail > .card:first-child { margin-top: 0; }

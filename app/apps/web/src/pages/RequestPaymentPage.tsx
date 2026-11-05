@@ -52,6 +52,7 @@ import {
 import type { AddressDraft } from '../components/payments/PaymentAddressFields';
 import { VendorPicker } from '../components/payments/VendorPicker';
 import { OverageReasonDialog } from '../components/payments/OverageReasonDialog';
+import { PaymentTimelineCard } from '../components/payments/PaymentTimelineCard';
 import { parseMoney, usd } from '../lib/quoteTotals';
 import { deriveSite } from '../lib/woDerive';
 import { useInvalidateObligations } from '../hooks/useObligations';
@@ -70,6 +71,22 @@ const W9_THRESHOLD = 599;
 
 export function RequestPaymentPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
+  return <RequestPayment woNumber={woNumber} />;
+}
+
+/** The payment request form. Its own page (/work-orders/:wo/request-payment),
+    and since 2026-11-05 (Elise) also the body of the work order's Finances tab
+    (`embedded`), like the quote builder on the Quote tab: no AppShell, no
+    breadcrumb, no page header; `railTop` (the Finances card) heads the rail. */
+export function RequestPayment({
+  woNumber,
+  embedded = false,
+  railTop,
+}: {
+  woNumber: string;
+  embedded?: boolean;
+  railTop?: ReactNode;
+}) {
   const { linkTo } = useLinkNav();
   const queryClient = useQueryClient();
   const invalidateObligations = useInvalidateObligations();
@@ -314,13 +331,16 @@ export function RequestPaymentPage() {
     </nav>
   );
 
-  const shell = (children: ReactNode) => (
+  const shell = (children: ReactNode) =>
+    embedded ? (
+      <div className="pay pay-embedded">{children}</div>
+    ) : (
     <AppShell active="Work Orders" breadcrumb={breadcrumb}>
       <div className="canvas-inner pay">{children}</div>
     </AppShell>
-  );
+    );
 
-  if (woQuery.isLoading) {
+  if (woQuery.isLoading && !embedded) {
     return shell(<div className="wo-state"><b>Loading {woNumber}…</b></div>);
   }
 
@@ -333,6 +353,17 @@ export function RequestPaymentPage() {
   return shell(
     <>
       {/* ══ Context header (read-only, from the WO) ══════════════════════ */}
+      {embedded ? (
+        woBlocked && (
+          <div className="callout callout-lock">
+            <Icon name="lock" size={14} />
+            <span>
+              <b>Payment requests are closed on this work order.</b> {actionState?.reason}. Existing
+              requests can still be processed by AP below.
+            </span>
+          </div>
+        )
+      ) : (
       <section className="card pghead">
         <div className="pghead-top">
           <div className="pghead-idline">
@@ -379,6 +410,7 @@ export function RequestPaymentPage() {
           </div>
         )}
       </section>
+      )}
 
       <div className="pay-grid">
         {/* ══ Main column — the request form ═══════════════════════════ */}
@@ -871,6 +903,7 @@ export function RequestPaymentPage() {
 
         {/* ══ Right rail ═══════════════════════════════════════════════ */}
         <aside className="rail">
+          {railTop}
           <section className="card">
             <div className="card-head">
               <h2 className="card-title">Request status</h2>
@@ -914,25 +947,6 @@ export function RequestPaymentPage() {
           </section>
 
           <section className="card">
-            <div className="apnote">
-              <span className="apnote-ic"><Icon name="inbox" size={14} /></span>
-              <span>
-                <span className="apnote-t">Payment requests are processed by the AP team</span>
-                <span className="apnote-s">
-                  Submitting adds this request to the AP queue — nothing is sent to the technician
-                  until AP releases it.
-                </span>
-                <span className="apnote-chips">
-                  <span className="chip chip-sm">
-                    <Icon name="history" size={12} />
-                    Typically paid in 1–2 days
-                  </span>
-                </span>
-              </span>
-            </div>
-          </section>
-
-          <section className="card">
             <div className="card-head">
               <h2 className="card-title">Money on this WO</h2>
               {wo?.billing_entity && <span className="card-meta">{wo.billing_entity}</span>}
@@ -958,6 +972,9 @@ export function RequestPaymentPage() {
               </div>
             </dl>
           </section>
+
+          {/* Elise, 2026-11-05: every step of every request, under the money. */}
+          <PaymentTimelineCard woNumber={woNumber} />
         </aside>
       </div>
     </>,

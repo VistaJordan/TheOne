@@ -39,8 +39,16 @@ describe('payment history', () => {
     expect(body).toContain('taskIdOf(req)');
   });
 
-  it('is not drawn on the work order (Elise, 2026-11-03: payments and their status only)', () => {
-    expect(card).not.toContain('PaymentTimelineCard');
+  it('is drawn under Money on this WO on the payment request form, which is the Finances tab (Elise, 2026-11-05)', () => {
+    const form = read('apps/web/src/pages/RequestPaymentPage.tsx');
+    const money = form.indexOf('Money on this WO');
+    expect(money).toBeGreaterThan(0);
+    expect(form.indexOf('<PaymentTimelineCard', money)).toBeGreaterThan(money);
+    expect(form).not.toContain('processed by the AP team');
+    const detail = read('apps/web/src/pages/WorkOrderDetailPage.tsx');
+    expect(detail).toContain('<RequestPayment');
+    expect(detail).not.toContain('<InvoiceCard');
+    expect(detail).not.toContain('<CostBreakdownTab');
     expect(card).not.toContain('getPaymentHistory');
   });
 });

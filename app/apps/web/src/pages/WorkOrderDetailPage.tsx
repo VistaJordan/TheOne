@@ -25,8 +25,9 @@ import { SoftCloseChecklist } from '../components/wo/SoftCloseChecklist';
 import { PenaltiesCard } from '../components/wo/ManagerFlags';
 import { MoneyCard } from '../components/wo/MoneyCard';
 import { QuoteBuilder } from './QuoteBuilderPage';
-import { InvoiceCard } from '../components/wo/InvoiceCard';
 import { PaymentHistoryCard } from '../components/wo/PayablesCard';
+import { PaymentTimelineCard } from '../components/payments/PaymentTimelineCard';
+import { RequestPayment } from './RequestPaymentPage';
 import { AssignmentHistoryCard, PeopleCard } from '../components/wo/PeopleCard';
 import { SuggestedVendorsCard } from '../components/wo/tech/SuggestedVendorsCard';
 import { TechniciansCard } from '../components/wo/tech/TechniciansCard';
@@ -40,7 +41,7 @@ import { MessagesPanel } from '../components/wo/messages/MessagesPanel';
 import { CallsCard } from '../components/wo/calls/CallsCard';
 import { TechTextsCard } from '../components/wo/tech/TechTextsCard';
 import { EtaCard, RecordActions, RecordBar, RecordRail, ResponsibleVendorCard, useWoRecord } from '../components/wo/record/RecordParts';
-import { ChecklistTab, CostBreakdownTab, RelatedTab, TimelogTab } from '../components/wo/record/RecordTabs';
+import { ChecklistTab, RelatedTab, TimelogTab } from '../components/wo/record/RecordTabs';
 import { JobPlanServicesCard, PermitsCard, TimeCard } from '../components/wo/maint/WoMaintCards';
 import { ConsumablesCard, DispatchCard } from '../components/wo/maint/WoVendorCards';
 import { WoPurchasingCard } from './PurchasingPage';
@@ -119,7 +120,8 @@ export function WorkOrderDetailPage() {
   const wanted = toPanel(asked);
   const tab: Tab = canOpen(wanted) ? wanted : toPanel(visibleTabs[0] ?? 'overview');
   // Which part of Finances a ?tab=payables / ?tab=costs link pointed at.
-  const financeFocus = tab === 'money' && (asked === 'payables' || asked === 'costs') && show(asked) ? asked : null;
+  // (?tab=costs still opens Finances, though the Cost breakdown left it 2026-11-05.)
+  const financeFocus = tab === 'money' && asked === 'payables' && show(asked) ? asked : null;
   const setTab = (t: Tab) =>
     setSearchParams(t === 'overview' ? {} : { tab: t }, { replace: true });
   // What Cancel / Reopen / Resume could not do, said under the header.
@@ -227,20 +229,17 @@ export function WorkOrderDetailPage() {
     return () => ro.disconnect();
   }, [wo?.id]);
 
-  // A link to Payables or the Cost breakdown lands on that part of Finances,
-  // once per link (the record loading later does not pull the page back).
+  // A link to Payables lands on that part of Finances, once per link.
   const focusedRef = useRef<string | null>(null);
-  const costsReady = Boolean(recordQuery.data);
   useEffect(() => {
     if (!financeFocus || !wo) return;
     const key = `${wo.id}:${financeFocus}`;
     if (focusedRef.current === key) return;
-    if (financeFocus === 'costs' && !costsReady) return;
     const el = document.getElementById(`fin-${financeFocus}`);
     if (!el) return;
     focusedRef.current = key;
     el.scrollIntoView({ block: 'start' });
-  }, [financeFocus, wo?.id, costsReady]);
+  }, [financeFocus, wo?.id]);
 
   const phase = useMemo(() => {
     if (!wo) return null;
@@ -484,64 +483,41 @@ export function WorkOrderDetailPage() {
             </div>
           )}
 
-          {/* 2026-10-27 · Finances, Payables and Cost breakdown on one panel,
-              each part behind its own tab permission. */}
-          {tab === 'money' && (() => {
-            // 2026-11-02 (Elise) · Payment requests, with Request payment, sits
-            // beside the money card when both parts are open to this person;
-            // otherwise it stays with the rest of Payables. 2026-11-03 (Elise) ·
-            // the step-by-step payment timeline is gone: this card's list of
-            // payments and their status is the payment history.
-            const paymentRequests = (
-              <div className="fin-col">
-                <PaymentHistoryCard
-                  woNumber={wo.wo_number}
-                  items={paymentsQuery.data?.items ?? []}
-                  totalPaid={paymentsQuery.data?.total_paid ?? null}
-                  loading={paymentsQuery.isLoading}
-                  requestAction={wo.actions?.['payment.request'] ?? null}
-                />
-              </div>
-            );
-            const besideMoney = show('money') && show('payables');
-            return (
+          {/* 2026-11-05 (Elise) · Finances opens straight on the payment
+              request form, like the Quote tab opens on the builder: the
+              Finances card heads its rail, Money on this WO and the payment
+              history sit under it. The Client invoice and the Cost breakdown
+              left the tab (Receivables › Invoicing raises invoices). Someone
+              who may see payments but not request one gets the list alone. */}
+          {tab === 'money' && (
             <div role="tabpanel" aria-label="Finances" className="fin-stack">
-              {show('money') && (
+              {show('payables') && can('payments', 'create') ? (
+                <section id="fin-payables" aria-label="Payables">
+                  <RequestPayment
+                    woNumber={wo.wo_number}
+                    embedded
+                    railTop={show('money') ? <MoneyCard wo={wo} /> : undefined}
+                  />
+                </section>
+              ) : (
                 <div className="fin-grid">
-                  {/* The money card (Profitability exception + Manager notes inside it). */}
-                  <MoneyCard wo={wo} />
-                  {besideMoney && paymentRequests}
-                  {/* 0045 · what the client was actually billed. */}
-                  <InvoiceCard wo={wo} />
+                  {show('money') && <MoneyCard wo={wo} />}
+                  {show('payables') && (
+                    <div id="fin-payables" className="fin-col">
+                      <PaymentHistoryCard
+                        woNumber={wo.wo_number}
+                        items={paymentsQuery.data?.items ?? []}
+                        totalPaid={paymentsQuery.data?.total_paid ?? null}
+                        loading={paymentsQuery.isLoading}
+                        requestAction={wo.actions?.['payment.request'] ?? null}
+                      />
+                      <PaymentTimelineCard woNumber={wo.wo_number} />
+                    </div>
+                  )}
                 </div>
               )}
-
-              {/* 2026-11-03 (Elise) · no Payment links card (PPR / Yoda links
-                  stay in All fields), Purchasing moved to Parts, and no Vendor
-                  bills card — so Payables is the payment requests alone, drawn
-                  here only when they are not beside the money card. */}
-              {show('payables') && !besideMoney && (
-                <section id="fin-payables" className="fin-part" aria-label="Payables">
-                  <h2 className="fin-part-title">Payables</h2>
-                  <div className="pay-grid">{paymentRequests}</div>
-                </section>
-              )}
-
-              {show('costs') && (
-                <section id="fin-costs" className="fin-part" aria-label="Cost breakdown">
-                  <h2 className="fin-part-title">Cost breakdown</h2>
-                  {recordQuery.data ? (
-                    <CostBreakdownTab woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} />
-                  ) : (
-                    <section className="card">
-                      <div className="empty-flat">{recordQuery.isLoading ? 'Loading…' : 'Could not load the cost breakdown.'}</div>
-                    </section>
-                  )}
-                </section>
-              )}
             </div>
-            );
-          })()}
+          )}
 
           {/* 2026-10-27 · Penalties, a tab of its own (after Messages since 2026-11-04): Bad
               quote, Penalty, Late quote, Missed ETA, Recall and the manager's

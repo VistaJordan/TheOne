@@ -2785,9 +2785,25 @@ delete asked / refused / done (the reason) — with who and when, newest
 first, eight then **Show all**. It reads the `activity_log` rows
 `logPayment` writes (field `payment_request.status`), so a deleted request
 keeps its history and nothing new is stored; a new payment action must join
-`HISTORY_ACTIONS` (the test fails until it does). **The card is gone**
-(Elise, 2026-11-03: the work order shows the payments and their status, the
-Payment requests card, not their audit trail); the route stays, unread by the web.
+`HISTORY_ACTIONS` (the test fails until it does). The card was dropped on
+2026-11-03 and is back since 2026-11-05 as `components/payments/
+PaymentTimelineCard.tsx`, under **Money on this WO** on the payment form.
+
+**Finances opens on the payment request form** (Elise, 2026-11-05, no
+migration; `RequestPayment` in `pages/RequestPaymentPage.tsx`,
+`tests/payment-history.test.ts`). Like the Quote tab and the builder, the
+Finances tab draws the Request payment form in place (`embedded`: no
+AppShell, breadcrumb or page header; the work order's own blocked callout
+stays), the previous payments under it; its rail is the Finances card
+(`MoneyCard`, passed as `railTop`, with the `money` tab grant), Request
+status, Money on this WO and the Payment history. The "processed by the AP
+team" card is gone from the form (on its own page too). Without `payments`
+create the tab draws the Payment requests list and the history instead. The
+**Client invoice** card and the **Cost breakdown** left the work order
+(`InvoiceCard.tsx` and `CostBreakdownTab` stay in the tree, undrawn); invoices
+are raised in Receivables › Invoicing, and open NTE increase requests are
+decided in Approvals › NTE increase requests. `?tab=payables` and
+`?tab=costs` still open Finances.
 
 **Notifications in the sidebar; no bell** (Elise, 2026-11-04, no migration;
 `packages/shared/src/notices.ts` pure, `listInbox` / `markInbox` /
@@ -3248,6 +3264,11 @@ Notes` (long text, QC section) is admins only for now: 0124 sets view / edit
 false on `work_orders/fields/qc/fields.QC Notes` for every role but `admin`
 and `service` (super admins always see it), never client-safe. `Portal ID`
 (short text, Integrations section) is open to whoever sees the section.
+**INV/COLL** (migration 0125, Elise 2026-11-05, `tests/inv-coll.test.ts`):
+ClickUp's checkbox, under its ClickUp key so the values on file show, in the
+AR section of All fields; admins only like QC Notes (0125 sets view / edit
+false on `work_orders/fields/ar/fields.INV/COLL` for every role but `admin`
+and `service`), never client-safe. seed.ts carries the row — keep in step.
 
 **Tech Hub: technicians off the client conversation** (migration 0095,
 Elise 2026-10-27; `callSide` / `TECH_HUB_TAB` in `packages/shared/src/
