@@ -592,6 +592,22 @@ function VisitRow({ v, now, canEdit, busy, visitTypes, onPatch, onDelete }: Visi
       </div>
 
       <div className="cv-act">
+        {/* The type can change mid-visit: an assessment that ends up doing
+            the work is a Job. Same PATCH as the pencil's form. */}
+        {canEdit && !editing && (
+          <select
+            className="fld cv-status"
+            value={v.visit_type}
+            disabled={busy}
+            aria-label={`Type of visit ${v.seq}`}
+            title="Visit type"
+            onChange={(e) => onPatch({ visit_type: e.target.value })}
+          >
+            {(visitTypes.includes(v.visit_type) ? visitTypes : [v.visit_type, ...visitTypes]).map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        )}
         {canEdit && (
           <select
             className="fld cv-status"
