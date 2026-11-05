@@ -253,6 +253,9 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       // Rule 11.3.4's BFI_Checkbox (0061): ticked, Done / Incurred asks for a
       // before photo and a sign-off instead of an after photo.
       'fields.Bill For Incurred',
+      // 0125 · ClickUp's INV/COLL checkbox; admins only for now (view false
+      // for every other role).
+      'fields.INV/COLL',
     ],
   },
   {

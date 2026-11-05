@@ -487,6 +487,8 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: 'Support Trainee',          label: 'Support Trainee',      type: 'users' },
   { key: 'QC Notes',                 label: 'QC Notes',             type: 'long_text' },
   { key: 'Portal ID',                label: 'Portal ID',            type: 'short_text' },
+  // 0125 · INV/COLL (AR, admins only — the grant is in the migration). Keep in step.
+  { key: 'INV/COLL',                 label: 'INV/COLL',             type: 'checkbox' },
   { key: 'Zip Code',                 label: 'Zip Code',             type: 'short_text' },
   { key: 'Trade',                    label: 'Trade',                type: 'dropdown', options: null },
   // System field, kept OUT of the founder's curated order: the dispatcher
@@ -986,6 +988,8 @@ async function main() {
   await query(`UPDATE field_def SET client_safe = false WHERE key = ANY($1::text[])`, [clientUnsafeDefaultBagKeys()]);
   // 0124 · QC Notes is admins only, so never on a client's tracker either.
   await query(`UPDATE field_def SET client_safe = false WHERE key = 'QC Notes'`);
+  // 0125 · INV/COLL is admins only too.
+  await query(`UPDATE field_def SET client_safe = false WHERE key = 'INV/COLL'`);
 
   // ── 5. Tasks (§4.4) + memberships (§4.5) + created activity (§4.9) ──────────
   let taskCount = 0;
