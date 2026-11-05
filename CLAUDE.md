@@ -2785,20 +2785,20 @@ delete asked / refused / done (the reason) — with who and when, newest
 first, eight then **Show all**. It reads the `activity_log` rows
 `logPayment` writes (field `payment_request.status`), so a deleted request
 keeps its history and nothing new is stored; a new payment action must join
-`HISTORY_ACTIONS` (the test fails until it does). The card was dropped on
-2026-11-03 and is back since 2026-11-05 as `components/payments/
-PaymentTimelineCard.tsx`, under **Money on this WO** on the payment form.
+`HISTORY_ACTIONS` (the test fails until it does). **The card is gone**
+(Elise, 2026-11-03, again 2026-11-05: "history" means the payments and their
+status — Payments on this work order); the route stays, unread by the web.
 
 **Finances opens on the payment request form** (Elise, 2026-11-05, no
 migration; `RequestPayment` in `pages/RequestPaymentPage.tsx`,
 `tests/payment-history.test.ts`). Like the Quote tab and the builder, the
 Finances tab draws the Request payment form in place (`embedded`: no
 AppShell, breadcrumb or page header; the work order's own blocked callout
-stays), the previous payments under it; its rail is the Finances card
-(`MoneyCard`, passed as `railTop`, with the `money` tab grant), Request
-status, Money on this WO and the Payment history. The "processed by the AP
-team" card is gone from the form (on its own page too). Without `payments`
-create the tab draws the Payment requests list and the history instead. The
+stays); its rail is the Finances card (`MoneyCard`, passed as `railTop`,
+with the `money` tab grant), Money on this WO and **Payments on this work
+order** (`PaymentsTable`, moved up from under the form). The Request status
+and "processed by the AP team" cards are gone (on its own page too). Without
+`payments` create the tab draws the Payment requests list instead. The
 **Client invoice** card and the **Cost breakdown** left the work order
 (`InvoiceCard.tsx` and `CostBreakdownTab` stay in the tree, undrawn); invoices
 are raised in Receivables › Invoicing, and open NTE increase requests are

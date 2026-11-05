@@ -26,7 +26,6 @@ import { PenaltiesCard } from '../components/wo/ManagerFlags';
 import { MoneyCard } from '../components/wo/MoneyCard';
 import { QuoteBuilder } from './QuoteBuilderPage';
 import { PaymentHistoryCard } from '../components/wo/PayablesCard';
-import { PaymentTimelineCard } from '../components/payments/PaymentTimelineCard';
 import { RequestPayment } from './RequestPaymentPage';
 import { AssignmentHistoryCard, PeopleCard } from '../components/wo/PeopleCard';
 import { SuggestedVendorsCard } from '../components/wo/tech/SuggestedVendorsCard';
@@ -485,8 +484,8 @@ export function WorkOrderDetailPage() {
 
           {/* 2026-11-05 (Elise) · Finances opens straight on the payment
               request form, like the Quote tab opens on the builder: the
-              Finances card heads its rail, Money on this WO and the payment
-              history sit under it. The Client invoice and the Cost breakdown
+              Finances card heads its rail, Money on this WO and Payments on
+              this work order sit under it. The Client invoice and the Cost breakdown
               left the tab (Receivables › Invoicing raises invoices). Someone
               who may see payments but not request one gets the list alone. */}
           {tab === 'money' && (
@@ -511,7 +510,6 @@ export function WorkOrderDetailPage() {
                         loading={paymentsQuery.isLoading}
                         requestAction={wo.actions?.['payment.request'] ?? null}
                       />
-                      <PaymentTimelineCard woNumber={wo.wo_number} />
                     </div>
                   )}
                 </div>

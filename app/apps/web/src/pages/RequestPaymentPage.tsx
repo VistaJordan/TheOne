@@ -52,7 +52,6 @@ import {
 import type { AddressDraft } from '../components/payments/PaymentAddressFields';
 import { VendorPicker } from '../components/payments/VendorPicker';
 import { OverageReasonDialog } from '../components/payments/OverageReasonDialog';
-import { PaymentTimelineCard } from '../components/payments/PaymentTimelineCard';
 import { parseMoney, usd } from '../lib/quoteTotals';
 import { deriveSite } from '../lib/woDerive';
 import { useInvalidateObligations } from '../hooks/useObligations';
@@ -348,7 +347,6 @@ export function RequestPayment({
   const totalPaid = paymentsQuery.data?.total_paid ?? 0;
   const totalRequested = paymentsQuery.data?.total_requested ?? 0;
   const thisAmount = amountValid ? parsedAmount : null;
-  const status = submitted?.status ?? null;
 
   return shell(
     <>
@@ -891,61 +889,11 @@ export function RequestPayment({
             </div>
           </section>
 
-          {/* ══ Previous payments ════════════════════════════════════ */}
-          <PaymentsTable
-            items={items}
-            loading={paymentsQuery.isLoading}
-            error={paymentsQuery.isError}
-            woNumber={woNumber}
-            totalPaid={totalPaid}
-          />
         </div>
 
         {/* ══ Right rail ═══════════════════════════════════════════════ */}
         <aside className="rail">
           {railTop}
-          <section className="card">
-            <div className="card-head">
-              <h2 className="card-title">Request status</h2>
-              <span
-                className="pill pill-sm"
-                style={{ ['--pill' as string]: submitted ? '#0f9d9f' : '#4466ff' }}
-              >
-                <span className="pill-dot" aria-hidden="true" />
-                <span className="pill-label">{submitted ? 'Requested' : 'Draft'}</span>
-              </span>
-            </div>
-            {/* Requested → Approved → Paid (requirements §2). Nothing on the
-                timeline is reached until submit succeeds, so a pre-submit draft
-                shows all three greyed. */}
-            <ol className="lifebar" aria-label="Payment request lifecycle">
-              {(['requested', 'approved', 'paid'] as const).map((step) => {
-                const reached = status !== null && lifeIndex(status) >= lifeIndex(step);
-                const current = status === step;
-                return (
-                  <li
-                    key={step}
-                    className={`life${current ? ' is-current' : reached ? ' is-done' : ''}`}
-                    aria-current={current ? 'step' : undefined}
-                  >
-                    <span className="life-track" />
-                    <span className="life-lbl">
-                      <span className="life-mark">
-                        {current ? <span className="life-pulse" /> : reached ? <Icon name="check" size={12} /> : null}
-                      </span>
-                      <span className="life-name">{LIFE_LABEL[step]}</span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-            {submitted && (
-              <p className="life-when">
-                Requested just now. A rejected request comes back here as a draft with AP’s reason attached.
-              </p>
-            )}
-          </section>
-
           <section className="card">
             <div className="card-head">
               <h2 className="card-title">Money on this WO</h2>
@@ -973,16 +921,18 @@ export function RequestPayment({
             </dl>
           </section>
 
-          {/* Elise, 2026-11-05: every step of every request, under the money. */}
-          <PaymentTimelineCard woNumber={woNumber} />
+          {/* Elise, 2026-11-05: the payments on this work order and their
+              status, under the money (no Request status card, no step-by-step
+              history). */}
+          <PaymentsTable
+            items={items}
+            loading={paymentsQuery.isLoading}
+            error={paymentsQuery.isError}
+            woNumber={woNumber}
+            totalPaid={totalPaid}
+          />
         </aside>
       </div>
     </>,
   );
-}
-
-const LIFE_LABEL = { requested: 'Requested', approved: 'Approved', paid: 'Paid' } as const;
-
-function lifeIndex(status: string): number {
-  return ['requested', 'approved', 'paid'].indexOf(status);
 }

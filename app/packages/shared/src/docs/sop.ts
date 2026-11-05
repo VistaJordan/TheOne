@@ -224,7 +224,7 @@ export const SOP: SopDocument = {
         ] },
         { kind: 'sub', title: 'E. The other record tabs' },
         { kind: 'bullets', items: [
-          '**Finances** opens on the payment request form (**Submit payment request**), with the Finances card, Money on this WO and the **Payment history** beside it.',
+          '**Finances** opens on the payment request form (**Submit payment request**), with the Finances card, Money on this WO and the payments on this work order beside it.',
           '**Timelog** (on the **CICO** tab, under the visits): open time, response time, time on site, time in each status, the visits with their locations, pauses; **Start a timer** / **Stop** / **Log time** for technician time.',
           '**Site**: the **Site record** block — **Link** / **Change** / **Unlink** a site, choose the asset; access notes under "Getting in".',
         ] },
