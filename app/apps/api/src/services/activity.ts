@@ -218,4 +218,39 @@ export async function getRecentChangeHeads(
   }));
 }
 
+/**
+ * Live sync (0126): has anything changed since `after` that this browser tab
+ * did not do itself? Two doorbells: `live_change` (every write request, keyed
+ * by the tab that made it; plugins/liveChange.ts) and service principals'
+ * audit rows (Ecotrak sync, the PM raise, Quo, rules — work no tab asked for).
+ * Says nothing about WHAT changed, so it needs no permission: the screen
+ * re-reads through its own routes. The cursor is "<live id>:<audit id>"; a
+ * database re-seeded below it answers others = true so the screen reloads once.
+ */
+export async function getAppLatestChange(
+  after: string | null,
+  tab: string | null,
+): Promise<{ cursor: string; others: boolean }> {
+  const m = after ? /^(\d+):(\d+)$/.exec(after) : null;
+  const liveAfter = m ? Number(m[1]) : 0;
+  const logAfter = m ? Number(m[2]) : 0;
+  const res = await query<{ live_max: string; log_max: string; live_other: boolean; log_other: boolean }>(
+    `SELECT (SELECT coalesce(max(id), 0) FROM live_change)  AS live_max,
+            (SELECT coalesce(max(id), 0) FROM activity_log) AS log_max,
+            EXISTS (SELECT 1 FROM live_change
+                     WHERE id > $1 AND tab_id IS DISTINCT FROM $3) AS live_other,
+            EXISTS (SELECT 1 FROM activity_log a
+                      JOIN principal p ON p.id = a.actor_principal_id
+                     WHERE a.id > $2 AND p.kind = 'service') AS log_other`,
+    [liveAfter, logAfter, tab],
+  );
+  const row = res.rows[0];
+  const liveMax = Number(row?.live_max ?? 0);
+  const logMax = Number(row?.log_max ?? 0);
+  const cursor = `${liveMax}:${logMax}`;
+  if (!m) return { cursor, others: false };
+  const reseeded = liveMax < liveAfter || logMax < logAfter;
+  return { cursor, others: reseeded || Boolean(row?.live_other) || Boolean(row?.log_other) };
+}
+
 export { UUID_RE, CREATED_AT_SQL };

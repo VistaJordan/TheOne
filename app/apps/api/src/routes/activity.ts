@@ -1,12 +1,14 @@
 // Routes: GET /activity?wo=:id — a WO's activity newest-first (§5);
-// GET /activity/latest?wo=:id — its newest change, polled by an open work order.
+// GET /activity/latest?wo=:id — its newest change, polled by an open work order;
+// GET /activity/since?after=:id — the newest change anywhere, polled by every screen.
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { parse, notFound } from '../errors.js';
-import { resolveTaskId, getActivityForTask, getRecentChangeHeads, actingPrincipalFromRequest } from '../services/activity.js';
-import type { WoLatestChange } from '@theone/shared';
+import { resolveTaskId, getActivityForTask, getRecentChangeHeads, getAppLatestChange, actingPrincipalFromRequest } from '../services/activity.js';
+import type { AppLatestChange, WoLatestChange } from '@theone/shared';
 import { activityValuesVisible, allowFor, requirePerm } from '../services/permissions.js';
+import { liveChangeTab } from '../plugins/liveChange.js';
 
 const latestQuerySchema = z.object({ wo: z.string().min(1) });
 
@@ -14,6 +16,8 @@ const latestQuerySchema = z.object({ wo: z.string().min(1) });
 // (a burst of changes all on hidden fields) the newest row still moves the
 // version, without a name, so the page reloads what it can see.
 const LATEST_LOOKBACK = 25;
+
+const sinceQuerySchema = z.object({ after: z.string().max(50).optional() });
 
 const activityQuerySchema = z.object({
   wo: z.string().min(1),
@@ -47,5 +51,14 @@ export default async function activityRoutes(app: FastifyInstance): Promise<void
     const seen = heads.find((h) => activityValuesVisible(allow, h.field));
     if (seen) return { id: seen.id, actor: seen.actor, created_at: seen.created_at };
     return { id: heads[0]?.id ?? null, actor: null, created_at: heads[0]?.created_at ?? null };
+  });
+
+  // Live sync between accounts (0126): every signed-in screen asks whether
+  // anything changed since it last looked that its own tab did not do, and
+  // re-reads what it shows when so. Only a cursor and a yes / no come back —
+  // no names, no records — so it needs no permission beyond being signed in.
+  app.get('/activity/since', async (req): Promise<AppLatestChange> => {
+    const { after } = parse(sinceQuerySchema, req.query);
+    return getAppLatestChange(after ?? null, liveChangeTab(req.headers['x-obi-tab']));
   });
 }

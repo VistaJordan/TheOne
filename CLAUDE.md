@@ -2825,6 +2825,23 @@ rail (group or one type), All · Unread · Read, search, Mark all read / Mark
 all unread (on the type picked), tick rows to mark several, a toggle per row,
 day bands; the filter rides in the URL. The 0059 routes stay.
 
+**Live sync between accounts** (migration 0126, Elise 2026-11-05;
+`plugins/liveChange.ts`, `hooks/useAppLiveUpdates.ts` mounted by `AppShell`,
+`GET /activity/since?after=` → `getAppLatestChange` in `services/activity.ts`,
+`tests/app-live-updates.test.ts`). The 2026-11-02 poll (`useWoLiveUpdates`,
+`GET /activity/latest?wo=`, 4 s) watches one open work order and draws the
+"Updated by …" note; lists, queues and badges re-read only on focus. Now every
+successful non-GET `/api/*` request (minus `QUIET_PREFIXES`: auth, prefs,
+notices, assistant) inserts a `live_change` row in `onSend` with the browser
+tab that made it (`x-obi-tab` = `TAB_ID`, sent by `request()` on every call;
+NULL for a webhook) — whether or not the write logs an audit row. Every
+signed-in screen polls every 3 s with an opaque cursor ("<live id>:<audit id>")
+and re-reads every active query (`invalidateQueries`) when a row came from
+another tab (another account or the same person's other tab) or a service
+principal wrote an audit row (Ecotrak sync, PM raise, Quo, rules — work no tab
+asked for). No names or records come back, so no permission is asked. The
+table is UNLOGGED, no FK, pruned to the last hour.
+
 **Notifications tab on the work order** (Elise, 2026-11-02, no migration;
 `listWorkOrderNotices` in `services/notices.ts`, `GET
 /work-orders/:id/notifications`, `components/wo/NotificationsTab.tsx`). Every

@@ -18,6 +18,7 @@ import cookie from '@fastify/cookie';
 import { config } from './config.js';
 import { registerErrorHandler, badRequest } from './errors.js';
 import authGuard from './plugins/authGuard.js';
+import { installLiveChange } from './plugins/liveChange.js';
 import { kickClickUp } from './services/clickup.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
@@ -95,6 +96,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     if (req.url.startsWith('/api/admin/integrations/clickup') || req.url.startsWith('/api/webhooks/clickup-sync')) return;
     kickClickUp();
   });
+
+  // 0126 · every write rings the live-sync doorbell for the other screens.
+  installLiveChange(app);
 
   // Liveness only — deliberately says nothing about who is asking.
   app.get('/api/health', async () => ({ ok: true, auth_mode: config.authMode }));

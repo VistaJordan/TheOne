@@ -12,7 +12,7 @@ import type { ClickUpOverview, EcotrakOverview, IntegrationsResponse } from '@th
 import type { DocsContent, DocsMarkdownKind, DocsSnapshot } from '@theone/shared';
 import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
 // Who is free to take a work order (the Assignee pickers' availability view).
-import type { AssigneeAvailabilityResponse, WoLatestChange } from '@theone/shared';
+import type { AppLatestChange, AssigneeAvailabilityResponse, WoLatestChange } from '@theone/shared';
 import type {
   AssistantAskInput,
   AssistantAskResponse,
@@ -574,14 +574,26 @@ export function setUnauthorizedHandler(fn: UnauthorizedHandler | null): void {
   onUnauthorized = fn;
 }
 
+/** This page load's id (0126 live sync): every request carries it, so the API
+    can tell the other screens a write happened and this one that it was its
+    own. Random, not secret; a new one per page load. */
+export const TAB_ID: string = (() => {
+  try {
+    return crypto.randomUUID().replace(/-/g, '');
+  } catch {
+    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  }
+})();
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     credentials: 'same-origin',
+    ...init,
     headers: {
       'Content-Type': 'application/json',
+      'x-obi-tab': TAB_ID,
       ...(init?.headers ?? {}),
     },
-    ...init,
   });
   if (!res.ok) {
     let body: ApiError | null = null;
@@ -772,6 +784,13 @@ export function getWorkOrderFieldTimes(idOrNumber: string): Promise<{ items: WoF
     see; the live-updates poll (useWoLiveUpdates). */
 export function getLatestChange(wo: string): Promise<WoLatestChange> {
   return request<WoLatestChange>(`/activity/latest${toQuery({ wo })}`);
+}
+
+/** GET /api/activity/since — has anything changed since `after` (the cursor
+    the last answer gave) that this tab did not do; the app-wide live-sync
+    poll (useAppLiveUpdates). */
+export function getAppLatestChange(after: string | null): Promise<AppLatestChange> {
+  return request<AppLatestChange>(`/activity/since${toQuery({ after: after ?? undefined })}`);
 }
 
 export function getActivity(wo: string): Promise<ActivityEntry[]> {

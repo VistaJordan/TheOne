@@ -1847,6 +1847,17 @@ export interface WoLatestChange {
   created_at: string | null;
 }
 
+/** GET /activity/since?after= — polled by every signed-in screen (0126) so
+    every account follows every change without a refresh. `cursor` is opaque:
+    send it back as `after`. `others` = since `after`, a write request from
+    another browser tab (any account, the same person's other tab included,
+    a webhook), or a system write (a service principal's audit row: Ecotrak
+    sync, PM raise, rules) happened. */
+export interface AppLatestChange {
+  cursor: string;
+  others: boolean;
+}
+
 // ── KPIs ─────────────────────────────────────────────────────────────────────
 export interface Kpis {
   active: { count: number };

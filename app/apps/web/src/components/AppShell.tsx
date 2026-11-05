@@ -16,6 +16,7 @@ import { AssistantButton } from './assistant/AssistantPanel';
 import { OKnobScrollbar } from './OKnobScrollbar';
 import { useAuth } from '../auth/AuthProvider';
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed';
+import { useAppLiveUpdates } from '../hooks/useAppLiveUpdates';
 import { ADMIN_SECTIONS } from '../lib/adminSections';
 import { initialsOf, roleLabel } from '../lib/actor';
 import { isVersionTwo } from '../lib/versionTwo';
@@ -221,6 +222,10 @@ export function AppShell({
   // S5 — identity comes from the session, not from a client-side pin. `actingAs`
   // is who the app behaves as; `user` is the human who actually signed in.
   const { user, actingAs, isImpersonating, signOut, can } = useAuth();
+
+  // 2026-11-05 · other people's changes reach every screen (lists, queues,
+  // badges) within a few seconds, not only an open work order.
+  useAppLiveUpdates(!!user);
 
   // 0025 · the Approvals badge: what waits on this person (open tasks they
   // may decide + their own decided requests not yet acknowledged). Polled
