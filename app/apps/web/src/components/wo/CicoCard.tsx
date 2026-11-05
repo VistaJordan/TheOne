@@ -816,8 +816,11 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
   const submit = () => {
     setTouched(true);
     if (!type) return;
+    // A new visit is the technician arriving: it is logged checked in (the
+    // API stamps now and runs rule 2.2.2's On Site move or request).
     onSubmit({
       visit_type: type,
+      status: 'checked_in',
       tech_name: tech.trim() || null,
       tech_phone: phone.trim() || null,
       ...(vendorId && tech.trim() ? { vendor_id: vendorId } : {}),
@@ -888,7 +891,7 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
       <div className="cv-form-foot">
         <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
           <Icon name="plus" size={14} />
-          Log visit
+          Check in
         </button>
         <button type="button" className="btn btn-sm" onClick={onCancel} disabled={busy}>Cancel</button>
         {touched && !type && <span className="cv-hint">Pick the visit type first.</span>}
