@@ -149,7 +149,6 @@ export function NotificationsPage() {
       <div className="canvas-inner ntf">
         <div className="vend-head">
           <div className="page-head" style={{ margin: 0 }}>
-            <h1 className="page-title">Notifications</h1>
             <p className="ntf-sub">
               {first ? (unread > 0 ? `${unread.toLocaleString('en-US')} unread of ${total.toLocaleString('en-US')}` : total > 0 ? 'All caught up' : 'Nothing yet') : ' '}
             </p>

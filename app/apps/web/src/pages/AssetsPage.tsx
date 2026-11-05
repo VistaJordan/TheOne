@@ -71,9 +71,6 @@ export function AssetsPage() {
     <AppShell active="Assets">
       <div className="canvas-inner">
         <div className="vend-head">
-          <div className="page-head" style={{ margin: 0 }}>
-            <h1 className="page-title">Assets</h1>
-          </div>
           {view === 'list' && (
             <div className="vend-counts">
               {quick('warranty', 'expiring', 'Warranty ends soon')}

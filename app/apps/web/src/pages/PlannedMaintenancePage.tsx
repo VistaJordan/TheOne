@@ -119,7 +119,6 @@ export function PlannedMaintenancePage() {
   return (
     <AppShell active="Planned Maintenance">
       <div className="page-head">
-        <h1 className="page-title">Planned maintenance</h1>
         <p className="page-sub">
           The recurring jobs. Each schedule raises its own work order ahead of every due date, in
           PM Sched, numbered after the schedule — nothing to type on the day.

@@ -46,7 +46,6 @@ export function PurchasingPage() {
   return (
     <AppShell active="Purchasing">
       <div className="canvas-inner">
-        <div className="vend-head"><div className="page-head" style={{ margin: 0 }}><h1 className="page-title">Purchasing</h1></div></div>
         {meta.isError && <section className="card"><div className="empty-flat">{errText(meta.error, 'Could not load Purchasing.')}</div></section>}
         {m && tabs.length === 0 && <section className="card"><div className="empty-flat">Your role does not open any part of Purchasing.</div></section>}
         {m && tab && (

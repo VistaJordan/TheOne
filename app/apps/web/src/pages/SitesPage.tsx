@@ -89,9 +89,6 @@ export function SitesPage() {
     <AppShell active="Sites">
       <div className="canvas-inner">
         <div className="vend-head">
-          <div className="page-head" style={{ margin: 0 }}>
-            <h1 className="page-title">Sites</h1>
-          </div>
           <div className="seg" role="group" aria-label="View" style={{ marginLeft: 'auto' }}>
             <button type="button" className={`seg-btn${view === 'list' ? ' is-on' : ''}`} aria-pressed={view === 'list'} onClick={() => set({ view: null })}>
               <Icon name="list" size={12} /> List

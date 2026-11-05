@@ -93,7 +93,6 @@ export function ContractsPage() {
   return (
     <AppShell active="Contracts">
       <div className="page-head">
-        <h1 className="page-title">Contracts and rates</h1>
         <p className="page-sub">
           What each client has agreed the work costs. A quote prices against the card that covers
           its work order; an invoice with no quote bills the hours on site at the card's rate.

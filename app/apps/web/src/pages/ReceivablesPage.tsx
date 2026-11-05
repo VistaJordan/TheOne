@@ -198,7 +198,6 @@ export function ReceivablesPage() {
   return (
     <AppShell total={totalQuery.data?.total} active="Receivables">
       <div className="page-head">
-        <h1 className="page-title">Receivables</h1>
         <p className="page-sub">
           Accounts receivable — completion audit and client invoicing, one pipeline.
         </p>

@@ -52,9 +52,6 @@ export function MaintenancePage() {
   return (
     <AppShell active="Maintenance">
       <div className="canvas-inner">
-        <div className="vend-head">
-          <div className="page-head" style={{ margin: 0 }}><h1 className="page-title">Maintenance</h1></div>
-        </div>
         {tabs.length === 0 ? (
           <section className="card"><div className="empty-flat">Your role does not open any of the maintenance modules.</div></section>
         ) : (

@@ -129,7 +129,6 @@ export function ClientUpdatesPage() {
   return (
     <AppShell active="Client Updates">
       <div className="page-head">
-        <h1 className="page-title">Client Updates</h1>
         <p className="page-sub">
           A live tracker for each client, read straight from the work orders. Click a chart to narrow the list, then share
           it by link or email it from {list.data?.mail.from ?? 'contact@seamlessfm.com'}.

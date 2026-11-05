@@ -64,9 +64,6 @@ export function ClientsPage() {
     <AppShell active="Clients">
       <div className="canvas-inner">
         <div className="vend-head">
-          <div className="page-head" style={{ margin: 0 }}>
-            <h1 className="page-title">Clients</h1>
-          </div>
           {q.data?.can.create && (
             <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setAdding(true)}>
               <Icon name="plus" size={14} />

@@ -218,9 +218,6 @@ export function VendorsPage() {
     <AppShell active="Vendors">
       <div className="canvas-inner">
         <div className="vend-head">
-          <div className="page-head" style={{ margin: 0 }}>
-            <h1 className="page-title">Vendors</h1>
-          </div>
           {m && rowsView && (
             <div className="vend-counts">
               <button type="button" className={`chip${sp.get('kind') === 'vendor' ? ' chip-accent' : ''}`} onClick={() => set({ kind: sp.get('kind') === 'vendor' ? null : 'vendor' })}>
