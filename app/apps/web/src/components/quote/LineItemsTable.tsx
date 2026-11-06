@@ -17,10 +17,13 @@
    when one covers the work order (0046), else ×1.5.
 
    Picking the Labor type on a line whose description is still blank fills it
-   with "Labor tech N" (N = the section's labor lines so far + 1). */
+   with "Labor tech N"; since 2026-11-06 (Elise) N counts per DAY — the same
+   tech goes back each day — and every "Labor tech N" is kept in order within
+   its day (renumberLaborLines). */
 
+import { useEffect } from 'react';
 import type { DraftLine } from '../../lib/quoteDraft';
-import { DAY_VALUES, LINE_TYPES, blankLine, moveItem, nextLaborDescription, removeAt, replaceAt } from '../../lib/quoteDraft';
+import { DAY_VALUES, LINE_TYPES, blankLine, isAutoLaborDescription, moveItem, nextLaborDescription, removeAt, renumberLaborLines, replaceAt } from '../../lib/quoteDraft';
 import { OT_MULTIPLIER, lineAmount, lineErrors, lineFieldId, lineTax, usd } from '../../lib/quoteTotals';
 import { useReorder } from '../../hooks/useReorder';
 import type { LaborRate } from '../../api/client';
@@ -52,11 +55,20 @@ export function LineItemsTable({
   lines,
   editable,
   showErrors,
-  onChange,
+  onChange: emit,
   otMultiplier = OT_MULTIPLIER,
   showDay = false,
   showTax = true,
 }: LineItemsTableProps) {
+  // Every edit re-counts the "Labor tech N" names per day (2026-11-06).
+  const onChange = (next: DraftLine[]) => emit(renumberLaborLines(next));
+  // …and lines already on the form (an older quote, a restored copy) are put
+  // right as soon as they are drawn, not on the next edit.
+  useEffect(() => {
+    if (!editable) return;
+    const fixed = renumberLaborLines(lines);
+    if (fixed !== lines) emit(fixed);
+  }, [lines, editable, emit]);
   const reorder = useReorder((from, to) => onChange(moveItem(lines, from, to)));
   const otText = `${Number.isInteger(otMultiplier * 100) ? otMultiplier : otMultiplier.toFixed(3)}×`;
   const dayColumn = showDay || linesSpanDays(lines);
@@ -275,7 +287,16 @@ export function LineItemsTable({
                       aria-label={`${label} line ${n} day`}
                       value={line.day_value || '1'}
                       disabled={!editable}
-                      onChange={(e) => set(i, { day_value: e.target.value })}
+                      onChange={(e) => {
+                        const day_value = e.target.value;
+                        // A labor line still named "Labor tech N" is renumbered
+                        // for its new day: each day starts at Labor tech 1.
+                        const description =
+                          line.line_type === 'labor' && isAutoLaborDescription(line.description)
+                            ? nextLaborDescription(lines, i, day_value)
+                            : line.description;
+                        set(i, { day_value, description });
+                      }}
                     >
                       {DAY_VALUES.map((d) => (
                         <option key={d} value={d}>Day {d}</option>

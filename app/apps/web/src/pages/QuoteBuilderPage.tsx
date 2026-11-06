@@ -63,7 +63,17 @@ import { QuotePipeline } from '../components/quote/QuoteStatusPill';
 import { ScopeList } from '../components/quote/ScopeList';
 import { SummaryCard } from '../components/quote/SummaryCard';
 import type { DraftLine, DraftQuote, DraftSection } from '../lib/quoteDraft';
-import { blankOption, fromQuote, removeAt, replaceAt, resetDraft, toUpdateInput } from '../lib/quoteDraft';
+import {
+  blankOption,
+  clearLocalDraft,
+  fromQuote,
+  readLocalDraft,
+  removeAt,
+  replaceAt,
+  resetDraft,
+  toUpdateInput,
+  writeLocalDraft,
+} from '../lib/quoteDraft';
 import {
   computeQuoteTotals,
   excludedNote,
@@ -207,14 +217,24 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const identity = quote ? `${quote.id}:${quote.status}:${quote.rev}` : null;
   const signature = quote ? `${identity}:${quote.updated_at}` : null;
   const loadedSignature = useRef<string | null>(null);
+  // The server's updated_at the form was last in step with (the local copy's base).
+  const baseRef = useRef<string>('');
+  const draftRef = useRef<DraftQuote | null>(null);
+  draftRef.current = draft;
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (!quote || signature === loadedSignature.current) return;
     const sameQuote = loadedSignature.current?.startsWith(`${identity}:`) ?? false;
     if (sameQuote && (dirty || saving)) return;
     loadedSignature.current = signature;
-    setDraft(fromQuote(quote));
-    setDirty(false);
+    baseRef.current = quote.updated_at;
+    // 2026-11-06 · a reload brings back what was typed, unfinished lines
+    // included, while nobody else has saved the quote since.
+    const local = identity ? readLocalDraft(woNumber, identity, quote.updated_at) : null;
+    setDraft(local ?? fromQuote(quote));
+    // A restored copy may hold complete lines typed just before the reload:
+    // let the autosave send them.
+    setDirty(local !== null);
     // Seed the chip from the quote's own updated_at, so a saved quote does not
     // greet its author with "not saved yet".
     const t = Date.parse(quote.updated_at);
@@ -275,6 +295,14 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       // Keep the server's canonical numbers/summary, but do NOT let the response
       // re-seed the form (see loadedSignature above).
       loadedSignature.current = `${res.quote.id}:${res.quote.status}:${res.quote.rev}:${res.quote.updated_at}`;
+      baseRef.current = res.quote.updated_at;
+      if (draftRef.current) {
+        writeLocalDraft(woNumber, {
+          identity: `${res.quote.id}:${res.quote.status}:${res.quote.rev}`,
+          base: res.quote.updated_at,
+          draft: draftRef.current,
+        });
+      }
       queryClient.setQueryData(quoteKey, { quote: res.quote, permissions });
       setSavedAt(Date.now());
       setDirty(false);
@@ -291,6 +319,18 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     return () => clearTimeout(t);
   }, [draft, editable, dirty]);
 
+  // 2026-11-06 · every change is also kept in this browser at once, so a
+  // reload (or leaving by mistake) never loses an unfinished line. A quote
+  // nobody may edit any more keeps no copy.
+  useEffect(() => {
+    if (!quote || !identity || !draft) return;
+    if (!editable) {
+      clearLocalDraft(woNumber);
+      return;
+    }
+    if (dirty) writeLocalDraft(woNumber, { identity, base: baseRef.current, draft });
+  }, [quote, identity, draft, editable, dirty, woNumber]);
+
   // Embedded in the Quotes tab, switching tabs unmounts the builder before the
   // autosave fires: send what is pending on the way out.
   const pendingRef = useRef<DraftQuote | null>(null);
@@ -301,12 +341,19 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       const pending = pendingRef.current;
       if (!pending) return;
       void putWorkOrderQuote(woNumber, toUpdateInput(pending))
-        .then((res) =>
+        .then((res) => {
+          // Keep the local copy in step with this save, or coming back to
+          // the tab would find it out of date and drop the unfinished lines.
+          writeLocalDraft(woNumber, {
+            identity: `${res.quote.id}:${res.quote.status}:${res.quote.rev}`,
+            base: res.quote.updated_at,
+            draft: pending,
+          });
           queryClient.setQueryData(['wo-quote', woNumber], (old: { permissions?: QuotePermissions | null } | undefined) => ({
             quote: res.quote,
             permissions: old?.permissions ?? null,
-          })),
-        )
+          }));
+        })
         .catch(() => undefined);
     };
   }, [embedded, woNumber, queryClient]);

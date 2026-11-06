@@ -131,4 +131,36 @@ describe('nextLaborDescription — "Labor tech N"', async () => {
     // The line being switched is not counted twice.
     expect(nextLaborDescription([a, { ...c, line_type: 'labor' as const }], 1)).toBe('Labor tech 2');
   });
+
+  it('counts per day: each day of a multi-day job starts again at "Labor tech 1"', async () => {
+    const { isAutoLaborDescription } = await import('../apps/web/src/lib/quoteDraft');
+    const d1 = { ...blankLine(), line_type: 'labor' as const, description: 'Labor tech 1', day_value: '1' };
+    const d1b = { ...blankLine(), line_type: 'labor' as const, description: 'Labor tech 2', day_value: '1' };
+    const d2 = { ...blankLine(), line_type: 'labor' as const, description: '', day_value: '2' };
+    // A labor line on Day 2 with two on Day 1 is the first of its day.
+    expect(nextLaborDescription([d1, d1b, d2], 2)).toBe('Labor tech 1');
+    // A second labor line on Day 2.
+    const d2b = { ...d2, description: 'Labor tech 1' };
+    expect(nextLaborDescription([d1, d2b, { ...d2 }], 2)).toBe('Labor tech 2');
+    // Moving Day 1's second line to Day 2 (explicit day) counts Day 2's lines.
+    expect(nextLaborDescription([d1, d1b, d2b], 1, '2')).toBe('Labor tech 2');
+    expect(nextLaborDescription([d1, d1b], 1, '3')).toBe('Labor tech 1');
+    expect(isAutoLaborDescription('Labor tech 3')).toBe(true);
+    expect(isAutoLaborDescription('')).toBe(true);
+    expect(isAutoLaborDescription('Electrician helper')).toBe(false);
+  });
+
+  it('renumberLaborLines re-counts auto names per day and leaves typed ones', async () => {
+    const { renumberLaborLines } = await import('../apps/web/src/lib/quoteDraft');
+    const L = (description: string, day_value: string) =>
+      ({ ...blankLine(), line_type: 'labor' as const, description, day_value });
+    const trip = { ...blankLine(), line_type: 'service' as const, description: 'Trip' };
+    // The screenshot: Labor tech 1 on Day 1, Labor tech 2 on Day 2.
+    const out = renumberLaborLines([trip, L('Labor tech 1', '1'), L('Labor tech 2', '2')]);
+    expect(out.map((l) => l.description)).toEqual(['Trip', 'Labor tech 1', 'Labor tech 1']);
+    const mixed = renumberLaborLines([L('Electrician', '1'), L('Labor tech 5', '1'), L('', '1')]);
+    expect(mixed.map((l) => l.description)).toEqual(['Electrician', 'Labor tech 2', '']);
+    const same = [L('Labor tech 1', '1')];
+    expect(renumberLaborLines(same)).toBe(same);
+  });
 });

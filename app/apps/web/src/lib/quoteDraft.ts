@@ -171,13 +171,51 @@ export function tripLine(tripRate: number | null | undefined): DraftLine {
 }
 
 /** The description a Labor line gets when picked on a blank line: "Labor
-    tech N", N counting the section's OTHER labor lines plus one, so the first
-    reads "Labor tech 1". */
+    tech N", N counting the section's OTHER labor lines ON THE SAME DAY plus
+    one (Elise 2026-11-06: on a multi-day job the same tech goes back each
+    day, so each day starts again at "Labor tech 1"). `day` defaults to the
+    line's own day. */
 export const LABOR_LINE_DESCRIPTION = 'Labor tech';
 
-export function nextLaborDescription(lines: readonly DraftLine[], index: number): string {
-  const others = lines.filter((l, i) => i !== index && l.line_type === 'labor').length;
+const dayOf = (l: DraftLine): string => l.day_value || String(QUOTE_DEFAULT_DAY);
+
+export function nextLaborDescription(
+  lines: readonly DraftLine[],
+  index: number,
+  day: string = lines[index] ? dayOf(lines[index]) : String(QUOTE_DEFAULT_DAY),
+): string {
+  const others = lines.filter(
+    (l, i) => i !== index && l.line_type === 'labor' && dayOf(l) === day,
+  ).length;
   return `${LABOR_LINE_DESCRIPTION} ${others + 1}`;
+}
+
+/** True when a description is blank or still the generated "Labor tech N",
+    so moving the line to another day may renumber it. */
+export function isAutoLaborDescription(description: string): boolean {
+  const d = description.trim();
+  return d === '' || new RegExp(`^${LABOR_LINE_DESCRIPTION} \\d+$`).test(d);
+}
+
+/** Puts every labor line still named "Labor tech N" back in order within its
+    day (1, 2, … top to bottom), so moving, removing or re-dating a line never
+    leaves a day reading "Labor tech 2" with no tech 1. A description typed by
+    hand, or blank, is left alone. Returns the same array when nothing moved. */
+export function renumberLaborLines(lines: DraftLine[]): DraftLine[] {
+  const seen = new Map<string, number>();
+  let changed = false;
+  const next = lines.map((l) => {
+    if (l.line_type !== 'labor') return l;
+    const day = dayOf(l);
+    const n = (seen.get(day) ?? 0) + 1;
+    seen.set(day, n);
+    if (l.description.trim() === '' || !isAutoLaborDescription(l.description)) return l;
+    const description = `${LABOR_LINE_DESCRIPTION} ${n}`;
+    if (description === l.description) return l;
+    changed = true;
+    return { ...l, description };
+  });
+  return changed ? next : lines;
 }
 
 /** A new option opens like a new incurred section (2026-10-22): the five
@@ -259,7 +297,10 @@ function sectionToDraft(section: QuoteSection | QuoteDraftSection, currentRound:
     scope_lines:
       (section.scope_lines ?? []).length > 0 ? [...(section.scope_lines ?? [])] : locked ? [] : [''],
     include_in_summary: section.include_in_summary ?? true,
-    lines: (section.lines ?? []).map((line) => ({
+    // An open section's "Labor tech N" names are re-counted per day on load,
+    // so a quote saved before the per-day rule (2026-11-06) reads right; a
+    // locked section is shown exactly as it was saved.
+    lines: (locked ? (x: DraftLine[]) => x : renumberLaborLines)((section.lines ?? []).map((line) => ({
       key: uid('line'),
       line_type: line.line_type,
       description: line.description,
@@ -277,7 +318,7 @@ function sectionToDraft(section: QuoteSection | QuoteDraftSection, currentRound:
       ot: line.ot ?? false,
       uom: line.uom ?? '',
       tax_pct: (line.tax_pct ?? 0) > 0 ? String(line.tax_pct) : '',
-    })),
+    }))),
     round,
     locked,
     approved: saved ? saved.approved_at !== null : false,
@@ -466,4 +507,65 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
   const [item] = next.splice(from, 1);
   next.splice(target, 0, item);
   return next;
+}
+
+// ── Local copy (2026-11-06, Elise) ──────────────────────────────────────────
+// The autosave leaves out a line with no description or no Type (the API
+// refuses one), so a reload used to lose every unfinished row. The builder
+// keeps the whole form in this browser as well, keyed by work order, and
+// restores it on reload — but only while it is still the same quote (id,
+// status, revision) AND nobody saved it since (`base` = the quote's
+// updated_at this form was last in step with). Reset quote starts over; the
+// copy follows the form, so a reset is what is kept.
+
+const LOCAL_DRAFT_PREFIX = 'theone.quote.draft.';
+
+export interface LocalDraftCopy {
+  identity: string;
+  base: string;
+  draft: DraftQuote;
+}
+
+/** New React keys for a restored form: `uid` counts from 0 on every page
+    load, so the stored keys could collide with the next line added. */
+function rekey(draft: DraftQuote): DraftQuote {
+  return {
+    ...draft,
+    sections: draft.sections.map((s) => ({
+      ...s,
+      key: uid(s.kind === 'incurred' ? 'inc' : 'opt'),
+      lines: s.lines.map((l) => ({ ...l, key: uid('line') })),
+    })),
+  };
+}
+
+export function readLocalDraft(woNumber: string, identity: string, base: string): DraftQuote | null {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_DRAFT_PREFIX + woNumber);
+    if (!raw) return null;
+    const copy = JSON.parse(raw) as LocalDraftCopy;
+    if (copy.identity !== identity || copy.base !== base || !Array.isArray(copy.draft?.sections)) {
+      window.localStorage.removeItem(LOCAL_DRAFT_PREFIX + woNumber);
+      return null;
+    }
+    return rekey(copy.draft);
+  } catch {
+    return null;
+  }
+}
+
+export function writeLocalDraft(woNumber: string, copy: LocalDraftCopy): void {
+  try {
+    window.localStorage.setItem(LOCAL_DRAFT_PREFIX + woNumber, JSON.stringify(copy));
+  } catch {
+    /* storage full or blocked: the autosave still keeps the complete lines */
+  }
+}
+
+export function clearLocalDraft(woNumber: string): void {
+  try {
+    window.localStorage.removeItem(LOCAL_DRAFT_PREFIX + woNumber);
+  } catch {
+    /* nothing to clear */
+  }
 }
