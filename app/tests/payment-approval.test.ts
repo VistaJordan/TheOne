@@ -163,4 +163,23 @@ describe('nextLaborDescription — "Labor tech N"', async () => {
     const same = [L('Labor tech 1', '1')];
     expect(renumberLaborLines(same)).toBe(same);
   });
+
+  it('days run without gaps, and a line picks at most one day past the others', async () => {
+    const { renumberLaborLines, closeDayGaps, dayChoices } = await import('../apps/web/src/lib/quoteDraft');
+    const L = (description: string, day_value: string) =>
+      ({ ...blankLine(), line_type: 'labor' as const, description, day_value });
+    // The screenshot: Day 1, Day 2, Day 3, Day 5 → Day 5 becomes Day 4.
+    const out = renumberLaborLines([L('Labor tech 1', '1'), L('Labor tech 1', '2'), L('Labor tech 1', '3'), L('Labor tech 1', '5')]);
+    expect(out.map((l) => l.day_value)).toEqual(['1', '2', '3', '4']);
+    // Day 1 and Day 3 only → Day 3 becomes Day 2.
+    expect(closeDayGaps([L('a', '1'), L('b', '3')]).map((l) => l.day_value)).toEqual(['1', '2']);
+    const ok = [L('a', '1'), L('b', '2')];
+    expect(closeDayGaps(ok)).toBe(ok);
+    // Choices: the first line alone has Day 1 and Day 2; Day 3 needs a Day 2.
+    expect(dayChoices([L('a', '1')], 0)).toEqual(['1', '2']);
+    expect(dayChoices([L('a', '1'), L('b', '1')], 1)).toEqual(['1', '2']);
+    expect(dayChoices([L('a', '1'), L('b', '2'), L('c', '1')], 2)).toEqual(['1', '2', '3']);
+    // The only Day 2 line cannot jump to Day 3.
+    expect(dayChoices([L('a', '1'), L('b', '2')], 1)).toEqual(['1', '2']);
+  });
 });

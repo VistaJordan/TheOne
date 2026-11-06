@@ -201,9 +201,10 @@ export function isAutoLaborDescription(description: string): boolean {
     day (1, 2, … top to bottom), so moving, removing or re-dating a line never
     leaves a day reading "Labor tech 2" with no tech 1. A description typed by
     hand, or blank, is left alone. Returns the same array when nothing moved. */
-export function renumberLaborLines(lines: DraftLine[]): DraftLine[] {
+export function renumberLaborLines(input: DraftLine[]): DraftLine[] {
+  const lines = closeDayGaps(input);
   const seen = new Map<string, number>();
-  let changed = false;
+  let changed = lines !== input;
   const next = lines.map((l) => {
     if (l.line_type !== 'labor') return l;
     const day = dayOf(l);
@@ -215,7 +216,33 @@ export function renumberLaborLines(lines: DraftLine[]): DraftLine[] {
     changed = true;
     return { ...l, description };
   });
-  return changed ? next : lines;
+  return changed ? next : input;
+}
+
+/** Days run 1, 2, 3 with no gaps (Elise 2026-11-06: "Day 2, Day 5" is a day
+    picked wrong). The days the lines use are renumbered in order, Day 1
+    always first — Day 1, Day 3, Day 5 become Day 1, Day 2, Day 3, so removing
+    or re-dating a line closes the gap it left. Returns the same array when
+    the days already run without one. */
+export function closeDayGaps(lines: DraftLine[]): DraftLine[] {
+  const used = [...new Set(lines.map((l) => Number(dayOf(l))))].filter((d) => d > 1).sort((a, b) => a - b);
+  const map = new Map<number, number>(used.map((d, i) => [d, i + 2]));
+  if (used.every((d, i) => d === i + 2)) return lines;
+  return lines.map((l) => {
+    const d = Number(dayOf(l));
+    const to = map.get(d);
+    return to == null || to === d ? l : { ...l, day_value: String(to) };
+  });
+}
+
+/** The days a line may pick: Day 1 up to one past the latest day the OTHER
+    lines use (so Day 3 only once some line is on Day 2), and the line's own
+    day whatever it is. */
+export function dayChoices(lines: readonly DraftLine[], index: number): string[] {
+  const latest = lines.reduce((m, l, i) => (i === index ? m : Math.max(m, Number(dayOf(l)) || 1)), 1);
+  const own = Number(lines[index] ? dayOf(lines[index]) : '1') || 1;
+  const top = Math.min(Math.max(latest + 1, own), Number(DAY_VALUES[DAY_VALUES.length - 1]));
+  return DAY_VALUES.filter((d) => Number(d) <= top);
 }
 
 /** A new option opens like a new incurred section (2026-10-22): the five

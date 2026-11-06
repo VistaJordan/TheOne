@@ -23,7 +23,7 @@
 
 import { useEffect } from 'react';
 import type { DraftLine } from '../../lib/quoteDraft';
-import { DAY_VALUES, LINE_TYPES, blankLine, isAutoLaborDescription, moveItem, nextLaborDescription, removeAt, renumberLaborLines, replaceAt } from '../../lib/quoteDraft';
+import { LINE_TYPES, blankLine, dayChoices, isAutoLaborDescription, moveItem, nextLaborDescription, removeAt, renumberLaborLines, replaceAt } from '../../lib/quoteDraft';
 import { OT_MULTIPLIER, lineAmount, lineErrors, lineFieldId, lineTax, usd } from '../../lib/quoteTotals';
 import { useReorder } from '../../hooks/useReorder';
 import type { LaborRate } from '../../api/client';
@@ -298,7 +298,7 @@ export function LineItemsTable({
                         set(i, { day_value, description });
                       }}
                     >
-                      {DAY_VALUES.map((d) => (
+                      {dayChoices(lines, i).map((d) => (
                         <option key={d} value={d}>Day {d}</option>
                       ))}
                     </select>
