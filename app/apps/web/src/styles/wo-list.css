@@ -1103,6 +1103,11 @@
 .modal.is-wide {
   width: min(760px, 100%);
 }
+/* Add work order: room for a date picker's calendar + time columns opened
+   from the right-hand column (Elise, 2026-11-05). */
+.modal.is-create-wo {
+  width: min(1040px, 100%);
+}
 
 /* Confirmations: a question and two buttons, nothing to scroll. The colour
    comes from the tone — `--tone` is the danger red or the accent — used at low

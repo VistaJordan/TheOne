@@ -177,7 +177,12 @@ function TenMinuteDateTime({ id, value, onChange, disabled }: {
   useEffect(() => {
     if (!open) return;
     const pop = box.current?.querySelector<HTMLElement>('.dt10-pop');
-    if (pop && box.current) setToLeft(box.current.getBoundingClientRect().left + pop.offsetWidth > window.innerWidth - 16);
+    // Flip when it would pass the right edge of the window OR of the dialog
+    // body, which scrolls and so clips whatever sticks out of it.
+    if (pop && box.current) {
+      const clip = box.current.closest('.modal-body')?.getBoundingClientRect().right ?? window.innerWidth;
+      setToLeft(box.current.getBoundingClientRect().left + pop.offsetWidth > Math.min(clip, window.innerWidth) - 16);
+    }
     box.current?.querySelectorAll<HTMLElement>('.dt10-opt.is-on').forEach((el) => {
       const col = el.parentElement;
       if (col) col.scrollTop = el.offsetTop - col.offsetTop - (col.clientHeight - el.offsetHeight) / 2;
@@ -752,7 +757,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   return (
     <div className="modal-scrim" onClick={dismiss} role="presentation">
       <div
-        className="modal is-wide"
+        className="modal is-wide is-create-wo"
         role="dialog"
         aria-modal="true"
         aria-label="Add work order"
