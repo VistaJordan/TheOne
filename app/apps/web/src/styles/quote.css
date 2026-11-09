@@ -129,6 +129,19 @@
     top: var(--wo-pin-h, 0px);
     z-index: 4;
   }
+  /* The 14px gap under the card stays a gap once pinned: painted in the canvas
+     colour (as .wo-pin::before is), so the cards slide under it rather than
+     touching the band. +1px / -1px step over the card's own border. */
+  .qb .qhead:not(.is-unpinned)::after {
+    content: '';
+    position: absolute;
+    top: calc(100% + 1px);
+    left: -1px;
+    right: -1px;
+    height: 14px;
+    background: var(--bg);
+    pointer-events: none;
+  }
   /* Cancels .wo-grid's 2px top margin: no jump when it starts to stick. */
   .quote-tab .qb-embedded > .card.qhead.is-embedded { margin-top: -2px; }
 }
