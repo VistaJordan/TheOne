@@ -337,6 +337,8 @@ export const WO_TABS: { id: string; label: string }[] = [
   { id: 'quotes', label: 'Quote' },
   { id: 'money', label: 'Finances' },
   { id: 'payables', label: 'Payables' },
+  // 2026-11-09 · no longer tabs: these two rows decide whether the People
+  // (with Assignment history) and Dates cards show on Overview.
   { id: 'people', label: 'People' },
   { id: 'dates', label: 'Dates' },
   { id: 'drive', label: 'Drive' },

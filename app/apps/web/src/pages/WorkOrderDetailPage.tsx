@@ -57,7 +57,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { TECH_HUB_TAB, quoteSectionsHaveData, tabPermKey } from '@theone/shared';
 
 const TAB_IDS = [
-  'overview', 'fields', 'money', 'quotes', 'payables', 'people', 'technicians', 'site', 'dates', 'cico', 'parts',
+  'overview', 'fields', 'money', 'quotes', 'payables', 'technicians', 'site', 'cico', 'parts',
   // 2026-10-22 · Drive: the work order's files (the Photos card, moved off
   // Overview). Overview leads the strip and is the landing tab.
   'drive', 'messages', 'penalties', 'audit', 'notifications',
@@ -81,7 +81,7 @@ type Tab = (typeof TAB_IDS)[number];
 const FINANCE_TABS: readonly Tab[] = ['money', 'payables', 'costs'];
 
 /** 0095 · People › Technicians became the Tech Hub tab, with its own
-    permission row (it rode on People's until then); People is one tab again.
+    permission row (it rode on People's until then).
     The id stays `technicians` (TECH_HUB_TAB) so old ?tab= links still open it. */
 const tabPerm = (t: Tab): string => tabPermKey(t);
 
@@ -108,6 +108,11 @@ export function WorkOrderDetailPage() {
       (t !== 'penalties' || can('work_orders/fields/penalties', 'view')),
   );
   const show = (t: Tab) => visibleTabs.includes(t);
+  // Elise, 2026-11-09 · People and Dates are no longer tabs: their cards sit on
+  // Overview, each still behind its own row in Roles (like Timelog on CICO), so
+  // nobody gains them. An old ?tab=people or ?tab=dates link opens Overview.
+  const showPeople = can(tabPermKey('people'), 'view');
+  const showDates = can(tabPermKey('dates'), 'view');
   const rawTab = searchParams.get('tab');
   // 2026-10-20 · Timelog lives on CICO now: an old ?tab=timelog link opens
   // CICO (the Timelog view itself only for someone who cannot see CICO).
@@ -360,16 +365,14 @@ export function WorkOrderDetailPage() {
         <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} note={recordNote} />
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
-          {/* Elise, 2026-11-04 · Overview, CICO, Quote, Finances, People, Dates,
-              Drive, Messages, Penalties, Parts, Tech Hub, Logs, All fields. Site and
+          {/* Elise, 2026-11-09 · Overview, CICO, Quote, Finances, Drive,
+              Messages, Penalties, Parts, Tech Hub, Logs, All fields. Site and
               Notifications have no button (since 2026-11-03); ?tab=site /
               ?tab=notifications still open them. */}
           {show('overview') && <TabButton id="overview" tab={tab} onSelect={setTab}>Overview</TabButton>}
           {show('cico') && <TabButton id="cico" tab={tab} onSelect={setTab}>CICO</TabButton>}
           {show('quotes') && <TabButton id="quotes" tab={tab} onSelect={setTab}>Quote</TabButton>}
           {canOpen('money') && <TabButton id="money" tab={tab} onSelect={setTab}>Finances</TabButton>}
-          {show('people') && <TabButton id="people" tab={tab} onSelect={setTab}>People</TabButton>}
-          {show('dates') && <TabButton id="dates" tab={tab} onSelect={setTab}>Dates</TabButton>}
           {show('drive') && <TabButton id="drive" tab={tab} onSelect={setTab}>Drive</TabButton>}
           {show('messages') && (
             <TabButton id="messages" tab={tab} onSelect={setTab}>
@@ -401,6 +404,13 @@ export function WorkOrderDetailPage() {
                 loading={obligationsQuery.isLoading}
                 error={obligationsQuery.isError}
               />
+              {/* Who is on the job and when it is due, side by side. */}
+              {(showPeople || showDates) && (
+                <div className="wo-overview-facts">
+                  {showPeople && <PeopleCard wo={wo} />}
+                  {showDates && <DatesCard wo={wo} />}
+                </div>
+              )}
               <section className="card">
                 <div className="card-head">
                   <h2 className="card-title">Updates &amp; activity</h2>
@@ -426,6 +436,9 @@ export function WorkOrderDetailPage() {
                   </div>
                 )}
               </section>
+
+              {/* Every change of the Assignee: who made it and when. */}
+              {showPeople && <AssignmentHistoryCard wo={wo} />}
 
               <SoftCloseChecklist wo={wo} />
             </div>
@@ -526,14 +539,6 @@ export function WorkOrderDetailPage() {
             </div>
           )}
 
-          {tab === 'people' && (
-            <div role="tabpanel" aria-label="Our team">
-              <PeopleCard wo={wo} />
-              {/* Every change of the Assignee: who made it and when. */}
-              <AssignmentHistoryCard wo={wo} />
-            </div>
-          )}
-
           {/* 0095 · Tech Hub (was People › Technicians): finding, hiring and
               talking to the technician — calls (with the AI quote draft) and
               the Quo texts sit here, away from the client conversation. */}
@@ -561,10 +566,6 @@ export function WorkOrderDetailPage() {
 
           {tab === 'site' && (
             <div role="tabpanel" aria-label="Site"><SiteCard wo={wo} /></div>
-          )}
-
-          {tab === 'dates' && (
-            <div role="tabpanel" aria-label="Dates"><DatesCard wo={wo} /></div>
           )}
 
           {tab === 'cico' && (

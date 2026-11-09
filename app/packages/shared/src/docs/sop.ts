@@ -94,7 +94,7 @@ export const SOP: SopDocument = {
         ] },
         { kind: 'sub', title: 'Reject' },
         { kind: 'steps', items: ['Click **Reject**, type the reason in "Reject this work order", click **Reject with note**.', 'The work order moves to Cancelled / Postponed and leaves the queue.'] },
-        { kind: 'note', title: 'RULES', text: 'Accept stays locked while an intake field is missing (rule 11.1.1). The assignee must be an active person on file. Filling the Assignee by hand on the work order, or cancelling it, closes the acceptance by itself. Dispatcher tiers cannot change the Assignee (rule 8.5.4); a manager can, from the People tab. A reject needs a "Cancelled / Postponed" status to exist (Admin › Custom fields).' },
+        { kind: 'note', title: 'RULES', text: 'Accept stays locked while an intake field is missing (rule 11.1.1). The assignee must be an active person on file. Filling the Assignee by hand on the work order, or cancelling it, closes the acceptance by itself. Dispatcher tiers cannot change the Assignee (rule 8.5.4); a manager can, from the People card on Overview. A reject needs a "Cancelled / Postponed" status to exist (Admin › Custom fields).' },
       ],
     },
     {
@@ -181,7 +181,7 @@ export const SOP: SopDocument = {
       title: 'Running a Work Order: Vendor, Visits and Status',
       lead: 'The dispatcher\'s core loop: find the technician, log the visits, move the status.',
       who: ['OM (dispatcher)', 'Senior OM', 'OM Under Probation'],
-      where: 'The work-order page: header, People and CICO tabs',
+      where: 'The work-order page: header, Overview and CICO tabs',
       needs: ['work_orders edit', 'work_orders/fields/cico edit', 'vendor_map view / create', 'work_orders/status edit or create', 'work_orders/calls create', 'work_orders/fields/cico/fields.24. Sign-Off Link edit (sheets)'],
       blocks: [
         { kind: 'sub', title: 'A. Find and hire the technician' },

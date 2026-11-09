@@ -378,7 +378,7 @@ function SuggestCard({ data, canEdit }: { data: AdminVendorsResponse; canEdit: b
         <span className={`chip chip-sm${s.auto_fill ? ' chip-ok' : ' chip-outline'}`}>{s.auto_fill ? 'Automatic fill on' : 'Hand-picked only'}</span>
       </div>
       <p className="hint" style={{ padding: '0 14px 4px', margin: 0 }}>
-        The short list on a work order’s People tab. The preferred vendors above come first, in their order. The places left
+        The short list on a work order’s Tech Hub tab. The preferred vendors above come first, in their order. The places left
         over are filled automatically: vendors that pass the filters, sorted by the tie-breakers from top to bottom. A
         blacklisted vendor is never suggested.
       </p>

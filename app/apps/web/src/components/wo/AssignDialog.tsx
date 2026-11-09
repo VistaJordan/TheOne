@@ -3,7 +3,7 @@
    picker as Accept (the API refuses anyone who is not a dispatcher,
    ASSIGNEE_NOT_DISPATCHER) with "Who's available?" beside it; no note — the
    write is an ordinary Assignee field save, audited and mirrored like one
-   typed on the People tab, so the 11.1.1 gate and the scope rule apply. */
+   typed on the People card, so the 11.1.1 gate and the scope rule apply. */
 
 import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';

@@ -8,7 +8,7 @@ interface PeopleCardProps {
   wo: WorkOrderDetailV2;
 }
 
-/** The People tab: eight named seats — AM, team lead, associate team lead
+/** The People card on Overview: eight named seats — AM, team lead, associate team lead
     (ATL), assignee, completion
     assignee, support trainee, previous assignees, sales owner — as a grid of labelled slots,
     then the lists the WO is routed through.
@@ -49,7 +49,7 @@ export function PeopleCard({ wo }: PeopleCardProps) {
   );
 }
 
-/** People › Our team: every recorded change of the Assignee — who made it and
+/** Assignment history, on Overview: every recorded change of the Assignee — who made it and
     when — read from the same field history as the clock button in All
     fields. Drawn only for someone with the history grant. */
 export function AssignmentHistoryCard({ wo }: PeopleCardProps) {

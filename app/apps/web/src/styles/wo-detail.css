@@ -1726,7 +1726,7 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 
 /* ── People ───────────────────────────────────────────────────────────────── */
 /* The six named seats. Label left, who is in it right — the same row grammar
-   as .fieldrow and the All-fields panel, so the People tab reads like the rest
+   as .fieldrow and the All-fields panel, so the People card reads like the rest
    of the record rather than like its own invention. */
 /* Hugs its longest row (role column + widest name) instead of a fixed span;
    the floor keeps the head legible when every seat is short or empty. */
@@ -1916,10 +1916,22 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 /* ── Dates ────────────────────────────────────────────────────────────────── */
 .dates { padding: 6px 16px 12px; }
 
-/* The Dates tab card: six fixed rows, kept tight and narrow. */
-.dates-card { max-width: 460px; }
+/* The Dates card: fixed rows, kept tight. */
 .dates-card .dates { padding: 2px 16px 8px; }
 .dates-card .date-row { padding: 5px 0; }
+
+/* Overview (2026-11-09): People and Dates side by side, one above the other
+   when the column is narrow. The grid's gap is the only spacing between them;
+   the rows above and below keep the usual card gap. */
+.wo-overview-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+.wo-overview-facts > .card { margin-top: 0; }
+.wo-overview-facts > .card-people { width: auto; min-width: 0; }
+.card + .wo-overview-facts,
+.wo-overview-facts + .card { margin-top: 14px; }
 
 .date-row {
   display: flex;

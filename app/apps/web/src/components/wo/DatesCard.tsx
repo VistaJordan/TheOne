@@ -23,7 +23,7 @@ function fullDateTime(raw: unknown): string | null {
   return `${day}, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
 }
 
-/** The Dates tab: exactly the All-fields DATES section (Today, SLA Requested,
+/** The Dates card on Overview: exactly the All-fields DATES section (Today, SLA Requested,
     SLA Updated, Date-Time Received, Date Created, Due Date, Scheduled Date,
     Parts Arrival Date, Quote Due Date), driven by the same section config so
     the two views cannot drift. Every row edits in place except Quote Due
