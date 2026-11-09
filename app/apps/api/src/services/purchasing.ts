@@ -26,6 +26,10 @@
 //     second person (Approve over limit) before it can be issued.
 
 import {
+  NEEDED_BY_PAST_MESSAGE,
+  businessDay,
+  neededByInPast,
+  poIssueNeedsBand,
   PO_EXISTS_CODE,
   PO_LIMIT_DEFAULT,
   PO_OVER_LIMIT_CODE,
@@ -802,6 +806,10 @@ export async function saveRequest(id: string | null, input: PurchaseRequestInput
   const taskId = input.task_ref !== undefined ? await taskOf(input.task_ref, actor) : (before?.task?.id ?? null);
   const vendor = input.vendor_id !== undefined || input.vendor_name !== undefined ? await vendorRef({ query }, input.vendor_id, input.vendor_name) : { id: before?.vendor?.id ?? null, name: before?.vendor?.name ?? null };
   const neededBy = input.needed_by !== undefined ? day(input.needed_by, 'The date it is needed by') : (before?.needed_by ?? null);
+  // 2026-11-09: today or later; a date already on the request may stay.
+  if (neededBy !== (before?.needed_by ?? null) && neededByInPast(neededBy, businessDay())) {
+    throw badRequest(NEEDED_BY_PAST_MESSAGE, { field: 'needed_by' });
+  }
   const cc = input.cost_center_id !== undefined ? uuid(input.cost_center_id) : (before?.cost_center?.id ?? null);
   const reason = input.reason !== undefined ? clean(input.reason) : (before?.reason ?? null);
   const lines = input.lines !== undefined ? cleanLines(input.lines) : null;
@@ -879,6 +887,9 @@ export async function actOnRequest(id: string, action: PrAction, note: string | 
       selfApproved = verdict === 'self_approved';
       // 0115: the amount band decides who may say yes (403 APPROVAL_TIER).
       await assertTierAllows('purchase_request', cur.estimate, actor, 'Approving a purchase request');
+    } else {
+      // 2026-11-09 (Elise): declining follows the same bands as approving.
+      await assertTierAllows('purchase_request', cur.estimate, actor, 'Rejecting a purchase request');
     }
     await set(action === 'approve' ? 'approved' : 'rejected', 'This request is not waiting for a decision', ', decided_by = $4, decided_at = now(), decision_note = $5', [actor.id, reason]);
     await logWo(cur.task?.id ?? null, actor, 'Purchase request', `${cur.pr_number} ${action === 'approve' ? `approved${selfApproved ? ' (self-approved by a super admin)' : ''}` : `rejected: ${reason}`}`);
@@ -1270,11 +1281,25 @@ const PO_SELECT = `
     LEFT JOIN cost_center c ON c.id = po.cost_center_id
     LEFT JOIN afe a ON a.id = po.afe_id`;
 
-async function hydrateOrders(rows: PoRow[]): Promise<PurchaseOrder[]> {
+/** The estimate (before tax) of each request in `ids` that was approved. */
+async function approvedEstimates(q: Queryable, ids: string[]): Promise<Map<string, number>> {
+  if (ids.length === 0) return new Map();
+  const res = await q.query<{ id: string; estimate: number | string }>(
+    `SELECT r.id::text AS id, COALESCE(sum(l.qty * COALESCE(l.est_unit_cost, 0)), 0)::float8 AS estimate
+       FROM purchase_request r
+       LEFT JOIN purchase_request_line l ON l.request_id = r.id
+      WHERE r.id = ANY($1::uuid[]) AND r.status IN ('approved', 'ordered')
+      GROUP BY r.id`,
+    [ids],
+  );
+  return new Map(res.rows.map((r) => [r.id, Number(r.estimate)]));
+}
+
+async function hydrateOrders(rows: PoRow[], viewer: ActingPrincipal): Promise<PurchaseOrder[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
   const needsAfe = rows.some((r) => r.afe_id);
-  const [lines, people, afes, limit] = await Promise.all([
+  const [lines, people, afes, limit, tiers, estimates] = await Promise.all([
     query<{ id: string; po_id: string; description: string; qty: string; unit: string; unit_cost: string; received_qty: string }>(
       `SELECT id::text AS id, po_id::text AS po_id, description, qty, unit, unit_cost, received_qty FROM purchase_order_line WHERE po_id = ANY($1::uuid[]) ORDER BY position`,
       [ids],
@@ -1282,6 +1307,8 @@ async function hydrateOrders(rows: PoRow[]): Promise<PurchaseOrder[]> {
     peopleByIds(rows.flatMap((r) => [r.created_by, r.approved_by, r.limit_approved_by])),
     needsAfe ? afeRows() : Promise.resolve([] as Afe[]),
     poLimit(),
+    listApprovalTiers(),
+    approvedEstimates({ query }, rows.flatMap((r) => (r.request_id ? [r.request_id] : []))),
   ]);
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
   return rows.map((r) => {
@@ -1329,6 +1356,11 @@ async function hydrateOrders(rows: PoRow[]): Promise<PurchaseOrder[]> {
         poNeedsLimitApproval({ total, request_id: r.request_id, limit_approved: r.limit_approved_by !== null }, limit),
       limit_approved_by: r.limit_approved_by ? (people.get(r.limit_approved_by) ?? null) : null,
       limit_approved_at: iso(r.limit_approved_at),
+      tier:
+        r.status === 'draft' &&
+        poIssueNeedsBand({ subtotal: Number(r.subtotal), approved_estimate: r.request_id ? (estimates.get(r.request_id) ?? null) : null, limit_approved: r.limit_approved_by !== null })
+          ? tierSummary(tiers, 'purchase_request', total, viewer)
+          : null,
     };
   });
 }
@@ -1360,7 +1392,7 @@ export async function listOrders(actor: ActingPrincipal, opts: { status?: string
     where.push(`(lower(po.po_number) LIKE ${h} OR lower(po.vendor_name) LIKE ${h} OR lower(COALESCE(t.wo_number, '')) LIKE ${h})`);
   }
   const res = await query<PoRow>(`${PO_SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY po.created_at DESC LIMIT 500`, p.values);
-  const all = await hydrateOrders(res.rows);
+  const all = await hydrateOrders(res.rows, actor);
   return { items: opts.status ? all.filter((r) => r.status === opts.status) : all, counts: countBy(all) };
 }
 
@@ -1372,7 +1404,7 @@ export async function getOrder(id: string, actor: ActingPrincipal): Promise<Purc
   const scope = scopeOr(actor, p, 'po.task_id');
   const res = await query<PoRow>(`${PO_SELECT} WHERE po.id = ${hole}${scope ? ` AND ${scope}` : ''}`, p.values);
   if (!res.rows[0]) throw notFound('That purchase order does not exist');
-  return (await hydrateOrders(res.rows))[0];
+  return (await hydrateOrders(res.rows, actor))[0];
 }
 
 /** The lines of an order, rewritten in full, and the totals they add up to.
@@ -1516,6 +1548,8 @@ export async function approvePoOverLimit(id: string, actor: ActingPrincipal): Pr
   if (!cur.needs_limit_approval) throw conflict('This order does not need approval over the limit');
   const verdict = selfApprovalVerdict(cur.created_by?.id ?? null, actor.id, actor.isSuperAdmin);
   if (verdict === 'blocked') throw forbidden(selfApprovalMessage(cur.po_number), { code: SELF_APPROVAL_CODE });
+  // 2026-11-09: this approval stands in for the band at Issue, so it asks it.
+  await assertTierAllows('purchase_request', cur.total, actor, 'Approving a purchase order');
   const done = await query(
     `UPDATE purchase_order SET limit_approved_by = $2, limit_approved_at = now(), updated_at = now()
       WHERE id = $1 AND status = 'draft' AND limit_approved_by IS NULL RETURNING id`,
@@ -1545,8 +1579,8 @@ export async function actOnOrder(id: string, action: PoAction, actor: ActingPrin
     // refused, not issued over. The audit row and the notice follow the
     // commit with the figures the locked read found.
     const issued = await withTransaction(async (tx) => {
-      const fresh = await tx.query<{ status: PoStatus; total: string; vendor_name: string; vendor_id: string | null; request_id: string | null; limit_approved_by: string | null }>(
-        `SELECT status, total, vendor_name, vendor_id::text AS vendor_id, request_id::text AS request_id, limit_approved_by::text AS limit_approved_by
+      const fresh = await tx.query<{ status: PoStatus; subtotal: string; total: string; vendor_name: string; vendor_id: string | null; request_id: string | null; limit_approved_by: string | null }>(
+        `SELECT status, subtotal, total, vendor_name, vendor_id::text AS vendor_id, request_id::text AS request_id, limit_approved_by::text AS limit_approved_by
            FROM purchase_order WHERE id = $1 FOR UPDATE`,
         [id],
       );
@@ -1567,6 +1601,13 @@ export async function actOnOrder(id: string, action: PoAction, actor: ActingPrin
           code: PO_OVER_LIMIT_CODE,
           limit,
         });
+      }
+      // 2026-11-09 (Elise): a materials order follows the $500 / $3,000 bands
+      // unless an approved request or Approve over limit already covers it.
+      const requestId = fresh.rows[0].request_id;
+      const estimates = await approvedEstimates(tx, requestId ? [requestId] : []);
+      if (poIssueNeedsBand({ subtotal: Number(fresh.rows[0].subtotal), approved_estimate: requestId ? (estimates.get(requestId) ?? null) : null, limit_approved: fresh.rows[0].limit_approved_by !== null })) {
+        await assertTierAllows('purchase_request', total, actor, 'Issuing a purchase order');
       }
       await tx.query(`UPDATE purchase_order SET status = 'issued', approved_by = $2, approved_at = now(), updated_at = now() WHERE id = $1`, [id, actor.id]);
       return { total, vendorName: fresh.rows[0].vendor_name };
@@ -1677,7 +1718,7 @@ export async function woPurchasing(taskId: string, actor: ActingPrincipal): Prom
   return {
     requests: await hydrateRequests(pr.rows, actor),
     rfqs: await hydrateRfqs(rq.rows),
-    orders: await hydrateOrders(po.rows),
+    orders: await hydrateOrders(po.rows, actor),
     cost_center: meta.can.budgets.view && f?.cc_id ? { id: f.cc_id, code: f.cc_code!, name: f.cc_name! } : null,
     afe: meta.can.budgets.view && f?.afe_id ? { id: f.afe_id, afe_number: f.afe_number!, title: f.afe_title! } : null,
     meta,

@@ -60,7 +60,9 @@ describe('wiring', () => {
   const payments = read('apps/api/src/services/payments.ts');
   const body = payments.slice(payments.indexOf('export async function approvePaymentRequest('));
   it('above the NTE: AM only, a reason, no band, the NTE decided in the same transaction', () => {
-    expect(body).toContain('paymentAboveNte(cost, amount, nte)');
+    // In nteFacts since 2026-11-09, shared with the decline.
+    expect(payments).toContain('paymentAboveNte(cost, amount, nte)');
+    expect(body).toContain('await nteFacts(row)');
     expect(body).toContain('NTE_PAYMENT_APPROVER_CODE');
     expect(body).toContain('NTE_APPROVAL_REASON_CODE');
     expect(body).toContain("assertPaymentNotHeld(row, actor, 'Approving this payment', true)");

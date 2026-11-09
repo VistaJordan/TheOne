@@ -239,6 +239,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               visitComplete: Boolean(f[VISIT_MIRROR_KEYS.checkedInAt] && f[VISIT_MIRROR_KEYS.checkedOutAt]),
               costValue: f[FINAL_COST_KEY] ?? null,
               proof: approvedKinds ? { bfi: f[BFI_KEY], approvedKinds } : null,
+              checkedInVisitTypes: f[VISIT_MIRROR_KEYS.checkedInAt] ? [f[VISIT_MIRROR_KEYS.visitType]] : [],
             }}
             renderTrigger={({ open, toggle, mode }) => (
               <button

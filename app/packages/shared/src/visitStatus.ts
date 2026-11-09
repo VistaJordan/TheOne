@@ -27,3 +27,26 @@ export function onSiteStatusNameForVisitType(visitType: string | null | undefine
   if (t.startsWith('job') || t.startsWith('return')) return ON_SITE_JOB_STATUS_NAME;
   return null;
 }
+
+// Elise, 2026-11-09: nobody asks for On Site without a check-in. A status
+// request for either On Site status needs a visit of the matching type with a
+// check-in stamp (checked out since or not). The request a real check-in
+// raises (moveOnSite) runs after the visit is saved, so it always passes; a
+// manager's direct move is not asked.
+export const CHECK_IN_REQUIRED_CODE = 'CHECK_IN_REQUIRED';
+
+/** True when a request for this status needs a check-in that none of these
+    checked-in visit types provides. Any status but the two On Site ones: false. */
+export function onSiteRequestLacksCheckIn(
+  targetStatusName: string | null | undefined,
+  checkedInVisitTypes: readonly (string | null | undefined)[],
+): boolean {
+  const target = (targetStatusName ?? '').trim().toLowerCase();
+  if (target !== ON_SITE_ASSESSMENT_STATUS_NAME.toLowerCase() && target !== ON_SITE_JOB_STATUS_NAME.toLowerCase()) return false;
+  return !checkedInVisitTypes.some((t) => onSiteStatusNameForVisitType(t)?.toLowerCase() === target);
+}
+
+export function describeCheckInRequired(statusName: string): string {
+  const visit = statusName.trim().toLowerCase() === ON_SITE_ASSESSMENT_STATUS_NAME.toLowerCase() ? 'an Assessment visit' : 'a Job or Return trip visit';
+  return `Check the technician in on ${visit} before requesting ${statusName}.`;
+}

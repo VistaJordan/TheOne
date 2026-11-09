@@ -129,7 +129,7 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
   const approveLock = canApprove ? null : 'Requires payment approval rights';
   // 0090 (rule 6.2.3): the amount's band names the roles that may approve
   // it ($500–3,000 TL / ATL, $3,000 and over AM); the API answers 403.
-  // Approve only — rejecting is never banded.
+  // 2026-11-09 (Elise): the same goes for Reject.
   const tierLock =
     item.tier && !item.tier.allowed
       ? `${item.tier.label}: needs a role allowed for this amount (rule 6.2.3)`
@@ -174,7 +174,7 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
               moneyHold,
             title: 'Yoda “Verify” — stamps the payer and rolls the amount into the WO cost',
           })}
-          {open && btn('Reject', 'x', () => setSheet(sheet === 'reject' ? null : 'reject'), { danger: true, locked: approveLock })}
+          {open && btn('Reject', 'x', () => setSheet(sheet === 'reject' ? null : 'reject'), { danger: true, locked: approveLock ?? (aboveNte ? nteApproverLock : tierLock) })}
           {item.status !== 'paid' && btn('Change method', 'swap', () => setSheet(sheet === 'method' ? null : 'method'), { locked: apLock })}
           {btn('Delete', 'trash', () => setSheet(sheet === 'delete' ? null : 'delete'), {
             danger: true,

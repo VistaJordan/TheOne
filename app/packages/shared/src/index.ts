@@ -1538,7 +1538,7 @@ export const APPROVALS_PERM_KEY = 'approvals';
  * `view` here — deciding those stays with `quotes:approve` and the payments
  * grant, so the money rules keep one gate.
  */
-export type ApprovalSectionKey = 'intake' | 'nte' | 'money' | 'status' | 'snooze' | 'reviews' | 'quotes' | 'payments';
+export type ApprovalSectionKey = 'intake' | 'nte' | 'money' | 'status' | 'snooze' | 'reviews' | 'quotes' | 'payments' | 'purchases';
 
 export const APPROVAL_SECTIONS: { key: ApprovalSectionKey; label: string; decides: boolean }[] = [
   { key: 'intake', label: 'Pending acceptance', decides: true },
@@ -1549,6 +1549,9 @@ export const APPROVAL_SECTIONS: { key: ApprovalSectionKey; label: string; decide
   { key: 'reviews', label: 'Manager reviews', decides: true },
   { key: 'quotes', label: 'Quotes', decides: false },
   { key: 'payments', label: 'Payments', decides: false },
+  // Elise, 2026-11-09: purchase requests wait here like payments; deciding
+  // stays with `purchasing/requests` approve and the amount bands.
+  { key: 'purchases', label: 'Purchases', decides: false },
 ];
 
 /** `approvals/snooze` (Elise, 2026-10-22): approve = snooze a Pulse clock

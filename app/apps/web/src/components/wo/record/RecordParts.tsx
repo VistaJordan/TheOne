@@ -26,6 +26,8 @@ import {
   formatFeet,
   formatMinutes,
   minutesBetween,
+  ETA_IN_PAST_MESSAGE,
+  etaInPast,
 } from '@theone/shared';
 import type { WoRecord } from '@theone/shared';
 import { useAuth } from '../../../auth/AuthProvider';
@@ -378,12 +380,15 @@ function EtaDialog({ woId, woNumber, record, onClose }: DialogProps) {
   const [at, setAt] = useState(toLocalInput(record.state.eta?.eta_at ?? null));
   const [note, setNote] = useState(record.state.eta?.note ?? '');
   const save = useRecordWrite(woId, woNumber, (clear: boolean) => setWoEta(woId, clear || !at ? null : new Date(at).toISOString(), note.trim() || null), onClose);
+  // 2026-11-09: the current minute or later. An ETA already on file may stay.
+  const past = Boolean(at) && at !== toLocalInput(record.state.eta?.eta_at ?? null) && etaInPast(new Date(at));
   return (
     <Sheet title="Estimated time of arrival" icon="truck" onClose={onClose}>
       <p className="sheet-b">When the technician is expected on site. Shown on the work order until it is changed or cleared.</p>
       <div className="vend-form">
         <label className="field"><span className="lbl">Expected on site</span>
-          <input className="fld" type="datetime-local" autoFocus value={at} onChange={(e) => setAt(e.target.value)} />
+          <input className="fld" type="datetime-local" autoFocus min={toLocalInput(new Date().toISOString())} value={at} onChange={(e) => setAt(e.target.value)} />
+          {past && <span className="err" role="alert"><Icon name="alert" size={12} />{ETA_IN_PAST_MESSAGE}</span>}
         </label>
         <label className="field"><span className="lbl">Note (optional)</span>
           <input className="fld" value={note} placeholder="e.g. Leaving Houston at 2" onChange={(e) => setNote(e.target.value)} />
@@ -393,7 +398,7 @@ function EtaDialog({ woId, woNumber, record, onClose }: DialogProps) {
       <div className="sheet-f">
         <button type="button" className="btn" onClick={onClose}>Back</button>
         {record.state.eta && <button type="button" className="btn" disabled={save.isPending} onClick={() => save.mutate(true)}>Clear the ETA</button>}
-        <button type="button" className="btn btn-primary" disabled={!at || save.isPending} onClick={() => save.mutate(false)}>Save ETA</button>
+        <button type="button" className="btn btn-primary" disabled={!at || past || save.isPending} onClick={() => save.mutate(false)}>Save ETA</button>
       </div>
     </Sheet>
   );

@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   STATUS_PERM_KEY,
   checkEcotrakTransition,
+  describeCheckInRequired,
+  onSiteRequestLacksCheckIn,
   describeEcotrakRefusal,
   describeStatusGate,
   doneGateMissing,
@@ -92,6 +94,9 @@ export interface GateHints {
   /** Rule 11.3.4: the BFI checkbox and the kinds of the approved files
       (null = not loaded yet, no tag). */
   proof?: { bfi: unknown; approvedKinds: readonly string[] } | null;
+  /** 2026-11-09: the types of visits known to have a check-in (omitted =
+      unknown, no tag). A hint; the API reads every visit. */
+  checkedInVisitTypes?: readonly unknown[];
 }
 
 /** What the hints say the gate would find missing, or null when the pick
@@ -330,14 +335,20 @@ export function StatusChangeMenu({
                   const direct = !active && mode === 'request' && movesDirectly(s.name);
                   // 2026-10-29: out of a Cancel… status only through Reopen.
                   const needsReopen = !active && lockedCancelled && !isCancelStatusName(s.name);
+                  // 2026-11-09: a request for On Site needs a check-in.
+                  const checkInNote =
+                    !active && mode === 'request' && !direct && gateHints?.checkedInVisitTypes &&
+                    onSiteRequestLacksCheckIn(s.name, gateHints.checkedInVisitTypes.map((t) => (t == null ? null : String(t))))
+                      ? describeCheckInRequired(s.name)
+                      : null;
                   return (
                     <button
                       type="button"
                       role="menuitem"
                       key={s.id}
-                      className={`status-menu-item${active ? ' is-current' : ''}${refusal || gateNote ? ' is-ecotrak-refused' : ''}`}
+                      className={`status-menu-item${active ? ' is-current' : ''}${refusal || gateNote || checkInNote ? ' is-ecotrak-refused' : ''}`}
                       disabled={mutation.isPending || sent !== null || needsReopen}
-                      title={needsReopen ? REOPEN_REQUIRED_MESSAGE : (gateNote ?? refusal ?? undefined)}
+                      title={needsReopen ? REOPEN_REQUIRED_MESSAGE : (checkInNote ?? gateNote ?? refusal ?? undefined)}
                       onClick={() => {
                         if (active) {
                           setOpen(false);
@@ -357,6 +368,11 @@ export function StatusChangeMenu({
                       {gate && gateHit && gateNote && (
                         <span className="status-menu-ecotrak status-menu-gate" aria-label={gateNote}>
                           {statusGateTag(gate, gateHit.missing)}
+                        </span>
+                      )}
+                      {checkInNote && (
+                        <span className="status-menu-ecotrak status-menu-gate" aria-label={checkInNote}>
+                          Needs check-in
                         </span>
                       )}
                       {refusal && (

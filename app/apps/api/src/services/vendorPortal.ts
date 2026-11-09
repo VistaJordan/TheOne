@@ -23,7 +23,7 @@
 //   · No email is sent. A person copies the link and hands it over.
 
 import { createHash, randomBytes } from 'node:crypto';
-import { ONBOARDING_LABELS, PORTAL_TOKEN_RE, VENDOR_PORTAL_PERM_KEY, permAllows, portalPath } from '@theone/shared';
+import { ONBOARDING_LABELS, PORTAL_TOKEN_RE, VENDOR_PORTAL_PERM_KEY, etaInPast, permAllows, portalPath } from '@theone/shared';
 import type {
   FeedActor,
   OnboardingPayload,
@@ -448,7 +448,7 @@ export async function portalSetEta(token: string, ref: string, etaAt: string): P
   if (!job.open) throw conflict('That job is closed');
   const at = new Date(etaAt);
   if (Number.isNaN(at.getTime())) throw badRequest('That is not a date and time');
-  if (at.getTime() < Date.now() - 3600_000 || at.getTime() > Date.now() + 366 * 86_400_000) throw badRequest('Give a date and time from now on.');
+  if (etaInPast(at) || at.getTime() > Date.now() + 366 * 86_400_000) throw badRequest('Give a date and time from now on.');
   const actorId = await portalActor();
   const before = await query<{ eta_at: Date | null }>(`SELECT eta_at FROM task WHERE id = $1`, [job.id]);
   await query(`UPDATE task SET eta_at = $2, eta_note = $3, eta_by = $4 WHERE id = $1`, [job.id, at, `Given by ${v.name} on the vendor portal`, actorId]);

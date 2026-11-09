@@ -14,6 +14,9 @@
 
 import {
   BFI_KEY,
+  CHECK_IN_REQUIRED_CODE,
+  describeCheckInRequired,
+  onSiteRequestLacksCheckIn,
   FINAL_COST_KEY,
   INVOICING_GATED_STATUS_NAMES,
   PARTS_REQUIRED_KEY,
@@ -51,6 +54,21 @@ export async function quoteFilledTaskIds(q: Queryable, ids: readonly string[]): 
     [ids],
   );
   return new Set(res.rows.map((r) => r.task_id));
+}
+
+/**
+ * Elise, 2026-11-09: a request for On Site needs a check-in of the matching
+ * visit type. Asked of requests only (and again when one is approved); a
+ * manager's direct move is not.
+ */
+export async function assertRequestHasCheckIn(q: Queryable, taskId: string, targetStatusName: string): Promise<void> {
+  const res = await q.query<{ visit_type: string }>(
+    `SELECT visit_type FROM wo_visit WHERE task_id = $1 AND checked_in_at IS NOT NULL`,
+    [taskId],
+  );
+  if (onSiteRequestLacksCheckIn(targetStatusName, res.rows.map((r) => r.visit_type))) {
+    throw new ApiError('CONFLICT', describeCheckInRequired(targetStatusName), { code: CHECK_IN_REQUIRED_CODE });
+  }
 }
 
 /**

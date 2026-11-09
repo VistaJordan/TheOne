@@ -45,6 +45,8 @@ import {
   ACCEPTANCE_SOURCE_LABEL,
   APPROVALS_PERM_KEY,
   APPROVAL_TASK_LABEL,
+  PR_STATUS_LABELS,
+  PURCHASING_PERM,
   STATUS_PERM_KEY,
   approvalSectionOf,
   approvalSectionPermKey,
@@ -58,6 +60,7 @@ import {
   statusApprovalNeedsNote,
   type AcceptanceDetail,
   type ApprovalSectionKey,
+  type PurchaseRequest,
 } from '@theone/shared';
 import type {
   ApprovalListItem,
@@ -73,6 +76,8 @@ import { NteRequestsPanel } from '../components/approvals/NteRequestsPanel';
 import {
   ApiRequestError,
   acknowledgeApprovalTask,
+  actOnPurchaseRequest,
+  listPurchaseRequests,
   approveApprovalTask,
   approvePayment,
   sendQuote,
@@ -135,6 +140,7 @@ const SECTION_LABEL: Record<Section, string> = {
   reviews: 'Manager reviews',
   quotes: 'Quotes',
   payments: 'Payments',
+  purchases: 'Purchases',
 };
 
 /** The chip in the task cell — what kind of thing the row is. */
@@ -147,7 +153,11 @@ const KIND_CHIP: Record<Kind, string> = {
   reviews: 'Review',
   quotes: 'Quote',
   payments: 'Payment',
+  purchases: 'Purchase',
 };
+
+/** A purchase request opens on the Purchasing page. */
+const PURCHASE_REQUESTS_HREF = '/purchasing?tab=requests';
 
 export const APPROVAL_STATUS_LABEL: Record<ApprovalTaskStatus, string> = {
   open: 'Open',
@@ -228,7 +238,8 @@ const COLUMN_CLASS: Partial<Record<ColumnKey, string>> = {
 type RowData =
   | { kind: 'task'; item: ApprovalListItem }
   | { kind: 'quote'; item: QuoteListItem }
-  | { kind: 'payment'; item: PaymentListItem };
+  | { kind: 'payment'; item: PaymentListItem }
+  | { kind: 'purchase'; item: PurchaseRequest };
 
 interface Row {
   key: string;
@@ -471,6 +482,36 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
   };
 }
 
+/** Elise, 2026-11-09: a submitted purchase request waits here like a payment.
+    One with no work order shows its PR number in the WO # column. */
+function purchaseRow(item: PurchaseRequest, canDecide: boolean): Row {
+  const open = item.status === 'submitted';
+  return {
+    key: `purchase:${item.id}`,
+    section: 'purchases',
+    task_id: item.task?.id ?? '',
+    wo_number: item.task?.wo_number ?? item.pr_number,
+    wo_title: item.title,
+    client: null,
+    billing_entity: null,
+    trade: null,
+    due: null,
+    nte: null,
+    cost: null,
+    emergency: false,
+    escalated: false,
+    raised_at: item.submitted_at ?? item.created_at,
+    open,
+    mine: open && canDecide,
+    owner: 'Purchase approvers',
+    status: { label: PR_STATUS_LABELS[item.status], chip: 'chip-outline', trail: null, note: null },
+    held: false,
+    requester: false,
+    missing: [],
+    data: { kind: 'purchase', item },
+  };
+}
+
 // ── Decisions ────────────────────────────────────────────────────────────────
 
 /** 0025: acknowledge (Continue / Understood) and withdraw are the requester's
@@ -515,7 +556,10 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   const canApproveQuotes = can('quotes', 'approve');
   const canSeePayments = can('payments', 'view') && canSeeSection('payments');
   const canApprovePayments = can('payments', 'approve');
-  const canDecideAnything = canApproveAnyTask || canApproveQuotes || canApprovePayments;
+  // Only the people who decide purchase requests get the section.
+  const canApprovePurchases = can(PURCHASING_PERM.requests, 'approve');
+  const canSeePurchases = canApprovePurchases && canSeeSection('purchases');
+  const canDecideAnything = canApproveAnyTask || canApproveQuotes || canApprovePayments || canApprovePurchases;
   // A person in request mode (rule 2.4.1) lands on their own requests.
   const requestMode = can(STATUS_PERM_KEY, 'create') && !can(STATUS_PERM_KEY, 'edit');
   const myId = actingAs?.id ?? null;
@@ -552,6 +596,12 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
     retry: 0,
     enabled: canSeePayments && !intake,
   });
+  const purchasesQuery = useQuery({
+    queryKey: ['purchasing', 'inbox'],
+    queryFn: () => listPurchaseRequests({ status: 'submitted' }),
+    retry: 0,
+    enabled: canSeePurchases && !intake,
+  });
 
   const rows = useMemo<Row[]>(() => {
     const tasks = approvalsQuery.data?.items ?? [];
@@ -575,11 +625,12 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
       out.push(quoteRow(q, canApproveQuotes, held));
     }
     for (const p of paymentsQuery.data?.items ?? []) out.push(paymentRow(p, canApprovePayments, held, mayApproveOverNtePayment(myRole, mySuper)));
+    for (const p of purchasesQuery.data?.items ?? []) out.push(purchaseRow(p, canApprovePurchases));
     // Intake is its own page (Incoming Work Orders): the inbox never shows
     // it, and the intake page shows nothing else.
     return out.filter((r) => (r.section === 'intake') === intake);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- canDecideTask closes over `can`
-  }, [approvalsQuery.data, quotesQuery.data, paymentsQuery.data, myId, myRole, mySuper, canApproveQuotes, canApprovePayments, can, intake]);
+  }, [approvalsQuery.data, quotesQuery.data, paymentsQuery.data, purchasesQuery.data, myId, myRole, mySuper, canApproveQuotes, canApprovePayments, canApprovePurchases, can, intake]);
 
   const inLane = (r: Row, l: Lane) =>
     l === 'requests' ? r.requester : l === 'mine' ? r.mine : l === 'open' ? r.open : !r.open;
@@ -645,6 +696,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
     ...(canSeeSection('reviews') && rows.some((r) => r.section === 'reviews') ? (['reviews'] as Section[]) : []),
     ...(canSeeQuotes ? (['quotes'] as Section[]) : []),
     ...(canSeePayments ? (['payments'] as Section[]) : []),
+    ...(canSeePurchases ? (['purchases'] as Section[]) : []),
   ];
   // The lanes: My requests only for someone who has (or can raise) requests.
   const lanes: Lane[] = [
@@ -663,6 +715,8 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
     void queryClient.invalidateQueries({ queryKey: ['work-orders'] });
     void queryClient.invalidateQueries({ queryKey: ['quotes'] });
     void queryClient.invalidateQueries({ queryKey: ['payments'] });
+    void queryClient.invalidateQueries({ queryKey: ['purchasing'] });
+    void queryClient.invalidateQueries({ queryKey: ['wo-purchasing'] });
     // The work order's cards and audit trail show the same rows.
     void queryClient.invalidateQueries({ queryKey: ['wo-approvals'] });
     void queryClient.invalidateQueries({ queryKey: ['wo-payments'] });
@@ -702,6 +756,8 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
             : rejectQuote(d.item.wo_number, text ?? '');
         case 'payment':
           return kind === 'approve' ? approvePayment(d.item.id, text) : rejectPayment(d.item.id, text ?? '');
+        case 'purchase':
+          return actOnPurchaseRequest(d.item.id, kind === 'approve' ? 'approve' : 'reject', text);
       }
     },
     onSuccess: () => {
@@ -911,6 +967,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                   canDecideTask={canDecideTask}
                   canApproveQuotes={canApproveQuotes}
                   canApprovePayments={canApprovePayments}
+                  canApprovePurchases={canApprovePurchases}
                   busy={busy}
                   onDecide={(kind) => {
                     setError(null);
@@ -927,6 +984,8 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                       kind === 'release' ||
                       // …unless it takes Cost past the NTE: the AM says why.
                       (kind === 'approve' && r.data.kind === 'payment' && !r.data.item.above_nte) ||
+                      // A purchase request too: the row says the amount and the item.
+                      (kind === 'approve' && r.data.kind === 'purchase') ||
                       (kind === 'approve' && r.data.kind === 'task' && !approveAsksNote(r) && !nteHoldForPayment(r) && r.data.item.type !== 'wo_acceptance')
                     ) {
                       decide.mutate({ kind, row: r, text: null });
@@ -1074,6 +1133,8 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
               ? 'Return this quote to draft'
               : pending.row.data.kind === 'payment'
                 ? 'Reject this payment'
+                : pending.row.data.kind === 'purchase'
+                ? 'Reject this purchase request'
                 : pending.row.data.item.type === 'nte_override'
                   ? 'Reject this NTE increase'
                   : pending.row.data.item.type === 'status_change'
@@ -1090,6 +1151,8 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
           hint={
             pending.row.data.kind === 'task' && pending.row.data.item.type === 'wo_acceptance'
               ? `Moves ${pending.row.wo_number} to ${ACCEPTANCE_REJECT_STATUS_NAME} and posts the reason as an internal update (rule 7.1.2). Never shown to the client.`
+              : pending.row.data.kind === 'purchase'
+              ? 'Sent to whoever raised the request, with the decision.'
               : `Posted as an internal update on ${pending.row.wo_number} — feedback for whoever is running the job, never for the client.`
           }
           required
@@ -1165,6 +1228,12 @@ function facts(row: Row): { k: string; v: string }[] {
         { k: 'Purpose', v: row.data.item.purpose },
         { k: 'Work order', v: wo },
       ];
+    case 'purchase':
+      return [
+        { k: 'Purchase', v: `${usd(row.data.item.estimate)} · ${row.data.item.title}` },
+        { k: 'Request', v: row.data.item.pr_number },
+        ...(row.data.item.task ? [{ k: 'Work order', v: row.data.item.task.wo_number }] : []),
+      ];
   }
 }
 
@@ -1213,6 +1282,7 @@ interface RowProps {
   canDecideTask: (type: ApprovalTaskType) => boolean;
   canApproveQuotes: boolean;
   canApprovePayments: boolean;
+  canApprovePurchases: boolean;
   busy: boolean;
   onDecide: (kind: DecisionKind) => void;
 }
@@ -1343,12 +1413,29 @@ function Ask({ row }: { row: Row }) {
           </small>
         </div>
       );
+    case 'purchase':
+      return (
+        <div className="site payq-who">
+          <strong>
+            {chip}
+            {usd(d.item.estimate)} · {d.item.title}
+          </strong>
+          <small>
+            <Link to={PURCHASE_REQUESTS_HREF}>{d.item.pr_number}</Link>
+            {d.item.vendor && ` · ${d.item.vendor.name}`}
+            {d.item.needed_by && ` · needed by ${numericDate(d.item.needed_by) ?? d.item.needed_by}`}
+          </small>
+        </div>
+      );
   }
 }
 
 function InboxRow(props: RowProps) {
   const { row } = props;
-  const woHref = `/work-orders/${encodeURIComponent(row.wo_number)}`;
+  const woHref =
+    row.data.kind === 'purchase' && !row.data.item.task
+      ? PURCHASE_REQUESTS_HREF
+      : `/work-orders/${encodeURIComponent(row.wo_number)}`;
   const when = numericDate(row.raised_at) ?? '—';
   // Who raised it — a person's name only. A rule-raised task says nothing
   // here: the kind chip already says what it is.
@@ -1357,7 +1444,9 @@ function InboxRow(props: RowProps) {
       ? (row.data.item.source ? null : (row.data.item.created_by?.display_name ?? null))
       : row.data.kind === 'payment'
         ? (row.data.item.requested_by?.display_name ?? null)
-        : null;
+        : row.data.kind === 'purchase'
+          ? (row.data.item.requested_by?.name ?? null)
+          : null;
   const overNte = isCostOverNte(row.cost, row.nte);
   const lane =
     row.data.kind === 'task' && row.data.item.assigned_to && row.data.item.assigned_role_label
@@ -1459,7 +1548,7 @@ function InboxRow(props: RowProps) {
 
 /** The verbs a row offers at its status. A verb the viewer may not use is
     drawn locked with the reason — the rule is "visible, never hidden". */
-function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes, canApprovePayments, busy, onDecide }: RowProps) {
+function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes, canApprovePayments, canApprovePurchases, busy, onDecide }: RowProps) {
   // 0083 (D2): maker ≠ checker — the person who raised a request does not
   // approve it (the API answers 403 SELF_APPROVAL); a super admin may.
   const own = (makerId: string | null | undefined) => !mySuper && !!makerId && makerId === myId;
@@ -1592,7 +1681,14 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
         const nteApprover = mayApproveOverNtePayment(myRole, mySuper === true);
         return (
           <>
-            {verb('Reject', 'x', canApprovePayments, 'Requires payment approval rights', () => onDecide('reject'), 'danger')}
+            {verb(
+              'Reject',
+              'x',
+              canApprovePayments && nteApprover,
+              !canApprovePayments ? 'Requires payment approval rights' : 'Above the client NTE — an Account Manager declines it',
+              () => onDecide('reject'),
+              'danger',
+            )}
             {verb(
               'Approve',
               'check',
@@ -1612,7 +1708,16 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
       }
       return (
         <>
-          {verb('Reject', 'x', canApprovePayments, 'Requires payment approval rights', () => onDecide('reject'), 'danger')}
+          {verb(
+            'Reject',
+            'x',
+            canApprovePayments && !(d.item.tier && !d.item.tier.allowed),
+            !canApprovePayments
+              ? 'Requires payment approval rights'
+              : `${d.item.tier?.label}: needs a role allowed for this amount (rule 6.2.3)`,
+            () => onDecide('reject'),
+            'danger',
+          )}
           {verb(
             'Approve',
             'check',
@@ -1635,6 +1740,25 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
           )}
         </>
       );
+    case 'purchase': {
+      const bandLocked = Boolean(d.item.tier && !d.item.tier.allowed);
+      const need = !canApprovePurchases
+        ? 'Requires purchase request approval rights'
+        : `${d.item.tier?.label}: needs a role allowed for this amount (rule 6.2.3)`;
+      return (
+        <>
+          {verb('Reject', 'x', canApprovePurchases && !bandLocked, need, () => onDecide('reject'), 'danger')}
+          {verb(
+            'Approve',
+            'check',
+            canApprovePurchases && !bandLocked && !own(d.item.requested_by?.id),
+            !canApprovePurchases || bandLocked ? need : OWN,
+            () => onDecide('approve'),
+            'primary',
+          )}
+        </>
+      );
+    }
   }
 }
 

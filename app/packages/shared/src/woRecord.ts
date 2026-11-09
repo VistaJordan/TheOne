@@ -13,6 +13,15 @@ import type { FeedActor, VisitStatusMove } from './index';
 import type { WoCreateField, WoCreateForm, WoCreateMode } from './woCreate';
 import type { SiteLocation } from './portfolio';
 
+/** Elise, 2026-11-09: an ETA is the current minute or later. The screens pick
+    to the minute, so the minute now running still counts as "now". */
+export const ETA_IN_PAST_MESSAGE = 'An ETA must be the current time or later.';
+export const ETA_IN_PAST_CODE = 'ETA_IN_PAST';
+export function etaInPast(at: Date | number, now: Date | number = Date.now()): boolean {
+  const minuteStart = Math.floor(new Date(now).getTime() / 60_000) * 60_000;
+  return new Date(at).getTime() < minuteStart;
+}
+
 // ── State on the work order ──────────────────────────────────────────────────
 
 export interface WoStamp {

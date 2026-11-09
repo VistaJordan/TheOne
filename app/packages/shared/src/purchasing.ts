@@ -392,6 +392,25 @@ export interface PurchaseOrder {
   needs_limit_approval: boolean;
   limit_approved_by: FeedActor | null;
   limit_approved_at: string | null;
+  /** 2026-11-09: a draft nobody in its amount band has approved yet: who may
+      issue it, for the viewer. Null when an approval already covers it. */
+  tier: { label: string; allowed: boolean } | null;
+}
+
+/** Elise, 2026-11-09: a materials order follows the purchase-request bands
+    when it is issued, unless an approval already covers it: an approved
+    request whose estimate holds the order's value before tax, or Approve over
+    limit (which asks the band itself). */
+export function poIssueNeedsBand(order: { subtotal: number; approved_estimate: number | null; limit_approved: boolean }): boolean {
+  if (order.limit_approved) return false;
+  return order.approved_estimate === null || order.subtotal > order.approved_estimate + 0.005;
+}
+
+/** Elise, 2026-11-09: "Needed by" is today or later. Both sides pass the
+    Chicago day (businessDay()), so browser and API agree. */
+export const NEEDED_BY_PAST_MESSAGE = 'The date it is needed by cannot be in the past.';
+export function neededByInPast(neededBy: string | null | undefined, today: string): boolean {
+  return Boolean(neededBy) && neededBy! < today;
 }
 
 export interface PurchaseOrderInput {

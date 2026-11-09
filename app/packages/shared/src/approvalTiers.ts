@@ -19,7 +19,7 @@ export const APPROVAL_TIER_KIND_LABELS: Record<ApprovalTierKind, string> = {
   payment: 'Payment requests',
   vendor_bill: 'Vendor bills',
   invoice: 'Client invoices',
-  purchase_request: 'Purchase requests',
+  purchase_request: 'Purchase requests and orders',
 };
 
 /** What "approve" means for each kind, for the settings card's wording. */

@@ -41,6 +41,7 @@ import {
   INTAKE_REQUIRED_FIELDS,
   intakeMissing,
   APPROVAL_TASK_TYPES,
+  PURCHASING_PERM,
   STATUS_PERM_KEY,
   approvalSectionOf,
   approvalSectionPermKey,
@@ -66,7 +67,7 @@ import { woScopeSql } from './woScope.js';
 import { assertDispatchers } from './dataRules.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
-import { assertStatusGate } from './statusGates.js';
+import { assertRequestHasCheckIn, assertStatusGate } from './statusGates.js';
 import { assertStatusOrder } from './statusOrder.js';
 import { assertReadyToAssign } from './intakeGate.js';
 
@@ -666,6 +667,7 @@ async function decide(
     // parts list may have been emptied since the request — and BEFORE the
     // decision commits, so a refused move leaves the request open (409).
     await assertStatusGate({ query }, cur.task_id, hit.rows[0].name);
+    await assertRequestHasCheckIn({ query }, cur.task_id, hit.rows[0].name);
     // Rule 2.6.4: same again for Ecotrak's allowed transitions.
     await assertEcotrakAllowsMove(cur.task_id, hit.rows[0].name);
     // BRD 2.7: the portal's steps, asked again before the decision commits.
@@ -1455,6 +1457,8 @@ export async function requestStatusChange(
       });
     }
     await assertStatusGate({ query }, taskId, to.rows[0].name);
+    // 2026-11-09: On Site needs a check-in; the request a check-in raises passes.
+    await assertRequestHasCheckIn({ query }, taskId, to.rows[0].name);
     // Rule 2.6.4, at request time.
     await assertEcotrakAllowsMove(taskId, to.rows[0].name);
     // BRD 2.7: a move the portal's steps refuse is refused up front.
@@ -1570,6 +1574,17 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
       qp.values,
     );
     to_decide += Number(pr.rows[0]?.n ?? 0);
+  }
+  // Elise, 2026-11-09: submitted purchase requests wait in the inbox too. One
+  // with no work order follows no work-order scope, as on the Purchasing list.
+  if (allow(PURCHASING_PERM.requests, 'approve') && allow(approvalSectionPermKey('purchases'), 'view')) {
+    const scoped = moneyScope ? `AND (r.task_id IS NULL OR ${moneyScope})` : '';
+    const pu = await query<{ n: number | string }>(
+      `SELECT count(*)::int AS n FROM purchase_request r LEFT JOIN task t ON t.id = r.task_id
+        WHERE r.status = 'submitted' ${scoped}`,
+      qp.values,
+    );
+    to_decide += Number(pu.rows[0]?.n ?? 0);
   }
   return { to_decide, to_accept, to_acknowledge };
 }

@@ -1506,6 +1506,18 @@ async function approveOverNte(
   );
 }
 
+/** What the NTE rule needs to know about a request right now. */
+async function nteFacts(row: PaymentRow): Promise<{ amount: number; nte: number | null; cost: number; aboveNte: boolean }> {
+  const amount = Number(row.amount ?? 0);
+  const nte = moneyNum(row.wo_nte);
+  const billsRes = await query<{ bills: number | string | null }>(
+    `SELECT COALESCE(sum(total), 0)::float8 AS bills FROM vendor_bill WHERE task_id = $1 AND status IN ('approved', 'paid')`,
+    [row.task_id],
+  );
+  const cost = vendorMoneyOut(moneyNum(row.wo_cost), moneyNum(billsRes.rows[0]?.bills ?? null));
+  return { amount, nte, cost, aboveNte: row.status === 'requested' && paymentAboveNte(cost, amount, nte) };
+}
+
 /**
  * requested → approved (payments:approve); never by its own requester.
  * Within the NTE: the amount's band decides who (0090 / 0115), and an open
@@ -1523,15 +1535,9 @@ export async function approvePaymentRequest(
   assertCanApprove(actor, 'approve');
   const row = await loadRow(id);
   const selfApproved = assertNotOwnRequest(row, actor, 'approve');
-  const amount = Number(row.amount ?? 0);
-  const nte = moneyNum(row.wo_nte);
-  const billsRes = await query<{ bills: number | string | null }>(
-    `SELECT COALESCE(sum(total), 0)::float8 AS bills FROM vendor_bill WHERE task_id = $1 AND status IN ('approved', 'paid')`,
-    [row.task_id],
-  );
-  const cost = vendorMoneyOut(moneyNum(row.wo_cost), moneyNum(billsRes.rows[0]?.bills ?? null));
+  const { amount, nte, cost, aboveNte } = await nteFacts(row);
 
-  if (row.status !== 'requested' || !paymentAboveNte(cost, amount, nte)) {
+  if (!aboveNte) {
     // 0090 (rule 6.2.3): the amount's band says which roles may approve it —
     // $500–3,000 TL / ATL, $3,000 and over AM (Admin › Settings).
     await assertTierAllows('payment', amount, actor, 'Approving a payment');
@@ -1602,10 +1608,23 @@ export async function payPaymentRequest(id: string, actor: ActingPrincipal): Pro
     }, selfApproved);
 }
 
-/** requested | approved → rejected (payments:approve) with the reason for the requester. */
+/**
+ * requested | approved → rejected (payments:approve) with the reason for the
+ * requester. Elise, 2026-11-09: whoever may not approve it may not decline it
+ * either: the amount's band, or above the NTE an Account Manager.
+ */
 export async function rejectPaymentRequest(id: string, reason: string, actor: ActingPrincipal): Promise<PaymentRequest> {
   assertCanApprove(actor, 'reject');
   const row = await loadRow(id);
+  const facts = await nteFacts(row);
+  if (!facts.aboveNte) {
+    await assertTierAllows('payment', facts.amount, actor, 'Declining a payment');
+  } else if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin)) {
+    throw forbidden('This payment is above the client NTE — an Account Manager declines it', {
+      code: NTE_PAYMENT_APPROVER_CODE,
+      payment_request_id: id,
+    });
+  }
   const note = reason.trim();
   const out = await setStatus(row, ['requested', 'approved', 'sent_to_yoda'], 'rejected', 'payment_rejected', actor,
     'rejected_by = $3, rejected_at = now(), rejection_note = $4', [actor.id, note],

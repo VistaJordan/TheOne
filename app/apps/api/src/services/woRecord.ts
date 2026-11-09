@@ -19,6 +19,9 @@
 
 import {
   CANCEL_BILLED_CODE,
+  ETA_IN_PAST_CODE,
+  ETA_IN_PAST_MESSAGE,
+  etaInPast,
   LIFECYCLE_PERM_KEY,
   REOPEN_STATUS_NAME,
   approvalSectionPermKey,
@@ -676,6 +679,10 @@ export async function setWoEta(taskId: string, input: { eta_at: string | null; n
   if (input.eta_at) {
     at = new Date(input.eta_at);
     if (Number.isNaN(at.getTime())) throw badRequest('That is not a date and time', { field: 'eta_at' });
+    // 2026-11-09: asked only of a new time, so an old ETA's note can still change.
+    if (at.getTime() !== t.eta_at?.getTime() && etaInPast(at)) {
+      throw badRequest(ETA_IN_PAST_MESSAGE, { field: 'eta_at', code: ETA_IN_PAST_CODE });
+    }
   }
   await query(`UPDATE task SET eta_at = $2, eta_note = $3, eta_by = $4 WHERE id = $1`, [taskId, at, at ? clean(input.note) : null, at ? actor.id : null]);
   await logChange(taskId, actor, 'ETA', iso(t.eta_at), iso(at));

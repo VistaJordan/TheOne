@@ -12,6 +12,7 @@
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ETA_IN_PAST_MESSAGE, etaInPast } from '@theone/shared';
 import type { OnboardingPayload, PortalJob, PortalView } from '@theone/shared';
 import { ApiRequestError, addPortalNote, answerPortalOffer, getVendorPortal, setPortalEta, submitVendorOnboarding } from '../api/client';
 import { Icon, IconSprite } from '../components/Icon';
@@ -129,6 +130,13 @@ function JobFacts({ job }: { job: PortalJob }) {
   );
 }
 
+/** This minute, as a datetime-local value: the earliest ETA the picker offers. */
+function nowLocalInput(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function Job({ token, job, onDone }: { token: string; job: PortalJob; onDone: (v: PortalView) => void }) {
   const [eta, setEta] = useState('');
   const [note, setNote] = useState('');
@@ -146,8 +154,8 @@ function Job({ token, job, onDone }: { token: string; job: PortalJob; onDone: (v
       </dl>
       {error && <p className="vp-err" role="alert"><Icon name="alert-circle" size={14} /> {error}</p>}
       <form className="vp-row" onSubmit={(e) => { e.preventDefault(); if (eta) saveEta.mutate(); }}>
-        <label>When will you be there?<input className="fld" type="datetime-local" value={eta} onChange={(e) => setEta(e.target.value)} /></label>
-        <button type="submit" className="btn" disabled={!eta || saveEta.isPending}>{job.eta_at ? 'Change ETA' : 'Give ETA'}</button>
+        <label>When will you be there?<input className="fld" type="datetime-local" min={nowLocalInput()} value={eta} onChange={(e) => setEta(e.target.value)} /></label>
+        <button type="submit" className="btn" disabled={!eta || etaInPast(new Date(eta)) || saveEta.isPending} title={eta && etaInPast(new Date(eta)) ? ETA_IN_PAST_MESSAGE : undefined}>{job.eta_at ? 'Change ETA' : 'Give ETA'}</button>
       </form>
       {job.notes.length > 0 && (
         <ul className="vp-notes">{job.notes.map((n, i) => <li key={i}><small>{when(n.created_at)}</small>{n.body}</li>)}</ul>

@@ -2825,6 +2825,37 @@ rail (group or one type), All · Unread · Read, search, Mark all read / Mark
 all unread (on the type picked), tick rows to mark several, a toggle per row,
 day bands; the filter rides in the URL. The 0059 routes stay.
 
+**UAT list of 2026-11-09** (migration 0127, Elise;
+`tests/uat-locks-2026-11-09.test.ts`). **Declining follows the approval
+rules:** `rejectPaymentRequest` asks the amount band, or above the NTE the
+Account Manager (`nteFacts`, shared with Approve), and a purchase request's
+Reject asks its band; both buttons lock first (this replaces "Reject is never
+banded"; rejecting an NTE hold in Approvals is still never blocked). **0127:**
+OP Admin is view-only on the AR, QC, Payments and Invoicing sections and Not
+fully paid, and has `payments` create / edit / delete / approve off
+(dispatchers request payments; view stays); OM, Senior OM and OM Under
+Probation are view-only on QC, Invoicing and Integrations, keeping Payments and
+Not fully paid. `Client Portal Type` joined `CREATE_FILLABLE_FIELD_KEYS` so
+Add work order can still fill it. **Dates:** an ETA is the current minute or
+later (`etaInPast`, staff and vendor portal), a purchase request's Needed by is
+the Chicago day or later (`neededByInPast`); both ask only of a changed value.
+**On Site requests:** `assertRequestHasCheckIn` (`statusGates.ts`, 409
+`CHECK_IN_REQUIRED`) runs in `requestStatusChange` and `decide`: On Site (Job)
+needs a Job or Return trip visit with a check-in stamp, On Site (Assessment) an
+Assessment one; a manager's direct move is not asked. **Materials orders:** at
+Issue, `poIssueNeedsBand` applies the `purchase_request` bands to the order's
+total unless an approved request's estimate covers its subtotal or Approve over
+limit was given (which asks the band itself); `PurchaseOrder.tier` locks the
+buttons. **Purchases in the inbox:** a submitted purchase request is a
+**Purchases** section of `/approvals` (`purchaseRow`, data kind `purchase`,
+permission `approvals/purchases`, unset inherits `approvals`; shown only with
+`purchasing/requests` approve) and counts in the badge (`approvalCounts`);
+Approve is one click, Reject asks the reason, both through the Purchasing
+route so the bands and maker ≠ checker hold. Raising one of any amount needs
+only `purchasing/requests` create. **Quote summary:** each section prints its own "Required is to" list,
+Incurred's under INCURRED unless only the default texts are left
+(`incurredScopeToPrint`).
+
 **Live sync between accounts** (migration 0126, Elise 2026-11-05;
 `plugins/liveChange.ts`, `hooks/useAppLiveUpdates.ts` mounted by `AppShell`,
 `GET /activity/since?after=` → `getAppLatestChange` in `services/activity.ts`,

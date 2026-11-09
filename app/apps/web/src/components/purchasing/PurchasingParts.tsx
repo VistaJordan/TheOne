@@ -15,7 +15,10 @@ import {
   PO_STATUS_LABELS,
   PR_STATUS_LABELS,
   RFQ_STATUS_LABELS,
+  NEEDED_BY_PAST_MESSAGE,
+  businessDay,
   compareQuotes,
+  neededByInPast,
   purchaseRequestNeedsNoApproval,
   purchaseRequestProblem,
   purchaseTotals,
@@ -154,8 +157,11 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
   const toRfq = useMutation({ mutationFn: () => saveRfq(null, { request_id: request!.id }), onSuccess: (res) => { refresh(); onClose(); onRfq?.(res.rfq); } });
   const draft = fromDraft(lines);
   const estimate = purchaseTotals(draft, 0).subtotal;
-  const submitProblem = purchaseRequestProblem(d.title, draft);
+  // 2026-11-09: today or later; a date already on the request may stay.
+  const neededPast = d.needed_by !== (request?.needed_by ?? '') && neededByInPast(d.needed_by, businessDay());
+  const submitProblem = neededPast ? NEEDED_BY_PAST_MESSAGE : purchaseRequestProblem(d.title, draft);
   const busy = save.isPending || act.isPending || toOrder.isPending || toRfq.isPending;
+  const tierTip = request?.tier ? `${request.tier.label}: your role cannot decide a request of this amount` : undefined;
 
   return (
     <Sheet title={request ? <>{request.pr_number} <PrChip status={request.status} /></> : 'New purchase request'} icon="clipboard" onClose={onClose} problem={problem}
@@ -163,12 +169,12 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
         <button type="button" className="btn" onClick={onClose}>Close</button>
         {request?.status === 'submitted' && can.approve && (
           <>
-            <button type="button" className="btn is-danger" disabled={busy} onClick={() => (note.trim() ? act.mutate('reject', fail('Could not reject it.')) : setProblem('Say why the request is rejected, in the note.'))}>Reject</button>
+            <button type="button" className="btn is-danger" disabled={busy || tierLocked} title={tierLocked ? tierTip : undefined} onClick={() => (note.trim() ? act.mutate('reject', fail('Could not reject it.')) : setProblem('Say why the request is rejected, in the note.'))}>Reject</button>
             <button
               type="button"
               className="btn btn-primary"
               disabled={busy || ownRequest || tierLocked}
-              title={ownRequest ? 'You raised this request — someone else has to approve it (maker ≠ checker)' : tierLocked ? `${request.tier!.label}: your role cannot approve a request of this amount` : undefined}
+              title={ownRequest ? 'You raised this request — someone else has to approve it (maker ≠ checker)' : tierLocked ? tierTip : undefined}
               onClick={() => act.mutate('approve', fail('Could not approve it.'))}
             >
               Approve
@@ -179,7 +185,7 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
         {request?.status === 'approved' && meta.can.orders.create && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => toOrder.mutate(undefined, fail('Could not raise the order.'))}>Raise a purchase order</button>}
         {request && (request.status === 'rejected' || request.status === 'cancelled') && can.edit && <button type="button" className="btn" disabled={busy} onClick={() => act.mutate('reopen', fail('Could not reopen it.'))}>Back to draft</button>}
         {request && ['draft', 'submitted', 'approved'].includes(request.status) && can.edit && <button type="button" className="btn is-ghost" disabled={busy} onClick={() => act.mutate('cancel', fail('Could not cancel it.'))}>Cancel the request</button>}
-        {editable && <button type="button" className="btn" disabled={busy} onClick={() => save.mutate(undefined, fail('Could not save the request.'))}>{request ? 'Save' : 'Save as draft'}</button>}
+        {editable && <button type="button" className="btn" disabled={busy || neededPast} title={neededPast ? NEEDED_BY_PAST_MESSAGE : undefined} onClick={() => save.mutate(undefined, fail('Could not save the request.'))}>{request ? 'Save' : 'Save as draft'}</button>}
         {editable && can.create && <button type="button" className="btn btn-primary" disabled={busy || submitProblem !== null} title={submitProblem ?? undefined} onClick={() => act.mutate('submit', fail('Could not submit it.'))}>{purchaseRequestNeedsNoApproval(draft) ? 'Submit (under $500, no approval)' : 'Submit for approval'}</button>}
       </>}>
       {request?.status === 'rejected' && request.decision_note && <p className="mt-banner is-danger"><Icon name="alert-circle" size={14} />Rejected by {request.decided_by?.name ?? 'a manager'}: {request.decision_note}</p>}
@@ -189,7 +195,7 @@ export function RequestDialog({ request, meta, woNumber, onClose, onOrder, onRfq
       <div className="pf-form">
         <F label="What is being bought" wide><input className="fld" autoFocus={!request} value={d.title} disabled={!editable} onChange={(e) => setD((c) => ({ ...c, title: e.target.value }))} /></F>
         <F label="Work order" hint="Leave empty for stock or anything not tied to one job."><input className="fld mono" value={d.task_ref} disabled={!editable || Boolean(woNumber)} placeholder="WO-…" onChange={(e) => setD((c) => ({ ...c, task_ref: e.target.value }))} /></F>
-        <F label="Needed by"><input className="fld" type="date" value={d.needed_by} disabled={!editable} onChange={(e) => setD((c) => ({ ...c, needed_by: e.target.value }))} /></F>
+        <F label="Needed by" hint={neededPast ? NEEDED_BY_PAST_MESSAGE : undefined}><input className="fld" type="date" min={businessDay()} value={d.needed_by} disabled={!editable} onChange={(e) => setD((c) => ({ ...c, needed_by: e.target.value }))} /></F>
         <F label="Suggested vendor" hint="Pick a vendor on file (0083: a typed name is not a vendor)."><VendorField value={vendor} onChange={setVendor} disabled={!editable} /></F>
         {meta.cost_centers.length > 0 && (
           <F label="Cost center">
@@ -388,6 +394,9 @@ export function OrderDialog({ order: initial, meta, woNumber, onClose }: { order
   const needsLimit = order?.needs_limit_approval === true;
   const ownOrder = Boolean(order?.created_by && order.created_by.id === actingAs?.id && actingAs?.is_super_admin !== true);
   const LIMIT_TIP = `Over the ${usd(meta.po_limit)} limit for an order with no purchase request — someone else has to approve it over the limit first`;
+  // 2026-11-09: no approval covers this draft yet, and the amount's band excludes the viewer.
+  const tierLocked = order?.tier ? !order.tier.allowed : false;
+  const TIER_TIP = order?.tier ? `${order.tier.label}: your role cannot approve an order of this amount` : '';
   const receivable = Boolean(order && can.edit && ['issued', 'partially_received', 'received'].includes(order.status));
   const [d, setD] = useState({
     task_ref: order?.task?.wo_number ?? woNumber ?? '', expected_on: order?.expected_on ?? '', ship_to: order?.ship_to ?? '', note: order?.note ?? '',
@@ -431,14 +440,14 @@ export function OrderDialog({ order: initial, meta, woNumber, onClose }: { order
           <button
             type="button"
             className="btn"
-            disabled={busy || ownOrder}
-            title={ownOrder ? 'You drafted this order — someone else has to approve it over the limit (maker ≠ checker)' : 'Approve this order above the PO limit'}
+            disabled={busy || ownOrder || tierLocked}
+            title={ownOrder ? 'You drafted this order — someone else has to approve it over the limit (maker ≠ checker)' : tierLocked ? TIER_TIP : 'Approve this order above the PO limit'}
             onClick={() => act.mutate('approve_limit', fail('Could not approve it.'))}
           >
             Approve over limit
           </button>
         )}
-        {editable && can.approve && <button type="button" className="btn btn-primary" disabled={busy || needsLimit} onClick={() => act.mutate('issue', fail('Could not issue it.'))} title={needsLimit ? LIMIT_TIP : 'Makes the order firm. Nothing is emailed: send the printed order to the vendor yourself.'}>Issue the order</button>}
+        {editable && can.approve && <button type="button" className="btn btn-primary" disabled={busy || needsLimit || tierLocked} onClick={() => act.mutate('issue', fail('Could not issue it.'))} title={needsLimit ? LIMIT_TIP : tierLocked ? TIER_TIP : 'Makes the order firm. Nothing is emailed: send the printed order to the vendor yourself.'}>Issue the order</button>}
       </>}>
       {needsLimit && <p className="mt-banner"><Icon name="lock" size={14} />{LIMIT_TIP}.</p>}
       {order?.limit_approved_by && <p className="mt-banner"><Icon name="check" size={14} />Approved over the limit by {order.limit_approved_by.name}.</p>}

@@ -45,6 +45,14 @@ export function isDefaultScopeLine(line: string): boolean {
   return t === QUOTE_SCOPE_FIRST_LINE || t === QUOTE_SCOPE_LAST_LINE;
 }
 
+/** 2026-11-09 (Elise) · what the summary prints under INCURRED: the section's
+    own list, unless nobody touched it (only the default texts left), so a
+    quote with nothing typed there does not print a to-do list for it. */
+export function incurredScopeToPrint(lines: readonly unknown[] | null | undefined): string[] {
+  const visible = visibleScopeLines(lines);
+  return visible.every(isDefaultScopeLine) ? [] : visible;
+}
+
 /**
  * How an option is named on screen and in the client text: with ONE option
  * in the round there is no choice to make, so it reads "Proposed" with no

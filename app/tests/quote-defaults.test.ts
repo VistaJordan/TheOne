@@ -196,7 +196,7 @@ describe('source pins', () => {
   it('the route stores blank scope lines and the summary skips them', () => {
     expect(read('apps/api/src/routes/quotes.ts')).toMatch(/scope_lines: z\.array\(z\.string\(\)\.trim\(\)\.max\(1000\)\)/);
     const svc = read('apps/api/src/services/quotes.ts');
-    expect(svc).toMatch(/let scope = visibleScopeLines\(section\.scope_lines\)/);
+    expect(svc).toMatch(/pushScope\(out, visibleScopeLines\(section\.scope_lines\)\)/);
     expect(svc).toMatch(/optionCount > 1 \? `PROPOSED — \$\{section\.label\.toUpperCase\(\)\}` : 'PROPOSED'/);
   });
 

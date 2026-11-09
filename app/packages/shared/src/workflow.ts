@@ -128,7 +128,17 @@ export const PROBATION_FIELD_LOCKED_ROLES = ['om_probation'] as const;
     (CREATE_FILLABLE_FIELD_KEYS, read by POST /work-orders), so the lock
     bites on the field editor, bulk edit and the import, not on creation. */
 export const CLIENT_FM_LOCKED_ROLES = REQUEST_MODE_DISPATCHER_ROLES;
-export const CREATE_FILLABLE_FIELD_KEYS = ['fields.Client', 'fields.22. FM'] as const;
+/** 2026-11-09 (0127): Client Portal Type joins them. The dispatchers cannot
+    change it, but the Add work order form fills it from the client. */
+export const CREATE_FILLABLE_FIELD_KEYS = ['fields.Client', 'fields.22. FM', 'fields.Client Portal Type'] as const;
+
+/** Elise, 2026-11-09 (migration 0127): the All-fields sections each group may
+    only read. OP Admin: AR, QC, Payments, Invoicing, plus Not fully paid on
+    its own (the rest of Finances stays), and it no longer requests payments.
+    The dispatcher tiers: QC, Invoicing, Integrations. */
+export const OP_ADMIN_LOCKED_FIELD_SECTIONS = ['ar', 'qc', 'payments', 'invoicing'] as const;
+export const OP_ADMIN_LOCKED_FIELD_PATHS = ['work_orders/fields/finances/fields.1. Not Fully Paid'] as const;
+export const DISPATCHER_LOCKED_FIELD_SECTIONS_0127 = ['qc', 'invoicing', 'integrations'] as const;
 export function fillableOnCreate(catalogueKey: string): boolean {
   return (CREATE_FILLABLE_FIELD_KEYS as readonly string[]).includes(catalogueKey);
 }

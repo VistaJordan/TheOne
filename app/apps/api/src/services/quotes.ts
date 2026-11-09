@@ -81,6 +81,7 @@ import {
   quoteTaxApplies,
   reportedSentence,
   visibleScopeLines,
+  incurredScopeToPrint,
 } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -362,6 +363,16 @@ function lineRows(lines: QuoteLine[], multiDay: boolean): string[] {
   return out;
 }
 
+/** The numbered "Required is to:" block; nothing when the list is empty. */
+function pushScope(out: string[], scope: string[]): void {
+  if (scope.length === 0) return;
+  out.push('', 'Required is to:');
+  scope.forEach((text, i) => {
+    const n = `${i + 1}`.padStart(2);
+    out.push(...wrap(text, SUMMARY_WIDTH, '    ', `${n}. `));
+  });
+}
+
 /**
  * The auto-generated client text — narratives + the included line items +
  * totals, in the approved comp's format:
@@ -376,11 +387,11 @@ function lineRows(lines: QuoteLine[], multiDay: boolean): string[] {
  * option + tax) so the client can read the price of choosing it; the closing
  * GRAND TOTAL is the approved option's (or the first included one's).
  *
- * Scope lines ("Required is to…") are the JOB's scope of work: the comp edits
- * them on the incurred card and prints them under the proposed option. So an
- * option prints its OWN scope_lines when it has any, and the first included
- * option falls back to the incurred section's list — one documented fallback,
- * and a future per-option scope needs no code change.
+ * Scope lines ("Required is to…"): each section prints its OWN list, the
+ * Incurred card's under INCURRED and each option's under PROPOSED (2026-11-09,
+ * Elise). Until then Incurred's list printed only when an option's was blank,
+ * which never happens now that options open with two default lines, so the
+ * typed lines vanished and only the option's first and last showed.
  */
 export function buildAutoSummary(
   ctx: SummaryContext,
@@ -426,14 +437,14 @@ export function buildAutoSummary(
         ),
       );
     }
+    // 2026-11-09 (Elise): the Incurred card's own list prints here.
+    if (section.kind === 'incurred') pushScope(out, incurredScopeToPrint(section.scope_lines));
     if (section.lines.length > 0) out.push('');
     out.push(...lineRows(section.lines, multiDay));
   }
   if (incurredLike.length > 0) out.push(...amountRows('Total incurred',totals.incurred_subtotal));
 
   // ── Proposed options ──────────────────────────────────────────────────────
-  const incurredScope = visibleScopeLines(sections.filter((s) => s.kind === 'incurred').flatMap((s) => s.scope_lines));
-  let usedFallbackScope = false;
 
   // A lone option is the proposal, with no letter and no name (2026-10-22);
   // letters and names appear once the client has a choice. Blank scope lines
@@ -450,18 +461,7 @@ export function buildAutoSummary(
       out.push('', ...wrap(reportedSentence(section.narrative_reported), SUMMARY_WIDTH));
     }
 
-    let scope = visibleScopeLines(section.scope_lines);
-    if (scope.length === 0 && !usedFallbackScope) {
-      scope = incurredScope;
-      usedFallbackScope = true;
-    }
-    if (scope.length > 0) {
-      out.push('', 'Required is to:');
-      scope.forEach((text, i) => {
-        const n = `${i + 1}`.padStart(2);
-        out.push(...wrap(text, SUMMARY_WIDTH, '    ', `${n}. `));
-      });
-    }
+    pushScope(out, visibleScopeLines(section.scope_lines));
 
     if (section.lines.length > 0) out.push('');
     out.push(...lineRows(section.lines, multiDay));

@@ -73,9 +73,10 @@ describe('0097 — no dispatcher changes the Client or the FM; raising a work or
     }
   });
 
-  it('the create route exempts exactly those two keys, and only for someone who can see them', () => {
-    expect([...CREATE_FILLABLE_FIELD_KEYS]).toEqual(['fields.Client', 'fields.22. FM']);
-    for (const k of CREATE_FILLABLE_FIELD_KEYS) expect(PROBATION_LOCKED_FIELD_PATHS).toContain(fieldPermKey(k));
+  it('the create route exempts exactly those keys, and only for someone who can see them', () => {
+    // 2026-11-09 (0127): Client Portal Type joined, locked by its section.
+    expect([...CREATE_FILLABLE_FIELD_KEYS]).toEqual(['fields.Client', 'fields.22. FM', 'fields.Client Portal Type']);
+    for (const k of ['fields.Client', 'fields.22. FM']) expect(PROBATION_LOCKED_FIELD_PATHS).toContain(fieldPermKey(k));
     expect(fillableOnCreate('fields.Client')).toBe(true);
     expect(fillableOnCreate('fields.16. Client NTE 🔴')).toBe(false);
     const route = read('apps/api/src/routes/workOrders.ts');
