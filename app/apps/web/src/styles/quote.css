@@ -119,6 +119,20 @@
 /* ══ Header band ═══════════════════════════════════════════════════════════ */
 .qb .qhead { padding: 16px 18px 14px; }
 
+/* Pinned while the quote scrolls: the status and the buttons that move it stay
+   in reach. On the work order it sits directly under .wo-pin (--wo-pin-h, 0 on
+   the standalone page, where the canvas edge is the top). Left in the flow on
+   a screen too small to give up the height, and while a form is open in it. */
+@media (min-height: 700px) and (min-width: 900px) {
+  .qb .qhead:not(.is-unpinned) {
+    position: sticky;
+    top: var(--wo-pin-h, 0px);
+    z-index: 4;
+  }
+  /* Cancels .wo-grid's 2px top margin: no jump when it starts to stick. */
+  .quote-tab .qb-embedded > .card.qhead.is-embedded { margin-top: -2px; }
+}
+
 .qb .qhead-top {
   display: flex;
   align-items: flex-start;

@@ -8,6 +8,7 @@
    the API asks. While a request is open it says so instead. */
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiRequestError, requestNteIncrease } from '../../api/client';
 import { useWoRecord } from '../wo/record/RecordParts';
@@ -63,7 +64,9 @@ export function NteIncreaseButton({ woNumber, quoteTotal, quoteNumber }: { woNum
         <Icon name="plus" size={14} />
         Request NTE increase
       </button>
-      {open && (
+      {/* To the body: the button sits in the pinned header band, whose stacking
+          context would otherwise keep this dialog under the work-order header. */}
+      {open && createPortal(
         <div className="modal-scrim" onClick={() => !ask.isPending && setOpen(false)} role="presentation">
           <div className="modal is-narrow" role="dialog" aria-modal="true" aria-label="Request NTE increase" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
@@ -103,7 +106,8 @@ export function NteIncreaseButton({ woNumber, quoteTotal, quoteNumber }: { woNum
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

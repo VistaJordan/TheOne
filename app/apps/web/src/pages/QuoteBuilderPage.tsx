@@ -640,8 +640,17 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     if (!first) return;
     window.requestAnimationFrame(() => {
       const el = document.getElementById(first.fieldId);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      (el as HTMLElement | null)?.focus();
+      if (!el) return;
+      // The pinned header band must not cover the field it sends you to.
+      const head = document.querySelector<HTMLElement>('.qb .qhead');
+      const headStyle = head && getComputedStyle(head);
+      if (head && headStyle?.position === 'sticky') {
+        el.style.scrollMarginTop = `${parseFloat(headStyle.top) + head.offsetHeight + 40}px`;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      el.focus({ preventScroll: true });
     });
   };
 
@@ -847,7 +856,9 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       )}
 
       {/* ══ Header band ══════════════════════════════════════════════════ */}
-      <section className={`card qhead${embedded ? ' is-embedded' : ''}`}>
+      {/* Pinned while the quote scrolls (Elise, 2026-11-09), except while a
+          reject or decision form is open in it: those can outgrow the screen. */}
+      <section className={`card qhead${embedded ? ' is-embedded' : ''}${rejectOpen || decision ? ' is-unpinned' : ''}`}>
         {!embedded && (
         <div className="qhead-top">
           {/* The work order's own header already names it (Elise, 2026-11-03). */}

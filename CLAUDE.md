@@ -3479,7 +3479,11 @@ page keeps them; the pipeline and the action buttons share one row
 (`.qpipe-row`); the actor note shows only when the PERSON may not edit (a
 quote locked by its status says nothing — the pipeline already shows it), and
 the header has no status pill (both pages).
-The summary's incurred line reads "Total incurred".
+The summary's incurred line reads "Total incurred". **The header band is pinned**
+(Elise, 2026-11-09, `.qb .qhead` in `quote.css`): sticky under `--wo-pin-h`, on
+screens at least 900 × 700 and not while a reject or decision form is open in it
+(`is-unpinned`). A sticky band is a stacking context, so a dialog rendered inside
+it must portal to the body (`NteIncreaseButton`, `ImportTranscriptButton`).
 
 ## Verify
 
