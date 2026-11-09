@@ -1,5 +1,5 @@
 /* The payment cards on the Finances tab (the Payment links card left on
-   2026-11-03, Elise — the PPR / Yoda links are still in All fields):
+   2026-11-03, Elise; both link fields are retired, 0121 and 0128):
 
      PaymentHistoryCard   every payment request on this WO, newest first, each
                           with its status (Requested / Approved / Paid /

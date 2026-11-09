@@ -32,10 +32,12 @@ export function isWoCreateMode(v: unknown): v is WoCreateMode {
 /** 2026-11-03 (Elise, migration 0121): fields RETIRED from the app — out of
     the catalogue, Admin › Custom fields, Add work order, the import and the
     ClickUp push, yet still resolvable so a saved view or an automation that
-    names one keeps loading. By label; 0121 matches these and their keys. */
+    names one keeps loading. By label; 0121 and 0128 (PPR Link, 2026-11-09)
+    match these and their keys. */
 export const RETIRED_FIELD_LABELS: readonly string[] = [
   'Today', 'Yoda Link', 'GTG', 'MOD Date', 'Show in CA', 'Sharepoint Link',
   'MoD Call', 'MoD Call Notes', 'Tech Quote', 'Tech Map', 'Work Permit Needed', 'Supplier Type',
+  'PPR Link',
 ];
 
 /** Same day: kept and still written (the Ecotrak sync stores it, ClickUp

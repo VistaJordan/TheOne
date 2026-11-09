@@ -3435,8 +3435,8 @@ in `checkSiteInput` too. Stored values are not re-checked.
 2026-11-03; `RETIRED_FIELD_LABELS` / `SCREEN_HIDDEN_FIELD_KEYS` in shared
 `woCreate.ts`, `tests/retired-fields.test.ts`). Today, Yoda Link, GTG, MOD
 Date, Show in CA, Sharepoint Link, MoD Call, MoD Call Notes, Tech Quote, Tech
-Map, Work Permit Needed and Supplier Type carry `field_def.retired_at` (0121
-matches key or label; `create_mode` off). There is no field delete in the
+Map, Work Permit Needed, Supplier Type and, since 0128 (Elise 2026-11-09), PPR
+Link carry `field_def.retired_at` (matched by key or label; `create_mode` off). There is no field delete in the
 app, and a deleted `field_def` would make every saved view, tracker or
 automation naming it fail with "Unknown field", so retired is the delete:
 `listCustomFields()` leaves them out (catalogue, All fields, column picker,

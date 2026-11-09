@@ -10,10 +10,12 @@ import { RETIRED_FIELD_LABELS, SCREEN_HIDDEN_FIELD_KEYS } from '@theone/shared';
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
 describe('retired fields', () => {
-  const sql = read('packages/db/migrations/0121_retire_fields.sql');
+  const sql =
+    read('packages/db/migrations/0121_retire_fields.sql') +
+    read('packages/db/migrations/0128_retire_ppr_link.sql');
 
-  it('0121 retires every label on the list, and only those', () => {
-    expect(RETIRED_FIELD_LABELS).toHaveLength(12);
+  it('0121 and 0128 retire every label on the list, and only those', () => {
+    expect(RETIRED_FIELD_LABELS).toHaveLength(13);
     for (const label of RETIRED_FIELD_LABELS) expect(sql).toContain(`'${label}'`);
     for (const kept of ['Parts Required', 'Total Invoiced', 'Ecotrak ID']) {
       expect(RETIRED_FIELD_LABELS).not.toContain(kept);

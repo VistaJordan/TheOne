@@ -400,7 +400,6 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: '22. FM',                   label: 'FM',                   type: 'dropdown', options: FM_OPTIONS },
   { key: '24. Sign-Off Link',        label: 'Sign-Off Link',        type: 'short_text' },
   { key: '25. IVR Link',             label: 'IVR Link',             type: 'short_text' },
-  { key: '26. PPR Link',             label: 'PPR Link',             type: 'short_text' },
   { key: '29. PDF Link',             label: 'PDF Link',             type: 'short_text' },
   { key: '34. Cost',                 label: 'Cost',                 type: 'currency' },
   { key: 'Admin Comment',            label: 'Admin Comment',        type: 'long_text' },
