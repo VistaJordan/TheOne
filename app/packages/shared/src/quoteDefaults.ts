@@ -57,3 +57,17 @@ export function optionDisplayLabel(label: string, optionCount: number): string {
 /** Every line's Day defaults to 1 and the column is drawn only when a line
     says otherwise (or the person asks for it). */
 export const QUOTE_DEFAULT_DAY = 1;
+
+/** 2026-11-09 (Elise) · overtime is for labor only: a trip, a part, a material,
+    a fee or a discount never bills at the OT multiplier. The builder draws the
+    OT tick on Labor lines alone, the save stores `ot = false` on any other
+    line, and every price (quote totals, the invoice prefill, the summary)
+    reads `lineBillsOt`, so a line saved with OT before the rule prices at its
+    plain rate. */
+export const OT_LINE_TYPE = 'labor';
+export function lineTakesOt(lineType: string | null | undefined): boolean {
+  return lineType === OT_LINE_TYPE;
+}
+export function lineBillsOt(line: { line_type?: string | null; ot?: boolean | null }): boolean {
+  return line.ot === true && lineTakesOt(line.line_type);
+}

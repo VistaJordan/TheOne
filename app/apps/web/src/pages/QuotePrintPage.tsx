@@ -18,7 +18,7 @@
  * live, as the client would see it. */
 
 import { useEffect } from 'react';
-import { optionDisplayLabel, visibleScopeLines } from '@theone/shared';
+import { lineBillsOt, optionDisplayLabel, visibleScopeLines } from '@theone/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { QUOTE_DOCUMENT_TYPE_LABELS, type QuoteSection } from '@theone/shared';
@@ -282,7 +282,7 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
             <tr key={l.id}>
               <td>
                 {l.description}
-                {l.ot && <small> (overtime)</small>}
+                {lineBillsOt(l) && <small> (overtime)</small>}
               </td>
               <td className="num">{l.qty}</td>
               <td className="num">{usd(clientUnit(l))}</td>

@@ -4,7 +4,7 @@
 // network — tests/quo-calls.test.ts exercises it directly.
 
 import { z } from 'zod';
-import { QUOTE_UOMS } from '@theone/shared';
+import { QUOTE_UOMS, lineBillsOt } from '@theone/shared';
 import type { QuoteDraftBody, QuoteDraftLine, QuoteDraftSection, WoCall } from '@theone/shared';
 
 export const SYSTEM_PROMPT = `You draft quotes for Seamless FM, a facilities-maintenance company. Seamless FM dispatches technicians and vendors to client sites (restaurants, retail stores) and bills the client for the work.
@@ -28,7 +28,7 @@ Line items:
 - description: what the client is paying for, without the price.
 - qty and rate: numbers. rate is the unit price in USD with at most two decimals.
 - uom: one of "hr", "ea", "trip", "day", "lot", "ft", "sq ft", or null.
-- ot: true only when the call says the work is after hours or overtime. Keep rate at the normal rate — the system applies the overtime multiplier itself.
+- ot: only on a labor line, and true only when the call says the work is after hours or overtime (trips, parts, materials, fees and discounts never take ot). Keep rate at the normal rate — the system applies the overtime multiplier itself.
 - markup_pct: 0 unless rule 2 below applies.
 
 ## Pricing rules — in this order
@@ -236,7 +236,7 @@ export function toDraftBody(out: ModelOutput): QuoteDraftBody {
       qty: round2(l.qty),
       rate: round2(l.rate),
       day_value: null,
-      ot: l.ot,
+      ot: lineBillsOt(l),
       uom: l.uom && uoms.has(l.uom) ? l.uom : null,
       tax_pct: 0,
       markup_pct: Math.min(1000, round2(l.markup_pct)),

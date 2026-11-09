@@ -157,7 +157,7 @@ describe('quote math: shared constants', () => {
 
 describe('quote math: float handling', () => {
   it('2.5 x 180 is 675 with OT, not 674.9999999999999', () => {
-    expect(apiComputeLineAmount({ qty: 2.5, rate: 180, ot: true })).toBe(675);
+    expect(apiComputeLineAmount({ qty: 2.5, rate: 180, ot: true, line_type: 'labor' })).toBe(675);
   });
 });
 

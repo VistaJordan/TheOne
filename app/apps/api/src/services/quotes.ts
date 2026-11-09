@@ -46,6 +46,7 @@ import {
   type QuoteEvent,
   type QuoteSubmitFrom,
   type VisitStatusMove,
+  lineBillsOt,
 } from '@theone/shared';
 import type { Queryable } from '../db.js';
 import type {
@@ -154,7 +155,7 @@ export interface TotalsInput {
 /**
  * One line's money: qty × rate, × (1 + markup) when a markup is set (0048), ×
  * the OT multiplier when the OT flag is set (the house ×1.5, or the
- * contract's), NEGATIVE for a discount line (the sign comes from the type,
+ * contract's) — Labor lines only (lineBillsOt) —, NEGATIVE for a discount line (the sign comes from the type,
  * never from the input — the money validation still refuses a typed minus).
  */
 export function computeLineAmount(line: TotalsLineInput, otMultiplier: number = OT_MULTIPLIER): number {
@@ -162,7 +163,7 @@ export function computeLineAmount(line: TotalsLineInput, otMultiplier: number = 
   const rate = Number.isFinite(line.rate) ? line.rate : 0;
   const markup = Number.isFinite(line.markup_pct ?? 0) ? (line.markup_pct ?? 0) : 0;
   const sign = line.line_type === 'discount' ? -1 : 1;
-  return round2(sign * qty * rate * (1 + markup / 100) * (line.ot ? otMultiplier : 1));
+  return round2(sign * qty * rate * (1 + markup / 100) * (lineBillsOt(line) ? otMultiplier : 1));
 }
 
 /** 0048 · the tax a line carries, from its own rate. 0 when it has none. */
@@ -822,7 +823,7 @@ async function loadSectionsFor(
     const math: TotalsLineInput = {
       qty: Number(l.qty ?? 0),
       rate: Number(l.rate ?? 0),
-      ot: l.ot === true,
+      ot: lineBillsOt(l),
       line_type: l.line_type,
       tax_pct: Number(l.tax_pct ?? 0),
       markup_pct: Number(l.markup_pct ?? 0),
@@ -1516,7 +1517,7 @@ export async function updateQuote(
               line.rate,
               line.day_value ?? (line.day != null ? `Day ${line.day}` : null),
               line.day ?? null,
-              line.ot ?? false,
+              lineBillsOt(line),
               linePos++,
               line.uom?.trim() || null,
               line.tax_pct ?? 0,
@@ -1646,7 +1647,7 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
       .map((l) => {
         const qty = Number(l.qty ?? 0);
         const rate = Number(l.rate ?? 0);
-        const ot = l.ot === true;
+        const ot = lineBillsOt(l);
         const tax_pct = Number(l.tax_pct ?? 0);
         const markup_pct = Number(l.markup_pct ?? 0);
         const extras = [

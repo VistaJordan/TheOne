@@ -49,6 +49,7 @@ import {
   isEditable,
   lineAmount,
   quoteTaxApplies,
+  lineBillsOt,
   type Invoice,
   type InvoiceLine,
   type InvoiceLineInput,
@@ -349,7 +350,7 @@ async function prefillFromQuote(taskId: string): Promise<{ lines: InvoiceLineInp
       const math = {
         qty,
         rate: n(r.rate),
-        ot: r.ot,
+        ot: lineBillsOt(r),
         line_type: r.line_type as QuoteLineType,
         tax_pct: n(r.tax_pct),
         markup_pct: n(r.markup_pct),

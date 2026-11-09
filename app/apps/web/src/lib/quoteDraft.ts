@@ -23,7 +23,7 @@ import type {
   QuoteUpdateInput,
 } from '../api/client';
 import type { QuoteDocumentType, QuoteDraftBody, QuoteDraftSection } from '@theone/shared';
-import { QUOTE_DEFAULT_DAY, QUOTE_DEFAULT_TRIP_DESCRIPTION, defaultScopeLines } from '@theone/shared';
+import { QUOTE_DEFAULT_DAY, QUOTE_DEFAULT_TRIP_DESCRIPTION, defaultScopeLines, lineBillsOt } from '@theone/shared';
 import { parseLinePct, parseMoney, parsePct } from './quoteTotals';
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────────
@@ -423,7 +423,7 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
         qty: toNumber(line.qty),
         rate: toNumber(line.rate),
         day: line.day_value === '' ? QUOTE_DEFAULT_DAY : Number(line.day_value),
-        ot: line.ot,
+        ot: lineBillsOt(line),
         uom: line.uom.trim() === '' ? null : line.uom.trim(),
         tax_pct: Number.isNaN(parseLinePct(line.tax_pct)) ? 0 : parseLinePct(line.tax_pct),
         markup_pct: 0,

@@ -19,7 +19,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { CALL_PERM_KEY, parsePastedTranscript, parseTranscriptFile } from '@theone/shared';
+import { CALL_PERM_KEY, lineBillsOt, parsePastedTranscript, parseTranscriptFile } from '@theone/shared';
 import { notFound, parse } from '../errors.js';
 import { actingPrincipalFromRequest, resolveTaskId } from '../services/activity.js';
 import { requirePerm } from '../services/permissions.js';
@@ -122,7 +122,7 @@ function normalizeBody(b: z.infer<typeof draftBodySchema>) {
         qty: l.qty,
         rate: l.rate,
         day_value: l.day_value ?? null,
-        ot: l.ot ?? false,
+        ot: lineBillsOt(l),
         uom: l.uom ?? null,
         tax_pct: l.tax_pct ?? 0,
         markup_pct: l.markup_pct ?? 0,

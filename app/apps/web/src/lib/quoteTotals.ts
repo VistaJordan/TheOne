@@ -10,7 +10,7 @@
    debounced autosave has round-tripped — and because it can price a draft the
    server would reject, so it also decides which lines are excluded and why. */
 
-import { optionDisplayLabel } from '@theone/shared';
+import { lineBillsOt, optionDisplayLabel } from '@theone/shared';
 import type { DraftLine, DraftQuote, DraftSection } from './quoteDraft';
 
 /** Overtime multiplier — the HOUSE default, ×1.5 on the line rate
@@ -94,7 +94,7 @@ export function lineAmount(line: DraftLine, otMultiplier: number = OT_MULTIPLIER
   const r = parseMoney(line.rate);
   if (Number.isNaN(q) || Number.isNaN(r)) return null;
   const sign = line.line_type === 'discount' ? -1 : 1;
-  return round2(sign * q * r * (line.ot ? otMultiplier : 1));
+  return round2(sign * q * r * (lineBillsOt(line) ? otMultiplier : 1));
 }
 
 /** 0048 · the tax a line carries from its own rate; 0 when none, null when

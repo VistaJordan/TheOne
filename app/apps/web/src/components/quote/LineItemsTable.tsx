@@ -2,7 +2,7 @@
    and every option render the same table with a different caption.
 
    Amount is COMPUTED and read-only (qty × rate, × the OT multiplier when
-   OT). A line that does not yet compute renders "—", takes
+   OT — a Labor line only, the tick is not drawn on any other type). A line that does not yet compute renders "—", takes
    the .has-err row wash, and is EXCLUDED from the subtotal rather than
    counted as zero — the footer says which lines.
 
@@ -22,6 +22,7 @@
    its day (renumberLaborLines). */
 
 import { useEffect } from 'react';
+import { lineTakesOt } from '@theone/shared';
 import type { DraftLine } from '../../lib/quoteDraft';
 import { LINE_TYPES, blankLine, dayChoices, isAutoLaborDescription, moveItem, nextLaborDescription, removeAt, renumberLaborLines, replaceAt } from '../../lib/quoteDraft';
 import { OT_MULTIPLIER, lineAmount, lineErrors, lineFieldId, lineTax, usd } from '../../lib/quoteTotals';
@@ -192,7 +193,9 @@ export function LineItemsTable({
                           : line.description;
                       // Only labor repeats per day: any other type sits on Day 1.
                       const day_value = line_type === 'labor' ? line.day_value : '1';
-                      set(i, { line_type, description, day_value });
+                      // 2026-11-09 · overtime is for labor only.
+                      const ot = lineTakesOt(line_type) ? line.ot : false;
+                      set(i, { line_type, description, day_value, ot });
                     }}
                   >
                     {/* 2026-10-27 · a new line opens with no type picked. */}
@@ -308,6 +311,8 @@ export function LineItemsTable({
                 <td>
                   {/* The checkbox carries a visible "OT" label, not a bare box:
                       an unlabelled toggle in a money column is unreadable. */}
+                  {/* 2026-11-09 (Elise) · only a Labor line takes overtime. */}
+                  {lineTakesOt(line.line_type) && (
                   <label className="ck">
                     <input
                       type="checkbox"
@@ -318,6 +323,7 @@ export function LineItemsTable({
                     />
                     <span>OT</span>
                   </label>
+                  )}
                 </td>
                 <td className="ta-r">
                   <span className={`ro num${amount == null ? ' is-empty' : ''}`}>
