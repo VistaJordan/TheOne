@@ -170,6 +170,45 @@ export function tripLine(tripRate: number | null | undefined): DraftLine {
   };
 }
 
+/** The figure on the rate card (Prices, else the Yoda labor rate) that a
+    line of this type and description bills at, or null when the card says
+    nothing. Labor = the tech hour (helper / after-hours / holiday when the
+    description names one); a service line named Trip = the trip charge. */
+export function cardRateFor(
+  line: Pick<DraftLine, 'line_type' | 'description'>,
+  card: { tech_rate: number | null; helper_rate: number | null; trip_rate: number | null; afterhours_rate: number | null; holiday_rate: number | null } | null | undefined,
+): number | null {
+  if (!card) return null;
+  const d = line.description.trim().toLowerCase();
+  let v: number | null = null;
+  if (line.line_type === 'labor') {
+    if (d.includes('helper')) v = card.helper_rate ?? card.tech_rate;
+    else if (d.includes('after')) v = card.afterhours_rate ?? card.tech_rate;
+    else if (d.includes('holiday')) v = card.holiday_rate ?? card.tech_rate;
+    else v = card.tech_rate;
+  } else if (/^trip\b/.test(d)) {
+    v = card.trip_rate;
+  }
+  return v != null && v > 0 ? v : null;
+}
+
+/** Fill the rate of every line whose rate is still blank (or 0) from the
+    card; a typed rate is never touched. Returns the same array when nothing
+    changed, so it can run in an effect. */
+export function fillCardRates(lines: DraftLine[], card: Parameters<typeof cardRateFor>[1]): DraftLine[] {
+  if (!card) return lines;
+  let changed = false;
+  const out = lines.map((l) => {
+    const blank = l.rate.trim() === '' || Number(l.rate) === 0;
+    if (!blank) return l;
+    const v = cardRateFor(l, card);
+    if (v == null) return l;
+    changed = true;
+    return { ...l, rate: v.toFixed(2) };
+  });
+  return changed ? out : lines;
+}
+
 /** The description a Labor line gets when picked on a blank line: "Labor
     tech N", N counting the section's OTHER labor lines ON THE SAME DAY plus
     one (Elise 2026-11-06: on a multi-day job the same tech goes back each

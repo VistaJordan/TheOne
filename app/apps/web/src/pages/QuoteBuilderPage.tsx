@@ -1378,6 +1378,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               otMultiplier={otMult}
               showDay={false}
               showTax={taxApplies}
+              rate={quote.labor_rate}
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
 

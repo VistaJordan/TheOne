@@ -205,6 +205,7 @@ export function OptionCard({
           otMultiplier={otMultiplier}
           showDay={showDay}
           showTax={taxApplies}
+          rate={rate}
           onChange={setLines}
         />
       </div>

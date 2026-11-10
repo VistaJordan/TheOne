@@ -21,10 +21,10 @@
    tech goes back each day — and every "Labor tech N" is kept in order within
    its day (renumberLaborLines). */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { lineTakesOt } from '@theone/shared';
 import type { DraftLine } from '../../lib/quoteDraft';
-import { LINE_TYPES, blankLine, dayChoices, isAutoLaborDescription, moveItem, nextLaborDescription, removeAt, renumberLaborLines, replaceAt } from '../../lib/quoteDraft';
+import { LINE_TYPES, blankLine, cardRateFor, fillCardRates, dayChoices, isAutoLaborDescription, moveItem, nextLaborDescription, removeAt, renumberLaborLines, replaceAt } from '../../lib/quoteDraft';
 import { OT_MULTIPLIER, lineAmount, lineErrors, lineFieldId, lineTax, usd } from '../../lib/quoteTotals';
 import { useReorder } from '../../hooks/useReorder';
 import type { LaborRate } from '../../api/client';
@@ -49,6 +49,9 @@ interface LineItemsTableProps {
   showDay?: boolean;
   /** 2026-11-04 · draw the Tax % column (only an SFM quote carries tax). */
   showTax?: boolean;
+  /** 2026-11-10 · the work order's rate card (Prices first, then the Yoda
+      labor rate). A Labor or Trip line whose rate is blank takes its figure. */
+  rate?: LaborRate | null;
 }
 
 export function LineItemsTable({
@@ -60,6 +63,7 @@ export function LineItemsTable({
   otMultiplier = OT_MULTIPLIER,
   showDay = false,
   showTax = true,
+  rate = null,
 }: LineItemsTableProps) {
   // Every edit re-counts the "Labor tech N" names per day (2026-11-06).
   const onChange = (next: DraftLine[]) => emit(renumberLaborLines(next));
@@ -70,6 +74,24 @@ export function LineItemsTable({
     const fixed = renumberLaborLines(lines);
     if (fixed !== lines) emit(fixed);
   }, [lines, editable, emit]);
+  // 2026-11-10 (Elise) · labor and trip rates follow Prices: once, when the
+  // quote opens with the rate card known, a Labor / Trip line still at no
+  // rate (blank or $0 — a quote opened before its card existed) takes the
+  // card's figure. Never again after that, so a rate typed as 0 stays 0.
+  const filledOnce = useRef(false);
+  useEffect(() => {
+    if (filledOnce.current || !editable || !rate) return;
+    filledOnce.current = true;
+    const fixed = fillCardRates(lines, rate);
+    if (fixed !== lines) emit(fixed);
+  }, [lines, editable, emit, rate]);
+  /** The card's rate for a line whose type or description was just set,
+      when its rate is still blank; else its own rate. */
+  const rateAfter = (line: DraftLine, next: Pick<DraftLine, 'line_type' | 'description'>): string => {
+    if (line.rate.trim() !== '' && Number(line.rate) !== 0) return line.rate;
+    const v = cardRateFor(next, rate);
+    return v == null ? line.rate : v.toFixed(2);
+  };
   const reorder = useReorder((from, to) => onChange(moveItem(lines, from, to)));
   const otText = `${Number.isInteger(otMultiplier * 100) ? otMultiplier : otMultiplier.toFixed(3)}×`;
   const dayColumn = showDay || linesSpanDays(lines);
@@ -195,7 +217,7 @@ export function LineItemsTable({
                       const day_value = line_type === 'labor' ? line.day_value : '1';
                       // 2026-11-09 · overtime is for labor only.
                       const ot = lineTakesOt(line_type) ? line.ot : false;
-                      set(i, { line_type, description, day_value, ot });
+                      set(i, { line_type, description, day_value, ot, rate: rateAfter(line, { line_type, description }) });
                     }}
                   >
                     {/* 2026-10-27 · a new line opens with no type picked. */}
@@ -215,6 +237,10 @@ export function LineItemsTable({
                     value={line.description}
                     disabled={!editable}
                     onChange={(e) => set(i, { description: e.target.value })}
+                    onBlur={() => {
+                      const r = rateAfter(line, line);
+                      if (r !== line.rate) set(i, { rate: r });
+                    }}
                   />
                   {errs.description && (
                     <span className="err" id={`${lineFieldId(line.key, 'description')}-err`}>
