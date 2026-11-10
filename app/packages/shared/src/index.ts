@@ -1013,6 +1013,10 @@ export interface QuotePermissions {
       press here (a dispatcher while the quote waits for correction, or a
       status with no Submit). Absent on an older API. */
   submit_target?: 'pending_correction' | 'pending_approval' | null;
+  /** 2026-11-10 (Elise): the viewer submitted this quote and it still waits
+      for correction or approval, so they may take it back to draft to edit
+      (POST …/quote/retract). False once it is approved or sent. */
+  can_retract?: boolean;
 }
 
 /** Yoda LaborRate for the WO's (billing entity, FM, trade) combo — null when none. */

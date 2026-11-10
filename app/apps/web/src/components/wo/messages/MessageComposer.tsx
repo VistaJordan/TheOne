@@ -1,4 +1,4 @@
-import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
+import { useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ATTACHMENT_ALLOWED_TYPES, ATTACHMENT_MAX_BYTES, WO_MESSAGE_MAX, formatBytes, mentionsInBody } from '@theone/shared';
 import type { ClientSystem, MentionCandidate, WoMessagesResponse } from '../../../api/client';
@@ -6,6 +6,7 @@ import { listAttachments, postWorkOrderMessage, uploadAttachment } from '../../.
 import { useInvalidateObligations } from '../../../hooks/useObligations';
 import { useAuth } from '../../../auth/AuthProvider';
 import { prepareFile } from '../../../lib/upload';
+import { ConfirmDialog } from '../../ConfirmDialog';
 import { Icon } from '../../Icon';
 import { MentionTextarea, useMentionCandidates } from './MentionTextarea';
 
@@ -40,6 +41,8 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
   const mentioned = mentionsInBody(body, picked);
 
+  // 2026-11-10 (Elise) · a message to the client is confirmed first.
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const mutation = useMutation({
     mutationFn: () =>
       postWorkOrderMessage(woId, {
@@ -48,6 +51,7 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
         ...(mentioned.length > 0 ? { mentions: mentioned.map((m) => m.id) } : {}),
       }),
     onSuccess: (res) => {
+      setConfirmOpen(false);
       setBody('');
       setPicked([]);
       qc.setQueryData<WoMessagesResponse>(queryKey, (curr) =>
@@ -60,6 +64,8 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
       // client-visible one silences approval_followup.
       invalidateObligations();
     },
+    // The reason shows under the composer, not behind the dialog.
+    onError: () => setConfirmOpen(false),
   });
 
   // 0043 · photos and files ride along with the same visibility flag.
@@ -167,6 +173,19 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
   const trimmed = body.trim();
   const tooLong = trimmed.length > WO_MESSAGE_MAX;
   const canSend = trimmed.length > 0 && !tooLong && !mutation.isPending;
+  const send = () => {
+    if (!canSend) return;
+    if (clientVisible) setConfirmOpen(true);
+    else mutation.mutate();
+  };
+  // 2026-11-10 (Elise) · Enter sends, Shift+Enter starts a new line. The @
+  // list keeps Enter while it is open (MentionTextarea handles it first), and
+  // an IME composition is never cut short.
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    send();
+  };
 
   const help = clientVisible
     ? clientSystem
@@ -209,6 +228,7 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
         value={body}
         onChange={setBody}
         onPaste={onPaste}
+        onKeyDown={onKeyDown}
         candidates={candidates}
         onMention={(person) => setPicked((curr) => (curr.some((c) => c.id === person.id) ? curr : [...curr, person]))}
       />
@@ -285,15 +305,32 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
           <span className="composer-err" role="alert">{uploadError}</span>
         ) : null}
 
+        <span className="composer-hint">Enter to send · Shift+Enter for a new line</span>
+
         <span className={`composer-count${tooLong ? ' is-over' : ''}`}>
           {trimmed.length} / {WO_MESSAGE_MAX}
         </span>
 
-        <button type="button" className="btn btn-primary" disabled={!canSend} onClick={() => mutation.mutate()}>
+        <button type="button" className="btn btn-primary" disabled={!canSend} onClick={send}>
           <Icon name="send" size={14} />
           {mutation.isPending ? 'Posting…' : clientVisible ? 'Send to client' : 'Post internally'}
         </button>
       </div>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="Send to the client?"
+          icon="ext"
+          message="Are you sure you want to send this message to the client?"
+          note={help}
+          noteTone="info"
+          confirmLabel="Send to client"
+          busy={mutation.isPending}
+          busyLabel="Sending…"
+          onConfirm={() => mutation.mutate()}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }

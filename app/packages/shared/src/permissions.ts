@@ -133,6 +133,9 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       // tiers are view-only on it, so the Escalation button is a manager's.
       'fields.Escalated',
       'fields.35. WO Description',
+      // 0130 · a recall, and the work order it recalls.
+      'fields.Is Recall',
+      'fields.Original WO',
       // Rule 11.2.2's Parts_Required_List (0035): the Parts tab edits it and
       // Waiting for Parts / Please Order Parts are refused while it is empty.
       'fields.Parts Required',

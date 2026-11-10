@@ -86,6 +86,9 @@ export const WO_CREATE_DEFAULT_KEYS: readonly string[] = [
   'Sales Owner',
   'Emergency',
   'Escalated',
+  // 0130 (Elise, 2026-11-10) · is this a recall, and of which work order.
+  'Is Recall',
+  'Original WO',
 ];
 
 /**
@@ -142,7 +145,7 @@ export const WO_CREATE_SECTIONS: readonly WoCreateSection[] = [
   {
     id: 'what',
     title: 'What is wrong',
-    keys: ['Trade', 'Sub Category', 'Problem Type', '35. WO Description'],
+    keys: ['Trade', 'Sub Category', 'Problem Type', '35. WO Description', 'Is Recall', 'Original WO'],
   },
   {
     id: 'when',
@@ -341,6 +344,30 @@ export function woCreateMissing(
     if (!woCreateValueFilled(values[f.key])) missing.push(f.label);
   }
   return missing;
+}
+
+/** 0130 (Elise, 2026-11-10) · "Is this WO a recall?" on Add work order. Ticked,
+    the `Original WO` field appears and is required: the WO # of a work order
+    already on file (the API checks it exists and stores it in that record's
+    spelling, 400 ORIGINAL_WO_NOT_FOUND). Unticked, Original WO is not on the
+    form and is never written. */
+export const RECALL_KEY = 'Is Recall';
+export const ORIGINAL_WO_KEY = 'Original WO';
+export const ORIGINAL_WO_NOT_FOUND_CODE = 'ORIGINAL_WO_NOT_FOUND';
+
+export function recallTicked(v: unknown): boolean {
+  return v === true || v === 'true';
+}
+
+/** The form with the recall rule laid over it: Original WO required while the
+    recall box is ticked, gone while it is not. */
+export function applyRecallRule(form: WoCreateForm, recall: boolean): WoCreateForm {
+  if (!form.fields.some((f) => f.key === ORIGINAL_WO_KEY)) return form;
+  const fields = form.fields.flatMap((f): WoCreateField[] => {
+    if (f.key !== ORIGINAL_WO_KEY) return [f];
+    return recall ? [{ ...f, mode: 'required' }] : [];
+  });
+  return { ...form, fields };
 }
 
 /** Empty means empty: `false` is an answer, `''` and `[]` are not. */

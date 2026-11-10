@@ -33,6 +33,46 @@ export function insertScopeLine(lines: readonly string[]): string[] {
   return next;
 }
 
+/** 2026-11-10 (Elise) · a pasted block is one scope line per line of text.
+    Splits on line breaks, drops a leading number or bullet ("1.", "2)", "-",
+    "•") and the empty lines. One line or none = not a block (null), so an
+    ordinary paste stays the browser's. */
+export function splitPastedScope(text: string): string[] | null {
+  const parts = text
+    .split(/\r\n|\r|\n/)
+    .map((l) => l.replace(/^\s*(?:\d{1,3}\s*[.)\-:]|[-*•·–—▪●○])\s*/u, '').trim())
+    .filter((l) => l !== '');
+  return parts.length > 1 ? parts : null;
+}
+
+/** Puts a pasted block into the list at `index`: the first piece goes into
+    that line (after what is before the caret, `before`; what was after the
+    caret, `after`, joins the last piece), the rest fill the BLANK lines that
+    follow it, and whatever is left is inserted before the next filled line —
+    so the closing "Clean the working area" stays last. Returns the new list
+    and the index of the line holding the last piece. */
+export function pasteScopeLines(
+  lines: readonly string[],
+  index: number,
+  pieces: readonly string[],
+  before = '',
+  after = '',
+): { lines: string[]; last: number } {
+  const next = [...lines];
+  if (pieces.length === 0) return { lines: next, last: index };
+  const out = [...pieces];
+  out[0] = `${before}${out[0]}`;
+  out[out.length - 1] = `${out[out.length - 1]}${after}`;
+  next[index] = out[0];
+  let at = index;
+  for (const piece of out.slice(1)) {
+    at += 1;
+    if (at < next.length && next[at].trim() === '') next[at] = piece;
+    else next.splice(at, 0, piece);
+  }
+  return { lines: next, last: at };
+}
+
 /** The lines worth printing: trimmed, blanks dropped. */
 export function visibleScopeLines(lines: readonly unknown[] | null | undefined): string[] {
   return (lines ?? []).map((l) => String(l ?? '').trim()).filter((l) => l !== '');

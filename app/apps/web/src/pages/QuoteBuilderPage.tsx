@@ -22,6 +22,7 @@ import {
   ApiRequestError,
   approveQuote,
   cancelQuoteSubmission,
+  retractQuote,
   clientApproveQuote,
   clientDeclineQuote,
   createWorkOrderQuote,
@@ -56,7 +57,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { CopyButton } from '../components/CopyButton';
 import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
 import { Icon } from '../components/Icon';
-import { LineItemsTable, AddLineButton } from '../components/quote/LineItemsTable';
+import { LineItemsTable, AddLineButton, linesSpanDays } from '../components/quote/LineItemsTable';
 import { MoneyRail } from '../components/quote/MoneyRail';
 import { OptionCard } from '../components/quote/OptionCard';
 import { QuotePipeline } from '../components/quote/QuoteStatusPill';
@@ -178,8 +179,12 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const [showErrors, setShowErrors] = useState(false);
   // The Day column is hidden until a section's "Multi-day job" link is
   // pressed (or a line already sits past Day 1); keyed by section key.
+  // Keyed by the SAVED section id when there is one: the form is re-seeded
+  // from the server (fresh keys) after saves and live updates, which used to
+  // drop the column a moment after it was pressed (2026-11-10).
   const [dayShown, setDayShown] = useState<Record<string, boolean>>({});
-  const showDayFor = (key: string) => setDayShown((m) => ({ ...m, [key]: true }));
+  const dayKey = (s: DraftSection) => s.id ?? s.key;
+  const setDayFor = (s: DraftSection, on: boolean) => setDayShown((m) => ({ ...m, [dayKey(s)]: on }));
   // "Tech reported that…" is one line that grows with its text (2026-10-22).
   const reportRef = useRef<HTMLTextAreaElement | null>(null);
   const reportText = draft?.sections[0]?.narrative ?? '';
@@ -418,6 +423,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   // flushed first.
   const sendMutation = useMutation({ mutationFn: () => flushThen(() => sendQuote(woNumber)) });
   const cancelMutation = useMutation({ mutationFn: () => runAction(() => cancelQuoteSubmission(woNumber)) });
+  // 2026-11-10 (Elise) · the submitter takes the quote back to draft to edit.
+  const retractMutation = useMutation({ mutationFn: () => runAction(() => retractQuote(woNumber)) });
   const newRoundMutation = useMutation({ mutationFn: () => runAction(() => startQuoteRound(woNumber)) });
   const rejectMutation = useMutation({
     mutationFn: () => runAction(() => rejectQuote(woNumber, rejectNote.trim())),
@@ -631,8 +638,25 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     sendMutation.isPending ||
     rejectMutation.isPending ||
     cancelMutation.isPending ||
+    retractMutation.isPending ||
     newRoundMutation.isPending ||
     decisionMutation.isPending;
+
+  // 2026-11-10 (Elise) · the person who submitted the quote may take it back
+  // to edit until a manager approves or sends it.
+  const retractButton = () =>
+    permissions?.can_retract && allows('quote.edit') ? (
+      <button
+        type="button"
+        className="btn btn-lg"
+        disabled={busy}
+        onClick={() => retractMutation.mutate()}
+        title="Take the quote back to draft to edit it — submit it again when it is ready"
+      >
+        <Icon name="pencil" size={14} />
+        Take back to edit
+      </button>
+    ) : null;
 
   const focusFirstProblem = () => {
     setShowErrors(true);
@@ -938,6 +962,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 locked here. */}
             {status === 'pending_correction' && (
               <>
+                {retractButton()}
                 {canApprove && allows('quote.approve') && (
                   <button type="button" className="btn btn-lg btn-danger" onClick={() => setRejectOpen(true)}>
                     <Icon name="x" size={14} />
@@ -954,6 +979,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
             {status === 'pending_approval' && (
               <>
+                {retractButton()}
                 {canApprove && allows('quote.approve') && (
                   <button type="button" className="btn btn-lg btn-danger" onClick={() => setRejectOpen(true)}>
                     <Icon name="x" size={14} />
@@ -1350,7 +1376,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               editable={incurredEditable}
               showErrors={showErrors && incurredEditable}
               otMultiplier={otMult}
-              showDay={dayShown[incurred.key] === true}
+              showDay={false}
               showTax={taxApplies}
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
@@ -1361,7 +1387,11 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                   lines={incurred.lines}
                   onChange={(lines) => setSection(0, { ...incurred, lines })}
                   rate={quote.labor_rate}
-                  onShowDay={() => showDayFor(incurred.key)}
+                  // 2026-11-10 (Elise) · incurred work is not split into days:
+                  // no Multi-day toggle here, only "One-day job" to put back an
+                  // older quote whose incurred lines sit past Day 1.
+                  dayOn={false}
+                  onToggleDay={linesSpanDays(incurred.lines) ? (on) => setDayFor(incurred, on) : undefined}
                 />
               )}
               <span className="lt-note">
@@ -1439,8 +1469,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 decisionActions={status === 'sent' && options.length > 1 ? decisionButton(s.key, true) : undefined}
                 otMultiplier={otMult}
                 taxApplies={taxApplies}
-                showDay={dayShown[s.key] === true}
-                onShowDay={() => showDayFor(s.key)}
+                showDay={dayShown[dayKey(s)] === true}
+                onToggleDay={(on) => setDayFor(s, on)}
                 onChange={(next) => setSection(i, next)}
                 onRemove={() => update({ ...draft, sections: removeAt(draft.sections, i) })}
               />

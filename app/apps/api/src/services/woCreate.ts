@@ -53,6 +53,11 @@ import {
   ADDRESS_KEY,
   COMPLETION_ASSIGNEE_KEY,
   SUPPORT_TRAINEE_KEY,
+  ORIGINAL_WO_KEY,
+  ORIGINAL_WO_NOT_FOUND_CODE,
+  RECALL_KEY,
+  applyRecallRule,
+  recallTicked,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { badRequest, conflict } from '../errors.js';
@@ -237,6 +242,26 @@ interface HitRow extends Omit<WoDuplicateHit, 'deleted'> {
   deleted: boolean;
 }
 
+/** 0130 · the WO # a recall points at, as the record spells it; 400
+    ORIGINAL_WO_NOT_FOUND when no live work order answers to it. */
+async function resolveOriginalWo(raw: string): Promise<string> {
+  const normalized = normalizeWoNumber(raw);
+  const hit = normalized
+    ? await query<{ wo_number: string }>(
+        `SELECT t.wo_number FROM task t WHERE ${NORMALIZED_WO} = $1 AND t.deleted_at IS NULL LIMIT 1`,
+        [normalized],
+      )
+    : { rows: [] };
+  const row = hit.rows[0];
+  if (!row) {
+    throw badRequest(`No work order numbered ${raw.trim()} is on file — pick the original work order from the list`, {
+      code: ORIGINAL_WO_NOT_FOUND_CODE,
+      field: ORIGINAL_WO_KEY,
+    });
+  }
+  return row.wo_number;
+}
+
 /**
  * Is this number free, and is something like it already open? Runs on every
  * keystroke of the WO # box (debounced) and again inside create.
@@ -386,9 +411,14 @@ export async function createWorkOrder(
   const configured = await getCreateForm();
   // 0064 · the layout for this client and trade is laid over the form, the
   // same way the browser did it, so "required" and "off" mean one thing.
-  const form = applyFormLayout(
-    configured,
-    pickFormLayout(configured.layouts ?? [], str(input.fields?.['Client']), str(input.fields?.['Trade'])),
+  // 0130 · and the recall rule: Original WO only (and then required) when the
+  // recall box is ticked.
+  const form = applyRecallRule(
+    applyFormLayout(
+      configured,
+      pickFormLayout(configured.layouts ?? [], str(input.fields?.['Client']), str(input.fields?.['Trade'])),
+    ),
+    recallTicked(input.fields?.[RECALL_KEY]),
   );
   const offered = new Map(form.fields.map((f) => [f.key, f]));
   const bag: Record<string, unknown> = {};
@@ -435,6 +465,11 @@ export async function createWorkOrder(
       missing,
     });
   }
+
+  // 0130 · the work order it recalls is one on file (not in the trash), stored
+  // in that record's spelling.
+  const originalWo = str(bag[ORIGINAL_WO_KEY]);
+  if (originalWo) bag[ORIGINAL_WO_KEY] = await resolveOriginalWo(originalWo);
 
   const check = await checkWoNumber(woNumber);
   if (check.existing) {

@@ -26,9 +26,6 @@ import {
   QUOTE_DUE_KEY,
   SIGNOFF_FIELD_KEY,
   VISIT_HIDDEN_KEYS,
-  CICO_PORTAL_METHOD,
-  CICO_PORTAL_SUGGESTIONS,
-  VISIT_METHODS,
   VISIT_MIRROR_KEYS,
   cicoMethodLabel,
   fieldSectionPermKey,
@@ -337,6 +334,12 @@ function VisitLog({
   // A running "on site" figure ticks while somebody is checked in.
   const [now, setNow] = useState(() => Date.now());
   const hasOpen = visits.some((v) => v.status === 'checked_in');
+  // 2026-11-10 (Elise) · no check-in after a check-in: the open visit is
+  // checked out before another one checks in (the API refuses it too, 409).
+  const openVisit = visits.find((v) => v.status === 'checked_in') ?? null;
+  const checkInBlockedText = openVisit
+    ? `Visit ${openVisit.seq}${openVisit.tech_name ? ` (${openVisit.tech_name})` : ''} is still checked in — check it out first`
+    : null;
   useEffect(() => {
     if (!hasOpen) return;
     setNow(Date.now());
@@ -459,6 +462,7 @@ function VisitLog({
               canEdit={canEdit}
               busy={busy}
               visitTypes={visitTypes}
+              checkInBlocked={openVisit !== null && openVisit.id !== v.id}
               onPatch={(input) => update.mutate({ id: v.id, input })}
               onDelete={() => remove.mutate(v.id)}
             />
@@ -484,10 +488,17 @@ function VisitLog({
           />
         ) : (
           <div className="cv-foot">
-            <button type="button" className="btn btn-sm" onClick={() => setComposing(true)} disabled={busy}>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setComposing(true)}
+              disabled={busy || openVisit !== null}
+              title={checkInBlockedText ?? undefined}
+            >
               <Icon name="plus" size={14} />
               New visit
             </button>
+            {checkInBlockedText && <span className="cv-hint">{checkInBlockedText}.</span>}
             {(client || fm) && !defaultMethod && (
               <span className="cv-hint">
                 No check-in method on file for{' '}
@@ -512,11 +523,13 @@ interface VisitRowProps {
   canEdit: boolean;
   busy: boolean;
   visitTypes: string[];
+  /** Another visit is still checked in: this one cannot check in yet. */
+  checkInBlocked?: boolean;
   onPatch: (input: VisitInput) => void;
   onDelete: () => void;
 }
 
-function VisitRow({ v, now, canEdit, busy, visitTypes, onPatch, onDelete }: VisitRowProps) {
+function VisitRow({ v, now, canEdit, busy, visitTypes, checkInBlocked = false, onPatch, onDelete }: VisitRowProps) {
   // 0064 · where the check-in happened, against the site's boundary — drawn
   // once the visit has a check-in to place.
   const locatable = v.status !== 'planned';
@@ -617,7 +630,13 @@ function VisitRow({ v, now, canEdit, busy, visitTypes, onPatch, onDelete }: Visi
             onChange={(e) => onPatch(patchForStatus(e.target.value))}
           >
             {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option
+                key={o.value}
+                value={o.value}
+                disabled={checkInBlocked && o.value === 'checked_in' && statusValueOf(v) !== 'checked_in'}
+              >
+                {o.label}
+              </option>
             ))}
           </select>
         )}
@@ -706,16 +725,10 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
   // 0057 · undefined = the technician box was not touched; a uuid = picked
   // from the records; null = typed by hand.
   const [vendorId, setVendorId] = useState<string | null | undefined>(undefined);
-  const [method, setMethod] = useState(v.method ?? '');
-  const [detail, setDetail] = useState(v.method_detail ?? '');
-  const [portal, setPortal] = useState(v.method_portal ?? '');
   const [inAt, setInAt] = useState(toLocalInput(v.checked_in_at));
   const [outAt, setOutAt] = useState(toLocalInput(v.checked_out_at));
 
   const types = visitTypes.includes(v.visit_type) ? visitTypes : [v.visit_type, ...visitTypes];
-  const methods: string[] = v.method && !(VISIT_METHODS as readonly string[]).includes(v.method)
-    ? [v.method, ...VISIT_METHODS]
-    : [...VISIT_METHODS];
 
   const submit = () => {
     // Only what changed goes over the wire, so an untouched stamp is never
@@ -725,10 +738,6 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
     if (tech.trim() !== (v.tech_name ?? '')) input.tech_name = tech.trim() || null;
     if (phone.trim() !== (v.tech_phone ?? '')) input.tech_phone = phone.trim() || null;
     if (vendorId !== undefined) input.vendor_id = vendorId;
-    if (method !== (v.method ?? '')) input.method = method || null;
-    if (detail.trim() !== (v.method_detail ?? '')) input.method_detail = detail.trim() || null;
-    const nextPortal = method === CICO_PORTAL_METHOD ? portal.trim() : '';
-    if (nextPortal !== (v.method_portal ?? '')) input.method_portal = nextPortal || null;
     if (inAt !== toLocalInput(v.checked_in_at)) input.checked_in_at = fromLocalInput(inAt);
     if (outAt !== toLocalInput(v.checked_out_at)) input.checked_out_at = fromLocalInput(outAt);
     if (Object.keys(input).length === 0) { onCancel(); return; }
@@ -762,18 +771,7 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
           <span className="lbl">Phone</span>
           <input className="fld" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(000) 000-0000" disabled={busy} />
         </label>
-        <label className="field">
-          <span className="lbl">Method</span>
-          <select className="fld" value={method} onChange={(e) => setMethod(e.target.value)} disabled={busy}>
-            <option value="">—</option>
-            {methods.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </label>
-        {method === CICO_PORTAL_METHOD && <PortalField value={portal} onChange={setPortal} disabled={busy} />}
-        <label className="field cv-detailfield">
-          <span className="lbl">Method detail</span>
-          <input className="fld" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="IVR number, portal, where to submit…" disabled={busy} />
-        </label>
+        <MethodReadOnly method={v.method} portal={v.method_portal} detail={v.method_detail} />
       </div>
       <div className="cv-form-row">
         <label className="field">
@@ -815,19 +813,7 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
   const [phone, setPhone] = useState('');
   /** 0057 · the record the technician was picked from; null = typed by hand. */
   const [vendorId, setVendorId] = useState<string | null>(null);
-  const [method, setMethod] = useState(defaultMethod ?? '');
-  const [detail, setDetail] = useState(defaultDetail ?? '');
-  // 0098 · the FM's portal ("Service Channel") rides with its Portal method.
-  const [portal, setPortal] = useState(defaultPortal ?? '');
   const [touched, setTouched] = useState(false);
-
-  // Picking a different method than the FM's drops the FM's instruction (an
-  // IVR number is no help on a portal visit); picking it back restores it.
-  const pickMethod = (m: string) => {
-    setMethod(m);
-    setDetail(m === defaultMethod ? (defaultDetail ?? '') : '');
-    setPortal(m === defaultMethod ? (defaultPortal ?? '') : '');
-  };
 
   const submit = () => {
     setTouched(true);
@@ -840,9 +826,7 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
       tech_name: tech.trim() || null,
       tech_phone: phone.trim() || null,
       ...(vendorId && tech.trim() ? { vendor_id: vendorId } : {}),
-      method: method || null,
-      method_detail: detail.trim() || null,
-      method_portal: method === CICO_PORTAL_METHOD ? portal.trim() || null : null,
+      // 2026-11-10 (Elise) · the method is the client's / FM's, filled by the API.
     });
   };
 
@@ -885,24 +869,7 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
           <span className="lbl">Phone</span>
           <input className="fld" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(000) 000-0000" disabled={busy} />
         </label>
-        <label className="field">
-          <span className="lbl">Method</span>
-          <select className="fld" value={method} onChange={(e) => pickMethod(e.target.value)} disabled={busy}>
-            <option value="">—</option>
-            {VISIT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </label>
-        {method === CICO_PORTAL_METHOD && <PortalField value={portal} onChange={setPortal} disabled={busy} />}
-        <label className="field cv-detailfield">
-          <span className="lbl">Method detail</span>
-          <input
-            className="fld"
-            value={detail}
-            onChange={(e) => setDetail(e.target.value)}
-            placeholder="IVR number, portal, where to submit…"
-            disabled={busy}
-          />
-        </label>
+        <MethodReadOnly method={defaultMethod} portal={defaultPortal} detail={defaultDetail} />
       </div>
       <div className="cv-form-foot">
         <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
@@ -912,7 +879,7 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
         <button type="button" className="btn btn-sm" onClick={onCancel} disabled={busy}>Cancel</button>
         {touched && !type && <span className="cv-hint">Pick the visit type first.</span>}
         {/* 0100 · where the method came from: the client's row for this Comp, or the FM table. */}
-        {defaultFrom && defaultMethod && method === defaultMethod && (
+        {defaultFrom && defaultMethod && (
           <span className="cv-hint">Method from {defaultFrom}</span>
         )}
       </div>
@@ -920,25 +887,18 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
   );
 }
 
-/** 0098 · which portal a Portal check-in goes through ("Service Channel",
-    "Corrigo"): typed, with the usual ones suggested. */
-function PortalField({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
+/** 2026-11-10 (Elise) · the check-in method is not editable on a visit: it is
+    the client's check-in row for the Comp (else the FM's entry), changed in
+    Clients › Check-in method. Shown here as plain text. */
+function MethodReadOnly({ method, portal, detail }: { method: string | null; portal: string | null; detail: string | null }) {
   return (
-    <label className="field">
-      <span className="lbl">Portal</span>
-      <input
-        className="fld"
-        list="cv-portal-options"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Service Channel, Corrigo…"
-        maxLength={80}
-        disabled={disabled}
-      />
-      <datalist id="cv-portal-options">
-        {CICO_PORTAL_SUGGESTIONS.map((p) => <option key={p} value={p} />)}
-      </datalist>
-    </label>
+    <div className="field cv-detailfield">
+      <span className="lbl">Check-in method</span>
+      <span className="cv-method-ro" title="Set on the client's page (Check-in method) — not editable on a visit">
+        {method ? cicoMethodLabel(method, portal) : DASH}
+        {detail ? ` · ${detail}` : ''}
+      </span>
+    </div>
   );
 }
 

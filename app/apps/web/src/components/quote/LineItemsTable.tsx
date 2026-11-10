@@ -357,19 +357,34 @@ export function LineItemsTable({
 /** The "Add line" affordance — the comp puts it in the section footer, beside
     the read-only-amount note and the subtotal chip. When the WO's labor rate
     is known (Yoda LaborRate per Comp × FM × Trade) the Yoda presets sit beside
-    it: Tech hour, Helper hour, Trip, After-hours, Holiday. `onShowDay` draws
-    the "Multi-day job" link that reveals the hidden Day column. */
+    it: Tech hour, Helper hour, Trip, After-hours, Holiday. `onToggleDay` draws
+    the "Multi-day job" toggle that reveals the hidden Day column; since
+    2026-11-10 (Elise) pressing it again turns the job back into one day —
+    every line returns to Day 1 and the column hides. */
 export function AddLineButton({
   lines,
   onChange,
   rate,
-  onShowDay,
+  dayOn = false,
+  onToggleDay,
 }: {
   lines: DraftLine[];
   onChange: (l: DraftLine[]) => void;
   rate?: LaborRate | null;
-  onShowDay?: () => void;
+  /** The Day column is drawn (pressed, or a line already past Day 1). */
+  dayOn?: boolean;
+  onToggleDay?: (on: boolean) => void;
 }) {
+  const multiDay = dayOn || linesSpanDays(lines);
+  const toggleDay = () => {
+    if (!onToggleDay) return;
+    if (multiDay) {
+      if (linesSpanDays(lines)) onChange(lines.map((l) => (Number(l.day_value || '1') > 1 ? { ...l, day_value: '1' } : l)));
+      onToggleDay(false);
+    } else {
+      onToggleDay(true);
+    }
+  };
   const preset = (label: string, value: number | null, line_type: DraftLine['line_type'], description: string) =>
     value == null ? null : (
       <button
@@ -401,15 +416,20 @@ export function AddLineButton({
           {preset('Holiday', rate.holiday_rate, 'labor', 'Tech — holiday labor')}
         </span>
       )}
-      {onShowDay && !linesSpanDays(lines) && (
+      {onToggleDay && (
         <button
           type="button"
           className="btn btn-sm btn-ghost"
-          title="Show the Day column — lines are grouped Day N on the client summary and the invoice"
-          onClick={onShowDay}
+          aria-pressed={multiDay}
+          title={
+            multiDay
+              ? 'Back to a one-day job — every line returns to Day 1 and the Day column hides'
+              : 'Show the Day column — labor lines are grouped Day N on the client summary and the invoice'
+          }
+          onClick={toggleDay}
         >
-          <Icon name="layers" size={12} />
-          Multi-day job
+          <Icon name={multiDay ? 'x' : 'layers'} size={12} />
+          {multiDay ? 'One-day job' : 'Multi-day job'}
         </button>
       )}
     </span>

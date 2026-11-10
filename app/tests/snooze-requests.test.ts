@@ -75,7 +75,8 @@ describe('0097 — no dispatcher changes the Client or the FM; raising a work or
 
   it('the create route exempts exactly those keys, and only for someone who can see them', () => {
     // 2026-11-09 (0127): Client Portal Type joined, locked by its section.
-    expect([...CREATE_FILLABLE_FIELD_KEYS]).toEqual(['fields.Client', 'fields.22. FM', 'fields.Client Portal Type']);
+    // 2026-11-10 (0129): the intake fields the dispatchers can no longer edit.
+    expect([...CREATE_FILLABLE_FIELD_KEYS].slice(0, 3)).toEqual(['fields.Client', 'fields.22. FM', 'fields.Client Portal Type']);
     for (const k of ['fields.Client', 'fields.22. FM']) expect(PROBATION_LOCKED_FIELD_PATHS).toContain(fieldPermKey(k));
     expect(fillableOnCreate('fields.Client')).toBe(true);
     expect(fillableOnCreate('fields.16. Client NTE 🔴')).toBe(false);

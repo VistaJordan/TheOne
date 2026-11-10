@@ -129,8 +129,45 @@ export const PROBATION_FIELD_LOCKED_ROLES = ['om_probation'] as const;
     bites on the field editor, bulk edit and the import, not on creation. */
 export const CLIENT_FM_LOCKED_ROLES = REQUEST_MODE_DISPATCHER_ROLES;
 /** 2026-11-09 (0127): Client Portal Type joins them. The dispatchers cannot
-    change it, but the Add work order form fills it from the client. */
-export const CREATE_FILLABLE_FIELD_KEYS = ['fields.Client', 'fields.22. FM', 'fields.Client Portal Type'] as const;
+    change it, but the Add work order form fills it from the client.
+    2026-11-10 (0129): so do the fields DISPATCHER_INTAKE_LOCKED_FIELD_KEYS
+    names — a dispatcher still types them when raising a work order. */
+export const CREATE_FILLABLE_FIELD_KEYS = [
+  'fields.Client',
+  'fields.22. FM',
+  'fields.Client Portal Type',
+  'fields.35. WO Description',
+  'fields.✅ Client AFM',
+  'fields.Store',
+  'fields.17. Address',
+  'fields.Street Address',
+  'fields.City',
+  'fields.State',
+  'fields.Zip Code',
+  'fields.21. Comp',
+  'fields.25. IVR Link',
+  'fields.30. IVR Pin',
+] as const;
+
+/** Elise, 2026-11-10 (migration 0129): what the work order IS — its
+    description, the client's AFM, the store, where it is (the address and
+    its parts, which fill from it), the Comp and the IVR link and PIN — is
+    view-only for the three dispatcher tiers (CLIENT_FM_LOCKED_ROLES) once the
+    work order exists. Raising one still takes them (CREATE_FILLABLE_FIELD_KEYS).
+    Paths are `fieldPermKey` of each key; the test pins them to 0129's file. */
+export const DISPATCHER_INTAKE_LOCKED_FIELD_KEYS = [
+  'fields.35. WO Description',
+  'fields.✅ Client AFM',
+  'fields.Store',
+  'fields.17. Address',
+  'fields.Street Address',
+  'fields.City',
+  'fields.State',
+  'fields.Zip Code',
+  'fields.21. Comp',
+  'fields.25. IVR Link',
+  'fields.30. IVR Pin',
+] as const;
 
 /** Elise, 2026-11-09 (migration 0127): the All-fields sections each group may
     only read. OP Admin: AR, QC, Payments, Invoicing, plus Not fully paid on

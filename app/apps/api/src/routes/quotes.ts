@@ -33,6 +33,7 @@ import {
   sendQuote,
   rejectQuote,
   cancelSubmission,
+  retractQuote,
   clientApproveQuote,
   clientDeclineQuote,
   restoreBfiOptions,
@@ -198,6 +199,8 @@ export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
   lifecycle('approve', approveQuote);
   lifecycle('send', sendQuote);
   lifecycle('cancel-submission', cancelSubmission);
+  // 2026-11-10 · the submitter takes a quote back to draft before it is approved.
+  lifecycle('retract', retractQuote);
   lifecycle('new-round', startNewRound);
 
   app.post('/work-orders/:id/quote/reject', async (req) => {

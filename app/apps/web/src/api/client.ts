@@ -1278,6 +1278,15 @@ export function cancelQuoteSubmission(idOrNumber: string): Promise<QuoteResponse
   });
 }
 
+/** POST …/quote/retract — the submitter takes a quote waiting for correction
+    or approval back to draft to edit it (2026-11-10). */
+export function retractQuote(idOrNumber: string): Promise<QuoteResponse> {
+  return request<QuoteResponse>(quotePath(idOrNumber, '/retract'), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 /** POST …/quote/client-approve — the client chose ONE option (Yoda Approval). */
 export function clientApproveQuote(
   idOrNumber: string,

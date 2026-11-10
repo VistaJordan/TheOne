@@ -46,7 +46,7 @@ interface OptionCardProps {
   otMultiplier?: number;
   /** The "Multi-day job" link revealed the Day column for this option. */
   showDay?: boolean;
-  onShowDay?: () => void;
+  onToggleDay?: (on: boolean) => void;
   /** 2026-11-04 · false = the quote carries no tax (not SFM): no Tax % column. */
   taxApplies?: boolean;
 }
@@ -64,7 +64,7 @@ export function OptionCard({
   onRemove,
   otMultiplier,
   showDay,
-  onShowDay,
+  onToggleDay,
   taxApplies = true,
 }: OptionCardProps) {
   const label = optionDisplayLabel(`Option ${optionTag(index)}`, sole ? 1 : 2);
@@ -210,7 +210,7 @@ export function OptionCard({
       </div>
 
       <div className="opt-foot">
-        {canEdit && <AddLineButton lines={section.lines} onChange={setLines} rate={rate} onShowDay={onShowDay} />}
+        {canEdit && <AddLineButton lines={section.lines} onChange={setLines} rate={rate} dayOn={showDay} onToggleDay={onToggleDay} />}
         {note && (
           <span className="lt-note">
             <Icon name="alert" size={12} />

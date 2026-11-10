@@ -74,6 +74,10 @@ import {
   parseAddressParts,
   ADDRESS_ZIP_KEY,
   zipInputValue,
+  ORIGINAL_WO_KEY,
+  RECALL_KEY,
+  applyRecallRule,
+  recallTicked,
 } from '@theone/shared';
 import {
   ApiRequestError,
@@ -85,6 +89,7 @@ import {
   getSite,
   getWoCreateForm,
   getWoCreateTemplates,
+  listWorkOrders,
   saveWoCreateTemplate,
   uploadAttachment,
   type WoFieldDescriptor,
@@ -322,7 +327,10 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     () => pickFormLayout(configured.layouts ?? [], values['Client'], values[WO_TRADE_KEY]),
     [configured.layouts, values],
   );
-  const form = useMemo(() => applyFormLayout(configured, layout), [configured, layout]);
+  // 0130 · Original WO appears (and is required) only once "Is this WO a
+  // recall?" is ticked.
+  const recall = recallTicked(values[RECALL_KEY]);
+  const form = useMemo(() => applyRecallRule(applyFormLayout(configured, layout), recall), [configured, layout, recall]);
   // 0064 · photos and files chosen here go up as soon as the work order exists.
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -665,6 +673,12 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
           <span>Yes</span>
         </label>
       );
+    }
+
+    // 0130 · the work order a recall goes back to: picked from the work
+    // orders on file (the API refuses a number nobody answers to).
+    if (f.key === ORIGINAL_WO_KEY) {
+      return <OriginalWoPicker id={domId} value={val} onChange={(v) => set(f.key, v)} disabled={busy} />;
     }
 
     // 0063 · the sub-category suggests what the picked trade offers, and still
@@ -1034,6 +1048,55 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
 }
 
 /** The number is taken: say by what, and link to it. */
+/** 0130 · "Original WO": type a few characters of the WO #, the client's WO #
+    or the title, and pick one of the work orders on file. */
+function OriginalWoPicker({ id, value, onChange, disabled }: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}) {
+  const [term, setTerm] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setTerm(value.trim()), 250);
+    return () => clearTimeout(t);
+  }, [value]);
+  const hits = useQuery({
+    queryKey: ['original-wo-search', term],
+    queryFn: () => listWorkOrders({ search: term, limit: 8 }),
+    enabled: term.length >= 2,
+    staleTime: 30_000,
+  });
+  const items = hits.data?.items ?? [];
+  const exact = items.some((w) => w.wo_number.toLowerCase() === value.trim().toLowerCase());
+  return (
+    <>
+      <input
+        id={id}
+        className="fld"
+        list={`${id}-list`}
+        value={value}
+        placeholder="Type the WO # of the original work order"
+        autoComplete="off"
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      />
+      <datalist id={`${id}-list`}>
+        {items.map((w) => (
+          <option key={w.id} value={w.wo_number}>
+            {[w.ext_name, w.client, w.title].filter(Boolean).join(' · ')}
+          </option>
+        ))}
+      </datalist>
+      {value.trim().length >= 2 && hits.isSuccess && !exact && (
+        <span className="hint">
+          {items.length === 0 ? 'No work order matches — check the number' : 'Pick the original work order from the list'}
+        </span>
+      )}
+    </>
+  );
+}
+
 function TakenNotice({ hit }: { hit: WoDuplicateHit }) {
   return (
     <p className="modal-error">

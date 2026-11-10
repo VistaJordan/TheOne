@@ -237,6 +237,12 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     },
   });
 
+  // Controls that save on change (checkboxes, Comp): each follows its OWN
+  // field's grant, as the API does, so a view-only field cannot be clicked at
+  // all; and only the one being saved locks, so the rest of the tab holds still.
+  const mayWrite = (f: WoFieldDescriptor) => canEdit && can(fieldPermKey(f.key), 'edit');
+  const savingField = (f: WoFieldDescriptor) => save.isPending && save.variables?.key === f.key;
+
   const startEdit = (f: WoFieldDescriptor) => {
     setSaveError(null);
     setEditing(f.key);
@@ -312,7 +318,7 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
                 <input
                   type="checkbox"
                   checked={bool(raw)}
-                  disabled={!canEdit || save.isPending}
+                  disabled={!mayWrite(f) || savingField(f)}
                   onChange={(e) => save.mutate({ key: f.key, value: e.target.checked })}
                 />
                 <span>{bool(raw) ? 'Yes' : 'No'}</span>
@@ -411,7 +417,7 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
         <span>{label}</span>
         <select
           value={cur}
-          disabled={!canEdit || save.isPending}
+          disabled={!mayWrite(f) || savingField(f)}
           onChange={(e) =>
             save.mutate({ key: f.key, value: e.target.value === '' ? null : e.target.value })
           }

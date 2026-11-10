@@ -1616,6 +1616,8 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
    "Submit request on Teams (must add photos)". */
 .cv-detail { font-size: 12px; color: var(--ink-2); }
 .cv-form-row .cv-detailfield { flex: 2 1 260px; max-width: 460px; }
+/* 2026-11-10 · the check-in method is read off the client row, never typed. */
+.cv-method-ro { display: flex; align-items: center; min-height: 32px; font-size: 13px; color: var(--ink-2); }
 
 /* Actions: the status select, then the clock / pencil / trash */
 .cv-act { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }

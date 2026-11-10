@@ -9,8 +9,8 @@
    saved) until the person removes them; the printed list skips them. The
    incurred section and every option draw the same list. */
 
-import type { KeyboardEvent } from 'react';
-import { insertScopeLine } from '@theone/shared';
+import type { ClipboardEvent, KeyboardEvent } from 'react';
+import { insertScopeLine, pasteScopeLines, splitPastedScope } from '@theone/shared';
 import { moveItem, removeAt, replaceAt } from '../../lib/quoteDraft';
 import { scopeFieldId } from '../../lib/quoteTotals';
 import { useReorder } from '../../hooks/useReorder';
@@ -44,6 +44,23 @@ export function ScopeList({ sectionKey, lines, editable, onChange, showError = f
     });
   };
 
+  // 2026-11-10 (Elise) · a pasted block lands one line per scope line, not all
+  // in the line the caret was on (an <input> folds the breaks into spaces).
+  const onPaste = (e: ClipboardEvent<HTMLInputElement>, index: number) => {
+    const pieces = splitPastedScope(e.clipboardData.getData('text'));
+    if (!pieces) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const value = el.value;
+    const start = el.selectionStart ?? value.length;
+    const end = el.selectionEnd ?? value.length;
+    const { lines: next, last } = pasteScopeLines(lines, index, pieces, value.slice(0, start), value.slice(end));
+    onChange(next);
+    window.requestAnimationFrame(() => {
+      document.getElementById(scopeFieldId(sectionKey, last))?.focus();
+    });
+  };
+
   return (
     <div className="field">
       <span className="lbl" id={labelId}>
@@ -74,6 +91,7 @@ export function ScopeList({ sectionKey, lines, editable, onChange, showError = f
               disabled={!editable}
               onChange={(e) => onChange(replaceAt(lines, i, e.target.value))}
               onKeyDown={(e) => onKeyDown(e, i)}
+              onPaste={(e) => onPaste(e, i)}
             />
             {editable && (
               <button

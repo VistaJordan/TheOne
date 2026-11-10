@@ -3488,6 +3488,41 @@ screens at least 900 × 700 and not while a reject or decision form is open in i
 (`is-unpinned`). A sticky band is a stacking context, so a dialog rendered inside
 it must portal to the body (`NteIncreaseButton`, `ImportTranscriptButton`).
 
+**UAT list of 2026-11-10** (migrations 0129 + 0130, Elise;
+`tests/uat-fixes-2026-11-10.test.ts`). **Quotes:** the section's **Multi-day
+job** is a toggle (**One-day job** puts every line back on Day 1), its state
+keyed by the saved section id so a re-seed after a save no longer drops it;
+Incurred offers no Multi-day (only One-day job for an older quote past Day 1),
+and the summary groups only an option's LABOR lines by day — trip, parts and
+the rest follow ungrouped, and INCURRED is never split (`lineRows` /
+`laborSpansDays` in `services/quotes.ts`). Pasting several lines into
+"Required is to…" fills one scope line per line (`splitPastedScope` /
+`pasteScopeLines`, shared `quoteDefaults.ts`: numbers and bullets dropped, the
+blank lines after the caret filled first, the closing line stays last).
+**Take back to edit** (`POST …/quote/retract`, `retractQuote`): the submitter
+(`submitted_by`; a super admin always) moves a quote in pending correction or
+pending approval back to draft, rev unchanged, internal comment, logged
+`quote_retracted`; `Quote.permissions.can_retract`. **Messages:** Enter sends,
+Shift+Enter is a new line (the @ list keeps Enter while open); a client-visible
+post asks "Are you sure you want to send this message to the client?" first.
+**Visits:** the check-in method is never typed on a visit — `createVisit`
+always takes `methodForTask` (client row for the Comp, else the FM) and
+`updateVisit` refuses a method change (400 `VISIT_METHOD_LOCKED`); the CICO
+card draws it read-only. **One check-in at a time:** a visit cannot move into
+checked in while another visit on the work order is still checked in (409
+`VISIT_STILL_CHECKED_IN`, asked under the task lock; New visit and the row's
+Checked in option are locked with the reason). **0129:** OM, Senior OM and OM
+Under Probation are view-only on WO Description, Client AFM, Store, Address +
+Street Address / City / State / Zip Code, Comp, IVR Link and IVR Pin
+(`DISPATCHER_INTAKE_LOCKED_FIELD_KEYS`); all of them joined
+`CREATE_FILLABLE_FIELD_KEYS`, so Add work order still takes them. **0130:**
+Add work order asks **Is this WO a recall?** (`Is Recall`, checkbox); ticked,
+**Original WO** appears and is required (`applyRecallRule`), picked from the
+work orders on file and checked by the API (400 `ORIGINAL_WO_NOT_FOUND`,
+stored in the record's spelling). Not the manager's `Recall` penalty tick
+(0094). seed.ts and `WO_CREATE_DEFAULT_KEYS` carry both — keep in step.
+Deferred: QC Date limited to the QC person (no QC role yet).
+
 ## Verify
 
 ```

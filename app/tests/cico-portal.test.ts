@@ -60,7 +60,8 @@ describe('the wiring', () => {
     const visits = read('apps/api/src/services/visits.ts');
     expect(visits).toContain('return method === CICO_PORTAL_METHOD && p ? p : null;');
     expect(visits).toContain('[name, method, note, actorId, portalFor(method, portal)]');
-    expect(visits).toContain('if (portal === undefined) portal = entry && entry.method === method ? entry.portal : null;');
+    // 2026-11-10 (Elise): a new visit always takes the client's / FM's method and portal.
+    expect(visits).toContain('const portal = portalFor(method, entry?.portal ?? null);');
     expect(visits).toContain('next.method_portal = portalFor(next.method, next.method_portal);');
     expect(visits).toContain('cicoMethodText(v.method, v.method_detail, v.method_portal)');
   });

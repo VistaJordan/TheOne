@@ -486,6 +486,9 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: 'Support Trainee',          label: 'Support Trainee',      type: 'users' },
   { key: 'QC Notes',                 label: 'QC Notes',             type: 'long_text' },
   { key: 'Portal ID',                label: 'Portal ID',            type: 'short_text' },
+  // 0130 (Elise, 2026-11-10) · the recall question on Add work order — keep in step.
+  { key: 'Is Recall',                label: 'Is this WO a recall?', type: 'checkbox' },
+  { key: 'Original WO',              label: 'Original WO',          type: 'short_text' },
   // 0125 · INV/COLL (AR, admins only — the grant is in the migration). Keep in step.
   { key: 'INV/COLL',                 label: 'INV/COLL',             type: 'checkbox' },
   { key: 'Zip Code',                 label: 'Zip Code',             type: 'short_text' },

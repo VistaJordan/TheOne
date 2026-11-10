@@ -582,6 +582,31 @@ async function moveOnSite(taskId: string, visitType: string, actor: ActingPrinci
 
 // ── Writes ───────────────────────────────────────────────────────────────────
 
+/** 2026-11-10 (Elise) · the visit's method is read off the client / FM row and
+    is never typed on the visit. */
+export const VISIT_METHOD_LOCKED_CODE = 'VISIT_METHOD_LOCKED';
+export const VISIT_METHOD_LOCKED_TEXT =
+  'The check-in method comes from the client’s check-in row and cannot be changed on a visit — change it in Clients › Check-in method';
+
+/** 2026-11-10 (Elise) · no check-in after a check-in: a visit still checked in
+    (no check-out) must be checked out before another one checks in. 409
+    VISIT_STILL_CHECKED_IN. `exceptId` is the visit being moved in itself. */
+export const VISIT_STILL_CHECKED_IN_CODE = 'VISIT_STILL_CHECKED_IN';
+async function assertNoOpenVisit(tx: Q, taskId: string, exceptId: string | null): Promise<void> {
+  const open = await tx.query<{ seq: number | string; tech_name: string | null }>(
+    `SELECT seq, tech_name FROM wo_visit
+      WHERE task_id = $1 AND status = 'checked_in' AND ($2::uuid IS NULL OR id <> $2::uuid)
+      ORDER BY seq LIMIT 1`,
+    [taskId, exceptId],
+  );
+  const row = open.rows[0];
+  if (!row) return;
+  const who = row.tech_name ? ` (${row.tech_name})` : '';
+  throw new ApiError('CONFLICT', `Visit ${Number(row.seq)}${who} is still checked in — check it out before checking in again`, {
+    code: VISIT_STILL_CHECKED_IN_CODE,
+  });
+}
+
 export async function createVisit(
   taskId: string,
   input: VisitInput,
@@ -590,21 +615,14 @@ export async function createVisit(
   requireVisitEdit(actor);
   const c = clean(input, true);
 
-  // Reads that need no lock run on the pool first: the FM's entry, for
-  // whatever the caller did not choose — the method when none was sent, and
-  // the instruction when the method is the FM's own and no instruction was
-  // sent.
-  let method = c.method;
-  let detail = c.method_detail;
-  let portal = c.method_portal;
-  if (method === undefined || detail === undefined || portal === undefined) {
-    const { entry } = await methodForTask(taskId);
-    if (method === undefined) method = entry?.method ?? null;
-    if (detail === undefined) detail = entry && entry.method === method ? entry.detail : null;
-    // 0098 · the FM's portal rides with its method, as the detail does.
-    if (portal === undefined) portal = entry && entry.method === method ? entry.portal : null;
-  }
-  portal = portalFor(method, portal);
+  // 2026-11-10 (Elise) · the check-in method is not typed on a visit: it is
+  // always the client's row for the Comp, else the FM's entry (methodForTask).
+  // Whatever the caller sent for it is ignored; the row is changed in
+  // Clients › Check-in method.
+  const { entry } = await methodForTask(taskId);
+  const method = entry?.method ?? null;
+  const detail = entry?.detail ?? null;
+  const portal = portalFor(method, entry?.portal ?? null);
 
   const now = nowStamp();
   // M8: the status follows the stamps. A visit logged straight as checked-in
@@ -636,6 +654,8 @@ export async function createVisit(
     // visits of one work order (and the next visit seq with them).
     const owner = await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [taskId]);
     if (owner.rows.length === 0) throw new ApiError('NOT_FOUND', 'Work order not found');
+    // 2026-11-10 (Elise) · one check-in at a time: asked under the task lock.
+    if (status === 'checked_in') await assertNoOpenVisit(tx, taskId, null);
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO wo_visit
          (task_id, seq, visit_type, status, return_trip_needed, tech_name, tech_phone, method,
@@ -686,6 +706,14 @@ export async function updateVisit(
 
   const cur = await rowById({ query }, visitId);
   if (!cur) throw new ApiError('NOT_FOUND', 'Visit not found');
+  // 2026-11-10 (Elise) · the method is not edited on a visit (see createVisit).
+  const methodChanged =
+    (c.method !== undefined && (c.method ?? null) !== cur.method) ||
+    (c.method_detail !== undefined && (c.method_detail ?? null) !== cur.method_detail) ||
+    (c.method_portal !== undefined && (c.method_portal ?? null) !== cur.method_portal);
+  if (methodChanged) {
+    throw new ApiError('BAD_REQUEST', VISIT_METHOD_LOCKED_TEXT, { code: VISIT_METHOD_LOCKED_CODE });
+  }
 
   // The next state: plain fields first, then the status move and the stamps
   // it earns, then explicit stamps (a correction) on top.
@@ -725,6 +753,13 @@ export async function updateVisit(
   let items: WoVisit[] = [];
   let mirror: TaskChange[] = [];
   await withTransaction(async (tx) => {
+    // 2026-11-10 (Elise) · a visit moving INTO checked in waits for every other
+    // visit on the work order to be checked out (task row locked first, as in
+    // createVisit).
+    if (next.status === 'checked_in' && cur.status !== 'checked_in') {
+      await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [cur.task_id]);
+      await assertNoOpenVisit(tx, cur.task_id, visitId);
+    }
     await tx.query(
       `UPDATE wo_visit
           SET visit_type = $2, status = $3, return_trip_needed = $4,

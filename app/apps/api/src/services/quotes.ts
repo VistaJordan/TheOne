@@ -349,18 +349,35 @@ export interface SummaryContext {
 }
 
 /** Line rows for one section, grouped "Day N" when the job spans several days
-    (Yoda prints the prefix only when max Day > 1). */
+    (Yoda prints the prefix only when max Day > 1). Since 2026-11-10 (Elise)
+    only LABOR lines sit under the days: the labor is grouped Day 1, Day 2, …
+    and the trip, parts and every other line follow, ungrouped. */
 function lineRows(lines: QuoteLine[], multiDay: boolean): string[] {
+  if (!multiDay) return lines.flatMap((line) => amountRows(line.description, line.amount, '  '));
   const out: string[] = [];
-  let lastDay: number | null | undefined;
-  for (const line of lines) {
-    if (multiDay && line.day !== lastDay) {
-      out.push(`  Day ${line.day ?? '—'}`);
-      lastDay = line.day;
+  const labor = lines
+    .map((line, i) => ({ line, i }))
+    .filter(({ line }) => line.line_type === 'labor')
+    .sort((a, b) => (a.line.day ?? 1) - (b.line.day ?? 1) || a.i - b.i)
+    .map(({ line }) => line);
+  const others = lines.filter((line) => line.line_type !== 'labor');
+  let lastDay: number | undefined;
+  for (const line of labor) {
+    const day = line.day ?? 1;
+    if (day !== lastDay) {
+      out.push(`  Day ${day}`);
+      lastDay = day;
     }
-    out.push(...amountRows(line.description, line.amount, multiDay ? '    ' : '  '));
+    out.push(...amountRows(line.description, line.amount, '    '));
   }
+  if (labor.length > 0 && others.length > 0) out.push('');
+  for (const line of others) out.push(...amountRows(line.description, line.amount, '  '));
   return out;
+}
+
+/** A section is a multi-day job when one of its LABOR lines sits past Day 1. */
+function laborSpansDays(section: QuoteSection): boolean {
+  return section.lines.some((l) => l.line_type === 'labor' && (l.day ?? 1) > 1);
 }
 
 /** The numbered "Required is to:" block; nothing when the list is empty. */
@@ -400,7 +417,6 @@ export function buildAutoSummary(
 ): string {
   const out: string[] = [];
   const yoda = totals.total_rule !== 'options_only';
-  const multiDay = sections.some((s) => s.lines.some((l) => (l.day ?? 1) > 1));
 
   // ── Header ────────────────────────────────────────────────────────────────
   // Any of client / store / city / state can be missing on a sparse WO, so the
@@ -440,7 +456,8 @@ export function buildAutoSummary(
     // 2026-11-09 (Elise): the Incurred card's own list prints here.
     if (section.kind === 'incurred') pushScope(out, incurredScopeToPrint(section.scope_lines));
     if (section.lines.length > 0) out.push('');
-    out.push(...lineRows(section.lines, multiDay));
+    // 2026-11-10 (Elise) · incurred work is never split into days.
+    out.push(...lineRows(section.lines, false));
   }
   if (incurredLike.length > 0) out.push(...amountRows('Total incurred',totals.incurred_subtotal));
 
@@ -464,7 +481,7 @@ export function buildAutoSummary(
     pushScope(out, visibleScopeLines(section.scope_lines));
 
     if (section.lines.length > 0) out.push('');
-    out.push(...lineRows(section.lines, multiDay));
+    out.push(...lineRows(section.lines, laborSpansDays(section)));
     out.push(...amountRows(`${named(section.label)} total`, total ? total.total : 0));
     if (yoda && total) {
       if (totals.sales_tax_pct > 0) {
@@ -941,6 +958,10 @@ function permissionsFor(
       q.status === 'draft' || q.status === 'pending_correction'
         ? quoteSubmitTarget(actor.role, q.status)
         : null,
+    // 2026-11-10 (Elise) · whoever submitted it may take it back to edit
+    // while it still waits for correction or approval.
+    can_retract: QUOTE_RETRACTABLE_FROM.includes(q.status) && canEditQuote(actor)
+      && (q.maker_id === actor.id || actor.isSuperAdmin),
   };
 }
 
@@ -2026,6 +2047,48 @@ export async function rejectQuote(
       await addComment(tx, actor.id, taskId, `Quote returned to draft — ${note}`, false);
     },
     'rev = rev + 1, approved_by = NULL, submitted_by = NULL, submitted_at = NULL',
+  );
+}
+
+/** The statuses the submitter may take a quote back from (2026-11-10). */
+const QUOTE_RETRACTABLE_FROM: QuoteStatus[] = ['pending_correction', 'pending_approval'];
+
+/**
+ * pending_correction | pending_approval → draft (quotes:edit), Elise
+ * 2026-11-10: the dispatcher who submitted a quote may take it back to edit
+ * it, until a manager approves or sends it. Only the submitter of record
+ * (`submitted_by`; a super admin always); a manager who wants changes uses
+ * Reject with note. The rev does not move (nobody reviewed it) and an
+ * internal comment says who took it back.
+ */
+export async function retractQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
+  assertCanEdit(actor);
+  await assertWoAllows(taskId, 'quote.edit');
+  const head = await query<{ status: QuoteStatus; submitted_by: string | null }>(
+    `SELECT status, submitted_by::text AS submitted_by FROM quote WHERE task_id = $1 LIMIT 1`,
+    [taskId],
+  );
+  const q = head.rows[0];
+  if (!q) throw new ApiError('NOT_FOUND', 'No quote on this work order');
+  if (!QUOTE_RETRACTABLE_FROM.includes(q.status)) {
+    throw conflict('Only a quote waiting for correction or approval can be taken back — once it is approved or sent, ask a manager', {
+      code: 'QUOTE_NOT_RETRACTABLE',
+      status: q.status,
+    });
+  }
+  if (q.submitted_by !== actor.id && !actor.isSuperAdmin) {
+    throw forbidden('Only the person who submitted this quote can take it back', { code: 'QUOTE_NOT_YOURS' });
+  }
+  return transition(
+    taskId,
+    QUOTE_RETRACTABLE_FROM,
+    'draft',
+    'quote_retracted',
+    actor,
+    async (tx) => {
+      await addComment(tx, actor.id, taskId, 'Quote taken back to draft to edit.', false);
+    },
+    'approved_by = NULL, submitted_by = NULL, submitted_at = NULL',
   );
 }
 
