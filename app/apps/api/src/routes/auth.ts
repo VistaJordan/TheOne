@@ -46,9 +46,10 @@ import { recordAuthEvent } from '../services/activity.js';
 
 /** Only ever redirect somewhere inside our own app — never to a supplied URL. */
 function safeRedirect(raw: string | undefined): string {
-  // Same default as the web sign-in page: the dashboard. A bare "/" means no
-  // particular page was asked for, so it lands there too.
-  if (!raw || raw === '/' || !raw.startsWith('/') || raw.startsWith('//')) return '/dashboard';
+  // Same default as the web sign-in page: the home route, which opens Work
+  // Orders for anyone who can see them (HomeRoute in App.tsx) and the
+  // Dashboard only for a role without them (Elise, 2026-11-10).
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/';
   return raw;
 }
 

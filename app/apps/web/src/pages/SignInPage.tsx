@@ -26,8 +26,10 @@ import { initialsOf, roleLabel } from '../lib/actor';
     first super admin, then the first account, if this address is not seeded. */
 const DEV_DEFAULT_EMAIL = 'eliseam@byblosvista.com';
 
-/** Where a sign-in lands when nothing more specific was asked for. */
-const HOME = '/dashboard';
+/** Where a sign-in lands when nothing more specific was asked for: the home
+    route, which opens Work Orders for anyone who can see them and the
+    Dashboard only for a role without them (Elise, 2026-11-10). */
+const HOME = '/';
 
 /** This device's last "Keep me signed in" choice — a per-browser convenience,
     so it lives in localStorage and a blocked store simply means unticked. */
