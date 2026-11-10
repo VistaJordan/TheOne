@@ -49,7 +49,7 @@ import { ApiError, conflict } from '../errors.js';
 import { ensureFolderPath, forgetDrives, getItemByPath, graphConfigured, resolveDrive, uploadFile } from '../lib/graphDrive.js';
 import type { ActingPrincipal } from './activity.js';
 import { logAdminEvent } from './adminAudit.js';
-import { integrationOn } from './integrations.js';
+import { integrationOn, integrationOnSince } from './integrations.js';
 import { allowFor, requirePerm } from './permissions.js';
 
 const MAX_ATTEMPTS = 6;
@@ -485,6 +485,14 @@ export async function sweepSharePoint(actorId: string | null = null): Promise<Sw
     return out;
   }
 
+  // 0131 · nothing created or approved before the master switch was last
+  // turned on is filed: an integration starts from when it is on.
+  const onSince = await integrationOnSince('sharepoint');
+  const since = (stamp: string | null): string | null => {
+    if (!stamp) return null;
+    return onSince && onSince.getTime() > new Date(stamp).getTime() ? onSince.toISOString() : stamp;
+  };
+
   // 1. Records the switches cover that have no row yet.
   if (s.client_folders && s.client_folders_since) {
     const fresh = await query<{ id: string }>(
@@ -492,7 +500,7 @@ export async function sweepSharePoint(actorId: string | null = null): Promise<Sw
         WHERE c.deleted_at IS NULL AND c.created_at >= $1::timestamptz
           AND NOT EXISTS (SELECT 1 FROM sharepoint_folder f WHERE f.kind = 'client' AND f.entity_id = c.id::text)
         ORDER BY c.created_at LIMIT $2`,
-      [s.client_folders_since, SWEEP_BATCH],
+      [since(s.client_folders_since), SWEEP_BATCH],
     );
     for (const r of fresh.rows) {
       out.folders_tried++;
@@ -506,7 +514,7 @@ export async function sweepSharePoint(actorId: string | null = null): Promise<Sw
         WHERE t.deleted_at IS NULL AND t.created_at >= $1::timestamptz
           AND NOT EXISTS (SELECT 1 FROM sharepoint_folder f WHERE f.kind = 'work_order' AND f.entity_id = t.id::text)
         ORDER BY t.created_at LIMIT $2`,
-      [s.wo_folders_since, SWEEP_BATCH],
+      [since(s.wo_folders_since), SWEEP_BATCH],
     );
     for (const r of fresh.rows) {
       out.folders_tried++;
@@ -551,7 +559,7 @@ export async function sweepSharePoint(actorId: string | null = null): Promise<Sw
           AND COALESCE(a.reviewed_at, a.created_at) >= $1::timestamptz
           AND NOT EXISTS (SELECT 1 FROM sharepoint_file f WHERE f.attachment_id = a.id)
         ORDER BY a.created_at LIMIT $2`,
-      [s.copy_files_since, SWEEP_BATCH],
+      [since(s.copy_files_since), SWEEP_BATCH],
     );
     const failed = await query<{ id: string }>(
       `SELECT attachment_id::text AS id FROM sharepoint_file

@@ -18,11 +18,13 @@
 // settings tables directly.
 
 import {
+  CLIENT_MESSAGE_INTEGRATION,
   INTEGRATIONS,
   INTEGRATIONS_PERM_KEY,
   INTEGRATION_BY_KEY,
   INTEGRATION_KEYS,
   INTEGRATION_OFF,
+  type ClientMessageTarget,
   type IntegrationKey,
   type IntegrationStatus,
   type IntegrationsResponse,
@@ -86,6 +88,19 @@ export async function integrationOnNow(key: IntegrationKey): Promise<boolean> {
     return on;
   } catch {
     return defaultOf(key);
+  }
+}
+
+/** 0131 · when the switch last went from off to on, or null (never flipped
+    on by hand, or before 0131). Anything a connector would file as a backlog
+    starts no earlier than this: an integration starts from when it is on. */
+export async function integrationOnSince(key: IntegrationKey): Promise<Date | null> {
+  try {
+    const r = await query<{ on_since: Date | null }>(`SELECT on_since FROM integration_setting WHERE key = $1`, [key]);
+    const v = r.rows[0]?.on_since;
+    return v ? new Date(v) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -158,7 +173,7 @@ async function configuredOf(key: IntegrationKey): Promise<Configured> {
       return { configured: false, note: 'Nothing can be sent to Ecotrak: the sending side is not built. Turned on only at go-live, after a test on Ecotrak\'s test system.' };
     case 'servicechannel':
     case 'corrigo':
-      return { configured: false, note: 'No connector built yet. Client messages for these sites wait in the outbox.' };
+      return { configured: false, note: 'No connector built yet. Client messages posted before it is live stay on the work order and are never sent.' };
     case 'sharepoint':
       return sharepointConfigured();
     case 'claude':
@@ -255,12 +270,24 @@ export async function setIntegration(key: string, enabled: boolean, user: Admin)
   }
   const before = (await rows()).get(key)?.enabled ?? def.default_on ?? true;
   await query(
-    `INSERT INTO integration_setting (key, enabled, updated_by, updated_at) VALUES ($1, $2, $3, now())
-     ON CONFLICT (key) DO UPDATE SET enabled = EXCLUDED.enabled, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+    `INSERT INTO integration_setting (key, enabled, updated_by, updated_at, on_since)
+     VALUES ($1, $2, $3, now(), CASE WHEN $2 THEN now() END)
+     ON CONFLICT (key) DO UPDATE SET enabled = EXCLUDED.enabled, updated_by = EXCLUDED.updated_by, updated_at = now(),
+       on_since = CASE WHEN EXCLUDED.enabled AND NOT integration_setting.enabled THEN now() ELSE integration_setting.on_since END`,
     [key, enabled, user.id],
   );
   flags.set(key, enabled);
   loadedAt = Date.now();
+  // 0131 · an integration starts from the moment it is turned on: a client
+  // message still waiting for this system was posted before now and is
+  // skipped, never sent. (Imported late: woMessages imports this file.)
+  if (enabled) {
+    const target = (Object.entries(CLIENT_MESSAGE_INTEGRATION) as [ClientMessageTarget, string][]).find(([, k]) => k === key)?.[0];
+    if (target) {
+      const { skipQueuedDeliveries } = await import('./woMessages.js');
+      await skipQueuedDeliveries(target).catch((e: unknown) => console.warn('[integrations] could not skip queued messages:', e));
+    }
+  }
   // 0080 · ClickUp back on: what happened while it was off is skipped for
   // good. The stamp is the record; the baseline runs at once (imported late:
   // the connector imports this file), and the runner redoes it if this fails.

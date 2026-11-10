@@ -82,6 +82,22 @@ function describeSystem(target: ClientMessageTarget | null): ClientSystem | null
   return { target, label: CLIENT_MESSAGE_TARGET_LABELS[target], write_enabled: clientWriteEnabled(target) };
 }
 
+/** 0131 · why a client-visible message was not queued. */
+function notLiveError(target: ClientMessageTarget): string {
+  return `Not sent: ${CLIENT_MESSAGE_TARGET_LABELS[target]} was not live when this was posted`;
+}
+
+/** 0131 · an integration was just turned on: whatever still waits for it was
+ *  queued before that moment and is skipped, never sent. */
+export async function skipQueuedDeliveries(target: ClientMessageTarget): Promise<number> {
+  const r = await query(
+    `UPDATE comment_delivery SET status = 'skipped', error = $2
+      WHERE target = $1 AND status = 'pending'`,
+    [target, `Not sent: posted before ${CLIENT_MESSAGE_TARGET_LABELS[target]} was turned on`],
+  );
+  return (r as { rowCount?: number | null }).rowCount ?? 0;
+}
+
 // ── Reading the thread ───────────────────────────────────────────────────────
 
 interface MessageRow {
@@ -339,9 +355,12 @@ export async function postMessage(
     }
 
     if (target) {
+      // 0131 · queued only when the system can send now; otherwise kept here
+      // as skipped, so turning the integration on later never sends it.
+      const skipped = !clientWriteEnabled(target);
       await tx.query(
-        `INSERT INTO comment_delivery (comment_id, target) VALUES ($1, $2)`,
-        [commentId, target],
+        `INSERT INTO comment_delivery (comment_id, target, status, error) VALUES ($1, $2, $3, $4)`,
+        [commentId, target, skipped ? 'skipped' : 'pending', skipped ? notLiveError(target) : null],
       );
     }
 
@@ -448,10 +467,13 @@ export async function editMessage(
       );
     }
     if (clientVisible && !current.client_visible && newTarget) {
+      const skipped = !clientWriteEnabled(newTarget);
       await tx.query(
-        `INSERT INTO comment_delivery (comment_id, target) VALUES ($1, $2)
-         ON CONFLICT (comment_id, target) DO NOTHING`,
-        [messageId, newTarget],
+        `INSERT INTO comment_delivery (comment_id, target, status, error) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (comment_id, target) DO UPDATE
+           SET status = EXCLUDED.status, error = EXCLUDED.error
+           WHERE comment_delivery.status = 'skipped'`,
+        [messageId, newTarget, skipped ? 'skipped' : 'pending', skipped ? notLiveError(newTarget) : null],
       );
     }
     if (!clientVisible && current.client_visible) {
@@ -526,7 +548,17 @@ export async function deliverPendingMessage(commentId: string): Promise<void> {
       WHERE d.comment_id = $1 AND d.status = 'pending'`,
     [commentId, ECOTRAK_ID_KEY],
   );
-  const pending = res.rows.filter((r) => clientMessageAdapter(r.target) !== null);
+  // 0131 · a system switched off since the message was queued sends nothing;
+  // the row is skipped for good rather than left to go out later.
+  for (const r of res.rows) {
+    if (clientMessageAdapter(r.target) !== null && !clientWriteEnabled(r.target)) {
+      await query(
+        `UPDATE comment_delivery SET status = 'skipped', error = $2 WHERE id = $1 AND status = 'pending'`,
+        [r.id, notLiveError(r.target)],
+      );
+    }
+  }
+  const pending = res.rows.filter((r) => clientWriteEnabled(r.target));
   if (pending.length === 0) return;
 
   const actorId = await messagingActorId();

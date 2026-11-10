@@ -51,7 +51,18 @@ export function portalFromClientPortalType(portalType: string | null | undefined
   return target ? CLIENT_SYSTEM_PORTAL_NAME[target] : null;
 }
 
-export type MessageDeliveryStatus = 'pending' | 'sent' | 'failed';
+/** 0131 · `skipped` = posted while that client system could not send (switched
+    off in Admin › Integrations, or no connector yet). Never sent later: an
+    integration starts from the moment it is turned on. */
+export type MessageDeliveryStatus = 'pending' | 'sent' | 'failed' | 'skipped';
+
+/** 0131 · the Admin › Integrations switch that lets a client-visible message
+    leave for each client system. */
+export const CLIENT_MESSAGE_INTEGRATION: Record<ClientMessageTarget, 'ecotrak_outbound' | 'corrigo' | 'servicechannel'> = {
+  ecotrak: 'ecotrak_outbound',
+  corrigo: 'corrigo',
+  servicechannel: 'servicechannel',
+};
 
 export interface MessageDelivery {
   target: ClientMessageTarget;
@@ -91,8 +102,9 @@ export interface WoMessage {
 export interface ClientSystem {
   target: ClientMessageTarget;
   label: string;
-  /** False until that system's adapter exists and is allowed to write. A
-   *  client-visible message still queues; it just stays pending. */
+  /** False until that system's adapter exists and its switch is on. A
+   *  client-visible message posted meanwhile is kept here and never sent
+   *  (0131: an integration starts from the moment it is turned on). */
   write_enabled: boolean;
 }
 

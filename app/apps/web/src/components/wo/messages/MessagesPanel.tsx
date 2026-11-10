@@ -69,7 +69,7 @@ export function MessagesPanel({ woId, woNumber, data, loading, error, queryKey }
               title={
                 clientSystem.write_enabled
                   ? `Client-visible messages go to ${clientSystem.label}`
-                  : `Client-visible messages queue for ${clientSystem.label} until that integration is live`
+                  : `${clientSystem.label} is not live: client-visible messages stay here and are not sent later`
               }
             >
               <Icon name="ext" size={12} />

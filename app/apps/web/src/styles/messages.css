@@ -486,7 +486,8 @@ a.btn[aria-disabled="true"] { opacity: 0.55; pointer-events: none; }
 }
 
 .msg-foot.is-internal { color: var(--ink-3); }
-.msg-foot.is-unlinked { color: var(--ink-3); }
+.msg-foot.is-unlinked,
+.msg-foot.is-skipped { color: var(--ink-3); }
 .msg-foot.is-sent { color: var(--accent-text); }
 .msg-foot.is-failed { color: var(--danger); }
 

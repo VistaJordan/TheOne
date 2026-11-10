@@ -22,7 +22,7 @@ type IconName = Parameters<typeof Icon>[0]['name'];
 interface Foot {
   icon: IconName;
   label: string;
-  tone: 'internal' | 'pending' | 'sent' | 'failed' | 'unlinked';
+  tone: 'internal' | 'pending' | 'sent' | 'failed' | 'unlinked' | 'skipped';
 }
 
 const LABELS: Record<MessageDelivery['target'], string> = {
@@ -54,12 +54,11 @@ function footFor(m: WoMessage, clientSystem: ClientSystem | null): Foot[] {
     if (d.status === 'failed') {
       return { icon: 'alert-circle', label: `Could not send to ${sys}${d.error ? `: ${d.error}` : ''}`, tone: 'failed' };
     }
-    const live = clientSystem?.target === d.target ? clientSystem.write_enabled : false;
-    return {
-      icon: 'clock',
-      label: live ? `Queued for ${sys}` : `Queued for ${sys} · sends once that integration is live`,
-      tone: 'pending',
-    };
+    // 0131 · posted while the system was not live: kept here, never sent.
+    if (d.status === 'skipped') {
+      return { icon: 'ext', label: `Not sent to ${sys} · it was not live when this was posted`, tone: 'skipped' };
+    }
+    return { icon: 'clock', label: `Queued for ${sys}`, tone: 'pending' };
   });
 }
 

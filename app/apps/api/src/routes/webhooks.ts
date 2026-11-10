@@ -39,7 +39,7 @@ import { escalateFromEmail } from '../services/escalations.js';
 import { raiseDueWorkOrders } from '../services/plannedMaintenance.js';
 import { handleQuoEvent } from '../services/woCalls.js';
 import type { QuoEvent } from '../services/woCalls.js';
-import { requireIntegration } from '../services/integrations.js';
+import { integrationOn } from '../services/integrations.js';
 import { runDueClientUpdates } from '../services/clientUpdates.js';
 
 const optionalText = (max: number) =>
@@ -152,8 +152,10 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
     // The public demo runs on seed data with the dev bypass; a reachable
     // receiver there would let anyone flag demo rows from the internet.
     if (config.demoMode) throw new ApiError('FORBIDDEN', 'Webhooks are disabled in the public demo.');
-    // 0074 · the switch in Admin › Integrations.
-    requireIntegration('email_escalations');
+    // 0074 / 0131 · the switch in Admin › Integrations. While it is off an
+    // email is acknowledged and dropped (not refused), so a sender's retries
+    // never replay it once the switch is back on.
+    if (!integrationOn('email_escalations')) return { ok: true, ignored: 'switched_off' };
 
     const outcome = checkWebhookSecret(presentedSecret(req.headers), config.escalationWebhookSecret);
     if (outcome === 'unconfigured') {
@@ -170,9 +172,10 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
 
   app.post('/webhooks/quo', async (req) => {
     if (config.demoMode) throw new ApiError('FORBIDDEN', 'Webhooks are disabled in the public demo.');
-    // 0074 · the switch in Admin › Integrations: refused, so Quo's retries
-    // deliver the events once it is back on.
-    requireIntegration('quo');
+    // 0074 / 0131 · the switch in Admin › Integrations. While it is off the
+    // event is acknowledged and dropped: refusing it would make Quo retry and
+    // replay calls and texts from before the switch went back on.
+    if (!integrationOn('quo')) return { ok: true, ignored: 'switched_off' };
     const outcome = verifyQuoSignature(req.headers, req.rawBody ?? '', config.quoWebhookSecret);
     if (outcome === 'unconfigured') {
       throw new ApiError('FORBIDDEN', 'The Quo webhook is not configured (QUO_WEBHOOK_SECRET is unset).');

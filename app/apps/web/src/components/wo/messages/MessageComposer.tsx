@@ -191,7 +191,7 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
     ? clientSystem
       ? clientSystem.write_enabled
         ? `Goes to the client on ${clientSystem.label}`
-        : `Queued for ${clientSystem.label} — sends once that integration is live`
+        : `${clientSystem.label} is not live — this stays on the work order and is never sent to ${clientSystem.label}, even after it is turned on`
       : 'Visible to the client — no client system is linked to this work order yet'
     : 'Internal — the team only, never the client';
 
