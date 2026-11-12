@@ -135,7 +135,49 @@ const optionName = (o: { name?: string; label?: string }) => (o.name ?? o.label 
     ClickUp side loses its prefix, so "7-Eleven" never reads as "Eleven". */
 export function findOption<O extends { name?: string; label?: string }>(options: O[], value: string): O | undefined {
   const want = matchName(value);
-  return options.find((o) => matchName(optionName(o)) === want) ?? options.find((o) => bareName(optionName(o)) === want);
+  const tight = (s: string) => s.replace(/ /g, '');
+  return (
+    options.find((o) => matchName(optionName(o)) === want) ??
+    options.find((o) => bareName(optionName(o)) === want) ??
+    // Spacing only: our "Sun Holdings" is ClickUp's "SunHoldings".
+    options.find((o) => tight(matchName(optionName(o))) === tight(want))
+  );
+}
+
+/** Our value → the ClickUp option it is, where the two spell the same thing
+    differently. Keyed by the ClickUp field's name and our value, both
+    through `matchName`. The FM list in ClickUp names the clients we keep in
+    Client (Elise, 2026-11-10: in OBI Client and FM are the same; ClickUp's
+    own "Client" field is filled by a ClickUp automation). */
+export const CLICKUP_OPTION_ALIASES: Record<string, Record<string, string>> = {
+  [matchName('22. FM')]: {
+    [matchName('PH')]: 'Powerhouse',
+    [matchName('7-11')]: '7-Eleven',
+    [matchName('5Guys')]: 'FiveGuys',
+    [matchName('Din Tai Fung')]: 'DinTai',
+    [matchName('Extra Space Storage')]: 'Extra Space',
+    [matchName('Green Thumb')]: 'GreenThumbIndustries',
+    [matchName('Net Lease')]: 'NETLeaseCapital',
+    [matchName('Outback Staekhouse')]: 'Outback Steakhouse',
+    [matchName("Wendy's Corp")]: "Wendy's",
+    [matchName('Flynn Group')]: 'Flynn',
+    [matchName('23rd Group')]: '23rd Goup',
+    [matchName('KFM')]: 'KFM24',
+    [matchName('FSFS')]: 'FrontStreet',
+    [matchName('SFS')]: 'FrontStreet',
+    [matchName('Learning Experience')]: 'Learning',
+    [matchName('RSM LEO')]: 'RSM365',
+    [matchName('RSM')]: 'RSM365',
+  },
+  [matchName('Sales Owner')]: {
+    [matchName('Rocio')]: 'Ro',
+  },
+};
+
+/** `findOption`, after the alias table for that field. */
+export function findOptionFor<O extends { name?: string; label?: string }>(fieldName: string, options: O[], value: string): O | undefined {
+  const alias = CLICKUP_OPTION_ALIASES[matchName(fieldName)]?.[matchName(value)];
+  return (alias ? findOption(options, alias) : undefined) ?? findOption(options, value);
 }
 
 /** One of our values for one ClickUp custom field. Users fields return the
@@ -144,13 +186,13 @@ export function toCuFieldValue(field: ClickUpFieldDef, v: unknown, idByName: Map
   if (isBlank(v) || (field.type === 'labels' && splitNames(v).length === 0)) return { kind: 'clear' };
   switch (field.type) {
     case 'drop_down': {
-      const opt = findOption(field.options ?? [], String(v));
+      const opt = findOptionFor(field.name, field.options ?? [], String(v));
       return opt ? { kind: 'set', value: opt.id } : { kind: 'error', message: `"${String(v)}" is not an option of ClickUp's "${field.name}"` };
     }
     case 'labels': {
       const ids: string[] = [];
       for (const n of splitNames(v)) {
-        const opt = findOption(field.options ?? [], n);
+        const opt = findOptionFor(field.name, field.options ?? [], n);
         if (!opt) return { kind: 'error', message: `"${n}" is not a label of ClickUp's "${field.name}"` };
         ids.push(opt.id);
       }

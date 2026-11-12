@@ -89,10 +89,11 @@ const EXPECTED_VARS = [
   'ESCALATION_WEBHOOK_SECRET',
   'QUO_WEBHOOK_SECRET',
   'SALES_TAX_API_KEY',
+  'GOOGLE_MAPS_API_KEY',
 ];
 
 describe('W4-11 · DEMO_MODE refuses to boot beside a real credential', () => {
-  it('lists the fourteen credentials, in the contract order', () => {
+  it('lists the fifteen credentials, in the contract order', () => {
     expect([...DEMO_MODE_SECRET_VARS]).toEqual(EXPECTED_VARS);
   });
 

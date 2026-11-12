@@ -2000,6 +2000,29 @@ CLICKUP_API_BASE points it at a stand-in server for testing. Audit:
 (they change no record) — the panel shows linked / waiting / failing and a
 Retry per work order.
 
+**ClickUp: Client fills FM, the address goes on the map** (migration 0132,
+Elise 2026-11-10; `tests/clickup-client-fm.test.ts`,
+`tests/clickup-address-location.test.ts`). In OBI the Client and the FM are
+the same company, so the automatic map sends our `Client` to ClickUp's
+`22. FM` (`CUSTOM_AUTO` in `services/clickup.ts`) and our `22. FM` nowhere
+(`NOT_SENT_AUTO`); ClickUp's own `Client` (the store brand) is filled by a
+ClickUp automation. Dropdown values match ignoring case, punctuation and
+spacing, then through `CLICKUP_OPTION_ALIASES` (`lib/clickupValues.ts`,
+`findOptionFor`: PH → Powerhouse, FSFS / SFS → FrontStreet, RSM LEO →
+RSM365, Rocio → Ro…) — add a row there when ClickUp spells a client
+differently. ClickUp's `17. Address` is a `location` field (now in
+`CLICKUP_WRITABLE_TYPES`; only a text source fits it): `placesFor` places the
+address before `wants` runs — `placeAddress` (`services/addressGeo.ts`) asks
+Google (`lib/googleGeocode.ts`, `GOOGLE_MAPS_API_KEY`, the key the team's n8n
+workflows use; a `partial_match` is trusted only in the address's own state),
+else the ZIP centre from `geo_zip`, and keeps every answer in `geocode_cache`
+(one lookup per address; an unplaceable one is asked again after 30 days; the
+seed does not truncate it). The value sent is the point plus our address as
+written. Google unreachable or the key unset = nothing sent that run, tried
+again next run. `GOOGLE_MAPS_API_KEY` is the fifteenth `DEMO_MODE_SECRET_VARS`
+entry. This is the first lookup that sends addresses outside OBI; the
+technician map still uses only our own tables.
+
 **Admin › Documentation** (migration 0075, `packages/shared/src/docs/`,
 `services/docsSnapshot.ts`, `routes/adminDocs.ts`, `pages/admin/AdminDocsPage.tsx`,
 `components/docs/`, `styles/docs.css`, `tests/docs.test.ts` +
@@ -2047,9 +2070,9 @@ rule, IMPERSONATION_READ_ONLY and its allow / deny lists, was replaced on
 2026-10-20 by migration 0088: viewing as can write and the audit row names
 the real person — see "Viewing as writes" below.) **DEMO_MODE guards**
 (`config.ts`, `services/auth.ts`, `routes/auth.ts`, migration 0082): the API
-refuses to boot while `DEMO_MODE=true` if any of the 14 credentials in
+refuses to boot while `DEMO_MODE=true` if any of the 15 credentials in
 `DEMO_MODE_SECRET_VARS` is set (`demoModeConflict`, pure; `SALES_TAX_API_KEY`
-is the fourteenth). `CRON_SECRET` is left out on purpose: it authenticates
+is the fourteenth, `GOOGLE_MAPS_API_KEY` (0132) the fifteenth). `CRON_SECRET` is left out on purpose: it authenticates
 Vercel's cron to us, reaches nothing outside, and is inert in the demo, where
 every cron route answers 403 before it reads it. The list is not exhaustive
 by construction: `DATABASE_URL` (`user:pass@host`, no credential suffix) is

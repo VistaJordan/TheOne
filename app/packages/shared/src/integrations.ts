@@ -258,12 +258,16 @@ export const CLICKUP_WRITABLE_TYPES: readonly string[] = [
   'phone',
   'users',
   'emoji',
+  'location',
 ];
 
 /** Which ClickUp field types fit one of our value types — the mapping
     dropdown offers only these. Text fits anything (written as text). */
 export function clickUpFits(ourType: string, cuType: string): boolean {
   if (!CLICKUP_WRITABLE_TYPES.includes(cuType)) return false;
+  // A map location (0132): only a written address goes there, placed on the
+  // map by the sync (services/addressGeo.ts).
+  if (cuType === 'location') return ourType === 'text';
   if (cuType === 'text' || cuType === 'short_text') return true;
   switch (ourType) {
     case 'number':

@@ -37,6 +37,7 @@ import {
   type ClickUpTarget,
 } from '@theone/shared';
 import { query } from '../db.js';
+import { addressKey, placeAddress, type PlaceOutcome } from './addressGeo.js';
 import { ApiError, badRequest } from '../errors.js';
 import {
   ClickUpError,
@@ -61,7 +62,7 @@ import {
   fits,
   isBlank,
   bareName,
-  findOption,
+  findOptionFor,
   idKey,
   matchName,
   personKey,
@@ -187,10 +188,25 @@ const NATIVE_AUTO: Record<string, ClickUpTarget> = {
   'fields.Assignee': 'assignees',
 };
 
+// In OBI the Client and the FM are the same company (FM = the Client under
+// ClickUp's spelling), so our Client fills ClickUp's "22. FM" and our FM is
+// not sent. ClickUp's own "Client" field (the store brand) is filled by a
+// ClickUp automation, so nothing of ours goes there (Elise, 2026-11-10).
+// The client names that ClickUp spells differently are in
+// CLICKUP_OPTION_ALIASES.
+const CUSTOM_AUTO: Record<string, string> = { 'fields.Client': '22. FM' };
+const NOT_SENT_AUTO = new Set(['fields.22. FM']);
+
 /** The match by name for a source nobody has chosen for. */
 export function autoMapping(s: Source, cuFields: ClickUpFieldDef[], taken: Set<string>): Mapping {
   const native = NATIVE_AUTO[s.source];
   if (native) return { target: native, cu_field_id: null };
+  if (NOT_SENT_AUTO.has(s.source)) return { target: 'none', cu_field_id: null };
+  const fixed = CUSTOM_AUTO[s.source];
+  if (fixed) {
+    const f = cuFields.find((x) => !taken.has(x.id) && matchName(x.name) === matchName(fixed));
+    return f ? { target: 'custom', cu_field_id: f.id } : { target: 'none', cu_field_id: null };
+  }
   // In order of trust: our key (the old ClickUp name, verbatim), our label,
   // then the aliases; each exactly first, then without ClickUp's "32." prefix.
   const names = [matchName(s.source.replace(/^fields\./, '')), matchName(s.label)];
@@ -276,7 +292,7 @@ function warningFor(m: Resolved, cfg: ConfigRow, ourStatuses: string[]): string 
   if (m.target === 'custom' && m.cu_field_id) {
     const f = cfg.cu_fields.find((x) => x.id === m.cu_field_id);
     if (f && (f.type === 'drop_down' || f.type === 'labels') && m.options?.length) {
-      const missing = m.options.filter((o) => !findOption(f.options ?? [], o));
+      const missing = m.options.filter((o) => !findOptionFor(f.name, f.options ?? [], o));
       if (missing.length) return `Not options in ClickUp: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` +${missing.length - 4}` : ''}`;
     }
   }
@@ -614,7 +630,31 @@ interface Want {
   error?: string;
 }
 
-function wants(t: TaskRow, map: Resolved[], cfg: ConfigRow, idByName: Map<string, number>): Want[] {
+/** A location value for ClickUp (0132): the point, and our address as written. */
+export function locationValue(address: string, place: PlaceOutcome | undefined): { value?: unknown; error?: string } | null {
+  if (!place || place.kind === 'later') return null; // not asked yet: send nothing this run
+  if (place.kind === 'unplaceable') return { error: `"${address}" could not be placed on the map` };
+  return { value: { location: { lat: place.point.lat, lng: place.point.lng }, formatted_address: address } };
+}
+
+/** Place on the map every address this work order sends to a location field. */
+async function placesFor(t: TaskRow, map: Resolved[], cfg: ConfigRow): Promise<Map<string, PlaceOutcome>> {
+  const out = new Map<string, PlaceOutcome>();
+  for (const m of map) {
+    if (m.target !== 'custom') continue;
+    const field = cfg.cu_fields.find((f) => f.id === m.cu_field_id);
+    if (field?.type !== 'location') continue;
+    const raw = rawValue(t, m.source);
+    if (isBlank(raw)) continue;
+    const address = String(raw).trim();
+    if (out.has(addressKey(address))) continue;
+    const str = (k: string) => (isBlank(t.fields?.[k]) ? null : String(t.fields[k]));
+    out.set(addressKey(address), await placeAddress(address, str('State'), str('Zip Code')));
+  }
+  return out;
+}
+
+function wants(t: TaskRow, map: Resolved[], cfg: ConfigRow, idByName: Map<string, number>, places?: Map<string, PlaceOutcome>): Want[] {
   const out = new Map<string, Want>();
   for (const m of map) {
     if (m.target === 'none') continue;
@@ -659,8 +699,19 @@ function wants(t: TaskRow, map: Resolved[], cfg: ConfigRow, idByName: Map<string
       case 'custom': {
         const field = cfg.cu_fields.find((f) => f.id === m.cu_field_id);
         if (!field) break;
-        const v = toCuFieldValue(field, raw, idByName);
         const key = `cf:${field.id}`;
+        if (field.type === 'location') {
+          if (isBlank(raw)) {
+            out.set(key, { key, target: 'custom', field, value: null });
+            break;
+          }
+          const address = String(raw).trim();
+          const loc = locationValue(address, places?.get(addressKey(address)));
+          if (!loc) break;
+          out.set(key, loc.error ? { key, target: 'custom', field, value: undefined, error: `${m.label}: ${loc.error}` } : { key, target: 'custom', field, value: loc.value });
+          break;
+        }
+        const v = toCuFieldValue(field, raw, idByName);
         if (v.kind === 'error') out.set(key, { key, target: 'custom', field, value: undefined, error: `${m.label}: ${v.message}` });
         else if (v.kind === 'clear') out.set(key, { key, target: 'custom', field, value: null });
         else {
@@ -748,7 +799,7 @@ const valueRefused = (e: unknown): e is ClickUpError =>
   e instanceof ClickUpError && e.status >= 400 && e.status < 500 && ![401, 403, 404, 429].includes(e.status);
 
 async function pushOne(link: LinkRow, t: TaskRow, map: Resolved[], cfg: ConfigRow, idByName: Map<string, number>): Promise<{ errors: string[]; pushed: Record<string, unknown>; id: string; url: string | null }> {
-  const all = wants(t, map, cfg, idByName);
+  const all = wants(t, map, cfg, idByName, await placesFor(t, map, cfg));
   const pushed: Record<string, unknown> = { ...link.pushed };
   const remembered = (pushed.__errors ?? {}) as Record<string, { sig: string; msg: string }>;
   const errors: Record<string, { sig: string; msg: string }> = {};

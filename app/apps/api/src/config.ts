@@ -65,6 +65,8 @@ export const DEMO_MODE_SECRET_VARS = [
   'QUO_WEBHOOK_SECRET',
   // The RapidAPI key services/salesTax.ts presents for a ZIP → rate lookup.
   'SALES_TAX_API_KEY',
+  // The Google geocoder key services/addressGeo.ts presents (0132).
+  'GOOGLE_MAPS_API_KEY',
 ] as const;
 
 /** The first real credential set while DEMO_MODE is on, or null. Pure — it
