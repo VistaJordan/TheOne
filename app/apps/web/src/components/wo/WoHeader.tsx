@@ -32,6 +32,7 @@ import { StatusChangeBanner } from './StatusChangeBanner';
 import { AcceptanceChip } from './AcceptanceChip';
 import { AssignDialog } from './AssignDialog';
 import { SharePointFolderChip } from '../SharePointFolderChip';
+import { WoCopyButtons } from './WoCopyButtons';
 
 /** One labelled amount in the worth block. The currency sign is drawn
     separately, smaller and lighter, so label + amount read the way the comp
@@ -306,6 +307,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
             </button>
           )}
           {actions}
+          <WoCopyButtons wo={wo} />
           <button
             type="button"
             className="icon-btn wohead-fold"

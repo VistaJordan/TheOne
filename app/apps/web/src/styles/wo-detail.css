@@ -409,6 +409,11 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
   flex: none;
 }
 
+/* Elise 2026-11-12 · Copy full / Copy vague, at the right of the header. */
+.wohead-copies { display: inline-flex; gap: 6px; }
+.wohead-copy { min-width: 0; }
+.wohead-copy.is-copied { color: var(--accent-text); }
+
 .wohead-mid {
   display: flex;
   align-items: flex-end;
