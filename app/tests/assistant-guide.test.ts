@@ -86,6 +86,8 @@ const FROM_SHARED: Record<string, { file: string; literal?: string }> = {
   'Not on the form': { file: 'packages/shared/src/woCreate.ts' },
   'On the form': { file: 'packages/shared/src/woCreate.ts' },
   'Parts Required': { file: 'packages/shared/src/statusGates.ts' },
+  // The quote builder's Submit button reads its label from QUOTE_SUBMIT_LABEL.
+  'Submit for correction': { file: 'packages/shared/src/quoteSubmit.ts' },
   // 0094 · the Penalties labels are drawn by the Finances › Penalties card
   // (components/wo/ManagerFlags.tsx) since 2026-10-27, so they need no entry.
 };

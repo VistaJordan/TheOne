@@ -1074,18 +1074,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           </div>
         )}
 
-        {status === 'draft' && !canApprove && allows('quote.submit') && (
-          <div className="callout callout-lock">
-            <Icon name="lock" size={14} />
-            <span>
-              <b>Needs the quote-approve permission.</b> Dispatchers build and revise quotes; approving and
-              sending the summary to the client is reserved for ATL, TL, AM and admin.
-              {submitTarget === 'pending_correction'
-                ? ' Submit for correction and a manager corrects it and sends it to the client — the control stays visible so you always know it exists.'
-                : ' Submit for approval and an ATL picks it up — the control stays visible so you always know it exists.'}
-            </span>
-          </div>
-        )}
         {status === 'pending_correction' && submitTarget === null && (
           <div className="callout callout-lock">
             <Icon name="lock" size={14} />
