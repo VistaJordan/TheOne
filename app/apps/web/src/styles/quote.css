@@ -303,8 +303,14 @@
    2026-11-13): the compact pipeline, then the tools and the buttons, centred
    together. It wraps only when the screen is too narrow for both. */
 .qb .qhead.is-embedded { padding: 7px 12px; }
-.qb .qhead.is-embedded .qpipe-row { gap: 16px; justify-content: center; }
+.qb .qhead.is-embedded .qpipe-row { gap: 12px; justify-content: center; }
 .qb .qhead.is-embedded .ctas { margin-left: 0; justify-content: center; }
+/* Side by side, never stacked, on any screen wide enough to hold the line. */
+@media (min-width: 1100px) {
+  .qb .qhead.is-embedded .qpipe-row,
+  .qb .qhead.is-embedded .ctas { flex-wrap: nowrap; }
+  .qb .qhead.is-embedded .ctas > * { flex: none; white-space: nowrap; }
+}
 .qb .qhead.is-embedded .pipe { flex-wrap: nowrap; flex: none; }
 .qb .qhead.is-embedded .pstep {
   gap: 4px;
