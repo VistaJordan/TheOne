@@ -60,7 +60,7 @@ export function withinMoneyBound(n: number): boolean {
  * `J0.5` — the money paid ahead of the job — and is never numbered, so it
  * does not take J1 from the job payments that follow.
  */
-export const PAYMENT_PURPOSE_CODES = ['J', 'D', 'M', 'A'] as const;
+export const PAYMENT_PURPOSE_CODES = ['D', 'J', 'M', 'A'] as const;
 export type PaymentPurposeCode = (typeof PAYMENT_PURPOSE_CODES)[number];
 
 export const PAYMENT_PURPOSE_LABEL: Record<PaymentPurposeCode, string> = {
