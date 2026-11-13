@@ -744,6 +744,23 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       gated('Send to client', 'send', canApprove, 'Needs the quote-approve permission', 'quote.send', () => sendMutation.mutate(), 'lockTipSend')
     );
 
+  /** The preview card's "Mark as sent to client": the Send to client act with
+      the same gates, each refusal in the most specific words. */
+  const SENDABLE: string[] = ['draft', 'pending_correction', 'pending_approval', 'approved'];
+  const shareState: { ok: boolean; sent: boolean; reason: string } = !SENDABLE.includes(status)
+    ? { ok: false, sent: true, reason: 'This quote is already marked as sent to the client' }
+    : !canApprove
+      ? { ok: false, sent: false, reason: 'Needs the quote-approve permission' }
+      : !allows('quote.send')
+        ? { ok: false, sent: false, reason: blockedReason('quote.send') ?? 'Not allowed in this work-order status' }
+        : nteHold
+          ? { ok: false, sent: false, reason: NTE_HOLD_TIP }
+          : overNte && nte !== null && nteTotal !== null
+            ? { ok: false, sent: false, reason: quoteOverNteSentence(nteTotal, nte) }
+            : blocked && editable
+              ? { ok: false, sent: false, reason: problemChipText(problems.length) }
+              : { ok: true, sent: false, reason: '' };
+
   const decisionButton = (sectionKey: string | null, compact: boolean) =>
     !allows('quote.client_decide')
       ? lockedButton(CLIENT_DECISION_APPROVED, blockedReason('quote.client_decide') ?? '', `lockDecide-${sectionKey}`, 'sm')
@@ -836,22 +853,39 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               <Icon name="download" size={12} />
               PDF
             </a>
-            {/* How a quote reaches the client is still to be decided (Elise,
-                2026-10-28): the button holds the place and says so. */}
-            <span className="tipwrap">
+            {/* How a quote reaches the client is still to be decided, so for
+                now (Elise, 2026-11-13) this records the send and delivers
+                nothing: the same act as Send to client below (approved on the
+                way, status Sent, the "sent to the client" note, the work order
+                to Waiting for Approval), so the rules after it can be tested
+                and quotes already sent outside OBI can be marked. */}
+            {shareState.ok ? (
               <button
                 type="button"
-                className="btn btn-sm btn-locked"
-                aria-disabled="true"
-                aria-describedby="qShareTip"
+                className="btn btn-sm btn-primary"
+                disabled={busy}
+                onClick={() => sendMutation.mutate()}
+                title="Marks the quote as sent to the client. Nothing is delivered yet: send it to the client yourself (or mark one you already sent)."
               >
                 <Icon name="send" size={12} />
-                Share with client
+                {sendMutation.isPending ? 'Marking…' : 'Mark as sent to client'}
               </button>
-              <span className="tip tip-below" id="qShareTip" role="tooltip">
-                How quotes are shared with clients is not decided yet
+            ) : (
+              <span className="tipwrap">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-locked"
+                  aria-disabled="true"
+                  aria-describedby="qShareTip"
+                >
+                  <Icon name={shareState.sent ? 'check' : 'send'} size={12} />
+                  {shareState.sent ? 'Sent to client' : 'Mark as sent to client'}
+                </button>
+                <span className="tip tip-below" id="qShareTip" role="tooltip">
+                  {shareState.reason}
+                </span>
               </span>
-            </span>
+            )}
           </div>
         </div>
         <div className="qpreview-body">
