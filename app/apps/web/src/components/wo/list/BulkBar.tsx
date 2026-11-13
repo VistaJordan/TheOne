@@ -16,7 +16,7 @@ import { StatusCircle } from '../../StatusCircle';
 import { bucketStatuses, useStatusGroups } from '../../../lib/statusGroups';
 import { Popover } from './Popover';
 import { FieldPicker } from './FieldPicker';
-import { ADDRESS_ZIP_KEY, zipInputValue } from '@theone/shared';
+import { ADDRESS_ZIP_KEY, numericInputValue, zipInputValue } from '@theone/shared';
 
 interface BulkBarProps {
   ids: string[];
@@ -458,19 +458,26 @@ function BulkEditMenu({
                           ? 'date'
                           : f?.type === 'datetime'
                             ? 'datetime-local'
-                            : f?.type === 'number' || f?.type === 'money'
-                              ? 'number'
-                              : 'text'
+                            : 'text'
                       }
                       value={value ?? ''}
                       placeholder="— clear —"
-                      // Zip Code takes digits and one dash (12345 or 12345-6789).
-                      inputMode={key === `fields.${ADDRESS_ZIP_KEY}` ? 'numeric' : undefined}
+                      // Zip Code takes digits and one dash (12345 or 12345-6789);
+                      // money and numbers digits and one point, never letters.
+                      inputMode={
+                        key === `fields.${ADDRESS_ZIP_KEY}` ? 'numeric'
+                        : f?.type === 'number' || f?.type === 'money' ? 'decimal'
+                        : undefined
+                      }
                       maxLength={key === `fields.${ADDRESS_ZIP_KEY}` ? 10 : undefined}
                       onChange={(e) =>
                         setEdits({
                           ...edits,
-                          [key]: key === `fields.${ADDRESS_ZIP_KEY}` ? zipInputValue(e.target.value) : e.target.value,
+                          [key]: key === `fields.${ADDRESS_ZIP_KEY}`
+                            ? zipInputValue(e.target.value)
+                            : f?.type === 'number' || f?.type === 'money'
+                              ? numericInputValue(e.target.value, { money: f.type === 'money', allowNegative: f.type === 'number' })
+                              : e.target.value,
                         })
                       }
                     />

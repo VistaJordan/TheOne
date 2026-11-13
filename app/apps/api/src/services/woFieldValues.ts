@@ -22,7 +22,7 @@ import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { ActivityEntry } from '@theone/shared';
-import { COMPLETION_ASSIGNEE_KEY, SUPPORT_TRAINEE_KEY, EMERGENCY_KEY, ESCALATED_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, flagTicked, withinMoneyBound } from '@theone/shared';
+import { COMPLETION_ASSIGNEE_KEY, SUPPORT_TRAINEE_KEY, EMERGENCY_KEY, ESCALATED_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, flagTicked, parseTypedNumber, withinMoneyBound } from '@theone/shared';
 import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
@@ -48,18 +48,23 @@ function coerceValue(f: ResolvedField, raw: unknown): unknown {
     }
     case 'number':
     case 'money': {
-      const digits = typeof raw === 'number' ? String(raw) : String(raw).replace(/[^0-9.-]/g, '');
-      if (!/^-?\d*\.?\d+$/.test(digits) || !Number.isFinite(Number(digits))) {
-        throw new ApiError('BAD_REQUEST', `"${f.label}" needs a number`);
+      // Letters are refused, never stripped (2026-11-13: "5e3" used to save
+      // as 53, "abc500" as 500). A "$" and thousands commas are allowed.
+      const n = parseTypedNumber(raw);
+      if (n === null) {
+        throw new ApiError('BAD_REQUEST', `"${f.label}" takes numbers only`, {
+          code: VALIDATION_CODE,
+          field: f.jsonKey,
+        });
       }
       // 0083 (M1): a figure a column (the NTE mirror is numeric(12,2)) or a
       // sum of a few could not hold is refused here, not as a 500 later.
-      if (f.type === 'money' && !withinMoneyBound(Number(digits))) {
+      if (f.type === 'money' && !withinMoneyBound(n)) {
         throw new ApiError('BAD_REQUEST', `"${f.label}" can be at most ${MONEY_MAX.toLocaleString('en-US')}`, {
           code: VALIDATION_CODE,
         });
       }
-      return Number(digits);
+      return n;
     }
     case 'date': {
       const s = String(raw).slice(0, 10);

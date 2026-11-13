@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ADDRESS_ZIP_KEY, COMPUTED_KEYS, HISTORY_FIELD_KEYS, clientOptionsForComp, zipInputValue, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
+import { ADDRESS_ZIP_KEY, COMPUTED_KEYS, HISTORY_FIELD_KEYS, clientOptionsForComp, numericInputValue, zipInputValue, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
 import {
   ApiRequestError,
   getWoFields,
@@ -298,19 +298,25 @@ export function FieldEditor({
     const type =
       field.type === 'date' ? 'date'
       : field.type === 'datetime' ? 'datetime-local'
-      : field.type === 'money' || field.type === 'number' ? 'number'
       : field.subtype === 'phone' ? 'tel'
       : field.subtype === 'url' ? 'url'
       : 'text';
-    // Zip Code takes digits only; letters never reach the box.
+    // Zip Code takes digits only; money and numbers digits and one point —
+    // letters never reach the box (a type="number" box still lets "e" in).
     const zip = field.key === ZIP_FIELD_KEY;
+    const numeric = field.type === 'money' || field.type === 'number';
     input = (
       <input
         type={type}
-        step={field.type === 'money' ? '0.01' : undefined}
         value={draft}
-        onChange={(e) => onDraft(zip ? zipInputValue(e.target.value) : e.target.value)}
-        inputMode={zip ? 'numeric' : undefined}
+        onChange={(e) =>
+          onDraft(
+            zip ? zipInputValue(e.target.value)
+            : numeric ? numericInputValue(e.target.value, { money: field.type === 'money', allowNegative: field.type === 'number' })
+            : e.target.value,
+          )
+        }
+        inputMode={zip ? 'numeric' : numeric ? 'decimal' : undefined}
         maxLength={zip ? 10 : undefined}
         onKeyDown={onKeyDown}
         autoFocus

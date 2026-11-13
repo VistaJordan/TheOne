@@ -74,6 +74,7 @@ import {
   parseAddressParts,
   ADDRESS_ZIP_KEY,
   zipInputValue,
+  numericInputValue,
   ORIGINAL_WO_KEY,
   RECALL_KEY,
   applyRecallRule,
@@ -726,11 +727,12 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     const type =
       d?.type === 'datetime' || f.type === 'datetime' ? 'datetime-local'
       : d?.type === 'date' || f.type === 'date' ? 'date'
-      : d?.type === 'money' || d?.type === 'number' || f.type === 'currency' || f.type === 'number' ? 'number'
       : d?.subtype === 'phone' || f.type === 'phone' ? 'tel'
       : 'text';
-    // Zip Code takes digits only; letters never reach the box.
+    // Zip Code takes digits only; money and numbers digits and one point.
     const zip = f.key === ADDRESS_ZIP_KEY;
+    const isMoney = d?.type === 'money' || f.type === 'currency';
+    const numeric = isMoney || d?.type === 'number' || f.type === 'number';
     if (type === 'datetime-local') {
       return <TenMinuteDateTime id={domId} value={val} onChange={(v) => set(f.key, v)} disabled={busy} />;
     }
@@ -740,10 +742,16 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
         id={domId}
         className="fld"
         type={type}
-        step={d?.type === 'money' || f.type === 'currency' ? '0.01' : undefined}
         value={val}
-        onChange={(e) => set(f.key, zip ? zipInputValue(e.target.value) : e.target.value)}
-        inputMode={zip ? 'numeric' : undefined}
+        onChange={(e) =>
+          set(
+            f.key,
+            zip ? zipInputValue(e.target.value)
+            : numeric ? numericInputValue(e.target.value, { money: isMoney, allowNegative: !isMoney })
+            : e.target.value,
+          )
+        }
+        inputMode={zip ? 'numeric' : numeric ? 'decimal' : undefined}
         maxLength={zip ? 10 : undefined}
         placeholder={zip ? '77002' : undefined}
         disabled={busy}
