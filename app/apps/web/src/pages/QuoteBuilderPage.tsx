@@ -43,7 +43,6 @@ import {
   QUOTE_DECLINE_KIND_LABEL,
   QUOTE_DECLINE_KINDS,
   QUOTE_SUBMIT_LABEL,
-  QUOTE_SUBMITTED_LOCKED_TEXT,
   QUOTE_SUBMITTED_STATUSES,
   quoteEditableBy,
   quoteOverNte,
@@ -261,8 +260,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   // 2026-10-29 (Elise): once submitted, only a manager (approve grant) edits
   // it — the shared rule the API's updateQuote enforces.
   const editable = quoteEditableBy(status, canEdit, canApprove) && allows('quote.edit');
-  // 2026-11-04 (Elise): locked for everyone once submitted, managers too.
-  const submittedLocked = canEdit && QUOTE_SUBMITTED_STATUSES.includes(status);
   // 0092 · where this person's Submit takes the quote: a dispatcher's draft
   // goes for correction, a manager's (or a corrected one) for approval; null
   // while a dispatcher waits on the manager. An older API says nothing, so a
@@ -770,18 +767,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         )
         : lockedButton(CLIENT_DECISION_APPROVED, 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', `lockDecide-${sectionKey}`, 'sm');
 
-  // Why the quote cannot be edited, when it cannot; nothing while it can.
-  const actorNote =
-    !allows('quote.edit') && (status === 'draft' || status === 'pending_correction' || status === 'pending_approval')
-      ? blockedReason('quote.edit')
-      : editable
-        ? null
-        : submittedLocked
-          ? QUOTE_SUBMITTED_LOCKED_TEXT
-          : canEdit
-            ? null
-            : 'You can read this quote. Building and revising it is Senior OM and above.';
-
   // Import transcript, Reset quote and the autosave chip.
   const headTools = (
     <>
@@ -1059,8 +1044,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           </div>
         </div>
 
-        {actorNote && <p className="actor-note qactor">{actorNote}</p>}
-
         {actionError && (
           <div className="callout" style={{ marginTop: 12 }}>
             <Icon name="alert" size={14} />
@@ -1071,48 +1054,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           <div className="callout" style={{ marginTop: 12 }} role="status">
             <Icon name="info" size={14} />
             <span>{statusNote}</span>
-          </div>
-        )}
-
-        {status === 'pending_correction' && submitTarget === null && (
-          <div className="callout callout-lock">
-            <Icon name="lock" size={14} />
-            <span>
-              <b>With a manager for correction.</b> {QUOTE_CORRECTION_PENDING_TEXT}. It appears in Quotes ›
-              Pending correction and in Approvals › Quotes; a Reject with note returns it to you as a draft.
-            </span>
-          </div>
-        )}
-        {/* 2026-11-04 (Elise): a submitted quote is locked for everyone. */}
-        {QUOTE_SUBMITTED_STATUSES.includes(status) && canApprove && allows('quote.approve') && (
-          <div className="callout">
-            <Icon name="check-circle" size={14} />
-            <span>
-              <b>Review this quote.</b> It is locked: nobody changes a submitted quote. If it is right,{' '}
-              <b>Send to client</b> approves it and sends the summary text to the client in one click. If it
-              needs changing, <b>Reject with note</b> returns it to <b>Draft</b> with your note attached, to be
-              corrected there.
-            </span>
-          </div>
-        )}
-        {status === 'sent' && (
-          <div className="callout">
-            <Icon name="globe" size={14} />
-            <span>
-              <b>With the client since {quote.sent_at ? new Date(quote.sent_at).toLocaleDateString() : 'today'}.</b>{' '}
-              Record the client&rsquo;s decision here: approve the option they chose (its lines become
-              incurred work and the other options are retired) or decline with their reason.
-            </span>
-          </div>
-        )}
-        {status === 'client_approved' && (
-          <div className="callout">
-            <Icon name="check-circle" size={14} />
-            <span>
-              <b>Round {currentRound} is locked.</b> The approved option now bills with the job. If the
-              tech finds more on the return visit, <b>Add additional quote</b> opens round {currentRound + 1}{' '}
-              with the approved work as its incurred baseline.
-            </span>
           </div>
         )}
 
