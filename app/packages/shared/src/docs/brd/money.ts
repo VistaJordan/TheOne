@@ -125,7 +125,7 @@ export const MONEY_PART: DocPart = {
           value: 'One form, enough detail for AP to pay without a chat.',
           rules: [
             'The work order\'s status must allow a request (open through Done; closed once Invoiced or Cancelled / Postponed — 403 WO_STATUS_BLOCKED).',
-            'The purpose is a code (UAT #24, 0083): J, M or A; the server numbers repeats on the work order J, J1, J2… (the form says which number it will file under). Purposes typed before 0083 are left as they were. The old duplicate-purpose 409 is gone.',
+            'The purpose is a code (UAT #24, 0083): J, M or A, or Deposit (J0.5, always that code, never numbered; Elise 2026-11-13); the server numbers repeats on the work order J, J1, J2… (the form says which number it will file under). Purposes typed before 0083 are left as they were. The old duplicate-purpose 409 is gone.',
             'A blacklisted technician (the vendor record\'s blacklist) cannot be paid (409 VENDOR_BLACKLISTED); an admin may override.',
             'W9: a running total above $599 per technician, company and calendar year (credit-card payments and alternate recipients do not count) flags the request that crossed it and every later one; W9 on file is the vendor record\'s "W9 received = Yes".',
           ],

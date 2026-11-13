@@ -75,6 +75,8 @@ import {
   PAYMENT_METHOD_LABEL,
   PAYMENT_PROCESS_PERM_KEY,
   SELF_APPROVAL_CODE,
+  DEPOSIT_PURPOSE,
+  PAYMENT_PURPOSE_CODES,
   isPaymentPurposeCode,
   mayApproveOverNtePayment,
   nextPurpose,
@@ -833,12 +835,13 @@ async function loadRow(id: string): Promise<PaymentRow> {
 
 /** 0083 (#24): the purpose must be one of the codes; the stored value is numbered. */
 function purposeCodeOf(raw: string): PaymentPurposeCode {
-  const code = raw.trim().toUpperCase();
+  const typed = raw.trim().toUpperCase();
+  const code = typed === DEPOSIT_PURPOSE ? 'D' : typed;
   if (!isPaymentPurposeCode(code)) {
-    throw badRequest('Purpose must be J (Job), M (Materials) or A (Assessment)', {
+    throw badRequest('Purpose must be J (Job), D (Deposit), M (Materials) or A (Assessment)', {
       code: 'PURPOSE_CODE',
       purpose: raw,
-      allowed: ['J', 'M', 'A'],
+      allowed: [...PAYMENT_PURPOSE_CODES],
     });
   }
   return code;

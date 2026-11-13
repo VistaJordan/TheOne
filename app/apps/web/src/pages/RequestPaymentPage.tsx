@@ -33,6 +33,7 @@ import {
   PAYMENT_PURPOSE_CODES,
   PAYMENT_PURPOSE_LABEL,
   nextPurpose,
+  purposeDisplayCode,
   usPhoneInputValue,
   usPhoneProblem,
   type PaymentPurposeCode,
@@ -564,7 +565,7 @@ export function RequestPayment({
                         <option value="">Pick one…</option>
                         {PAYMENT_PURPOSE_CODES.map((c) => (
                           <option key={c} value={c}>
-                            {c} — {PAYMENT_PURPOSE_LABEL[c]}
+                            {purposeDisplayCode(c)} — {PAYMENT_PURPOSE_LABEL[c]}
                           </option>
                         ))}
                       </select>
@@ -572,7 +573,9 @@ export function RequestPayment({
                     </div>
                     <p className="fhelp">
                       <Icon name="info" size={12} />
-                      {nextCode && nextCode !== purpose
+                      {purpose === 'D'
+                        ? 'A deposit paid ahead of the job is filed as J0.5, so the job payments after it stay J, J1, J2…'
+                        : nextCode && nextCode !== purpose
                         ? `${woNumber} already has a ${PAYMENT_PURPOSE_LABEL[purpose as PaymentPurposeCode].toLowerCase()} payment — this one is filed as ${nextCode}.`
                         : 'Shown to AP and on this work order’s payment ledger. Repeats are numbered J1, J2…; describe the work in the note.'}
                     </p>

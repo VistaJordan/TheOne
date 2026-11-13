@@ -55,22 +55,38 @@ export function withinMoneyBound(n: number): boolean {
 
 // ── #24 · payment purpose codes ──────────────────────────────────────────────
 
-export const PAYMENT_PURPOSE_CODES = ['J', 'M', 'A'] as const;
+/**
+ * `D` (Deposit, Elise 2026-11-13) is a form code only: a deposit is stored as
+ * `J0.5` — the money paid ahead of the job — and is never numbered, so it
+ * does not take J1 from the job payments that follow.
+ */
+export const PAYMENT_PURPOSE_CODES = ['J', 'D', 'M', 'A'] as const;
 export type PaymentPurposeCode = (typeof PAYMENT_PURPOSE_CODES)[number];
 
 export const PAYMENT_PURPOSE_LABEL: Record<PaymentPurposeCode, string> = {
   J: 'Job',
+  D: 'Deposit',
   M: 'Materials',
   A: 'Assessment',
 };
+
+/** What a deposit is stored (and shown) as. */
+export const DEPOSIT_PURPOSE = 'J0.5';
+
+/** The code as the form shows it: "J0.5" for a deposit, the letter otherwise. */
+export function purposeDisplayCode(code: PaymentPurposeCode): string {
+  return code === 'D' ? DEPOSIT_PURPOSE : code;
+}
 
 export function isPaymentPurposeCode(v: unknown): v is PaymentPurposeCode {
   return typeof v === 'string' && (PAYMENT_PURPOSE_CODES as readonly string[]).includes(v);
 }
 
-/** "J" / "J1" / "J12" → "J"; anything else (a pre-0083 free-text purpose) → null. */
+/** "J" / "J1" / "J12" → "J"; "J0.5" → "D"; anything else (a pre-0083 free-text purpose) → null. */
 export function purposeBase(stored: string | null | undefined): PaymentPurposeCode | null {
-  const m = /^([JMA])(\d*)$/.exec((stored ?? '').trim().toUpperCase());
+  const s = (stored ?? '').trim().toUpperCase();
+  if (s === DEPOSIT_PURPOSE) return 'D';
+  const m = /^([JMA])(\d*)$/.exec(s);
   return m ? (m[1] as PaymentPurposeCode) : null;
 }
 
@@ -78,9 +94,11 @@ export function purposeBase(stored: string | null | undefined): PaymentPurposeCo
  * The stored purpose for a new payment of `code` on a work order that already
  * holds `existing` purposes: the first is the bare letter, repeats are
  * numbered J1, J2… (never reusing a number, so a deleted J1 does not come
- * back). Free-text purposes from before 0083 are ignored.
+ * back). A deposit is always J0.5 and does not count as a J. Free-text
+ * purposes from before 0083 are ignored.
  */
 export function nextPurpose(code: PaymentPurposeCode, existing: (string | null | undefined)[]): string {
+  if (code === 'D') return DEPOSIT_PURPOSE;
   let max = -1;
   for (const raw of existing) {
     const m = /^([JMA])(\d*)$/.exec((raw ?? '').trim().toUpperCase());

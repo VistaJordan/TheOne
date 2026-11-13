@@ -268,6 +268,14 @@ describe('#24 · payment purpose codes', () => {
     expect(purposeBase('j2')).toBe('J');
     expect(purposeBase('Trip charge')).toBeNull();
     expect(purposeLabel('J2')).toBe('Job (J2)');
+    // Deposit (Elise 2026-11-13): stored as J0.5, never numbered, not a J.
+    expect(isPaymentPurposeCode('D')).toBe(true);
+    expect(nextPurpose('D', [])).toBe('J0.5');
+    expect(nextPurpose('D', ['J', 'J0.5'])).toBe('J0.5');
+    expect(nextPurpose('J', ['J0.5'])).toBe('J');
+    expect(nextPurpose('J', ['J0.5', 'J'])).toBe('J1');
+    expect(purposeBase('J0.5')).toBe('D');
+    expect(purposeLabel('J0.5')).toBe('Deposit (J0.5)');
     expect(purposeLabel('Trip charge')).toBe('Trip charge');
   });
 
