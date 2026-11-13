@@ -300,11 +300,14 @@
 .qb .qhead.is-embedded .qpipe-row { margin-top: 0; }
 
 /* On the work order's Quote tab the band is one slim line (Elise,
-   2026-11-13): the compact pipeline, then the tools and the buttons, centred
-   together. It wraps only when the screen is too narrow for both. */
+   2026-11-13): the compact pipeline on the left, the tools and the buttons on
+   the right, all centred on the band's height. It wraps only when the screen
+   is too narrow for both. */
 .qb .qhead.is-embedded { padding: 7px 12px; }
-.qb .qhead.is-embedded .qpipe-row { gap: 12px; justify-content: center; }
-.qb .qhead.is-embedded .ctas { margin-left: 0; justify-content: center; }
+.qb .qhead.is-embedded .qpipe-row { gap: 12px; align-items: center; }
+.qb .qhead.is-embedded .pipe { margin: 0; padding: 0; align-self: center; }
+.qb .qhead.is-embedded .ctas { margin: 0 0 0 auto; align-items: center; }
+.qb .qhead.is-embedded .ctas > * { margin-top: 0; margin-bottom: 0; }
 /* Side by side, never stacked, on any screen wide enough to hold the line. */
 @media (min-width: 1100px) {
   .qb .qhead.is-embedded .qpipe-row,
