@@ -22,8 +22,8 @@ import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
 import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { ActivityEntry } from '@theone/shared';
-import { COMPLETION_ASSIGNEE_KEY, SUPPORT_TRAINEE_KEY, ESCALATED_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, flagTicked, withinMoneyBound } from '@theone/shared';
-import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEscalation, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
+import { COMPLETION_ASSIGNEE_KEY, SUPPORT_TRAINEE_KEY, EMERGENCY_KEY, ESCALATED_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, flagTicked, withinMoneyBound } from '@theone/shared';
+import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
 
@@ -305,6 +305,11 @@ export async function updateWorkOrderFields(
     const esc = log.find((c) => c.field === `fields.${ESCALATED_KEY}`);
     if (esc && flagTicked(esc.before) && !flagTicked(esc.after) && !auto && !opts.system) {
       await assertMayClearEscalation(actorId, tx);
+    }
+    // 2026-11-12: a dispatcher raises an emergency but does not clear one.
+    const emg = log.find((c) => c.field === `fields.${EMERGENCY_KEY}`);
+    if (emg && flagTicked(emg.before) && !flagTicked(emg.after) && !auto && !opts.system) {
+      await assertMayClearEmergency(actorId, tx);
     }
     // M2 (Wave D): Received on ≤ Due date, against the bag as this save leaves it.
     assertDateOrder(merged, log.map((c) => c.field.slice('fields.'.length)));

@@ -32,6 +32,35 @@ export const MENTION_MAX = 20;
 /** The `app_notice.kind` a mention raises. */
 export const MENTION_NOTICE_KIND = 'wo_mention';
 
+// ── Message watchers (Elise, 2026-11-12) ─────────────────────────────────────
+//
+// The work order's own dispatcher (the Assignee seat), its TL and its ATL hear
+// about every message somebody else posts on it, internal or client-visible,
+// mentioned or not. Its AM hears only when @mentioned (the mention notice
+// above). Client notes synced in from a portal do not raise it.
+
+/** The `app_notice.kind` a message raises for the work order's watchers. */
+export const MESSAGE_NOTICE_KIND = 'wo_message';
+
+/** The bag keys whose people watch a work order's messages. */
+export const MESSAGE_WATCHER_KEYS = ['Assignee', 'TL', 'ATL'] as const;
+
+/** The names sitting in the watcher seats of a bag, each once (case-
+ *  insensitive), in seat order. A seat may hold a comma-joined list. */
+export function messageWatcherNames(bag: Record<string, unknown> | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const key of MESSAGE_WATCHER_KEYS) {
+    for (const raw of String(bag?.[key] ?? '').split(',')) {
+      const name = raw.trim();
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      out.push(name);
+    }
+  }
+  return out;
+}
+
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

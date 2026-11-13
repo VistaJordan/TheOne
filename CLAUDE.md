@@ -3546,6 +3546,29 @@ stored in the record's spelling). Not the manager's `Recall` penalty tick
 (0094). seed.ts and `WO_CREATE_DEFAULT_KEYS` carry both — keep in step.
 Deferred: QC Date limited to the QC person (no QC role yet).
 
+**Overview, the header fold, Emergency, message notices** (Elise,
+2026-11-12, no migration; `tests/wo-overview-notices-2026-11-12.test.ts`).
+Overview leads with **Job details** (`components/wo/OverviewDetailsCard.tsx`:
+Address, Store, WO Description, Sign-Off Link, each an `InlineField`) beside
+the Dates card, then Obligations, a short scrolling Updates & activity
+(`.ov-feed-body`, 320px) and Assignment history; its rail is People
+(`RecordRail` `top`), Time, Location, Cost — no Responsibility
+(`responsibility={false}`, the record tabs keep it) and no Soft-close checklist
+(`SoftCloseChecklist.tsx` stays in the tree, undrawn). `WoHeader` takes
+`folded`: folded on every tab but Overview, open on it; the fold button
+overrides until the next tab change. **Emergency:** the dispatchers (OM,
+Senior OM, OM Under Probation) tick it but never untick it
+(`mayClearEmergency` in shared `managerFlags.ts`, `assertMayClearEmergency`
+in `dataRules.ts`, 403 `EMERGENCY_CLEAR_FORBIDDEN`, field editor and bulk
+edit; the header draws a raised one locked for them). **Message notices:**
+every staff message (internal or client-visible) raises an `app_notice` of
+kind `wo_message` for the people in the work order's Assignee, TL and ATL
+seats (`MESSAGE_WATCHER_KEYS`, `messageWatcherNames`), matched by display
+name among the mention candidates (so only people who can open it), minus
+the author and those @mentioned (they get the mention notice); the AM hears
+only when mentioned. Client notes synced from a portal raise nothing; edits
+raise nothing new.
+
 ## Verify
 
 ```

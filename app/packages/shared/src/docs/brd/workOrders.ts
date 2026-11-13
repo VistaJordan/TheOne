@@ -62,7 +62,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Overview',
-          what: 'The Obligations card first ("Nothing owed on this work order."; Snooze per row), the Updates & activity feed (read-only, "N events · newest first", with a Write a message button) and the Soft-close checklist (Quote created, Before photos, Quote check, Admin check; an n / 4 meter — GTG retired, 0121). The landing tab since 2026-10-22.',
+          what: 'Since 2026-11-12: Job details (Address, Store, WO Description, Sign-Off Link, editable in place) beside the Dates card, then the Obligations card ("Nothing owed on this work order."; Snooze per row), a short scrolling Updates & activity feed (read-only, "N events · newest first", with a Write a message button) and the Assignment history; the right rail is People, Time, Location and Cost (no Responsibility, no Soft-close checklist). The header opens full on Overview and folds on every other tab. The landing tab since 2026-10-22.',
           value: 'The story of the job on one tab.',
         },
         {
@@ -363,7 +363,7 @@ export const WORK_ORDERS_PART: DocPart = {
       features: [
         {
           name: 'Emergency',
-          what: 'A checkbox in the Overview section; rows carry it so every list draws the red rail and badge ("Emergency work order") without a second fetch. A paused automation "Rule 2.5.1 · Emergency from client priority" (priority changed to urgent → Emergency) is the hook for the client portals.',
+          what: 'A checkbox in the Overview section; rows carry it so every list draws the red rail and badge ("Emergency work order") without a second fetch. A paused automation "Rule 2.5.1 · Emergency from client priority" (priority changed to urgent → Emergency) is the hook for the client portals. Since 2026-11-12 the dispatchers (OM, Senior OM, OM Under Probation) may tick it but not untick it (403 EMERGENCY_CLEAR_FORBIDDEN; the header draws a raised one locked for them).',
           value: 'The ClickUp "emergency" status becomes a flag that survives every status change.',
           brd: ['2.5.1'],
           since: '0034',

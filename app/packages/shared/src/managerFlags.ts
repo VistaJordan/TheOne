@@ -17,6 +17,8 @@
 // Keys here are the JSON keys inside task.fields; the catalogue key is
 // `fields.<key>`.
 
+import { isDispatcherRole } from './access';
+
 export const PROFITABILITY_EXCEPTION_KEY = 'Profitability Exception';
 export const PROFITABILITY_NOTES_KEY = 'Profitability Exception Notes';
 
@@ -85,6 +87,15 @@ export const ESCALATION_CLEAR_SENTENCE = 'Only a TL, ATL or AM can clear an esca
 
 export function mayClearEscalation(roleCode: string | null | undefined, isSuperAdmin: boolean): boolean {
   return isSuperAdmin || (!!roleCode && (ESCALATION_CLEAR_ROLES as readonly string[]).includes(roleCode));
+}
+
+// Elise, 2026-11-12: the dispatchers (OM, Senior OM, OM Under Probation) may
+// turn Emergency ON but not off; anyone else who may edit the field clears it.
+export const EMERGENCY_CLEAR_CODE = 'EMERGENCY_CLEAR_FORBIDDEN';
+export const EMERGENCY_CLEAR_SENTENCE = 'A dispatcher can raise an emergency but not clear it — ask a TL, ATL or AM.';
+
+export function mayClearEmergency(roleCode: string | null | undefined, isSuperAdmin: boolean): boolean {
+  return isSuperAdmin || !isDispatcherRole(roleCode);
 }
 
 /** A checkbox value that reads as ticked (stored true, or typed in bulk / CSV). */

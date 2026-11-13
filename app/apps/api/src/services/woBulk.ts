@@ -17,7 +17,7 @@ import { Params, listCustomFields, resolveField } from './woFields.js';
 import { woScopeSql } from './woScope.js';
 import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
-import { ADDRESS_KEY, CLIENT_PORTAL_TYPE_KEY, ESCALATED_KEY, STATUS_ORDER_CODE, checkStatusOrder, flagTicked, statusOrderRefused } from '@theone/shared';
+import { ADDRESS_KEY, CLIENT_PORTAL_TYPE_KEY, EMERGENCY_KEY, ESCALATED_KEY, STATUS_ORDER_CODE, checkStatusOrder, flagTicked, statusOrderRefused } from '@theone/shared';
 import { statusOrderError } from './statusOrder.js';
 import { dispatchAutomations } from './automations.js';
 import { raiseAcceptanceTasks } from './approvals.js';
@@ -25,7 +25,7 @@ import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
-import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
+import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
 import { checkWriteValue } from './woFieldValues.js';
 import { assertMoneyNotLocked } from './moneySync.js';
 import { assertGateHoldsFields, doneGateMissingFor, quoteGateMissingFor } from './statusGates.js';
@@ -175,6 +175,9 @@ export async function bulkUpdate(
     // 2026-11-03 (0120): unticking Escalated in bulk is a TL / ATL / AM's call.
     const esc = customPatch.find((c) => c.key === ESCALATED_KEY);
     if (esc && !flagTicked(esc.value)) await assertMayClearEscalation(actorId);
+    // 2026-11-12: unticking Emergency in bulk is not a dispatcher's call.
+    const emg = customPatch.find((c) => c.key === EMERGENCY_KEY);
+    if (emg && !flagTicked(emg.value)) await assertMayClearEmergency(actorId);
   }
 
   const rows = await query<{

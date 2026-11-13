@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -9,8 +9,10 @@ import {
   PARTS_REQUIRED_KEY,
   VISIT_MIRROR_KEYS,
   ecotrakStatusLabel,
+  EMERGENCY_CLEAR_SENTENCE,
   ESCALATION_CLEAR_SENTENCE,
   fieldPermKey,
+  mayClearEmergency,
   mayClearEscalation,
 } from '@theone/shared';
 import { useAuth } from '../../auth/AuthProvider';
@@ -70,9 +72,12 @@ interface WoHeaderProps {
   quoteStatus?: string | null;
   /** The record's actions (the More menu), drawn after the header's own buttons. */
   actions?: ReactNode;
+  /** Elise, 2026-11-12 · the header folds on every tab but Overview and opens
+      again on Overview; the fold button still works on any tab. */
+  folded?: boolean;
 }
 
-export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, quoteFilled, quoteStatus, actions }: WoHeaderProps) {
+export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, quoteFilled, quoteStatus, actions, folded = false }: WoHeaderProps) {
   const meta = deriveHeaderMeta(wo);
   const f = wo.fields ?? {};
   // Rules 2.6.3 / 2.7: where the work order sits on Ecotrak (stamped by the
@@ -117,6 +122,8 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
   // 2.5.1, ticked by hand until the client portals decide it).
   const emergencyKey = `fields.${FIELD.emergency}`;
   const canFlagEmergency = flagEditable(emergencyKey);
+  // 2026-11-12 · a dispatcher raises it but cannot clear it.
+  const canClearEmergency = mayClearEmergency(actingAs?.role, !!actingAs?.is_super_admin);
   const emergencySave = useWoFieldSave(wo.id);
   // 2026-10-22 · reassign or unassign from the top: the assignee chip opens
   // the dispatcher picker for whoever may edit the Assignee field (the
@@ -145,9 +152,11 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
         (a) => a.has_file && a.review_status === 'approved' && (a.content_type ?? '').toLowerCase().startsWith('image/'),
       ).length
     : null;
-  // Every work order opens with the full header (2026-10-20); the fold lasts
-  // until the page is left and is no longer remembered across work orders.
-  const [collapsed, setCollapsed] = useState(false);
+  // Every work order opens with the full header on Overview (2026-10-20); the
+  // fold follows the tab (2026-11-12: folded away from Overview, open on it),
+  // and the button overrides it until the next tab change. Not remembered.
+  const [collapsed, setCollapsed] = useState(folded);
+  useEffect(() => setCollapsed(folded), [folded]);
   // "Request again" on a rejected request re-opens the status menu.
   const statusTriggerRef = useRef<HTMLButtonElement>(null);
   const toggleCollapsed = () => setCollapsed((v) => !v);
@@ -261,7 +270,18 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               </button>
             )}
           />
-          {canFlagEmergency && (
+          {canFlagEmergency && emergency && !canClearEmergency ? (
+            <button
+              type="button"
+              className="btn is-emergency btn-locked"
+              aria-disabled="true"
+              aria-pressed
+              title={EMERGENCY_CLEAR_SENTENCE}
+            >
+              <Icon name="lock" size={14} />
+              Emergency
+            </button>
+          ) : canFlagEmergency && (
             <button
               type="button"
               className={`btn${emergency ? ' is-emergency' : ''}`}

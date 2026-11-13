@@ -29,6 +29,7 @@ import {
   clientMessageTarget,
   mentionsInBody,
   messageEditableBy,
+  messageWatcherNames,
   messageIsSent,
   tabPermKey,
 } from '@theone/shared';
@@ -236,12 +237,21 @@ async function loadMessage(
 
 const SCOPE_CHUNK = 200;
 
-export async function mentionCandidates(taskId: string): Promise<MentionCandidate[]> {
-  const res = await query<PrincipalRow>(
-    `SELECT ${PRINCIPAL_COLUMNS} ${PRINCIPAL_FROM}
-      WHERE p.kind = 'human' AND p.status <> 'disabled'
-      ORDER BY lower(p.display_name), p.id`,
-  );
+export async function mentionCandidates(taskId: string, names?: readonly string[]): Promise<MentionCandidate[]> {
+  if (names && names.length === 0) return [];
+  const res = names
+    ? await query<PrincipalRow>(
+        `SELECT ${PRINCIPAL_COLUMNS} ${PRINCIPAL_FROM}
+          WHERE p.kind = 'human' AND p.status <> 'disabled'
+            AND lower(btrim(p.display_name)) = ANY($1::text[])
+          ORDER BY lower(p.display_name), p.id`,
+        [names.map((n) => n.trim().toLowerCase())],
+      )
+    : await query<PrincipalRow>(
+        `SELECT ${PRINCIPAL_COLUMNS} ${PRINCIPAL_FROM}
+          WHERE p.kind = 'human' AND p.status <> 'disabled'
+          ORDER BY lower(p.display_name), p.id`,
+      );
   const people = res.rows
     .map((r) => ({ row: r, actor: actingFromPrincipal(toPrincipal(r)) }))
     .filter(({ actor }) => {
@@ -310,6 +320,42 @@ async function notifyMentioned(
     link: `/work-orders/${encodeURIComponent(woNumber)}?tab=messages&msg=${commentId}`,
     actorId: actor.id,
   });
+}
+
+/** Elise, 2026-11-12 · tell the work order's dispatcher (Assignee), TL and ATL
+ *  about a message someone else posted, internal or client-visible, mentioned
+ *  or not — minus the people the mention notice already told. Only a person
+ *  who can open the work order and its Messages tab is told (the mention
+ *  candidates' test). After the commit; never throws (notify). */
+async function notifyWatchers(
+  taskId: string,
+  commentId: string,
+  body: string,
+  clientVisible: boolean,
+  alreadyTold: readonly { id: string }[],
+  actor: ActingPrincipal,
+): Promise<void> {
+  try {
+    const wo = await query<{ wo_number: string; fields: Record<string, unknown> | null }>(
+      `SELECT wo_number, fields FROM task WHERE id = $1`,
+      [taskId],
+    );
+    const row = wo.rows[0];
+    if (!row) return;
+    const told = new Set([actor.id, ...alreadyTold.map((p) => p.id)]);
+    const people = (await mentionCandidates(taskId, messageWatcherNames(row.fields))).filter((p) => !told.has(p.id));
+    if (people.length === 0) return;
+    const snippet = body.length > 280 ? `${body.slice(0, 279)}…` : body;
+    await notify(people.map((p) => p.id), {
+      kind: 'wo_message',
+      title: `${actor.name} posted ${clientVisible ? 'a client-visible' : 'an internal'} message on ${row.wo_number}`,
+      body: snippet,
+      link: `/work-orders/${encodeURIComponent(row.wo_number)}?tab=messages&msg=${commentId}`,
+      actorId: actor.id,
+    });
+  } catch (err) {
+    console.error('[messages] watcher notice failed', { task_id: taskId, comment_id: commentId, err });
+  }
 }
 
 // ── Posting ──────────────────────────────────────────────────────────────────
@@ -385,6 +431,7 @@ export async function postMessage(
   if (!commentId) throw new ApiError('INTERNAL', 'Message insert produced no row');
   await deliverPendingMessage(commentId);
   await notifyMentioned(taskId, commentId, input.body, mentioned, actor);
+  await notifyWatchers(taskId, commentId, input.body, input.client_visible, mentioned, actor);
 
   const item = await loadMessage(taskId, commentId, actor, allow);
   if (!item) throw new ApiError('INTERNAL', 'Message vanished after insert');

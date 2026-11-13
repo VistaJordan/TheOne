@@ -3034,3 +3034,24 @@ a.photo-img.is-real img {
 .wo-notice-title a { color: var(--accent-text); text-decoration: none; }
 .wo-notice-title a:hover { text-decoration: underline; }
 .wo-notice-body { color: var(--ink-3); font-size: 12px; }
+
+/* Overview (Elise, 2026-11-12): Job details beside Dates; People in the rail;
+   Updates & activity is a short card that scrolls inside itself. */
+.ov-details-rows { display: grid; padding: 2px 16px 10px; }
+.ov-detail {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--row-border);
+  font-size: 13px;
+}
+.ov-detail:last-child { border-bottom: 0; }
+.ov-detail-k { color: var(--ink-3); font-size: 12px; }
+.ov-detail-v { min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
+.ov-detail.is-long .ov-detail-v { white-space: pre-wrap; }
+.ov-feed-body { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
+.ov-feed .fi { padding: 6px 0; }
+.rec-rail .card-people .seats { padding: 4px 14px 12px; }
+.rec-rail .card-people .seat { grid-template-columns: 92px minmax(0, 1fr); gap: 8px; }

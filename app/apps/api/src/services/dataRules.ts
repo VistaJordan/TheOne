@@ -33,6 +33,8 @@ import {
   completionAssigneeNotArMessage,
   DISPATCHER_ROLE_CODES,
   DUE_DATE_KEY,
+  EMERGENCY_CLEAR_CODE,
+  EMERGENCY_CLEAR_SENTENCE,
   ESCALATION_CLEAR_CODE,
   ESCALATION_CLEAR_SENTENCE,
   HISTORY_FIELD_KEYS,
@@ -47,6 +49,7 @@ import {
   historyFieldMessage,
   matchClientRecord,
   matchOption,
+  mayClearEmergency,
   mayClearEscalation,
   normalizeUsState,
   normalizeZip,
@@ -261,6 +264,21 @@ export async function assertMayClearEscalation(actorId: string, q: Queryable = p
   throw new ApiError('FORBIDDEN', ESCALATION_CLEAR_SENTENCE, {
     code: ESCALATION_CLEAR_CODE,
     field: 'fields.Escalated',
+  });
+}
+
+/** Elise, 2026-11-12: a dispatcher may tick Emergency but not untick it.
+    Asked of the person a save acts as, never of a rule's or the system's own write. */
+export async function assertMayClearEmergency(actorId: string, q: Queryable = pool): Promise<void> {
+  const res = await q.query<{ role: string | null; is_super_admin: boolean }>(
+    `SELECT role, is_super_admin FROM principal WHERE id = $1`,
+    [actorId],
+  );
+  const who = res.rows[0];
+  if (!who || mayClearEmergency(who.role, who.is_super_admin)) return;
+  throw new ApiError('FORBIDDEN', EMERGENCY_CLEAR_SENTENCE, {
+    code: EMERGENCY_CLEAR_CODE,
+    field: 'fields.Emergency',
   });
 }
 

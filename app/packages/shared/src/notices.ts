@@ -28,6 +28,7 @@ export const NOTICE_TYPES: Record<string, { label: string; group: NoticeGroupId 
   wo_assigned: { label: 'Assigned to you', group: 'work_orders' },
   assignment: { label: 'Assignment Manager', group: 'work_orders' },
   wo_mention: { label: 'Mentions', group: 'work_orders' },
+  wo_message: { label: 'Messages on your work orders', group: 'work_orders' },
   dispatch: { label: 'Dispatch offers', group: 'work_orders' },
   vendor_portal: { label: 'Vendor portal notes', group: 'work_orders' },
   nte_increase: { label: 'NTE increase requests', group: 'approvals' },

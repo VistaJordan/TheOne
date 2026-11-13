@@ -10,7 +10,8 @@
  *                   Cancel / Reopen).
  *   ResponsibleVendorCard, EtaCard   Assign vendor on People ›
  *                   Technicians, Add ETA on CICO.
- *   RecordRail      the right rail: Responsibility · Location · Time · Cost.
+ *   RecordRail      the right rail: Responsibility · Time · Location · Cost
+ *                   (Overview, 2026-11-12: People · Time · Location · Cost).
  *   VisitLocation   on a visit: where the check-in happened, against the
  *                   site's boundary.
  *
@@ -553,10 +554,24 @@ function useMinute(): number {
   return now;
 }
 
-export function RecordRail({ woId, record, loading }: { woId: string; record: WoRecord | undefined; loading: boolean }) {
+export function RecordRail({
+  woId,
+  record,
+  loading,
+  top,
+  responsibility = true,
+}: {
+  woId: string;
+  record: WoRecord | undefined;
+  loading: boolean;
+  /** Drawn first (Overview's People card, 2026-11-12). */
+  top?: ReactNode;
+  /** False on Overview (2026-11-12): no Responsibility card. */
+  responsibility?: boolean;
+}) {
   const now = useMinute();
   const place = useQuery({ queryKey: ['wo-place', woId], queryFn: () => getWoPlace(woId), retry: 0 });
-  if (!record) return <aside className="rail rec-rail"><section className="card"><div className="empty-flat">{loading ? 'Loading…' : 'Could not load the record.'}</div></section></aside>;
+  if (!record) return <aside className="rail rec-rail">{top}<section className="card"><div className="empty-flat">{loading ? 'Loading…' : 'Could not load the record.'}</div></section></aside>;
   const r = record.responsibility;
   const t = record.time;
   const c = record.cost;
@@ -567,6 +582,8 @@ export function RecordRail({ woId, record, loading }: { woId: string; record: Wo
 
   return (
     <aside className="rail rec-rail">
+      {top}
+      {responsibility && (
       <section className="card">
         <div className="card-head"><h2 className="card-title">Responsibility</h2></div>
         <div className="rec-rows">
@@ -582,6 +599,29 @@ export function RecordRail({ woId, record, loading }: { woId: string; record: Wo
           <Row label="AM">{r.am ?? '—'}</Row>
           {record.can.see_vendors && r.technicians.length > 0 && (
             <Row label="Technicians">{r.technicians.map((x) => x.name).join(', ')}</Row>
+          )}
+        </div>
+      </section>
+      )}
+
+      <section className="card">
+        <div className="card-head">
+          <h2 className="card-title grow">Time</h2>
+          {t.on_site_since && <span className="chip chip-accent chip-sm">On site · {live(t.on_site_since)}</span>}
+        </div>
+        <div className="rec-rows">
+          <Row label="Open for"><b className="num">{record.state.completion ? formatMinutes(record.timelog.open_minutes) : live(t.date_received ? `${t.date_received}T00:00:00Z` : t.created_at)}</b></Row>
+          <Row label="In this status">{live(t.status_since)}</Row>
+          <Row label="Received">{dayOnly(t.date_received ?? t.created_at)}</Row>
+          <Row label="Scheduled">{t.scheduled ? dayTime(t.scheduled) : '—'}</Row>
+          <Row label="Due">{dayOnly(t.due_date)}</Row>
+          <Row label="SLA due">{t.sla_due ? dayTime(t.sla_due) : '—'}</Row>
+          <Row label="First check-in">{dayTime(t.first_check_in)}</Row>
+          <Row label="Last check-out">{dayTime(t.last_check_out)}</Row>
+          <Row label="On site">{t.visits === 0 ? 'No visit yet' : `${formatMinutes(t.on_site_minutes)} over ${t.visits} ${t.visits === 1 ? 'visit' : 'visits'}`}</Row>
+          {record.state.eta && <Row label="ETA">{dayTime(record.state.eta.eta_at)}</Row>}
+          {(t.paused_minutes > 0 || record.state.paused) && (
+            <Row label="Paused">{record.state.paused ? `now, for ${live(record.state.paused.at)}` : formatMinutes(t.paused_minutes)}</Row>
           )}
         </div>
       </section>
@@ -606,28 +646,6 @@ export function RecordRail({ woId, record, loading }: { woId: string; record: Wo
             ) : <span className="pf-muted">—</span>}
           </Row>
           {site?.access_notes && <Row label="Getting in">{site.access_notes}</Row>}
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="card-head">
-          <h2 className="card-title grow">Time</h2>
-          {t.on_site_since && <span className="chip chip-accent chip-sm">On site · {live(t.on_site_since)}</span>}
-        </div>
-        <div className="rec-rows">
-          <Row label="Open for"><b className="num">{record.state.completion ? formatMinutes(record.timelog.open_minutes) : live(t.date_received ? `${t.date_received}T00:00:00Z` : t.created_at)}</b></Row>
-          <Row label="In this status">{live(t.status_since)}</Row>
-          <Row label="Received">{dayOnly(t.date_received ?? t.created_at)}</Row>
-          <Row label="Scheduled">{t.scheduled ? dayTime(t.scheduled) : '—'}</Row>
-          <Row label="Due">{dayOnly(t.due_date)}</Row>
-          <Row label="SLA due">{t.sla_due ? dayTime(t.sla_due) : '—'}</Row>
-          <Row label="First check-in">{dayTime(t.first_check_in)}</Row>
-          <Row label="Last check-out">{dayTime(t.last_check_out)}</Row>
-          <Row label="On site">{t.visits === 0 ? 'No visit yet' : `${formatMinutes(t.on_site_minutes)} over ${t.visits} ${t.visits === 1 ? 'visit' : 'visits'}`}</Row>
-          {record.state.eta && <Row label="ETA">{dayTime(record.state.eta.eta_at)}</Row>}
-          {(t.paused_minutes > 0 || record.state.paused) && (
-            <Row label="Paused">{record.state.paused ? `now, for ${live(record.state.paused.at)}` : formatMinutes(t.paused_minutes)}</Row>
-          )}
         </div>
       </section>
 

@@ -21,7 +21,7 @@ import { WoHeader } from '../components/wo/WoHeader';
 import { UpdatesFeed } from '../components/wo/UpdatesFeed';
 import { PhotosCard } from '../components/wo/PhotosCard';
 import { NotificationsTab } from '../components/wo/NotificationsTab';
-import { SoftCloseChecklist } from '../components/wo/SoftCloseChecklist';
+import { OverviewDetailsCard } from '../components/wo/OverviewDetailsCard';
 import { PenaltiesCard } from '../components/wo/ManagerFlags';
 import { MoneyCard } from '../components/wo/MoneyCard';
 import { QuoteBuilder } from './QuoteBuilderPage';
@@ -359,6 +359,7 @@ export function WorkOrderDetailPage() {
           quoteFilled={quoteQuery.data ? quoteSectionsHaveData(quoteQuery.data.quote?.sections) : null}
           quoteStatus={quoteQuery.data ? (quoteQuery.data.quote?.status ?? null) : undefined}
           actions={<RecordActions woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} onNote={setRecordNote} />}
+          folded={tab !== 'overview'}
         />
 
         {/* 0064 · what state the job is in. */}
@@ -397,21 +398,22 @@ export function WorkOrderDetailPage() {
         <div className="col-main">
           {tab === 'overview' && (
             <div role="tabpanel" aria-label="Overview">
-              {/* S5 — what is owed leads the panel: activity is context, a
-                  running clock is an action. */}
+              {/* Elise, 2026-11-12 · the job itself leads: Address, Store,
+                  Description, Sign-Off Link and the dates. People and Time
+                  moved to the right rail; Responsibility and the soft-close
+                  checklist left Overview; Updates & activity is a short,
+                  scrolling card. */}
+              <div className="wo-overview-facts">
+                <OverviewDetailsCard wo={wo} />
+                {showDates && <DatesCard wo={wo} />}
+              </div>
+              {/* S5 — what is owed: a running clock is an action. */}
               <ObligationsCard
                 items={obligations}
                 loading={obligationsQuery.isLoading}
                 error={obligationsQuery.isError}
               />
-              {/* Who is on the job and when it is due, side by side. */}
-              {(showPeople || showDates) && (
-                <div className="wo-overview-facts">
-                  {showPeople && <PeopleCard wo={wo} />}
-                  {showDates && <DatesCard wo={wo} />}
-                </div>
-              )}
-              <section className="card">
+              <section className="card ov-feed">
                 <div className="card-head">
                   <h2 className="card-title">Updates &amp; activity</h2>
                   <span className="card-meta">
@@ -420,12 +422,14 @@ export function WorkOrderDetailPage() {
                       : '—'}
                   </span>
                 </div>
-                <UpdatesFeed
-                  items={feedItems}
-                  statuses={statuses}
-                  loading={feedQuery.isLoading}
-                  error={feedQuery.isError}
-                />
+                <div className="ov-feed-body">
+                  <UpdatesFeed
+                    items={feedItems}
+                    statuses={statuses}
+                    loading={feedQuery.isLoading}
+                    error={feedQuery.isError}
+                  />
+                </div>
                 {/* 0052 · posting moved to the Messages tab; the feed is the read. */}
                 {show('messages') && (
                   <div className="feed-to-messages">
@@ -439,8 +443,6 @@ export function WorkOrderDetailPage() {
 
               {/* Every change of the Assignee: who made it and when. */}
               {showPeople && <AssignmentHistoryCard wo={wo} />}
-
-              <SoftCloseChecklist wo={wo} />
             </div>
           )}
 
@@ -624,7 +626,17 @@ export function WorkOrderDetailPage() {
           )}
         </div>
 
-        {RAIL_TABS.includes(tab) && <RecordRail woId={wo.id} record={recordQuery.data} loading={recordQuery.isLoading} />}
+        {RAIL_TABS.includes(tab) && (
+          <RecordRail
+            woId={wo.id}
+            record={recordQuery.data}
+            loading={recordQuery.isLoading}
+            // 2026-11-12 · on Overview the rail reads People, Time, Location,
+            // Cost; Responsibility stays on the record's other tabs.
+            top={tab === 'overview' && showPeople ? <PeopleCard wo={wo} /> : undefined}
+            responsibility={tab !== 'overview'}
+          />
+        )}
 
         {tab === TECH_HUB_TAB && conversation && (
           <aside className="rail">
