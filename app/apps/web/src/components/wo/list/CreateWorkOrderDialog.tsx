@@ -342,7 +342,19 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     // they stay editable. A part only the ZIP table knows is completed below
     // (and again by the API on create, services/addressFill.ts).
     const parts = key === ADDRESS_KEY ? addressPartValues(parseAddressParts(v)) : {};
-    setValues((cur) => ({ ...cur, ...parts, [key]: v }));
+    setValues((cur) => {
+      // 2026-11-13 (Elise): a trade picked by mistake left its sub category
+      // behind, and the box then only suggested names matching it. Changing
+      // the trade drops a sub category the new trade does not offer, so its
+      // own list shows.
+      const sub = (cur[WO_SUBCATEGORY_KEY] ?? '').trim();
+      const dropSub =
+        key === WO_TRADE_KEY &&
+        v !== (cur[WO_TRADE_KEY] ?? '') &&
+        sub !== '' &&
+        !subcategoriesFor(form.subcategories, v).some((s) => s.toLowerCase() === sub.toLowerCase());
+      return { ...cur, ...parts, ...(dropSub ? { [WO_SUBCATEGORY_KEY]: '' } : {}), [key]: v };
+    });
     setFlagged((f) => {
       if (!f.has(key)) return f;
       const next = new Set(f);

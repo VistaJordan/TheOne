@@ -186,7 +186,7 @@ export function fillableOnCreate(catalogueKey: string): boolean {
 // decline sends the work order back to Waiting for Quote (Yoda: re-quote in a
 // new round). Matched by name, and a status that does not exist is skipped.
 
-export type QuoteEvent = 'sent' | 'client_approved' | 'client_declined' | 'client_declined_bfi';
+export type QuoteEvent = 'sent' | 'client_approved' | 'client_declined' | 'client_declined_bfi' | 'manager_rejected';
 
 export const QUOTE_EVENT_STATUS_NAME: Record<QuoteEvent, string> = {
   sent: 'Waiting for Approval',
@@ -195,6 +195,9 @@ export const QUOTE_EVENT_STATUS_NAME: Record<QuoteEvent, string> = {
   client_declined: 'Waiting for Quote',
   // Bill for incurred only: the job ends at the incurred work.
   client_declined_bfi: 'Done / Incurred',
+  // A manager's Reject with note sends the quote back to draft, and the work
+  // order back to Waiting for Quote (Elise, 2026-11-13).
+  manager_rejected: 'Waiting for Quote',
 };
 
 /** Statuses a quote event may move the work order FROM. A work order that is
@@ -205,6 +208,7 @@ const QUOTE_EVENT_FROM: Record<QuoteEvent, readonly string[]> = {
   client_approved: ['Waiting for Quote', 'Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
   client_declined: ['Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
   client_declined_bfi: ['Waiting for Quote', 'Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
+  manager_rejected: ['Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
 };
 
 /** The status a quote event moves the work order to, or null to leave it. */

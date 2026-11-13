@@ -391,7 +391,7 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: '16. Client NTE 🔴',        label: 'Client NTE',           type: 'currency' },
   { key: '17. Address',              label: 'Address',              type: 'location' },
   { key: '20. Last Update',          label: 'Last Update',          type: 'short_text' },
-  { key: '21. Comp',                 label: 'Comp',                 type: 'dropdown', options: ['AF', 'SFM', 'BKR', 'TPM', 'EDS', 'RF'] },
+  { key: '21. Comp',                 label: 'Comp',                 type: 'dropdown', options: ['SFM', 'BKR', 'RF'] }, // 0134: AF, TPM and EDS closed
   // The visit log's vocabulary (0021): a visit's type is picked when the visit
   // is logged, and this field MIRRORS the latest visit — empty means no visit
   // yet, which feeds the dashboard's "No visit logged" card. Migration 0021

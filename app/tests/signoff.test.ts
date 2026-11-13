@@ -19,10 +19,11 @@ import { renderSignoffSheet, safeText } from '../apps/api/src/lib/signoffPdf';
 describe('signoffLayoutFor', () => {
   it('maps each Comp to its sheet, BKR by client', () => {
     expect(signoffLayoutFor('SFM', 'FrontStreet')).toBe('sfm');
-    expect(signoffLayoutFor('tpm', null)).toBe('tpm');
-    expect(signoffLayoutFor('AF', null)).toBe('af');
     expect(signoffLayoutFor('RF', null)).toBe('rf');
-    expect(signoffLayoutFor('EDS', null)).toBe('eds');
+    // 0134: AF, TPM and EDS are closed — no sheet.
+    expect(signoffLayoutFor('tpm', null)).toBeNull();
+    expect(signoffLayoutFor('AF', null)).toBeNull();
+    expect(signoffLayoutFor('EDS', null)).toBeNull();
     expect(signoffLayoutFor('BKR', 'HFS')).toBe('bkr');
     expect(signoffLayoutFor('BKR', 'EMCOR')).toBe('bkr_emcor');
     expect(signoffLayoutFor('BKR', 'Emcor Facilities')).toBe('bkr_emcor');
@@ -79,7 +80,7 @@ describe('renderSignoffSheet', () => {
   it('survives a missing address and a very long one', async () => {
     const short = await renderSignoffSheet({ layout: 'bkr_emcor', wo_ref: '1084899-00000007', address: null });
     expect((await PDFDocument.load(short)).getPageCount()).toBe(1);
-    const long = await renderSignoffSheet({ layout: 'af', wo_ref: 'R1148243', address: 'x'.repeat(40).split('').join(' ').repeat(6) });
+    const long = await renderSignoffSheet({ layout: 'sfm', wo_ref: 'R1148243', address: 'x'.repeat(40).split('').join(' ').repeat(6) });
     expect((await PDFDocument.load(long)).getPageCount()).toBe(1);
   });
 });

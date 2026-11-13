@@ -3575,6 +3575,36 @@ the author and those @mentioned (they get the mention notice); the AM hears
 only when mentioned. Client notes synced from a portal raise nothing; edits
 raise nothing new.
 
+**UAT list of 2026-11-13** (migration 0134, Elise; `tests/uat-2026-11-13.test.ts`).
+**Notifications** opens on **Unread**; the read-state switch is Unread · All
+(no Read view) and the Mark all read / unread buttons are gone (per-row and
+ticked-row marking stay). **Add work order:** changing the Trade drops a Sub
+Category the new trade does not offer, so its own suggestions show; **Due
+Date** is required (`WO_CREATE_REQUIRED_KEYS`, 0134 — seed in step).
+**Senior OM** sees the Client visible messages but cannot post them (0134:
+`work_orders/comments/client` create false). **Zelle / Cash App**
+(`MANAGER_APPROVAL_METHODS` in shared `paymentApproval.ts`): never
+auto-approved, and only a TL, ATL or AM (or a super admin) approves or
+declines one (`assertManagerForMethod`, 403 `APPROVAL_TIER`, the row's `tier`
+locks the button; the amount bands still apply on top); a processor switching
+an approved request to one of them sends it back to `requested` unless a
+manager approved it. **A manager's Reject with note** on a quote moves the
+work order to Waiting for Quote (`QuoteEvent` `manager_rejected`, from Quote
+Ready / Waiting for Advice / Waiting for Approval; reply's `status_move`).
+**A ticked penalty needs its explanation** (`penaltyDescriptionProblem` in
+shared `managerFlags.ts`, `assertPenaltyDescription`, 400 `VALIDATION` on
+Penalty Description): any Penalties checkbox ticked with a blank Manager
+description is refused by the field editor (not a rule's write), bulk edit
+and the create paths; the Penalties card drafts the ticks and the description
+together with **Save penalties**. **AF, TPM and EDS are closed** (Comp = SFM,
+BKR, RF): 0134 drops them from the `21. Comp` options (seed in step), deletes
+their `client_team`, `client_cico_method` and `price_card` rows, switches off
+their contracts, clears them from `client.billing_entity` and marks inactive
+the clients that had no other entity (24 on the local database: Vixxo, RSM
+LEO, …); the AF / TPM / EDS sign-off sheets and forms left the code
+(`SIGNOFF_LAYOUTS` = sfm, rf, bkr, bkr_emcor). History stays: work orders,
+quotes, invoices and payments carrying those Comps are untouched.
+
 ## Verify
 
 ```

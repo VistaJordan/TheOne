@@ -9,18 +9,17 @@
 import { fieldPermKey } from './permissions';
 
 /** Which drawing the sheet uses. One per billing entity ('21. Comp'), BKR
-    twice because EMCOR's sheet carries a Closeout Number line. */
-export type SignoffLayout = 'sfm' | 'tpm' | 'af' | 'rf' | 'eds' | 'bkr' | 'bkr_emcor';
+    twice because EMCOR's sheet carries a Closeout Number line. AF, TPM and
+    EDS closed on 2026-11-13 (0134): their sheets are gone, and a work order
+    still carrying one of those Comps has no sheet. */
+export type SignoffLayout = 'sfm' | 'rf' | 'bkr' | 'bkr_emcor';
 
-export const SIGNOFF_LAYOUTS: readonly SignoffLayout[] = ['sfm', 'tpm', 'af', 'rf', 'eds', 'bkr', 'bkr_emcor'];
+export const SIGNOFF_LAYOUTS: readonly SignoffLayout[] = ['sfm', 'rf', 'bkr', 'bkr_emcor'];
 
 /** The entity name printed in the text message and shown on the card. */
 export const SIGNOFF_ENTITY_NAMES: Record<SignoffLayout, string> = {
   sfm: 'Seamless Facility Management',
-  tpm: 'Texas Pipe Masters',
-  af: 'Alpha Fixers',
   rf: 'Repairfected',
-  eds: 'Elite Drain Solutions',
   bkr: 'BKR National Facility Services',
   bkr_emcor: 'BKR National Facility Services',
 };
@@ -34,10 +33,7 @@ export function signoffLayoutFor(comp: string | null | undefined, client: string
   const c = (comp ?? '').trim().toUpperCase();
   switch (c) {
     case 'SFM': return 'sfm';
-    case 'TPM': return 'tpm';
-    case 'AF': return 'af';
     case 'RF': return 'rf';
-    case 'EDS': return 'eds';
     case 'BKR': return /emcor/i.test(client ?? '') ? 'bkr_emcor' : 'bkr';
     default: return null;
   }
@@ -47,15 +43,11 @@ export function signoffLayoutFor(comp: string | null | undefined, client: string
  * The Paperform each entity's technicians were texted before The One (read
  * off the ClickUp tasks' '24. Sign-Off Link' values, 2026-11-02). Every form
  * takes the same two prefill keys: `ed9ra` = the client's work order number,
- * `bf7ou` = the service address. Elite Drain Solutions never had one: null,
- * and its work orders offer the PDF only. Add or change a form here.
+ * `bf7ou` = the service address. Add or change a form here.
  */
 export const SIGNOFF_FORM_URLS: Record<SignoffLayout, string | null> = {
   sfm: 'https://seamlessfm.paperform.co/',
-  tpm: 'https://bf8xowiy.paperform.co/',
-  af: 'https://alphafixerssignoff.paperform.co/',
   rf: 'https://repairfected.paperform.co/',
-  eds: null,
   bkr: 'https://bkrform.paperform.co/',
   bkr_emcor: 'https://bkremcor.paperform.co/',
 };
@@ -132,7 +124,7 @@ export interface WoSignoffResponse {
   /** The current sheet, or null when none has been generated yet. */
   signoff: WoSignoff | null;
   /** The entity's Paperform, prefilled with this work order's number and
-      address as they are NOW — null when the entity has no form (EDS), Comp
+      address as they are NOW — null when the entity has no form, Comp
       is unset, or the work order has no number. Needs no drawn sheet. */
   form_link: string | null;
   /** Every form-link share on the work order (a PDF share sits under its

@@ -23,7 +23,7 @@ import { CREATED_AT_SQL } from './activity.js';
 import { ACTOR_NAME_SQL } from '../lib/actorName.js';
 import type { ActivityEntry } from '@theone/shared';
 import { COMPLETION_ASSIGNEE_KEY, SUPPORT_TRAINEE_KEY, EMERGENCY_KEY, ESCALATED_KEY, MONEY_MAX, VALIDATION_CODE, addedAssignees, flagTicked, parseTypedNumber, withinMoneyBound } from '@theone/shared';
-import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNoDisabledAssignees, assertNotHistoryField, checkFieldValue } from './dataRules.js';
+import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNoDisabledAssignees, assertPenaltyDescription, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
 
@@ -126,6 +126,7 @@ export async function validateBagValues(bag: Record<string, unknown>): Promise<R
     if (checked !== null && (jsonKey === 'Client' || jsonKey === 'State' || f.subtype === 'dropdown')) out[jsonKey] = checked;
   }
   assertDateOrder(out, Object.keys(out));
+  assertPenaltyDescription(out, Object.keys(out));
   return out;
 }
 
@@ -318,6 +319,9 @@ export async function updateWorkOrderFields(
     }
     // M2 (Wave D): Received on ≤ Due date, against the bag as this save leaves it.
     assertDateOrder(merged, log.map((c) => c.field.slice('fields.'.length)));
+    // 2026-11-13 (Elise): a ticked penalty needs its explanation. A rule's
+    // or the system's own write is not asked.
+    if (!auto && !opts.system) assertPenaltyDescription(merged, log.map((c) => c.field.slice('fields.'.length)));
     // #22 / M22 (Wave D, D3): a name ADDED to the Assignee seat is an active
     // dispatcher. A rule's own write (auto) and the system's (opts.system)
     // are not a person picking — the rule / schedule is checked where it is saved.

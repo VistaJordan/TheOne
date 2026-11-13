@@ -111,6 +111,8 @@ export const WO_CREATE_REQUIRED_KEYS: readonly string[] = [
   'Trade',
   '35. WO Description',
   'Date-Time Received',
+  // 0134 (Elise, 2026-11-13): the due date is asked at entry.
+  'Due Date',
   '16. Client NTE 🔴',
 ];
 

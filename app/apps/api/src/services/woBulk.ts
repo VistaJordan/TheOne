@@ -25,7 +25,7 @@ import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
-import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
+import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertPenaltyDescription, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
 import { checkWriteValue } from './woFieldValues.js';
 import { assertMoneyNotLocked } from './moneySync.js';
 import { assertGateHoldsFields, doneGateMissingFor, quoteGateMissingFor } from './statusGates.js';
@@ -407,6 +407,7 @@ export async function bulkUpdate(
           // M2 (Wave D): Received on ≤ Due date on the row as the save leaves it.
           try {
             assertDateOrder(merged, changed.map((c) => c.key));
+            assertPenaltyDescription(merged, changed.map((c) => c.key));
           } catch (err) {
             if (err instanceof ApiError) err.message = `${row.wo_number}: ${err.message}`;
             throw err;

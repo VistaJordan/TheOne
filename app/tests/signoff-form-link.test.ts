@@ -28,12 +28,12 @@ describe('the prefilled form link', () => {
       return link ? new URL(link).host : null;
     };
     expect(host('SFM')).toBe('seamlessfm.paperform.co');
-    expect(host('AF')).toBe('alphafixerssignoff.paperform.co');
-    expect(host('TPM')).toBe('bf8xowiy.paperform.co');
     expect(host('RF')).toBe('repairfected.paperform.co');
     expect(host('BKR')).toBe('bkrform.paperform.co');
     expect(host('BKR', 'EMCOR')).toBe('bkremcor.paperform.co');
-    // EDS never had a form; no Comp, no form.
+    // 0134: AF, TPM and EDS are closed; no Comp, no form.
+    expect(host('AF')).toBeNull();
+    expect(host('TPM')).toBeNull();
     expect(host('EDS')).toBeNull();
     expect(signoffFormLink(null, 'WO1', null)).toBeNull();
   });

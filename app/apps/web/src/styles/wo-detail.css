@@ -1327,6 +1327,9 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .mf-note { display: flex; flex-direction: column; gap: 4px; }
 .mf-note-box { width: 100%; min-height: 52px; resize: vertical; font-size: 12.5px; }
 .mf-note-ro { white-space: pre-wrap; color: var(--ink-2); font-size: 12.5px; }
+/* 2026-11-13 · the Penalties card saves its ticks and description together. */
+.mf-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.mf-actions .ife-err { margin-right: auto; }
 
 /* The Payables tab: the Payments fields beside the payment-request ledger. */
 .pay-grid {
@@ -3055,3 +3058,4 @@ a.photo-img.is-real img {
 .ov-feed .fi { padding: 6px 0; }
 .rec-rail .card-people .seats { padding: 4px 14px 12px; }
 .rec-rail .card-people .seat { grid-template-columns: 92px minmax(0, 1fr); gap: 8px; }
+.card-penalties .fld.is-err { border-color: var(--danger); }

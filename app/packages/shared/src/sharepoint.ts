@@ -173,7 +173,7 @@ function segment(template: string, vars: Record<string, string | number | null |
 
 export interface SharePointClientPlace {
   year: number;
-  /** The billing entity (`21. Comp`): AF, SFM, BKR, TPM, EDS, RF. */
+  /** The billing entity (`21. Comp`): SFM, BKR, RF (AF, TPM and EDS closed in 0134). */
   entity: string;
   /** The client's name as written on the client record. */
   client: string;

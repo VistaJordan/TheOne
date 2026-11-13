@@ -76,7 +76,7 @@ describe('the wiring (source pins)', () => {
     const src = read('apps/api/src/services/payments.ts');
     const fn = src.slice(src.indexOf('export async function createPaymentRequest('));
     const body = fn.slice(0, fn.indexOf('export interface PaymentEditInput'));
-    expect(body).toContain('paymentApprovalVerdict(actor.role, input.amount)');
+    expect(body).toContain('paymentApprovalVerdict(actor.role, input.amount, input.method)');
     // 2026-10-28: an overage (past the NTE or the quote) is never auto-approved.
     expect(body).toContain('const autoApproved = !approval.needed && !overage;');
     expect(body).toContain("autoApproved ? 'approved' : 'requested'");

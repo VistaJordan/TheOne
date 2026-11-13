@@ -127,3 +127,24 @@ export function flagTicked(v: unknown): boolean {
   if (v === true || v === 1) return true;
   return typeof v === 'string' && ['true', 'yes', '1', 'y'].includes(v.trim().toLowerCase());
 }
+
+// ── A penalty needs its explanation (Elise, 2026-11-13) ─────────────────────
+//
+// Ticking any Penalties flag (Bad quote, Penalty, Late quote, Missed ETA,
+// Recall) needs the Manager description, and the description cannot be
+// emptied while a flag stays ticked. Asked against the bag as the save leaves
+// it, only when the save touches one of these keys — work orders already on
+// file are not re-checked until someone edits their penalties.
+
+export const PENALTY_DESCRIPTION_KEY = 'Penalty Description';
+export const PENALTY_FLAG_KEYS: readonly string[] = PENALTY_FIELDS.filter((f) => f.type === 'checkbox').map((f) => f.key);
+
+/** The sentence a refused save carries, or null when the save is fine. */
+export function penaltyDescriptionProblem(bag: Record<string, unknown>, touched: readonly string[]): string | null {
+  const keys = [...PENALTY_FLAG_KEYS, PENALTY_DESCRIPTION_KEY];
+  if (!touched.some((k) => keys.includes(k.replace(/^fields\./, '')))) return null;
+  if (!PENALTY_FLAG_KEYS.some((k) => flagTicked(bag[k]))) return null;
+  const d = bag[PENALTY_DESCRIPTION_KEY];
+  if (typeof d === 'string' ? d.trim() !== '' : d != null && String(d).trim() !== '') return null;
+  return 'A penalty needs its explanation: write the Manager description.';
+}

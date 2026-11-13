@@ -2037,7 +2037,7 @@ export async function rejectQuote(
 ): Promise<Quote> {
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.approve');
-  return transition(
+  const quote = await transition(
     taskId,
     ['pending_correction', 'pending_approval', 'approved'],
     'draft',
@@ -2048,6 +2048,9 @@ export async function rejectQuote(
     },
     'rev = rev + 1, approved_by = NULL, submitted_by = NULL, submitted_at = NULL',
   );
+  // 2026-11-13 (Elise): the work order goes back to Waiting for Quote (from
+  // Quote Ready and the approval statuses; a refusal rides on status_move).
+  return withStatusMove(taskId, quote, 'manager_rejected', actor);
 }
 
 /** The statuses the submitter may take a quote back from (2026-11-10). */

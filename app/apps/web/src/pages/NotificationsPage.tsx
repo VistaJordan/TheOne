@@ -8,9 +8,9 @@
 
    Left: every TYPE the person has, grouped (Work orders · Approvals &
    requests · Vendors · Pulse escalations · Other), each with its unread and
-   total count — pick a group or one type to track just that. Top: All ·
-   Unread · Read, a search, and Mark all read / Mark all unread, which act on
-   the type picked (everything when none is). Rows can be ticked to mark
+   total count — pick a group or one type to track just that. Top: Unread
+   (the default) · All and a search (2026-11-13, Elise: no Read view and no
+   Mark all read / unread buttons). Rows can be ticked to mark
    several at once; each row has its own read / unread toggle, and opening one
    marks it read. The filter lives in the URL, so a view can be bookmarked. */
 
@@ -39,10 +39,10 @@ import { TIER_LABEL, tierClass, tierOf } from '../lib/obligations';
 export const NOTICE_INBOX_KEY = ['notices'] as const;
 export const NOTICE_COUNT_KEY = ['notices', 'count'] as const;
 
+/** 2026-11-13 (Elise): Unread is the default view; there is no Read view. */
 const SHOWS: { id: NoticeReadFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
   { id: 'unread', label: 'Unread' },
-  { id: 'read', label: 'Read' },
+  { id: 'all', label: 'All' },
 ];
 
 const BANDS: NoticeDayBand[] = ['Today', 'Yesterday', 'Earlier this week', 'Earlier'];
@@ -53,7 +53,7 @@ export function NotificationsPage() {
   const qc = useQueryClient();
   const now = useNow(30_000);
   const [sp, setSp] = useSearchParams();
-  const show = (SHOWS.find((s) => s.id === sp.get('show'))?.id ?? 'all') as NoticeReadFilter;
+  const show = (SHOWS.find((s) => s.id === sp.get('show'))?.id ?? 'unread') as NoticeReadFilter;
   const type = sp.get('type');
   const group = (NOTICE_GROUPS.find((g) => g.id === sp.get('group'))?.id ?? null) as NoticeGroupId | null;
   const [search, setSearch] = useState('');
@@ -63,7 +63,7 @@ export function NotificationsPage() {
   const setFilter = (next: { show?: NoticeReadFilter; type?: string | null; group?: NoticeGroupId | null }) => {
     const p = new URLSearchParams(sp);
     const put = (k: string, v: string | null | undefined) => (v ? p.set(k, v) : p.delete(k));
-    if ('show' in next) put('show', next.show === 'all' ? null : next.show);
+    if ('show' in next) put('show', next.show === 'unread' ? null : next.show);
     if ('type' in next || 'group' in next) {
       put('type', next.type ?? null);
       put('group', next.group ?? null);
@@ -123,7 +123,6 @@ export function NotificationsPage() {
   });
 
   const scopeLabel = type ? noticeType(type).label : group ? NOTICE_GROUPS.find((g) => g.id === group)!.label : null;
-  const markAll = (read: boolean) => mark.mutate({ read, kinds });
   const selectedItems = items.filter((n) => selected.has(rowKey(n)));
   const toggle = (n: NoticeInboxItem) =>
     setSelected((s) => {
@@ -152,26 +151,6 @@ export function NotificationsPage() {
             <p className="ntf-sub">
               {first ? (unread > 0 ? `${unread.toLocaleString('en-US')} unread of ${total.toLocaleString('en-US')}` : total > 0 ? 'All caught up' : 'Nothing yet') : ' '}
             </p>
-          </div>
-          <div className="ntf-head-actions">
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={scopeUnread === 0 || mark.isPending}
-              onClick={() => markAll(true)}
-              title={scopeLabel ? `Every ${scopeLabel} notification` : 'Every notification'}
-            >
-              <Icon name="check-check" size={12} /> Mark all read
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={scopeTotal - scopeUnread === 0 || mark.isPending}
-              onClick={() => markAll(false)}
-              title={scopeLabel ? `Every ${scopeLabel} notification` : 'Every notification'}
-            >
-              <Icon name="circle" size={12} /> Mark all unread
-            </button>
           </div>
         </div>
 
@@ -250,7 +229,7 @@ export function NotificationsPage() {
             ) : items.length === 0 ? (
               <section className="card">
                 <div className="empty-flat">
-                  {search.trim() ? 'No notification matches the search.' : show === 'unread' ? 'Nothing unread here — all caught up.' : show === 'read' ? 'Nothing read here yet.' : 'No notifications here yet.'}
+                  {search.trim() ? 'No notification matches the search.' : show === 'unread' ? 'Nothing unread here — all caught up.' : 'No notifications here yet.'}
                 </div>
               </section>
             ) : (

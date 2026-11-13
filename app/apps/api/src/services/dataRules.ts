@@ -53,6 +53,8 @@ import {
   mayClearEscalation,
   normalizeUsState,
   normalizeZip,
+  penaltyDescriptionProblem,
+  PENALTY_DESCRIPTION_KEY,
 } from '@theone/shared';
 import { query, type Queryable } from '../db.js';
 import { ApiError } from '../errors.js';
@@ -331,6 +333,14 @@ export async function checkFieldValue(f: ResolvedField, value: unknown, q: Query
 
 /** Received on ≤ Due date, asked only when the patch touches one of the two
     (a bag loaded before the rule keeps what it has until someone edits it). */
+/** 2026-11-13 (Elise): a ticked penalty needs the Manager description —
+    against the bag as the save leaves it, only when the save touches the
+    Penalties keys. 400 VALIDATION on the description. */
+export function assertPenaltyDescription(merged: Record<string, unknown>, touched: readonly string[]): void {
+  const p = penaltyDescriptionProblem(merged, touched);
+  if (p) throw new ApiError('BAD_REQUEST', p, { code: VALIDATION_CODE, field: `fields.${PENALTY_DESCRIPTION_KEY}` });
+}
+
 export function assertDateOrder(merged: Record<string, unknown>, touched: readonly string[]): void {
   if (!touched.includes(RECEIVED_ON_KEY) && !touched.includes(DUE_DATE_KEY)) return;
   const p = dateOrderProblem(merged[RECEIVED_ON_KEY], merged[DUE_DATE_KEY]);

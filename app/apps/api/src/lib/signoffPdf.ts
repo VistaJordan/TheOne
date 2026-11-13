@@ -49,20 +49,10 @@ export const BRANDS: Record<SignoffLayout, Brand> = {
     labelColor: hex('#003cff'), labelSize: 17, valueColor: hex('#000000'), valueSize: 12, valueBold: false,
     labels: { ref: 'Job Work Order Number:', address: 'Location:', manager: 'Name of Manager on Site:', signature: 'Signature of Manager on Site:' },
   },
-  tpm: {
-    title: 'Signoff Sheet', titleSize: 26, titleColor: hex('#fa833f'),
-    labelColor: hex('#fa833f'), labelSize: 17, valueColor: hex('#040404'), valueSize: 12, valueBold: false,
-    labels: { ref: 'Job Work Order Number:', address: 'Location:', manager: 'Name of Manager on Site:', signature: 'Signature of Manager on Site:' },
-  },
   rf: {
     title: 'Signoff Sheet', titleSize: 26, titleColor: hex('#51b57e'),
     labelColor: hex('#53b880'), labelSize: 17, valueColor: hex('#040404'), valueSize: 12, valueBold: false,
     labels: { ref: 'Job Work Order Number:', address: 'Location:', manager: 'Name of Manager on Site:', signature: 'Signature of Manager on Site:' },
-  },
-  eds: {
-    title: 'Sign-Off Submission', titleSize: 16, titleColor: hex('#e57620'),
-    labelColor: hex('#e57620'), labelSize: 14, valueColor: INK_SOFT, valueSize: 11, valueBold: true,
-    labels: { ref: 'Work Order Number:', address: 'Address/Location:', manager: 'Manager On-site Name:', signature: 'Manager On-Site Signature:' },
   },
   bkr: {
     title: 'Signoff Sheet', titleSize: 26, titleColor: INK,
@@ -74,14 +64,7 @@ export const BRANDS: Record<SignoffLayout, Brand> = {
     labelColor: INK, labelSize: 14, valueColor: hex('#e3244b'), valueSize: 11, valueBold: false,
     labels: { ref: 'Work Order #:', address: 'Service Address:', manager: 'Store Manager Name:', closeout: 'Closeout Number:', signature: 'Store Manager Signature:' },
   },
-  af: {
-    title: 'Job Completion Slip', titleSize: 26, titleColor: INK_SOFT,
-    labelColor: INK_SOFT, labelSize: 13, valueColor: INK_SOFT, valueSize: 11, valueBold: false,
-    labels: { ref: 'Job Number:', address: 'Store Location:', manager: 'Manager on Duty:', signature: 'Signature:' },
-  },
 };
-
-const AF_FOOTER = 'For questions or feedback, please call us on (530) 264-8213, or send us an email on info@alphafixers.com';
 
 // ── Text helpers ─────────────────────────────────────────────────────────────
 
@@ -200,7 +183,7 @@ class Sheet {
   gap(n: number): void { this.y += n; }
 }
 
-/** One label / value pair in the stacked style five of the brands share. */
+/** One label / value pair in the stacked style every brand uses. */
 function field(s: Sheet, b: Brand, label: string, value: string | null, opts: { line?: number } = {}): void {
   s.text(label, s.bold, b.labelSize, b.labelColor);
   s.gap(2);
@@ -230,45 +213,6 @@ async function stacked(s: Sheet, layout: SignoffLayout, data: SignoffSheetData, 
   s.signatureBox(footerH ? footerH + 10 : 0);
 }
 
-/** Alpha Fixers' slip is a bordered table rather than a stack. */
-async function alphaFixers(s: Sheet, data: SignoffSheetData): Promise<void> {
-  const b = BRANDS.af;
-  await s.band('af_header');
-  s.gap(30);
-  s.centered(b.title, s.bold, b.titleSize, b.titleColor);
-  s.gap(26);
-
-  const labelW = 200;
-  const pad = 12;
-  const rows: { label: string; value: string | null; height: number }[] = [
-    { label: b.labels.ref, value: safeText(data.wo_ref) || '-', height: 34 },
-    { label: b.labels.address, value: safeText(data.address) || null, height: 34 },
-    { label: b.labels.manager, value: null, height: 34 },
-    { label: b.labels.signature, value: null, height: 230 },
-  ];
-  const valueW = CONTENT_W - labelW - pad * 2;
-  for (const r of rows) {
-    const lines = r.value ? wrap(r.value, s.regular, b.valueSize, valueW) : [];
-    const h = Math.max(r.height, lines.length * b.valueSize * 1.3 + pad * 2);
-    const top = PAGE_H - s.y;
-    s.page.drawRectangle({ x: MARGIN, y: top - h, width: labelW, height: h, borderColor: BOX, borderWidth: 0.75, color: rgb(1, 1, 1) });
-    s.page.drawRectangle({ x: MARGIN + labelW, y: top - h, width: CONTENT_W - labelW, height: h, borderColor: BOX, borderWidth: 0.75, color: rgb(1, 1, 1) });
-    // Labels sit on the row's first line, except the signature's which is
-    // vertically centred like the sample.
-    const labelY = r.value === null && r.height > 100 ? top - h / 2 - b.labelSize / 2 : top - pad - b.labelSize;
-    s.page.drawText(r.label, { x: MARGIN + pad, y: labelY, size: b.labelSize, font: s.regular, color: b.labelColor });
-    let ly = top - pad - b.valueSize;
-    for (const line of lines) {
-      s.page.drawText(line, { x: MARGIN + labelW + pad, y: ly, size: b.valueSize, font: s.regular, color: b.valueColor });
-      ly -= b.valueSize * 1.3;
-    }
-    s.y += h;
-  }
-
-  s.gap(40);
-  s.text(AF_FOOTER, s.regular, 12, INK_SOFT);
-}
-
 /** The blank sheet, as PDF bytes. One page, always. */
 export async function renderSignoffSheet(data: SignoffSheetData): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -281,12 +225,9 @@ export async function renderSignoffSheet(data: SignoffSheetData): Promise<Uint8A
 
   switch (data.layout) {
     case 'sfm': await stacked(s, 'sfm', data, 'sfm_header', 'sfm_footer'); break;
-    case 'tpm': await stacked(s, 'tpm', data, 'tpm_header', 'tpm_footer'); break;
     case 'rf': await stacked(s, 'rf', data, 'rf_header', null); break;
-    case 'eds': await stacked(s, 'eds', data, 'eds_logo', null, 150); break;
     case 'bkr': await stacked(s, 'bkr', data, 'bkr_logo', 'bkr_footer', 140); break;
     case 'bkr_emcor': await stacked(s, 'bkr_emcor', data, 'bkr_logo', 'bkr_footer', 140); break;
-    case 'af': await alphaFixers(s, data); break;
   }
   return doc.save();
 }

@@ -75,7 +75,7 @@ export function salesOwnerFromTeam(
 
 export interface ClientTeam {
   id: string;
-  /** The billing entity, a `21. Comp` value (SFM, BKR, AF, TPM, RF, EDS). */
+  /** The billing entity, a `21. Comp` value (SFM, BKR, RF; AF, TPM and EDS closed in 0134). */
   billing_entity: string;
   tl: string | null;
   atl: string | null;

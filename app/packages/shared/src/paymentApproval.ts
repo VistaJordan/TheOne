@@ -32,10 +32,35 @@ export interface PaymentApprovalVerdict {
   reason: string;
 }
 
+// ── Zelle and Cash App always ask a manager (Elise, 2026-11-13) ─────────────
+//
+// A payment made by Zelle or Cash App is never approved as it is raised,
+// whatever the amount, and only a TL, an ATL or an AM (or a super admin) may
+// approve or decline it. The amount bands still apply on top: $3,000 and over
+// stays the AM's. A processor who switches an approved request to one of these
+// methods sends it back to the queue unless a manager approved it.
+
+export const MANAGER_APPROVAL_METHODS: readonly string[] = ['zelle', 'cashapp'];
+export const MANAGER_APPROVAL_ROLES: readonly string[] = ['tl', 'atl', 'am'];
+export const MANAGER_METHOD_TIER_LABEL = 'Zelle / Cash App — TL, ATL or AM';
+
+export function needsManagerForMethod(method: string | null | undefined): boolean {
+  return MANAGER_APPROVAL_METHODS.includes((method ?? '').trim().toLowerCase());
+}
+
+/** May this person approve (or decline) a Zelle / Cash App payment? */
+export function mayApproveManagerMethod(role: string | null | undefined, isSuperAdmin: boolean): boolean {
+  return isSuperAdmin || MANAGER_APPROVAL_ROLES.includes(role ?? '');
+}
+
 export function paymentApprovalVerdict(
   _requesterRole: string | null | undefined,
   amount: number,
+  method?: string | null,
 ): PaymentApprovalVerdict {
+  if (needsManagerForMethod(method)) {
+    return { needed: true, reason: 'Zelle and Cash App payments always need a manager’s approval' };
+  }
   if (Number.isFinite(amount) && amount >= 0 && amount < APPROVAL_NOT_NEEDED_UNDER) {
     return { needed: false, reason: `Under $${APPROVAL_NOT_NEEDED_UNDER} — approved as requested` };
   }

@@ -163,7 +163,7 @@ async function present(row: SheetRow, f: Facts): Promise<WoSignoff> {
   return {
     id: row.id,
     layout: row.layout,
-    entity_name: SIGNOFF_ENTITY_NAMES[row.layout],
+    entity_name: SIGNOFF_ENTITY_NAMES[row.layout] ?? row.entity,
     wo_ref: row.wo_ref,
     address: row.address,
     created_by: row.created_by_id ? { id: row.created_by_id, name: row.created_by_name ?? 'Unknown' } : null,
@@ -431,7 +431,7 @@ export async function shareSignoff(taskId: string, input: SignoffShareInput, act
   } else {
     row = await currentSheet({ query }, taskId);
     if (!row) row = await generate(taskId, actor.id, 'button');
-    text = signoffMessageText(SIGNOFF_ENTITY_NAMES[row.layout], row.wo_ref, row.address, publicUrl(row.token));
+    text = signoffMessageText(SIGNOFF_ENTITY_NAMES[row.layout] ?? row.entity, row.wo_ref, row.address, publicUrl(row.token));
   }
 
   let channel: 'quo_api' | 'quo_app';

@@ -66,6 +66,7 @@ import type {
   ApprovalTier,
 } from '@theone/shared';
 import {
+  APPROVAL_TIER_CODE,
   NTE_APPROVAL_REASON_CODE,
   NTE_OVERRIDE_REQUIRED_CODE,
   NTE_PAYMENT_APPROVER_CODE,
@@ -83,6 +84,9 @@ import {
   overNte,
   overQuoteReason,
   paymentApprovalVerdict,
+  needsManagerForMethod,
+  mayApproveManagerMethod,
+  MANAGER_METHOD_TIER_LABEL,
   paymentLockReason,
   paymentOverage,
   paymentOverageSentence,
@@ -344,6 +348,32 @@ interface MapOpts {
   tiers?: ApprovalTier[];
 }
 
+/** The band the Approve button locks on, plus (2026-11-13) the Zelle /
+    Cash App rule: only a TL, ATL or AM approves one, whatever the amount. */
+function paymentTierSummary(
+  tiers: ApprovalTier[],
+  amount: number,
+  method: string | null | undefined,
+  viewer: ActingPrincipal,
+): { label: string; allowed: boolean } | null {
+  const band = tierSummary(tiers, 'payment', amount, viewer);
+  if (!needsManagerForMethod(method)) return band;
+  const manager = mayApproveManagerMethod(viewer.role, viewer.isSuperAdmin);
+  if (!manager) return { label: MANAGER_METHOD_TIER_LABEL, allowed: false };
+  return band ?? { label: MANAGER_METHOD_TIER_LABEL, allowed: true };
+}
+
+/** 2026-11-13 (Elise): a Zelle / Cash App payment is a TL, ATL or AM's to
+    approve or decline, at any amount (the amount band still applies). */
+function assertManagerForMethod(row: PaymentRow, actor: ActingPrincipal, what: string): void {
+  if (!needsManagerForMethod(row.method) || mayApproveManagerMethod(actor.role, actor.isSuperAdmin)) return;
+  throw forbidden(`${what} paid by Zelle or Cash App needs a TL, an ATL or an AM`, {
+    code: APPROVAL_TIER_CODE,
+    tier: MANAGER_METHOD_TIER_LABEL,
+    roles: ['tl', 'atl', 'am'],
+  });
+}
+
 async function withTiers(opts: MapOpts): Promise<MapOpts> {
   if (!opts.viewer || opts.tiers) return opts;
   return { ...opts, tiers: await listApprovalTiers() };
@@ -407,7 +437,7 @@ function mapPayment(
     approve_hold: moneyHoldOf(r, quotes, true),
     tier:
       opts.viewer && opts.tiers
-        ? tierSummary(opts.tiers, 'payment', Number(r.amount ?? 0), opts.viewer)
+        ? paymentTierSummary(opts.tiers, Number(r.amount ?? 0), r.method, opts.viewer)
         : null,
     auto_approved: r.auto_approved === true,
     overage_reason: r.overage_reason ?? null,
@@ -1019,7 +1049,7 @@ export async function createPaymentRequest(
   // 0090: who has to say yes. A dispatcher's request under $500 is cleared
   // for AP as it is raised; a probation dispatcher's, and anyone's at $500
   // or over, waits in the queue for the band's approver.
-  const approval = paymentApprovalVerdict(actor.role, input.amount);
+  const approval = paymentApprovalVerdict(actor.role, input.amount, input.method);
   // Elise, 2026-10-28: past the NTE or the approved quote the request is
   // still filed — with the requester's reason — and always waits in the
   // queue: the hold raised below is what a manager decides first.
@@ -1544,6 +1574,7 @@ export async function approvePaymentRequest(
     // 0090 (rule 6.2.3): the amount's band says which roles may approve it —
     // $500–3,000 TL / ATL, $3,000 and over AM (Admin › Settings).
     await assertTierAllows('payment', amount, actor, 'Approving a payment');
+    assertManagerForMethod(row, actor, 'Approving a payment');
     await assertPaymentNotHeld(row, actor, 'Approving this payment');
     return setStatus(row, ['requested'], 'approved', 'payment_approved', actor,
       'approved_by = $3, approved_at = now()', [actor.id],
@@ -1622,6 +1653,7 @@ export async function rejectPaymentRequest(id: string, reason: string, actor: Ac
   const facts = await nteFacts(row);
   if (!facts.aboveNte) {
     await assertTierAllows('payment', facts.amount, actor, 'Declining a payment');
+    assertManagerForMethod(row, actor, 'Declining a payment');
   } else if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin)) {
     throw forbidden('This payment is above the client NTE — an Account Manager declines it', {
       code: NTE_PAYMENT_APPROVER_CODE,
@@ -1660,12 +1692,28 @@ export async function convertPaymentMethod(id: string, method: PaymentMethod, ac
   assertCanProcess(actor, 'Changing the payment method');
   const row = await loadRow(id);
   if (row.status === 'paid') throw badRequest('A paid payment cannot change method');
+  // 2026-11-13 (Elise): switching an approved request to Zelle / Cash App
+  // sends it back for a manager's yes unless a TL, ATL or AM gave it.
+  let backToQueue = false;
+  if (row.status === 'approved' && needsManagerForMethod(method) && !needsManagerForMethod(row.method)) {
+    const approver = row.approved_by_id
+      ? (await query<{ role: string | null; is_super_admin: boolean }>(
+          `SELECT role, is_super_admin FROM principal WHERE id = $1`, [row.approved_by_id])).rows[0]
+      : undefined;
+    backToQueue = !approver || !mayApproveManagerMethod(approver.role, approver.is_super_admin === true);
+  }
   await withTransaction(async (tx) => {
-    await tx.query(`UPDATE payment_request SET method = $2, payment_address = NULL WHERE id = $1`, [id, method]);
+    await tx.query(
+      backToQueue
+        ? `UPDATE payment_request SET method = $2, payment_address = NULL, status = 'requested', approved_by = NULL, approved_at = NULL, auto_approved = false WHERE id = $1`
+        : `UPDATE payment_request SET method = $2, payment_address = NULL WHERE id = $1`,
+      [id, method],
+    );
     if (row.vendor_id) await recomputeNeedsW9(tx, row.vendor_id);
-    await logPayment(tx, actor.id, row.task_id, 'payment_method_changed', { payment_request_id: id, method: row.method }, {
+    await logPayment(tx, actor.id, row.task_id, 'payment_method_changed', { payment_request_id: id, method: row.method, status: row.status }, {
       payment_request_id: id,
       method,
+      ...(backToQueue ? { status: 'requested', reason: 'Zelle and Cash App payments need a manager’s approval' } : {}),
     });
   });
   return mapOne(await loadRow(id), { fullAddress: true, viewer: actor });
