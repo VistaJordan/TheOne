@@ -33,6 +33,7 @@ import {
   VISIT_HIDDEN_KEYS,
   VISIT_OWNED_KEYS,
   fieldPermKey,
+  isViewLevelField,
   type ActivityEntry,
   type WoFieldDescriptor,
 } from '@theone/shared';
@@ -240,7 +241,9 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
   // Controls that save on change (checkboxes, Comp): each follows its OWN
   // field's grant, as the API does, so a view-only field cannot be clicked at
   // all; and only the one being saved locks, so the rest of the tab holds still.
-  const mayWrite = (f: WoFieldDescriptor) => canEdit && can(fieldPermKey(f.key), 'edit');
+  // 0133: the header flags and QC Date need only `work_orders` view, as on the API.
+  const baseFor = (key: string) => canEdit || (isViewLevelField(key) && can('work_orders', 'view'));
+  const mayWrite = (f: WoFieldDescriptor) => baseFor(f.key) && can(fieldPermKey(f.key), 'edit');
   const savingField = (f: WoFieldDescriptor) => save.isPending && save.variables?.key === f.key;
 
   const startEdit = (f: WoFieldDescriptor) => {
@@ -277,7 +280,7 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
       f.subtype === 'long_text' && raw !== null && raw !== undefined && String(raw) !== '';
     // The sign-off link is written by the system (0070): no pencil, like the CICO tab.
     const canEditField =
-      canEdit && can(fieldPermKey(f.key), 'edit') && !readOnly && f.type !== 'boolean' && f.key !== SIGNOFF_FIELD_KEY;
+      baseFor(f.key) && can(fieldPermKey(f.key), 'edit') && !readOnly && f.type !== 'boolean' && f.key !== SIGNOFF_FIELD_KEY;
     const editable = canEditField && !isLongText;
     // The Cost row goes red when it is above the client NTE (same rule as the
     // Finances card and the list column).

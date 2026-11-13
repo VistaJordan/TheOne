@@ -3544,7 +3544,13 @@ Add work order asks **Is this WO a recall?** (`Is Recall`, checkbox); ticked,
 work orders on file and checked by the API (400 `ORIGINAL_WO_NOT_FOUND`,
 stored in the record's spelling). Not the manager's `Recall` penalty tick
 (0094). seed.ts and `WO_CREATE_DEFAULT_KEYS` carry both — keep in step.
-Deferred: QC Date limited to the QC person (no QC role yet).
+**QC Date is the QC person's** (migration 0133, Elise 2026-11-13,
+`tests/qc-date-role.test.ts`): role `qc` sees every work order (`work_orders`
+view only; the money sections hidden, no status moves, no other section) and
+edits QC Date; 0133 sets QC Date edit false for every other role (super admins
+always may). A save of only QC Date needs `work_orders` view
+(`onlyViewLevelFields` / `isViewLevelField` in shared `managerFlags.ts`, the
+0120 header-flag pattern, mirrored by `useCanEditField` and All fields).
 
 **Overview, the header fold, Emergency, message notices** (Elise,
 2026-11-12, no migration; `tests/wo-overview-notices-2026-11-12.test.ts`).

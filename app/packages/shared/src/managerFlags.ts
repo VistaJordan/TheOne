@@ -81,6 +81,30 @@ export function onlyHeaderFlags(catalogueKeys: readonly string[]): boolean {
   );
 }
 
+// ── QC Date is the QC person's (Elise, 2026-11-13, migration 0133) ──────────
+//
+// Role `qc` sees the work orders (view, no edit) and fills QC Date; 0133 sets
+// QC Date edit false for every other role (super admins always may). Like the
+// header flags, a save of ONLY QC-owned fields needs `work_orders` view — the
+// field's own grant decides who writes it.
+
+export const QC_ROLE_CODE = 'qc';
+export const QC_DATE_KEY = 'QC Date';
+export const QC_OWNED_FIELD_KEYS = [QC_DATE_KEY] as const;
+
+/** Fields a person with only `work_orders` view may still write when the
+    field's own grant allows it: the header flags and the QC-owned fields. */
+export const VIEW_LEVEL_FIELD_KEYS: readonly string[] = [...HEADER_FLAG_KEYS, ...QC_OWNED_FIELD_KEYS];
+
+export function isViewLevelField(catalogueKey: string): boolean {
+  return VIEW_LEVEL_FIELD_KEYS.includes(catalogueKey.replace(/^fields\./, ''));
+}
+
+/** True when every catalogue key of a save is a view-level field. */
+export function onlyViewLevelFields(catalogueKeys: readonly string[]): boolean {
+  return catalogueKeys.length > 0 && catalogueKeys.every(isViewLevelField);
+}
+
 export const ESCALATION_CLEAR_ROLES = ['tl', 'atl', 'am', 'admin'] as const;
 export const ESCALATION_CLEAR_CODE = 'ESCALATION_CLEAR_FORBIDDEN';
 export const ESCALATION_CLEAR_SENTENCE = 'Only a TL, ATL or AM can clear an escalation.';

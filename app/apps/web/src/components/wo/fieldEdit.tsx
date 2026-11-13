@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ADDRESS_ZIP_KEY, COMPUTED_KEYS, HISTORY_FIELD_KEYS, clientOptionsForComp, numericInputValue, zipInputValue, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, type WoFieldDescriptor } from '@theone/shared';
+import { ADDRESS_ZIP_KEY, COMPUTED_KEYS, HISTORY_FIELD_KEYS, clientOptionsForComp, numericInputValue, zipInputValue, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, isViewLevelField, type WoFieldDescriptor } from '@theone/shared';
 import {
   ApiRequestError,
   getWoFields,
@@ -126,7 +126,9 @@ export function useCanEditFields(): boolean {
 export function useCanEditField(fieldKey: string): boolean {
   const { can } = useAuth();
   const key = fieldPermKey(fieldKey);
-  return can('work_orders', 'edit') && can(key, 'view') && can(key, 'edit');
+  // 0133: the header flags and QC Date need only `work_orders` view (same rule as the server).
+  const base = can('work_orders', 'edit') || (isViewLevelField(fieldKey) && can('work_orders', 'view'));
+  return base && can(key, 'view') && can(key, 'edit');
 }
 
 /** One field-save mutation. Invalidates broadly (['work-orders'] covers the

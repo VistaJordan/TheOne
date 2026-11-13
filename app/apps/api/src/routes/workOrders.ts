@@ -29,6 +29,7 @@ import {
   REOPEN_REQUIRED_MESSAGE,
   isCancelStatusName,
   onlyHeaderFlags,
+  onlyViewLevelFields,
   permAllows,
   statusMoveNeedsNoApproval,
   statusApprovalNeedsNote,
@@ -290,6 +291,8 @@ function requireFieldEdit(req: FastifyRequest, catalogueKeys: string[]): string 
   // 2026-11-03 (0120): the header's Emergency / Escalation flags are
   // everyone's — a save of only those needs view; the field grants still apply.
   if (onlyHeaderFlags(catalogueKeys)) requirePerm(p, 'work_orders', 'view', 'You cannot view work orders');
+  // 0133: QC Date likewise — the QC role has view only; the field grant decides.
+  else if (onlyViewLevelFields(catalogueKeys)) requirePerm(p, 'work_orders', 'view', 'You cannot view work orders');
   else requirePerm(p, 'work_orders', 'edit', 'You cannot edit work orders');
   assertFieldWrites(allow, catalogueKeys);
   return p.id;
