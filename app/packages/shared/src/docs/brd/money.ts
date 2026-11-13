@@ -15,7 +15,7 @@ export const MONEY_PART: DocPart = {
       where: 'Sidebar › Quotes; a work order\'s Quotes tab (the builder in place); the quote builder; /work-orders/:wo/quote/print.',
       purpose: 'One quote per work order, built from the technician\'s report, priced from the client contract, submitted, approved and sent, then printed.',
       value: 'Quotes are consistent across dispatchers, priced from the contract rather than memory, approved by the right role, numbered, and never re-priced after approval.',
-      users: ['Senior OM', 'Team Lead', 'Assistant TL', 'Account Manager'],
+      users: ['Senior OM', 'Team Lead', 'Associate Team Lead', 'Account Manager'],
       features: [
         {
           name: 'Creating the quote',
@@ -117,7 +117,7 @@ export const MONEY_PART: DocPart = {
       where: 'Sidebar › Payments; on a work order’s Finances tab the Payment requests card (with Request payment) sits beside the money card — under Payables when the person sees Payables but not the money card — and Vendor bills under Payables.',
       purpose: 'The payables queue at Yoda parity (0076 — OBI is the payment tool): a request per technician payment, approved, paid by AP and rolled into the work order\'s Cost; the vendor\'s own bills and credit notes beside it.',
       value: 'Technicians are paid fast and traceably, which keeps good technicians; the work order\'s Cost is the sum of what was actually paid, not a typed guess.',
-      users: ['OM (dispatcher)', 'Team Lead', 'Assistant TL', 'Account Manager', 'Accounts Payable'],
+      users: ['OM (dispatcher)', 'Team Lead', 'Associate Team Lead', 'Account Manager', 'Accounts Payable'],
       features: [
         {
           name: 'Requesting a payment',

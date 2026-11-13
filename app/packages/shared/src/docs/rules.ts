@@ -85,7 +85,7 @@ export const BUSINESS_RULES: DocRule[] = [
 
   // ── 7. Queues ──
   { id: '7.1.1', title: 'Pending acceptance', statement: 'A work order the Ecotrak sync or the CSV import created without an assignee waits for a manager to accept and assign it, or reject it.', enforced: 'wo_acceptance tasks raised after the creating commit; Incoming Work Orders page.', state: 'built', note: 'The Add work order form, the drafts and planned maintenance hand over already assigned and raise none.' },
-  { id: '7.1.2', title: 'Who accepts', statement: 'Team Lead, Assistant TL, Account Manager and Admin decide acceptances.', enforced: 'approvals/intake approve (0036).', state: 'built' },
+  { id: '7.1.2', title: 'Who accepts', statement: 'Team Lead, Associate Team Lead, Account Manager and Admin decide acceptances.', enforced: 'approvals/intake approve (0036).', state: 'built' },
   { id: '7.1.3', title: 'Accept names the dispatcher', statement: 'Accepting requires an active person on file as assignee; the system suggests nobody yet.', enforced: 'decide() requires assignee; Who\'s available? panel assists.', state: 'partial', note: 'The auto-assign suggester is not built; availability is shown instead.' },
   { id: '7.1.4', title: 'Accepted means in the dispatcher\'s list', statement: 'The assignment written on accept is what the scope rule keys on, so the work order appears in that dispatcher\'s book.', enforced: 'updateWorkOrderFields on accept; woScopeSql.', state: 'built' },
   { id: '7.2.1', title: 'One row shape', statement: 'Every kind of approval reads the same way in the inbox: what waits, on which work order, since when, for whom.', enforced: 'ApprovalsPage row component.', state: 'built' },

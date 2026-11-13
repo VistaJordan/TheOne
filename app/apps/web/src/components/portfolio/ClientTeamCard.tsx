@@ -1,5 +1,5 @@
 /* 0096 · Clients › a client › Account team: who leads this client under each
-   of our companies (Comp) — Team Lead, Assistant Team Lead, salesperson,
+   of our companies (Comp) — Team Lead, Associate Team Lead, salesperson,
    Account Manager. "Add work order" fills AM, TL and ATL from the row that
    matches its Client and Comp. Names are kept as typed (the team sheet uses
    first names; "House" = no salesperson); a name that matches one active
@@ -18,12 +18,12 @@ import { SalesSelect, salespeopleOf } from './ClientTeamCells';
 type Draft = Record<'billing_entity' | 'tl' | 'atl' | 'sales' | 'am', string>;
 const COLS: { key: Exclude<keyof Draft, 'billing_entity'>; label: string }[] = [
   { key: 'tl', label: 'Team Lead' },
-  { key: 'atl', label: 'Assistant TL' },
+  { key: 'atl', label: 'Associate Team Lead' },
   { key: 'sales', label: 'Sales' },
   { key: 'am', label: 'AM' },
 ];
 /** The role a column's name should hold, as the hint names it. */
-const seatLabel = (k: string): string => (k === 'am' ? 'AM' : k === 'tl' ? 'Team Lead' : k === 'atl' ? 'Assistant TL' : 'account');
+const seatLabel = (k: string): string => (k === 'am' ? 'AM' : k === 'tl' ? 'Team Lead' : k === 'atl' ? 'Associate Team Lead' : 'account');
 const toDraft =(t: ClientTeam | null): Draft => ({
   billing_entity: t?.billing_entity ?? '',
   tl: t?.tl ?? '',

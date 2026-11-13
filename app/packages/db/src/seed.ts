@@ -477,7 +477,7 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: 'State',                    label: 'State',                type: 'dropdown', options: US_STATES },
   { key: 'Store',                    label: 'Store',                type: 'short_text' },
   { key: 'TL',                       label: 'TL',                   type: 'users' },
-  // 0096 · the account team's Assistant Team Lead, filled on Add work order
+  // 0096 · the account team's Associate Team Lead, filled on Add work order
   // from Clients › Account team. Kept in step with the migration.
   { key: 'ATL',                      label: 'ATL',                  type: 'users' },
   // 0124 · Support Trainee (an OM Under Probation, People), QC Notes (admins

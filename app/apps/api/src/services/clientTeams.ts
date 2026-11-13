@@ -1,5 +1,5 @@
 // 0096 · The account team per client and billing entity: Team Lead,
-// Assistant Team Lead, salesperson, Account Manager — one row per (client,
+// Associate Team Lead, salesperson, Account Manager — one row per (client,
 // Comp), edited on Clients › a client › Account team. "Add work order" reads
 // every team (`teamsForForm`) and fills AM / TL / ATL from the one matching
 // its Client and Comp; `createWorkOrder` fills the same three again when the

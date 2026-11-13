@@ -25,7 +25,7 @@ export const LIFECYCLE: LifecycleModel = {
       phases: ['Intake'],
       summary:
         'A work order arrives from a client system (Ecotrak today), a CSV import, a planned-maintenance schedule, an OP Admin draft or the Add work order form. One created by the Ecotrak sync or the import without an assignee waits on Incoming Work Orders until a manager accepts it and names a dispatcher; the Ready to Assign gate holds it back until the 13 intake fields are filled. Drafts, schedules and the form hand over already assigned.',
-      who: ['Team Lead', 'Assistant TL', 'Account Manager', 'Operations Admin'],
+      who: ['Team Lead', 'Associate Team Lead', 'Account Manager', 'Operations Admin'],
     },
     {
       key: 'assessment',
@@ -41,7 +41,7 @@ export const LIFECYCLE: LifecycleModel = {
       phases: ['Quote'],
       summary:
         'The quote is built (by hand, or drafted by AI from a Quo call), priced from the client contract, submitted for approval and approved by a manager. Quote Ready cannot be entered with an empty quote.',
-      who: ['Senior OM', 'Team Lead', 'Assistant TL', 'Account Manager'],
+      who: ['Senior OM', 'Team Lead', 'Associate Team Lead', 'Account Manager'],
     },
     {
       key: 'approval',
@@ -81,7 +81,7 @@ export const LIFECYCLE: LifecycleModel = {
       phases: [],
       summary:
         'Cancelled / Postponed is reached by rejecting an incoming work order, by the Cancel work order button (a reason is required) or by a client rejection. Reopen undoes a cancellation.',
-      who: ['Team Lead', 'Assistant TL', 'Account Manager', 'Admin'],
+      who: ['Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin'],
     },
   ],
 

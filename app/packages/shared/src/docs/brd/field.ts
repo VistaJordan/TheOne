@@ -14,7 +14,7 @@ export const FIELD_PART: DocPart = {
       where: 'Sidebar › Vendors: List · Board · Tasks · Alerts · Data quality · Performance · Coverage map; the vendor page.',
       purpose: 'One table for both kinds: vendors the VR team recruited and technicians dispatchers have worked with, with the profile, documents, compliance, notes and history.',
       value: 'The vendor network is a shared asset instead of spreadsheets and memory; compliance is derived from documents, not ticked by hand; nobody loses a good technician when a dispatcher leaves.',
-      users: ['VR Officer', 'Team Lead', 'Assistant TL', 'Account Manager', 'Admin'],
+      users: ['VR Officer', 'Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin'],
       features: [
         {
           name: 'The record',

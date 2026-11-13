@@ -15,7 +15,7 @@ export const SOP: SopDocument = {
     'This SOP defines how a work order is received, dispatched, quoted, approved, fulfilled, paid and invoiced in OBI, who performs each step, which screen and button does it, and the rules the system enforces along the way. It is generated from the application itself: the procedures are kept beside the code, and the appendix (statuses, fields, roles, automations, integrations) is read from the live instance when this page opens.',
   purpose: [
     'OBI is the single system of record for every work order Seamless FM runs on behalf of its clients: it receives the job from the client\'s system or by hand, finds the technician, logs the visits, builds and approves the quote, pays the technician, invoices the client and keeps the client informed, with every action recorded.',
-    'Four kinds of people operate it. Managers (Team Lead, Assistant TL, Account Manager, Admin) accept work, approve quotes, payments and status changes, and set the rules. Dispatchers (OM, Senior OM, OM Under Probation — the Ops Coordinator position) find technicians, run visits and move the job. The Operations Admin drafts work orders typed in by hand and keeps the client systems in step. Accounts (Accounts Payable, Accounts Receivable, VR Officer, Sales) pay, audit, invoice, recruit vendors and watch their clients.',
+    'Four kinds of people operate it. Managers (Team Lead, Associate Team Lead, Account Manager, Admin) accept work, approve quotes, payments and status changes, and set the rules. Dispatchers (OM, Senior OM, OM Under Probation — the Ops Coordinator position) find technicians, run visits and move the job. The Operations Admin drafts work orders typed in by hand and keeps the client systems in step. Accounts (Accounts Payable, Accounts Receivable, VR Officer, Sales) pay, audit, invoice, recruit vendors and watch their clients.',
     'Trust is tiered. A probation dispatcher requests status changes and cannot change the assignee; a senior dispatcher builds quotes; a manager decides. What each role may do is set in Admin › Roles and can be adjusted per person by a super admin.',
   ],
   scope:
@@ -80,7 +80,7 @@ export const SOP: SopDocument = {
       n: 3,
       title: 'Receiving and Accepting Work Orders',
       lead: 'Every work order the Ecotrak sync or the CSV import creates without a dispatcher waits on Incoming Work Orders until a manager accepts it and names one, or rejects it.',
-      who: ['Team Lead', 'Assistant TL', 'Account Manager', 'Admin'],
+      who: ['Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin'],
       where: 'Incoming Work Orders › To accept',
       needs: ['approvals/intake view', 'approvals/intake approve'],
       blocks: [
@@ -119,7 +119,7 @@ export const SOP: SopDocument = {
       n: 5,
       title: 'Adding a Work Order from Incoming Work Orders',
       lead: 'The same act without the draft, for anyone with the create right.',
-      who: ['Operations Admin', 'Team Lead', 'Assistant TL', 'Account Manager', 'Admin'],
+      who: ['Operations Admin', 'Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin'],
       where: 'Incoming Work Orders › Add work order',
       needs: ['work_orders create'],
       blocks: [
@@ -265,7 +265,7 @@ export const SOP: SopDocument = {
       n: 9,
       title: 'Quoting',
       lead: 'One quote per work order, due 48 business hours after the assessment, priced from the client contract.',
-      who: ['Senior OM', 'Team Lead', 'Assistant TL', 'Account Manager'],
+      who: ['Senior OM', 'Team Lead', 'Associate Team Lead', 'Account Manager'],
       where: 'The Client quote card › the quote builder; Quotes',
       needs: ['quotes create', 'quotes edit', 'quotes approve'],
       blocks: [
@@ -328,7 +328,7 @@ export const SOP: SopDocument = {
       n: 12,
       title: 'Paying the Technician',
       lead: 'A request per payment, approved, paid by AP in OBI (the Yoda payment flow, 0076), rolled into Cost.',
-      who: ['Dispatchers (request)', 'Team Lead / Assistant TL / Account Manager (approve)', 'Accounts Payable (process)'],
+      who: ['Dispatchers (request)', 'Team Lead / Associate Team Lead / Account Manager (approve)', 'Accounts Payable (process)'],
       where: 'Finances › Payables on the work order; Payments',
       needs: ['payments create', 'payments approve', 'payments/process edit'],
       blocks: [
@@ -381,7 +381,7 @@ export const SOP: SopDocument = {
       n: 14,
       title: 'The Approvals Inbox',
       lead: 'Every yes-or-no the system needs from a manager, in one place, oldest first.',
-      who: ['Team Lead', 'Assistant TL', 'Account Manager', 'Admin'],
+      who: ['Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin'],
       where: 'Approvals',
       needs: ['approvals view', 'approvals/nte, status, reviews approve', 'quotes approve', 'payments approve'],
       blocks: [
@@ -406,7 +406,7 @@ export const SOP: SopDocument = {
       n: 15,
       title: 'Vendors and Technicians (Vendor Relations)',
       lead: 'OBI\'s own vendor network: records, documents, compliance, tasks, alerts and the coverage map.',
-      who: ['VR Officer', 'Team Lead', 'Assistant TL', 'Account Manager', 'Admin'],
+      who: ['VR Officer', 'Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin'],
       where: 'Vendors (List, Board, Tasks, Alerts, Data quality, Performance, Coverage map)',
       needs: ['vendors view / create / edit / delete', 'vendors/documents create / delete', 'vendors/review approve', 'vendors/blacklist create / edit', 'vendors/lists create', 'vendors/import create', 'vendors/export view', 'vendors/portal view / edit', 'vendors/dispatch edit'],
       blocks: [
@@ -453,7 +453,7 @@ export const SOP: SopDocument = {
       n: 17,
       title: 'Planned Maintenance and the Maintenance Tabs',
       lead: 'Recurring jobs that raise their own work orders, and the plans, services, time and permits around them.',
-      who: ['Team Lead', 'Assistant TL', 'Account Manager', 'Admin', 'Dispatchers (view of Planned Maintenance and the tabs their role opens)'],
+      who: ['Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin', 'Dispatchers (view of Planned Maintenance and the tabs their role opens)'],
       where: 'Planned Maintenance; Maintenance',
       needs: ['planned_maintenance create / edit / delete', 'maintenance/assignment edit', 'maintenance/job_plans, services, time, permits'],
       blocks: [
@@ -474,7 +474,7 @@ export const SOP: SopDocument = {
       n: 18,
       title: 'Keeping the Client Informed (Client Updates)',
       lead: 'A live tracker per client, shared by link, email or schedule, instead of a spreadsheet.',
-      who: ['Team Lead', 'Assistant TL', 'Account Manager', 'Admin', 'Dispatchers (view)'],
+      who: ['Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin', 'Dispatchers (view)'],
       where: 'Client Updates; /share/client-updates/<token> for the client',
       needs: ['client_updates create / edit / delete', 'client_updates/share edit'],
       blocks: [
@@ -490,7 +490,7 @@ export const SOP: SopDocument = {
       n: 19,
       title: 'Dashboards, Pulse and the Assistant',
       lead: 'What the records say, for the person looking.',
-      who: ['Everyone with the Dashboard section', 'Builders: Team Lead, Assistant TL, Account Manager, Admin'],
+      who: ['Everyone with the Dashboard section', 'Builders: Team Lead, Associate Team Lead, Account Manager, Admin'],
       where: 'Dashboard; Pulse; the sparkle',
       needs: ['dashboard view / create', 'approvals view (the Awaiting approval card)', 'assistant view'],
       blocks: [
@@ -581,7 +581,7 @@ export const SOP: SopDocument = {
     'OBI is working when a work order moves from the client\'s system to a paid invoice without a spreadsheet, a Teams reminder or a re-keyed form: the right dispatcher gets it complete, the technician is found in seconds, the quote is out inside 48 business hours, every approval is taken by the right tier in one inbox, the technician is paid from the record, the client sees exactly what was meant for them, and every step can be read back in the audit log.',
 
   matrix: [
-    { role: 'Team Lead / Assistant TL / Account Manager', procedures: [1, 2, 3, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19] },
+    { role: 'Team Lead / Associate Team Lead / Account Manager', procedures: [1, 2, 3, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19] },
     { role: 'OM (dispatcher) / Senior OM', procedures: [1, 2, 6, 7, 8, 9, 10, 11, 12, 16, 19] },
     { role: 'OM Under Probation (Ops Coordinator)', procedures: [1, 2, 6, 7, 8, 10, 11, 12, 19] },
     { role: 'Operations Admin', procedures: [1, 2, 4, 5, 6, 8, 9, 16, 19] },

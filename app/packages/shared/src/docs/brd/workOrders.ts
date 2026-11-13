@@ -261,7 +261,7 @@ export const WORK_ORDERS_PART: DocPart = {
       where: 'Sidebar › Incoming Work Orders: To accept and Drafts tabs (To accept, with the Unassigned list under its queue, comes with approvals/intake view; Drafts with intake view; the strip shows when the person holds both).',
       purpose: 'One door for every work order on its way in: the queue a manager accepts from and assigns, and the OP Admin\'s drafting area.',
       value: 'The inbox of client traffic is a queue with a badge, not an email folder; a work order cannot reach a dispatcher half-filled.',
-      users: ['Team Lead', 'Assistant TL', 'Account Manager', 'Admin', 'Operations Admin'],
+      users: ['Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin', 'Operations Admin'],
       features: [
         {
           name: 'To accept',
@@ -324,7 +324,7 @@ export const WORK_ORDERS_PART: DocPart = {
       where: 'Sidebar › Approvals.',
       purpose: 'The manager\'s to-do list: every yes-or-no the system needs from a person, in one sectioned inbox.',
       value: 'Nothing waits in a chat thread; the oldest waits first; escalated rows float to the top; every decision is audited and acted on by the system.',
-      users: ['Team Lead', 'Assistant TL', 'Account Manager', 'Admin', 'Accounts Payable'],
+      users: ['Team Lead', 'Associate Team Lead', 'Account Manager', 'Admin', 'Accounts Payable'],
       features: [
         {
           name: 'Sections, lanes and filters',

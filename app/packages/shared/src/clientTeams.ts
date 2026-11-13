@@ -4,7 +4,7 @@
  *
  * Who looks after a client depends on which of our companies bills the work:
  * PH has one team under BKR, another under AF, TPM and RF. So a team is a row
- * per (client, Comp): the Team Lead, the Assistant Team Lead, the salesperson
+ * per (client, Comp): the Team Lead, the Associate Team Lead, the salesperson
  * and the Account Manager. It is kept on the client record (Clients › a
  * client › Account team) so it can always be adjusted, and "Add work order"
  * fills AM, TL and ATL from it once the Client and the Comp are picked. The

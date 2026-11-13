@@ -312,7 +312,7 @@ describe('T1 — test accounts: who they are', () => {
     expect(isTestAccountEmail('om@test.theone.local')).toBe(false);
     expect(isTestAccountEmail('jordan@seamlessfm.com')).toBe(false);
     expect(isTestAccountEmail(null)).toBe(false);
-    expect(testAccountDisplayName('Assistant TL', 'atl')).toBe('Test Assistant TL');
+    expect(testAccountDisplayName('Associate Team Lead', 'atl')).toBe('Test Associate Team Lead');
     expect(testAccountDisplayName(null, 'atl')).toBe('Test ATL');
   });
 
