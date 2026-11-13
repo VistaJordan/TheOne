@@ -92,9 +92,11 @@ export function useRecordWrite<T>(woId: string, woNumber: string, fn: (arg: T) =
 // was removed; requests already open are still decided on Cost breakdown and
 // in Approvals.
 
-export function RecordBar({ woId, woNumber, record, note }: { woId: string; woNumber: string; record: WoRecord | undefined; note?: string | null }) {
+export function RecordBar({ woId, woNumber, record, note, chips = true }: { woId: string; woNumber: string; record: WoRecord | undefined; note?: string | null; chips?: boolean }) {
   const dropTag = useRecordWrite(woId, woNumber, (id: string) => removeWoTag(woId, id));
   if (!record) return null;
+  // The Quote tab draws no chips (Elise, 2026-11-13): only a refused act's note.
+  if (!chips) return note ? <div className="rec-bar"><p className="snooze-err rec-err" role="status"><Icon name="alert-circle" size={12} />{note}</p></div> : null;
   const s = record.state;
   const edit = record.can.edit;
   const openNte = record.nte_requests.find((n) => n.status === 'open');

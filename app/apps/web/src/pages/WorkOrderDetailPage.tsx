@@ -362,8 +362,9 @@ export function WorkOrderDetailPage() {
           folded={tab !== 'overview'}
         />
 
-        {/* 0064 · what state the job is in. */}
-        <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} note={recordNote} />
+        {/* 0064 · what state the job is in. Not on the Quote tab (Elise,
+            2026-11-13): the quote band sits right under the tabs there. */}
+        <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} note={recordNote} chips={tab !== 'quotes'} />
 
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
           {/* Elise, 2026-11-09 · Overview, CICO, Quote, Finances, Drive,

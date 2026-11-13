@@ -298,6 +298,24 @@
 }
 .qb .qpipe-row .pipe { margin-top: 0; }
 .qb .qhead.is-embedded .qpipe-row { margin-top: 0; }
+
+/* On the work order's Quote tab the band is one slim line (Elise,
+   2026-11-13): a compact pipeline on the left, the tools and the buttons on
+   the right. It wraps only when the screen is too narrow for both. */
+.qb .qhead.is-embedded { padding: 7px 12px; }
+.qb .qhead.is-embedded .qpipe-row { gap: 10px; }
+.qb .qhead.is-embedded .pipe { flex-wrap: nowrap; flex: none; }
+.qb .qhead.is-embedded .pstep {
+  gap: 4px;
+  padding: 2px 8px 2px 4px;
+  font-size: 11px;
+}
+.qb .qhead.is-embedded .pstep-mark { width: 15px; height: 15px; font-size: 9px; }
+.qb .qhead.is-embedded .pstep-pulse { width: 6px; height: 6px; }
+.qb .qhead.is-embedded .pipe-link { width: 8px; }
+.qb .qhead.is-embedded .ctas { gap: 6px; }
+.qb .qhead.is-embedded .ctas .btn-lg { height: 28px; padding: 0 10px; font-size: 12px; }
+.qb .qhead.is-embedded .ctas .chip { font-size: 11px; }
 .qb .qactor { margin: 10px 0 0; }
 
 /* action bar */
