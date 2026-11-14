@@ -16,6 +16,7 @@ import {
   SELF_EDIT_MESSAGE,
   buildPermissionTree,
   grantsExceeding,
+  isTestAccountEmail,
   mayEditRoleDefinitions,
   type PermissionSet,
   type PermMap,
@@ -294,10 +295,14 @@ function UsersTable({
   clientsFor: string | null;
   onClients: (id: string) => void;
   tree: PermNode[];
-  onChange: (id: string, input: { role?: string; is_super_admin?: boolean; status?: UserStatus }) => void;
+  onChange: (id: string, input: { name?: string; role?: string; is_super_admin?: boolean; status?: UserStatus }) => void;
 }) {
   // Why the Super admin switch is off on every row of this page, if it is.
   const superLock = !editorIsSuperAdmin ? 'Only a super admin can change this' : null;
+  // A test account's name is written once, from the role label of the day
+  // (T1), and no sign-in refreshes it; a Microsoft account's comes from the
+  // directory. So only test accounts get a Rename here.
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const cols = canAdjust ? 8 : 7;
   return (
     <div className="table-wrap">
@@ -342,6 +347,32 @@ function UsersTable({
                         {isSelf && <span className="chip chip-sm">You</span>}
                       </strong>
                       <small>{u.email ?? '—'}</small>
+                      {isTestAccountEmail(u.email) && canAssignClients && (
+                        renaming?.id === u.id ? (
+                          <form
+                            className="confirm-row"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const next = renaming.name.trim();
+                              if (next && next !== u.name) onChange(u.id, { name: next });
+                              setRenaming(null);
+                            }}
+                          >
+                            <input className="fld sm" autoFocus maxLength={120} aria-label={`New name for ${u.name}`}
+                              value={renaming.name} onChange={(e) => setRenaming({ id: u.id, name: e.target.value })}
+                              onKeyDown={(e) => { if (e.key === 'Escape') setRenaming(null); }} />
+                            <button type="submit" className="linkbtn" disabled={busy || !renaming.name.trim()}>Save</button>
+                            <button type="button" className="linkbtn" onClick={() => setRenaming(null)}>Cancel</button>
+                          </form>
+                        ) : (
+                          <button type="button" className="linkbtn" disabled={busy || off}
+                            title="Change this test account's name"
+                            onClick={() => setRenaming({ id: u.id, name: u.name })}>
+                            <Icon name="pencil" size={12} />
+                            Rename
+                          </button>
+                        )
+                      )}
                     </div>
                   </td>
                   <td>
