@@ -15,6 +15,7 @@ import {
   mayApproveOverNtePayment,
   overNteApproverLabel,
   quoteOverNteWarning,
+  applyCorrigoSlaRule,
 } from '@theone/shared';
 
 const root = resolve(__dirname, '..');
@@ -136,5 +137,19 @@ describe('files attached on Add work order are the client’s, approved as they 
     expect(svc).toContain("fromClient ? 'client' : null,");
     expect(svc).toContain("AND actor_principal_id = $2");
     expect(read('apps', 'api', 'src', 'routes', 'workOrders.ts')).toContain('from_client: z.boolean().optional(),');
+  });
+});
+
+describe('Add work order: a Corrigo work order assigned while created needs its SLA', () => {
+  const form = { fields: [{ key: 'SLA Due Date', label: 'SLA Due Date', mode: 'optional' }] } as never;
+  const mode = (v: Record<string, unknown>) => (applyCorrigoSlaRule(form, v) as { fields: { mode: string }[] }).fields[0].mode;
+  it('required only with a Dispatcher picked and Client Portal Type Corrigo', () => {
+    expect(mode({ Assignee: 'Ana', 'Client Portal Type': 'Corrigo' })).toBe('required');
+    expect(mode({ 'Client Portal Type': 'Corrigo' })).toBe('optional');
+    expect(mode({ Assignee: 'Ana', 'Client Portal Type': 'Ecotrak' })).toBe('optional');
+  });
+  it('the form and the API both lay it over the form', () => {
+    expect(read('apps', 'web', 'src', 'components', 'wo', 'list', 'CreateWorkOrderDialog.tsx')).toContain('applyCorrigoSlaRule(applyRecallRule(');
+    expect(read('apps', 'api', 'src', 'services', 'woCreate.ts')).toContain('const form = applyCorrigoSlaRule(');
   });
 });

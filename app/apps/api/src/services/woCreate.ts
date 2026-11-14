@@ -56,6 +56,7 @@ import {
   ORIGINAL_WO_KEY,
   ORIGINAL_WO_NOT_FOUND_CODE,
   RECALL_KEY,
+  applyCorrigoSlaRule,
   applyRecallRule,
   recallTicked,
 } from '@theone/shared';
@@ -413,12 +414,16 @@ export async function createWorkOrder(
   // same way the browser did it, so "required" and "off" mean one thing.
   // 0130 · and the recall rule: Original WO only (and then required) when the
   // recall box is ticked.
-  const form = applyRecallRule(
-    applyFormLayout(
-      configured,
-      pickFormLayout(configured.layouts ?? [], str(input.fields?.['Client']), str(input.fields?.['Trade'])),
+  // 2026-11-14 · and a Corrigo work order assigned here needs its SLA.
+  const form = applyCorrigoSlaRule(
+    applyRecallRule(
+      applyFormLayout(
+        configured,
+        pickFormLayout(configured.layouts ?? [], str(input.fields?.['Client']), str(input.fields?.['Trade'])),
+      ),
+      recallTicked(input.fields?.[RECALL_KEY]),
     ),
-    recallTicked(input.fields?.[RECALL_KEY]),
+    input.fields ?? {},
   );
   const offered = new Map(form.fields.map((f) => [f.key, f]));
   const bag: Record<string, unknown> = {};

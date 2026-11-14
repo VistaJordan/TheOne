@@ -77,6 +77,7 @@ import {
   numericInputValue,
   ORIGINAL_WO_KEY,
   RECALL_KEY,
+  applyCorrigoSlaRule,
   applyRecallRule,
   recallTicked,
 } from '@theone/shared';
@@ -335,7 +336,11 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   // 0130 · Original WO appears (and is required) only once "Is this WO a
   // recall?" is ticked.
   const recall = recallTicked(values[RECALL_KEY]);
-  const form = useMemo(() => applyRecallRule(applyFormLayout(configured, layout), recall), [configured, layout, recall]);
+  // 2026-11-14 · a Corrigo work order given a Dispatcher here needs its SLA.
+  const form = useMemo(
+    () => applyCorrigoSlaRule(applyRecallRule(applyFormLayout(configured, layout), recall), values),
+    [configured, layout, recall, values],
+  );
   // 0064 · photos and files chosen here go up as soon as the work order exists.
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);

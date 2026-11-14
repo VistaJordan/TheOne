@@ -20,6 +20,7 @@
  * accepted, so a coordinator can raise one from a phone call with the number
  * alone and it simply cannot reach a dispatcher until the rest is in.
  */
+import { CLIENT_PORTAL_TYPE_KEY, clientMessageTarget } from './messaging';
 
 /** The three settings a field can carry on the create form. */
 export const WO_CREATE_MODES = ['off', 'optional', 'required'] as const;
@@ -370,6 +371,24 @@ export function applyRecallRule(form: WoCreateForm, recall: boolean): WoCreateFo
     return recall ? [{ ...f, mode: 'required' }] : [];
   });
   return { ...form, fields };
+}
+
+/** 2026-11-14 (Elise) · a Corrigo client's work order assigned while it is
+    created needs its SLA, as rule 11.1.1 asks at Accept (`intakeFieldAsked`,
+    SLA for Corrigo only): picking a Dispatcher on Add work order makes SLA Due
+    Date required while Client Portal Type reads Corrigo. Only when the field
+    is on the form (Admin › Custom fields can switch it off). */
+export const SLA_DUE_DATE_KEY = 'SLA Due Date';
+
+export function applyCorrigoSlaRule(form: WoCreateForm, values: Record<string, unknown>): WoCreateForm {
+  const asked =
+    woCreateValueFilled(values['Assignee']) &&
+    clientMessageTarget(typeof values[CLIENT_PORTAL_TYPE_KEY] === 'string' ? (values[CLIENT_PORTAL_TYPE_KEY] as string) : null) === 'corrigo';
+  if (!asked) return form;
+  return {
+    ...form,
+    fields: form.fields.map((f) => (f.key === SLA_DUE_DATE_KEY ? { ...f, mode: 'required' } : f)),
+  };
 }
 
 /** Empty means empty: `false` is an answer, `''` and `[]` are not. */
