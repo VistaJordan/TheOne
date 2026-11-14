@@ -28,7 +28,8 @@ describe('the prefilled form link', () => {
       return link ? new URL(link).host : null;
     };
     expect(host('SFM')).toBe('seamlessfm.paperform.co');
-    expect(host('RF')).toBe('repairfected.paperform.co');
+    // 0137: RF is closed too.
+    expect(host('RF')).toBeNull();
     expect(host('BKR')).toBe('bkrform.paperform.co');
     expect(host('BKR', 'EMCOR')).toBe('bkremcor.paperform.co');
     // 0134: AF, TPM and EDS are closed; no Comp, no form.

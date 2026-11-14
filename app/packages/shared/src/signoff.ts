@@ -10,16 +10,15 @@ import { fieldPermKey } from './permissions';
 
 /** Which drawing the sheet uses. One per billing entity ('21. Comp'), BKR
     twice because EMCOR's sheet carries a Closeout Number line. AF, TPM and
-    EDS closed on 2026-11-13 (0134): their sheets are gone, and a work order
-    still carrying one of those Comps has no sheet. */
-export type SignoffLayout = 'sfm' | 'rf' | 'bkr' | 'bkr_emcor';
+    EDS closed on 2026-11-13 (0134), RF on 2026-11-14 (0137): their sheets are
+    gone, and a work order still carrying one of those Comps has no sheet. */
+export type SignoffLayout = 'sfm' | 'bkr' | 'bkr_emcor';
 
-export const SIGNOFF_LAYOUTS: readonly SignoffLayout[] = ['sfm', 'rf', 'bkr', 'bkr_emcor'];
+export const SIGNOFF_LAYOUTS: readonly SignoffLayout[] = ['sfm', 'bkr', 'bkr_emcor'];
 
 /** The entity name printed in the text message and shown on the card. */
 export const SIGNOFF_ENTITY_NAMES: Record<SignoffLayout, string> = {
   sfm: 'Seamless Facility Management',
-  rf: 'Repairfected',
   bkr: 'BKR National Facility Services',
   bkr_emcor: 'BKR National Facility Services',
 };
@@ -33,7 +32,6 @@ export function signoffLayoutFor(comp: string | null | undefined, client: string
   const c = (comp ?? '').trim().toUpperCase();
   switch (c) {
     case 'SFM': return 'sfm';
-    case 'RF': return 'rf';
     case 'BKR': return /emcor/i.test(client ?? '') ? 'bkr_emcor' : 'bkr';
     default: return null;
   }
@@ -47,7 +45,6 @@ export function signoffLayoutFor(comp: string | null | undefined, client: string
  */
 export const SIGNOFF_FORM_URLS: Record<SignoffLayout, string | null> = {
   sfm: 'https://seamlessfm.paperform.co/',
-  rf: 'https://repairfected.paperform.co/',
   bkr: 'https://bkrform.paperform.co/',
   bkr_emcor: 'https://bkremcor.paperform.co/',
 };

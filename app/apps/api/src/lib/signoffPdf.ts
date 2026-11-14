@@ -49,11 +49,6 @@ export const BRANDS: Record<SignoffLayout, Brand> = {
     labelColor: hex('#003cff'), labelSize: 17, valueColor: hex('#000000'), valueSize: 12, valueBold: false,
     labels: { ref: 'Job Work Order Number:', address: 'Location:', manager: 'Name of Manager on Site:', signature: 'Signature of Manager on Site:' },
   },
-  rf: {
-    title: 'Signoff Sheet', titleSize: 26, titleColor: hex('#51b57e'),
-    labelColor: hex('#53b880'), labelSize: 17, valueColor: hex('#040404'), valueSize: 12, valueBold: false,
-    labels: { ref: 'Job Work Order Number:', address: 'Location:', manager: 'Name of Manager on Site:', signature: 'Signature of Manager on Site:' },
-  },
   bkr: {
     title: 'Signoff Sheet', titleSize: 26, titleColor: INK,
     labelColor: INK, labelSize: 14, valueColor: hex('#e3244b'), valueSize: 11, valueBold: false,
@@ -225,7 +220,6 @@ export async function renderSignoffSheet(data: SignoffSheetData): Promise<Uint8A
 
   switch (data.layout) {
     case 'sfm': await stacked(s, 'sfm', data, 'sfm_header', 'sfm_footer'); break;
-    case 'rf': await stacked(s, 'rf', data, 'rf_header', null); break;
     case 'bkr': await stacked(s, 'bkr', data, 'bkr_logo', 'bkr_footer', 140); break;
     case 'bkr_emcor': await stacked(s, 'bkr_emcor', data, 'bkr_logo', 'bkr_footer', 140); break;
   }

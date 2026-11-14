@@ -19,7 +19,8 @@ import { renderSignoffSheet, safeText } from '../apps/api/src/lib/signoffPdf';
 describe('signoffLayoutFor', () => {
   it('maps each Comp to its sheet, BKR by client', () => {
     expect(signoffLayoutFor('SFM', 'FrontStreet')).toBe('sfm');
-    expect(signoffLayoutFor('RF', null)).toBe('rf');
+    // 0137: RF closed too.
+    expect(signoffLayoutFor('RF', null)).toBeNull();
     // 0134: AF, TPM and EDS are closed — no sheet.
     expect(signoffLayoutFor('tpm', null)).toBeNull();
     expect(signoffLayoutFor('AF', null)).toBeNull();

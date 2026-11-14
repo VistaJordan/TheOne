@@ -173,7 +173,7 @@ export const WORK_ORDERS_PART: DocPart = {
       features: [
         {
           name: 'Layouts per billing entity',
-          what: 'Comp picks the layout: SFM, TPM, AF ("Job Completion Slip"), RF ("Sign-Off Submission"), EDS, BKR; BKR becomes the EMCOR variant when the client name contains "emcor", and only that layout carries a Closeout Number line. The sheet prints the client\'s WO number (the external reference, else the WO #) and the address, drawn by pdf-lib on US Letter with the entity\'s header, footer and logo; non-Latin text is folded. A work order with no Comp cannot have a sheet ("Set Comp on the work order first").',
+          what: 'Comp picks the layout: SFM or BKR (AF, TPM and EDS closed on 2026-11-13, RF on 2026-11-14: no sheet); BKR becomes the EMCOR variant when the client name contains "emcor", and only that layout carries a Closeout Number line. The sheet prints the client\'s WO number (the external reference, else the WO #) and the address, drawn by pdf-lib on US Letter with the entity\'s header, footer and logo; non-Latin text is folded. A work order with no Comp cannot have a sheet ("Set Comp on the work order first").',
           value: 'The client sees its own paperwork, not ours.',
           since: '0070',
         },

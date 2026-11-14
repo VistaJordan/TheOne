@@ -106,3 +106,15 @@ describe('Add work order: an exit by mistake keeps a draft', () => {
     expect(dlg.match(/finished\.current = true;/g)?.length).toBeGreaterThanOrEqual(4);
   });
 });
+
+describe('RF is closed (0137)', () => {
+  const mig = read('packages', 'db', 'migrations', '0137_rf_closed.sql');
+  it('leaves the Comp list, the teams, check-in rows, price cards and contracts', () => {
+    expect(read('packages', 'db', 'src', 'seed.ts')).toContain("options: ['SFM', 'BKR'] }");
+    expect(mig).toContain("DELETE FROM client_team        WHERE upper(btrim(billing_entity)) = 'RF';");
+    expect(mig).toContain("DELETE FROM client_cico_method WHERE upper(btrim(billing_entity)) = 'RF';");
+    expect(mig).toContain("DELETE FROM price_card         WHERE upper(btrim(billing_entity)) = 'RF';");
+    expect(mig).toContain("UPDATE contract SET active = false");
+    expect(mig).toContain("WHERE f.key = '21. Comp';");
+  });
+});

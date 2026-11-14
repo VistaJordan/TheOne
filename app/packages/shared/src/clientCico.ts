@@ -13,7 +13,7 @@
 
 export interface ClientCicoMethod {
   id: string;
-  /** The billing entity, a `21. Comp` value (SFM, BKR, RF; AF, TPM and EDS closed in 0134). */
+  /** The billing entity, a `21. Comp` value (SFM, BKR; AF, TPM and EDS closed in 0134, RF in 0137). */
   billing_entity: string;
   /** One of VISIT_METHODS. */
   method: string;

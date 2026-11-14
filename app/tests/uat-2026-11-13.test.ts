@@ -111,14 +111,15 @@ describe('A ticked penalty needs its explanation', () => {
 
 describe('AF, TPM and EDS are closed', () => {
   it('leave the Comp list in the seed and the migration', () => {
-    expect(read('packages', 'db', 'src', 'seed.ts')).toContain("options: ['SFM', 'BKR', 'RF'] }");
+    // 0137 (2026-11-14) closed RF too.
+    expect(read('packages', 'db', 'src', 'seed.ts')).toContain("options: ['SFM', 'BKR'] }");
     expect(mig).toContain("DELETE FROM client_team        WHERE upper(btrim(billing_entity)) IN ('AF', 'TPM', 'EDS');");
     expect(mig).toContain("DELETE FROM client_cico_method WHERE upper(btrim(billing_entity)) IN ('AF', 'TPM', 'EDS');");
     expect(mig).toContain("DELETE FROM price_card         WHERE upper(btrim(billing_entity)) IN ('AF', 'TPM', 'EDS');");
     expect(mig).toContain("WHERE f.key = '21. Comp';");
   });
   it('have no sign-off sheet', () => {
-    expect(SIGNOFF_LAYOUTS).toEqual(['sfm', 'rf', 'bkr', 'bkr_emcor']);
+    expect(SIGNOFF_LAYOUTS).toEqual(['sfm', 'bkr', 'bkr_emcor']);
     for (const c of ['AF', 'TPM', 'EDS']) expect(signoffLayoutFor(c, null)).toBeNull();
   });
 });
