@@ -540,7 +540,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
         setUploading(`Uploading ${i + 1} of ${files.length}…`);
         try {
           const prepared = await prepareFile(files[i]);
-          await uploadAttachment(res.task_id, { file_name: prepared.file_name, content_type: prepared.content_type, data: prepared.data });
+          await uploadAttachment(res.task_id, { file_name: prepared.file_name, content_type: prepared.content_type, data: prepared.data, from_client: true });
         } catch {
           failed.push(files[i].name);
         }

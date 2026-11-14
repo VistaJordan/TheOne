@@ -118,3 +118,23 @@ describe('RF is closed (0137)', () => {
     expect(mig).toContain("WHERE f.key = '21. Comp';");
   });
 });
+
+describe('an upload reads its row back in its own statement', () => {
+  it('no WITH (INSERT …) SELECT on attachment — the outer SELECT cannot see the new row', () => {
+    const svc = read('apps', 'api', 'src', 'services', 'attachments.ts');
+    expect(svc).not.toContain('WITH ins AS');
+    expect(svc.match(/return readInserted\(ins\.rows\[0\]\.id\);/g)?.length).toBe(2);
+  });
+});
+
+describe('files attached on Add work order are the client’s, approved as they land', () => {
+  it('the form sends from_client; the API files them as kind client, approved, for the creator only', () => {
+    const dlg = read('apps', 'web', 'src', 'components', 'wo', 'list', 'CreateWorkOrderDialog.tsx');
+    expect(dlg).toContain('data: prepared.data, from_client: true });');
+    const svc = read('apps', 'api', 'src', 'services', 'attachments.ts');
+    expect(svc).toContain("const reviewStatus = fromClient ? 'approved' : 'pending';");
+    expect(svc).toContain("fromClient ? 'client' : null,");
+    expect(svc).toContain("AND actor_principal_id = $2");
+    expect(read('apps', 'api', 'src', 'routes', 'workOrders.ts')).toContain('from_client: z.boolean().optional(),');
+  });
+});

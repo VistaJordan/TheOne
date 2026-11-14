@@ -231,6 +231,7 @@ const attachmentSchema = z
     data: z.string().min(1),
     client_visible: z.boolean().optional(),
     visit_id: z.string().uuid().nullable().optional(),
+    from_client: z.boolean().optional(),
   })
   .strict();
 

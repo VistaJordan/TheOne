@@ -181,6 +181,16 @@ function safeName(raw: string): string {
   return cleaned.slice(0, 120) || 'file';
 }
 
+/** The row just inserted, read in its own statement (see addAttachment). */
+/** How long after creating a work order its creator may still file From client files. */
+const FROM_CLIENT_WINDOW_MIN = 60;
+
+async function readInserted(id: string): Promise<Attachment> {
+  const res = await query<Row>(`${SELECT} WHERE a.id = $1`, [id]);
+  if (!res.rows[0]) throw new ApiError('INTERNAL', 'The file was stored but could not be read back');
+  return mapRow(res.rows[0]);
+}
+
 export async function addAttachment(
   taskId: string,
   woNumber: string,
@@ -209,6 +219,29 @@ export async function addAttachment(
   }
 
   const fileName = safeName(input.file_name ?? 'file');
+
+  // 2026-11-14 (Elise): a file attached on Add work order is what the client
+  // shared with us — filed as "From client" and approved as it lands, not
+  // quarantined for review. Only the person who created the work order, within
+  // FROM_CLIENT_WINDOW_MIN of creating it, may file one that way, so the flag
+  // is not a way round rule 1.3.1 for proof of work (the Done gate never reads
+  // a "client" file anyway).
+  const fromClient = input.from_client === true;
+  if (fromClient) {
+    const created = await query(
+      `SELECT 1 FROM activity_log
+        WHERE entity_type = 'task' AND entity_id = $1 AND action = 'created'
+          AND actor_principal_id = $2
+          AND created_at > now() - make_interval(mins => $3)
+        LIMIT 1`,
+      [taskId, actor.id, FROM_CLIENT_WINDOW_MIN],
+    );
+    if (created.rowCount === 0) {
+      throw badRequest('Only the files attached while creating the work order are filed as From client');
+    }
+  }
+  const reviewStatus = fromClient ? 'approved' : 'pending';
+
   // The work order's number leads the path so the store is browsable by a
   // human in an emergency; the random suffix keeps two files of the same name
   // apart without a lookup.
@@ -223,14 +256,17 @@ export async function addAttachment(
     addRandomSuffix: false,
   });
 
-  const res = await query<Row>(
-    `WITH ins AS (
-       INSERT INTO attachment
-         (task_id, file_name, storage_key, content_type, byte_size, client_visible, visit_id, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8)
-       RETURNING id
-     )
-     ${SELECT} WHERE a.id = (SELECT id FROM ins)`,
+  // 2026-11-14: INSERT … RETURNING, then read the row back in its own query.
+  // An INSERT inside a WITH, read by the same statement's SELECT, cannot see the row it
+  // just inserted (one snapshot for the whole statement), so it came back
+  // empty and every upload answered 500 after the file and row were stored.
+  const ins = await query<{ id: string }>(
+    `INSERT INTO attachment
+       (task_id, file_name, storage_key, content_type, byte_size, client_visible, visit_id, uploaded_by,
+        review_status, kind, reviewed_by, reviewed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8,
+        $9, $10, CASE WHEN $11 THEN $8::uuid END, CASE WHEN $11 THEN now() END)
+     RETURNING id::text AS id`,
     [
       taskId,
       fileName,
@@ -240,6 +276,9 @@ export async function addAttachment(
       input.client_visible ?? false,
       input.visit_id ?? null,
       actor.id,
+      reviewStatus,
+      fromClient ? 'client' : null,
+      fromClient,
     ],
   );
 
@@ -251,20 +290,27 @@ export async function addAttachment(
     [
       actor.id,
       taskId,
-      `attachment:${res.rows[0].id}`,
+      `attachment:${ins.rows[0].id}`,
       JSON.stringify({
         file_name: fileName,
         content_type: contentType,
         byte_size: bytes.length,
         client_visible: input.client_visible ?? false,
         visit_id: input.visit_id ?? null,
-        // 0061 / rule 1.3.1: it waits for a reviewer.
-        review_status: 'pending',
+        // 0061 / rule 1.3.1: it waits for a reviewer — unless the client sent it.
+        review_status: reviewStatus,
+        ...(fromClient ? { kind: 'client', via: 'create_form' } : {}),
       }),
     ],
   );
 
-  return mapRow(res.rows[0]);
+  // 0071 · approved as it landed, so it goes to SharePoint like an approval.
+  if (fromClient) {
+    const { fileAttachment } = await import('./sharepoint.js');
+    await fileAttachment(ins.rows[0].id, actor.id);
+  }
+
+  return readInserted(ins.rows[0].id);
 }
 
 /**
@@ -300,14 +346,11 @@ export async function addSystemAttachment(
     storageKey = blob.pathname;
     byteSize = bytes.length;
   }
-  const res = await query<Row>(
-    `WITH ins AS (
-       INSERT INTO attachment
-         (task_id, file_name, storage_key, content_type, byte_size, client_visible, uploaded_by, kind)
-       VALUES ($1, $2, $3, $4, $5, false, $6, $7)
-       RETURNING id
-     )
-     ${SELECT} WHERE a.id = (SELECT id FROM ins)`,
+  const ins = await query<{ id: string }>(
+    `INSERT INTO attachment
+       (task_id, file_name, storage_key, content_type, byte_size, client_visible, uploaded_by, kind)
+     VALUES ($1, $2, $3, $4, $5, false, $6, $7)
+     RETURNING id::text AS id`,
     [taskId, fileName, storageKey, contentType, byteSize, input.actorId, input.kind],
   );
   await query(
@@ -316,11 +359,11 @@ export async function addSystemAttachment(
     [
       input.actorId,
       taskId,
-      `attachment:${res.rows[0].id}`,
+      `attachment:${ins.rows[0].id}`,
       JSON.stringify({ file_name: fileName, content_type: contentType, byte_size: byteSize, client_visible: false, visit_id: null, review_status: 'pending', kind: input.kind, via: input.via }),
     ],
   );
-  return mapRow(res.rows[0]);
+  return readInserted(ins.rows[0].id);
 }
 
 /** The bytes, for the API to stream. Throws 404 for a row with no file. */

@@ -146,6 +146,8 @@ export interface AttachmentUpload {
   data: string;
   client_visible?: boolean;
   visit_id?: string | null;
+  /** Attached on Add work order: kind "client", approved as it lands. */
+  from_client?: boolean;
 }
 
 /** `details.code` when the server has no storage connected yet. */
