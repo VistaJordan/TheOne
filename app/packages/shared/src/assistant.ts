@@ -56,9 +56,10 @@ export interface AssistantConversation extends AssistantConversationSummary {
 export interface AssistantStatus {
   /** False until ANTHROPIC_API_KEY is set on the server. */
   configured: boolean;
-  /** Questions this person may still ask today. */
-  remaining_today: number;
-  daily_limit: number;
+  /** Questions this person may still ask today; null = no daily limit
+      (Dashboard › AI usage, 0138). */
+  remaining_today: number | null;
+  daily_limit: number | null;
   can_teach: boolean;
 }
 
@@ -73,7 +74,7 @@ export interface AssistantAskResponse {
   conversation: AssistantConversationSummary;
   question: AssistantMessage;
   answer: AssistantMessage;
-  remaining_today: number;
+  remaining_today: number | null;
 }
 
 export interface AssistantNote {

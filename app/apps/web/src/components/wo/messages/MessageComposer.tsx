@@ -9,6 +9,7 @@ import { prepareFile } from '../../../lib/upload';
 import { ConfirmDialog } from '../../ConfirmDialog';
 import { Icon } from '../../Icon';
 import { MentionTextarea, useMentionCandidates } from './MentionTextarea';
+import { ImproveButton, ImproveSuggestion, useImproveMessage } from './ImproveMessage';
 
 interface MessageComposerProps {
   woId: string;
@@ -41,6 +42,9 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
   const mentioned = mentionsInBody(body, picked);
 
+  // 0138 · Improve: an AI rewrite shown above the box, Replace to use it.
+  const improve = useImproveMessage(woId, clientVisible);
+
   // 2026-11-10 (Elise) · a message to the client is confirmed first.
   const [confirmOpen, setConfirmOpen] = useState(false);
   const mutation = useMutation({
@@ -54,6 +58,7 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
       setConfirmOpen(false);
       setBody('');
       setPicked([]);
+      improve.dismiss();
       qc.setQueryData<WoMessagesResponse>(queryKey, (curr) =>
         curr ? { ...curr, items: [...curr.items, res.item] } : curr,
       );
@@ -216,6 +221,8 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
         </span>
       </div>
 
+      <ImproveSuggestion improve={improve} onReplace={setBody} />
+
       <MentionTextarea
         className="composer-input"
         placeholder={
@@ -290,6 +297,7 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
           >
             <Icon name="clip" size={14} />
           </button>
+          <ImproveButton improve={improve} body={body} />
           {uploading > 0 ? (
             <span className="composer-count">Uploading {uploading}…</span>
           ) : (

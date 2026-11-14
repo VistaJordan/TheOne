@@ -38,6 +38,14 @@ export const COMMUNICATION_PART: DocPart = {
           since: '0089',
         },
         {
+          name: 'Improve (an AI rewrite of the draft)',
+          what: 'Improve beside the photo and file buttons opens Polish, More formal, Shorter, Friendlier and Custom… (the person types how it should change). Claude rewrites the text in the box and the suggestion shows above it with Replace, Try again and Dismiss, and "Check it before you post — AI can make mistakes". Nothing is posted until the person posts it the ordinary way. The rewrite keeps every fact, number and @mention, adds nothing the draft did not say, and writes for the client on the Client visible tab. Improve is not drawn while Claude is switched off or not set up, and is drawn locked with the reason once the perso’ daily limit or the mont’ budget is reached (Dashboard › AI usage).',
+          value: 'Clearer, more professional messages to clients without leaving the work order.',
+          permissions: ['work_orders/comments create (and work_orders/comments/client create on the Client visible tab)'],
+          audit: ['one ai_usage row per suggestion (Dashboard › AI usage); the message itself is logged when it is posted'],
+          since: '0138',
+        },
+        {
           name: 'Technician texts (Quo thread)',
           what: 'The Quo conversation with the technician, on the Tech Hub tab since 0095 (it sat under the client thread on Messages), synced from Quo and never client-visible; Send text composes from your claimed Quo line (attachments arrive in a later sprint); a right rail shows the technician and the conversation (first contact, last activity, Quo line, job segment, counts of calls, texts and photos, Call via Quo / Text via Quo).',
           value: 'Texts with the technician live beside the job.',

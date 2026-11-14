@@ -222,6 +222,8 @@ export function AppShell({
   // S5 — identity comes from the session, not from a client-side pin. `actingAs`
   // is who the app behaves as; `user` is the human who actually signed in.
   const { user, actingAs, isImpersonating, signOut, can } = useAuth();
+  // lib/versionTwo.ts · the Dashboard is open to super admins in this version.
+  const superAdminView = Boolean(actingAs?.is_super_admin);
 
   // 2026-11-05 · other people's changes reach every screen (lists, queues,
   // badges) within a few seconds, not only an open work order.
@@ -486,9 +488,9 @@ export function AppShell({
                     // A real link, so a middle-click or Ctrl-click opens it in a new tab.
                     <Link
                       to={item.to}
-                      className={`side-item${isActive ? ' is-active' : ''}${isVersionTwo(item.label) ? ' is-v2' : ''}`}
+                      className={`side-item${isActive ? ' is-active' : ''}${isVersionTwo(item.label, superAdminView) ? ' is-v2' : ''}`}
                       aria-current={isActive ? 'page' : undefined}
-                      title={isVersionTwo(item.label) ? `${item.label} — coming in Version 2` : undefined}
+                      title={isVersionTwo(item.label, superAdminView) ? `${item.label} — coming in Version 2` : undefined}
                       onFocus={(e) => previewable && openFlyout(item, e.currentTarget)}
                     >
                       <span className="side-icon">
@@ -496,7 +498,7 @@ export function AppShell({
                       </span>
                       <span className="side-label">{item.label}</span>
                       {/* lib/versionTwo.ts · parked until the next version. */}
-                      {isVersionTwo(item.label) && <span className="side-v2">V2</span>}
+                      {isVersionTwo(item.label, superAdminView) && <span className="side-v2">V2</span>}
                       {count != null && (
                         <span className="side-badge">{count.toLocaleString('en-US')}</span>
                       )}

@@ -15,6 +15,15 @@ export const VERSION_TWO_SECTIONS: Readonly<Record<string, string>> = {
   Pulse: 'The Pulse: the clocks on what each work order is owed, and who should chase it.',
 };
 
-export function isVersionTwo(nav: string): boolean {
-  return Object.prototype.hasOwnProperty.call(VERSION_TWO_SECTIONS, nav);
+/** Parked sections already open to super admins (Elise, 2026-11-14: the
+    Dashboard, with its AI usage tab, is theirs in this version; everyone else
+    keeps the Version 2 screen until it is finished). Read from the person
+    whose view it is — viewing as a dispatcher shows what they see. */
+export const VERSION_TWO_OPEN_TO_SUPER_ADMINS: readonly string[] = ['Dashboard'];
+
+/** Is this section parked for this person? Leave `superAdmin` out to ask
+    about everyone. */
+export function isVersionTwo(nav: string, superAdmin = false): boolean {
+  if (!Object.prototype.hasOwnProperty.call(VERSION_TWO_SECTIONS, nav)) return false;
+  return !(superAdmin && VERSION_TWO_OPEN_TO_SUPER_ADMINS.includes(nav));
 }

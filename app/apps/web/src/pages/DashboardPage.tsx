@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { dashboardPermKey, noVisitLoggedFilter, type WoFilterSet } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
 import { KpiRow } from '../components/KpiRow';
 import { DashCards } from '../components/dash/DashCards';
 import { DashboardBoard } from '../components/dash/DashboardBoard';
+import { AiUsagePanel } from '../components/dash/AiUsagePanel';
 import {
   ApiRequestError,
   countWorkOrders,
@@ -28,7 +29,7 @@ import { filterUrl } from '../lib/woView';
 
 /** The two built-in views, plus (0042) one tab per dashboard record the
     viewer may open — those tabs carry the dashboard's id. */
-type DashTab = 'attention' | 'main' | (string & {});
+type DashTab = 'attention' | 'main' | 'ai' | (string & {});
 
 /** The rows behind the "No visit logged" card — also the filter its click
     hands to the list, so the card and the landing page can never disagree.
@@ -40,12 +41,15 @@ type DashTab = 'attention' | 'main' | (string & {});
 const VISIT_TYPE_UNSET: WoFilterSet = noVisitLoggedFilter();
 
 export function DashboardPage() {
-  const { can } = useAuth();
+  const { can, actingAs } = useAuth();
+  // 0138 · AI usage (models, limits, cost): super admins only for now.
+  const canAi = Boolean(actingAs?.is_super_admin);
+  const [params] = useSearchParams();
   // 0050 · which of the two built-in pages this person opens is a tick under
   // Admin › Roles › Dashboard › Which dashboards, like every other dashboard.
   const canAttention = can(dashboardPermKey('attention'), 'view');
   const canMain = can(dashboardPermKey('main'), 'view');
-  const [picked, setPicked] = useState<DashTab | null>(null);
+  const [picked, setPicked] = useState<DashTab | null>(params.get('tab') === 'ai' ? 'ai' : null);
   const [naming, setNaming] = useState(false);
 
   // 0042 · the shared dashboards. Failing to load them must not take the
@@ -132,6 +136,17 @@ export function DashboardPage() {
             {d.name}
           </button>
         ))}
+        {canAi && (
+          <button
+            type="button"
+            className={`seg-btn${tab === 'ai' ? ' is-on' : ''}`}
+            aria-pressed={tab === 'ai'}
+            onClick={() => setTab('ai')}
+            title="The model, limits and cost of each AI feature — super admins only"
+          >
+            AI usage
+          </button>
+        )}
         {canBuild && (
           <button type="button" className="seg-btn is-add" onClick={() => setNaming(true)} title="Build a dashboard">
             +
@@ -143,6 +158,8 @@ export function DashboardPage() {
         <p className="hint">
           {dashQuery.isLoading ? 'Loading dashboards…' : 'No dashboard has been shared with you yet.'}
         </p>
+      ) : tab === 'ai' && canAi ? (
+        <AiUsagePanel />
       ) : tab === 'attention' && canAttention ? (
         <div className="attn-row">
           <AttentionCard

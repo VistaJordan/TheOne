@@ -20,12 +20,14 @@ import {
   QUOTE_DEFAULT_TRIP_DESCRIPTION,
   QUOTE_SCOPE_FIRST_LINE,
   QUOTE_SCOPE_LAST_LINE,
+  aiModelInfo,
   quoteDraftHasContent,
 } from '@theone/shared';
 import type {
   AiQuoteDraft,
   AiQuoteDraftResponse,
   AiQuoteDraftStatus,
+  AiTokenUsage,
   QuoteDraftBody,
 } from '@theone/shared';
 import { config } from '../config.js';
@@ -34,7 +36,8 @@ import type { Queryable } from '../db.js';
 import { ApiError, badRequest, conflict, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { contractForTask } from './contracts.js';
-import { integrationOn, requireIntegration } from './integrations.js';
+import { integrationOn } from './integrations.js';
+import { aiGate, recordAiUse, type AiResponseUsage } from './aiUsage.js';
 import {
   assertCanCreate,
   assertCanEdit,
@@ -142,13 +145,21 @@ async function taskContext(taskId: string): Promise<TaskContextRow> {
     one of them: it gets neither, and a decline fails the draft as before. */
 const SERVER_FALLBACK = /^claude-(fable|mythos|opus-5|sonnet-5-5)/;
 
-async function askClaude(userMessage: string): Promise<{ out: ModelOutput; model: string; usage: unknown }> {
+/** The cost of a draft (0138): one `ai_usage` row whatever happened. */
+class DraftFailure extends Error {
+  constructor(readonly error: ApiError, readonly responses: AiResponseUsage[]) {
+    super(error.message);
+  }
+}
+
+async function askClaude(userMessage: string, modelId: string): Promise<{ out: ModelOutput; model: string; usage: unknown }> {
   const client = new Anthropic({ apiKey: config.anthropicApiKey!, timeout: 240_000, maxRetries: 1 });
-  const fallback = SERVER_FALLBACK.test(config.quoteAiModel);
+  // 0138 · the model is Dashboard › AI usage's; the list says which take the fallback.
+  const fallback = aiModelInfo(modelId)?.fallback ?? SERVER_FALLBACK.test(modelId);
   let res;
   try {
     res = await client.beta.messages.create({
-      model: config.quoteAiModel,
+      model: modelId,
       max_tokens: 16000,
       // A safety decline on the primary model re-runs on the server's default
       // fallback in the same call rather than failing the draft.
@@ -170,25 +181,30 @@ async function askClaude(userMessage: string): Promise<{ out: ModelOutput; model
     throw new ApiError('INTERNAL', `The AI could not be reached: ${(err as Error).message}`);
   }
 
+  // A response came back, so it cost something even if it is unusable.
+  const spent = [{ model: res.model, usage: res.usage }];
+  const fail = (error: ApiError): never => {
+    throw new DraftFailure(error, spent);
+  };
   if (res.stop_reason === 'refusal') {
-    throw new ApiError('INTERNAL', 'The AI declined to draft a quote from this call');
+    fail(new ApiError('INTERNAL', 'The AI declined to draft a quote from this call'));
   }
   if (res.stop_reason === 'max_tokens') {
-    throw new ApiError('INTERNAL', 'The AI ran out of room before finishing the draft');
+    fail(new ApiError('INTERNAL', 'The AI ran out of room before finishing the draft'));
   }
   const textBlock = res.content.find((b) => b.type === 'text');
   if (!textBlock || textBlock.type !== 'text') {
-    throw new ApiError('INTERNAL', 'The AI returned no draft');
+    return fail(new ApiError('INTERNAL', 'The AI returned no draft'));
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(textBlock.text);
   } catch {
-    throw new ApiError('INTERNAL', 'The AI returned a draft that is not valid JSON');
+    fail(new ApiError('INTERNAL', 'The AI returned a draft that is not valid JSON'));
   }
   const checked = modelOutput.safeParse(parsed);
   if (!checked.success) {
-    throw new ApiError('INTERNAL', 'The AI returned a draft in the wrong shape', checked.error.flatten());
+    return fail(new ApiError('INTERNAL', 'The AI returned a draft in the wrong shape', checked.error.flatten()));
   }
   return { out: checked.data, model: res.model, usage: res.usage };
 }
@@ -197,10 +213,6 @@ async function askClaude(userMessage: string): Promise<{ out: ModelOutput; model
     typically 20–60 s — so the route runs it inside the request. */
 export async function generateDraft(taskId: string, callId: string, actor: ActingPrincipal): Promise<AiQuoteDraftResponse> {
   assertCanEdit(actor);
-  requireIntegration('claude'); // 0074 · Admin › Integrations
-  if (!config.anthropicApiKey) {
-    throw conflict('AI quote drafting is not configured (ANTHROPIC_API_KEY is unset)');
-  }
   const call = await getCall(taskId, callId);
   if (!call.transcript || call.transcript.length === 0) {
     throw conflict('This call has no transcript yet — wait for Quo, or paste it');
@@ -211,7 +223,26 @@ export async function generateDraft(taskId: string, callId: string, actor: Actin
   }
 
   const [ctx, rates] = await Promise.all([taskContext(taskId), contractForTask(taskId)]);
-  const { out, model, usage } = await askClaude(buildUserMessage(ctx, rates, call));
+  // 0138 · the Claude switch, the key, this person's daily limit and the
+  // month's budget (Dashboard › AI usage); asked after the checks above so a
+  // draft that could never run spends nothing.
+  const setting = await aiGate('quote_draft', actor.id);
+  let asked: Awaited<ReturnType<typeof askClaude>>;
+  try {
+    asked = await askClaude(buildUserMessage(ctx, rates, call), setting.model);
+  } catch (err) {
+    const failure = err instanceof DraftFailure ? err : null;
+    await recordAiUse({ feature: 'quote_draft', principalId: actor.id, responses: failure?.responses ?? [], status: 'error', taskId, model: setting.model });
+    throw failure ? failure.error : err;
+  }
+  const { out, model, usage } = asked;
+  await recordAiUse({
+    feature: 'quote_draft',
+    principalId: actor.id,
+    responses: [{ model, usage: usage as AiTokenUsage }],
+    status: 'ok',
+    taskId,
+  });
   const body = toDraftBody(out);
   const assumptions = out.assumptions.map((s) => s.trim()).filter(Boolean).slice(0, 30);
   const missing = out.missing_info.map((s) => s.trim()).filter(Boolean).slice(0, 30);

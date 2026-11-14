@@ -178,7 +178,7 @@ async function configuredOf(key: IntegrationKey): Promise<Configured> {
       return sharepointConfigured();
     case 'claude':
       return config.anthropicApiKey
-        ? { configured: true, note: `Key set · assistant on ${config.assistant.model}, quote drafts on ${config.quoteAiModel}.` }
+        ? { configured: true, note: 'Key set · the model, daily limit and monthly budget of each AI feature are in Dashboard › AI usage.' }
         : { configured: false, note: 'ANTHROPIC_API_KEY is not set on the server.' };
     case 'email':
       return config.mail.provider

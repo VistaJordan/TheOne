@@ -11,6 +11,7 @@ import './styles/quote.css';
 import './styles/payment.css';
 import './styles/pulse.css';
 import './styles/notifications.css';
+import './styles/ai-usage.css';
 import './styles/receivables.css';
 import './styles/approvals.css';
 import './styles/intake.css';

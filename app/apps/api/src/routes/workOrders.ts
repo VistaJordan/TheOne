@@ -23,6 +23,8 @@ import {
   TECH_HUB_TAB,
   STATUS_PERM_KEY,
   WO_MESSAGE_MAX,
+  AI_IMPROVE_MODES,
+  AI_IMPROVE_INSTRUCTION_MAX,
   fieldPermKey,
   fillableOnCreate,
   REOPEN_REQUIRED_CODE,
@@ -56,6 +58,7 @@ import { getFieldTimes } from '../services/woMetrics.js';
 import { getFeed } from '../services/feed.js';
 import { getMessages as getQuoMessages, resolveConversationId, sendMessage } from '../services/messages.js';
 import { editMessage, listMessages, mentionCandidates, postMessage } from '../services/woMessages.js';
+import { improveMessage } from '../services/aiImprove.js';
 import { evaluateForTask } from '../services/obligations.js';
 import { listWorkOrderNotices } from '../services/notices.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
@@ -318,6 +321,16 @@ const messageBodySchema = z.object({
   client_visible: z.boolean(),
   mentions: mentionIdsSchema.optional(),
 });
+
+// 0138 · Improve message: the draft, how to change it, and which tab it is for.
+const improveBodySchema = z
+  .object({
+    body: z.string().trim().min(1).max(WO_MESSAGE_MAX),
+    mode: z.enum(AI_IMPROVE_MODES),
+    instruction: z.string().trim().max(AI_IMPROVE_INSTRUCTION_MAX).optional(),
+    client_visible: z.boolean(),
+  })
+  .strict();
 
 // An edit may change the text, the visibility, or both — never nothing.
 const messageEditSchema = z
@@ -799,6 +812,24 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     // client-visible one is the chase that silences approval_followup.
     await evaluateForTask(taskId);
     return reply.status(201).send({ item });
+  });
+
+  // 0138 · Improve: Claude rewrites the draft in the composer (Polish, More
+  // formal, Shorter, Friendlier, or the person's own instruction). Posts
+  // nothing — the composer shows the suggestion and the person decides.
+  // Needs what posting would need; the model, the daily limit and the
+  // monthly budget are Dashboard › AI usage's, the allowance the signed-in user's.
+  app.post('/work-orders/:id/messages/improve', async (req) => {
+    const { p } = acting(req);
+    requirePerm(p, MESSAGE_PERM_KEY, 'create', 'You cannot post messages');
+    const { id } = parse(idParamsSchema, req.params);
+    const input = parse(improveBodySchema, req.body);
+    if (input.client_visible) {
+      requirePerm(p, CLIENT_MESSAGE_PERM_KEY, 'create', 'You cannot message the client');
+    }
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    return improveMessage(taskId, input, req.auth!.user.id);
   });
 
   // 0052 · edit one's own message while no client system has accepted it

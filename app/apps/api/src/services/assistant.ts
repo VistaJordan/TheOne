@@ -20,7 +20,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { FastifyInstance } from 'fastify';
-import { ASSISTANT_PERM_KEY } from '@theone/shared';
+import { ASSISTANT_PERM_KEY, aiModelInfo } from '@theone/shared';
 import type {
   AssistantAskInput,
   AssistantAskResponse,
@@ -36,10 +36,11 @@ import type {
 } from '@theone/shared';
 import { config } from '../config.js';
 import { query } from '../db.js';
-import { conflict, notFound } from '../errors.js';
+import { notFound } from '../errors.js';
 import type { SessionPrincipal } from './auth.js';
 import { logAdminEvent, type Snapshot } from './adminAudit.js';
 import { integrationOn } from './integrations.js';
+import { aiGate, aiSettingFor, aiUsedToday, recordAiUse, type AiResponseUsage } from './aiUsage.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { STATIC_INSTRUCTIONS, buildQuestion, buildReference, chicagoToday, describeAbilities } from '../lib/assistantPrompt.js';
 import type { RefField, RefNote, RefStatus } from '../lib/assistantPrompt.js';
@@ -70,25 +71,19 @@ export function requireTeach(a: Asker): void {
 
 // ── Status and the daily allowance ───────────────────────────────────────────
 
-async function askedToday(userId: string): Promise<number> {
-  const res = await query<{ n: string }>(
-    `SELECT count(*)::text AS n
-       FROM assistant_message m
-       JOIN assistant_conversation c ON c.id = m.conversation_id
-      WHERE c.principal_id = $1 AND m.role = 'user'
-        AND (m.created_at AT TIME ZONE 'America/Chicago')::date = (now() AT TIME ZONE 'America/Chicago')::date`,
-    [userId],
-  );
-  return Number(res.rows[0]?.n ?? 0);
-}
+// 0138 · the model, the daily limit and the monthly budget are Admin › AI
+// usage's (feature `assistant`); one question = one `ai_usage` row, counted
+// against the person signed in.
+
+const remainingOf = (limit: number | null, used: number): number | null => (limit === null ? null : Math.max(0, limit - used));
 
 export async function assistantStatus(a: Asker): Promise<AssistantStatus> {
   requireAsk(a);
-  const used = await askedToday(a.user.id);
+  const [setting, used] = await Promise.all([aiSettingFor('assistant'), aiUsedToday('assistant', a.user.id)]);
   return {
     configured: config.anthropicApiKey !== null && integrationOn('claude'),
-    daily_limit: config.assistant.dailyLimit,
-    remaining_today: Math.max(0, config.assistant.dailyLimit - used),
+    daily_limit: setting.daily_limit,
+    remaining_today: remainingOf(setting.daily_limit, used),
     can_teach: allowFor(a.actingAs)(ASSISTANT_PERM_KEY, 'edit'),
   };
 }
@@ -245,6 +240,8 @@ interface Outcome {
   lookups: AssistantLookup[];
   model: string | null;
   usage: Record<string, number>;
+  /** Each model response, for the cost (0138): priced one by one. */
+  responses: AiResponseUsage[];
 }
 
 const textOf = (content: Block[]): string =>
@@ -254,27 +251,33 @@ const textOf = (content: Block[]): string =>
     .join('\n\n')
     .trim();
 
-async function answer(app: FastifyInstance, a: Asker, messages: Param[]): Promise<Outcome> {
+async function answer(app: FastifyInstance, a: Asker, messages: Param[], modelId: string): Promise<Outcome> {
   const client = new Anthropic({ apiKey: config.anthropicApiKey!, timeout: 120_000, maxRetries: 1 });
   const reference = await loadReference(app, a.cookie);
   const lookups: AssistantLookup[] = [];
   const usage: Record<string, number> = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
   const started = Date.now();
   let model: string | null = null;
+  const responses: AiResponseUsage[] = [];
+  // 0138 · the model is Dashboard › AI usage's choice: send the effort and the
+  // refusal fallback only to a model that takes them (Haiku 4.5 refuses
+  // effort; neither Haiku takes the server-side fallback).
+  const info = aiModelInfo(modelId);
+  const takesFallback = info ? info.fallback : true;
+  const takesEffort = info ? info.effort : true;
 
-  const done = (body: string, status: AssistantMessageStatus): Outcome => ({ body, status, lookups, model, usage });
+  const done = (body: string, status: AssistantMessageStatus): Outcome => ({ body, status, lookups, model, usage, responses });
 
   for (let step = 0; step < MAX_STEPS; step++) {
     let res: Anthropic.Beta.BetaMessage;
     try {
       res = await client.beta.messages.create({
-        model: config.assistant.model,
+        model: modelId,
         max_tokens: 16000,
         // A safety decline on the primary model re-runs on the server's default
         // fallback in the same call rather than failing the answer.
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        output_config: { effort: config.assistant.effort },
+        ...(takesFallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+        ...(takesEffort ? { output_config: { effort: config.assistant.effort } } : {}),
         system: [
           { type: 'text', text: STATIC_INSTRUCTIONS, cache_control: { type: 'ephemeral' } },
           { type: 'text', text: reference, cache_control: { type: 'ephemeral' } },
@@ -296,6 +299,7 @@ async function answer(app: FastifyInstance, a: Asker, messages: Param[]): Promis
     }
 
     model = res.model;
+    responses.push({ model: res.model, usage: res.usage });
     for (const k of Object.keys(usage)) usage[k] += Number((res.usage as unknown as Record<string, unknown>)[k] ?? 0);
 
     if (res.stop_reason === 'refusal') {
@@ -340,18 +344,9 @@ const titleOf = (question: string): string => {
 
 export async function ask(app: FastifyInstance, a: Asker, input: AssistantAskInput): Promise<AssistantAskResponse> {
   requireAsk(a);
-  if (!integrationOn('claude')) {
-    throw conflict('The assistant is switched off in Admin › Integrations', { code: 'ASSISTANT_OFF' });
-  }
-  if (!config.anthropicApiKey) {
-    throw conflict('The assistant is not switched on yet (ANTHROPIC_API_KEY is unset)', { code: 'ASSISTANT_OFF' });
-  }
-  const used = await askedToday(a.user.id);
-  if (used >= config.assistant.dailyLimit) {
-    throw conflict(`You have asked ${config.assistant.dailyLimit} questions today, which is the daily limit. It resets at midnight.`, {
-      code: 'ASSISTANT_DAILY_LIMIT',
-    });
-  }
+  // 0138 · the Claude switch, the key, this person's daily limit and the
+  // month's budget, all from Dashboard › AI usage (409 with details.code).
+  const setting = await aiGate('assistant', a.user.id);
 
   let conversation: AssistantConversationSummary;
   let earlier: AssistantMessage[] = [];
@@ -398,7 +393,14 @@ export async function ask(app: FastifyInstance, a: Asker, input: AssistantAskInp
     }),
   });
 
-  const out = await answer(app, a, history);
+  const out = await answer(app, a, history, setting.model);
+  await recordAiUse({
+    feature: 'assistant',
+    principalId: a.user.id,
+    responses: out.responses,
+    status: out.status === 'error' ? 'error' : 'ok',
+    model: setting.model,
+  });
 
   const saved = await query<MessageRow>(
     `INSERT INTO assistant_message AS m (conversation_id, role, body, status, lookups, model, usage)
@@ -431,7 +433,7 @@ export async function ask(app: FastifyInstance, a: Asker, input: AssistantAskInp
     conversation,
     question,
     answer: toMessage(saved.rows[0]),
-    remaining_today: Math.max(0, config.assistant.dailyLimit - used - 1),
+    remaining_today: remainingOf(setting.daily_limit, await aiUsedToday('assistant', a.user.id)),
   };
 }
 

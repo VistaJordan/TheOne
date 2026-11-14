@@ -107,7 +107,8 @@ function RequireCan({
 /** A section parked for Version 2 (lib/versionTwo.ts): its page is kept
     and answers again the moment its name leaves VERSION_TWO_SECTIONS. */
 function VersionTwo({ nav, children }: { nav: NavKey; children: ReactNode }) {
-  if (!isVersionTwo(nav)) return <>{children}</>;
+  const { actingAs } = useAuth();
+  if (!isVersionTwo(nav, Boolean(actingAs?.is_super_admin))) return <>{children}</>;
   return (
     <AppShell active={nav}>
       <div className="wo-state v2-state">
@@ -320,6 +321,8 @@ export function App() {
               <Route path="/admin/portfolio" element={<RequireAuth><AdminPortfolioPage /></RequireAuth>} />
               {/* 0074 · every connector with its on / off switch. */}
               <Route path="/admin/integrations" element={<RequireAuth><AdminIntegrationsPage /></RequireAuth>} />
+              {/* 0138 · AI usage moved to a Dashboard tab (super admins) the same day. */}
+              <Route path="/admin/ai" element={<Navigate to="/dashboard?tab=ai" replace />} />
               {/* 0075 — the living BRD, SOP and work-order lifecycle. */}
               <Route path="/admin/docs" element={<RequireAuth><Suspense fallback={null}><AdminDocsPage /></Suspense></RequireAuth>} />
             </Routes>

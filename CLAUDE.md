@@ -3639,6 +3639,53 @@ overrides ignored) is never auto-approved, and
 decline one under `SMALL_NTE_PAYMENT_UNDER` ($500); $500 and over above the NTE
 stays the AM's (`overNteApproverLabel` words the lock). **An exit by mistake keeps the form:** besides ✕ / the scrim, Add work order files what was typed as an intake draft when the page goes away (the browser's "Leave site?" first, then a `keepalive` POST on `pagehide`, `createIntakeDraftOnExit`) or the form unmounts inside the app (Back, a link); Create, Save as draft and Cancel set `finished` and file nothing extra. Needs `intake` create, which migration 0136 grants (view / create / edit) to TL, ATL and AM too — rule 14.1.2 had kept drafts to OP Admin and Admin, from before drafts lived on Add work order. **RF closed too** (migration 0137, Elise 2026-11-14): the 0134 treatment for RF — Comp = SFM, BKR; RF's teams, check-in rows and price cards deleted, its contracts off, RF-only clients inactive, the RF sign-off sheet and form gone (`SIGNOFF_LAYOUTS` = sfm, bkr, bkr_emcor); history untouched; seed.ts in step. **Files attached on Add work order are the client’s:** the form uploads them with `from_client: true`; `addAttachment` files them as kind `client`, approved as they land (reviewed by the uploader, copied to SharePoint), honoured only for the person who created the work order within 60 minutes (`FROM_CLIENT_WINDOW_MIN`, else 400). The same day fixed every upload answering 500 after storing the file (a WITH-INSERT read back by its own statement saw no row). **Production migrations:** `npm run db:migrate:prod` (`app/scripts/migrate-production.mjs`) pulls the Vercel Production env to a temp file, picks the direct Neon URL, lists what is pending and asks before running `db:migrate` (`--check` lists only, `--yes` skips the question).
 
+**AI usage, models and limits; Improve message; the assistant keeps
+confidences** (migration 0138, Elise 2026-11-14; `packages/shared/src/aiUsage.ts`
+pure, `services/aiUsage.ts`, `services/aiImprove.ts`, `routes/ai.ts`,
+`components/dash/AiUsagePanel.tsx`, `components/wo/messages/ImproveMessage.tsx`,
+`tests/ai-usage.test.ts`). Every Claude call belongs to a FEATURE
+(`AI_FEATURES`: `assistant`, `quote_draft`, `message_improve`). **Dashboard ›
+AI usage** is a Dashboard tab drawn for **super admins only** (Elise: nobody else
+sees it until it is finished; `GET /ai/usage?period=today|month|last_month|30d`
+and `PUT /ai/settings/:feature` answer 403 to anyone else, read from the person
+whose view it is; no permission path, no role grant; `/admin/ai` redirects to
+`/dashboard?tab=ai`). It sets per feature the model (`AI_MODELS`: Haiku 5.5,
+Haiku 4.5, Sonnet 5.5, Opus 5.5 with their prices per million tokens), the daily
+limit per person (null = none, 0 = off for everyone) and the monthly budget in
+US$ (row in `ai_setting`, logged `ai_setting_updated`). A feature with no row
+keeps its env default (ASSISTANT_AI_MODEL / ASSISTANT_DAILY_LIMIT,
+QUOTE_AI_MODEL with 30 a day; Improve on Haiku 5.5, 100 a day). **`aiGate(feature,
+userId)`** runs before every call: Claude switch, key, today's count (Chicago
+day) and the month's spend, else 409 with `details.code` `AI_OFF` /
+`AI_DAILY_LIMIT` / `AI_MONTHLY_BUDGET`; the allowance is the signed-in user's
+(`req.auth.user`), never the viewed person's. **`recordAiUse`** writes one
+`ai_usage` row per use (tokens, cost summed response by response through
+`aiCostUsd` at the price on file, `status` ok / error, `task_id`); a refused use
+writes nothing; it never throws. Both tables have no FK and the seed truncates
+neither. The assistant's count moved from `assistant_message` to `ai_usage`
+(`AssistantStatus.daily_limit` / `remaining_today` may be null = no limit); the
+effort and the server-side fallback are sent only to a model that takes them
+(`aiModelInfo().effort` / `.fallback`: Haiku 4.5 refuses effort, neither Haiku
+takes the fallback). The tab shows tiles, By feature (settings + month spend
+against the budget), By person (cost and uses per feature, today against each
+limit, `aiHeavyUseReason`: reached a daily limit, or three times the team's
+median) and By day. **The Dashboard is open to super admins in this version**
+(`VERSION_TWO_OPEN_TO_SUPER_ADMINS` in `lib/versionTwo.ts`, `isVersionTwo(nav,
+superAdmin)` in the route guard and the sidebar); everyone else keeps the
+Version 2 screen, and `/` still lands on Work Orders for anyone who may open
+them. **A new AI feature** = an `AI_FEATURES` entry, its labels and defaults,
+the 0138 CHECK on `ai_setting.feature` widened by a migration, and `aiGate` +
+`recordAiUse` around its call. **Improve** on the Messages composer (`POST
+/work-orders/:id/messages/improve {body, mode, instruction?, client_visible}`,
+the posting grants, `resolveTaskId`): Polish · More formal · Shorter ·
+Friendlier · Custom…; the suggestion shows above the box with Replace · Try
+again · Dismiss and nothing is posted; the button is hidden while `GET
+/ai/status` says AI_OFF and locked with the reason at a limit or the budget.
+**The assistant's BRIEFING** gained "What you keep confidential": employment
+(pay, benefits, HR), people as people, secrets and internals, and figures the
+asker's role does not show (never inferred from other figures); who the asker is
+comes only from the session, never from what they type.
+
 ## Verify
 
 ```

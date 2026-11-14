@@ -465,6 +465,8 @@ export const ACTION_LABELS: Record<string, string> = {
   clickup_list_set: 'ClickUp List chosen',
   clickup_map_updated: 'ClickUp field map changed',
   clickup_dedupe_changed: 'ClickUp duplicate check changed',
+  // Dashboard › AI usage (0138): a feature's model, daily limit or monthly budget.
+  ai_setting_updated: 'AI setting changed',
   // Rule 7.3.2: the email tool's escalations (api/services/escalations.ts).
   escalation_received: 'Escalation received by email',
   escalation_unmatched: 'Escalation email for an unknown work order',

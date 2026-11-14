@@ -2258,6 +2258,8 @@ export * from './vendorSuggest';
 export * from './purchasing';
 // 0068: the assistant — ask anything, answered from live look-ups.
 export * from './assistant';
+// 0138: AI usage — the model, daily limit and monthly budget per AI feature, and what each costs.
+export * from './aiUsage';
 // Cost follows accepted payment requests; Total Invoiced follows the quote.
 export * from './moneyRules';
 // 0070: sign-off sheets — branded blank per entity, shared by text, signed copy filed.

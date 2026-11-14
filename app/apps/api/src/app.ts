@@ -61,6 +61,7 @@ import plannedMaintenanceRoutes from './routes/plannedMaintenance.js';
 import billingProposalRoutes from './routes/billingProposals.js';
 import clientUpdateRoutes from './routes/clientUpdates.js';
 import assistantRoutes from './routes/assistant.js';
+import aiRoutes from './routes/ai.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
@@ -170,6 +171,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(clientUpdateRoutes, { prefix: '/api' });
   // 0068 — the assistant: questions answered from live look-ups, as the asker.
   await app.register(assistantRoutes, { prefix: '/api' });
+  // 0138 — AI usage: the model, daily limit and monthly budget per AI feature.
+  await app.register(aiRoutes, { prefix: '/api' });
 
   return app;
 }

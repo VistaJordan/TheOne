@@ -98,7 +98,9 @@ export type AdminEntity =
   | 'vendor_target'
   | 'vendor_saved_view'
   // 0101: a card of the price list (entity, client: trip, markup, rates, fees).
-  | 'price_card';
+  | 'price_card'
+  // 0138: an AI feature's model, daily limit and monthly budget (Dashboard › AI usage), keyed by feature.
+  | 'ai_setting';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

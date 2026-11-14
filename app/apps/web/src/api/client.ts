@@ -8,6 +8,17 @@ import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@
 import type { WoNotificationsResponse } from '@theone/shared';
 // 0074: Admin › Integrations.
 import type { ClickUpOverview, EcotrakOverview, IntegrationsResponse } from '@theone/shared';
+// 0138: AI usage — models, limits, cost; Improve message.
+import type {
+  AiFeature,
+  AiFeatureSettingView,
+  AiImproveInput,
+  AiImproveResponse,
+  AiSettingInput,
+  AiStatusResponse,
+  AiUsagePeriod,
+  AiUsageResponse,
+} from '@theone/shared';
 // 0075: Admin › Documentation.
 import type { DocsContent, DocsMarkdownKind, DocsSnapshot } from '@theone/shared';
 import type { SharePointFolderRef, SharePointOverview, SharePointSettings, SharePointTestResult } from '@theone/shared';
@@ -2378,6 +2389,25 @@ export function getIntegrations(): Promise<IntegrationsResponse> {
 
 export function setIntegrationEnabled(key: string, enabled: boolean): Promise<IntegrationsResponse> {
   return request(`/admin/integrations/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ enabled }) });
+}
+
+// 0138 · AI usage: per feature, may I use it now (the buttons ask first).
+export function getAiStatus(): Promise<AiStatusResponse> {
+  return request('/ai/status');
+}
+
+// 0138 · Dashboard › AI usage (super admins): cost per feature and per person, the settings.
+export function getAiUsage(period: AiUsagePeriod): Promise<AiUsageResponse> {
+  return request(`/ai/usage?period=${encodeURIComponent(period)}`);
+}
+
+export function saveAiSetting(feature: AiFeature, input: AiSettingInput): Promise<{ settings: AiFeatureSettingView[] }> {
+  return request(`/ai/settings/${encodeURIComponent(feature)}`, { method: 'PUT', body: JSON.stringify(input) });
+}
+
+// 0138 · Improve on the Messages composer: a rewrite to accept or dismiss.
+export function improveWorkOrderMessage(woId: string, input: AiImproveInput): Promise<AiImproveResponse> {
+  return request(`/work-orders/${encodeURIComponent(woId)}/messages/improve`, { method: 'POST', body: JSON.stringify(input) });
 }
 
 // 0079 · Ecotrak → OBI's panel under its row (read only against Ecotrak).
