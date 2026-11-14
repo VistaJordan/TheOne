@@ -8,6 +8,7 @@
     "dev:web": "npm --prefix app run dev:web",
     "setup": "npm --prefix app run setup",
     "db:migrate": "npm --prefix app run db:migrate",
+    "db:migrate:prod": "npm --prefix app run db:migrate:prod --",
     "db:seed": "npm --prefix app run db:seed",
     "build": "npm --prefix app -w @theone/web run build"
   }

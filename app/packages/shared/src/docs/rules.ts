@@ -113,7 +113,7 @@ export const BUSINESS_RULES: DocRule[] = [
   { id: '11.3.5', title: 'Technician rating on Done', statement: 'The dispatcher rates the technician when the job is done.', enforced: 'Not built.', state: 'deferred', note: 'There is no rating field on the vendor record yet.' },
 
   // ── 14. Intake ──
-  { id: '14.1', title: 'WO Intake drafts', statement: 'The Operations Admin drafts work orders by hand on the Drafts tab of Incoming Work Orders.', enforced: 'wo_intake_draft; /incoming/drafts.', state: 'built' },
+  { id: '14.1', title: 'WO Intake drafts', statement: 'The Operations Admin drafts work orders by hand on the Drafts tab of Incoming Work Orders; since 2026-11-14 TL, ATL and AM hold drafts too (they open Add work order, whose Save as draft and mistaken exits file one).', enforced: 'wo_intake_draft; /incoming/drafts; intake view / create / edit for oa, admin (0040) and tl, atl, am (0136).', state: 'built' },
   { id: '14.2.2', title: 'A draft is complete before it is submitted', statement: 'Submit & assign refuses until every required intake field and an active assignee are in.', enforced: 'submitIntakeDraft (409 INTAKE_SUBMIT with the missing list).', state: 'built' },
   { id: '14.3.3', title: 'Submit & assign is the handoff', statement: 'A submitted draft creates the work order already assigned and skips the acceptance queue.', enforced: 'submitIntakeDraft.', state: 'built' },
 ];

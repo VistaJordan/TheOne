@@ -2555,6 +2555,23 @@ export function createIntakeDraft(input: IntakeDraftInput): Promise<{ item: Inta
   return request('/intake/drafts', { method: 'POST', body: JSON.stringify(input) });
 }
 
+/** Elise 2026-11-14: the Add work order form filed as a draft while the page
+    is going away (refresh, tab closed). `keepalive` lets the browser finish
+    the request after the page has gone; nothing waits for the answer. */
+export function createIntakeDraftOnExit(input: IntakeDraftInput): void {
+  try {
+    void fetch('/api/intake/drafts', {
+      method: 'POST',
+      credentials: 'same-origin',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'x-obi-tab': TAB_ID },
+      body: JSON.stringify(input),
+    }).catch(() => undefined);
+  } catch {
+    /* the page is going away — nothing to tell anyone */
+  }
+}
+
 export function getIntakeDraft(id: string): Promise<{ item: IntakeDraft }> {
   return request(`/intake/drafts/${encodeURIComponent(id)}`);
 }

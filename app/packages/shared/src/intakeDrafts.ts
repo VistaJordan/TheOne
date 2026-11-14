@@ -1,7 +1,9 @@
 // Section 14 — the Incoming Work Order Intake (OP Admin).
 //
 //   14.1.1  A staging area SEPARATE from the main work-order table.
-//   14.1.2  OP Admin, Admin and Super Admin see it; nobody else does.
+//   14.1.2  OP Admin, Admin and Super Admin see it — and since 0136 (Elise,
+//           2026-11-14) TL, ATL and AM, who open Add work order and keep
+//           drafts from it; nobody else does.
 //   14.2.x  "New Work Order" opens the manual entry form; the 11.1.1 intake
 //           fields are mandatory before it can be submitted; an Assignee
 //           dropdown says where the ticket goes.

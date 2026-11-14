@@ -7,6 +7,7 @@
   ],
   "scripts": {
     "db:migrate": "npm -w @theone/db run migrate",
+    "db:migrate:prod": "node scripts/migrate-production.mjs",
     "db:seed": "npm -w @theone/db run seed",
     "setup": "npm run db:migrate && npm run db:seed",
     "typecheck": "tsc -p packages/shared --noEmit && tsc -p packages/db --noEmit && tsc -p apps/api --noEmit && tsc -p apps/worker --noEmit && tsc -b apps/web --force",

@@ -91,3 +91,18 @@ describe('a payment under $500 on a loss-making job', () => {
     expect(svc).toContain('mayApproveOverNtePayment(actor.role, actor.isSuperAdmin, amount)');
   });
 });
+
+describe('Add work order: an exit by mistake keeps a draft', () => {
+  const dlg = read('apps', 'web', 'src', 'components', 'wo', 'list', 'CreateWorkOrderDialog.tsx');
+  it('a refresh or closed tab asks first, then files the draft on the way out', () => {
+    expect(dlg).toContain("window.addEventListener('beforeunload', warn)");
+    expect(dlg).toContain("window.addEventListener('pagehide', leave)");
+    expect(dlg).toContain('createIntakeDraftOnExit(draftInput())');
+    expect(read('apps', 'web', 'src', 'api', 'client.ts')).toContain('keepalive: true');
+  });
+  it('leaving inside the app files it too; Create, Save as draft and Cancel do not', () => {
+    expect(dlg).toContain('// Unmounted with the form still open (Back, a link): keep it as a draft.');
+    expect(dlg).toContain('onClick={cancel}');
+    expect(dlg.match(/finished\.current = true;/g)?.length).toBeGreaterThanOrEqual(4);
+  });
+});

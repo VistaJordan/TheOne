@@ -84,6 +84,7 @@ import {
   ApiRequestError,
   checkWoNumber,
   createIntakeDraft,
+  createIntakeDraftOnExit,
   createWorkOrder,
   deleteWoCreateTemplate,
   getPrincipals,
@@ -294,6 +295,9 @@ const SHOW_SITE_ON_CREATE = false;
 
 export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   const navigate = useNavigate();
+  /** The form left on purpose (created, saved as a draft, cancelled): no
+      draft is filed on the way out. */
+  const finished = useRef(false);
   const qc = useQueryClient();
   const { can } = useAuth();
   const catalogue = useWoCatalogue();
@@ -520,7 +524,11 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   const missing = useMemo(() => woCreateMissing(form, bag, woNumber), [form, bag, woNumber]);
 
   const create = useMutation({
-    mutationFn: () => createWorkOrder({ wo_number: woNumber.trim(), fields: bag, site_id: site?.id ?? null, asset_id: assetId || null }),
+    mutationFn: () => {
+      // A refresh while the work order is being created must not file a draft too.
+      finished.current = true;
+      return createWorkOrder({ wo_number: woNumber.trim(), fields: bag, site_id: site?.id ?? null, asset_id: assetId || null });
+    },
     onSuccess: async (res) => {
       void qc.invalidateQueries({ queryKey: ['work-orders'] });
       void qc.invalidateQueries({ queryKey: ['sites-meta'] });
@@ -547,6 +555,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       }
     },
     onError: (err: unknown) => {
+      finished.current = false;
       if (err instanceof ApiRequestError) {
         setError(err.message);
         const details = (err as { details?: { missing?: unknown } }).details;
@@ -593,21 +602,28 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
 
   // ── Save as draft ──────────────────────────────────────────────────────────
   const canDraft = can(INTAKE_PERM_KEY, 'create');
+  const draftInput = () => {
+    const { [ASSIGNEE_KEY]: assignee, ...fields } = bag;
+    return {
+      wo_number: woNumber.trim() || null,
+      fields,
+      assignee: typeof assignee === 'string' && assignee.trim() ? assignee : null,
+    };
+  };
   const saveDraft = useMutation({
     mutationFn: () => {
-      const { [ASSIGNEE_KEY]: assignee, ...fields } = bag;
-      return createIntakeDraft({
-        wo_number: woNumber.trim() || null,
-        fields,
-        assignee: typeof assignee === 'string' && assignee.trim() ? assignee : null,
-      });
+      finished.current = true;
+      return createIntakeDraft(draftInput());
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['intake-drafts'] });
       onClose();
       navigate('/incoming/drafts');
     },
-    onError: (e) => setError(e instanceof ApiRequestError ? e.message : 'Could not save the draft'),
+    onError: (e) => {
+      finished.current = false;
+      setError(e instanceof ApiRequestError ? e.message : 'Could not save the draft');
+    },
   });
   // What the form opens holding (Received on, filled in by itself) is not
   // "something typed": a form closed untouched leaves no draft behind.
@@ -627,6 +643,42 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     else onClose();
   };
   const blocked = taken || missing.length > 0 || busy;
+
+  // 2026-11-14 (Elise): an exit by mistake that skips the ✕ keeps the form
+  // too. A refresh or a closed tab first asks the browser's "Leave site?"; if
+  // the person leaves anyway, what was typed is filed as a draft on the way
+  // out (`createIntakeDraftOnExit`, a keepalive request). Leaving the form
+  // inside the app (Back, a link) files it the same way. Create, Save as
+  // draft and Cancel finish the form (`finished`) and file nothing extra.
+  const onExit = useRef<() => void>(() => undefined);
+  onExit.current = () => {
+    if (finished.current || !canDraft || !somethingTyped) return;
+    finished.current = true;
+    createIntakeDraftOnExit(draftInput());
+  };
+  const unsaved = useRef(false);
+  unsaved.current = somethingTyped;
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!unsaved.current || finished.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    const leave = () => onExit.current();
+    window.addEventListener('beforeunload', warn);
+    window.addEventListener('pagehide', leave);
+    return () => {
+      window.removeEventListener('beforeunload', warn);
+      window.removeEventListener('pagehide', leave);
+      // Unmounted with the form still open (Back, a link): keep it as a draft.
+      onExit.current();
+      void qc.invalidateQueries({ queryKey: ['intake-drafts'] });
+    };
+  }, [qc]);
+  const cancel = () => {
+    finished.current = true;
+    onClose();
+  };
 
   // ── Drawing one field ──────────────────────────────────────────────────────
   const control = (f: WoCreateField) => {
@@ -1028,7 +1080,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
           <button
             type="button"
             className="btn-sm is-ghost"
-            onClick={onClose}
+            onClick={cancel}
             disabled={busy}
             title={canDraft && somethingTyped ? 'Throw this work order away — nothing is kept' : undefined}
           >

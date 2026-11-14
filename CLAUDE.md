@@ -3624,7 +3624,7 @@ $500:** Cost + vendor bills + the payment above the NTE (`aboveNteFor`,
 overrides ignored) is never auto-approved, and
 `mayApproveOverNtePayment(role, super, amount)` lets TL / ATL / AM approve or
 decline one under `SMALL_NTE_PAYMENT_UNDER` ($500); $500 and over above the NTE
-stays the AM's (`overNteApproverLabel` words the lock).
+stays the AM's (`overNteApproverLabel` words the lock). **An exit by mistake keeps the form:** besides ✕ / the scrim, Add work order files what was typed as an intake draft when the page goes away (the browser's "Leave site?" first, then a `keepalive` POST on `pagehide`, `createIntakeDraftOnExit`) or the form unmounts inside the app (Back, a link); Create, Save as draft and Cancel set `finished` and file nothing extra. Needs `intake` create, which migration 0136 grants (view / create / edit) to TL, ATL and AM too — rule 14.1.2 had kept drafts to OP Admin and Admin, from before drafts lived on Add work order. **Production migrations:** `npm run db:migrate:prod` (`app/scripts/migrate-production.mjs`) pulls the Vercel Production env to a temp file, picks the direct Neon URL, lists what is pending and asks before running `db:migrate` (`--check` lists only, `--yes` skips the question).
 
 ## Verify
 
