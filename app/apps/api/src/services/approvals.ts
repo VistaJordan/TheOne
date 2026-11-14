@@ -813,7 +813,12 @@ async function decide(
       cur.created_by?.display_name ?? null,
     );
   }
-  return getApprovalTask(id);
+  const decided = await getApprovalTask(id);
+  // Elise, 2026-11-14: the requester and the work order's assigned
+  // dispatcher(s) hear about the decision in Notifications. Never throws.
+  const { notifyRequestDecided } = await import('./requestNotices.js');
+  await notifyRequestDecided(decided, to, note, { id: actor.id });
+  return decided;
 }
 
 /** What a decision may carry besides the note. */

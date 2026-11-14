@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MENTION_NOTICE_KIND,
   NOTICE_TYPES,
+  REQUEST_DECIDED_NOTICE_KIND,
   PULSE_RULE_LABELS,
   WO_ASSIGNED_NOTICE_KIND,
   kindsInGroup,
@@ -40,7 +41,7 @@ function raisedKinds(): string[] {
 
 describe('notice types', () => {
   it('every kind notify() raises has a name and a group', () => {
-    const kinds = [...raisedKinds(), WO_ASSIGNED_NOTICE_KIND, MENTION_NOTICE_KIND, 'vendor_expiry'];
+    const kinds = [...raisedKinds(), WO_ASSIGNED_NOTICE_KIND, MENTION_NOTICE_KIND, REQUEST_DECIDED_NOTICE_KIND, 'vendor_expiry'];
     expect(kinds.length).toBeGreaterThan(10);
     for (const k of kinds) expect(NOTICE_TYPES[k], `kind "${k}" — add it to NOTICE_TYPES`).toBeDefined();
   });

@@ -31,6 +31,7 @@ export const NOTICE_TYPES: Record<string, { label: string; group: NoticeGroupId 
   wo_message: { label: 'Messages on your work orders', group: 'work_orders' },
   dispatch: { label: 'Dispatch offers', group: 'work_orders' },
   vendor_portal: { label: 'Vendor portal notes', group: 'work_orders' },
+  request_decided: { label: 'Request decisions', group: 'approvals' },
   nte_increase: { label: 'NTE increase requests', group: 'approvals' },
   nte_increase_decided: { label: 'NTE increase decisions', group: 'approvals' },
   work_permit: { label: 'Work permits', group: 'approvals' },
@@ -46,6 +47,21 @@ export const NOTICE_TYPES: Record<string, { label: string; group: NoticeGroupId 
   vendor_expiry: { label: 'Insurance dates', group: 'vendors' },
   vendor_onboarding: { label: 'Vendor onboarding', group: 'vendors' },
 };
+
+/** A decided approval task (status change, snooze, money hold), told to the
+    requester and the work order's assigned dispatcher(s) (Elise, 2026-11-14). */
+export const REQUEST_DECIDED_NOTICE_KIND = 'request_decided';
+
+/** "Status change approved on WO-123 by Jordan". */
+export function requestDecidedNoticeTitle(
+  typeLabel: string,
+  decision: 'approved' | 'rejected',
+  woNumber: string,
+  byName: string | null,
+): string {
+  const by = byName && byName.trim() !== '' ? ` by ${byName.trim()}` : '';
+  return `${typeLabel} ${decision} on ${woNumber}${by}`;
+}
 
 /** The Pulse rules, in the wording the Pulse page prints for them. */
 export const PULSE_RULE_LABELS: Record<string, string> = {

@@ -3306,6 +3306,19 @@ actorId, read off the newest audit row that set the seat), and `notify` now
 takes a `dedupeKey` (0059's unique index) — keyed by that audit row, so one
 assignment is one notice. Never throws.
 
+**Request decisions in Notifications** (Elise, 2026-11-14, no migration;
+`services/requestNotices.ts`, `REQUEST_DECIDED_NOTICE_KIND` /
+`requestDecidedNoticeTitle` in shared `notices.ts`,
+`tests/request-decided-notice.test.ts`). When `decide` (approvals.ts)
+approves or rejects an approval task, after the commit `notifyRequestDecided`
+raises an `app_notice` of kind `request_decided` ("Status change approved on
+WO-12 by Jordan", body = the task title + the note, link to the work order)
+for the requester and every active person in the work order's Assignee seat,
+minus the decider; one per person per decision (dedupe key = the task id).
+`wo_acceptance` is skipped (an accept already raises "Assigned to you"). An NTE
+hold approved through its payment (`approvePaymentRequest`) does not go
+through `decide` and raises nothing. Never throws.
+
 **No work order goes to a disabled account** (Elise, 2026-10-23, no
 migration; `tests/assignee-disabled.test.ts`). The person paths already
 refused one through `assertDispatchers` (`status <> 'disabled'`). The paths
