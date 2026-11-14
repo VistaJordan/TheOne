@@ -675,6 +675,19 @@ files with a blob behind them count. The header feeds the status menu the
 approved kinds from the same `['wo-attachments', id]` cache entry, so the
 "Needs after photo" tag clears the moment a photo is approved.
 
+**Files are named by their group** (Elise, 2026-11-14, no migration;
+`ATTACHMENT_KIND_PREFIX` / `autoAttachmentName` / `nextAutoNumber` in shared
+`attachments.ts`, `autoNameFor` in `services/attachments.ts`,
+`tests/attachment-auto-names.test.ts`). Approving a file into a group renames
+it B1, B2… (before), A1… (after), SO1… (sign-off), C1… (from client),
+numbered per work order in the order filed (one past the highest used, gaps
+not reused), the stored file's extension kept; numbers are handed out under
+the task row lock (`FOR NO KEY UPDATE`). A file already holding a name of its
+group keeps it on re-approval; moved to another group it takes that group's
+next number; Other keeps the typed name. Client files from Add work order are
+named C1… as they land. The viewer draws "Named A1, A2… automatically" in
+place of the name box for the four groups. Nothing on file was renamed.
+
 **Trend cards and the board's period** (migration 0044, rule-free, the
 dashboards' second half). A fifth widget kind, `line`, cuts by WHEN instead of
 by a category: `config.time_field` + `bucket` (day/week/month),

@@ -25,8 +25,11 @@ import {
   type AttachmentReview,
   type AttachmentReviewStatus,
   type AttachmentUpload,
+  autoAttachmentName,
+  autoNameNumber,
+  nextAutoNumber,
 } from '@theone/shared';
-import { query } from '../db.js';
+import { query, withTransaction, type Queryable } from '../db.js';
 import { ApiError, badRequest, notFound } from '../errors.js';
 import { allowFor, requirePerm } from './permissions.js';
 import type { ActingPrincipal } from './activity.js';
@@ -181,6 +184,39 @@ function safeName(raw: string): string {
   return cleaned.slice(0, 120) || 'file';
 }
 
+/**
+ * Elise, 2026-11-14: a file filed into a group is named by it — B1, B2… for
+ * before photos, A1… after, SO1… sign-offs, C1… client files — numbered per
+ * work order in the order they are filed (`nextAutoNumber`: one past the
+ * highest used, gaps not reused). Runs inside the caller's transaction, which
+ * has locked the task row, so two files filed at once never share a number.
+ * A file already carrying an automatic name of its kind keeps it; `other`
+ * keeps the name it had. Returns the name to store.
+ */
+async function autoNameFor(
+  tx: Queryable,
+  taskId: string,
+  attachmentId: string | null,
+  kind: AttachmentKind,
+  currentName: string,
+): Promise<string> {
+  if (autoAttachmentName(kind, 1, currentName) === null) return currentName;
+  if (autoNameNumber(kind, currentName) !== null) return currentName;
+  const taken = await tx.query<{ file_name: string }>(
+    `SELECT file_name FROM attachment
+      WHERE task_id = $1 AND kind = $2 AND ($3::uuid IS NULL OR id <> $3::uuid)`,
+    [taskId, kind, attachmentId],
+  );
+  const n = nextAutoNumber(kind, taken.rows.map((r) => r.file_name));
+  return autoAttachmentName(kind, n, currentName) ?? currentName;
+}
+
+/** Lock the work order's row so automatic numbers are handed out one at a
+    time (NO KEY: see updateWorkOrderFields in woFieldValues.ts). */
+async function lockTaskForNaming(tx: Queryable, taskId: string): Promise<void> {
+  await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [taskId]);
+}
+
 /** The row just inserted, read in its own statement (see addAttachment). */
 /** How long after creating a work order its creator may still file From client files. */
 const FROM_CLIENT_WINDOW_MIN = 60;
@@ -260,7 +296,14 @@ export async function addAttachment(
   // An INSERT inside a WITH, read by the same statement's SELECT, cannot see the row it
   // just inserted (one snapshot for the whole statement), so it came back
   // empty and every upload answered 500 after the file and row were stored.
-  const ins = await query<{ id: string }>(
+  // A client file is filed as it lands, so it is named as it lands (C1, C2…).
+  let storedName = fileName;
+  const ins = await withTransaction(async (tx) => {
+    if (fromClient) {
+      await lockTaskForNaming(tx, taskId);
+      storedName = await autoNameFor(tx, taskId, null, 'client', fileName);
+    }
+    return tx.query<{ id: string }>(
     `INSERT INTO attachment
        (task_id, file_name, storage_key, content_type, byte_size, client_visible, visit_id, uploaded_by,
         review_status, kind, reviewed_by, reviewed_at)
@@ -269,7 +312,7 @@ export async function addAttachment(
      RETURNING id::text AS id`,
     [
       taskId,
-      fileName,
+      storedName,
       blob.pathname,
       contentType,
       bytes.length,
@@ -280,7 +323,8 @@ export async function addAttachment(
       fromClient ? 'client' : null,
       fromClient,
     ],
-  );
+    );
+  });
 
   // Rule 1.2.1: every button leaves a trace. The snapshot carries enough to
   // read the row back after the file itself is gone.
@@ -292,7 +336,8 @@ export async function addAttachment(
       taskId,
       `attachment:${ins.rows[0].id}`,
       JSON.stringify({
-        file_name: fileName,
+        file_name: storedName,
+        ...(storedName !== fileName ? { uploaded_as: fileName } : {}),
         content_type: contentType,
         byte_size: bytes.length,
         client_visible: input.client_visible ?? false,
@@ -424,15 +469,27 @@ export async function reviewAttachment(
   if (approving && (!kind || !ATTACHMENT_KINDS.includes(kind))) {
     throw badRequest('Say what this file is — before photo, after photo, sign-off or other — to approve it');
   }
-  const fileName = input.file_name?.trim() ? safeName(input.file_name) : row.file_name;
+  const typed = input.file_name?.trim() ? safeName(input.file_name) : row.file_name;
   const status: AttachmentReviewStatus = approving ? 'approved' : 'declined';
 
-  await query(
-    `UPDATE attachment
-        SET review_status = $2, kind = $3, file_name = $4, reviewed_by = $5, reviewed_at = now()
-      WHERE id = $1`,
-    [attachmentId, status, kind, fileName, actor.id],
-  );
+  // Elise, 2026-11-14: approving into B / A / SO / C names the file by its
+  // group (B1, A2…); the typed name is kept only for `other`.
+  const fileName = await withTransaction(async (tx) => {
+    let name = typed;
+    if (approving && kind) {
+      await lockTaskForNaming(tx, taskId);
+      // The extension comes from the file as it is stored, never a typed name.
+      name = await autoNameFor(tx, taskId, attachmentId, kind, row.file_name);
+      if (name === row.file_name && autoAttachmentName(kind, 1, row.file_name) === null) name = typed;
+    }
+    await tx.query(
+      `UPDATE attachment
+          SET review_status = $2, kind = $3, file_name = $4, reviewed_by = $5, reviewed_at = now()
+        WHERE id = $1`,
+      [attachmentId, status, kind, name, actor.id],
+    );
+    return name;
+  });
 
   await query(
     `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, before, after)

@@ -82,6 +82,52 @@ export interface AttachmentReview {
   viewed?: boolean;
 }
 
+// ── Automatic names (Elise, 2026-11-14) ──────────────────────────────────────
+//
+// A file filed into a group is renamed by the group: before photos B1, B2…,
+// after photos A1, A2…, sign-offs SO1…, client files C1… — numbered per work
+// order in the order they are filed, the extension kept. `other` keeps the
+// name it came with (or the one the reviewer types).
+
+export const ATTACHMENT_KIND_PREFIX: Partial<Record<AttachmentKind, string>> = {
+  before: 'B',
+  after: 'A',
+  signoff: 'SO',
+  client: 'C',
+};
+
+/** The extension of a file name, lower-cased with its dot ('.jpg'), or ''. */
+export function fileExtension(name: string): string {
+  const m = /\.([A-Za-z0-9]{1,8})$/.exec(name.trim());
+  return m ? `.${m[1].toLowerCase()}` : '';
+}
+
+/** The number in an automatic name of this kind ('A3.jpg' → 3), else null. */
+export function autoNameNumber(kind: AttachmentKind, name: string): number | null {
+  const prefix = ATTACHMENT_KIND_PREFIX[kind];
+  if (!prefix) return null;
+  const m = new RegExp(`^${prefix}(\\d+)(?:\\.[A-Za-z0-9]{1,8})?$`, 'i').exec(name.trim());
+  return m ? Number(m[1]) : null;
+}
+
+/** The next number of a group: one past the highest automatic name already
+    used by a file of that kind on the work order (gaps are not reused). */
+export function nextAutoNumber(kind: AttachmentKind, namesInKind: readonly string[]): number {
+  let max = 0;
+  for (const n of namesInKind) {
+    const k = autoNameNumber(kind, n);
+    if (k !== null && k > max) max = k;
+  }
+  return max + 1;
+}
+
+/** The automatic name for the n-th file of a kind, keeping the original
+    extension; null for a kind that is not renamed (`other`). */
+export function autoAttachmentName(kind: AttachmentKind, n: number, originalName: string): string | null {
+  const prefix = ATTACHMENT_KIND_PREFIX[kind];
+  return prefix ? `${prefix}${n}${fileExtension(originalName)}` : null;
+}
+
 /** `details.code` when a decision did not come from the viewer (M14). */
 export const ATTACHMENT_NOT_VIEWED_CODE = 'ATTACHMENT_NOT_VIEWED';
 

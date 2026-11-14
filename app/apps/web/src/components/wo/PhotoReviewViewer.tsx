@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import {
   ATTACHMENT_KINDS,
   ATTACHMENT_KIND_LABEL,
+  ATTACHMENT_KIND_PREFIX,
   formatBytes,
   isImageType,
   type Attachment,
@@ -109,7 +110,16 @@ export function PhotoReviewViewer({
         </div>
         <div className="prv-foot">
           <div className="photo-review-fields">
-            <input className="fld sm" aria-label="File name" value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
+            {/* Elise, 2026-11-14: a grouped file is named by its group (B1,
+                A2, SO1, C1…, numbered in the order filed); only Other keeps a
+                typed name. */}
+            {kind !== '' && ATTACHMENT_KIND_PREFIX[kind] ? (
+              <span className="file-meta" title="Numbered in the order files are filed into this group">
+                Named {ATTACHMENT_KIND_PREFIX[kind]}1, {ATTACHMENT_KIND_PREFIX[kind]}2… automatically
+              </span>
+            ) : (
+              <input className="fld sm" aria-label="File name" value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />
+            )}
             <select className="fld sm" aria-label="What this file is" value={kind} onChange={(e) => setKind(e.target.value as AttachmentKind | '')}>
               <option value="">What is it?</option>
               {ATTACHMENT_KINDS.map((k) => (
