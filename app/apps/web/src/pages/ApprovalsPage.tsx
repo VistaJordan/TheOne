@@ -56,6 +56,8 @@ import {
   ecotrakTransitionRefused,
   isDispatcherRole,
   mayApproveOverNtePayment,
+  overNteApproverLabel,
+  SMALL_NTE_PAYMENT_UNDER,
   mayDecideOverQuote,
   statusApprovalNeedsNote,
   type AcceptanceDetail,
@@ -423,7 +425,9 @@ const PAYMENT_CHIP: Record<PaymentListItem['status'], string> = {
   rejected: 'chip-danger',
 };
 
-function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>, nteApprover: boolean): Row {
+function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>, myRole: string | null | undefined, mySuper: boolean): Row {
+  // 2026-11-14 (Elise): under $500 a TL / ATL approves one above the NTE too.
+  const nteApprover = mayApproveOverNtePayment(myRole, mySuper, Number(item.amount));
   const open = item.status === 'requested';
   const by =
     item.status === 'rejected'
@@ -463,7 +467,7 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
     open,
     // 2026-11-03: a payment above the NTE is the Account Manager's.
     mine: open && canDecide && (!item.above_nte || nteApprover),
-    owner: item.above_nte ? 'Account Manager' : 'Payment approvers',
+    owner: item.above_nte ? (Number(item.amount) < SMALL_NTE_PAYMENT_UNDER ? 'TL / ATL / AM' : 'Account Manager') : 'Payment approvers',
     status: {
       label: PAYMENT_STATUS_LABEL[item.status],
       chip: PAYMENT_CHIP[item.status],
@@ -624,7 +628,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
       if (q.status === 'draft') continue;
       out.push(quoteRow(q, canApproveQuotes, held));
     }
-    for (const p of paymentsQuery.data?.items ?? []) out.push(paymentRow(p, canApprovePayments, held, mayApproveOverNtePayment(myRole, mySuper)));
+    for (const p of paymentsQuery.data?.items ?? []) out.push(paymentRow(p, canApprovePayments, held, myRole, mySuper === true));
     for (const p of purchasesQuery.data?.items ?? []) out.push(purchaseRow(p, canApprovePurchases));
     // Intake is its own page (Incoming Work Orders): the inbox never shows
     // it, and the intake page shows nothing else.
@@ -1678,14 +1682,15 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
       if (d.item.above_nte) {
         // 2026-11-03 (Elise): above the NTE an Account Manager approves it
         // with a reason, whatever the amount band; the click asks the reason.
-        const nteApprover = mayApproveOverNtePayment(myRole, mySuper === true);
+        const nteApprover = mayApproveOverNtePayment(myRole, mySuper === true, Number(d.item.amount));
+        const nteWho = overNteApproverLabel(Number(d.item.amount));
         return (
           <>
             {verb(
               'Reject',
               'x',
               canApprovePayments && nteApprover,
-              !canApprovePayments ? 'Requires payment approval rights' : 'Above the client NTE — an Account Manager declines it',
+              !canApprovePayments ? 'Requires payment approval rights' : `Above the client NTE — ${nteWho} declines it`,
               () => onDecide('reject'),
               'danger',
             )}
@@ -1696,7 +1701,7 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
               !canApprovePayments
                 ? 'Requires payment approval rights'
                 : !nteApprover
-                  ? 'Above the client NTE — an Account Manager approves it'
+                  ? `Above the client NTE — ${nteWho} approves it`
                   : own(d.item.requested_by?.id)
                     ? OWN
                     : (d.item.approve_hold ?? ''),

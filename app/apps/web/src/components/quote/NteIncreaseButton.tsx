@@ -1,9 +1,9 @@
 /* Request NTE increase, from the quote builder (Elise, 2026-11-04).
 
-   A quote above the client NTE is not sent (409 QUOTE_OVER_NTE): the NTE is
-   raised first through a manual NTE increase request (0064, wo_nte_request),
-   which a manager decides under Approvals › NTE increase requests. This is
-   the ask, drawn beside the locked Send to client: the amount opens at the
+   Since 2026-11-14 a quote above the client NTE is sent with a warning; this
+   optional ask raises the NTE ahead of it through a manual NTE increase
+   request (0064, wo_nte_request), which a manager decides under Approvals ›
+   NTE increase requests. Drawn beside Send to client: the amount opens at the
    quote's figure (rounded up to the dollar) and the reason is required, as
    the API asks. While a request is open it says so instead. */
 

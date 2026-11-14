@@ -3321,6 +3321,12 @@ export function markNotices(input: {
   return request('/notices/mark', { method: 'POST', body: JSON.stringify(input) });
 }
 
+/** Elise 2026-11-14: the Messages tab showed these messages, so the notices
+    that point at them are read. */
+export function markMessageNoticesSeen(woNumber: string, messageIds: string[]): Promise<{ changed: number; unread: number }> {
+  return request('/notices/seen-messages', { method: 'POST', body: JSON.stringify({ wo_number: woNumber, message_ids: messageIds }) });
+}
+
 // ── 0060 — Portfolio: sites, their buildings / floors / spaces, assets ───────
 
 import type {

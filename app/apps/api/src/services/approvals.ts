@@ -39,6 +39,7 @@ import {
   ACCEPTANCE_SOURCE_LABEL,
   APPROVAL_TASK_LABEL,
   INTAKE_REQUIRED_FIELDS,
+  CLIENT_PORTAL_TYPE_KEY,
   intakeMissing,
   APPROVAL_TASK_TYPES,
   PURCHASING_PERM,
@@ -150,9 +151,11 @@ interface Row {
 /** The intake keys as one small object off the bag — the list never ships
     the whole ~100-key bag per row. Keys are literals from the shared
     vocabulary (none carries a quote). */
-const INTAKE_FIELDS_SQL = `jsonb_build_object(${INTAKE_REQUIRED_FIELDS.map(
-  (f) => `'${f.key}', t.fields->'${f.key}'`,
-).join(', ')})`;
+const INTAKE_FIELDS_SQL = `jsonb_build_object(${[
+  ...INTAKE_REQUIRED_FIELDS.map((f) => f.key),
+  // The SLA is asked of Corrigo clients only (intakeFieldAsked).
+  CLIENT_PORTAL_TYPE_KEY,
+].map((k) => `'${k}', t.fields->'${k}'`).join(', ')})`;
 
 const SELECT_SQL = `
   SELECT a.id::text            AS id,

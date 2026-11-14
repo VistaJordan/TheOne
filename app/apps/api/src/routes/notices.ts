@@ -7,6 +7,7 @@
 //   GET  /notices            → { items, unread }   newest unread first (0059)
 //   POST /notices/:id/read   → { unread }
 //   POST /notices/read-all   → { unread }
+//   POST /notices/seen-messages → { changed, unread }  the Messages tab showed these messages
 //
 // A person's notifications are their own: every route reads the ACTING
 // principal's rows and no route takes a principal id. A super admin viewing
@@ -25,6 +26,7 @@ import {
   listNotifications,
   markAllRead,
   markInbox,
+  markMessageNoticesSeen,
   markRead,
   pruneNotifications,
   unreadCount,
@@ -88,6 +90,18 @@ export default async function noticeRoutes(app: FastifyInstance): Promise<void> 
     const pulse = await withPulse(req);
     const changed = await markInbox(me.id, pulse, body);
     return { changed, unread: await inboxUnread(me.id, pulse) };
+  });
+
+  // Elise 2026-11-14: the Messages tab calls this with the messages it shows,
+  // so a notice about one of them is read once the message has been seen.
+  app.post('/notices/seen-messages', async (req) => {
+    const me = actingPrincipalFromRequest(req);
+    const body = parse(
+      z.object({ wo_number: z.string().min(1).max(120), message_ids: z.array(z.string().max(64)).max(1000) }),
+      req.body,
+    );
+    const changed = await markMessageNoticesSeen(me.id, body.wo_number, body.message_ids);
+    return { changed, unread: await inboxUnread(me.id, await withPulse(req)) };
   });
 
   app.get('/notices', async (req) => {

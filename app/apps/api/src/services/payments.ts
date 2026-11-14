@@ -80,6 +80,7 @@ import {
   PAYMENT_PURPOSE_CODES,
   isPaymentPurposeCode,
   mayApproveOverNtePayment,
+  overNteApproverLabel,
   nextPurpose,
   overNte,
   overQuoteReason,
@@ -939,6 +940,22 @@ async function overageFor(taskId: string, amount: number): Promise<PaymentOverag
   });
 }
 
+/** True when paying `amount` takes this work order's Cost + approved / paid
+    vendor bills past its NTE (approved overrides ignored: the job loses money
+    either way). Elise 2026-11-14. */
+async function aboveNteFor(taskId: string, amount: number): Promise<boolean> {
+  const t = await query<{ cost: string | null; nte: number | string | null; bills: number | string | null }>(
+    `SELECT fields->>'34. Cost' AS cost, nte::float8 AS nte,
+            (SELECT COALESCE(sum(b.total), 0)::float8 FROM vendor_bill b
+              WHERE b.task_id = task.id AND b.status IN ('approved', 'paid')) AS bills
+       FROM task WHERE id = $1`,
+    [taskId],
+  );
+  const r = t.rows[0];
+  if (!r) return false;
+  return paymentAboveNte(vendorMoneyOut(moneyNum(r.cost), moneyNum(r.bills)), amount, moneyNum(r.nte));
+}
+
 /** The reason, trimmed — or the 409 that asks for it (the form's popup). */
 function requireOverageReason(o: PaymentOverage | null, raw: string | null | undefined): string | null {
   if (!o) return null;
@@ -1055,7 +1072,11 @@ export async function createPaymentRequest(
   // queue: the hold raised below is what a manager decides first.
   const overage = await overageFor(taskId, input.amount);
   const overageReason = requireOverageReason(overage, input.overage_reason);
-  const autoApproved = !approval.needed && !overage;
+  // Elise 2026-11-14: a loss-making job (Cost + vendor bills + this payment
+  // above the NTE, whatever an approved override covers) is never approved
+  // as it is raised, even under $500 — a TL / ATL (or the AM) says yes.
+  const lossJob = await aboveNteFor(taskId, input.amount);
+  const autoApproved = !approval.needed && !overage && !lossJob;
   const startStatus: PaymentRequestStatus = autoApproved ? 'approved' : 'requested';
 
   // Yoda resolves the Technician by phone and creates one when unknown, so the
@@ -1585,8 +1606,9 @@ export async function approvePaymentRequest(
 
   const projected = projectedCost(cost, amount);
   const over = `Paying this takes Cost to ${money(projected)}, over the client NTE ${money(nte ?? 0)}`;
-  if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin)) {
-    throw forbidden(`${over} — an Account Manager approves it`, {
+  // 2026-11-14 (Elise): under $500 a TL / ATL approves it too.
+  if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin, amount)) {
+    throw forbidden(`${over} — ${overNteApproverLabel(amount)} approves it`, {
       code: NTE_PAYMENT_APPROVER_CODE,
       payment_request_id: id,
     });
@@ -1654,8 +1676,8 @@ export async function rejectPaymentRequest(id: string, reason: string, actor: Ac
   if (!facts.aboveNte) {
     await assertTierAllows('payment', facts.amount, actor, 'Declining a payment');
     assertManagerForMethod(row, actor, 'Declining a payment');
-  } else if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin)) {
-    throw forbidden('This payment is above the client NTE — an Account Manager declines it', {
+  } else if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin, facts.amount)) {
+    throw forbidden(`This payment is above the client NTE — ${overNteApproverLabel(facts.amount)} declines it`, {
       code: NTE_PAYMENT_APPROVER_CODE,
       payment_request_id: id,
     });

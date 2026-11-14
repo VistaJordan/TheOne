@@ -3605,6 +3605,27 @@ LEO, …); the AF / TPM / EDS sign-off sheets and forms left the code
 (`SIGNOFF_LAYOUTS` = sfm, rf, bkr, bkr_emcor). History stays: work orders,
 quotes, invoices and payments carrying those Comps are untouched.
 
+**UAT list of 2026-11-14** (Elise, no migration; `tests/uat-2026-11-14.test.ts`).
+**SLA is a Corrigo client's only:** `IntakeField.portal` (shared
+`intakeGate.ts`) — the SLA row names `corrigo`, and `intakeFieldAsked` asks it
+only when `Client Portal Type` reads Corrigo (`clientMessageTarget`), so the
+Ready to Assign gate, Incoming's "Fill before assigning" (the row SQL carries
+the portal type) and a draft's Submit skip it for everyone else.
+**A quote above the NTE is sent** (reversing 2026-11-04): `sendQuote` no
+longer refuses; the builder draws an **Above NTE** warning chip
+(`quoteOverNteWarning`) beside an unlocked Send to client, Request NTE
+increase stays as an option, and the client's approval still sets the NTE.
+`QUOTE_OVER_NTE_CODE` is no longer raised. **A message seen is a notice
+read:** the Messages tab posts the ids it shows to `POST
+/notices/seen-messages` (`markMessageNoticesSeen`, quiet for live sync: under
+`/api/notices/`), which reads the person's notices whose link is
+`/work-orders/<WO #>?tab=messages&msg=<id>`. **A loss-making payment under
+$500:** Cost + vendor bills + the payment above the NTE (`aboveNteFor`,
+overrides ignored) is never auto-approved, and
+`mayApproveOverNtePayment(role, super, amount)` lets TL / ATL / AM approve or
+decline one under `SMALL_NTE_PAYMENT_UNDER` ($500); $500 and over above the NTE
+stays the AM's (`overNteApproverLabel` words the lock).
+
 ## Verify
 
 ```

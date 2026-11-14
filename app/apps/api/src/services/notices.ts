@@ -379,6 +379,27 @@ export async function markInbox(principalId: string, withPulse: boolean, input: 
   return changed;
 }
 
+// ── A message seen is a notice read (Elise, 2026-11-14) ─────────────────────
+//
+// Opening the Messages tab on a work order marks read the person's own notices
+// that point at a message it is showing (a mention, a message on a work order
+// they hold — every such link is `/work-orders/<WO #>?tab=messages&msg=<id>`),
+// so they leave the Unread view of Notifications without a second click.
+
+/** Marks read the unread notices of `principalId` whose link names one of
+    these messages on this work order. Returns how many changed. */
+export async function markMessageNoticesSeen(principalId: string, woNumber: string, messageIds: readonly string[]): Promise<number> {
+  const ids = messageIds.filter((id) => UUID_RE.test(id));
+  if (ids.length === 0) return 0;
+  const links = ids.map((id) => `/work-orders/${encodeURIComponent(woNumber)}?tab=messages&msg=${id}`);
+  const r = await query(
+    `UPDATE app_notice SET read_at = now()
+      WHERE principal_id = $1 AND read_at IS NULL AND link = ANY($2::text[])`,
+    [principalId, links],
+  );
+  return r.rowCount ?? 0;
+}
+
 // ── One work order's notifications (2026-11-02) ─────────────────────────────
 //
 // The work order's Notifications tab: every notice raised ABOUT it, to

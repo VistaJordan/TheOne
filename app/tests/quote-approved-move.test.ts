@@ -55,9 +55,10 @@ describe('over the NTE', () => {
     expect(quoteTotalForNte({ grand_total: 300, option_totals: [] })).toBe(300);
     expect(quoteOverNteSentence(5080, 500)).toContain('request an NTE increase');
   });
-  it('the builder locks Send to client and offers Request NTE increase', () => {
+  it('the builder warns beside Send to client and still offers Request NTE increase (2026-11-14)', () => {
     const b = src('apps/web/src/pages/QuoteBuilderPage.tsx');
-    expect(b).toContain("lockedButton('Send to client', quoteOverNteSentence(nteTotal, nte), 'lockTipSend')");
+    expect(b).not.toContain("lockedButton('Send to client', quoteOverNteSentence");
+    expect(b).toContain('quoteOverNteWarning(nteTotal, nte)');
     expect(b).toContain('<NteIncreaseButton');
     expect(src('apps/web/src/components/quote/NteIncreaseButton.tsx')).toContain('requestNteIncrease(woNumber');
   });

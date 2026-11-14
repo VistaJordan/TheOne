@@ -55,7 +55,7 @@ describe('intakeDraftMissing — WO# first, then the intake fields', () => {
       'City',
       'Trade',
     ]);
-    expect(intakeDraftMissing({ wo_number: null, fields: {} })).toHaveLength(1 + INTAKE_REQUIRED_FIELDS.length);
+    expect(intakeDraftMissing({ wo_number: null, fields: {} })).toHaveLength(INTAKE_REQUIRED_FIELDS.length) // WO# + every field but the SLA (Corrigo only);
     expect(intakeDraftMissing({ wo_number: 'WOT1', fields: { ...FULL, Client: ' ' } })).toEqual(['Client']);
   });
 });

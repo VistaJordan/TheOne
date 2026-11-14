@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import type { WoMessagesResponse } from '../../../api/client';
+import { markMessageNoticesSeen, type WoMessagesResponse } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthProvider';
 import { Icon } from '../../Icon';
 import { feedTime } from '../../../lib/fields';
@@ -110,6 +111,7 @@ export function MessagesPanel({ woId, woNumber, data, loading, error, queryKey }
           </span>
         </div>
 
+        <MarkNoticesSeen woNumber={woNumber} ids={items.map((m) => m.id)} />
         <WoThread items={items} woId={woId} queryKey={queryKey} clientSystem={clientSystem} lane={lane} />
 
         {lane === 'client' && !canMessageClient ? (
@@ -128,4 +130,26 @@ export function MessagesPanel({ woId, woNumber, data, loading, error, queryKey }
       </section>
     </div>
   );
+}
+
+/** Elise 2026-11-14: a message on screen is a notice read — the person's
+    notices about the messages this tab shows are marked read, and the
+    Notifications badge and list re-read. Asked again only when the shown
+    set changes. */
+function MarkNoticesSeen({ woNumber, ids }: { woNumber: string; ids: string[] }) {
+  const qc = useQueryClient();
+  const key = ids.join(',');
+  useEffect(() => {
+    if (!key) return;
+    let live = true;
+    markMessageNoticesSeen(woNumber, key.split(','))
+      .then((r) => {
+        if (live && r.changed > 0) void qc.invalidateQueries({ queryKey: ['notices'] });
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [woNumber, key, qc]);
+  return null;
 }

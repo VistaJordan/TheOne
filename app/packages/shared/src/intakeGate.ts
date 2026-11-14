@@ -16,11 +16,17 @@
 // `intake_missing` off every acceptance row so the Accept verb is locked,
 // with the list, before the click.
 
+import { CLIENT_PORTAL_TYPE_KEY, clientMessageTarget, type ClientMessageTarget } from './messaging';
+
 export interface IntakeField {
   /** The bag key (`task.fields`) — the same key the field editor writes. */
   key: string;
   /** How the missing list names it. */
   label: string;
+  /** Asked only of a work order whose `Client Portal Type` names this client
+      system (`clientMessageTarget`). Elise 2026-11-14: the SLA is required
+      for Corrigo clients only. */
+  portal?: ClientMessageTarget;
 }
 
 /**
@@ -34,7 +40,7 @@ export interface IntakeField {
 export const INTAKE_REQUIRED_FIELDS: readonly IntakeField[] = [
   { key: 'Date-Time Received', label: 'Received on' },
   { key: 'Due Date', label: 'Due date' },
-  { key: 'SLA Due Date', label: 'SLA' },
+  { key: 'SLA Due Date', label: 'SLA', portal: 'corrigo' },
   { key: '17. Address', label: 'Address' },
   { key: 'City', label: 'City' },
   { key: 'State', label: 'State' },
@@ -88,8 +94,16 @@ export function intakeMissing(row: IntakeRow): IntakeField[] {
     Client: row.client,
   };
   return INTAKE_REQUIRED_FIELDS.filter(
-    (f) => !intakeValueFilled(bag[f.key]) && !intakeValueFilled(column[f.key]),
+    (f) => intakeFieldAsked(f, bag) && !intakeValueFilled(bag[f.key]) && !intakeValueFilled(column[f.key]),
   );
+}
+
+/** Whether this intake field is asked of a work order with this bag: always,
+    unless it names a portal (the SLA: Corrigo clients only). */
+export function intakeFieldAsked(f: IntakeField, bag: Record<string, unknown> | null | undefined): boolean {
+  if (!f.portal) return true;
+  const raw = bag?.[CLIENT_PORTAL_TYPE_KEY];
+  return clientMessageTarget(typeof raw === 'string' ? raw : null) === f.portal;
 }
 
 /** The sentence a refused assignment reads (the 409, the locked Accept

@@ -17,7 +17,7 @@ import {
   rejectPaymentRequest,
 } from '../../api/client';
 import type { PaymentMethod, PaymentRequest } from '../../api/client';
-import { OVERAGE_REASON_MIN, PAYMENT_PROCESS_PERM_KEY, mayApproveOverNtePayment } from '@theone/shared';
+import { OVERAGE_REASON_MIN, PAYMENT_PROCESS_PERM_KEY, mayApproveOverNtePayment, overNteApproverLabel } from '@theone/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
 
@@ -139,9 +139,10 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
   // with a reason, whatever the band — that click also decides the NTE
   // override, so the NTE hold does not lock it; the approved quote still may.
   const aboveNte = item.above_nte;
-  const nteApproverLock = mayApproveOverNtePayment(actingAs?.role, actingAs?.is_super_admin === true)
+  // 2026-11-14 (Elise): under $500 a TL / ATL may approve it too.
+  const nteApproverLock = mayApproveOverNtePayment(actingAs?.role, actingAs?.is_super_admin === true, Number(item.amount))
     ? null
-    : 'Above the client NTE — an Account Manager approves it';
+    : `Above the client NTE — ${overNteApproverLabel(Number(item.amount))} approves it`;
   const approveLocked = aboveNte
     ? approveLock ?? nteApproverLock ?? ownLock ?? item.approve_hold
     : approveLock ?? tierLock ?? ownLock ?? (hold ? HOLD : null) ?? moneyHold;

@@ -234,14 +234,11 @@ describe('#21 · purchasing', () => {
 });
 
 describe('#23 · quotes', () => {
-  it('a submitted quote is not edited; one over the NTE is not sent (2026-11-04)', () => {
+  it('a submitted quote is not edited; one over the NTE IS sent (2026-11-14)', () => {
     const upd = fn(quotes, 'export async function updateQuote(');
     expect(upd).toContain('QUOTE_SUBMITTED_LOCKED_CODE');
     const send = fn(quotes, 'export async function sendQuote(');
-    expect(send).toContain('QUOTE_OVER_NTE_CODE');
-    // Asked before the quote is approved on the way.
-    expect(send.indexOf('QUOTE_OVER_NTE_CODE')).toBeLessThan(send.indexOf('await approveQuote('));
-    expect(send).toContain('quoteTotalForNte(priced.totals)');
+    expect(send).not.toContain('QUOTE_OVER_NTE_CODE');
     expect(quoteTotalForNte({ grand_total: 500, option_totals: [{ grand_total: 500 }, { grand_total: 5000 }] })).toBe(5000);
     expect(quoteOverNte(1000.01, 1000)).toBe(true);
     expect(quoteOverNte(1000, 1000)).toBe(false);

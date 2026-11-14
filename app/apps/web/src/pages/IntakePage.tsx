@@ -30,6 +30,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ADDRESS_KEY,
   INTAKE_FORM_FIELDS,
+  intakeFieldAsked,
   addressPartValues,
   parseAddressParts,
   ADDRESS_ZIP_KEY,
@@ -580,7 +581,7 @@ function DraftForm({ id }: { id: string }) {
               >
                 <label className="lbl" htmlFor={`intake-${f.key.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
                   {f.label}
-                  {f.required && <span className="req" aria-hidden="true">*</span>}
+                  {f.required && intakeFieldAsked(f, draft.fields) && <span className="req" aria-hidden="true">*</span>}
                 </label>
                 {control(f)}
               </div>

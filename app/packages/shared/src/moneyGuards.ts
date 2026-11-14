@@ -281,8 +281,30 @@ export const NTE_PAYMENT_APPROVER_CODE = 'NTE_PAYMENT_APPROVER';
 /** details.code of the 409 that asks the approver for the reason. */
 export const NTE_APPROVAL_REASON_CODE = 'NTE_APPROVAL_REASON';
 
-export function mayApproveOverNtePayment(role: string | null | undefined, isSuperAdmin: boolean): boolean {
-  return isSuperAdmin || (typeof role === 'string' && (NTE_PAYMENT_APPROVER_ROLES as readonly string[]).includes(role));
+/** Elise 2026-11-14: a payment UNDER $500 on a loss-making job (Cost + vendor
+    bills + this payment above the NTE) is a TL's or an ATL's to approve — the
+    AM keeps it too. $500 and over above the NTE stays the AM's alone. */
+export const SMALL_NTE_PAYMENT_APPROVER_ROLES = ['tl', 'atl', 'am'] as const;
+/** The amount below which the TL / ATL may approve a payment above the NTE
+    (the same $500 as `APPROVAL_NOT_NEEDED_UNDER`). */
+export const SMALL_NTE_PAYMENT_UNDER = 500;
+
+/** May this person approve (or decline) a payment above the NTE? `amount`
+    left out = the AM rule alone (the $500-and-over case). */
+export function mayApproveOverNtePayment(role: string | null | undefined, isSuperAdmin: boolean, amount?: number | null): boolean {
+  if (isSuperAdmin) return true;
+  if (typeof role !== 'string') return false;
+  if (typeof amount === 'number' && Number.isFinite(amount) && amount < SMALL_NTE_PAYMENT_UNDER) {
+    return (SMALL_NTE_PAYMENT_APPROVER_ROLES as readonly string[]).includes(role);
+  }
+  return (NTE_PAYMENT_APPROVER_ROLES as readonly string[]).includes(role);
+}
+
+/** Who approves a payment above the NTE, in words, for this amount. */
+export function overNteApproverLabel(amount: number | null | undefined): string {
+  return typeof amount === 'number' && Number.isFinite(amount) && amount < SMALL_NTE_PAYMENT_UNDER
+    ? 'a TL, an ATL or an Account Manager'
+    : 'an Account Manager';
 }
 
 /** True when paying `amount` takes `cost` (Cost + vendor bills) past the NTE —
@@ -384,7 +406,13 @@ export function quoteTotalForNte(totals: { grand_total: number; option_totals: r
   return totals.option_totals.reduce((max, o) => Math.max(max, o.grand_total), totals.grand_total);
 }
 
-/** Why Send to client is refused while the quote is over the NTE. */
+/** 2026-11-14 (Elise): a quote above the NTE is sent; this is the warning the
+    builder draws beside Send to client. */
+export function quoteOverNteWarning(total: number, nte: number): string {
+  return `Above the client NTE: the quote (${usd(total)}) is more than the NTE (${usd(nte)}). Sending it asks the client to approve the higher amount; their approval sets the NTE.`;
+}
+
+/** Kept for older callers: the 2026-11-04 refusal sentence (no longer raised). */
 export function quoteOverNteSentence(total: number, nte: number): string {
   return `The quote (${usd(total)}) is above the client NTE (${usd(nte)}). Raise the NTE first: request an NTE increase and have a manager approve it, then send the quote.`;
 }

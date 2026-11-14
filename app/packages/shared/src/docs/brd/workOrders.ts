@@ -283,7 +283,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Ready to Assign gate',
-          what: 'Received on, Due date, SLA, Address, City, State, Zip code, Store, Trade, WO description, Client, Comp and Client NTE must be filled before Accept and assign, and before a direct or bulk Assignee write while an acceptance is open (checked against the bag as the save leaves it, so filling Address and Assignee together is fine). 409 INTAKE_GATE with the missing labels.',
+          what: 'Received on, Due date, SLA (only when Client Portal Type is Corrigo, 2026-11-14), Address, City, State, Zip code, Store, Trade, WO description, Client, Comp and Client NTE must be filled before Accept and assign, and before a direct or bulk Assignee write while an acceptance is open (checked against the bag as the save leaves it, so filling Address and Assignee together is fine). 409 INTAKE_GATE with the missing labels.',
           value: 'A dispatcher never opens a work order to find the address missing.',
           brd: ['11.1.1', '11.1.2'],
           since: '0037',

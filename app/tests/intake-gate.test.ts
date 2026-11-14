@@ -122,7 +122,8 @@ describe('intakeMissing — the fields still empty on a row', () => {
   });
 
   it('treats a missing bag as all empty', () => {
-    expect(intakeMissing({ fields: null })).toHaveLength(INTAKE_REQUIRED_FIELDS.length);
+    // The SLA is asked of Corrigo clients only (2026-11-14), so a bare row lacks one fewer.
+    expect(intakeMissing({ fields: null })).toHaveLength(INTAKE_REQUIRED_FIELDS.length - 1);
   });
 });
 

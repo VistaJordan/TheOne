@@ -75,8 +75,6 @@ import {
   optionDisplayLabel,
   permAllows,
   quoteOverNte,
-  QUOTE_OVER_NTE_CODE,
-  quoteOverNteSentence,
   quoteTotalForNte,
   quoteTaxApplies,
   reportedSentence,
@@ -1969,10 +1967,11 @@ const QUOTE_APPROVABLE_FROM: QuoteStatus[] = ['draft', 'pending_correction', 'pe
  * pending correction or pending approval is approved first (approveQuote,
  * its own checks and `quote_approved` row) and then sent.
  *
- * 2026-11-04 (Elise, reversing 2026-10-27): a quote above the NTE is NOT
- * sent — 409 QUOTE_OVER_NTE until the NTE is raised through an approved NTE
- * increase request. Compared before anything is approved, against the
- * dearest option (`quoteTotalForNte`).
+ * 2026-11-14 (Elise, reversing 2026-11-04): a quote above the NTE IS sent.
+ * The quote is how the client is asked for the higher amount, and their
+ * approval writes the approved option's total into the Client NTE
+ * (`setNteFromApproval`). The builder warns before the click
+ * (`quoteOverNteWarning`); nothing here refuses it.
  */
 export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
@@ -1981,14 +1980,6 @@ export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise
 
   const cur = await currentStatus(taskId);
   if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');
-  const priced = await getQuote(taskId, actor);
-  if (priced) {
-    const total = quoteTotalForNte(priced.totals);
-    const nte = priced.totals.nte;
-    if (nte !== null && quoteOverNte(total, nte)) {
-      throw conflict(quoteOverNteSentence(total, nte), { code: QUOTE_OVER_NTE_CODE, total, nte });
-    }
-  }
   if (QUOTE_APPROVABLE_FROM.includes(cur.status)) await approveQuote(taskId, actor);
 
   // Read the numbers on the pool BEFORE the transaction opens: a read that

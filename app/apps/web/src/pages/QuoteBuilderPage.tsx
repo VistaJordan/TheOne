@@ -46,7 +46,7 @@ import {
   QUOTE_SUBMITTED_STATUSES,
   quoteEditableBy,
   quoteOverNte,
-  quoteOverNteSentence,
+  quoteOverNteWarning,
   quoteTotalForNte,
   type QuoteDeclineKind,
 } from '@theone/shared';
@@ -252,8 +252,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   /** Rule 1.5.2: an NTE override waits on a manager, so approve / send / the
       client's yes are on hold (the API refuses them with a 409) until decided. */
   const nteHold = quote?.nte_override_open ?? false;
-  // 2026-11-04 (Elise): a quote above the NTE is not sent until the NTE is
-  // raised (overNte below); the client's approval then sets the NTE.
+  // 2026-11-14 (Elise): a quote above the NTE is sent with a warning
+  // (overNte below); the client's approval then sets the NTE.
   const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
   const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
   /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */
@@ -733,9 +733,14 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
   /** Draft / pending correction / pending approval → approved and sent. */
   const sendToClient = () =>
+    // 2026-11-14 (Elise): a quote above the NTE is sent, with a warning — the
+    // client's approval of the higher amount sets the NTE.
     overNte && nte !== null && nteTotal !== null ? (
       <>
-        {lockedButton('Send to client', quoteOverNteSentence(nteTotal, nte), 'lockTipSend')}
+        <span className="chip chip-warn chip-sm" role="note" title={quoteOverNteWarning(nteTotal, nte)}>
+          Above NTE
+        </span>
+        {gated('Send to client', 'send', canApprove, 'Needs the quote-approve permission', 'quote.send', () => sendMutation.mutate(), 'lockTipSend')}
         {can('work_orders', 'edit') && (
           <NteIncreaseButton woNumber={woNumber} quoteTotal={nteTotal} quoteNumber={quote?.number ?? null} />
         )}
@@ -755,9 +760,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         ? { ok: false, sent: false, reason: blockedReason('quote.send') ?? 'Not allowed in this work-order status' }
         : nteHold
           ? { ok: false, sent: false, reason: NTE_HOLD_TIP }
-          : overNte && nte !== null && nteTotal !== null
-            ? { ok: false, sent: false, reason: quoteOverNteSentence(nteTotal, nte) }
-            : blocked && editable
+          : blocked && editable
               ? { ok: false, sent: false, reason: problemChipText(problems.length) }
               : { ok: true, sent: false, reason: '' };
 

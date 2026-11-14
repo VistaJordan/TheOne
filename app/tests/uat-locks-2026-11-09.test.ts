@@ -34,7 +34,7 @@ describe('declining follows the approval rules', () => {
   const fn = svc.slice(svc.indexOf('export async function rejectPaymentRequest'), svc.indexOf('Yoda ConvertToAch'));
   it('a payment decline asks the band, or above the NTE the Account Manager', () => {
     expect(fn).toContain("assertTierAllows('payment', facts.amount, actor, 'Declining a payment')");
-    expect(fn).toContain('mayApproveOverNtePayment(actor.role, actor.isSuperAdmin)');
+    expect(fn).toContain('mayApproveOverNtePayment(actor.role, actor.isSuperAdmin, facts.amount)');
   });
   it('a purchase request decline asks the band', () => {
     expect(read('apps/api/src/services/purchasing.ts')).toContain("assertTierAllows('purchase_request', cur.estimate, actor, 'Rejecting a purchase request')");
