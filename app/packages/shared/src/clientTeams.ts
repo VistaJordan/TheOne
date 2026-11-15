@@ -3,7 +3,8 @@
  * 2026-10-27).
  *
  * Who looks after a client depends on which of our companies bills the work:
- * PH has one team under BKR, another under AF, TPM and RF. So a team is a row
+ * PH has one team under BKR and could have another under SFM (AF, TPM and EDS
+ * closed in 0134, RF in 0137). So a team is a row
  * per (client, Comp): the Team Lead, the Associate Team Lead, the salesperson
  * and the Account Manager. It is kept on the client record (Clients › a
  * client › Account team) so it can always be adjusted, and "Add work order"

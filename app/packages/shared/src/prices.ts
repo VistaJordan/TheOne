@@ -28,7 +28,7 @@ export interface PriceRate {
   helper_rate: number | null;
   afterhours_rate: number | null;
   holiday_rate: number | null;
-  /** A trip of this trade's own (AF / All Systems); null = the card's. */
+  /** A trip of this trade's own; null = the card's. */
   trip_rate: number | null;
 }
 

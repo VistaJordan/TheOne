@@ -1011,8 +1011,8 @@ sending); each Quo read is bounded (15 s) and never retried. Tests:
 `routes/signoff.ts`, `packages/shared/src/signoff.ts`,
 `components/wo/SignoffPanel.tsx` at the foot of the CICO card). What the
 Make + Paperform automation did for ClickUp: a **one-page blank sheet in the
-billing entity's branding** (`21. Comp` → layout `sfm | tpm | af | rf | eds |
-bkr | bkr_emcor`, BKR's EMCOR variant carries a Closeout Number line;
+billing entity's branding** (`21. Comp` → layout `sfm | bkr | bkr_emcor` —
+AF, TPM, EDS closed in 0134, RF in 0137 —, BKR's EMCOR variant carries a Closeout Number line;
 `signoffLayoutFor`) with the client's WO number (`ext_name`, else
 `wo_number`) and `17. Address` printed, drawn by **pdf-lib** (US Letter,
 standard fonts, `safeText` folds non-Latin-1) with the header / footer /
@@ -1047,7 +1047,7 @@ acknowledged and dropped. Permission: `work_orders/fields/cico` view / edit
 (+ `work_orders` edit). Audit on the task: `signoff_generated`,
 `signoff_shared`, `signoff_received`, `signoff_reply_held|dismissed`, plus
 the ordinary `attachment_added` and `field_updated`. Self-check:
-`tests/signoff.test.ts` renders every layout and asserts ONE page. **The form link** (migration 0116, Elise 2026-11-02, `tests/signoff-form-link.test.ts`): `SIGNOFF_FORM_URLS` (shared `signoff.ts`) is each layout's Paperform the team texted before The One (EDS: none); `signoffFormLink` prefills `ed9ra` = the client's WO # and `bf7ou` = the address, and `WoSignoffResponse.form_link` carries it (Comp only, no drawn sheet). The panel shows it with Copy link; Send to tech asks Form link or PDF (`kind` on the share; 0116 lets a link share have no `signoff_id`, and reply matching joins the sheet so it never matches one). Needs on
+`tests/signoff.test.ts` renders every layout and asserts ONE page. **The form link** (migration 0116, Elise 2026-11-02, `tests/signoff-form-link.test.ts`): `SIGNOFF_FORM_URLS` (shared `signoff.ts`) is each layout's Paperform the team texted before The One (SFM, BKR, BKR EMCOR since 0134 / 0137); `signoffFormLink` prefills `ed9ra` = the client's WO # and `bf7ou` = the address, and `WoSignoffResponse.form_link` carries it (Comp only, no drawn sheet). The panel shows it with Copy link; Send to tech asks Form link or PDF (`kind` on the share; 0116 lets a link share have no `signoff_id`, and reply matching joins the sheet so it never matches one). Needs on
 Vercel: `BLOB_READ_WRITE_TOKEN` (set), `QUO_API_KEY` + `QUO_FROM_NUMBER`
 (not yet), and `message.received` added to the Quo webhook.
 
@@ -3190,8 +3190,8 @@ says from and to; the confirm dialog and the note are gone for
 (migration 0096, Elise 2026-10-27; `packages/shared/src/clientTeams.ts` pure,
 `services/clientTeams.ts`, `routes/clientTeams.ts`,
 `components/portfolio/ClientTeamCard.tsx`, `tests/client-teams.test.ts`).
-Who leads a client depends on which of our companies bills it (PH has a team
-under BKR, AF, TPM and RF), so `client_team` is one row per (client, Comp):
+Who leads a client depends on which of our companies bills it (PH had a team
+under BKR, AF, TPM and RF; only SFM and BKR remain since 0134 / 0137), so `client_team` is one row per (client, Comp):
 Team Lead, Assistant Team Lead, salesperson, Account Manager, edited on
 **Clients › a client › Account team** (`clients` view / edit; one team per
 Comp, 409 on a second; logged on the client as `client_team_added|updated|
