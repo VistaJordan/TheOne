@@ -49,14 +49,13 @@ function writeRemember(on: boolean): void {
   }
 }
 
-/** The page to return to after sign-in: the ?redirect_to RequireAuth set when
-    it bounced someone here, if it is a same-origin path — never an absolute
-    URL, so the parameter cannot be abused to send people off-site. A bare "/"
-    means nobody asked for anything in particular (they just opened the app),
-    so that lands on HOME too. */
-function landingFrom(params: URLSearchParams): string {
-  const to = params.get('redirect_to');
-  return to && to !== '/' && to.startsWith('/') && !to.startsWith('//') ? to : HOME;
+/** The page a sign-in lands on: always HOME (Elise, 2026-11-15), for every
+    account, test ones included. It used to return to the page the person was
+    on when their session ended (?redirect_to), which opened Vendors or
+    whatever was last on screen as "the first page". The parameter is no
+    longer read. */
+function landingFrom(_params: URLSearchParams): string {
+  return HOME;
 }
 
 export function SignInPage() {

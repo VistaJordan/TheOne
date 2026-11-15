@@ -77,9 +77,9 @@ function RequireAuth({ children }: { children: ReactNode }) {
   }
 
   if (!authenticated) {
-    // Carry the intended destination so a deep link survives the round trip.
-    const to = `/sign-in?redirect_to=${encodeURIComponent(location.pathname + location.search)}`;
-    return <Navigate to={to} replace />;
+    // No destination is carried: every sign-in lands on Work Orders (the
+    // home route), whatever page the session ended on (Elise, 2026-11-15).
+    return <Navigate to="/sign-in" replace />;
   }
 
   return <>{children}</>;
