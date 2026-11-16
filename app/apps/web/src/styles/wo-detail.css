@@ -1961,6 +1961,7 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .wo-overview-facts > .card { margin-top: 0; }
 .wo-overview-facts > .card-people { width: auto; min-width: 0; }
 .card + .wo-overview-facts,
+.wo-overview-facts + .wo-overview-facts,
 .wo-overview-facts + .card { margin-top: 14px; }
 
 .date-row {
