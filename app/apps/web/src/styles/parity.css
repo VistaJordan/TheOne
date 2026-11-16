@@ -40,11 +40,8 @@
 }
 .qb .subtotal-chip.is-grand .num { color: var(--accent-text); }
 
-/* Add-line + Yoda rate presets in the section footer. */
+/* Add line in the section footer. */
 .qb .lt-add { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.qb .lt-presets { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-.qb .lt-presets .chip { cursor: pointer; }
-.qb .lt-presets .chip:hover { border-color: var(--accent); color: var(--accent-text); }
 
 /* Money rail: per-option sub-line (lines · tax) and the priced row. */
 .qb .kvrow .kv-sub {

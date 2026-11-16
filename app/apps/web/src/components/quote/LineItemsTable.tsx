@@ -381,22 +381,21 @@ export function LineItemsTable({
 }
 
 /** The "Add line" affordance — the comp puts it in the section footer, beside
-    the read-only-amount note and the subtotal chip. When the WO's labor rate
-    is known (Yoda LaborRate per Comp × FM × Trade) the Yoda presets sit beside
-    it: Tech hour, Helper hour, Trip, After-hours, Holiday. `onToggleDay` draws
+    the read-only-amount note and the subtotal chip. The rate presets that sat
+    beside it (Tech hr, Helper hr, Trip, After-hours, Holiday) were removed on
+    2026-11-16 (Elise, UAT #46); a new section still opens with its Trip line
+    at the card's rate. `onToggleDay` draws
     the "Multi-day job" toggle that reveals the hidden Day column; since
     2026-11-10 (Elise) pressing it again turns the job back into one day —
     every line returns to Day 1 and the column hides. */
 export function AddLineButton({
   lines,
   onChange,
-  rate,
   dayOn = false,
   onToggleDay,
 }: {
   lines: DraftLine[];
   onChange: (l: DraftLine[]) => void;
-  rate?: LaborRate | null;
   /** The Day column is drawn (pressed, or a line already past Day 1). */
   dayOn?: boolean;
   onToggleDay?: (on: boolean) => void;
@@ -411,21 +410,6 @@ export function AddLineButton({
       onToggleDay(true);
     }
   };
-  const preset = (label: string, value: number | null, line_type: DraftLine['line_type'], description: string) =>
-    value == null ? null : (
-      <button
-        key={label}
-        type="button"
-        className="chip chip-sm"
-        title={`Add a ${label.toLowerCase()} line at ${usd(value)}`}
-        onClick={() =>
-          onChange([...lines, { ...blankLine(), line_type, description, rate: value.toFixed(2) }])
-        }
-      >
-        <Icon name="plus" size={12} />
-        {label} {usd(value)}
-      </button>
-    );
 
   return (
     <span className="lt-add">
@@ -433,15 +417,6 @@ export function AddLineButton({
         <Icon name="plus" size={12} />
         Add line
       </button>
-      {rate && (
-        <span className="lt-presets" aria-label="Rate presets from the labor rate card">
-          {preset('Tech hr', rate.tech_rate, 'labor', 'Tech — labor')}
-          {preset('Helper hr', rate.helper_rate, 'labor', 'Helper — labor')}
-          {preset('Trip', rate.trip_rate, 'service', 'Trip charge')}
-          {preset('After-hours', rate.afterhours_rate, 'labor', 'Tech — after-hours labor')}
-          {preset('Holiday', rate.holiday_rate, 'labor', 'Tech — holiday labor')}
-        </span>
-      )}
       {onToggleDay && (
         <button
           type="button"

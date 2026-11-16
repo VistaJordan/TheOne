@@ -1420,7 +1420,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 <AddLineButton
                   lines={incurred.lines}
                   onChange={(lines) => setSection(0, { ...incurred, lines })}
-                  rate={quote.labor_rate}
                   // 2026-11-10 (Elise) · incurred work is not split into days:
                   // no Multi-day toggle here, only "One-day job" to put back an
                   // older quote whose incurred lines sit past Day 1.

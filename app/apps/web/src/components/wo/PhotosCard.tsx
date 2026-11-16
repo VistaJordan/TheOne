@@ -24,9 +24,15 @@
  * message box: Add photo / Upload files in the head, or a drop onto the
  * card. They land Pending (internal) like any upload and the reviewer sorts
  * them into the columns.
+ *
+ * 2026-11-16 (Elise, UAT #47) · the drop is caught on the whole page while
+ * the Drive tab is open, not on the card alone: a file let go just outside
+ * the card used to be opened by the browser in place of the app. The
+ * listeners sit on the window, so nothing inside (an image link, the grid)
+ * can swallow the drag.
  */
 
-import { useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ATTACHMENT_ALLOWED_TYPES,
@@ -146,41 +152,63 @@ export function PhotosCard({ wo }: PhotosCardProps) {
     }
   };
 
-  const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
-  const dropHandlers = canAttach
-    ? {
-        onDragEnter: (e: DragEvent<HTMLElement>) => {
-          if (!hasFiles(e)) return;
-          e.preventDefault();
-          setDragDepth((d) => d + 1);
-        },
-        onDragOver: (e: DragEvent<HTMLElement>) => {
-          if (!hasFiles(e)) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = uploadsClosed || uploading > 0 ? 'none' : 'copy';
-        },
-        onDragLeave: (e: DragEvent<HTMLElement>) => {
-          if (!hasFiles(e)) return;
-          setDragDepth((d) => Math.max(0, d - 1));
-        },
-        onDrop: (e: DragEvent<HTMLElement>) => {
-          if (!hasFiles(e)) return;
-          e.preventDefault();
-          setDragDepth(0);
-          if (uploading > 0) return;
-          void sendFiles(Array.from(e.dataTransfer.files ?? []));
-        },
-      }
-    : {};
+  // Kept in refs so the window listeners, added once, read today's values.
+  const sendRef = useRef(sendFiles);
+  sendRef.current = sendFiles;
+  const busyRef = useRef(false);
+  busyRef.current = uploading > 0;
+  const closedRef = useRef<string | null>(null);
+  closedRef.current = uploadsClosed;
+
+  useEffect(() => {
+    const hasFiles = (e: globalThis.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+    const onEnter = (e: globalThis.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setDragDepth((d) => d + 1);
+    };
+    const onOver = (e: globalThis.DragEvent) => {
+      if (!hasFiles(e)) return;
+      // Always prevent the default, or the browser opens the file itself.
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = closedRef.current || busyRef.current ? 'none' : 'copy';
+    };
+    const onLeave = (e: globalThis.DragEvent) => {
+      if (!hasFiles(e)) return;
+      setDragDepth((d) => Math.max(0, d - 1));
+    };
+    const onDrop = (e: globalThis.DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      setDragDepth(0);
+      // A drop meant for another box (the message composer has its own) is left to it.
+      if (e.defaultPrevented && e.target instanceof Element && e.target.closest('.composer')) return;
+      if (busyRef.current) return;
+      void sendRef.current(Array.from(e.dataTransfer?.files ?? []));
+    };
+    const reset = () => setDragDepth(0);
+    window.addEventListener('dragenter', onEnter);
+    window.addEventListener('dragover', onOver);
+    window.addEventListener('dragleave', onLeave);
+    window.addEventListener('drop', onDrop);
+    window.addEventListener('dragend', reset);
+    return () => {
+      window.removeEventListener('dragenter', onEnter);
+      window.removeEventListener('dragover', onOver);
+      window.removeEventListener('dragleave', onLeave);
+      window.removeEventListener('drop', onDrop);
+      window.removeEventListener('dragend', reset);
+    };
+  }, []);
   const dragging = dragDepth > 0;
   const uploadDisabled = !!uploadsClosed || !q.data || uploading > 0;
   const uploadTitle = (what: string) =>
-    uploadsClosed ?? `${what} (up to ${formatBytes(ATTACHMENT_MAX_BYTES)} each) — or drop files onto this card`;
+    uploadsClosed ?? `${what} (up to ${formatBytes(ATTACHMENT_MAX_BYTES)} each) — or drop files anywhere on this tab`;
 
   const viewerItems = viewer ? (viewer.list === 'pending' ? pending : declined) : [];
 
   return (
-    <section className={`card photos-card${dragging ? ' is-dragging' : ''}`} {...dropHandlers}>
+    <section className={`card photos-card${dragging ? ' is-dragging' : ''}`}>
       {dragging && (
         <div className="photo-drop" aria-hidden="true">
           <Icon name={uploadsClosed ? 'alert' : 'upload'} size={16} />

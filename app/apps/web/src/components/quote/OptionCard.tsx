@@ -211,7 +211,7 @@ export function OptionCard({
       </div>
 
       <div className="opt-foot">
-        {canEdit && <AddLineButton lines={section.lines} onChange={setLines} rate={rate} dayOn={showDay} onToggleDay={onToggleDay} />}
+        {canEdit && <AddLineButton lines={section.lines} onChange={setLines} dayOn={showDay} onToggleDay={onToggleDay} />}
         {note && (
           <span className="lt-note">
             <Icon name="alert" size={12} />
