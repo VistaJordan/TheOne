@@ -115,6 +115,8 @@ function normalizeBody(b: z.infer<typeof draftBodySchema>) {
       name: s.name ?? null,
       narrative_reported: s.narrative_reported ?? null,
       scope_lines: s.scope_lines ?? [],
+      specs: s.specs ?? null,
+      note_to_customer: s.note_to_customer ?? null,
       include_in_summary: s.include_in_summary ?? true,
       lines: (s.lines ?? []).map((l) => ({
         line_type: l.line_type,

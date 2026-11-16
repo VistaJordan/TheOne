@@ -105,9 +105,11 @@ export function onlyViewLevelFields(catalogueKeys: readonly string[]): boolean {
   return catalogueKeys.length > 0 && catalogueKeys.every(isViewLevelField);
 }
 
-export const ESCALATION_CLEAR_ROLES = ['tl', 'atl', 'am', 'admin'] as const;
+// OP Admin joined the list on 2026-11-16 (Elise): OA raises and clears both
+// header flags. (Emergency: OA is not a dispatcher, so it already clears it.)
+export const ESCALATION_CLEAR_ROLES = ['tl', 'atl', 'am', 'admin', 'oa'] as const;
 export const ESCALATION_CLEAR_CODE = 'ESCALATION_CLEAR_FORBIDDEN';
-export const ESCALATION_CLEAR_SENTENCE = 'Only a TL, ATL or AM can clear an escalation.';
+export const ESCALATION_CLEAR_SENTENCE = 'Only a TL, ATL, AM or OP Admin can clear an escalation.';
 
 export function mayClearEscalation(roleCode: string | null | undefined, isSuperAdmin: boolean): boolean {
   return isSuperAdmin || (!!roleCode && (ESCALATION_CLEAR_ROLES as readonly string[]).includes(roleCode));

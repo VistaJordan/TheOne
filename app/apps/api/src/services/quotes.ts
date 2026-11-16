@@ -460,6 +460,7 @@ export function buildAutoSummary(
     if (section.lines.length > 0) out.push('');
     // 2026-11-10 (Elise) · incurred work is never split into days.
     out.push(...lineRows(section.lines, false));
+    pushNote(out, section.note_to_customer);
   }
   if (incurredLike.length > 0) out.push(...amountRows('Total incurred',totals.incurred_subtotal));
 
@@ -491,6 +492,7 @@ export function buildAutoSummary(
       }
       out.push(...amountRows(optionCount > 1 ? `${section.label} grand total` : 'Grand total', total.grand_total));
     }
+    pushNote(out, section.note_to_customer);
   }
 
   // ── Totals ────────────────────────────────────────────────────────────────
@@ -519,14 +521,18 @@ export function buildAutoSummary(
   }
 
   // ── Note to customer ──────────────────────────────────────────────────────
-  if (ctx.note_to_customer) {
-    out.push('');
-    for (const para of ctx.note_to_customer.split(/\n+/)) {
-      out.push(...wrap(para, SUMMARY_WIDTH));
-    }
-  }
+  // Since 0146 each section prints its own note under it (above); a quote
+  // from before that still holding a quote-wide note prints it here.
+  pushNote(out, ctx.note_to_customer);
 
   return out.join('\n');
+}
+
+/** A note to the customer, paragraph by paragraph, after a blank line. */
+function pushNote(out: string[], note: string | null | undefined): void {
+  if (!note || note.trim() === '') return;
+  out.push('');
+  for (const para of note.trim().split(/\n+/)) out.push(...wrap(para, SUMMARY_WIDTH));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -728,6 +734,8 @@ interface SectionRow {
   name: string | null;
   narrative_reported: string | null;
   scope_lines: unknown;
+  specs: string | null;
+  note_to_customer: string | null;
   include_in_summary: boolean;
   position: number | string;
   round: number | string;
@@ -784,6 +792,11 @@ function optionLetter(index: number): string {
   return out;
 }
 
+/** A blank text box saves as NULL (0146's per-section specs / note). */
+function blankToNull(v: string | null | undefined): string | null {
+  return v == null || v.trim() === '' ? null : v;
+}
+
 function toStringArray(v: unknown): string[] {
   if (Array.isArray(v)) return v.map((x) => String(x));
   if (typeof v === 'string') {
@@ -818,7 +831,7 @@ async function loadSectionsFor(
   if (quoteIds.length === 0) return out;
   const secRes = await query<SectionRow & { quote_id: string }>(
     `SELECT s.quote_id::text AS quote_id, s.id::text AS id, s.kind, s.name, s.narrative_reported, s.scope_lines,
-            s.include_in_summary, s.position, s.round, s.locked, s.rejection_note,
+            s.specs, s.note_to_customer, s.include_in_summary, s.position, s.round, s.locked, s.rejection_note,
             ${ISO('s.approved_at')} AS approved_at,
             ab.id::text AS approved_by_id, ab.display_name AS approved_by_name, ab.kind::text AS approved_by_kind
        FROM quote_section s
@@ -888,6 +901,8 @@ async function loadSectionsFor(
       name: s.name,
       narrative_reported: s.narrative_reported,
       scope_lines: toStringArray(s.scope_lines),
+      specs: s.specs,
+      note_to_customer: s.note_to_customer,
       include_in_summary: s.include_in_summary === true,
       position: Number(s.position),
       round,
@@ -1299,6 +1314,9 @@ export interface SectionInput {
   name?: string | null;
   narrative_reported?: string | null;
   scope_lines?: string[];
+  /** 0146 · the section's own specs and note to the customer. */
+  specs?: string | null;
+  note_to_customer?: string | null;
   include_in_summary?: boolean;
   lines?: LineInput[];
 }
@@ -1546,8 +1564,9 @@ export async function updateQuote(
       for (const section of input.sections) {
         const secRes = await tx.query<{ id: string }>(
           `INSERT INTO quote_section
-             (quote_id, kind, name, narrative_reported, scope_lines, include_in_summary, position, round)
-           VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+             (quote_id, kind, name, narrative_reported, scope_lines, include_in_summary, position, round,
+              specs, note_to_customer)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
            RETURNING id::text AS id`,
           [
             cur.id,
@@ -1558,6 +1577,8 @@ export async function updateQuote(
             section.include_in_summary ?? true,
             position++,
             round,
+            blankToNull(section.specs),
+            blankToNull(section.note_to_customer),
           ],
         );
         const sectionId = secRes.rows[0].id;
@@ -1668,7 +1689,7 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
   const mult = head ? multOf(head) : OT_MULTIPLIER;
   const secRows = (
     await tx.query(
-      `SELECT id::text AS id, kind, name, narrative_reported, scope_lines,
+      `SELECT id::text AS id, kind, name, narrative_reported, scope_lines, specs, note_to_customer,
               include_in_summary, position, round, locked,
               ${ISO('approved_at')} AS approved_at, rejection_note
          FROM quote_section
@@ -1753,6 +1774,8 @@ async function snapshotQuote(tx: Queryable, quoteId: string): Promise<QuoteSnaps
       name: s.name,
       narrative_reported: s.narrative_reported,
       scope_lines: toStringArray(s.scope_lines),
+      specs: s.specs ?? null,
+      note_to_customer: s.note_to_customer ?? null,
       include_in_summary: s.include_in_summary === true,
       lines: own,
     };
@@ -1965,8 +1988,13 @@ export async function submitQuote(taskId: string, actor: ActingPrincipal): Promi
   if (!target) {
     throw forbidden(QUOTE_CORRECTION_PENDING_TEXT, { code: QUOTE_CORRECTION_PENDING_CODE, status: cur.status });
   }
-  return transition(taskId, [cur.status], target, QUOTE_SUBMIT_ACTION[target], actor, undefined,
+  const quote = await transition(taskId, [cur.status], target, QUOTE_SUBMIT_ACTION[target], actor, undefined,
     'submitted_by = $3, submitted_at = now()', [actor.id]);
+  // 2026-11-16 (Elise): Submit for correction moves the work order to Quote
+  // Ready without a status request (a refusal rides on status_move).
+  return target === 'pending_correction'
+    ? withStatusMove(taskId, quote, 'submitted_for_correction', actor)
+    : quote;
 }
 
 /** → approved (quotes:approve). Fills money.quote on the WO. Refused (409)

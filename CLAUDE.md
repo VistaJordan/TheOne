@@ -3748,6 +3748,42 @@ again · Dismiss and nothing is posted; the button is hidden while `GET
 asker's role does not show (never inferred from other figures); who the asker is
 comes only from the session, never from what they type.
 
+**UAT list of 2026-11-16** (migrations 0146, 0147, 0148, Elise;
+`tests/uat-2026-11-16.test.ts`). **OP Admin clears an escalation**
+(`ESCALATION_CLEAR_ROLES` gained `oa`; it already cleared Emergency, not
+being a dispatcher). **Submit for correction moves the work order to Quote
+Ready** (`QuoteEvent` `submitted_for_correction`, from Open / Assessment
+Sched / On Site (Assessment) / Return Trip Needed / Waiting for Quote,
+`withStatusMove` after `submitQuote`, source `quote`, so no status request;
+the Quote Ready gate still runs and a refusal rides on `status_move`); a
+manager's Reject with note already moved it to Waiting for Quote (2026-11-13).
+**Specs and the note to the customer are per section** (0146:
+`quote_section.specs` / `note_to_customer`; the quote's own two columns were
+moved onto its Incurred section and cleared, and stay as legacy for a quote
+with none, printed at the foot): every section — Incurred and each option of
+every round — draws them (`components/quote/SectionNotes.tsx`, in
+`OptionCard` and the Incurred card; the two rail cards are gone, on the AI
+draft page too); the PUT section schema carries them, `updateQuote` writes
+them with the section, `snapshotQuote` and the summary read them (each
+section's note prints under it, specs never); `foldQuoteLevelNotes` (shared
+`quoteDefaults.ts`) puts quote-wide values (an older quote, an AI draft body)
+on the Incurred section. **Only TL / ATL change TL and ATL** (0147: edit false
+on `work_orders/fields/people/fields.TL|ATL` for every role but `tl`, `atl`
+and `service` — Admin included; super admins always may) and **OM Under
+Probation is view-only on People** (0147, `work_orders/fields/people` edit
+false). AM / TL / ATL / Sales Owner joined `CREATE_FILLABLE_FIELD_KEYS`, so
+Add work order still fills them from the account team. **The Emergency status
+is gone** (0148: its work orders move to Open with a `status_changed` row and
+the Emergency box ticked, `via: 'migration'`, signed "Status cleanup"; an
+Ecotrak status map row pointing at it points at Open; the status is deleted;
+seed.ts skips it and maps "emergency" to Open — keep in step; the emergency is
+the checkbox). **No Tag action** in the header's More menu (tags on file
+still show and can be removed). **A visit's phone is a US number**
+(`techPhone` in `services/visits.ts`: `usPhoneProblem` → 400 `VALIDATION`
+`field: tech_phone`, stored as `formatUsPhone`; the CICO boxes shape it as
+typed, `PhoneInput` in `CicoCard.tsx`). **No "Use this device's location"**
+on a visit — Type coordinates only.
+
 ## Verify
 
 ```

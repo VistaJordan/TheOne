@@ -30,7 +30,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Record actions and state chips',
-          what: 'Since 2026-10-20 the bar under the header holds the state chips only, and its buttons live where the work is. The header\'s More menu: Pause / Resume ("Pause this work order — Why is it paused?"), Tag ("Tag this work order", suggested tags, Reason, Add the tag), Complete service / Edit completion (Completion note, Fault code — what was wrong, Action code — what was done, Is this a temporary fix? No / Yes — a return is needed / Not said; Clear the completion), Cancel work order ("Why is it cancelled?") / Reopen ("Why is it reopened?"). People › Technicians: the Responsible vendor card with Assign vendor / Re-assign vendor (Find a vendor, Hired on this work order shortcuts, Remove). CICO: the ETA card with Add ETA / Change ETA (Estimated time of arrival, Expected on site, Note, Save ETA, Clear the ETA). The bar under the header shows the state chips: Cancelled — reason, Paused <when> — reason, ETA <time>, Service completed · temporary fix, the vendor, "NTE increase to $X waiting", running site events, tags with remove.',
+          what: 'Since 2026-10-20 the bar under the header holds the state chips only, and its buttons live where the work is. The header\'s More menu: Pause / Resume ("Pause this work order — Why is it paused?") (Tag was removed on 2026-11-16; tags already on file still show and can be removed), Complete service / Edit completion (Completion note, Fault code — what was wrong, Action code — what was done, Is this a temporary fix? No / Yes — a return is needed / Not said; Clear the completion), Cancel work order ("Why is it cancelled?") / Reopen ("Why is it reopened?"). People › Technicians: the Responsible vendor card with Assign vendor / Re-assign vendor (Find a vendor, Hired on this work order shortcuts, Remove). CICO: the ETA card with Add ETA / Change ETA (Estimated time of arrival, Expected on site, Note, Save ETA, Clear the ETA). The bar under the header shows the state chips: Cancelled — reason, Paused <when> — reason, ETA <time>, Service completed · temporary fix, the vendor, "NTE increase to $X waiting", running site events, tags with remove.',
           value: 'The Facilio-style actions a dispatcher expects, each audited and each a plain column on the work order.',
           rules: [
             'Cancel moves the work order to the first status whose name starts with "Cancel", ends an open pause, and keeps its stamp even if a gate refuses the move (the bar says why); Pause and Complete service are refused on a cancelled work order; Complete needs a note, a fault code or an action code, and codes must be active catalogue codes.',
@@ -155,7 +155,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Visit location and geofence',
-          what: 'On a visit row: Use this device\'s location, or Type coordinates (Latitude / Longitude, Check), Clear; the result reads "<place> · N ft from the pin" against the site\'s pin and boundary, or "Check-in location not recorded".',
+          what: 'On a visit row: Type coordinates (Latitude / Longitude, Check), Clear; the result reads "<place> · N ft from the pin" against the site\'s pin and boundary, or "Check-in location not recorded".',
           value: 'A check-in far from the site is visible, without a technician app.',
           rules: ['Coordinates are validated (latitude within 90, longitude within 180).'],
           permissions: ['work_orders/fields/cico edit'],
@@ -367,7 +367,7 @@ export const WORK_ORDERS_PART: DocPart = {
           value: 'The ClickUp "emergency" status becomes a flag that survives every status change.',
           brd: ['2.5.1'],
           since: '0034',
-          deferred: ['The Pulse\'s Ack emergency clock keys off the Open / Emergency statuses with high priority, not this flag.'],
+          deferred: ['The Pulse\'s Ack emergency clock keys off the Open status with high priority, not this flag (the Emergency status was removed in 0148, 2026-11-16).'],
         },
         {
           name: 'Escalated',

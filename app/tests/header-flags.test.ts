@@ -4,7 +4,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { flagTicked, mayClearEscalation, onlyHeaderFlags } from '@theone/shared';
+import { flagTicked, mayClearEmergency, mayClearEscalation, onlyHeaderFlags } from '@theone/shared';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -16,12 +16,16 @@ describe('header flags', () => {
     expect(onlyHeaderFlags([])).toBe(false);
   });
 
-  it('only TL, ATL, AM, Admin and super admins clear an escalation', () => {
-    for (const r of ['tl', 'atl', 'am', 'admin']) expect(mayClearEscalation(r, false)).toBe(true);
-    for (const r of ['om', 'senior_om', 'om_probation', 'oa', 'vr_officer', null]) {
+  it('only TL, ATL, AM, Admin, OP Admin and super admins clear an escalation', () => {
+    for (const r of ['tl', 'atl', 'am', 'admin', 'oa']) expect(mayClearEscalation(r, false)).toBe(true);
+    for (const r of ['om', 'senior_om', 'om_probation', 'vr_officer', null]) {
       expect(mayClearEscalation(r, false)).toBe(false);
     }
     expect(mayClearEscalation('om', true)).toBe(true);
+  });
+
+  it('OP Admin clears an emergency too (2026-11-16)', () => {
+    expect(mayClearEmergency('oa', false)).toBe(true);
   });
 
   it('reads a ticked checkbox in every spelling', () => {

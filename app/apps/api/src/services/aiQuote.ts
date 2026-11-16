@@ -21,6 +21,7 @@ import {
   QUOTE_SCOPE_FIRST_LINE,
   QUOTE_SCOPE_LAST_LINE,
   aiModelInfo,
+  foldQuoteLevelNotes,
   quoteDraftHasContent,
 } from '@theone/shared';
 import type {
@@ -327,7 +328,9 @@ export async function submitDraft(
   }
   const quote = await updateQuote(
     taskId,
-    { sections: body.sections, specs: body.specs, note_to_customer: body.note_to_customer },
+    // 0146: specs and the note live on the sections; a draft's quote-wide
+    // values land on the Incurred section.
+    { sections: foldQuoteLevelNotes(body.sections, body.specs, body.note_to_customer) },
     actor,
   );
 

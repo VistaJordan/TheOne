@@ -138,6 +138,10 @@ export interface QuoteDraftSection {
   name: string | null;
   narrative_reported: string | null;
   scope_lines: string[];
+  /** 0146 · per-section specs and note (optional: drafts saved before carry
+      them on the body instead, see foldQuoteLevelNotes). */
+  specs?: string | null;
+  note_to_customer?: string | null;
   include_in_summary: boolean;
   lines: QuoteDraftLine[];
 }

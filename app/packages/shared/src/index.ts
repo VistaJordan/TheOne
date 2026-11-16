@@ -80,7 +80,6 @@ export const PHASE_ORDER: readonly Phase[] = [
  */
 export const PHASE_BY_STATUS_NAME: Record<string, Phase | null> = {
   'Open': 'Intake',
-  'Emergency': 'Intake',
   'Assessment Sched': 'Assessment',
   'On Site (Assessment)': 'Assessment',
   'Return Trip Needed': 'Assessment',
@@ -932,6 +931,10 @@ export interface QuoteSection {
   name: string | null;
   narrative_reported: string | null;
   scope_lines: string[];
+  /** 0146 · the section's own "Equipment & part specs" (internal, never
+      printed) and its note to the customer (printed under the section). */
+  specs: string | null;
+  note_to_customer: string | null;
   include_in_summary: boolean;
   position: number;
   /** Submission round (Yoda: one QuoteSection per round). 1 = the first quote. */

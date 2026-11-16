@@ -162,6 +162,12 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
       {incurred && incurred.lines.length > 0 && (
         <LinesBlock section={incurred} heading="Work performed" note="Billed with the work order" />
       )}
+      {incurred && incurred.lines.length === 0 && incurred.note_to_customer?.trim() && (
+        <section className="qdoc-note">
+          <h3>Work performed</h3>
+          <p>{incurred.note_to_customer}</p>
+        </section>
+      )}
 
       {approvedEarlier.map((s) => (
         <LinesBlock
@@ -227,6 +233,7 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
         </section>
       )}
 
+      {/* A quote from before 0146 may still hold a quote-wide note. */}
       {quote.note_to_customer && (
         <section className="qdoc-note">
           <h3>Note</h3>
@@ -298,6 +305,8 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
           </tr>
         </tfoot>
       </table>
+      {/* 0146 · the section's own note to the customer prints under it. */}
+      {section.note_to_customer?.trim() && <p className="qdoc-narr qdoc-section-note">{section.note_to_customer}</p>}
     </section>
   );
 }

@@ -72,6 +72,9 @@ export const sectionSchema = z.object({
   // opens with three blanks and a reload must show the list as it was left.
   // Everything that prints the list skips them (visibleScopeLines).
   scope_lines: z.array(z.string().trim().max(1000)).max(50).optional(),
+  // 0146 · each section's own specs (internal) and note to the customer.
+  specs: z.string().max(8000).nullable().optional(),
+  note_to_customer: z.string().max(8000).nullable().optional(),
   include_in_summary: z.boolean().optional(),
   lines: z.array(lineSchema).max(100).optional(),
 });

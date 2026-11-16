@@ -29,6 +29,8 @@ import {
   VISIT_MIRROR_KEYS,
   cicoMethodLabel,
   fieldSectionPermKey,
+  usPhoneInputValue,
+  usPhoneProblem,
   type ActivityEntry,
   type VisitInput,
   type WoVisitResponse,
@@ -734,6 +736,7 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
     // Only what changed goes over the wire, so an untouched stamp is never
     // rewritten (and never re-stamped by the status logic).
     const input: VisitInput = {};
+    if (phone.trim() !== (v.tech_phone ?? '') && phone.trim() !== '' && usPhoneProblem(phone)) return;
     if (type !== v.visit_type) input.visit_type = type;
     if (tech.trim() !== (v.tech_name ?? '')) input.tech_name = tech.trim() || null;
     if (phone.trim() !== (v.tech_phone ?? '')) input.tech_phone = phone.trim() || null;
@@ -764,12 +767,12 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
             value={tech}
             disabled={busy}
             onChange={(name) => { setTech(name); setVendorId(null); }}
-            onPick={(h) => { setTech(h.name); if (h.phone) setPhone(h.phone); setVendorId(h.id); }}
+            onPick={(h) => { setTech(h.name); if (h.phone) setPhone(usPhoneInputValue(h.phone)); setVendorId(h.id); }}
           />
         </label>
         <label className="field">
           <span className="lbl">Phone</span>
-          <input className="fld" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(000) 000-0000" disabled={busy} />
+          <PhoneInput value={phone} onChange={setPhone} disabled={busy} />
         </label>
         <MethodReadOnly method={v.method} portal={v.method_portal} detail={v.method_detail} />
       </div>
@@ -818,6 +821,7 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
   const submit = () => {
     setTouched(true);
     if (!type) return;
+    if (phone.trim() !== '' && usPhoneProblem(phone)) return;
     // A new visit is the technician arriving: it is logged checked in (the
     // API stamps now and runs rule 2.2.2's On Site move or request).
     onSubmit({
@@ -862,12 +866,12 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
             disabled={busy}
             autoFocus
             onChange={(name) => { setTech(name); setVendorId(null); }}
-            onPick={(h) => { setTech(h.name); if (h.phone) setPhone(h.phone); setVendorId(h.id); }}
+            onPick={(h) => { setTech(h.name); if (h.phone) setPhone(usPhoneInputValue(h.phone)); setVendorId(h.id); }}
           />
         </label>
         <label className="field">
           <span className="lbl">Phone</span>
-          <input className="fld" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(000) 000-0000" disabled={busy} />
+          <PhoneInput value={phone} onChange={setPhone} disabled={busy} />
         </label>
         <MethodReadOnly method={defaultMethod} portal={defaultPortal} detail={defaultDetail} />
       </div>
@@ -884,6 +888,28 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
         )}
       </div>
     </form>
+  );
+}
+
+/** 2026-11-16 (Elise) · a visit's phone is a US number: digits only, shaped
+    (409) 555-0143 as they are typed; a number that cannot be a US one says
+    why under the box (the API refuses it too). */
+function PhoneInput({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled: boolean }) {
+  const problem = value.trim() !== '' ? usPhoneProblem(value) : null;
+  return (
+    <>
+      <input
+        className={`fld${problem ? ' is-err' : ''}`}
+        type="tel"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onChange(usPhoneInputValue(e.target.value))}
+        placeholder="(000) 000-0000"
+        aria-invalid={problem ? true : undefined}
+        disabled={disabled}
+      />
+      {problem && <span className="err"><Icon name="alert" size={12} />{problem}</span>}
+    </>
   );
 }
 

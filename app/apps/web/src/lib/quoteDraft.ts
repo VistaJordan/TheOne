@@ -23,7 +23,7 @@ import type {
   QuoteUpdateInput,
 } from '../api/client';
 import type { QuoteDocumentType, QuoteDraftBody, QuoteDraftSection } from '@theone/shared';
-import { QUOTE_DEFAULT_DAY, QUOTE_DEFAULT_TRIP_DESCRIPTION, defaultScopeLines, lineBillsOt } from '@theone/shared';
+import { QUOTE_DEFAULT_DAY, QUOTE_DEFAULT_TRIP_DESCRIPTION, defaultScopeLines, foldQuoteLevelNotes, lineBillsOt } from '@theone/shared';
 import { parseLinePct, parseMoney, parsePct } from './quoteTotals';
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────────
@@ -87,6 +87,10 @@ export interface DraftSection {
   /** "Tech reported that…" / the option narrative. */
   narrative: string;
   scope_lines: string[];
+  /** 0146 · this section's own "Equipment & part specs" (internal) and note
+      to the customer (printed under the section), as typed. */
+  specs: string;
+  note_to_customer: string;
   include_in_summary: boolean;
   lines: DraftLine[];
   /** Yoda round. Sections of earlier rounds are history and render locked. */
@@ -106,8 +110,6 @@ export interface DraftQuote {
   total_rule: QuoteTotalRule;
   bill_to: string;
   is_cost_tbd: boolean;
-  specs: string;
-  note_to_customer: string;
   /** Non-null = the operator used "Edit text" and pinned a manual summary. */
   summary_pinned: string | null;
   /** 0048 · the document fields (bill_to is above). */
@@ -294,6 +296,8 @@ export function blankOption(round = 1, tripRate?: number | null): DraftSection {
     name: '',
     narrative: '',
     scope_lines: defaultScopeLines(),
+    specs: '',
+    note_to_customer: '',
     include_in_summary: true,
     lines: [tripLine(tripRate)],
     round,
@@ -311,6 +315,8 @@ function blankIncurred(tripRate?: number | null): DraftSection {
     name: 'Work already performed',
     narrative: '',
     scope_lines: defaultScopeLines(),
+    specs: '',
+    note_to_customer: '',
     include_in_summary: true,
     lines: [tripLine(tripRate)],
     round: 1,
@@ -339,8 +345,6 @@ export function resetDraft(draft: DraftQuote, tripRate?: number | null): DraftQu
       blankOption(draft.current_round, tripRate),
     ],
     is_cost_tbd: false,
-    specs: '',
-    note_to_customer: '',
     summary_pinned: null,
   };
 }
@@ -362,6 +366,8 @@ function sectionToDraft(section: QuoteSection | QuoteDraftSection, currentRound:
     narrative: section.narrative_reported ?? '',
     scope_lines:
       (section.scope_lines ?? []).length > 0 ? [...(section.scope_lines ?? [])] : locked ? [] : [''],
+    specs: section.specs ?? '',
+    note_to_customer: section.note_to_customer ?? '',
     include_in_summary: section.include_in_summary ?? true,
     // An open section's "Labor tech N" names are re-counted per day on load,
     // so a quote saved before the per-day rule (2026-11-06) reads right; a
@@ -405,8 +411,10 @@ function pctToInput(n: number): string {
  * round's so the letters the server derived line up with the cards.
  */
 export function fromQuote(quote: Quote): DraftQuote {
-  const incurred = quote.sections.find((s) => s.kind === 'incurred');
-  const options = quote.sections.filter((s) => s.kind === 'option');
+  // 0146 · a quote-wide specs / note from before lands on the Incurred card.
+  const folded = foldQuoteLevelNotes(quote.sections, quote.specs, quote.note_to_customer);
+  const incurred = folded.find((s) => s.kind === 'incurred');
+  const options = folded.filter((s) => s.kind === 'option');
   const inc = incurred ? sectionToDraft(incurred, quote.current_round) : blankIncurred(quote.labor_rate?.trip_rate);
   // From round 2 on the incurred work is what the client already approved — locked.
   if (quote.current_round > 1) inc.locked = true;
@@ -417,8 +425,6 @@ export function fromQuote(quote: Quote): DraftQuote {
     total_rule: quote.total_rule,
     bill_to: quote.bill_to ?? '',
     is_cost_tbd: quote.is_cost_tbd,
-    specs: quote.specs ?? '',
-    note_to_customer: quote.note_to_customer ?? '',
     summary_pinned: quote.summary.pinned,
     document_type: quote.document_type ?? 'quote',
     ship_to: quote.ship_to ?? '',
@@ -445,6 +451,8 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
     // reload must show the list as it was left. Everything that prints the
     // list skips blanks (visibleScopeLines).
     scope_lines: section.scope_lines.map((s) => s.trim()),
+    specs: section.specs.trim() === '' ? null : section.specs,
+    note_to_customer: section.note_to_customer.trim() === '' ? null : section.note_to_customer,
     include_in_summary: section.include_in_summary,
     // A line with no description CANNOT be saved: the route's Zod schema demands
     // description.min(1) and rejects the whole body otherwise. Sending the row
@@ -513,8 +521,6 @@ export function toUpdateInput(draft: DraftQuote): QuoteUpdateInput {
     total_rule: draft.total_rule,
     bill_to: draft.bill_to.trim() === '' ? null : draft.bill_to.trim(),
     is_cost_tbd: draft.is_cost_tbd,
-    specs: draft.specs.trim() === '' ? null : draft.specs,
-    note_to_customer: draft.note_to_customer.trim() === '' ? null : draft.note_to_customer,
     summary_pinned: draft.summary_pinned,
     sections: draft.sections
       .filter((s) => !s.locked && s.round === draft.current_round)
@@ -531,8 +537,9 @@ export function toUpdateInput(draft: DraftQuote): QuoteUpdateInput {
     summary — takes the builder's defaults and is never sent on Submit quote,
     so the quote keeps its own values for them. */
 export function fromDraftBody(body: QuoteDraftBody): DraftQuote {
-  const incurred = body.sections.find((s) => s.kind === 'incurred');
-  const options = body.sections.filter((s) => s.kind === 'option');
+  const sections = foldQuoteLevelNotes(body.sections, body.specs, body.note_to_customer);
+  const incurred = sections.find((s) => s.kind === 'incurred');
+  const options = sections.filter((s) => s.kind === 'option');
   return {
     sections: [
       incurred ? sectionToDraft(incurred, 1) : blankIncurred(),
@@ -543,8 +550,6 @@ export function fromDraftBody(body: QuoteDraftBody): DraftQuote {
     total_rule: 'incurred_plus_option',
     bill_to: '',
     is_cost_tbd: false,
-    specs: body.specs ?? '',
-    note_to_customer: body.note_to_customer ?? '',
     summary_pinned: null,
     document_type: 'quote',
     ship_to: '',
@@ -554,7 +559,6 @@ export function fromDraftBody(body: QuoteDraftBody): DraftQuote {
 /** The form → the AI draft body: the same conversion the builder saves with,
     trimmed to the three things a draft holds. */
 export function toDraftBody(draft: DraftQuote): QuoteDraftBody {
-  const input = toUpdateInput(draft);
   return {
     // The draft keeps the S4 line shape: the Day as text, every field present.
     sections: draft.sections.map(sectionToInput).map((s) => ({
@@ -562,6 +566,8 @@ export function toDraftBody(draft: DraftQuote): QuoteDraftBody {
       name: s.name ?? null,
       narrative_reported: s.narrative_reported ?? null,
       scope_lines: s.scope_lines ?? [],
+      specs: s.specs ?? null,
+      note_to_customer: s.note_to_customer ?? null,
       include_in_summary: s.include_in_summary ?? true,
       lines: (s.lines ?? []).map((l) => ({
         line_type: l.line_type,
@@ -575,8 +581,9 @@ export function toDraftBody(draft: DraftQuote): QuoteDraftBody {
         markup_pct: l.markup_pct ?? 0,
       })),
     })),
-    specs: input.specs ?? null,
-    note_to_customer: input.note_to_customer ?? null,
+    // 0146 · the notes ride on the sections now.
+    specs: null,
+    note_to_customer: null,
   };
 }
 

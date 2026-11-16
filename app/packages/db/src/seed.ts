@@ -74,7 +74,9 @@ function slug(name: string): string {
     operational vocabulary here, so older seed sections and sample data keep
     resolving after the S8 rename. */
 const STATUS_ALIAS: Record<string, string> = {
-  'emergency': 'Emergency',
+  // 0148 · the Emergency status is gone; an emergency is the checkbox.
+  'emergency': 'Open',
+  'Emergency': 'Open',
   'assessment scheduled': 'Assessment Sched',
   'job scheduled': 'Job Sched',
   'pm scheduled': 'PM Sched',
@@ -724,6 +726,8 @@ const S5_TASKS: {
     trade: 'Refrigeration',
     nte: 2500,
     priority: 'high',
+    // 0148: it was in the (removed) Emergency status; the box carries it now.
+    extraFields: { Emergency: true },
   },
   {
     wo_number: 'WO-39440',
@@ -902,6 +906,8 @@ async function main() {
   const statusIdByName = new Map<string, string>();
   const statusGroupById = new Map<string, StatusGroup>();
   for (const s of data.statuses) {
+    // 0148 (Elise, 2026-11-16): no Emergency status — keep in step.
+    if (s.name.trim().toLowerCase() === 'emergency') continue;
     const group = PENDING_STATUSES.has(s.name) ? 'pending' : STATUS_GROUP_BY_TYPE[s.type];
     if (!group) throw new Error(`Unknown ClickUp status type: ${s.type}`);
     const id = await insertId(

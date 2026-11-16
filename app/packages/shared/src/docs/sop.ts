@@ -198,7 +198,7 @@ export const SOP: SopDocument = {
           'On the **CICO** tab, the **ETA** card: **Add ETA** / **Change ETA** sets **Expected on site** and a note (**Save ETA**; **Clear the ETA**).',
           'Click **New visit**.',
           'Pick the **Visit type** (Assessment, Job or Return trip), the **Technician** (free text, or anyone on file: hired first), the **Phone**, the **Method** and **Method detail** (pre-filled from the FM). Click **Check in** when the technician arrives.',
-          'The visit is saved **Checked in**. The time is stamped (a time you typed is kept) and the work order moves by itself to **On Site (Assessment)** or **On Site (Job)** (rule 2.2.2), from whatever status it was in. This needs no request to a manager, whoever you are. Optionally record the location: **Use this device\'s location** or **Type coordinates**; the result reads "<place> · N ft from the pin"; **Clear** removes it.',
+          'The visit is saved **Checked in**. The time is stamped (a time you typed is kept) and the work order moves by itself to **On Site (Assessment)** or **On Site (Job)** (rule 2.2.2), from whatever status it was in. This needs no request to a manager, whoever you are. Optionally record the location: **Type coordinates**; the result reads "<place> · N ft from the pin"; **Clear** removes it.',
           'When they leave, set **Checked out** (or **Checked out · return trip needed**). An Assessment check-out stamps **Quote Due Date** (48 business hours). A Job check-out never does.',
           'If the visit turns out to be another kind (an assessment that finished the work is a **Job**), change it with the type dropdown on the visit row, above the status. It does not move the work order\'s status.',
           'Correct a stamp with the pencil (**Save visit**; "A corrected time keeps its history"); see **History of this visit**; delete with the trash icon ("The old check-in/out fields will read the visit before it.").',
@@ -218,7 +218,6 @@ export const SOP: SopDocument = {
         { kind: 'sub', title: 'D. More, in the header' },
         { kind: 'bullets', items: [
           '**Pause** ("Why is it paused?") / **Resume**: a marker on the record; no clock stops (rule 2.4.4). Not on a cancelled work order.',
-          '**Tag**: a **Tag** (suggestions offered) and a **Reason**, **Add the tag**; remove from the chip.',
           '**Complete service** / **Edit completion**: **Completion note**, **Fault code — what was wrong**, **Action code — what was done**, **Is this a temporary fix?**; it records the completion and does not move the status; **Clear the completion** undoes it.',
           '**Cancel work order** ("Why is it cancelled?") / **Reopen** ("Why is it reopened?"): Cancel moves to the Cancelled status and ends an open pause; it is gone once the invoice is sent or paid or a payment is paid. Reopen returns the work order to the status it had before. Neither (nor Pause or Complete service) is offered to people who must request status changes.',
         ] },

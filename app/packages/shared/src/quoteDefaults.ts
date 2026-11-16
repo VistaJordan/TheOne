@@ -119,3 +119,26 @@ export function lineTakesOt(lineType: string | null | undefined): boolean {
 export function lineBillsOt(line: { line_type?: string | null; ot?: boolean | null }): boolean {
   return line.ot === true && lineTakesOt(line.line_type);
 }
+
+/** 0146 (Elise, 2026-11-16) · specs and the note to the customer belong to a
+    section. Values that still arrive quote-wide (an older quote, an AI draft
+    body) land on the Incurred section when it has none of its own. Pure:
+    returns new section objects, never mutates. */
+export function foldQuoteLevelNotes<
+  S extends { kind: 'incurred' | 'option'; specs?: string | null; note_to_customer?: string | null },
+>(sections: readonly S[], specs: string | null | undefined, note: string | null | undefined): S[] {
+  const s = (specs ?? '').trim() === '' ? null : specs!;
+  const n = (note ?? '').trim() === '' ? null : note!;
+  if (!s && !n) return [...sections];
+  const i = sections.findIndex((x) => x.kind === 'incurred');
+  if (i < 0) return [...sections];
+  return sections.map((x, k) =>
+    k !== i
+      ? x
+      : {
+          ...x,
+          specs: (x.specs ?? '').trim() !== '' ? x.specs : s,
+          note_to_customer: (x.note_to_customer ?? '').trim() !== '' ? x.note_to_customer : n,
+        },
+  );
+}

@@ -99,12 +99,6 @@ export const LIFECYCLE: LifecycleModel = {
       ],
     },
     {
-      status: 'Emergency',
-      meaning: 'An emergency intake; the red Emergency flag is the field that drives the colour everywhere, and the Pulse\'s Ack emergency clock watches this status with high priority.',
-      enteredBy: 'A person, or the paused "priority changed to urgent" automation once the client portal sets priority.',
-      who: 'Managers.',
-    },
-    {
       status: 'Assessment Sched',
       meaning: 'A technician has been found and an assessment visit is planned.',
       enteredBy: 'Change status after hiring a technician and logging a planned visit.',
@@ -235,9 +229,7 @@ export const LIFECYCLE: LifecycleModel = {
   ],
 
   edges: [
-    { from: 'Open', to: 'Emergency', label: 'Emergency flag', kind: 'branch' },
     { from: 'Open', to: 'Assessment Sched', label: 'tech hired, visit planned', kind: 'main' },
-    { from: 'Emergency', to: 'Assessment Sched', label: 'same path, red', kind: 'main' },
     { from: 'Open', to: 'Job Sched', label: 'approved up front', kind: 'branch' },
     { from: 'Assessment Sched', to: 'On Site (Assessment)', label: 'check-in', kind: 'system' },
     { from: 'On Site (Assessment)', to: 'Waiting for Quote', label: 'check-out · clock starts', kind: 'main' },

@@ -59,7 +59,9 @@ import {
   VISIT_MIRROR_KEYS,
   VISIT_OWNED_KEYS,
   nextVisitStamps,
+  formatUsPhone,
   onSiteStatusNameForVisitType,
+  usPhoneProblem,
   type ActivityActor,
   type ActivityEntry,
   type FmCicoMethod,
@@ -342,6 +344,17 @@ function text(v: unknown, label: string, max: number): string | null {
   return s === '' ? null : s;
 }
 
+/** 2026-11-16 (Elise): a visit's phone is a US number, stored as
+    (409) 555-0143. Blank clears it; only a value being written is asked, so
+    a phone already on file is never re-checked. */
+function techPhone(v: unknown): string | null {
+  const t = text(v, 'Tech phone', 60);
+  if (t === null) return null;
+  const problem = usPhoneProblem(t);
+  if (problem) throw new ApiError('BAD_REQUEST', problem, { code: 'VALIDATION', field: 'tech_phone' });
+  return formatUsPhone(t);
+}
+
 /** An ISO datetime (with or without seconds / zone) → UTC ISO to the second. */
 function stamp(v: unknown, label: string): string | null {
   if (v === null || v === undefined || v === '') return null;
@@ -386,7 +399,7 @@ function clean(input: VisitInput, forCreate: boolean): Clean {
     out.return_trip_needed = Boolean(input.return_trip_needed);
   }
   if ('tech_name' in input) out.tech_name = text(input.tech_name, 'Tech name', 200);
-  if ('tech_phone' in input) out.tech_phone = text(input.tech_phone, 'Tech phone', 60);
+  if ('tech_phone' in input) out.tech_phone = techPhone(input.tech_phone);
   if ('method' in input) out.method = text(input.method, 'Method', 60);
   if ('method_detail' in input) out.method_detail = text(input.method_detail, 'Method detail', 300);
   if ('method_portal' in input) out.method_portal = text(input.method_portal, 'Portal', 80);

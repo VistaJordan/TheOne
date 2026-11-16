@@ -63,6 +63,7 @@ import { MoneyRail } from '../components/quote/MoneyRail';
 import { OptionCard } from '../components/quote/OptionCard';
 import { QuotePipeline } from '../components/quote/QuoteStatusPill';
 import { ScopeList } from '../components/quote/ScopeList';
+import { SectionNotes } from '../components/quote/SectionNotes';
 import { SummaryCard } from '../components/quote/SummaryCard';
 import type { DraftLine, DraftQuote, DraftSection } from '../lib/quoteDraft';
 import {
@@ -1415,6 +1416,10 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
 
+            <div className="narr">
+              <SectionNotes section={incurred} editable={incurredEditable} onChange={(next) => setSection(0, next)} />
+            </div>
+
             <div className="lt-foot">
               {incurredEditable && (
                 <AddLineButton
@@ -1612,57 +1617,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             </section>
           )}
 
-          <section className="card">
-            <div className="card-head">
-              <h2 className="card-title grow">Specs</h2>
-              <span className="card-meta">Internal</span>
-            </div>
-            <div className="card-pad">
-              <div className="field">
-                <label className="lbl" htmlFor="specs">
-                  Equipment &amp; part specs <span className="opt">optional</span>
-                </label>
-                <textarea
-                  className="fld"
-                  id="specs"
-                  rows={4}
-                  value={draft.specs}
-                  disabled={!editable}
-                  onChange={(e) => update({ ...draft, specs: e.target.value })}
-                />
-                <span className="hint">
-                  Not sent to the client — kept for the tech and for warranty claims.
-                </span>
-              </div>
-            </div>
-          </section>
-
-          <section className="card">
-            <div className="card-head">
-              <h2 className="card-title grow">Note to Customer</h2>
-              <span className="chip chip-sm chip-accent">
-                <Icon name="globe" size={12} />
-                Client-visible
-              </span>
-            </div>
-            <div className="card-pad">
-              <div className="field">
-                <label className="lbl" htmlFor="note-to-customer">
-                  Message appended to the summary <span className="opt">optional</span>
-                </label>
-                <textarea
-                  className="fld"
-                  id="note-to-customer"
-                  rows={3}
-                  value={draft.note_to_customer}
-                  disabled={!editable}
-                  onChange={(e) => update({ ...draft, note_to_customer: e.target.value })}
-                />
-                <span className="hint">Appears under the totals in the text your client sees.</span>
-              </div>
-            </div>
-          </section>
-
           <SummaryCard
             auto={quote.summary.auto}
             pinned={draft.summary_pinned}
@@ -1759,7 +1713,7 @@ function ResetSheet({ round, onCancel, onReset }: { round: number; onCancel: () 
           Reset this quote?
         </h2>
         <p className="sheet-b" id="resetB">
-          Every line, option and scope line, the specs and the note to the customer are cleared, and
+          Every line, option and scope line, and each section's specs and note to the customer are cleared, and
           the quote opens again as a new one: Incurred and one option, each with its Trip line.
           {round > 1 ? ' Earlier rounds and the approved incurred work stay as they are.' : ''} The
           quote number, sales tax and bill-to / ship-to are kept. This cannot be undone.

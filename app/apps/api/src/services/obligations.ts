@@ -444,7 +444,8 @@ async function collectDesired(
     const rule = active('emergency_ack');
     if (rule) {
       const rows = await statusCandidates(
-        rule.params.statuses ?? ['Open', 'Emergency'],
+        // 0148: the Emergency status is gone (the checkbox carries it).
+        rule.params.statuses ?? ['Open'],
         rule.params.priorities ?? ['high'],
         `NOT EXISTS (SELECT 1 FROM activity_log a
                       WHERE a.entity_type = 'task' AND a.entity_id = b.task_id::text

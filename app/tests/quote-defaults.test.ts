@@ -214,6 +214,8 @@ describe('Reset quote (2026-10-27)', async () => {
     ...blankOption(round, 50),
     name: 'Typed option',
     scope_lines: ['typed'],
+    specs: 'specs',
+    note_to_customer: 'note',
     locked,
   });
   const base = (round: number): Draft => ({
@@ -228,8 +230,6 @@ describe('Reset quote (2026-10-27)', async () => {
     total_rule: 'incurred_plus_option',
     bill_to: 'Bill',
     is_cost_tbd: true,
-    specs: 'specs',
-    note_to_customer: 'note',
     summary_pinned: 'pinned',
     document_type: 'proposal',
     ship_to: 'Ship',
@@ -247,9 +247,10 @@ describe('Reset quote (2026-10-27)', async () => {
       expect(s.lines[0].description).toBe(QUOTE_DEFAULT_TRIP_DESCRIPTION);
       expect(s.lines[0].rate).toBe('75.00');
       expect(s.name === '' || s.kind === 'incurred').toBe(true);
+      // 0146 · each section's specs and note start empty.
+      expect(s.specs).toBe('');
+      expect(s.note_to_customer).toBe('');
     }
-    expect(next.specs).toBe('');
-    expect(next.note_to_customer).toBe('');
     expect(next.summary_pinned).toBeNull();
     expect(next.is_cost_tbd).toBe(false);
   });

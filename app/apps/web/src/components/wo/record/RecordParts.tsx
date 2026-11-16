@@ -6,7 +6,7 @@
  *   RecordBar       under the header: what state the job is in (paused,
  *                   cancelled, an ETA, service completed, its tags, a site
  *                   event running).
- *   RecordActions   in the header: More (Pause, Tag, Complete service,
+ *   RecordActions   in the header: More (Pause, Complete service,
  *                   Cancel / Reopen).
  *   ResponsibleVendorCard, EtaCard   Assign vendor on People ›
  *                   Technicians, Add ETA on CICO.
@@ -34,7 +34,6 @@ import type { WoRecord } from '@theone/shared';
 import { useAuth } from '../../../auth/AuthProvider';
 import {
   ApiRequestError,
-  addWoTag,
   cancelWo,
   clearWoCompletion,
   completeWoService,
@@ -151,9 +150,9 @@ export function RecordBar({ woId, woNumber, record, note, chips = true }: { woId
   );
 }
 
-type Dialog = 'pause' | 'cancel' | 'reopen' | 'complete' | 'tag' | null;
+type Dialog = 'pause' | 'cancel' | 'reopen' | 'complete' | null;
 
-/** The header's More menu (Pause / Resume, Tag, Complete service, Cancel /
+/** The header's More menu (Pause / Resume, Complete service, Cancel /
     Reopen). What a click could not do — a refused status move
     on Cancel or Reopen, a failed Resume — goes back to the page through
     `onNote`, which the bar under the header prints. */
@@ -223,9 +222,6 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
                   <Icon name="clock" size={14} /><span><b>Pause</b><small>A marker everyone sees; no clock stops</small></span>
                 </button>
               ))}
-              <button type="button" role="menuitem" className="rec-pdf-item" onClick={pick('tag')}>
-                <Icon name="tag" size={14} /><span><b>Tag</b><small>A short label and why it applies</small></span>
-              </button>
               {lifecycle && !cancelled && (
                 <button type="button" role="menuitem" className="rec-pdf-item" onClick={pick('complete')}>
                   <Icon name="check-circle" size={14} /><span><b>{s.completion ? 'Edit completion' : 'Complete service'}</b><small>What was found and what was done</small></span>
@@ -262,7 +258,6 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
           hint="It goes back to Open. The reason is kept on its history."
           woId={woId} woNumber={woNumber} run={async (reason) => report(await reopenWo(woId, reason))} onClose={close} />
       )}
-      {dialog === 'tag' && <TagDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}
       {dialog === 'complete' && <CompleteDialog woId={woId} woNumber={woNumber} record={record} onClose={close} />}
     </>
   );
@@ -402,37 +397,6 @@ function EtaDialog({ woId, woNumber, record, onClose }: DialogProps) {
         <button type="button" className="btn" onClick={onClose}>Back</button>
         {record.state.eta && <button type="button" className="btn" disabled={save.isPending} onClick={() => save.mutate(true)}>Clear the ETA</button>}
         <button type="button" className="btn btn-primary" disabled={!at || past || save.isPending} onClick={() => save.mutate(false)}>Save ETA</button>
-      </div>
-    </Sheet>
-  );
-}
-
-function TagDialog({ woId, woNumber, record, onClose }: DialogProps) {
-  const [tag, setTag] = useState('');
-  const [reason, setReason] = useState('');
-  const add = useRecordWrite(woId, woNumber, () => addWoTag(woId, tag.trim(), reason.trim() || null), onClose);
-  const have = new Set(record.tags.map((t) => t.tag.toLowerCase()));
-  const offer = record.tag_suggestions.filter((t) => !have.has(t.toLowerCase())).slice(0, 12);
-  return (
-    <Sheet title="Tag this work order" icon="tag" onClose={onClose}>
-      <p className="sheet-b">A short label — “Recall”, “Warranty claim”, “Client escalation” — and why it applies.</p>
-      <div className="vend-form">
-        <label className="field"><span className="lbl">Tag</span>
-          <input className="fld" autoFocus value={tag} maxLength={40} onChange={(e) => setTag(e.target.value)} />
-        </label>
-        {offer.length > 0 && (
-          <div className="rec-suggest">
-            {offer.map((t) => <button type="button" key={t} className="chip chip-sm" onClick={() => setTag(t)}>{t}</button>)}
-          </div>
-        )}
-        <label className="field"><span className="lbl">Reason</span>
-          <input className="fld" value={reason} maxLength={300} placeholder="Why this tag applies" onChange={(e) => setReason(e.target.value)} />
-        </label>
-      </div>
-      {add.isError && <p className="snooze-err" role="alert"><Icon name="alert-circle" size={12} />{errText(add.error, 'Could not add the tag.')}</p>}
-      <div className="sheet-f">
-        <button type="button" className="btn" onClick={onClose}>Back</button>
-        <button type="button" className="btn btn-primary" disabled={tag.trim() === '' || add.isPending} onClick={() => add.mutate(undefined)}>Add the tag</button>
       </div>
     </Sheet>
   );
@@ -690,15 +654,8 @@ export function VisitLocation({ woId, visitId, canEdit }: { woId: string; visitI
   });
   const v = record.data?.timelog.visits.find((x) => x.id === visitId);
   if (!record.data || !v) return null;
-  const here = () => {
-    if (!navigator.geolocation) { setError('This browser cannot report a location. Type the coordinates instead.'); return; }
-    setError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => save.mutate({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setError('The location was not shared. Allow it in the browser, or type the coordinates.'),
-      { enableHighAccuracy: true, timeout: 15_000 },
-    );
-  };
+  // 2026-11-16 (Elise): no "Use this device's location" — the person checking
+  // a visit in is not standing at the site; the coordinates are typed.
   const tone = v.geofence_result === 'inside' ? ' chip-accent' : v.geofence_result === 'outside' ? ' chip-danger' : '';
   return (
     <div className="rec-geo">
@@ -713,7 +670,6 @@ export function VisitLocation({ woId, visitId, canEdit }: { woId: string; visitI
       )}
       {canEdit && !typing && (
         <>
-          <button type="button" className="link-btn" disabled={save.isPending} onClick={here} title="Use the location of the device you are on — only meaningful when you are standing at the site">Use this device’s location</button>
           <button type="button" className="link-btn" onClick={() => setTyping(true)}>Type coordinates</button>
           {v.geofence_result && <button type="button" className="link-btn" disabled={save.isPending} onClick={() => save.mutate(null)}>Clear</button>}
         </>

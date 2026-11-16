@@ -25,6 +25,7 @@ import { excludedNote, sumLines, usd } from '../../lib/quoteTotals';
 import type { LaborRate } from '../../api/client';
 import { AddLineButton, LineItemsTable } from './LineItemsTable';
 import { ScopeList } from './ScopeList';
+import { SectionNotes } from './SectionNotes';
 import { Icon } from '../Icon';
 
 interface OptionCardProps {
@@ -208,6 +209,8 @@ export function OptionCard({
           rate={rate}
           onChange={setLines}
         />
+
+        <SectionNotes section={section} editable={canEdit} onChange={onChange} />
       </div>
 
       <div className="opt-foot">

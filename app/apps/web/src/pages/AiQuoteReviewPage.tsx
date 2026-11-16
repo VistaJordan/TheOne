@@ -31,6 +31,7 @@ import { Icon } from '../components/Icon';
 import { LineItemsTable, AddLineButton } from '../components/quote/LineItemsTable';
 import { OptionCard } from '../components/quote/OptionCard';
 import { ScopeList } from '../components/quote/ScopeList';
+import { SectionNotes } from '../components/quote/SectionNotes';
 import { useAuth } from '../auth/AuthProvider';
 import type { DraftLine, DraftQuote, DraftSection } from '../lib/quoteDraft';
 import { blankOption, fromDraftBody, removeAt, replaceAt, toDraftBody } from '../lib/quoteDraft';
@@ -467,6 +468,10 @@ export function AiQuoteReviewPage() {
               otMultiplier={OT_MULT}
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
+            <div className="narr">
+              <SectionNotes section={incurred} editable={editable} onChange={(next) => setSection(0, next)} />
+            </div>
+
             <div className="lt-foot">
               {editable && <AddLineButton lines={incurred.lines} onChange={(lines) => setSection(0, { ...incurred, lines })} />}
             </div>
@@ -515,34 +520,6 @@ export function AiQuoteReviewPage() {
                 </div>
               ))}
               <span className="hint">Overtime at ×{OT_MULT} here; the quote applies its contract’s own multiplier.</span>
-            </div>
-          </section>
-
-          <section className="card">
-            <div className="card-head"><h2 className="card-title grow">Specs</h2><span className="chip chip-outline chip-sm">Internal</span></div>
-            <div className="card-pad">
-              <textarea
-                className="fld"
-                rows={4}
-                aria-label="Specs (internal)"
-                value={draft.specs}
-                disabled={!editable}
-                onChange={(e) => update({ ...draft, specs: e.target.value })}
-              />
-            </div>
-          </section>
-
-          <section className="card">
-            <div className="card-head"><h2 className="card-title grow">Note to customer</h2></div>
-            <div className="card-pad">
-              <textarea
-                className="fld"
-                rows={3}
-                aria-label="Note to customer"
-                value={draft.note_to_customer}
-                disabled={!editable}
-                onChange={(e) => update({ ...draft, note_to_customer: e.target.value })}
-              />
             </div>
           </section>
 

@@ -427,6 +427,9 @@ export interface QuoteSectionInput {
   name: string | null;
   narrative_reported: string | null;
   scope_lines: string[];
+  /** 0146 · the section's own specs (internal) and note to the customer. */
+  specs: string | null;
+  note_to_customer: string | null;
   include_in_summary: boolean;
   lines: QuoteLineInput[];
 }
@@ -438,8 +441,10 @@ export interface QuoteUpdateInput {
   total_rule: SharedQuoteTotalRule;
   bill_to: string | null;
   is_cost_tbd: boolean;
-  specs: string | null;
-  note_to_customer: string | null;
+  /** Legacy quote-wide fields (0146 moved them onto the sections); the
+      builder no longer sends them. */
+  specs?: string | null;
+  note_to_customer?: string | null;
   /** Non-null once someone used "Edit text": a PINNED manual summary that stops
       the auto-sync. Null = the summary tracks the generated `summary.auto`. */
   summary_pinned: string | null;

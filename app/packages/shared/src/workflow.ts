@@ -162,7 +162,22 @@ export const CREATE_FILLABLE_FIELD_KEYS = [
   'fields.21. Comp',
   'fields.25. IVR Link',
   'fields.30. IVR Pin',
+  // 2026-11-16 (0147): the account-team seats fill from the client's team as
+  // the work order is raised, though only TL / ATL may change TL and ATL
+  // afterwards and OM Under Probation changes no People field.
+  'fields.AM',
+  'fields.TL',
+  'fields.ATL',
+  'fields.Sales Owner',
 ] as const;
+
+/** Elise, 2026-11-16 (migration 0147): only a TL or an ATL changes the TL and
+    ATL seats on a work order (super admins always may). Paths are
+    `fieldPermKey` of each key. */
+export const TEAM_LEAD_FIELD_KEYS = ['fields.TL', 'fields.ATL'] as const;
+export const TEAM_LEAD_FIELD_EDIT_ROLES = ['tl', 'atl'] as const;
+/** 0147: OM Under Probation is view-only on the whole People section. */
+export const PROBATION_PEOPLE_LOCK_PATH = 'work_orders/fields/people';
 
 /** Elise, 2026-11-10 (migration 0129): what the work order IS — its
     description, the client's AFM, the store, where it is (the address and
@@ -201,9 +216,19 @@ export function fillableOnCreate(catalogueKey: string): boolean {
 // decline sends the work order back to Waiting for Quote (Yoda: re-quote in a
 // new round). Matched by name, and a status that does not exist is skipped.
 
-export type QuoteEvent = 'sent' | 'client_approved' | 'client_declined' | 'client_declined_bfi' | 'manager_rejected';
+export type QuoteEvent =
+  | 'submitted_for_correction'
+  | 'sent'
+  | 'client_approved'
+  | 'client_declined'
+  | 'client_declined_bfi'
+  | 'manager_rejected';
 
 export const QUOTE_EVENT_STATUS_NAME: Record<QuoteEvent, string> = {
+  // A dispatcher's Submit for correction puts the work order in Quote Ready
+  // directly — no status request (Elise, 2026-11-16). The Quote Ready gate
+  // still runs (a submitted quote with data and an approved photo).
+  submitted_for_correction: 'Quote Ready',
   sent: 'Waiting for Approval',
   client_approved: 'Approved',
   // A challenged quote is re-quoted (Elise, 2026-10-29).
@@ -219,7 +244,8 @@ export const QUOTE_EVENT_STATUS_NAME: Record<QuoteEvent, string> = {
     already further along (scheduled, on site, done, cancelled) stays put:
     a late decision never pulls it backwards. */
 const QUOTE_EVENT_FROM: Record<QuoteEvent, readonly string[]> = {
-  sent: ['Open', 'Emergency', 'Assessment Sched', 'On Site (Assessment)', 'Return Trip Needed', 'Waiting for Quote', 'Quote Ready', 'Waiting for Advice'],
+  submitted_for_correction: ['Open', 'Assessment Sched', 'On Site (Assessment)', 'Return Trip Needed', 'Waiting for Quote'],
+  sent: ['Open', 'Assessment Sched', 'On Site (Assessment)', 'Return Trip Needed', 'Waiting for Quote', 'Quote Ready', 'Waiting for Advice'],
   client_approved: ['Waiting for Quote', 'Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
   client_declined: ['Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
   client_declined_bfi: ['Waiting for Quote', 'Quote Ready', 'Waiting for Advice', 'Waiting for Approval'],
