@@ -250,9 +250,14 @@ const CHECK_TAG: Record<GateCheck, string> = {
   bfi_proof: 'Needs sign-off',
 };
 
-function joinAnd(parts: readonly string[]): string {
-  if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+/** "Missing steps" (Elise, 2026-11-16): a refusal names what is still to do
+    under that heading — one step on the same line, several as "- " lines,
+    one per step, which the web draws as a bulleted list (MessageLines). */
+export function missingStepsText(target: string, steps: readonly string[]): string {
+  const clean = steps.map((s) => s.trim().replace(/\.$/, '')).filter((s) => s !== '');
+  if (clean.length <= 1) return `Missing step ${target}: ${clean[0] ?? ''}.`;
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  return `Missing steps ${target}:\n${clean.map((s) => `- ${cap(s)}`).join('\n')}`;
 }
 
 /** The sentence the person sees when a move is refused. For the Done and
@@ -263,12 +268,13 @@ export function describeStatusGate(
   statusName: string,
   missing?: readonly GateCheck[],
 ): string {
+  const target = `to move to ${statusName}`;
   if (gate === 'parts') {
-    return `Enter the parts required (${PARTS_REQUIRED_KEY}) before moving to ${statusName}.`;
+    return missingStepsText(target, [`the parts required (${PARTS_REQUIRED_KEY})`]);
   }
   const all: readonly GateCheck[] = gate === 'quote' ? QUOTE_GATE_CHECKS : DONE_GATE_CHECKS;
   const checks = missing && missing.length > 0 ? missing : all;
-  return `${statusName} needs ${joinAnd(checks.map((c) => CHECK_TEXT[c]))} first.`;
+  return missingStepsText(target, checks.map((c) => CHECK_TEXT[c]));
 }
 
 /** The short tag the status menu draws on a pick the gate would refuse. */

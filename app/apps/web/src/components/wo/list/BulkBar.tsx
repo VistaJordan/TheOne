@@ -1,3 +1,4 @@
+import { MessageLines } from '../../MessageLines';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BulkUpdateResult, WoFieldDescriptor } from '../../../api/client';
@@ -156,7 +157,7 @@ export function BulkBar({
       </button>
 
       {busy && <span className="bulk-note">Applying…</span>}
-      {error && <span className="bulk-note is-err">{error}</span>}
+      {error && <span className="bulk-note is-err"><MessageLines text={error} /></span>}
       {result && !busy && !error && (
         <span className="bulk-note is-ok">
           {result.updated} updated

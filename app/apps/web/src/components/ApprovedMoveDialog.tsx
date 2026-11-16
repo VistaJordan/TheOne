@@ -8,6 +8,7 @@
    the same); with no quote, or one already decided, the status just moves
    and only an optional confirmation is asked. */
 
+import { MessageLines } from './MessageLines';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { approvedMovePlan, QUOTE_NOT_SENT_TEXT, QUOTE_OPTION_REQUIRED_TEXT } from '@theone/shared';
@@ -105,7 +106,7 @@ export function ApprovedMoveDialog({ woId, statusName, busy, error, onConfirm, o
               </div>
             </>
           )}
-          {error && <p className="composer-err" role="alert">{error}</p>}
+          {error && <p className="composer-err" role="alert"><MessageLines text={error} /></p>}
         </div>
         <div className="sheet-f">
           <button type="button" className="btn" disabled={busy} onClick={onCancel}>

@@ -119,7 +119,10 @@ describe('quoteGateMissing — what Quote Ready finds missing', () => {
     expect(describeStatusGate('quote', 'Quote Ready', ['quote_submitted'])).toContain('submitted');
     expect(describeStatusGate('quote', 'Quote Ready', ['photo'])).toContain('approved picture');
     expect(describeStatusGate('quote', 'Quote Ready', ['photo'])).toContain('Drive tab');
-    expect(describeStatusGate('quote', 'Quote Ready', ['quote_submitted', 'photo'])).toContain(' and ');
+    expect(describeStatusGate('quote', 'Quote Ready', ['quote_submitted'])).toMatch(/^Missing step to move to Quote Ready: the quote submitted/);
+    expect(describeStatusGate('quote', 'Quote Ready', ['quote_submitted', 'photo'])).toBe(
+      'Missing steps to move to Quote Ready:\n- The quote submitted (Submit for correction or Submit for approval on the Quote tab)\n- At least one approved picture (Drive tab)',
+    );
     // Unknown = every check, so nobody is told less than the gate asks.
     const all = describeStatusGate('quote', 'Quote Ready');
     expect(all).toContain('line or scope item');

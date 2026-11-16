@@ -17,6 +17,7 @@
  *
  * A pause stops no clock — it is a marker (rule 2.4.4). The bar says so. */
 
+import { MessageLines } from '../../MessageLines';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -95,7 +96,7 @@ export function RecordBar({ woId, woNumber, record, note, chips = true }: { woId
   const dropTag = useRecordWrite(woId, woNumber, (id: string) => removeWoTag(woId, id));
   if (!record) return null;
   // The Quote tab draws no chips (Elise, 2026-11-13): only a refused act's note.
-  if (!chips) return note ? <div className="rec-bar"><p className="snooze-err rec-err" role="status"><Icon name="alert-circle" size={12} />{note}</p></div> : null;
+  if (!chips) return note ? <div className="rec-bar"><p className="snooze-err rec-err" role="status"><Icon name="alert-circle" size={12} /><MessageLines text={note} /></p></div> : null;
   const s = record.state;
   const edit = record.can.edit;
   const openNte = record.nte_requests.find((n) => n.status === 'open');
@@ -145,7 +146,7 @@ export function RecordBar({ woId, woNumber, record, note, chips = true }: { woId
           </span>
         ))}
       </div>
-      {note && <p className="snooze-err rec-err" role="status"><Icon name="alert-circle" size={12} />{note}</p>}
+      {note && <p className="snooze-err rec-err" role="status"><Icon name="alert-circle" size={12} /><MessageLines text={note} /></p>}
     </div>
   );
 }

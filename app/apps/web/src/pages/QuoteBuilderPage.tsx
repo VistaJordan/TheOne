@@ -14,6 +14,7 @@
       quote goes out under-priced.
 */
 
+import { MessageLines } from '../components/MessageLines';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -1162,7 +1163,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         {statusNote && !actionError && (
           <div className="callout" style={{ marginTop: 12 }} role="status">
             <Icon name="info" size={14} />
-            <span>{statusNote}</span>
+            <span><MessageLines text={statusNote} /></span>
           </div>
         )}
 

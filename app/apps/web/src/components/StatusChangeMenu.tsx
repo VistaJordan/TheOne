@@ -1,3 +1,4 @@
+import { MessageLines } from './MessageLines';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -307,7 +308,7 @@ export function StatusChangeMenu({
           />
           {statusesQuery.isLoading && <div className="status-menu-note">Loading…</div>}
           {statusesQuery.isError && <div className="status-menu-note">Failed to load statuses</div>}
-          {mutation.isError && <div className="status-menu-note err">{failText}</div>}
+          {mutation.isError && <div className="status-menu-note err"><MessageLines text={failText} /></div>}
           {sent && <div className="status-menu-note ok">Request for {sent} sent for approval</div>}
           {noMatch && <div className="status-menu-note">No status matches “{search.trim()}”</div>}
           {lockedCancelled && <div className="status-menu-note">{REOPEN_REQUIRED_MESSAGE}</div>}

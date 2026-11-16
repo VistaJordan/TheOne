@@ -461,6 +461,14 @@ mirrored keys of the LATEST visit and the Cost field; the API reads every
 visit. Deferred with the subsystems they need: the After-photo / BFI check
 (11.3.4, no drive) and the tech rating (11.3.5 / 3.3.1, no tech database).
 
+**Missing steps** (Elise, 2026-11-16, no migration): every gate sentence
+(`describeStatusGate`, `describeCheckInRequired`) reads "Missing step to move
+to X: …" for one thing, or "Missing steps to move to X:" followed by one "- "
+line per step (`missingStepsText` in shared `statusGates.ts`); the web draws
+the lines as bullets with `components/MessageLines.tsx` (status menu, Approved
+dialog, CICO card, quote builder, record bar, bulk bar, lifecycle chart). A new
+place that shows an API refusal should render it through `MessageLines`.
+
 **Check-in moves On Site** (rule 2.2.2, no migration). A visit moving INTO
 `checked_in` — created as checked in, or planned → checked in — moves the
 work order to **On Site (Assessment)** for an Assessment visit and **On Site

@@ -48,5 +48,6 @@ export function onSiteRequestLacksCheckIn(
 
 export function describeCheckInRequired(statusName: string): string {
   const visit = statusName.trim().toLowerCase() === ON_SITE_ASSESSMENT_STATUS_NAME.toLowerCase() ? 'an Assessment visit' : 'a Job or Return trip visit';
-  return `Check the technician in on ${visit} before requesting ${statusName}.`;
+  // Same shape as missingStepsText (statusGates.ts): one step, one line.
+  return `Missing step to request ${statusName}: check the technician in on ${visit} (CICO tab).`;
 }

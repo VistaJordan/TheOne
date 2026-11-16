@@ -119,7 +119,7 @@ describe('rule 11.3.4 — proof before Done (0061)', () => {
 describe('the sentence and the tag name only what is missing', () => {
   it('lists every check when nothing narrower is known', () => {
     const s = describeStatusGate('done', DONE_STATUS_NAME);
-    expect(s).toContain('Done / Incurred needs');
+    expect(s).toContain(`Missing steps to move to ${DONE_STATUS_NAME}:`);
     expect(s).toContain('checked in and checked out');
     expect(s).toContain(FINAL_COST_KEY);
     expect(s).toContain('quote');
@@ -130,7 +130,10 @@ describe('the sentence and the tag name only what is missing', () => {
     expect(s).toContain(FINAL_COST_KEY);
     expect(s).not.toContain('checked in');
     expect(s).not.toContain('quote');
-    expect(describeStatusGate('done', DONE_STATUS_NAME, ['visit', 'quote'])).toContain(' and ');
+    expect(s).toMatch(/^Missing step to move to .+: the final vendor cost/);
+    const two = describeStatusGate('done', DONE_STATUS_NAME, ['visit', 'quote']);
+    expect(two.split('\n')).toHaveLength(3);
+    expect(two.split('\n').slice(1).every((l) => l.startsWith('- '))).toBe(true);
   });
 
   it('keeps the tags short', () => {

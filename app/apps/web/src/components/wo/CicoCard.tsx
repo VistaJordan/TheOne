@@ -17,6 +17,7 @@
 // The old status / stamp / method fields mirror the latest visit and are not
 // edited here or anywhere else by hand.
 
+import { MessageLines } from '../MessageLines';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -472,8 +473,8 @@ function VisitLog({
         </ol>
       )}
 
-      {error && <p className="afp-error cv-error" role="alert">{error}</p>}
-      {moveNote && <p className="afp-error cv-error" role="status">{moveNote}</p>}
+      {error && <p className="afp-error cv-error" role="alert"><MessageLines text={error} /></p>}
+      {moveNote && <p className="afp-error cv-error" role="status"><MessageLines text={moveNote} /></p>}
 
       {canEdit && (
         composing ? (

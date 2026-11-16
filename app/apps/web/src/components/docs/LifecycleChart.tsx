@@ -9,6 +9,7 @@
    attached to it. Under the chart, the stages strip and the side-process
    cards. Everything is one SVG so it prints and downloads as a picture. */
 
+import { MessageLines } from '../MessageLines';
 import { useMemo, useState, type RefObject } from 'react';
 import {
   ECOTRAK_PUSH_BY_STATUS_NAME,
@@ -242,7 +243,7 @@ export function LifecycleChart({ content, snap, svgRef }: { content: DocsContent
                   <h4>
                     <Icon name="lock" size={12} /> Gate
                   </h4>
-                  <p>{describeStatusGate(pickedNode.gate, pickedNode.status, pickedNode.gate === "done" ? ["visit", "cost", "quote", "after_photo"] : undefined)}</p>
+                  <p><MessageLines text={describeStatusGate(pickedNode.gate, pickedNode.status, pickedNode.gate === "done" ? ["visit", "cost", "quote", "after_photo"] : undefined)} /></p>
                 </>
               )}
             </div>

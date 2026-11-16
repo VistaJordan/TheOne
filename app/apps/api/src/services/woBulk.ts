@@ -254,7 +254,8 @@ export async function bulkUpdate(
           names.length === 1
             ? `${names[0]} is missing it.`
             : `${names.length} of the selected work orders are missing it (${names.slice(0, 5).join(', ')}${names.length > 5 ? ', …' : ''}).`;
-        throw new ApiError('CONFLICT', `${describeStatusGate(gate, target.name)} ${who}`, {
+        // The missing steps may be a "- " list (missingStepsText): who goes on its own line.
+        throw new ApiError('CONFLICT', `${describeStatusGate(gate, target.name)}\n${who}`, {
           code: STATUS_GATE_ERROR_CODE,
           gate,
           status: target.name,
