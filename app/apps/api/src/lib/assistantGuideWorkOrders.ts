@@ -35,7 +35,7 @@ Needs \`work_orders\` view. A person limited to their own work orders sees a "Yo
 5. Fill the sections; fields marked * are required, and the footer lists what is **Still needs …**. The first section, Client, holds Comp, Client and Client Portal. Under People, AM, TL, ATL and Sales Owner fill in by themselves from the client's **Account team** for that Comp (they can still be changed); the **Dispatcher** is always picked by hand, with **Who’s available?** beside it.
 6. Under Flags, tick **Emergency** or **Escalated** when the job already is one (a role that cannot set the field sees the tick locked).
 7. Optionally add files under **Photos and files**.
-8. Click **Create work order**.
+8. Click **Create work order**. If a required field is still empty, the click turns every missing field red and nothing is created; hover the button to see the list of what is still needed. The red goes as each field is filled.
 "Possible duplicates" is a warning only. **Save as template** keeps the filled form for next time. Store is in the Client section. Typing or pasting the Address under Where fills Street Address, City, State and Zip code from it, and a ZIP alone completes the city and state (they stay editable); the same fill runs on the Drafts form and wherever the Address is saved. While the Address is typed (on Add work order, on a draft, and when editing the Address on a work order) a list of addresses from Google Maps opens under the box; picking one writes the address as the map knows it, ZIP included, and the line under the box reads "Address from Google Maps". An address the map does not list can still be typed as it is (the line then reads "Not checked against Google Maps"). There is no list when Google Maps is switched off in Admin › Integrations, when its key is not on the server, or once the day's limit of suggestion requests is reached; the box is then plain typing. Which fields appear, and which are required, is set in Admin › Custom fields (the **Add work order** column) and Admin › Settings (layouts per client or trade).
 
 ### The work-order page
@@ -70,7 +70,9 @@ The **More** menu in the header (all need \`work_orders\` edit; Pause, Complete 
 Elsewhere on the page (need \`work_orders\` edit):
 - **Assign vendor** / **Re-assign vendor**: **Tech Hub** tab, the **Responsible vendor** card; search under **Find a vendor** and click one. Blacklisted vendors cannot be picked.
 - **Add ETA** / **Change ETA**: **CICO** tab, the **ETA** card; set **Expected on site**, **Save ETA**.
-- There is no button to ask for a higher NTE any more. Requests already open are decided in Approvals › NTE increase requests (needs \`approvals/nte\` approve).
+- There is no button to ask for a higher NTE any more. Requests already open are decided in Approvals › NTE increase requests (needs \`approvals/nte\` approve); the notification about one opens that list with its row picked out.
+- **Send reminder** in the work order's header (OM Under Probation, OM, Senior OM and OP Admin; shown only while something on the work order waits for a manager): pick the approval (a status change, a hold, a quote, a payment request, an NTE increase or a purchase request), add a note if you like, and click **Send reminder**. The managers who decide it get a notification. One reminder per approval per hour.
+- **Copy full** in the header copies the WO #, address, store, scope and the sign-off link; **Copy vague** copies street, city, ZIP and scope for a technician not hired yet.
 
 Visits (the **CICO** tab; needs \`work_orders\` edit and \`work_orders/fields/cico\` edit):
 1. Click **New visit**.

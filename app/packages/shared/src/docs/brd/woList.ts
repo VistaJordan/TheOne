@@ -108,6 +108,7 @@ export const WO_LIST_MODULE: DocModule = {
       rules: [
         'The WO # is identity, matched ignoring case, punctuation and a leading "WO": a taken number is refused as you type and on create (409), trash included ("… already exists (in the trash) … restoring it would clash, so the number stays taken", with Open it).',
         'Possible duplicates warn and never block: open work on the same asset (any age), the same site and trade within 30 days, the same store and trade within 30 days; up to eight, with why ("Carry on if this is a different job.").',
+        'Since 2026-11-16 (UAT #39) Create work order stays clickable while required fields are empty: a click paints every missing field red (each clears as it is filled) and jumps to the first, and hovering the button lists "Still needed before you can create:" one field per line. Only a taken WO # or a save in progress disables it.',
         'A missing required field is 409 "This work order still needs …"; keys the form does not offer are dropped; the site must be one the person may see and the asset must stand at it; there must be a status named Open.',
         'Title = the first line of the description; Date received, NTE and Billing entity are promoted from their fields.',
       ],

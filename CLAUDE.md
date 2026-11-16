@@ -3972,6 +3972,42 @@ files the picture on Drive (pending review) and writes its name on line 10.
 its text boxes (the browser's remembered entries); the sub-category list,
 Google's address suggestions and the pre-filled Received on stay.
 
+**UAT list of 2026-11-16, fourth batch** (Elise, no migration;
+`tests/approval-reminders.test.ts`, `tests/wo-copy.test.ts`). **Send
+reminder** (#48, shared `approvalReminders.ts` pure,
+`services/approvalReminders.ts`, `components/wo/ApprovalReminderButton.tsx`):
+a header button for `APPROVAL_REMINDER_ROLES` (the three dispatcher tiers +
+`oa`; a super admin always — `mayRemindApprovals`, code not a Roles row),
+drawn only while `GET /work-orders/:id/pending-approvals` (`work_orders` view,
+`resolveTaskId`) lists something waiting for a manager: open approval tasks
+but `wo_acceptance`, a quote in pending correction / approval, a `requested`
+payment request, an open `wo_nte_request`, a `submitted` purchase request.
+`POST /work-orders/:id/approval-reminders {kind, id, note?}` re-reads the item
+(404 when decided), asks the cool-down (`APPROVAL_REMINDER_COOLDOWN_MINUTES`
+60 per approval, whoever sends — 409 `REMINDER_TOO_SOON`), logs
+`approval_reminder_sent` (entity task, field `reminder:<id>`, which IS the
+cool-down's record) and raises an `approval_reminder` notice (in
+`NOTICE_KINDS_ALWAYS_SHOWN`) to the deciders: people whose ROLE grants
+`approve` on the kind's path (the task's section, `quotes`, `payments`,
+`approvals/nte`, `purchasing/requests`, each falling back to its parent;
+over-quote holds `OVER_QUOTE_DECIDER_ROLES`), narrowed to those on the work
+order (`isAssignedTo`) when any are, else the non-super-admins, else the super
+admins (409 `REMINDER_NO_DECIDER` when nobody). Per-person overrides are not
+read. **NTE increase notice** (#6): `nte_increase` links to
+`nteRequestsLink` (`/approvals?view=nte-requests&wo=<WO #>`, the Approvals
+page opens the lane and `NteRequestsPanel` outlines the row) with `taskId`
+set; old `?tab=costs` notices are redirected by `noticeOpenLink` on the
+Notifications page, and `listWorkOrderNotices` also takes `nte_increase` rows
+by `task_id`. The decision notice links to the work order. **Copy full**
+(#41) ends with the sign-off link (`woSignoffLink`: `signoffFormLink` for the
+Comp's layout with the client's WO #, else `24. Sign-Off Link`). **Add work
+order** (#39): Create is disabled only while the WO # is taken or a save runs;
+with fields missing a click sets `triedCreate` (every missing field `is-missing`,
+clearing as it fills, focus on the first) and hovering lists them
+(`.cwo-missing-tip`). **Quote rail** (#29): Money · Labor rate card · Document.
+Two tests (`assignment-notice`, `uat-2026-11-13`) fail only on a Windows
+checkout: they look for `\n` in files git writes CRLF; CI (LF) passes them.
+
 ## Verify
 
 ```
