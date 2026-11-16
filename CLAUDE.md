@@ -636,7 +636,7 @@ anything else lists underneath. Logged `attachment_added|removed` under field
 `attachment:<id>`. Permission path `work_orders/attachments` (create /
 delete); reading needs only `work_orders` view. Since 2026-10-22 the Photos card
 sits on its own **Drive** tab (`work_orders/tabs/drive`, unset inherits
-like every tab; links that pointed at photos say `?tab=drive`), Overview
+like every tab; links that pointed at photos say `?tab=drive`; since 2026-11-16 its head has **Add photo** / **Upload files** and the card takes a drop — same upload, internal, Pending — beside the message box), Overview
 leads the strip and is the landing tab (bare URL). Since 2026-11-03 (Elise)
 the tabs are named Quote (was Quotes) and Logs (was Audit trail); since
 2026-11-09 the strip reads Overview · CICO · Quote · Finances · Drive ·

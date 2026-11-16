@@ -19,12 +19,19 @@
  * 2026-10-28 (Elise) · a fourth column, From client: the pictures and files
  * the client shares with us (kind "client", 0106). Like a sign-off, any file
  * type belongs there. It is not proof of work — the Done gate never reads it.
+ *
+ * 2026-11-16 (Elise) · files can be added here too, not only from the
+ * message box: Add photo / Upload files in the head, or a drop onto the
+ * card. They land Pending (internal) like any upload and the reviewer sorts
+ * them into the columns.
  */
 
-import { useState } from 'react';
+import { useRef, useState, type DragEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ATTACHMENT_ALLOWED_TYPES,
   ATTACHMENT_KINDS,
+  ATTACHMENT_MAX_BYTES,
   ATTACHMENT_KIND_LABEL,
   formatBytes,
   isImageType,
@@ -33,7 +40,8 @@ import {
   type AttachmentReview,
 } from '@theone/shared';
 import type { WorkOrderDetailV2 } from '../../api/client';
-import { attachmentUrl, deleteAttachment, listAttachments, reviewAttachment } from '../../api/client';
+import { attachmentUrl, deleteAttachment, listAttachments, reviewAttachment, uploadAttachment } from '../../api/client';
+import { prepareFile } from '../../lib/upload';
 import { numericDate } from '../../lib/fields';
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
@@ -94,10 +102,91 @@ export function PhotosCard({ wo }: PhotosCardProps) {
   );
 
   const onRemove = canRemove ? (id: string) => remove.mutate(id) : undefined;
+
+  // 2026-11-16 · uploading from the Drive tab itself.
+  const canAttach = can('work_orders/attachments', 'create');
+  const photoInput = useRef<HTMLInputElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(0);
+  // Drag depth, not a boolean: dragenter / dragleave fire for every child.
+  const [dragDepth, setDragDepth] = useState(0);
+  const uploadsClosed = !canAttach
+    ? 'Your role cannot add files'
+    : q.data && !q.data.storage_ready
+      ? 'File storage is not configured on this server'
+      : null;
+
+  const sendFiles = async (list: FileList | File[] | null) => {
+    if (!list || list.length === 0) return;
+    if (uploadsClosed) {
+      setError(uploadsClosed);
+      return;
+    }
+    setError(null);
+    setUploading(list.length);
+    try {
+      for (const file of Array.from(list)) {
+        const prepared = await prepareFile(file);
+        // Only the fields the route's strict schema accepts.
+        await uploadAttachment(woId, {
+          file_name: prepared.file_name,
+          content_type: prepared.content_type,
+          data: prepared.data,
+          client_visible: false,
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That file did not upload');
+    } finally {
+      setUploading(0);
+      if (photoInput.current) photoInput.current.value = '';
+      if (fileInput.current) fileInput.current.value = '';
+      void qc.invalidateQueries({ queryKey: ['wo-attachments', woId] });
+      void qc.invalidateQueries({ queryKey: ['wo-activity', woId] });
+    }
+  };
+
+  const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  const dropHandlers = canAttach
+    ? {
+        onDragEnter: (e: DragEvent<HTMLElement>) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          setDragDepth((d) => d + 1);
+        },
+        onDragOver: (e: DragEvent<HTMLElement>) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = uploadsClosed || uploading > 0 ? 'none' : 'copy';
+        },
+        onDragLeave: (e: DragEvent<HTMLElement>) => {
+          if (!hasFiles(e)) return;
+          setDragDepth((d) => Math.max(0, d - 1));
+        },
+        onDrop: (e: DragEvent<HTMLElement>) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          setDragDepth(0);
+          if (uploading > 0) return;
+          void sendFiles(Array.from(e.dataTransfer.files ?? []));
+        },
+      }
+    : {};
+  const dragging = dragDepth > 0;
+  const uploadDisabled = !!uploadsClosed || !q.data || uploading > 0;
+  const uploadTitle = (what: string) =>
+    uploadsClosed ?? `${what} (up to ${formatBytes(ATTACHMENT_MAX_BYTES)} each) — or drop files onto this card`;
+
   const viewerItems = viewer ? (viewer.list === 'pending' ? pending : declined) : [];
 
   return (
-    <section className="card">
+    <section className={`card photos-card${dragging ? ' is-dragging' : ''}`} {...dropHandlers}>
+      {dragging && (
+        <div className="photo-drop" aria-hidden="true">
+          <Icon name={uploadsClosed ? 'alert' : 'upload'} size={16} />
+          {uploadsClosed ?? 'Drop to upload — it waits for approval like any upload'}
+        </div>
+      )}
       <div className="card-head">
         <h2 className="card-title">Photos</h2>
         <span className="card-meta">
@@ -105,6 +194,47 @@ export function PhotosCard({ wo }: PhotosCardProps) {
           {files.length > 0 && ` · ${files.length} file${files.length === 1 ? '' : 's'}`}
           {pending.length > 0 && ` · ${pending.length} waiting`}
         </span>
+        {canAttach && (
+          <div className="photo-actions">
+            <input
+              ref={photoInput}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+              onChange={(e) => void sendFiles(e.target.files)}
+            />
+            <input
+              ref={fileInput}
+              type="file"
+              accept={ATTACHMENT_ALLOWED_TYPES.join(',')}
+              multiple
+              hidden
+              onChange={(e) => void sendFiles(e.target.files)}
+            />
+            {uploading > 0 && <span className="card-meta">Uploading {uploading}…</span>}
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={uploadDisabled}
+              title={uploadTitle('Take or pick a photo')}
+              onClick={() => photoInput.current?.click()}
+            >
+              <Icon name="camera" size={12} />
+              Add photo
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={uploadDisabled}
+              title={uploadTitle('Upload photos or files')}
+              onClick={() => fileInput.current?.click()}
+            >
+              <Icon name="upload" size={12} />
+              Upload files
+            </button>
+          </div>
+        )}
       </div>
 
       {error && <p className="composer-err" role="alert">{error}</p>}
@@ -148,7 +278,7 @@ export function PhotosCard({ wo }: PhotosCardProps) {
           woId={woId}
           label="Before"
           items={before}
-          empty="Add a photo from the message box — it shows here once approved as a before photo"
+          empty="Add a photo here or from the message box — it shows here once approved as a before photo"
           onRemove={onRemove}
         />
         <PhotoColumn

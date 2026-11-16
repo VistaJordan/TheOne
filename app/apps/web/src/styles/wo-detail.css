@@ -933,6 +933,26 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .tool-btn:disabled { opacity: 0.5; }
 
 /* ── Photos card ──────────────────────────────────────────────────────────── */
+/* 2026-11-16 · Add photo / Upload files in the head, and a drop on the card. */
+.photos-card { position: relative; }
+.photos-card .card-head { flex-wrap: wrap; row-gap: 6px; }
+.photo-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.photo-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed var(--accent);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 10%, var(--thead-bg));
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
 .photo-group { padding: 12px 16px 14px; }
 .photo-group + .photo-group { border-top: 1px solid var(--row-border); }
 

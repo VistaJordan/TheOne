@@ -67,7 +67,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'Drive',
-          what: 'The photos and files of the work order: the Photos card (Waiting for approval, then the approved files grouped by kind), moved off Overview on 2026-10-22. Uploading still happens from the message box.',
+          what: 'The photos and files of the work order: the Photos card (Waiting for approval, then the approved files grouped by kind), moved off Overview on 2026-10-22. Since 2026-11-16 files are uploaded here too (Add photo, Upload files, or a drop onto the card), as well as from the message box.',
           value: 'The files of the job in one place, apart from the story.',
           permissions: ['work_orders/tabs/drive view (unset follows work_orders view)', 'work_orders/attachments create / approve / delete'],
           since: '2026-10-22',
