@@ -74,6 +74,7 @@ import {
   DEFAULT_OT_MULTIPLIER,
   QUOTE_DEFAULT_DAY,
   QUOTE_DEFAULT_TRIP_DESCRIPTION,
+  summaryLineLabel,
   defaultScopeLines,
   optionDisplayLabel,
   permAllows,
@@ -94,7 +95,7 @@ import { evaluateForTask } from './obligations.js';
 import { contractForTask } from './contracts.js';
 import { Params } from './woFields.js';
 import { woScopeSql } from './woScope.js';
-import { assertNoOpenNteOverride, openNteOverride } from './approvals.js';
+import { openNteOverride } from './approvals.js';
 import { assertWoAllows, woStatusSnapshot } from './woPolicy.js';
 import type { WoStatusSnapshot } from './woPolicy.js';
 import { enqueueOutbox } from './outbox.js';
@@ -358,7 +359,7 @@ export interface SummaryContext {
     only LABOR lines sit under the days: the labor is grouped Day 1, Day 2, …
     and the trip, parts and every other line follow, ungrouped. */
 function lineRows(lines: QuoteLine[], multiDay: boolean): string[] {
-  if (!multiDay) return lines.flatMap((line) => amountRows(line.description, line.amount, '  '));
+  if (!multiDay) return lines.flatMap((line) => amountRows(summaryLineLabel(line), line.amount, '  '));
   const out: string[] = [];
   const labor = lines
     .map((line, i) => ({ line, i }))
@@ -373,10 +374,10 @@ function lineRows(lines: QuoteLine[], multiDay: boolean): string[] {
       out.push(`  Day ${day}`);
       lastDay = day;
     }
-    out.push(...amountRows(line.description, line.amount, '    '));
+    out.push(...amountRows(summaryLineLabel(line), line.amount, '    '));
   }
   if (labor.length > 0 && others.length > 0) out.push('');
-  for (const line of others) out.push(...amountRows(line.description, line.amount, '  '));
+  for (const line of others) out.push(...amountRows(summaryLineLabel(line), line.amount, '  '));
   return out;
 }
 
@@ -1463,16 +1464,18 @@ export async function createQuote(taskId: string, actor: ActingPrincipal): Promi
     // incurred" affordance, it is always there) AND one proposed option
     // (2026-10-22, Elise: one option is already open; "Add another option"
     // is the second). Each opens with the five default "Required is to…"
-    // lines and a Trip line at the card's trip rate (quoteDefaults
-    // in shared; the builder's blankOption opens the next option the same).
-    const sections = await tx.query<{ id: string }>(
+    // lines (quoteDefaults in shared). The Trip service line, at the card's
+    // trip rate, goes on the INCURRED section only (2026-11-16, Elise: an
+    // option with its own Trip charged the trip again in the proposal; the
+    // builder's blankOption opens the next option the same, with no lines).
+    const sections = await tx.query<{ id: string; kind: string }>(
       `INSERT INTO quote_section (quote_id, kind, name, scope_lines, include_in_summary, position, round)
        VALUES ($1, 'incurred', 'Work already performed', $2::jsonb, true, 0, 1),
               ($1, 'option', NULL, $2::jsonb, true, 1, 1)
-       RETURNING id::text AS id`,
+       RETURNING id::text AS id, kind`,
       [ins.rows[0].id, JSON.stringify(defaultScopeLines())],
     );
-    for (const s of sections.rows) {
+    for (const s of sections.rows.filter((r) => r.kind === 'incurred')) {
       await tx.query(
         `INSERT INTO quote_line (section_id, line_type, description, qty, rate, day_value, day, ot, position, uom, tax_pct, markup_pct)
          VALUES ($1, 'trip', $2, 1, $3, $4, $5, false, 0, NULL, 0, 0)`,
@@ -2082,7 +2085,10 @@ export async function submitQuote(taskId: string, actor: ActingPrincipal): Promi
 export async function approveQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.approve');
-  await assertNoOpenNteOverride(taskId, 'Approving the quote');
+  // 2026-11-16 (Elise): the NTE override (cost over NTE) holds the MONEY —
+  // payments — not the quote. The quote is how the NTE gets raised: it goes
+  // to the client above the NTE and the client's yes sets the new NTE, which
+  // then settles the override on its own (reconcileApprovalTasks).
   await assertWithinSendLimit(taskId, actor);
   return transition(
     taskId,
@@ -2118,7 +2124,7 @@ const QUOTE_APPROVABLE_FROM: QuoteStatus[] = ['draft', 'pending_correction', 'pe
 export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise<Quote> {
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.send');
-  await assertNoOpenNteOverride(taskId, 'Sending the quote');
+  // No NTE-override hold on the quote since 2026-11-16 (see approveQuote).
   await assertWithinSendLimit(taskId, actor);
 
   const cur = await currentStatus(taskId);
@@ -2277,9 +2283,8 @@ export async function clientApproveQuote(
 ): Promise<Quote> {
   const snap = await assertWoAllows(taskId, 'quote.client_decide');
   assertCanClientDecide(actor, snap);
-  // Rule 1.5.2: the client's yes binds money.quote; no binding while an NTE
-  // override is still waiting on a manager.
-  await assertNoOpenNteOverride(taskId, 'Recording the client approval');
+  // 2026-11-16 (Elise): no NTE-override hold here — the client's yes is what
+  // raises the NTE (setNteFromApproval), which settles the override.
 
   const pre = await getQuote(taskId, actor);
   if (!pre) throw new ApiError('NOT_FOUND', 'No quote on this work order');
@@ -2384,7 +2389,12 @@ async function setNteFromApproval(taskId: string, amount: number, actor: ActingP
       task_id: taskId,
       message: err instanceof Error ? err.message : String(err),
     });
+    return;
   }
+  // 2026-11-16 (Elise) · the client's yes also settles any manual NTE
+  // increase request still open, so the two never block each other.
+  const { settleNteRequestsFromApproval } = await import('./woRecord.js');
+  await settleNteRequestsFromApproval(taskId, Math.round(amount * 100) / 100, actor);
 }
 
 /** The work order's Client NTE (the bag key woRecord.ts writes too). */
@@ -2424,7 +2434,6 @@ export async function planApprovedMove(
   }
   const snap = await assertWoAllows(taskId, 'quote.client_decide');
   assertCanClientDecide(actor, snap);
-  await assertNoOpenNteOverride(taskId, 'Recording the client approval');
   return () => clientApproveQuote(taskId, { section_id: sectionId, note }, actor);
 }
 

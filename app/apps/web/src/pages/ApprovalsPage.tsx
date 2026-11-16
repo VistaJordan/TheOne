@@ -428,7 +428,7 @@ function taskRow(
   };
 }
 
-function quoteRow(item: QuoteListItem, canDecide: boolean, held: Set<string>): Row {
+function quoteRow(item: QuoteListItem, canDecide: boolean): Row {
   // 0092 · a quote with a manager for correction is open too: the manager
   // edits it in the builder and submits it, so the row links there.
   const open = item.status === 'pending_approval' || item.status === 'pending_correction';
@@ -456,7 +456,9 @@ function quoteRow(item: QuoteListItem, canDecide: boolean, held: Set<string>): R
       trail: open ? null : numericDate(item.updated_at),
       note: null,
     },
-    held: held.has(item.task_id),
+    // 2026-11-16 (Elise): an NTE override holds payments, never the quote —
+    // the quote going to the client is how the NTE gets raised.
+    held: false,
     requester: false,
     missing: [],
     data: { kind: 'quote', item },
@@ -684,7 +686,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
     for (const q of quotesQuery.data?.items ?? []) {
       // A draft is nobody's to approve yet; it enters the inbox on submit.
       if (q.status === 'draft') continue;
-      out.push(quoteRow(q, canApproveQuotes, held));
+      out.push(quoteRow(q, canApproveQuotes));
     }
     for (const p of paymentsQuery.data?.items ?? []) out.push(paymentRow(p, canApprovePayments, held, myRole, mySuper === true));
     for (const p of purchasesQuery.data?.items ?? []) out.push(purchaseRow(p, canApprovePurchases));
@@ -1747,8 +1749,8 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
             // to the client; quotes have no maker ≠ checker.
             'Send to client',
             'send',
-            canApproveQuotes && !row.held,
-            !canApproveQuotes ? 'Requires quote approval rights' : NTE_HOLD,
+            canApproveQuotes,
+            'Requires quote approval rights',
             () => onDecide('approve'),
             'primary',
           )}

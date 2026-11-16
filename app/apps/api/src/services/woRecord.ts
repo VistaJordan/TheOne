@@ -1060,6 +1060,44 @@ export async function decideNteIncrease(taskId: string, requestId: string, decis
   return getWoRecord(taskId, actor);
 }
 
+/**
+ * 2026-11-16 (Elise) · the client's approval of a quote sets the NTE
+ * (quotes.ts `setNteFromApproval`); any manual NTE increase request still
+ * open on the work order is then settled by it, so the two never pull against
+ * each other. A request the new NTE covers reads approved, one it does not
+ * reads withdrawn; either way the note says the client's approval decided it,
+ * and the requester is told. Never throws: the approval already stands.
+ */
+export async function settleNteRequestsFromApproval(taskId: string, newNte: number, actor: ActingPrincipal): Promise<void> {
+  try {
+    const t = await loadTask(taskId);
+    const note = `Settled by the client’s approval of the quote — the NTE is now $${newNte.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const res = await query<{ id: string; requested_nte: string; requested_by: string | null; status: string }>(
+      `UPDATE wo_nte_request
+          SET status = CASE WHEN requested_nte <= $2 THEN 'approved' ELSE 'withdrawn' END,
+              decided_by = $3, decided_at = now(), decision_note = $4
+        WHERE task_id = $1 AND status = 'open'
+        RETURNING id::text AS id, requested_nte::text AS requested_nte, requested_by::text AS requested_by, status`,
+      [taskId, newNte, actor.id, note],
+    );
+    for (const r of res.rows) {
+      await logChange(taskId, actor, `NTE increase ${r.status}`, null, { requested: Number(r.requested_nte), note, via: 'quote' });
+      await notify([r.requested_by], {
+        kind: 'nte_increase_decided',
+        title: `The NTE increase on ${t.wo_number} was settled by the client’s approval`,
+        body: note,
+        link: `/work-orders/${encodeURIComponent(t.wo_number)}?tab=quotes`,
+        actorId: actor.id,
+      });
+    }
+  } catch (err) {
+    console.error('[woRecord] could not settle NTE increase requests', {
+      task_id: taskId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 // ═══ A visit's location, against the geofence ════════════════════════════════
 
 export async function locateVisit(taskId: string, visitId: string, at: { lat: number; lng: number } | null, actor: ActingPrincipal): Promise<WoRecord> {

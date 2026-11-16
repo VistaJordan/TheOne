@@ -102,7 +102,9 @@ export type AdminEntity =
   // 0138: an AI feature's model, daily limit and monthly budget (Dashboard › AI usage), keyed by feature.
   | 'ai_setting'
   // Elise 2026-11-16 · a press of After hours on Notifications / Approvals.
-  | 'after_hours';
+  | 'after_hours'
+  // 0145: a saved quote template (private, or shared with everyone).
+  | 'quote_template';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

@@ -2319,5 +2319,7 @@ export * from './dataQuality';
 // UAT follow-up T1: test sign-in accounts, one per role.
 export * from './testAccounts';
 export * from './quoteDefaults';
+// 0145 (2026-11-16): quote templates — saved quote content to start a quote from.
+export * from './quoteTemplates';
 export * from './quoteTax';
 export * from './notices';
