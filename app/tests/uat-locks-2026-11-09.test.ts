@@ -124,7 +124,7 @@ describe('a purchase request waits in Approvals like a payment', () => {
     expect(approvalSectionPermKey('purchases')).toBe('approvals/purchases');
   });
   it('lists what was submitted, for the people who decide it', () => {
-    expect(page).toContain("listPurchaseRequests({ status: 'submitted' })");
+    expect(page).toContain("listPurchaseRequests({ status: 'submitted', ...(afterHours ? {} : { assigned: '1' as const }) })");
     expect(page).toContain("canSeePurchases = canApprovePurchases && canSeeSection('purchases')");
   });
   it('decides through the Purchasing route, so the bands and maker ≠ checker hold', () => {

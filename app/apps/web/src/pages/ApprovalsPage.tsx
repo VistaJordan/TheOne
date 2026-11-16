@@ -75,6 +75,7 @@ import type {
 } from '../api/client';
 import { AssigneeSelect } from '../components/wo/AssigneeAvailability';
 import { NteRequestsPanel } from '../components/approvals/NteRequestsPanel';
+import { AfterHoursToggle, useAfterHours } from '../components/AfterHoursToggle';
 import {
   ApiRequestError,
   acknowledgeApprovalTask,
@@ -88,7 +89,8 @@ import {
   holdApprovalTask,
   listApprovals,
   listPayments,
-  listQuotes,
+  listQuotesForInbox,
+  listApprovalsAfterHours,
   rejectApprovalTask,
   rejectPayment,
   rejectQuote,
@@ -584,25 +586,33 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const approvalsQuery = useQuery({ queryKey: ['approvals'], queryFn: listApprovals, retry: 0 });
+  // Elise 2026-11-16: the inbox shows the work orders the viewer is on; After
+  // hours (a logged switch) shows every one. Incoming is never narrowed — a
+  // new work order has nobody on it yet (the API exempts acceptances).
+  const afterHours = useAfterHours('approvals') && !intake;
+  const approvalsQuery = useQuery({
+    queryKey: ['approvals', afterHours ? 'all' : 'mine'],
+    queryFn: afterHours ? listApprovalsAfterHours : listApprovals,
+    retry: 0,
+  });
   // The two other sources are read only when the viewer may see them; a section
   // the viewer cannot see simply is not offered.
   const quotesQuery = useQuery({
-    queryKey: ['quotes'],
-    queryFn: listQuotes,
+    queryKey: ['quotes', 'inbox', afterHours ? 'all' : 'mine'],
+    queryFn: () => listQuotesForInbox(afterHours),
     retry: 0,
     enabled: canSeeQuotes && !intake,
   });
   const paymentsQuery = useQuery({
-    queryKey: ['payments', 'inbox'],
+    queryKey: ['payments', 'inbox', afterHours ? 'all' : 'mine'],
     // The inbox wants every request still waiting on a decision, not a page.
-    queryFn: () => listPayments({ status: 'requested', page_size: 500 }),
+    queryFn: () => listPayments({ status: 'requested', page_size: 500, ...(afterHours ? {} : { assigned: '1' as const }) }),
     retry: 0,
     enabled: canSeePayments && !intake,
   });
   const purchasesQuery = useQuery({
-    queryKey: ['purchasing', 'inbox'],
-    queryFn: () => listPurchaseRequests({ status: 'submitted' }),
+    queryKey: ['purchasing', 'inbox', afterHours ? 'all' : 'mine'],
+    queryFn: () => listPurchaseRequests({ status: 'submitted', ...(afterHours ? {} : { assigned: '1' as const }) }),
     retry: 0,
     enabled: canSeePurchases && !intake,
   });
@@ -841,6 +851,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
             <AddWorkOrderButton />
           </div>
         )}
+        {!intake && <AfterHoursToggle page="approvals" />}
       </div>
 
       <div className="payq-head">
@@ -925,7 +936,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
         </p>
       )}
 
-      {nteView && <NteRequestsPanel />}
+      {nteView && <NteRequestsPanel afterHours={afterHours} />}
 
       {!nteView && approvalsQuery.isError && (
         <div className="quotes-empty">

@@ -551,6 +551,8 @@ export interface PaymentQueueParams {
   needs_w9?: 'true';
   page?: number;
   page_size?: number;
+  /** Elise 2026-11-16 · the Approvals page: only the work orders the person is on. */
+  assigned?: '1';
 }
 
 /** Thrown for any non-2xx response, carrying the API's { error } envelope. */
@@ -902,6 +904,12 @@ export function rejectQuote(idOrNumber: string, note: string): Promise<QuoteResp
 /** GET /api/quotes — every quote, newest-updated first. */
 export function listQuotes(): Promise<QuoteListResponse> {
   return request<QuoteListResponse>(`/quotes`);
+}
+
+/** The Approvals page's quote lane: the work orders the person is on, or
+    every one while After hours is on. */
+export function listQuotesForInbox(allWorkOrders: boolean): Promise<QuoteListResponse> {
+  return request<QuoteListResponse>(allWorkOrders ? `/quotes` : `/quotes?assigned=1`);
 }
 
 // ── S4 — payment requests ────────────────────────────────────────────────────
@@ -1359,6 +1367,11 @@ export type {
 /** GET /api/approvals — every task across work orders, open ones first. */
 export function listApprovals(): Promise<ApprovalListResponse> {
   return request<ApprovalListResponse>('/approvals');
+}
+
+/** The inbox with After hours on: every work order, not only the viewer's. */
+export function listApprovalsAfterHours(): Promise<ApprovalListResponse> {
+  return request<ApprovalListResponse>('/approvals?after_hours=1');
 }
 
 /** GET /api/work-orders/:id/approval-tasks — the tasks on one work order. */
@@ -3356,17 +3369,35 @@ export function markAllNoticesRead(): Promise<{ unread: number }> {
 
 // ── The Notifications page (2026-11-04) — the inbox in the sidebar ───────────
 
-import type { NoticeInboxResponse, NoticeReadFilter, NoticeSource } from '@theone/shared';
+import type { AfterHoursPage, AfterHoursState, NoticeInboxResponse, NoticeReadFilter, NoticeSource } from '@theone/shared';
 
 export interface NoticeInboxParams {
   show: NoticeReadFilter;
   kinds: string[] | null;
   q: string;
   before?: string | null;
+  /** After hours: every work order's notices (honoured only while it is on). */
+  afterHours?: boolean;
 }
+
+// ── After hours (Elise, 2026-11-16) ─────────────────────────────────────────
+
+export const getAfterHours = (): Promise<AfterHoursState> => request<AfterHoursState>('/after-hours');
+/** A press of the switch — logged as an audit row on the API. */
+export const setAfterHours = (page: AfterHoursPage, on: boolean): Promise<AfterHoursState> =>
+  post<AfterHoursState>('/after-hours', { page, on });
+export interface AfterHoursLogRow {
+  at: string;
+  action: 'after_hours_opened' | 'after_hours_closed';
+  page: string;
+  person: { id: string; name: string };
+  by: { id: string; name: string } | null;
+}
+export const getAfterHoursLog = (): Promise<{ items: AfterHoursLogRow[] }> => request('/after-hours/log');
 
 export function getNoticeInbox(p: NoticeInboxParams): Promise<NoticeInboxResponse> {
   const qs = new URLSearchParams({ show: p.show });
+  if (p.afterHours) qs.set('after_hours', '1');
   if (p.kinds?.length) qs.set('kinds', p.kinds.join(','));
   if (p.q.trim()) qs.set('q', p.q.trim());
   if (p.before) qs.set('before', p.before);
@@ -3752,7 +3783,8 @@ export interface NteRequestRow {
   created_at: string;
   can_decide: boolean;
 }
-export const listNteRequests = (): Promise<{ items: NteRequestRow[] }> => request('/nte-requests');
+export const listNteRequests = (assigned = false): Promise<{ items: NteRequestRow[] }> =>
+  request(assigned ? '/nte-requests?assigned=1' : '/nte-requests');
 export const decideNteIncrease = (woRef: string, requestId: string, decision: 'approve' | 'reject' | 'withdraw', note?: string | null) =>
   post<WoRecord>(recordPath(woRef, `/nte-requests/${encodeURIComponent(requestId)}`), { decision, note: note ?? null });
 export const locateVisit = (woRef: string, visitId: string, at: { lat: number; lng: number } | null) =>
@@ -3928,7 +3960,7 @@ export const getPurchasingMeta = () => request<PurchasingMeta>('/purchasing/meta
 export const getTaxRates = () => request<{ tax_rates: TaxRate[] }>('/tax-rates');
 export const getPrintTemplate = (kind: DocTemplateKind) => request<{ template: PrintTemplate | null }>(`/print-templates/${kind}`);
 
-export const listPurchaseRequests = (params: { status?: string; search?: string }) => request<PurchasingList<PurchaseRequest>>(`/purchasing/requests${qs(params)}`);
+export const listPurchaseRequests = (params: { status?: string; search?: string; assigned?: '1' }) => request<PurchasingList<PurchaseRequest>>(`/purchasing/requests${qs(params)}`);
 export const savePurchaseRequest = (id: string | null, input: PurchaseRequestInput) =>
   post<{ request: PurchaseRequest }>(id ? `/purchasing/requests/${enc(id)}` : '/purchasing/requests', input, id ? 'PATCH' : 'POST');
 export const actOnPurchaseRequest = (id: string, action: PrAction, note?: string | null) => post<{ request: PurchaseRequest }>(`/purchasing/requests/${enc(id)}/act`, { action, note: note ?? null });

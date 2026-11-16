@@ -6,7 +6,18 @@
 //
 // Nothing here sends an email (held on purpose).
 
-import { PULSE_NOTICE_PREFIX, VENDOR_REVIEW_PERM_KEY, parseNoticeCursor } from '@theone/shared';
+import {
+  NOTICE_KINDS_ALWAYS_SHOWN,
+  PULSE_NOTICE_PREFIX,
+  QUOTE_DUE_AFTER_HOURS,
+  QUOTE_DUE_NOTICE_KIND,
+  QUOTE_DUE_STATUS_NAME,
+  VENDOR_REVIEW_PERM_KEY,
+  businessDay,
+  parseNoticeCursor,
+  quoteDueNoticeTitle,
+  quoteDueState,
+} from '@theone/shared';
 import type {
   AppNotification,
   AppNotificationsResponse,
@@ -19,6 +30,10 @@ import type {
 } from '@theone/shared';
 import { query } from '../db.js';
 import { notFound } from '../errors.js';
+import { addWorkingHours, wallStamp } from '../lib/businessDays.js';
+import { holidayDays } from './holidays.js';
+import { STATUS_SINCE_SQL } from './obligations.js';
+import { assignedToSql } from './woScope.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -33,6 +48,20 @@ export interface NotifyInput {
   /** One notice per person per key (0059's unique index): a second call
       with the same key writes nothing. */
   dedupeKey?: string | null;
+  /** The work order it is about (0144). Absent = read off a
+      `/work-orders/<WO #>` link, so every work-order notice carries it. */
+  taskId?: string | null;
+}
+
+/** The WO # a `/work-orders/<WO #>[?…|#…|/…]` link points at, else null. */
+export function woNumberOfLink(link: string | null | undefined): string | null {
+  const m = /^\/work-orders\/([^/?#]+)/.exec(link ?? '');
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
 }
 
 export async function notify(principalIds: (string | null | undefined)[], n: NotifyInput): Promise<void> {
@@ -40,12 +69,23 @@ export async function notify(principalIds: (string | null | undefined)[], n: Not
   if (to.length === 0) return;
   try {
     await query(
-      `INSERT INTO app_notice (principal_id, kind, title, body, link, actor_id, dedupe_key)
-       SELECT p.id, $2, $3, $4, $5, $6, $7
+      `INSERT INTO app_notice (principal_id, kind, title, body, link, actor_id, dedupe_key, task_id)
+       SELECT p.id, $2, $3, $4, $5, $6, $7,
+              COALESCE($8::uuid, (SELECT t.id FROM task t WHERE t.wo_number = $9::text LIMIT 1))
          FROM principal p
         WHERE p.id = ANY($1::uuid[]) AND p.kind = 'human' AND p.status <> 'disabled'
        ON CONFLICT (principal_id, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
-      [to, n.kind, n.title.slice(0, 300), n.body ? n.body.slice(0, 1000) : null, n.link ?? null, n.actorId ?? null, n.dedupeKey ?? null],
+      [
+        to,
+        n.kind,
+        n.title.slice(0, 300),
+        n.body ? n.body.slice(0, 1000) : null,
+        n.link ?? null,
+        n.actorId ?? null,
+        n.dedupeKey ?? null,
+        n.taskId && UUID_RE.test(n.taskId) ? n.taskId : null,
+        woNumberOfLink(n.link),
+      ],
     );
   } catch (err) {
     console.error('[notices] could not write a notification', err);
@@ -109,6 +149,75 @@ export async function raiseExpiryNotifications(force = false): Promise<void> {
   } catch (err) {
     console.error('[notices] expiry sweep failed', err);
   }
+}
+
+// ── Quotes due (Elise, 2026-11-16) ──────────────────────────────────────────
+//
+// A work order in Waiting for Quote owes its quote QUOTE_DUE_AFTER_HOURS
+// working hours after it got there (weekends and holidays skipped, as the
+// quote clock does). From that Chicago day on, while it still sits there with
+// no quote on its way (a draft or a declined one still owes it), the people in its Assignee seat get one reminder a day:
+// "due today" on the day, "overdue" after. The dedupe key (work order, the
+// time it entered the status, the day) makes every later sweep that day a
+// no-op, and a work order sent back to Waiting for Quote starts a new clock.
+// Raised on the inbox's own reads (at most every few minutes per process) and
+// by the hourly cron, so nobody has to open the page for it to be written.
+
+let lastQuoteSweep = 0;
+const QUOTE_SWEEP_EVERY_MS = 5 * 60 * 1000;
+
+export interface QuoteDueSweep {
+  /** Work orders in Waiting for Quote with no quote submitted. */
+  checked: number;
+  /** Of those, due today or overdue (a reminder written, or already there). */
+  due: number;
+}
+
+export async function raiseQuoteDueNotifications(force = false, now = new Date()): Promise<QuoteDueSweep> {
+  const out: QuoteDueSweep = { checked: 0, due: 0 };
+  if (!force && now.getTime() - lastQuoteSweep < QUOTE_SWEEP_EVERY_MS) return out;
+  lastQuoteSweep = now.getTime();
+  try {
+    const rows = await query<{ task_id: string; wo_number: string; title: string | null; entered_at: Date; people: string[] }>(
+      `SELECT t.id::text AS task_id, t.wo_number, t.title,
+              ${STATUS_SINCE_SQL} AS entered_at,
+              ARRAY(
+                SELECT p.id::text FROM principal p
+                 WHERE p.kind = 'human' AND p.status <> 'disabled' AND btrim(p.display_name) <> ''
+                   AND lower(btrim(p.display_name)) IN (
+                     SELECT lower(btrim(nm)) FROM unnest(string_to_array(COALESCE(t.fields ->> 'Assignee', ''), ',')) AS nm)
+              ) AS people
+         FROM task t JOIN status s ON s.id = t.status_id
+        WHERE t.deleted_at IS NULL AND s.name = $1
+          -- Still owed: no quote on its way. A draft, or one the client declined
+          -- (re-quoted in a new round), still has to be submitted.
+          AND NOT EXISTS (SELECT 1 FROM quote q WHERE q.task_id = t.id
+                             AND q.status IN ('pending_correction', 'pending_approval', 'approved', 'sent', 'client_approved'))`,
+      [QUOTE_DUE_STATUS_NAME],
+    );
+    out.checked = rows.rows.length;
+    if (rows.rows.length === 0) return out;
+    const holidays = await holidayDays();
+    const today = businessDay(now);
+    for (const r of rows.rows) {
+      const dueDay = wallStamp(addWorkingHours(r.entered_at, QUOTE_DUE_AFTER_HOURS, holidays)).slice(0, 10);
+      const state = quoteDueState(dueDay, today);
+      if (state === 'not_yet') continue;
+      out.due += 1;
+      if (r.people.length === 0) continue;
+      await notify(r.people, {
+        kind: QUOTE_DUE_NOTICE_KIND,
+        title: quoteDueNoticeTitle(r.wo_number, state, dueDay),
+        body: `${r.title ? `${r.title} — ` : ''}in ${QUOTE_DUE_STATUS_NAME} since ${wallStamp(r.entered_at).replace('T', ' ')}; submit the quote.`,
+        link: `/work-orders/${encodeURIComponent(r.wo_number)}?tab=quotes`,
+        taskId: r.task_id,
+        dedupeKey: `quote_due:${r.task_id}:${r.entered_at.getTime()}:${today}`,
+      });
+    }
+  } catch (err) {
+    console.error('[notices] quote-due sweep failed', err);
+  }
+  return out;
 }
 
 // ── The bell ─────────────────────────────────────────────────────────────────
@@ -187,16 +296,28 @@ export async function pruneNotifications(principalId: string): Promise<void> {
 // own rows; nothing here takes another principal's id. Read and unread are
 // both settable: unread is `read_at` back to NULL.
 
+// Elise 2026-11-16 · a notice about a work order shows only while the person
+// is ON that work order (an assigned seat, `assignedToSql`), unless After
+// hours is on ($3) — a mention, or the answer to their own request, always
+// shows. Parameters: $1 the person, $2 with the Pulse, $3 every work order,
+// $4 their display name; the filters start at $5.
+const ON_THE_JOB = (alias: string) => `($3::boolean OR ${assignedToSql('$4::text', alias)})`;
+const ALWAYS_SHOWN = NOTICE_KINDS_ALWAYS_SHOWN.map((k) => `'${k}'`).join(', ');
+
 const INBOX_CTE = `WITH inbox AS (
   SELECT 'notice'::text AS source, n.id::text AS id, n.kind, n.title, n.body, n.link,
          n.actor_id, NULL::text AS wo_number, NULL::int AS tier, n.read_at, n.created_at
     FROM app_notice n
+    LEFT JOIN task t ON t.id = n.task_id
    WHERE n.principal_id = $1
+     AND (n.task_id IS NULL OR t.id IS NULL OR n.kind IN (${ALWAYS_SHOWN}) OR ${ON_THE_JOB('t')})
   UNION ALL
   SELECT 'pulse', n.id::text, '${PULSE_NOTICE_PREFIX}' || o.rule_key, n.title, n.body, NULL,
          NULL, n.wo_number, n.tier, n.read_at, n.created_at
     FROM notification n JOIN obligation o ON o.id = n.obligation_id
+    LEFT JOIN task t ON t.id = o.task_id
    WHERE $2::boolean AND n.principal_id = $1
+     AND (t.id IS NULL OR ${ON_THE_JOB('t')})
 )`;
 
 export interface InboxOptions {
@@ -207,6 +328,10 @@ export interface InboxOptions {
   before: string | null;
   limit: number;
   withPulse: boolean;
+  /** The person's display name — what the assigned seats hold. */
+  name: string;
+  /** After hours: every work order, not only the person's own jobs. */
+  allWorkOrders: boolean;
 }
 
 type InboxRow = {
@@ -230,7 +355,7 @@ function likePattern(q: string): string {
   return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
-/** The filter half every inbox query shares, from parameter `$3` on. */
+/** The filter half every inbox query shares, from parameter `$5` on. */
 function inboxFilter(o: Pick<InboxOptions, 'read' | 'kinds' | 'q'>, params: unknown[]): string {
   const where: string[] = [];
   if (o.read === 'unread') where.push('read_at IS NULL');
@@ -249,7 +374,8 @@ function inboxFilter(o: Pick<InboxOptions, 'read' | 'kinds' | 'q'>, params: unkn
 
 export async function listInbox(principalId: string, o: InboxOptions): Promise<NoticeInboxResponse> {
   await raiseExpiryNotifications();
-  const base: unknown[] = [principalId, o.withPulse];
+  await raiseQuoteDueNotifications();
+  const base: unknown[] = [principalId, o.withPulse, o.allWorkOrders, o.name];
 
   const listParams = [...base];
   let where = inboxFilter(o, listParams);
@@ -312,18 +438,18 @@ export async function listInbox(principalId: string, o: InboxOptions): Promise<N
     types: types.rows,
     next_before: more && last ? `${last.at_us}|${last.source}:${last.id}` : null,
     includes_pulse: o.withPulse,
+    all_work_orders: o.allWorkOrders,
   };
 }
 
-/** The sidebar badge: every unread row of the inbox. */
-export async function inboxUnread(principalId: string, withPulse: boolean): Promise<number> {
+/** The sidebar badge: every unread row of the inbox — the person's own jobs
+    only (the badge never follows After hours). */
+export async function inboxUnread(principalId: string, withPulse: boolean, name: string): Promise<number> {
   await raiseExpiryNotifications();
+  await raiseQuoteDueNotifications();
   const res = await query<{ n: number }>(
-    `SELECT ((SELECT count(*) FROM app_notice WHERE principal_id = $1 AND read_at IS NULL)
-           + (CASE WHEN $2::boolean
-                   THEN (SELECT count(*) FROM notification WHERE principal_id = $1 AND read_at IS NULL)
-                   ELSE 0 END))::int AS n`,
-    [principalId, withPulse],
+    `${INBOX_CTE} SELECT count(*)::int AS n FROM inbox WHERE read_at IS NULL`,
+    [principalId, withPulse, false, name],
   );
   return res.rows[0]?.n ?? 0;
 }

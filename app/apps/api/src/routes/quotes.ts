@@ -42,6 +42,7 @@ import {
 } from '../services/quotes.js';
 import { listLaborRates, upsertLaborRate } from '../services/rates.js';
 import { requirePerm } from '../services/permissions.js';
+import { withAssignedOnly } from '../services/afterHours.js';
 import { assertRawMoney, zMoney } from '../validation.js';
 import { PERCENT_MAX } from '@theone/shared';
 
@@ -141,7 +142,7 @@ export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
   app.get('/quotes', async (req) => {
     const viewer = actingPrincipalFromRequest(req);
     requirePerm(viewer, 'quotes', 'view', 'You cannot view quotes');
-    return listQuotes(undefined, viewer);
+    return listQuotes(undefined, withAssignedOnly(viewer, req.query));
   });
 
   /** Labor rates (Yoda /QuoteRate). Read with quotes:view; upsert is an admin setting. */

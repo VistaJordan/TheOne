@@ -73,6 +73,10 @@ export interface ActingPrincipal {
   /** UAT T1 · a test sign-in account: refused on user and role writes
       (the Share dialog's role grants and per-person ticks included). */
   isTestAccount?: boolean;
+  /** Elise 2026-11-16 · narrow every work-order scope to the work orders this
+      person is ON (an assigned seat) — the Approvals page's queues without
+      After hours. Never set on a session; a route copies the actor with it. */
+  assignedOnly?: boolean;
   /** The permission tree (0015) — what every gate resolves against. */
   perms: PermissionSet;
   /** Resolved from the `role` table, not from a hardcoded list (0005). */

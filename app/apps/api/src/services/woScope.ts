@@ -19,7 +19,7 @@
 // lower + btrim, no FK). It is how the sales team's dashboard knows what to
 // count, and it widens a dispatcher's book the same way an entity tick does.
 
-import { resolveWoScope, type WoScope } from '@theone/shared';
+import { ASSIGNED_SEAT_KEYS, resolveWoScope, type WoScope } from '@theone/shared';
 import { query } from '../db.js';
 import { ApiError } from '../errors.js';
 import { Params } from './woFields.js';
@@ -35,6 +35,34 @@ export function woScopeOf(actor: ActingPrincipal): WoScope {
  * query stays exactly what it was.
  */
 export function woScopeSql(actor: ActingPrincipal, p: Params, alias = 't'): string | null {
+  const base = woScopeBaseSql(actor, p, alias);
+  // Elise 2026-11-16 · the Approvals page's queues ask for the work orders
+  // the person is ON (an assigned seat), unless After hours is on.
+  if (!actor.assignedOnly) return base;
+  const mine = assignedToSql(p.add(actor.name), alias);
+  return base ? `(${base} AND ${mine})` : mine;
+}
+
+const SEAT_ARRAY = `ARRAY[${ASSIGNED_SEAT_KEYS.map((k) => `'${k.replace(/'/g, "''")}'`).join(', ')}]::text[]`;
+
+/**
+ * "On the job" (Elise, 2026-11-16): the person named by the bound parameter
+ * `nameParam` sits in one of ASSIGNED_SEAT_KEYS of the task `alias` (each a
+ * comma-joined list of display names), or — with the Assignee blank — in the
+ * legacy `Assignee Name TXT`. The pure twin is `isAssignedTo` in shared.
+ */
+export function assignedToSql(nameParam: string, alias = 't'): string {
+  return `(EXISTS (
+       SELECT 1
+         FROM unnest(${SEAT_ARRAY}) AS seat(k)
+         CROSS JOIN LATERAL unnest(string_to_array(COALESCE(${alias}.fields ->> seat.k, ''), ',')) AS nm(n)
+        WHERE lower(btrim(nm.n)) = lower(btrim(${nameParam})))
+     OR (COALESCE(btrim(${alias}.fields ->> 'Assignee'), '') = ''
+         AND lower(btrim(COALESCE(${alias}.fields ->> 'Assignee Name TXT', ''))) = lower(btrim(${nameParam}))
+         AND btrim(${nameParam}) <> ''))`;
+}
+
+function woScopeBaseSql(actor: ActingPrincipal, p: Params, alias: string): string | null {
   const scope = woScopeOf(actor);
   // 0062 · a person restricted to a list of sites sees only the work orders
   // AT those sites — on top of (AND) whatever the role scope says. A work

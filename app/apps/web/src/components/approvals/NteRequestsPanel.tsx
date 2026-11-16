@@ -18,9 +18,15 @@ import { Icon } from '../Icon';
 const money = (n: number | null) =>
   n === null ? '—' : `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export function NteRequestsPanel() {
+/** `afterHours`: every work order's requests; otherwise only the work orders
+    the viewer is on (Elise, 2026-11-16). */
+export function NteRequestsPanel({ afterHours = false }: { afterHours?: boolean } = {}) {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['nte-requests'], queryFn: listNteRequests, retry: 0 });
+  const q = useQuery({
+    queryKey: ['nte-requests', afterHours ? 'all' : 'mine'],
+    queryFn: () => listNteRequests(!afterHours),
+    retry: 0,
+  });
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<{ wo: string; id: string; note: string } | null>(null);
 

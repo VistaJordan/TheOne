@@ -132,7 +132,8 @@ describe('W2-1 · the lists are windows, and the lib knows how wide', () => {
     expect(m, 'listQuotes(limit = N) not found').not.toBeNull();
     expect(Number(m?.[1])).toBe(QUOTES_LIST_CAP);
     const route = read('../apps/api/src/routes/quotes.ts');
-    expect(route).toContain('listQuotes(undefined, viewer)');
+    // 2026-11-16: the Approvals page narrows it with ?assigned=1; no limit either way.
+    expect(route).toContain('listQuotes(undefined, withAssignedOnly(viewer, req.query))');
   });
 
   it('pins the invoices cap to GET /invoices (services/invoices.ts)', () => {

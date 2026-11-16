@@ -8,6 +8,13 @@
 //   POST /notices/:id/read   → { unread }
 //   POST /notices/read-all   → { unread }
 //   POST /notices/seen-messages → { changed, unread }  the Messages tab showed these messages
+//   GET  /after-hours        → AfterHoursState       is the wide view on, per page
+//   POST /after-hours        → AfterHoursState       a press of the switch (logged)
+//   GET  /after-hours/log    → { items }             every press (admin/audit view)
+//
+// Elise 2026-11-16 · a notice about a work order shows only to the people on
+// that job (an assigned seat); `?after_hours=1` shows the rest while After
+// hours is on for the person.
 //
 // A person's notifications are their own: every route reads the ACTING
 // principal's rows and no route takes a principal id. A super admin viewing
@@ -17,8 +24,10 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { NOTICE_PAGE_SIZE, PULSE_PERM_KEY, permAllows } from '@theone/shared';
+import { NOTICE_PAGE_SIZE, PULSE_PERM_KEY, adminPermKey, permAllows } from '@theone/shared';
 import { parse } from '../errors.js';
+import { afterHoursLog, afterHoursOn, afterHoursState, setAfterHours } from '../services/afterHours.js';
+import { requirePerm } from '../services/permissions.js';
 import { actingPrincipalFromRequest } from '../services/activity.js';
 import {
   inboxUnread,
@@ -42,6 +51,9 @@ const inboxQuerySchema = z.object({
   q: z.string().max(200).optional(),
   before: z.string().max(120).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(NOTICE_PAGE_SIZE),
+  /** Elise 2026-11-16 · every work order, not only the person's jobs —
+      honoured only while After hours is on for this page (a logged press). */
+  after_hours: z.enum(['0', '1']).optional(),
 });
 
 const markSchema = z.object({
@@ -70,6 +82,7 @@ export default async function noticeRoutes(app: FastifyInstance): Promise<void> 
     const pulse = await withPulse(req);
     await pruneNotifications(me.id);
     if (pulse) await evaluateDebounced();
+    const all = q.after_hours === '1' && (await afterHoursOn(me.id, 'notifications'));
     return listInbox(me.id, {
       read: q.show,
       kinds: parseKinds(q.kinds),
@@ -77,11 +90,13 @@ export default async function noticeRoutes(app: FastifyInstance): Promise<void> 
       before: q.before ?? null,
       limit: q.limit,
       withPulse: pulse,
+      name: me.name,
+      allWorkOrders: all,
     });
   });
 
   app.get('/notices/count', async (req) => ({
-    unread: await inboxUnread(actingPrincipalFromRequest(req).id, await withPulse(req)),
+    unread: await inboxUnread(actingPrincipalFromRequest(req).id, await withPulse(req), actingPrincipalFromRequest(req).name),
   }));
 
   app.post('/notices/mark', async (req) => {
@@ -89,7 +104,7 @@ export default async function noticeRoutes(app: FastifyInstance): Promise<void> 
     const body = parse(markSchema, req.body);
     const pulse = await withPulse(req);
     const changed = await markInbox(me.id, pulse, body);
-    return { changed, unread: await inboxUnread(me.id, pulse) };
+    return { changed, unread: await inboxUnread(me.id, pulse, me.name) };
   });
 
   // Elise 2026-11-14: the Messages tab calls this with the messages it shows,
@@ -101,7 +116,23 @@ export default async function noticeRoutes(app: FastifyInstance): Promise<void> 
       req.body,
     );
     const changed = await markMessageNoticesSeen(me.id, body.wo_number, body.message_ids);
-    return { changed, unread: await inboxUnread(me.id, await withPulse(req)) };
+    return { changed, unread: await inboxUnread(me.id, await withPulse(req), me.name) };
+  });
+
+  // ── After hours (Elise, 2026-11-16) ──────────────────────────────────────
+  // The switch on Notifications and Approvals: shows every work order the
+  // person may open, not only their own jobs. Each press is an audit row
+  // (services/afterHours.ts); the log is for whoever reads Admin › Audit.
+  app.get('/after-hours', async (req) => afterHoursState(actingPrincipalFromRequest(req).id));
+
+  app.post('/after-hours', async (req) => {
+    const body = parse(z.object({ page: z.enum(['notifications', 'approvals']), on: z.boolean() }), req.body);
+    return setAfterHours(actingPrincipalFromRequest(req), body.page, body.on);
+  });
+
+  app.get('/after-hours/log', async (req) => {
+    requirePerm(actingPrincipalFromRequest(req), adminPermKey('audit'), 'view', 'The After hours log is not available to you');
+    return { items: await afterHoursLog() };
   });
 
   app.get('/notices', async (req) => {

@@ -54,6 +54,7 @@ import {
   spaceViewer,
   updateChecklistItem,
 } from '../services/woRecord.js';
+import { withAssignedOnly } from '../services/afterHours.js';
 
 const idParams = z.object({ id: z.string().min(1).max(64) });
 const text = (max: number) => z.string().max(max).nullable().optional();
@@ -150,7 +151,7 @@ export default async function woRecordRoutes(app: FastifyInstance): Promise<void
   });
 
   // M25 (UAT Wave D): the open requests across work orders, for Approvals.
-  app.get('/nte-requests', async (req) => ({ items: await listOpenNteRequests(actingPrincipalFromRequest(req)) }));
+  app.get('/nte-requests', async (req) => ({ items: await listOpenNteRequests(withAssignedOnly(actingPrincipalFromRequest(req), req.query)) }));
 
   app.post('/work-orders/:id/nte-requests', async (req) => {
     const { taskId, actor } = await task(req);

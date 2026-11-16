@@ -3331,6 +3331,38 @@ minus the decider; one per person per decision (dedupe key = the task id).
 hold approved through its payment (`approvePaymentRequest`) does not go
 through `decide` and raises nothing. Never throws.
 
+**Notifications and approvals follow the people on the job; After hours;
+quotes due** (migration 0144, Elise 2026-11-16; `ASSIGNED_SEAT_KEYS` /
+`isAssignedTo` / `NOTICE_KINDS_ALWAYS_SHOWN` / `quoteDueState` in shared
+`notices.ts`, `assignedToSql` in `services/woScope.ts`,
+`services/afterHours.ts`, `components/AfterHoursToggle.tsx`,
+`tests/notifications-assigned.test.ts`). "On the job" = the person's display
+name in Assignee, Support Trainee, TL, ATL, AM or Completion Assignee (Assignee
+Name TXT while the Assignee is blank). **Notifications:** 0144 adds
+`app_notice.task_id` (no FK; back-filled from the link; `notify()` fills it from
+a `/work-orders/<WO #>` link or `taskId`), and the inbox (`INBOX_CTE`, both
+halves — Pulse pings through their obligation) shows a notice about a work
+order only to someone on it; a mention and `request_decided` always show; the
+badge always counts the default view. Reassigning moves the old notices with
+the job. **Approvals:** `listApprovalTasks` and `approvalCounts` keep a task
+when it is a `wo_acceptance` (Incoming is never narrowed), the viewer's own
+request, or on a work order they are on; the quotes, payments, purchases and
+NTE-increase lanes ask `?assigned=1` (`withAssignedOnly` → `actor.assignedOnly`,
+which `woScopeSql` ANDs in); their own pages are unchanged. Super admins are
+narrowed too. **After hours** is a button on both pages (`POST /after-hours
+{page, on}`): each press is an audit row `after_hours_opened|closed` (entity
+`after_hours`, entity_id = the person, `after.page`), and `?after_hours=1` is
+honoured only while the person's latest row for that page is "opened" and under
+`AFTER_HOURS_HOURS` (12) old — so the wide view cannot be had unlogged and
+lapses on its own. "Who used it" (`GET /after-hours/log`, `admin/audit` view)
+lists every press. **Quotes due:** `raiseQuoteDueNotifications` (on inbox reads
+every 5 min, and the hourly client-updates cron) finds work orders in Waiting
+for Quote with no quote on its way (none, a draft or a declined one), due =
+entry into the status (`STATUS_SINCE_SQL`) + 48 working hours
+(`addWorkingHours`, weekends and holidays skipped), and from that Chicago day
+gives the Assignee one `quote_due` notice a day ("Quote due today on …" /
+"Quote overdue on … (was due …)"; dedupe = task + entry time + day).
+
 **No work order goes to a disabled account** (Elise, 2026-10-23, no
 migration; `tests/assignee-disabled.test.ts`). The person paths already
 refused one through `assertDispatchers` (`status <> 'disabled'`). The paths

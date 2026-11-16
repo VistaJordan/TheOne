@@ -100,7 +100,9 @@ export type AdminEntity =
   // 0101: a card of the price list (entity, client: trip, markup, rates, fees).
   | 'price_card'
   // 0138: an AI feature's model, daily limit and monthly budget (Dashboard › AI usage), keyed by feature.
-  | 'ai_setting';
+  | 'ai_setting'
+  // Elise 2026-11-16 · a press of After hours on Notifications / Approvals.
+  | 'after_hours';
 
 export type Snapshot = Record<string, unknown> & { name: string };
 

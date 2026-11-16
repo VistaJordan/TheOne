@@ -64,7 +64,7 @@ import {
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { Params } from './woFields.js';
-import { woScopeSql } from './woScope.js';
+import { assignedToSql, woScopeSql } from './woScope.js';
 import { assertDispatchers } from './dataRules.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
@@ -282,6 +282,16 @@ function num(v: unknown): number | null {
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 /**
+ * Elise 2026-11-16 · an approval about a work order shows only to the people
+ * ON it (an assigned seat) — plus their own requests, and every new work
+ * order waiting for acceptance (Incoming: nobody is on those yet). After hours
+ * on the Approvals page lifts it (`allWorkOrders`).
+ */
+function onTheJobSql(viewer: ActingPrincipal, p: Params): string {
+  return `AND (a.type = 'wo_acceptance' OR a.created_by = ${p.add(viewer.id)} OR ${assignedToSql(p.add(viewer.name), 't')})`;
+}
+
+/**
  * The inbox: every task across every live work order, open ones first, then
  * newest first. Deleted work orders keep their rows but leave the list.
  *
@@ -289,7 +299,11 @@ function num(v: unknown): number | null {
  * — except a person's OWN requests, which they always see, so a dispatcher
  * with no section grant still gets "My requests".
  */
-export async function listApprovalTasks(viewer: ActingPrincipal, limit = 500): Promise<ApprovalListResponse> {
+export async function listApprovalTasks(
+  viewer: ActingPrincipal,
+  limit = 500,
+  opts: { allWorkOrders?: boolean } = {},
+): Promise<ApprovalListResponse> {
   // 0026: a scoped viewer sees the tasks on THEIR work orders — plus the
   // requests they raised themselves, which stay theirs even if the work order
   // was reassigned afterwards.
@@ -298,7 +312,7 @@ export async function listApprovalTasks(viewer: ActingPrincipal, limit = 500): P
   const scopeSql = scope ? `AND (${scope} OR a.created_by = ${p.add(viewer.id)})` : '';
   const res = await query<Row>(
     `${SELECT_SQL}
-      WHERE t.deleted_at IS NULL ${scopeSql}
+      WHERE t.deleted_at IS NULL ${scopeSql} ${opts.allWorkOrders ? '' : onTheJobSql(viewer, p)}
       ORDER BY CASE a.status WHEN 'open' THEN 0 ELSE 1 END,
                a.created_at DESC, a.id DESC
       LIMIT ${p.add(limit)}`,
@@ -1543,7 +1557,7 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
        FROM approval_task a JOIN task t ON t.id = a.task_id
       WHERE t.deleted_at IS NULL
         AND (a.status = 'open' OR (a.created_by = ${me} AND a.acknowledged_at IS NULL))
-        ${scopeSql}
+        ${scopeSql} ${onTheJobSql(viewer, p)}
       GROUP BY 1, 2, 3, 4`,
     p.values,
   );
@@ -1565,7 +1579,9 @@ export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalC
   // bound parameter the statement never mentions (it cannot type it) — that
   // was a 500 on the badge for everyone who approves quotes or payments.
   const qp = new Params();
-  const moneyScope = woScopeSql(viewer, qp);
+  // Elise 2026-11-16: the badge counts what the inbox shows by default — the
+  // work orders the person is on.
+  const moneyScope = woScopeSql({ ...viewer, assignedOnly: true }, qp);
   const only = moneyScope ? `AND ${moneyScope}` : '';
   if (allow('quotes', 'approve') && allow(approvalSectionPermKey('quotes'), 'view')) {
     const q = await query<{ n: number | string }>(

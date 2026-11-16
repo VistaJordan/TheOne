@@ -32,6 +32,6 @@ describe('assigned to you', () => {
     expect(src).toContain('dedupeKey: `${WO_ASSIGNED_NOTICE_KIND}:${event.taskId}:${row.id}`');
     expect(src).toContain('link: `/work-orders/${encodeURIComponent(row.wo_number)}`');
     const notices = read('apps/api/src/services/notices.ts');
-    expect(notices).toContain('ON CONFLICT (principal_id, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,\n      [to, n.kind');
+    expect(notices).toContain('ON CONFLICT (principal_id, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,\n      [\n        to,\n        n.kind,');
   });
 });

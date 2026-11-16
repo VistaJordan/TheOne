@@ -42,6 +42,7 @@ import { searchPaymentVendors, getPaymentVendor } from '../services/paymentVendo
 import { requirePerm } from '../services/permissions.js';
 import { assertRawMoney, zMoney } from '../validation.js';
 import { assertRecordInScope } from '../services/recordScope.js';
+import { withAssignedOnly } from '../services/afterHours.js';
 
 /** 0108 (Elise, 2026-10-29): payments read outside a work order's page — the
  *  Payments page, one request by its own link — need the Payments page, or the
@@ -201,7 +202,7 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
         page: q.page,
         page_size: q.page_size,
       },
-      viewer,
+      withAssignedOnly(viewer, req.query),
     );
   });
 

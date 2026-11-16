@@ -459,6 +459,8 @@ export const ACTION_LABELS: Record<string, string> = {
   view_deleted: 'View deleted',
   work_orders_exported: 'Work orders exported',
   audit_log_exported: 'Audit log exported',
+  after_hours_opened: 'After hours switched on',
+  after_hours_closed: 'After hours switched off',
   // Admin › Integrations (0074): every switch flip; ClickUp's setup (0078).
   integration_turned_on: 'Integration turned on',
   integration_turned_off: 'Integration turned off',
@@ -493,6 +495,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   fm_cico_method: 'Check-in method',
   saved_view: 'Saved view',
   export: 'Export',
+  after_hours: 'After hours',
   webhook: 'Webhook',
   intake_draft: 'Intake draft',
   contract: 'Contract',

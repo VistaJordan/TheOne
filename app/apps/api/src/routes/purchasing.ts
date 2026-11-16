@@ -64,6 +64,7 @@ import {
   setWoFiling,
   woPurchasing,
 } from '../services/purchasing.js';
+import { withAssignedOnly } from '../services/afterHours.js';
 
 const text = (max: number) => z.string().max(max).nullable().optional();
 const day = z.string().max(10).nullable().optional();
@@ -92,7 +93,7 @@ export default async function purchasingRoutes(app: FastifyInstance): Promise<vo
 
   // ── Requests ───────────────────────────────────────────────────────────────
   const prBody = z.object({ task_ref: text(64), title: z.string().max(200).optional(), reason: text(2000), needed_by: day, vendor_id: id, vendor_name: text(200), cost_center_id: id, lines }).strict();
-  app.get('/purchasing/requests', async (req) => listRequests(actorOf(req), parse(listQuery, req.query)));
+  app.get('/purchasing/requests', async (req) => listRequests(withAssignedOnly(actorOf(req), req.query), parse(listQuery, req.query)));
   app.post('/purchasing/requests', async (req) => ({ request: await saveRequest(null, parse(prBody, req.body), actorOf(req)) }));
   app.patch('/purchasing/requests/:id', async (req) => ({ request: await saveRequest(p(req), parse(prBody, req.body), actorOf(req)) }));
   app.post('/purchasing/requests/:id/act', async (req) => {

@@ -46,6 +46,7 @@ export const NOTICE_TYPES: Record<string, { label: string; group: NoticeGroupId 
   vendor_blacklisted: { label: 'Blacklisted vendors', group: 'vendors' },
   vendor_expiry: { label: 'Insurance dates', group: 'vendors' },
   vendor_onboarding: { label: 'Vendor onboarding', group: 'vendors' },
+  quote_due: { label: 'Quotes due', group: 'work_orders' },
 };
 
 /** A decided approval task (status change, snooze, money hold), told to the
@@ -130,6 +131,8 @@ export interface NoticeInboxResponse {
   next_before: string | null;
   /** Whether the Pulse's pings are part of this inbox (the Pulse grant). */
   includes_pulse: boolean;
+  /** After hours is on: every work order's notices, not only the person's jobs. */
+  all_work_orders: boolean;
 }
 
 export const NOTICE_PAGE_SIZE = 50;
@@ -161,4 +164,74 @@ export function parseNoticeCursor(raw: string | null | undefined): { at: string;
   const key = raw.slice(i + 1);
   if (Number.isNaN(Date.parse(at)) || !/^(notice|pulse):[0-9a-f-]{36}$/i.test(key)) return null;
   return { at, key };
+}
+
+// ── Only the people on the job (Elise, 2026-11-16) ──────────────────────────
+//
+// Notifications and approvals about a work order show only to the people
+// assigned to it: whoever sits in one of these seats of the work order. The
+// rest stays reachable through **After hours**, a switch on the Notifications
+// and Approvals pages that shows every work order the person may open — each
+// press is logged (`after_hours_opened` / `after_hours_closed`).
+
+/** The work-order seats that make a person "on the job". */
+export const ASSIGNED_SEAT_KEYS = ['Assignee', 'Support Trainee', 'TL', 'ATL', 'AM', 'Completion Assignee'] as const;
+
+/** Kinds shown whoever holds the work order: someone asked for this person by
+    name (a mention), or it answers their own request. */
+export const NOTICE_KINDS_ALWAYS_SHOWN: readonly string[] = ['wo_mention', 'request_decided'];
+
+/** True when `name` sits in one of the assigned seats of this bag (each seat
+    is a comma-joined list of display names). The pure twin of the SQL in
+    `assignedToSql` (api `services/woScope.ts`). */
+export function isAssignedTo(bag: Record<string, unknown> | null | undefined, name: string | null | undefined): boolean {
+  const me = (name ?? '').trim().toLowerCase();
+  if (!me || !bag) return false;
+  for (const key of ASSIGNED_SEAT_KEYS) {
+    const v = bag[key];
+    if (typeof v !== 'string') continue;
+    if (v.split(',').some((n) => n.trim().toLowerCase() === me)) return true;
+  }
+  const assignee = typeof bag.Assignee === 'string' ? bag.Assignee.trim() : '';
+  const legacy = typeof bag['Assignee Name TXT'] === 'string' ? (bag['Assignee Name TXT'] as string).trim().toLowerCase() : '';
+  return assignee === '' && legacy !== '' && legacy === me;
+}
+
+/** The two pages that have the After hours switch. */
+export type AfterHoursPage = 'notifications' | 'approvals';
+export const AFTER_HOURS_PAGES: readonly AfterHoursPage[] = ['notifications', 'approvals'];
+
+/** How long a press lasts before the page goes back to "my jobs". */
+export const AFTER_HOURS_HOURS = 12;
+
+export interface AfterHoursState {
+  notifications: boolean;
+  approvals: boolean;
+}
+
+// ── Quotes due (Elise, 2026-11-16) ──────────────────────────────────────────
+//
+// A work order that sits in Waiting for Quote owes its quote 48 working hours
+// after it got there (weekends and holidays skipped, like the quote clock).
+// From the morning of that day the people on the job get a reminder, and
+// again every day after while the quote is still not submitted.
+
+export const QUOTE_DUE_NOTICE_KIND = 'quote_due';
+export const QUOTE_DUE_STATUS_NAME = 'Waiting for Quote';
+export const QUOTE_DUE_AFTER_HOURS = 48;
+
+export type QuoteDueState = 'not_yet' | 'due_today' | 'overdue';
+
+/** Where a quote stands on `today` ('YYYY-MM-DD', Chicago) given its due day. */
+export function quoteDueState(dueDay: string, today: string): QuoteDueState {
+  if (today < dueDay) return 'not_yet';
+  return today === dueDay ? 'due_today' : 'overdue';
+}
+
+/** "Quote due today on WO-123" / "Quote overdue on WO-123 (was due Nov 14)". */
+export function quoteDueNoticeTitle(woNumber: string, state: Exclude<QuoteDueState, 'not_yet'>, dueDay: string): string {
+  if (state === 'due_today') return `Quote due today on ${woNumber}`;
+  const [y, m, d] = dueDay.split('-').map(Number);
+  const label = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return `Quote overdue on ${woNumber} (was due ${label})`;
 }
