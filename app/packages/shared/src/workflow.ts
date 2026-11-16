@@ -183,6 +183,9 @@ export const TEAM_LEAD_FIELD_KEYS = ['fields.TL', 'fields.ATL'] as const;
 export const TEAM_LEAD_FIELD_EDIT_ROLES = ['tl', 'atl'] as const;
 /** 0147: OM Under Probation is view-only on the whole People section. */
 export const PROBATION_PEOPLE_LOCK_PATH = 'work_orders/fields/people';
+/** 2026-11-16 (0154): all three dispatcher tiers — OM, Senior OM, OM Under
+    Probation — are view-only on the whole People section. */
+export const PEOPLE_LOCKED_ROLES = REQUEST_MODE_DISPATCHER_ROLES;
 
 /** Elise, 2026-11-10 (migration 0129): what the work order IS — its
     description, the client's AFM, the store, where it is (the address and
