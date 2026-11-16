@@ -30,6 +30,8 @@
 .apq-columns { margin-left: auto; align-self: flex-end; }
 
 .ct .apq-type { margin-right: 6px; vertical-align: 1px; }
+/* How a payment is paid — amber when the method itself needs a manager. */
+.ct .apq-method { margin-left: 8px; vertical-align: 1px; font-weight: 600; }
 
 /* Date cells on the Approvals, Payments and Quotes queues. NOT `.col-list`:
    that name belongs to the Columns menu's flex list (wo-list.css) and turned

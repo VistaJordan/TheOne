@@ -59,6 +59,9 @@ import {
   overNteApproverLabel,
   SMALL_NTE_PAYMENT_UNDER,
   mayDecideOverQuote,
+  needsManagerForMethod,
+  PAYMENT_METHOD_LABEL,
+  type PaymentMethod,
   statusApprovalNeedsNote,
   type AcceptanceDetail,
   type ApprovalSectionKey,
@@ -469,7 +472,11 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
     open,
     // 2026-11-03: a payment above the NTE is the Account Manager's.
     mine: open && canDecide && (!item.above_nte || nteApprover),
-    owner: item.above_nte ? (Number(item.amount) < SMALL_NTE_PAYMENT_UNDER ? 'TL / ATL / AM' : 'Account Manager') : 'Payment approvers',
+    owner: item.above_nte
+      ? (Number(item.amount) < SMALL_NTE_PAYMENT_UNDER ? 'TL / ATL / AM' : 'Account Manager')
+      : needsManagerForMethod(item.method)
+        ? 'TL / ATL / AM'
+        : 'Payment approvers',
     status: {
       label: PAYMENT_STATUS_LABEL[item.status],
       chip: PAYMENT_CHIP[item.status],
@@ -1415,19 +1422,37 @@ function Ask({ row }: { row: Row }) {
         </div>
       );
     }
-    case 'payment':
+    case 'payment': {
+      // Elise, 2026-11-16: say from the outside who asked and how it is paid,
+      // so a Zelle / Cash App request (a TL / ATL / AM's call whatever the
+      // amount) reads as such before the row is opened.
+      const methodLabel = d.item.method
+        ? (PAYMENT_METHOD_LABEL[d.item.method as PaymentMethod] ?? d.item.method)
+        : null;
+      const managerMethod = needsManagerForMethod(d.item.method);
+      const requester = d.item.requested_by?.display_name ?? null;
       return (
         <div className="site payq-who">
           <strong>
             {chip}
             {usd(d.item.amount)} to {payeeLabel(d.item)}
+            {methodLabel && (
+              <span
+                className={`chip chip-sm ${managerMethod ? 'chip-warn' : 'chip-outline'} apq-method`}
+                title={managerMethod ? `${methodLabel} payments are approved by a TL, ATL or AM` : undefined}
+              >
+                {methodLabel}
+                {managerMethod && ' · TL / ATL / AM'}
+              </span>
+            )}
           </strong>
           <small>
-            {[d.item.purpose, d.item.method].filter(Boolean).join(' · ')}
+            {[requester ? `Requested by ${requester}` : null, d.item.purpose].filter(Boolean).join(' · ')}
             {row.held && ` · ${NTE_HOLD}`}
           </small>
         </div>
       );
+    }
     case 'purchase':
       return (
         <div className="site payq-who">
