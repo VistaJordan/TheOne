@@ -100,20 +100,18 @@ describe('the builder follows the vocabulary', async () => {
     expect(tripLine(0).rate).toBe('');
   });
 
-  it('a new option opens with the five scope lines and the Trip line', () => {
-    const opt = blankOption(1, 60);
+  it('a new option opens with the five scope lines and no Trip (2026-11-16: the Trip is on Incurred)', () => {
+    const opt = blankOption(1);
     expect(opt.scope_lines).toEqual(defaultScopeLines());
-    expect(opt.lines).toHaveLength(1);
-    expect(opt.lines[0].description).toBe('Trip');
-    expect(opt.lines[0].rate).toBe('60.00');
+    expect(opt.lines).toHaveLength(0);
     expect(opt.name).toBe('');
   });
 
   it('asks for an option name only once the round offers a choice', () => {
     const draft = {
       sections: [
-        { ...blankOption(1, 60), kind: 'incurred' as const, narrative: 'Tech found the unit down.', scope_lines: ['Inspect'] },
-        blankOption(1, 60),
+        { ...blankOption(1), kind: 'incurred' as const, narrative: 'Tech found the unit down.', scope_lines: ['Inspect'] },
+        blankOption(1),
       ],
       current_round: 1,
       sales_tax_pct: '0',
@@ -127,15 +125,15 @@ describe('the builder follows the vocabulary', async () => {
       ship_to: '',
     };
     expect(quoteProblems(draft).map((p) => p.message)).toEqual([]);
-    const two = { ...draft, sections: [...draft.sections, blankOption(1, 60)] };
+    const two = { ...draft, sections: [...draft.sections, blankOption(1)] };
     expect(quoteProblems(two).map((p) => p.message)).toEqual(['Option A needs a name', 'Option B needs a name']);
   });
 
   it('an option with no scope line at all is a problem; its narrative is not asked', () => {
-    const opt = { ...blankOption(1, 60), scope_lines: ['', ''] };
+    const opt = { ...blankOption(1), scope_lines: ['', ''] };
     const draft = {
       sections: [
-        { ...blankOption(1, 60), kind: 'incurred' as const, narrative: 'x', scope_lines: ['Inspect'] },
+        { ...blankOption(1), kind: 'incurred' as const, narrative: 'x', scope_lines: ['Inspect'] },
         opt,
       ],
       current_round: 1,
@@ -186,11 +184,12 @@ describe('source pins', () => {
     expect(card).not.toMatch(/setEditing|<textarea/);
   });
 
-  it('createQuote seeds incurred + one option, each with the defaults and a Trip line', () => {
+  it('createQuote seeds incurred + one option with the defaults, the Trip line on Incurred only', () => {
     const svc = read('apps/api/src/services/quotes.ts');
     expect(svc).toMatch(/\(\$1, 'incurred', 'Work already performed', \$2::jsonb, true, 0, 1\),\s*\(\$1, 'option', NULL, \$2::jsonb, true, 1, 1\)/);
     expect(svc).toMatch(/JSON\.stringify\(defaultScopeLines\(\)\)/);
     expect(svc).toMatch(/QUOTE_DEFAULT_TRIP_DESCRIPTION, tripRate/);
+    expect(svc).toContain("sections.rows.filter((r) => r.kind === 'incurred')");
   });
 
   it('the route stores blank scope lines and the summary skips them', () => {
@@ -211,14 +210,14 @@ describe('Reset quote (2026-10-27)', async () => {
   const { blankOption, resetDraft } = await import('../apps/web/src/lib/quoteDraft');
   type Draft = Parameters<typeof resetDraft>[0];
   const typed = (round: number, locked = false) => ({
-    ...blankOption(round, 50),
+    ...blankOption(round),
     name: 'Typed option',
     scope_lines: ['typed'],
     locked,
   });
   const base = (round: number): Draft => ({
     sections: [
-      { ...blankOption(round, 50), kind: 'incurred', name: 'Work already performed', scope_lines: ['typed'], locked: round > 1 },
+      { ...blankOption(round), kind: 'incurred', name: 'Work already performed', scope_lines: ['typed'], locked: round > 1 },
       typed(1, round > 1),
       typed(round),
       typed(round),
@@ -235,7 +234,7 @@ describe('Reset quote (2026-10-27)', async () => {
     ship_to: 'Ship',
   });
 
-  it('opens the quote again as new: incurred + one option, each with the default lines and Trip', () => {
+  it('opens the quote again as new: incurred + one option with the default lines, the Trip on Incurred only', () => {
     const next = resetDraft(base(1), 75);
     expect(next.sections).toHaveLength(2);
     const [inc, opt] = next.sections;
@@ -243,11 +242,12 @@ describe('Reset quote (2026-10-27)', async () => {
     expect(opt.kind).toBe('option');
     for (const s of next.sections) {
       expect(s.scope_lines).toEqual(defaultScopeLines());
-      expect(s.lines).toHaveLength(1);
-      expect(s.lines[0].description).toBe(QUOTE_DEFAULT_TRIP_DESCRIPTION);
-      expect(s.lines[0].rate).toBe('75.00');
       expect(s.name === '' || s.kind === 'incurred').toBe(true);
     }
+    expect(inc.lines).toHaveLength(1);
+    expect(inc.lines[0].description).toBe(QUOTE_DEFAULT_TRIP_DESCRIPTION);
+    expect(inc.lines[0].rate).toBe('75.00');
+    expect(opt.lines).toHaveLength(0);
     expect(next.specs).toBe('');
     expect(next.note_to_customer).toBe('');
     expect(next.summary_pinned).toBeNull();

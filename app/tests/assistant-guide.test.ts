@@ -150,7 +150,8 @@ describe('sentences the guide quotes are the ones the code says', () => {
   /** Sentences read off a screen (locks, warnings, chips): the file as shown must carry it. */
   const FROM_SCREENS: [string, string][] = [
     ['pages/admin/AdminUsersPage.tsx', 'Only a super admin can change this'],
-    ['pages/QuoteBuilderPage.tsx', 'On hold — decide the NTE override under Approvals first'],
+    // 2026-11-16: the NTE override no longer holds the quote; the builder warns instead.
+    ['pages/QuoteBuilderPage.tsx', 'Above NTE'],
     ['components/payments/PaymentActions.tsx', 'On hold — the NTE override on this work order has to be decided first'],
     ['pages/RequestPaymentPage.tsx', 'This technician is blacklisted — AP cannot pay them'],
     ['pages/VendorDetailPage.tsx', 'This may already be on file.'],

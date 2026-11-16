@@ -348,6 +348,10 @@ export const ACTION_LABELS: Record<string, string> = {
   // 0063 · the create form's templates and sub-categories.
   wo_template_saved: 'Create-form template saved',
   wo_template_deleted: 'Create-form template deleted',
+  // 0145 · quote templates.
+  quote_template_created: 'Quote template saved',
+  quote_template_updated: 'Quote template changed',
+  quote_template_deleted: 'Quote template deleted',
   wo_subcategory_added: 'Sub-category added',
   wo_subcategory_updated: 'Sub-category changed',
   // 0064 · site events, codes, form layouts.
@@ -498,6 +502,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   contract: 'Contract',
   approval_tier: 'Approval tier',
   pm_schedule: 'Maintenance schedule',
+  quote_template: 'Quote template',
   client_update: 'Client update',
   vendor: 'Vendor',
   vendor_setting: 'Vendor settings',

@@ -19,8 +19,6 @@ interface QuoteDecisionProps {
   status: QuoteStatus;
   /** The viewer holds `quotes:approve`. Nothing renders without it. */
   canApprove: boolean;
-  /** Rule 1.5.2: an NTE override is waiting on a manager — approve locks. */
-  nteHold?: boolean;
   /** 0083 (D2): why Approve & send is locked for this viewer (they submitted
       the quote), or null. */
   lockReason?: string | null;
@@ -29,9 +27,10 @@ interface QuoteDecisionProps {
   onDone?: () => void;
 }
 
-const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first';
+// 2026-11-16 (Elise): an open NTE override no longer holds the quote (it
+// holds payments) — the quote going to the client is how the NTE is raised.
 
-export function QuoteDecision({ woNumber, status, canApprove, nteHold, lockReason = null, size = 'card', onDone }: QuoteDecisionProps) {
+export function QuoteDecision({ woNumber, status, canApprove, lockReason = null, size = 'card', onDone }: QuoteDecisionProps) {
   const qc = useQueryClient();
   const [declining, setDeclining] = useState(false);
   const [note, setNote] = useState('');
@@ -75,8 +74,8 @@ export function QuoteDecision({ woNumber, status, canApprove, nteHold, lockReaso
       <button
         type="button"
         className={primary}
-        disabled={busy || nteHold || !!lockReason}
-        title={lockReason ?? (nteHold ? NTE_HOLD_TIP : 'Approve the quote and send it to the client')}
+        disabled={busy || !!lockReason}
+        title={lockReason ?? 'Approve the quote and send it to the client'}
         onClick={() => approve.mutate()}
       >
         <Icon name="send" size={12} />

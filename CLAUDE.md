@@ -3499,6 +3499,39 @@ its GTG step (n / 4). **Ecotrak ID** is not retired: `getFieldCatalogue`
 drops `SCREEN_HIDDEN_FIELD_KEYS`, while the Ecotrak sync still writes it and
 ClickUp still matches and pushes it. Parts Required and Total Invoiced stay.
 
+**Quotes, 2026-11-16: the NTE override no longer holds the quote; Trip on
+Incurred only; labor hours in the text; templates** (migration 0145, Elise;
+`tests/quote-fixes-2026-11-16.test.ts`). **NTE:** `assertNoOpenNteOverride`
+is gone from `approveQuote`, `sendQuote`, `clientApproveQuote` and
+`planApprovedMove` (it stays on payment approve / pay): the quote is how the
+NTE gets raised. The builder, `QuoteDecision` and the Approvals › Quotes lane
+no longer lock on `nte_override_open` (the payload still carries it).
+`setNteFromApproval` sets the NTE to the approved amount (as before), which
+reconciles the override away once Cost is under it, then calls
+`settleNteRequestsFromApproval` (`woRecord.ts`): every open `wo_nte_request`
+on the work order is closed — approved when the new NTE covers it, else
+withdrawn — with a note, a `NTE increase …` field row and an
+`nte_increase_decided` notice to the requester; never throws. **Trip:**
+`createQuote` puts the Trip line on the Incurred section only and
+`blankOption(round)` opens an option with no lines (the proposal used to
+charge the trip again); Reset quote follows; quotes on file are untouched.
+**Labor hours:** `summaryLineLabel` (shared `quoteDefaults.ts`) — a Labor line
+of qty ≠ 1 prints "3 labor hours tech 1" (a description not starting with
+Labor: "3 labor hours — Helper"), read by `lineRows` in the client text; the
+printed document already had a Qty column. **Templates** (0145
+`quote_template`: name, description, trade, `content` = `QuoteDraftBody`,
+`shared`, `created_by` with no FK, not truncated by the seed;
+`services/quoteTemplates.ts`, routes `GET|POST /quote-templates`, `PATCH|DELETE
+/quote-templates/:templateId`, shared `quoteTemplates.ts`,
+`components/quote/QuoteTemplatesButton.tsx`): **Templates** in the builder's
+header while editable opens **Use a template** (own + shared, the work order's
+trade first; **Use** → `applyTemplate`, asked first when the quote has lines;
+locked sections and earlier rounds stay) and **Save this quote**
+(`templateContentFrom`: the open sections, specs, note). List / save / use need
+`quotes` edit; sharing (and managing a shared one) needs `quotes` approve;
+`mayManageQuoteTemplate` = owner, approver for a shared one, super admin.
+Audit `quote_template_created|updated|deleted` (entity `quote_template`).
+
 **Only SFM quotes carry tax** (Elise, 2026-11-04, no migration; `quoteTaxApplies` /
 `QUOTE_TAX_ENTITY` in `packages/shared/src/quoteTax.ts`, `tests/quote-tax-sfm.test.ts`).
 A quote on a work order whose billing entity (`21. Comp`, mirrored to

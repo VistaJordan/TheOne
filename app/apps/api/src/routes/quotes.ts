@@ -1,6 +1,8 @@
 ﻿// Routes: the quote builder (S4 → Yoda parity, on the 0015 permission tree).
 //   GET    /quotes                          (list page — quotes:view, 0026 scoped)
 //   GET    /rates   PUT /rates              (Yoda labor rates — read quotes:view, write admin/settings:edit)
+//   GET|POST /quote-templates · PATCH|DELETE /quote-templates/:templateId
+//                                           (0145 · quotes:edit; sharing = quotes:approve)
 // The rest are nested under a work order —
 //   GET    /work-orders/:id/quote                 (quotes:view)
 //   GET    /work-orders/:id/quote/sales-tax       (quotes:view)
@@ -41,9 +43,15 @@ import {
   quoteSalesTax,
 } from '../services/quotes.js';
 import { listLaborRates, upsertLaborRate } from '../services/rates.js';
+import {
+  deleteQuoteTemplate,
+  listQuoteTemplates,
+  saveQuoteTemplate,
+  updateQuoteTemplate,
+} from '../services/quoteTemplates.js';
 import { requirePerm } from '../services/permissions.js';
 import { assertRawMoney, zMoney } from '../validation.js';
-import { PERCENT_MAX } from '@theone/shared';
+import { PERCENT_MAX, QUOTE_TEMPLATE_DESCRIPTION_MAX, QUOTE_TEMPLATE_NAME_MAX, type QuoteDraftBody } from '@theone/shared';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
 
@@ -127,6 +135,61 @@ const rateSchema = z
   })
   .strict();
 
+/** 0145 · a quote template: the builder's save shape (the AI draft's body),
+    checked with the same section schema PUT /quote uses. */
+const templateContentSchema = z
+  .object({
+    sections: z.array(sectionSchema).min(1).max(20),
+    specs: z.string().max(8000).nullable(),
+    note_to_customer: z.string().max(8000).nullable(),
+  })
+  .strict();
+const templateCreateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(QUOTE_TEMPLATE_NAME_MAX),
+    description: z.string().trim().max(QUOTE_TEMPLATE_DESCRIPTION_MAX).nullable().optional(),
+    trade: z.string().trim().max(80).nullable().optional(),
+    shared: z.boolean().optional(),
+    content: templateContentSchema,
+  })
+  .strict();
+const templatePatchSchema = z
+  .object({
+    name: z.string().trim().min(1).max(QUOTE_TEMPLATE_NAME_MAX).optional(),
+    description: z.string().trim().max(QUOTE_TEMPLATE_DESCRIPTION_MAX).nullable().optional(),
+    trade: z.string().trim().max(80).nullable().optional(),
+    shared: z.boolean().optional(),
+  })
+  .strict();
+const templateIdSchema = z.object({ templateId: z.string().min(1).max(64) });
+
+/** The parsed content → the stored QuoteDraftBody, every field present (the
+    AI draft's shape: the Day as text, "Day N"). */
+function templateContent(c: z.infer<typeof templateContentSchema>): QuoteDraftBody {
+  return {
+    sections: c.sections.map((s) => ({
+      kind: s.kind,
+      name: s.name ?? null,
+      narrative_reported: s.narrative_reported ?? null,
+      scope_lines: s.scope_lines ?? [],
+      include_in_summary: s.include_in_summary ?? true,
+      lines: (s.lines ?? []).map((l) => ({
+        line_type: l.line_type,
+        description: l.description,
+        qty: l.qty,
+        rate: l.rate,
+        day_value: l.day != null ? `Day ${l.day}` : (l.day_value ?? null),
+        ot: l.ot ?? false,
+        uom: l.uom ?? null,
+        tax_pct: l.tax_pct ?? 0,
+        markup_pct: l.markup_pct ?? 0,
+      })),
+    })),
+    specs: c.specs,
+    note_to_customer: c.note_to_customer,
+  };
+}
+
 /** :id (uuid or WO number) → task uuid, 404 when the work order does not exist
     or sits outside the viewer's scope (0026). */
 async function taskIdOf(req: FastifyRequest): Promise<string> {
@@ -155,6 +218,24 @@ export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
     assertRawMoney(req.rawBody);
     const input = parse(rateSchema, req.body);
     return { item: await upsertLaborRate(input, actor.id) };
+  });
+
+  // 0145 · quote templates: the viewer's own and the shared ones (quotes:edit);
+  // sharing with everyone is a quote approver's (checked in the service).
+  app.get('/quote-templates', async (req) => listQuoteTemplates(actingPrincipalFromRequest(req)));
+  app.post('/quote-templates', async (req, reply) => {
+    assertRawMoney(req.rawBody);
+    const input = parse(templateCreateSchema, req.body);
+    const saved = await saveQuoteTemplate({ ...input, content: templateContent(input.content) }, actingPrincipalFromRequest(req));
+    return reply.status(201).send(saved);
+  });
+  app.patch('/quote-templates/:templateId', async (req) => {
+    const { templateId } = parse(templateIdSchema, req.params);
+    return updateQuoteTemplate(templateId, parse(templatePatchSchema, req.body), actingPrincipalFromRequest(req));
+  });
+  app.delete('/quote-templates/:templateId', async (req) => {
+    const { templateId } = parse(templateIdSchema, req.params);
+    return deleteQuoteTemplate(templateId, actingPrincipalFromRequest(req));
   });
 
   app.get('/work-orders/:id/quote', async (req) => {

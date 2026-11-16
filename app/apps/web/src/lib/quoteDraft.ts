@@ -284,9 +284,12 @@ export function dayChoices(lines: readonly DraftLine[], index: number): string[]
   return DAY_VALUES.filter((d) => Number(d) <= top);
 }
 
-/** A new option opens like a new incurred section (2026-10-22): the five
-    default "Required is to…" lines and a Trip line at the card's trip rate. */
-export function blankOption(round = 1, tripRate?: number | null): DraftSection {
+/** A new option opens with the five default "Required is to…" lines
+    (2026-10-22) and NO line items: since 2026-11-16 (Elise) the Trip lives in
+    the Incurred section only — every option used to open with a Trip of its
+    own, so the proposal charged the trip again. A proposed job that really
+    needs a return trip adds it with the Trip preset. */
+export function blankOption(round = 1): DraftSection {
   return {
     key: uid('opt'),
     id: null,
@@ -295,7 +298,7 @@ export function blankOption(round = 1, tripRate?: number | null): DraftSection {
     narrative: '',
     scope_lines: defaultScopeLines(),
     include_in_summary: true,
-    lines: [tripLine(tripRate)],
+    lines: [],
     round,
     locked: false,
     approved: false,
@@ -322,7 +325,7 @@ function blankIncurred(tripRate?: number | null): DraftSection {
 
 /** "Reset quote" (Elise, 2026-10-27): the form back to what a new quote opens
     with — the Incurred section and ONE option, each with the default scope
-    lines and a Trip line at the card's trip rate; Specs, the note to the
+    lines, and (since 2026-11-16, on Incurred only) a Trip line at the card's trip rate; Specs, the note to the
     customer, a pinned summary and Cost TBD cleared. What is history stays:
     a locked section (an earlier round, the incurred work from round 2 on)
     is kept as it is. The sales tax %, the total rule and the document fields
@@ -336,7 +339,7 @@ export function resetDraft(draft: DraftQuote, tripRate?: number | null): DraftQu
     sections: [
       incurred && incurred.locked ? incurred : blankIncurred(tripRate),
       ...keptOptions,
-      blankOption(draft.current_round, tripRate),
+      blankOption(draft.current_round),
     ],
     is_cost_tbd: false,
     specs: '',
@@ -634,4 +637,47 @@ export function clearLocalDraft(woNumber: string): void {
   } catch {
     /* nothing to clear */
   }
+}
+
+// ── Quote templates (0145, Elise 2026-11-16) ─────────────────────────────────
+
+/** What "Save as template" keeps: the sections the person can still type in
+    (never an earlier round or approved incurred work — that is one job's
+    history), in the builder's save shape, plus the specs and the note. */
+export function templateContentFrom(draft: DraftQuote): QuoteDraftBody {
+  return toDraftBody({ ...draft, sections: editableSections(draft) });
+}
+
+/** "Use a template": the template's Incurred and options replace the ones
+    being typed — like Reset quote, what is history stays (a locked section, an
+    earlier round). A template with no Incurred keeps the quote's own; one with
+    no option opens a blank one. The specs and the note to the customer come
+    from the template when it has them; a pinned summary is cleared so the
+    text follows the new lines. Sales tax, the total rule and the document
+    fields are the job's and are kept. Nothing is sent here: the autosave
+    saves it like any other edit. */
+export function applyTemplate(draft: DraftQuote, body: QuoteDraftBody): DraftQuote {
+  const [incurred, ...options] = draft.sections;
+  const keptOptions = options.filter((s) => s.locked || s.round < draft.current_round);
+  const tIncurred = body.sections.find((s) => s.kind === 'incurred');
+  const tOptions = body.sections.filter((s) => s.kind === 'option');
+  const inc =
+    incurred && incurred.locked
+      ? incurred
+      : tIncurred
+        ? sectionToDraft(tIncurred, draft.current_round)
+        : (incurred ?? blankIncurred());
+  return {
+    ...draft,
+    sections: [
+      inc,
+      ...keptOptions,
+      ...(tOptions.length > 0
+        ? tOptions.map((o) => sectionToDraft(o, draft.current_round))
+        : [blankOption(draft.current_round)]),
+    ],
+    specs: body.specs ?? draft.specs,
+    note_to_customer: body.note_to_customer ?? draft.note_to_customer,
+    summary_pinned: null,
+  };
 }
