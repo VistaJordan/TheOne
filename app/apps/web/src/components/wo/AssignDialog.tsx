@@ -92,7 +92,7 @@ export function AssignDialog({
             <span className="hint">
               {people.isError
                 ? 'The people list could not be loaded — try again.'
-                : `The name lands in the Assignee seat of ${woNumber}; the work order then shows in that dispatcher's list (rule 7.1.4).`}
+                : `The name lands in the Assignee seat of ${woNumber}; the work order then shows in that dispatcher's list.`}
             </span>
           </div>
           {error && (

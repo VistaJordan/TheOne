@@ -202,6 +202,6 @@ export function checkEcotrakTransition(
     "Ecotrak does not allow Accepted → Arrived (rule 2.6.3)". */
 export function describeEcotrakRefusal(v: EcotrakTransitionVerdict): string {
   const from = ecotrakStatusLabel(v.from);
-  if (v.outcome === 'locked') return `Ecotrak is ${from}: no further transitions are allowed (rule 2.6.3)`;
-  return `Ecotrak does not allow ${from} → ${ecotrakStatusLabel(v.to)} (rule 2.6.3)`;
+  if (v.outcome === 'locked') return `Ecotrak is ${from}: no further transitions are allowed`;
+  return `Ecotrak does not allow ${from} → ${ecotrakStatusLabel(v.to)}`;
 }

@@ -254,7 +254,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const nteHold = quote?.nte_override_open ?? false;
   // 2026-11-14 (Elise): a quote above the NTE is sent with a warning
   // (overNte below); the client's approval then sets the NTE.
-  const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
+  const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first';
   const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
   /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */
   // 2026-10-29 (Elise): once submitted, only a manager (approve grant) edits

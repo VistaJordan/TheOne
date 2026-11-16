@@ -171,7 +171,7 @@ export const APPROVAL_STATUS_LABEL: Record<ApprovalTaskStatus, string> = {
 export const TYPE_LABEL: Record<ApprovalTaskType, string> = APPROVAL_TASK_LABEL;
 
 /** Rule 1.5.2's hold, as the locked verb explains it. */
-const NTE_HOLD = 'On hold — the NTE override on this work order has to be decided first (rule 1.5.2)';
+const NTE_HOLD = 'On hold — the NTE override on this work order has to be decided first';
 
 /** Where the work order came from, as the acceptance row and dialog say it. */
 function acceptanceSource(item: ApprovalListItem): string {
@@ -1154,7 +1154,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
           label="Why is it being rejected?"
           hint={
             pending.row.data.kind === 'task' && pending.row.data.item.type === 'wo_acceptance'
-              ? `Moves ${pending.row.wo_number} to ${ACCEPTANCE_REJECT_STATUS_NAME} and posts the reason as an internal update (rule 7.1.2). Never shown to the client.`
+              ? `Moves ${pending.row.wo_number} to ${ACCEPTANCE_REJECT_STATUS_NAME} and posts the reason as an internal update. Never shown to the client.`
               : pending.row.data.kind === 'purchase'
               ? 'Sent to whoever raised the request, with the decision.'
               : `Posted as an internal update on ${pending.row.wo_number} — feedback for whoever is running the job, never for the client.`
@@ -1719,7 +1719,7 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
             canApprovePayments && !(d.item.tier && !d.item.tier.allowed),
             !canApprovePayments
               ? 'Requires payment approval rights'
-              : `${d.item.tier?.label}: needs a role allowed for this amount (rule 6.2.3)`,
+              : `${d.item.tier?.label}: needs a role allowed for this amount`,
             () => onDecide('reject'),
             'danger',
           )}
@@ -1734,7 +1734,7 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
             !canApprovePayments
               ? 'Requires payment approval rights'
               : d.item.tier && !d.item.tier.allowed
-                ? `${d.item.tier.label}: needs a role allowed for this amount (rule 6.2.3)`
+                ? `${d.item.tier.label}: needs a role allowed for this amount`
                 : own(d.item.requested_by?.id)
                   ? OWN
                   : row.held
@@ -1749,7 +1749,7 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
       const bandLocked = Boolean(d.item.tier && !d.item.tier.allowed);
       const need = !canApprovePurchases
         ? 'Requires purchase request approval rights'
-        : `${d.item.tier?.label}: needs a role allowed for this amount (rule 6.2.3)`;
+        : `${d.item.tier?.label}: needs a role allowed for this amount`;
       return (
         <>
           {verb('Reject', 'x', canApprovePurchases && !bandLocked, need, () => onDecide('reject'), 'danger')}
@@ -1851,7 +1851,7 @@ function AcceptDialog({
             <span className="hint">
               {people.isError
                 ? 'The people list could not be loaded — try again.'
-                : `Accepting fills the Assignee seat on ${woNumber}; the work order then shows in that person's list (rule 7.1.4).`}
+                : `Accepting fills the Assignee seat on ${woNumber}; the work order then shows in that person's list.`}
             </span>
           </div>
         </div>

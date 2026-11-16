@@ -157,7 +157,7 @@ export function ViewBar({
             aria-selected={escalationsActive}
             className={`view-tab is-builtin${escalationsActive ? ' is-on' : ''}`}
             onClick={onSelectEscalations}
-            title="Built in: every work order flagged Escalated — by a manager or by the email tool (rule 7.3.3)"
+            title="Built in: every work order flagged Escalated — by a manager or by the email tool"
           >
             <Icon name="alert-circle" size={12} />
             Escalation Tracker

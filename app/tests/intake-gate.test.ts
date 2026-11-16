@@ -130,10 +130,10 @@ describe('intakeMissing — the fields still empty on a row', () => {
 describe('describeIntakeGate — the sentence', () => {
   it('names the count and the fields', () => {
     expect(describeIntakeGate([{ label: 'Due date' }, { label: 'SLA' }])).toBe(
-      'Fill these 2 fields before the work order can be assigned (rule 11.1.1): Due date, SLA.',
+      'Fill these 2 fields before the work order can be assigned: Due date, SLA.',
     );
     expect(describeIntakeGate([{ label: 'Comp' }])).toBe(
-      'Fill this field before the work order can be assigned (rule 11.1.1): Comp.',
+      'Fill this field before the work order can be assigned: Comp.',
     );
   });
 

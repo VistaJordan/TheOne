@@ -112,5 +112,5 @@ export function describeIntakeGate(missing: readonly Pick<IntakeField, 'label'>[
   const n = missing.length;
   if (n === 0) return 'Every intake field is filled — the work order can be assigned.';
   const list = missing.map((m) => m.label).join(', ');
-  return `Fill ${n === 1 ? 'this field' : `these ${n} fields`} before the work order can be assigned (rule 11.1.1): ${list}.`;
+  return `Fill ${n === 1 ? 'this field' : `these ${n} fields`} before the work order can be assigned: ${list}.`;
 }

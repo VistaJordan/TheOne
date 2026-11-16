@@ -81,7 +81,7 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
   // Rule 1.5.2: while an NTE override waits on a manager, the moves that let
   // money out are on hold — the API refuses them with a 409, this says so first.
   const hold = item.nte_override_open;
-  const HOLD = 'On hold — the NTE override on this work order has to be decided first (rule 1.5.2)';
+  const HOLD = 'On hold — the NTE override on this work order has to be decided first';
   // 0083 (#5 / #7): this payment would go past the NTE or the approved quote —
   // the click raises the hold for a manager and is refused (409).
   const moneyHold = item.money_hold;
@@ -132,7 +132,7 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
   // 2026-11-09 (Elise): the same goes for Reject.
   const tierLock =
     item.tier && !item.tier.allowed
-      ? `${item.tier.label}: needs a role allowed for this amount (rule 6.2.3)`
+      ? `${item.tier.label}: needs a role allowed for this amount`
       : null;
   const adminLock = isAdmin ? null : 'Requires admin';
   // 2026-11-03 (Elise): above the client NTE an Account Manager approves it

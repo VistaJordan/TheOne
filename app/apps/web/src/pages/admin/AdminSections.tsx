@@ -224,7 +224,6 @@ function ApprovalTiersCard() {
       <div className="card-head">
         <Icon name="layers" size={14} />
         <h3 className="card-title">Approval tiers by amount</h3>
-        <span className="card-meta">rule 6.2.3</span>
       </div>
       <p className="adm-cico-note">
         Each band names the roles that may decide inside it. A band with no roles restricts
@@ -2392,7 +2391,7 @@ export function AdminFieldsPage() {
         'Every field a work order can carry. The "Add work order" column decides which of them the ' +
         'manual create form offers, and which it refuses to save without — WO # is always required ' +
         'and is not listed, because it is the work order\'s identity. Assignment is stricter than ' +
-        'creation: rule 11.1.1 still holds a work order back from a dispatcher until its 13 intake ' +
+        'creation: a work order is still held back from a dispatcher until its 13 intake ' +
         'fields are in, whatever is set here. "Client-safe" decides whether a field may go out to a client on a shared Client Update.'
       }
       actions={

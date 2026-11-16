@@ -128,5 +128,5 @@ export function describeIntakeSubmit(missing: readonly string[], assigneeMissing
   }
   if (assigneeMissing) parts.push('pick an assignee');
   if (parts.length === 0) return 'The work order can be submitted.';
-  return `Before this work order can be submitted (rule 14.2.2), ${parts.join(' and ')}.`;
+  return `Before this work order can be submitted, ${parts.join(' and ')}.`;
 }

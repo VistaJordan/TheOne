@@ -261,7 +261,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
                 aria-expanded={open}
                 title={
                   mode === 'request'
-                    ? 'Asks a manager to move the status — it changes when they approve (rule 2.4.1)'
+                    ? 'Asks a manager to move the status — it changes when they approve'
                     : undefined
                 }
               >
@@ -290,8 +290,8 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               onClick={() => emergencySave.mutate({ key: emergencyKey, value: !emergency })}
               title={
                 emergency
-                  ? 'Clear the emergency flag — the work order stops reading red (rule 2.5.1)'
-                  : 'Flag this work order as an emergency: red in every view (rule 2.5.1)'
+                  ? 'Clear the emergency flag — the work order stops reading red'
+                  : 'Flag this work order as an emergency: red in every view'
               }
             >
               <Icon name="alert" size={14} />
@@ -318,8 +318,8 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               onClick={() => escalateSave.mutate({ key: escalatedKey, value: !escalated })}
               title={
                 escalated
-                  ? 'Clear the escalation — it leaves the Escalation Tracker and the top of the inbox (rule 7.3.1)'
-                  : 'Flag this work order as escalated: amber in every view, pinned to the top of the inbox, on the Escalation Tracker (rule 7.3.1)'
+                  ? 'Clear the escalation — it leaves the Escalation Tracker and the top of the inbox'
+                  : 'Flag this work order as escalated: amber in every view, pinned to the top of the inbox, on the Escalation Tracker'
               }
             >
               <Icon name="alert-circle" size={14} />
@@ -370,7 +370,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
           {ecotrakLabel && movesStatus && (
             <span
               className="chip chip-ecotrak"
-              title="Where this work order sits on Ecotrak, as of the last sync (rules 2.6.3 / 2.7 check status changes against it)"
+              title="Where this work order sits on Ecotrak, as of the last sync (status changes are checked against it)"
             >
               Ecotrak · {ecotrakLabel}
             </span>

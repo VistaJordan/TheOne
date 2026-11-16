@@ -1626,7 +1626,7 @@ export type StatusChangeMode = 'direct' | 'request' | 'none';
 
 export const STATUS_CHANGE_MODES: { code: StatusChangeMode; label: string; hint: string }[] = [
   { code: 'direct', label: 'Change directly', hint: 'Moves the status straight away' },
-  { code: 'request', label: 'Must request', hint: 'Asks a manager; the status moves when they approve (rule 2.4.1)' },
+  { code: 'request', label: 'Must request', hint: 'Asks a manager; the status moves when they approve' },
   { code: 'none', label: 'Not allowed', hint: 'No status button at all' },
 ];
 
@@ -1740,7 +1740,7 @@ export const APPROVAL_TASK_TYPES: {
   {
     code: 'nte_override',
     label: 'NTE override approval',
-    hint: 'The cost is above the client NTE — a manager decides whether to proceed anyway (rule 1.5.2)',
+    hint: 'The cost is above the client NTE — a manager decides whether to proceed anyway',
   },
   {
     code: 'manager_review',

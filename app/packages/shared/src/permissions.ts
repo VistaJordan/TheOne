@@ -420,7 +420,7 @@ export interface PermNode {
 /** The three-way status-change choice as the grants it stores (0025). */
 export const STATUS_MODE_CHOICES: NonNullable<PermNode['choices']> = [
   { code: 'direct', label: 'Change directly', hint: 'Moves the status straight away', grant: { edit: true, create: true } },
-  { code: 'request', label: 'Must request', hint: 'Asks a manager; the status moves when they approve (rule 2.4.1)', grant: { edit: false, create: true } },
+  { code: 'request', label: 'Must request', hint: 'Asks a manager; the status moves when they approve', grant: { edit: false, create: true } },
   { code: 'none', label: 'Not allowed', hint: 'No status button at all', grant: { edit: false, create: false } },
 ];
 
@@ -684,7 +684,7 @@ export function buildPermissionTree(
           key: WO_SCOPE_PERM_KEY,
           label: 'Which work orders',
           actions: ['view'],
-          note: 'Everything, or only the ones assigned to them (rule 8.5). Tick a billing entity below to let them see all of its work orders too. The clients assigned to a person in Admin › Users count as theirs as well.',
+          note: 'Everything, or only the ones assigned to them. Tick a billing entity below to let them see all of its work orders too. The clients assigned to a person in Admin › Users count as theirs as well.',
           choices: WO_SCOPE_CHOICES,
           children: (opts.entities ?? []).map((e) => ({
             key: woScopeEntityPermKey(e),
@@ -696,7 +696,7 @@ export function buildPermissionTree(
           key: 'work_orders/status',
           label: 'Status changes',
           actions: ['create', 'edit'],
-          note: 'Change directly, or must ask a manager (rule 2.4.1). Set per role here; per person from Adjust.',
+          note: 'Change directly, or must ask a manager. Set per role here; per person from Adjust.',
           choices: STATUS_MODE_CHOICES,
         },
         {
@@ -808,9 +808,9 @@ export function buildPermissionTree(
       actions: ['view', 'approve'],
       note: 'View = the Approvals inbox and the tasks on a work order; approve also covers reject and claim. Each section below can differ.',
       children: [
-        { key: 'approvals/intake', label: 'Pending acceptance', actions: ['view', 'approve'], note: 'New work orders waiting for a manager to accept and assign, or reject (rule 7.1).' },
+        { key: 'approvals/intake', label: 'Pending acceptance', actions: ['view', 'approve'], note: 'New work orders waiting for a manager to accept and assign, or reject.' },
         { key: 'approvals/nte', label: 'NTE increases', actions: ['view', 'approve'] },
-        { key: 'approvals/status', label: 'Status changes', actions: ['view', 'approve'], note: 'Requests raised under rule 2.4.1. A person always sees their own.' },
+        { key: 'approvals/status', label: 'Status changes', actions: ['view', 'approve'], note: 'Requests to change a status. A person always sees their own.' },
         { key: 'approvals/snooze', label: 'Snooze requests', actions: ['view', 'approve'], note: 'Approve = snooze a Pulse clock directly. Without it a snooze is a request a manager decides here. A person always sees their own.' },
         { key: 'approvals/reviews', label: 'Manager reviews', actions: ['view', 'approve'] },
         { key: 'approvals/quotes', label: 'Quotes', actions: ['view'], note: 'Deciding stays with Quotes › Approve.' },
@@ -844,7 +844,7 @@ export function buildPermissionTree(
       key: 'invoicing',
       label: 'Invoicing',
       actions: ['view', 'create', 'edit', 'approve'],
-      note: 'Create = raise a draft; edit = change a draft; approve = send it to the client (rule 6.2.3 tiers apply by amount).',
+      note: 'Create = raise a draft; edit = change a draft; approve = send it to the client (the approval tiers apply by amount).',
     },
     {
       // 0046 · the rate cards a quote and an invoice price against.

@@ -29,7 +29,7 @@ interface QuoteDecisionProps {
   onDone?: () => void;
 }
 
-const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first (rule 1.5.2)';
+const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first';
 
 export function QuoteDecision({ woNumber, status, canApprove, nteHold, lockReason = null, size = 'card', onDone }: QuoteDecisionProps) {
   const qc = useQueryClient();

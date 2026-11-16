@@ -214,7 +214,7 @@ export function VendorBillActions({
             !canApprove
               ? 'You cannot approve vendor bills'
               : tierBlocked
-                ? `${bill.tier?.label}: needs a role allowed for this amount (rule 6.2.3)`
+                ? `${bill.tier?.label}: needs a role allowed for this amount`
                 : ownBill
                   ? 'You recorded this bill — someone else has to approve it (maker ≠ checker)'
                   : (bill.money_hold ?? 'Agree the bill')

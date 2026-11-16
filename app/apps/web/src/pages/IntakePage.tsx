@@ -555,7 +555,7 @@ function DraftForm({ id }: { id: string }) {
               <span className="chip chip-sm chip-outline">Draft</span>
             </h1>
             <span className="card-meta">
-              <span className="req" aria-hidden="true">*</span> required before submitting (rule 14.2.2)
+              <span className="req" aria-hidden="true">*</span> required before submitting
             </span>
           </div>
 

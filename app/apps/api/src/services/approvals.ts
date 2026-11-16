@@ -630,7 +630,7 @@ async function decide(
   if (to === 'approved' && cur.type === 'wo_acceptance') {
     assignee = opts.assignee?.trim() || null;
     if (!assignee) {
-      throw badRequest('Pick who the work order is assigned to before accepting it (rule 7.1.3)', {
+      throw badRequest('Pick who the work order is assigned to before accepting it', {
         approval_task_id: id,
       });
     }
@@ -1018,7 +1018,7 @@ export async function assertNoOpenNteOverride(taskId: string, move: string): Pro
   const open = await openNteOverride(taskId);
   if (!open) return;
   throw conflict(
-    `${move} is on hold: the cost is over the client NTE and a manager has not decided the NTE override yet (rule 1.5.2). Decide it under Approvals first.`,
+    `${move} is on hold: the cost is over the client NTE and a manager has not decided the NTE override yet. Decide it under Approvals first.`,
     { rule: '1.5.2', approval_task_id: open.id, approval_task_title: open.title },
   );
 }
