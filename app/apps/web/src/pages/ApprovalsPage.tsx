@@ -191,22 +191,30 @@ function acceptanceSource(item: ApprovalListItem): string {
 // first and last. Everything between is chosen from the Columns menu, in the
 // order chosen, and remembered per browser like the header fold.
 
-type ColumnKey = 'client' | 'ask' | 'nte' | 'cost' | 'due' | 'owner' | 'raised' | 'status';
+type ColumnKey = 'client' | 'ask' | 'method' | 'nte' | 'cost' | 'due' | 'owner' | 'requester' | 'raised' | 'status';
 
 const COLUMN_CHOICES: (ColumnChoice & { key: ColumnKey })[] = [
   { key: 'client', label: 'Client' },
   { key: 'ask', label: 'Waiting for' },
+  { key: 'method', label: 'Payment method' },
   { key: 'nte', label: 'NTE' },
   { key: 'cost', label: 'Cost' },
   { key: 'due', label: 'WO Due Date' },
   { key: 'owner', label: 'For' },
-  { key: 'raised', label: 'Raised' },
+  { key: 'requester', label: 'Requested by' },
+  { key: 'raised', label: 'Requested on' },
   { key: 'status', label: 'Status' },
 ];
 
-const DEFAULT_COLUMNS: ColumnKey[] = ['client', 'ask', 'nte', 'cost', 'due', 'owner', 'raised', 'status'];
+const DEFAULT_COLUMNS: ColumnKey[] = ['client', 'ask', 'method', 'nte', 'cost', 'due', 'owner', 'requester', 'raised', 'status'];
 
 const COLUMNS_KEY = 'theone.approvals.columns';
+/** Columns added after people had saved a choice: each is put into a saved
+    choice once (after the column named), and removing it afterwards sticks. */
+const ADDED_COLUMNS: { key: ColumnKey; after: ColumnKey; seen: string }[] = [
+  { key: 'method', after: 'ask', seen: 'theone.approvals.columns.method' },
+  { key: 'requester', after: 'owner', seen: 'theone.approvals.columns.requester' },
+];
 
 function loadColumns(): ColumnKey[] {
   try {
@@ -216,7 +224,18 @@ function loadColumns(): ColumnKey[] {
     const parsed = (JSON.parse(raw) as unknown[]).filter(
       (k): k is ColumnKey => typeof k === 'string' && known.has(k),
     );
-    return parsed.length > 0 ? parsed : DEFAULT_COLUMNS;
+    if (parsed.length === 0) return DEFAULT_COLUMNS;
+    let changed = false;
+    for (const add of ADDED_COLUMNS) {
+      if (localStorage.getItem(add.seen)) continue;
+      localStorage.setItem(add.seen, '1');
+      if (parsed.includes(add.key)) continue;
+      const at = parsed.indexOf(add.after);
+      parsed.splice(at < 0 ? parsed.length : at + 1, 0, add.key);
+      changed = true;
+    }
+    if (changed) saveColumns(parsed);
+    return parsed;
   } catch {
     return DEFAULT_COLUMNS;
   }
@@ -235,6 +254,8 @@ const COLUMN_CLASS: Partial<Record<ColumnKey, string>> = {
   client: 'col-client',
   nte: 'num',
   cost: 'num',
+  method: 'col-method',
+  requester: 'col-requester',
   due: 'col-date',
   raised: 'col-date',
   status: 'col-status',
@@ -308,6 +329,12 @@ function holdReason(item: ApprovalListItem): string | null {
   if (item.type !== 'nte_override' && item.type !== 'over_quote') return null;
   const r = (item.detail as { reason?: unknown }).reason;
   return typeof r === 'string' && r.trim() !== '' ? r.trim() : null;
+}
+
+/** A rule-raised task names a person only when a payment's requester rode on it. */
+function holdRequesterFromDetail(item: ApprovalListItem): string | null {
+  const by = (item.detail as { requested_by?: unknown }).requested_by;
+  return typeof by === 'string' && by.trim() !== '' ? by : null;
 }
 
 function holdRequester(item: ApprovalListItem): string | null {
@@ -1386,15 +1413,11 @@ function Ask({ row }: { row: Row }) {
               d.item.title
             )}
           </strong>
-          {move && d.item.created_by && (
-            <small>Requested by {d.item.created_by.display_name}</small>
-          )}
           {d.item.type === 'snooze_request' && (
             <small>
-              {d.item.created_by ? `Requested by ${d.item.created_by.display_name}` : 'Requested'}
               {typeof (d.item.detail as { hours?: unknown }).hours === 'number'
-                ? ` · ${(d.item.detail as { hours: number }).hours}h`
-                : ''}
+                ? `${(d.item.detail as { hours: number }).hours}h`
+                : 'Snooze'}
               {row.open ? ' · the clock keeps running until this is approved' : ''}
             </small>
           )}
@@ -1423,32 +1446,14 @@ function Ask({ row }: { row: Row }) {
       );
     }
     case 'payment': {
-      // Elise, 2026-11-16: say from the outside who asked and how it is paid,
-      // so a Zelle / Cash App request (a TL / ATL / AM's call whatever the
-      // amount) reads as such before the row is opened.
-      const methodLabel = d.item.method
-        ? (PAYMENT_METHOD_LABEL[d.item.method as PaymentMethod] ?? d.item.method)
-        : null;
-      const managerMethod = needsManagerForMethod(d.item.method);
-      const requester = d.item.requested_by?.display_name ?? null;
       return (
         <div className="site payq-who">
           <strong>
             {chip}
             {usd(d.item.amount)} to {payeeLabel(d.item)}
-            {methodLabel && (
-              <span
-                className={`chip chip-sm ${managerMethod ? 'chip-warn' : 'chip-outline'} apq-method`}
-                title={managerMethod ? `${methodLabel} payments are approved by a TL, ATL or AM` : undefined}
-              >
-                {methodLabel}
-                {managerMethod && ' · TL / ATL / AM'}
-              </span>
-            )}
           </strong>
           <small>
-            {[requester ? `Requested by ${requester}` : null, d.item.purpose].filter(Boolean).join(' · ')}
-            {row.held && ` · ${NTE_HOLD}`}
+            {[d.item.purpose, row.held ? NTE_HOLD : null].filter(Boolean).join(' · ')}
           </small>
         </div>
       );
@@ -1481,7 +1486,7 @@ function InboxRow(props: RowProps) {
   // here: the kind chip already says what it is.
   const raisedBy =
     row.data.kind === 'task'
-      ? (row.data.item.source ? null : (row.data.item.created_by?.display_name ?? null))
+      ? (row.data.item.source ? holdRequesterFromDetail(row.data.item) : (row.data.item.created_by?.display_name ?? null))
       : row.data.kind === 'payment'
         ? (row.data.item.requested_by?.display_name ?? null)
         : row.data.kind === 'purchase'
@@ -1533,15 +1538,30 @@ function InboxRow(props: RowProps) {
             </span>
           </td>
         );
-      case 'raised':
+      case 'method': {
+        // Elise, 2026-11-16: Zelle / Cash App is a TL / ATL / AM's call at any
+        // amount — the column says the method, amber when it is one of those.
+        if (row.data.kind !== 'payment' || !row.data.item.method) {
+          return <td key={k} className="col-method">—</td>;
+        }
+        const m = row.data.item.method;
+        const label = PAYMENT_METHOD_LABEL[m as PaymentMethod] ?? m;
+        const manager = needsManagerForMethod(m);
         return (
-          <td key={k} className="col-date">
-            <span className="payq-status">
-              <span>{when}</span>
-              {raisedBy && <small>{raisedBy}</small>}
+          <td key={k} className="col-method">
+            <span
+              className={manager ? 'apq-method-manager' : undefined}
+              title={manager ? `${label} payments are approved by a TL, ATL or AM` : undefined}
+            >
+              {label}
             </span>
           </td>
         );
+      }
+      case 'requester':
+        return <td key={k} className="col-requester">{raisedBy ?? '—'}</td>;
+      case 'raised':
+        return <td key={k} className="col-date">{when}</td>;
       case 'status':
         return (
           <td key={k} className="col-status">
