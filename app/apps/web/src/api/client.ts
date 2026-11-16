@@ -488,13 +488,15 @@ export interface QuoteListResponse {
 
 // ── Payment requests (payables) ──────────────────────────────────────────────
 
-/** Yoda method CODES (D7) with their display labels. The wire carries the code. */
+/** Yoda method CODES (D7) with their display labels. The wire carries the code.
+ *  Listed alphabetically by label (Elise, 2026-11-15); the form's default is
+ *  still Credit card (RequestPaymentPage's initial state). */
 export const PAYMENT_METHODS: readonly { value: SharedPaymentMethod; label: string; hint: string }[] = [
-  { value: 'zelle', label: 'Zelle', hint: 'Email or phone enrolled with Zelle' },
   { value: 'ach', label: 'ACH', hint: 'Routing + account number — 1 extra AP day' },
-  { value: 'check', label: 'Check', hint: 'Mailed — allow 3–5 business days' },
   { value: 'cashapp', label: 'Cash App', hint: '$cashtag' },
+  { value: 'check', label: 'Check', hint: 'Mailed — allow 3–5 business days' },
   { value: 'credit', label: 'Credit card', hint: '' },
+  { value: 'zelle', label: 'Zelle', hint: 'Email or phone enrolled with Zelle' },
 ];
 export type PaymentMethod = SharedPaymentMethod;
 export function methodLabel(m: string): string {
