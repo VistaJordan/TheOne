@@ -25,6 +25,7 @@ export const INTEGRATION_KEYS = [
   'blob',
   'entra',
   'clickup',
+  'google_maps',
 ] as const;
 export type IntegrationKey = (typeof INTEGRATION_KEYS)[number];
 
@@ -119,6 +120,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
     summary: "Every new work order is created in the team's ClickUp List, and every change made in OBI (status, cost, any mapped field) follows it there. One-way: OBI is the source of truth.",
     off_means: 'Nothing is sent, and what happens while it is off is skipped for good: turning it back on carries on from that moment. Work orders received while it is off are never created in ClickUp.',
     logo: 'clickup.png',
+    built: true,
+  },
+  {
+    key: 'google_maps',
+    name: 'Google Maps',
+    vendor: 'Google Maps Platform',
+    group: 'team',
+    summary:
+      'Address suggestions as an address is typed on Add work order, on a draft and on the work order itself, so a wrong address from a client is caught against the map; and the point on the map sent with an address to ClickUp.',
+    off_means:
+      'Nothing is sent to Google. The Address box is a plain text box again (City, State and Zip Code still fill from what is typed), and addresses going to ClickUp wait without their map point until it is back on.',
+    logo: 'google-maps.png',
     built: true,
   },
   {

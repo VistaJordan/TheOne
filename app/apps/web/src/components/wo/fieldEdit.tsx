@@ -6,7 +6,8 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ADDRESS_ZIP_KEY, COMPUTED_KEYS, HISTORY_FIELD_KEYS, clientOptionsForComp, numericInputValue, zipInputValue, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, isViewLevelField, type WoFieldDescriptor } from '@theone/shared';
+import { AddressInput } from '../AddressInput';
+import { ADDRESS_KEY, ADDRESS_ZIP_KEY, COMPUTED_KEYS, HISTORY_FIELD_KEYS, clientOptionsForComp, numericInputValue, zipInputValue, SYSTEM_MONEY_KEYS, VISIT_OWNED_KEYS, fieldPermKey, isViewLevelField, type WoFieldDescriptor } from '@theone/shared';
 import {
   ApiRequestError,
   getWoFields,
@@ -23,6 +24,7 @@ const ASSIGNEE_FIELD_KEY = `fields.${FIELD.assignee}`;
 /** The Client field, whose choices follow the work order's Comp. */
 const CLIENT_FIELD_KEY = 'fields.Client';
 const ZIP_FIELD_KEY = `fields.${ADDRESS_ZIP_KEY}`;
+const ADDRESS_FIELD_KEY = `fields.${ADDRESS_KEY}`;
 
 /** What an editor may need to know about the work order it edits on — today
     only the client, for the Assignee picker's "for this client" list. */
@@ -286,6 +288,10 @@ export function FieldEditor({
         availability={context && field.key === ASSIGNEE_FIELD_KEY ? { client: context.client } : undefined}
       />
     );
+  } else if (field.key === ADDRESS_FIELD_KEY) {
+    // 0140 · Google Maps' addresses as it is typed; a pick fills the box and
+    // the ✓ saves it, so a wrong address from the client is corrected here.
+    input = <AddressInput value={draft} onChange={onDraft} onKeyDown={onKeyDown} autoFocus hint />;
   } else if (field.subtype === 'long_text') {
     input = (
       <textarea

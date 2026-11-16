@@ -248,10 +248,30 @@ function checkManager(input: ClientInput): void {
   if (input.account_manager && !UUID_RE.test(input.account_manager)) throw badRequest('That is not a person', { field: 'account_manager' });
 }
 
+const CLIENT_REQUIRED_ON_CREATE: [keyof ClientInput, string][] = [
+  ['code', 'Code'],
+  ['contact_name', 'Contact name'],
+  ['contact_phone', 'Contact phone'],
+  ['contact_email', 'Contact email'],
+  ['billing_email', 'Billing email'],
+  ['billing_entity', 'Billing entity'],
+  ['portal_type', 'Client portal'],
+  ['payment_terms', 'Payment terms'],
+  ['address', 'Billing address'],
+];
+
 export async function createClient(input: ClientInput, actor: ActingPrincipal): Promise<ClientDetail> {
   requirePerm(actor, CLIENTS_PERM_KEY, 'create', 'You cannot add clients');
   const name = clean(input.name);
   if (!name) throw badRequest('A client needs a name', { field: 'name' });
+  // 2026-11-16 (Elise, UAT #12): a client is added complete â€” every field of
+  // the record but its notes (the form also asks for the first account team,
+  // saved by its own call). Records made from names on work orders
+  // (adoptNewClients) do not come through here.
+  const missing = CLIENT_REQUIRED_ON_CREATE.filter(([k]) => !clean(input[k] as string | null)).map(([, label]) => label);
+  if (missing.length > 0) {
+    throw badRequest(`Fill in every field to add the client: ${missing.join(', ')}`, { code: 'VALIDATION', field: CLIENT_REQUIRED_ON_CREATE.find(([, l]) => l === missing[0])?.[0], missing });
+  }
   checkManager(input);
   const dup = await query<{ id: string }>(`SELECT id::text AS id FROM client WHERE deleted_at IS NULL AND lower(btrim(name)) = lower($1)`, [name]);
   if (dup.rows[0]) throw conflict(`${name} is already on file`, { field: 'name', existing_id: dup.rows[0].id });
@@ -267,7 +287,7 @@ export async function createClient(input: ClientInput, actor: ActingPrincipal): 
     vals,
   );
   await logAdminEvent({ actorId: actor.id, entity: 'client', entityId: ins.rows[0].id, action: 'client_created', after: { name } });
-  // 0071 · its SharePoint folder under its billing entity, when that switch
+  // 0071 ï¿½ its SharePoint folder under its billing entity, when that switch
   // is on. Bounded, never throws; the hourly sweep retries a failure.
   {
     const { fileClient } = await import('./sharepoint.js');

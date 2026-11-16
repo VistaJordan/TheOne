@@ -78,7 +78,7 @@ export function ChecklistTab({ woId, woNumber, record }: TabProps) {
 
 // ═══ Cost breakdown ══════════════════════════════════════════════════════════
 
-const LINE_TYPE: Record<string, string> = { service: 'Service / trip', labor: 'Labour', part: 'Parts', material: 'Materials' };
+const LINE_TYPE: Record<string, string> = { service: 'Service', trip: 'Trip', labor: 'Labour', part: 'Parts', material: 'Materials', fee: 'Fees', discount: 'Discount' };
 
 function Lines({ title, lines, empty }: { title: string; lines: WoCostLine[]; empty: string }) {
   const total = lines.reduce((s, l) => s + (l.status === 'rejected' || l.status === 'void' ? 0 : l.amount), 0);

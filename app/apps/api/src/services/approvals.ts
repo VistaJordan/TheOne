@@ -889,7 +889,24 @@ export async function rejectApprovalTask(
   const cur = await getApprovalTask(id);
   requireDecide(actor, cur.type, 'reject');
   requireOverQuoteLevel(actor, cur.type, 'reject');
-  return decide(id, 'rejected', note, actor);
+  // 2026-11-16 (Elise): a money hold raised for a payment that is still
+  // waiting is the decision on that payment. Rejecting only the hold left the
+  // payment at Requested; now the payment is rejected with the same reason
+  // (and its requester told), after the hold's own decision commits.
+  const paymentId = linkedHoldPayment(cur);
+  const decided = await decide(id, 'rejected', note, actor);
+  if (paymentId && (await paymentStillRequested(paymentId))) {
+    const { rejectPaymentRequest } = await import('./payments.js');
+    await rejectPaymentRequest(paymentId, note, actor, { fromHold: true });
+  }
+  return decided;
+}
+
+/** The payment an open NTE / over-quote hold was raised for, when it names one. */
+function linkedHoldPayment(task: ApprovalTask): string | null {
+  if ((task.type !== 'nte_override' && task.type !== 'over_quote') || task.status !== 'open') return null;
+  const pid = (task.detail as { payment_request_id?: unknown } | null)?.payment_request_id;
+  return typeof pid === 'string' && pid ? pid : null;
 }
 
 /** Take an open task into your own lane (approvals/<section>:approve).

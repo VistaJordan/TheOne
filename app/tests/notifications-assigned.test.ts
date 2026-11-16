@@ -47,7 +47,7 @@ describe('who is on the job', () => {
   });
 
   it('a mention and the answer to your own request always show', () => {
-    expect([...NOTICE_KINDS_ALWAYS_SHOWN].sort()).toEqual(['request_decided', 'wo_mention']);
+    expect([...NOTICE_KINDS_ALWAYS_SHOWN].sort()).toEqual(['payment_rejected', 'request_decided', 'wo_mention']);
   });
 });
 

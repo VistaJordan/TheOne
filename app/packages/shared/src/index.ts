@@ -858,7 +858,7 @@ export type QuoteStatus =
 export type QuoteSectionKind = 'incurred' | 'option';
 /** Yoda LineItemType: Labor, Materials, Service, Fees, Discount (+ part). A
     `discount` line's amount is NEGATIVE by type — the input stays positive. */
-export type QuoteLineType = 'service' | 'labor' | 'part' | 'material' | 'fee' | 'discount';
+export type QuoteLineType = 'service' | 'labor' | 'part' | 'material' | 'fee' | 'discount' | 'trip';
 /** D1 — Yoda prices each option as (incurred + option) × (1 + tax%); RULE B
     (options only, no incurred, no tax) is kept behind the flag. */
 export type QuoteTotalRule = 'incurred_plus_option' | 'options_only';
@@ -1023,6 +1023,10 @@ export interface QuotePermissions {
   /** 2026-11-16 (Elise) · the most this person may send to a client on their
       own (`quoteSendLimitFor`), null = no limit. Absent on an older API. */
   send_limit?: number | null;
+  /** 2026-11-16 (Elise) · Labor and Trip rates the price list sets are
+      read-only for this person (`cardRatesLockedFor`: the dispatchers).
+      Absent on an older API. */
+  card_rates_locked?: boolean;
   /** The quote's dearest option is above `send_limit`: Approve and Send are
       refused (403 QUOTE_SEND_LIMIT); the person submits it for approval. */
   over_send_limit?: boolean;
@@ -1072,6 +1076,8 @@ export interface Quote {
       false = the sales tax % and line taxes are ignored and not drawn. */
   tax_applies: boolean;
   is_cost_tbd: boolean;
+  /** Legacy, quote-wide (before 0146). 0146 moved them onto the Incurred
+      section; non-null only on a quote that had no live Incurred section. */
   specs: string | null;
   note_to_customer: string | null;
   created_by: ActivityActor | null;
@@ -1979,6 +1985,7 @@ export * from './permissions';
 export * from './permDiff';
 export * from './messaging';
 export * from './addressParts';
+export * from './addressSuggest';
 export * from './numericInput';
 export * from './woCopy';
 export * from './mentions';

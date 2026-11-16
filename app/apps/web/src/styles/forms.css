@@ -188,3 +188,63 @@ input:checked + .sw-track::after { transform: translateX(15px); background: var(
 }
 
 .push { margin-left: auto; }
+
+/* ── 0140 · The Address box with Google Maps suggestions (AddressInput) ───── */
+.addr-box { position: relative; display: flex; min-width: 0; }
+
+.addr {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.addr-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
+}
+
+.addr-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.addr-opt b { font-weight: 600; }
+.addr-opt small { font-size: 11.5px; color: var(--ink-3); }
+.addr-opt.is-active { background: var(--chip); }
+
+.addr-by {
+  padding: 5px 9px 3px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  text-align: right;
+}
+
+.addr-hint { font-size: 11.5px; line-height: 1.4; color: var(--ink-3); }
+.addr-hint.is-checked { color: var(--accent-text); }

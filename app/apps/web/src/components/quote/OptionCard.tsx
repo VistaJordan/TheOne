@@ -23,7 +23,8 @@ import type { DraftLine, DraftSection } from '../../lib/quoteDraft';
 import { optionTag } from '../../lib/quoteDraft';
 import { excludedNote, sumLines, usd } from '../../lib/quoteTotals';
 import type { LaborRate } from '../../api/client';
-import { AddLineButton, LineItemsTable } from './LineItemsTable';
+import { AddLineButton, LineItemsTable, linesCarryTax } from './LineItemsTable';
+import { sectionTax } from './QuoteTaxBar';
 import { ScopeList } from './ScopeList';
 import { SectionNotes } from './SectionNotes';
 import { Icon } from '../Icon';
@@ -39,6 +40,8 @@ interface OptionCardProps {
   /** The option's client price under the active total rule (null while invalid). */
   grandTotal?: number | null;
   rate?: LaborRate | null;
+  /** 2026-11-16 · the card's Labor / Trip rates are read-only (dispatchers). */
+  lockCardRates?: boolean;
   /** Rendered in the card header when the client decision is open (Sent). */
   decisionActions?: ReactNode;
   onChange: (next: DraftSection) => void;
@@ -50,6 +53,8 @@ interface OptionCardProps {
   onToggleDay?: (on: boolean) => void;
   /** 2026-11-04 · false = the quote carries no tax (not SFM): no Tax % column. */
   taxApplies?: boolean;
+  /** 2026-11-16 (UAT #27) · the quote's sales tax %, shown in dollars at the foot. */
+  salesTaxPct?: number;
 }
 
 export function OptionCard({
@@ -60,6 +65,7 @@ export function OptionCard({
   showErrors,
   grandTotal,
   rate,
+  lockCardRates = false,
   decisionActions,
   onChange,
   onRemove,
@@ -67,6 +73,7 @@ export function OptionCard({
   showDay,
   onToggleDay,
   taxApplies = true,
+  salesTaxPct = 0,
 }: OptionCardProps) {
   const label = optionDisplayLabel(`Option ${optionTag(index)}`, sole ? 1 : 2);
   const totals = sumLines(section.lines, otMultiplier, taxApplies);
@@ -205,8 +212,9 @@ export function OptionCard({
           showErrors={showErrors && canEdit}
           otMultiplier={otMultiplier}
           showDay={showDay}
-          showTax={taxApplies}
+          showTax={taxApplies && linesCarryTax(section.lines)}
           rate={rate}
+          lockCardRates={lockCardRates}
           onChange={setLines}
         />
 
@@ -224,6 +232,11 @@ export function OptionCard({
         <span className="subtotal-chip" style={{ marginLeft: 'auto' }}>
           {label} lines <b className="num">{usd(totals.total)}</b>
         </span>
+        {taxApplies && salesTaxPct > 0 && (
+          <span className="subtotal-chip" title="This option's lines × the sales tax at the top">
+            Sales tax ({salesTaxPct}%) <b className="num">{usd(sectionTax(totals.total, salesTaxPct))}</b>
+          </span>
+        )}
         {grandTotal != null && (
           <span className="subtotal-chip is-grand" title={taxApplies ? 'Incurred + this option, plus sales tax' : 'Incurred + this option'}>
             Client price <b className="num">{usd(grandTotal)}</b>

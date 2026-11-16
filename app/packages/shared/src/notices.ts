@@ -47,7 +47,12 @@ export const NOTICE_TYPES: Record<string, { label: string; group: NoticeGroupId 
   vendor_expiry: { label: 'Insurance dates', group: 'vendors' },
   vendor_onboarding: { label: 'Vendor onboarding', group: 'vendors' },
   quote_due: { label: 'Quotes due', group: 'work_orders' },
+  payment_rejected: { label: 'Payments rejected', group: 'approvals' },
 };
+
+/** A payment request was rejected, told to whoever raised it (Elise,
+    2026-11-16): the rejection is theirs to act on, wherever they sit. */
+export const PAYMENT_REJECTED_NOTICE_KIND = 'payment_rejected';
 
 /** A decided approval task (status change, snooze, money hold), told to the
     requester and the work order's assigned dispatcher(s) (Elise, 2026-11-14). */
@@ -179,7 +184,7 @@ export const ASSIGNED_SEAT_KEYS = ['Assignee', 'Support Trainee', 'TL', 'ATL', '
 
 /** Kinds shown whoever holds the work order: someone asked for this person by
     name (a mention), or it answers their own request. */
-export const NOTICE_KINDS_ALWAYS_SHOWN: readonly string[] = ['wo_mention', 'request_decided'];
+export const NOTICE_KINDS_ALWAYS_SHOWN: readonly string[] = ['wo_mention', 'request_decided', 'payment_rejected'];
 
 /** True when `name` sits in one of the assigned seats of this bag (each seat
     is a comma-joined list of display names). The pure twin of the SQL in

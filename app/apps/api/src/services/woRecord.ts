@@ -52,6 +52,7 @@ import type {
   WoTag,
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
+import { wallStamp, wallToInstant } from '../lib/businessDays.js';
 import { badRequest, conflict, forbidden, notFound } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
 import { notify } from './notices.js';
@@ -180,6 +181,24 @@ const bagText = (t: TaskRow, key: string): string | null => {
   return Array.isArray(v) ? v.join(', ') : String(v);
 };
 
+/**
+ * When the work order's clock starts (Elise, 2026-11-16, UAT #16). It used to
+ * be the received DAY at midnight UTC — 6 or 7 pm the evening before in
+ * Chicago — so a work order made at lunchtime read "open for 18 hours". Now:
+ * the Received on moment itself (`Date-Time Received`, a stamp), when it is
+ * not in the future; else, when the received day is the day it was created
+ * (Chicago), the moment it was created; else midnight of the received day in
+ * Chicago (an older work order loaded with only a day).
+ */
+function receivedStart(t: TaskRow, now: Date): Date {
+  const stamp = bagText(t, 'Date-Time Received');
+  const at = stamp && stamp.includes('T') ? wallToInstant(stamp) : null;
+  if (at && at.getTime() <= now.getTime()) return at;
+  if (!t.date_received || t.date_received === wallStamp(t.created_at).slice(0, 10)) return t.created_at;
+  const day = wallToInstant(t.date_received);
+  return day && day.getTime() < t.created_at.getTime() ? day : t.created_at;
+}
+
 async function loadCodes(): Promise<{ fault: WoCode[]; action: WoCode[] }> {
   const res = await query<WoCode>(`SELECT id::text AS id, kind, code, label, position, is_active FROM wo_code ORDER BY kind, position, lower(label)`);
   return { fault: res.rows.filter((r) => r.kind === 'fault'), action: res.rows.filter((r) => r.kind === 'action') };
@@ -268,7 +287,7 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
   const onSiteMinutes = visits.rows.reduce((sum, v) => sum + (v.checked_in_at && v.checked_out_at ? Math.max(0, Math.round((v.checked_out_at.getTime() - v.checked_in_at.getTime()) / 60_000)) : 0), 0);
   const pausedMinutes = pauses.rows.reduce((sum, p) => sum + (p.resumed_at ? Math.max(0, Math.round((p.resumed_at.getTime() - p.paused_at.getTime()) / 60_000)) : 0), 0);
   const lastChange = statusRows.rows[statusRows.rows.length - 1];
-  const start = t.date_received ? `${t.date_received}T00:00:00Z` : t.created_at.toISOString();
+  const start = receivedStart(t, now).toISOString();
 
   // ── Status spans: created → first change → … → now ─────────────────────────
   const statuses: WoStatusSpan[] = [];
@@ -309,6 +328,7 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
     time: {
       created_at: t.created_at.toISOString(),
       date_received: t.date_received,
+      received_at: start,
       due_date: bagText(t, 'Due Date'),
       sla_due: bagText(t, 'SLA Due Date'),
       scheduled: bagText(t, 'Scheduled Date'),

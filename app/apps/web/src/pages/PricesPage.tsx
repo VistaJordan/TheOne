@@ -20,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   formatMarkup,
   formatPriceFee,
+  emptyCardFor,
   priceCardClientChoices,
   priceCardProblems,
   priceCardTitle,
@@ -264,8 +265,9 @@ function PriceCardDialog({ card, entity, meta, onClose, onSaved }: {
         trip_rate: numOrNull(trip),
         materials_markup: numOrNull(markup),
         note: note.trim() || null,
+        // 2026-11-16 (UAT #14): a rate is named by the trades picked for it.
         rates: rates.map((r) => ({
-          label: r.label.trim() || r.trades.join(' - '),
+          label: r.trades.length > 0 ? r.trades.join(' - ') : r.label.trim(),
           trades: r.trades,
           tech_rate: numOrNull(r.tech),
           helper_rate: numOrNull(r.helper),
@@ -275,9 +277,12 @@ function PriceCardDialog({ card, entity, meta, onClose, onSaved }: {
         })),
         fees: fees.map((f) => ({ name: f.name.trim(), amount: numOrNull(f.amount), note: f.note.trim() || null })),
       };
+      if (rates.some((r) => r.trades.length === 0 && !r.label.trim())) throw new Error('Pick the trade (or trades) each labor rate is for.');
       const problems = priceCardProblems(input);
       if (problems.length > 0) throw new Error(problems[0]);
-      return savePriceCard(card?.id ?? null, input);
+      // The empty card opened when the client was added is filled in, not
+      // refused as a second card for the same client (UAT #13).
+      return savePriceCard(card?.id ?? emptyCardFor(meta.cards, ent, client.trim() || null)?.id ?? null, input);
     },
     onSuccess: (res) => { void qc.invalidateQueries({ queryKey: PRICES_KEY }); onSaved(res.card); },
     onError: (e) => setProblem(errText(e, 'Could not save the card.')),
@@ -347,11 +352,14 @@ function PriceCardDialog({ card, entity, meta, onClose, onSaved }: {
         {rates.map((r) => (
           <div key={r.key} className="price-rate-edit">
             <div className="price-rate-top">
-              <input className="fld" value={r.label} onChange={(e) => setRate(r.key, { label: e.target.value })} placeholder="Name, e.g. Plumber - Electrician" aria-label="Rate name" />
+              {/* 2026-11-16 (UAT #14) · trades are picked, never typed: the
+                  rate is named by them. A rate from the sheet with no trade
+                  still shows its old name until one is picked. */}
+              <span className="price-rate-name">{r.trades.length > 0 ? r.trades.join(' - ') : r.label.trim() || 'Pick a trade below'}</span>
               <button type="button" className="icon-btn" aria-label="Remove rate" onClick={() => setRates((cur) => cur.filter((x) => x.key !== r.key))}><Icon name="trash" size={12} /></button>
             </div>
             <div className="price-trade-pick">
-              <span className="price-pick-lbl">Prices</span>
+              <span className="price-pick-lbl">Trade <span className="req" aria-hidden="true">*</span></span>
               {r.trades.map((t) => (
                 <button key={t} type="button" className="chip chip-sm" onClick={() => setRate(r.key, { trades: r.trades.filter((x) => x !== t) })} aria-label={`Remove ${t}`}>
                   {t} <Icon name="x" size={12} />

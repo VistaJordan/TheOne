@@ -31,6 +31,7 @@
 .price-rate-edit { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .price-rate-top { display: flex; gap: 8px; align-items: center; }
 .price-rate-top .fld { flex: 1; min-width: 0; }
+.price-rate-name { flex: 1; min-width: 0; font-weight: 600; color: var(--ink); }
 .price-pick-lbl { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
 .price-rate-nums { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .price-rate-nums .price-num { width: 100%; }

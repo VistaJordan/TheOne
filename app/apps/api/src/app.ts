@@ -62,6 +62,7 @@ import billingProposalRoutes from './routes/billingProposals.js';
 import clientUpdateRoutes from './routes/clientUpdates.js';
 import assistantRoutes from './routes/assistant.js';
 import aiRoutes from './routes/ai.js';
+import addressRoutes from './routes/address.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
@@ -148,6 +149,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   // 0073: a work order saved as a PDF, and the two layouts in Admin › Settings.
   // 0074: Admin › Integrations — every connector's on / off switch.
   await app.register(adminIntegrationRoutes, { prefix: '/api' });
+  // 0140 · address suggestions from Google Maps, and the count of what we ask it.
+  await app.register(addressRoutes, { prefix: '/api' });
   // 0075 — Admin › Documentation: the live snapshot the BRD / SOP / lifecycle read.
   await app.register(adminDocsRoutes, { prefix: '/api' });
   // Rule 7.3.2 · machine-to-machine receivers, secret-gated (not sessions).

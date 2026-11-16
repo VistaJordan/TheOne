@@ -93,12 +93,35 @@ export const priceKey = (s: string | null | undefined): string => (s ?? '').trim
  * clients filed under that Comp, less those that already have a card there.
  */
 export function priceCardClientChoices(
-  meta: Pick<PricesResponse, 'clients_by_entity' | 'cards'>,
+  meta: Pick<PricesResponse, 'clients_by_entity' | 'cards'> & { clients?: string[] },
   entity: string,
 ): string[] {
   const e = entity.trim().toUpperCase();
-  const taken = new Set(meta.cards.filter((c) => c.billing_entity.trim().toUpperCase() === e).map((c) => priceKey(c.client)));
-  return (meta.clients_by_entity[e] ?? []).filter((c) => !taken.has(priceKey(c)));
+  // An EMPTY card does not take the client: adding a client with a billing
+  // entity opens one for it (ensureClientPriceCard), and the person then
+  // looks for the client here to fill it in (`emptyCardFor`).
+  const taken = new Set(meta.cards.filter((c) => c.billing_entity.trim().toUpperCase() === e && !priceCardIsEmpty(c)).map((c) => priceKey(c.client)));
+  // 2026-11-16 (Elise, UAT #13): a client filed under no Comp yet (just
+  // created, no team, no check-in row, no entity on its record) is offered
+  // under every Comp, so a new client can get its card straight away.
+  const filed = new Set(Object.values(meta.clients_by_entity).flat().map((c) => priceKey(c)));
+  const unfiled = (meta.clients ?? []).filter((c) => !filed.has(priceKey(c)));
+  const mine = meta.clients_by_entity[e] ?? [];
+  return [...mine, ...unfiled.filter((c) => !mine.some((m) => priceKey(m) === priceKey(c)))]
+    .filter((c) => !taken.has(priceKey(c)));
+}
+
+/** A card with nothing on it yet (the one opened for a new client). */
+export function priceCardIsEmpty(c: Pick<PriceCard, 'rates' | 'fees' | 'trip_rate' | 'note'>): boolean {
+  return c.rates.length === 0 && c.fees.length === 0 && c.trip_rate === null && !c.note;
+}
+
+/** The empty card already on file for this entity + client, which a "New
+    price card" for them fills in rather than refusing as a duplicate. */
+export function emptyCardFor(cards: readonly PriceCard[], entity: string, client: string | null): PriceCard | null {
+  if (!client) return null;
+  const e = entity.trim().toUpperCase();
+  return cards.find((c) => c.billing_entity.trim().toUpperCase() === e && priceKey(c.client) === priceKey(client) && priceCardIsEmpty(c)) ?? null;
 }
 
 /** A card's entity and client are its name: fixed once it exists. */

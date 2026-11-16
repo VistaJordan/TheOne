@@ -83,6 +83,7 @@ import {
   APPROVAL_TIER_KIND_LABELS,
   APPROVAL_TIER_KIND_VERBS,
   describeTierBand,
+  TIER_SUPER_ADMIN_ONLY,
   enrolmentSentence,
   TRASH_RESTORE_REFUSED,
   type ApprovalTier,
@@ -174,7 +175,8 @@ function ApprovalTiersCard() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-approval-tiers'], queryFn: listApprovalTiers, retry: 0 });
   const rolesQ = useQuery({ queryKey: ['roles'], queryFn: listRoles, retry: 0 });
-  const roleCodes = (rolesQ.data?.items ?? []).map((r) => r.code).filter((c) => c !== 'service');
+  const roleCodes = [...(rolesQ.data?.items ?? []).map((r) => r.code).filter((c) => c !== 'service'), TIER_SUPER_ADMIN_ONLY];
+  const roleText = (code: string) => (code === TIER_SUPER_ADMIN_ONLY ? 'super admins only' : code);
   const items = q.data?.items ?? [];
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<ApprovalTierKind | null>(null);
@@ -271,7 +273,7 @@ function ApprovalTiersCard() {
                               disabled={busy}
                               onChange={() => toggleRole(t, code)}
                             />
-                            <span>{code}</span>
+                            <span>{roleText(code)}</span>
                           </label>
                         ))}
                         {t.roles.length === 0 && <span className="hint">anyone with the base permission</span>}
@@ -319,7 +321,7 @@ function ApprovalTiersCard() {
                           checked={roles.includes(code)}
                           onChange={(e) => setRoles(e.target.checked ? [...roles, code] : roles.filter((r) => r !== code))}
                         />
-                        <span>{code}</span>
+                        <span>{roleText(code)}</span>
                       </label>
                     ))}
                   </div>

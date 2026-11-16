@@ -145,6 +145,31 @@ async function clientsByEntity(): Promise<Record<string, string[]>> {
   return out;
 }
 
+/**
+ * The trades a rate may price (Elise, 2026-11-16, UAT #14: picked from a
+ * list, never typed). The Trade field's own options when it has some; the
+ * field's vocabulary often comes from the values on the work orders instead
+ * (seed: `options: null`), so the trades on file and on existing rates are
+ * added — otherwise the list was empty and people typed the trade by hand.
+ */
+async function tradeChoices(): Promise<string[]> {
+  const [own, used] = await Promise.all([
+    fieldOptions('Trade'),
+    query<{ t: string }>(
+      `SELECT DISTINCT btrim(x.t) AS t FROM (
+         SELECT trade AS t FROM task
+         UNION ALL SELECT fields->>'Trade' FROM task
+         UNION ALL SELECT unnest(trades) FROM price_rate) x
+        WHERE btrim(coalesce(x.t, '')) <> ''`,
+    ).catch(() => ({ rows: [] as { t: string }[] })),
+  ]);
+  const out: string[] = [];
+  for (const t of [...own, ...used.rows.map((r) => r.t)]) {
+    if (!out.some((o) => o.toLowerCase() === t.toLowerCase())) out.push(t);
+  }
+  return out.sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+}
+
 export async function listPrices(actor: ActingPrincipal): Promise<PricesResponse> {
   requirePerm(actor, PRICES_PERM_KEY, 'view', 'You cannot see the price list');
   const allow = allowFor(actor);
@@ -154,7 +179,7 @@ export async function listPrices(actor: ActingPrincipal): Promise<PricesResponse
       throw e;
     }),
     fieldOptions('21. Comp'),
-    fieldOptions('Trade'),
+    tradeChoices(),
     query<{ name: string }>(`SELECT name FROM client WHERE is_active AND deleted_at IS NULL ORDER BY lower(name)`),
     clientsByEntity(),
   ]);

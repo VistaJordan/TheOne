@@ -24,7 +24,7 @@ You receive the transcript of a phone call about one work order — usually a Se
   - lines: the priced items for that option.
 
 Line items:
-- line_type: "labor" (hours × hourly rate), "part", "material" (consumables, refrigerant, fittings), or "service" (a flat-priced service or a trip charge).
+- line_type: "labor" (hours × hourly rate), "material" (parts and consumables: motors, refrigerant, fittings), or "trip" (a trip charge). Anything else flat-priced is a "material" line with uom "lot".
 - description: what the client is paying for, without the price.
 - qty and rate: numbers. rate is the unit price in USD with at most two decimals.
 - uom: one of "hr", "ea", "trip", "day", "lot", "ft", "sq ft", or null.
@@ -55,7 +55,7 @@ const LINE_SCHEMA = {
   additionalProperties: false,
   required: ['line_type', 'description', 'qty', 'rate', 'uom', 'ot', 'markup_pct'],
   properties: {
-    line_type: { type: 'string', enum: ['service', 'labor', 'part', 'material'] },
+    line_type: { type: 'string', enum: ['labor', 'material', 'trip'] },
     description: { type: 'string' },
     qty: { type: 'number' },
     rate: { type: 'number' },
@@ -104,7 +104,7 @@ export const DRAFT_SCHEMA = {
 /** What the model returns — validated again here: structured outputs make it
     very likely, not something to trust with money. */
 const modelLine = z.object({
-  line_type: z.enum(['service', 'labor', 'part', 'material']),
+  line_type: z.enum(['service', 'labor', 'part', 'material', 'trip']),
   description: z.string(),
   qty: z.number(),
   rate: z.number(),
@@ -231,7 +231,9 @@ export function toDraftBody(out: ModelOutput): QuoteDraftBody {
     const description = clip(l.description, 500);
     if (description === '') return null;
     return {
-      line_type: l.line_type,
+      // 2026-11-16: the builder offers Labor · Material · Trip; an older
+      // answer's part is a material and its service a trip or a material.
+      line_type: l.line_type === 'part' ? 'material' : l.line_type === 'service' ? (/^\s*trip\b/i.test(description) ? 'trip' : 'material') : l.line_type,
       description,
       qty: round2(l.qty),
       rate: round2(l.rate),

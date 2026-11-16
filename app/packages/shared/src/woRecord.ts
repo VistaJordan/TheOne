@@ -60,6 +60,9 @@ export interface WoResponsibility {
 export interface WoTimeDetails {
   created_at: string;
   date_received: string | null;
+  /** 2026-11-16 (UAT #16) · the moment the work order's clock starts: the
+      Received on stamp, else when it was created. Absent on an older API. */
+  received_at?: string;
   due_date: string | null;
   sla_due: string | null;
   scheduled: string | null;

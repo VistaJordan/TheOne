@@ -69,6 +69,6 @@ describe('every reader asks the rule', () => {
     const page = read('apps/web/src/pages/QuoteBuilderPage.tsx');
     expect(page).toContain('computeQuoteTotals(draft, draft.is_cost_tbd ? null : totalCost, otMult, taxApplies)');
     expect(page).toContain('taxApplies={taxApplies}');
-    expect(page).toContain('showTax={taxApplies}');
+    expect(page).toContain('showTax={taxApplies && linesCarryTax(incurred.lines)}');
   });
 });

@@ -7,22 +7,16 @@
 
 import type { QuoteRates } from '@theone/shared';
 import type { QuoteTotals } from '../../lib/quoteTotals';
-import { NTE_WARN_PCT, OT_MULTIPLIER, parsePct, usd, usd0 } from '../../lib/quoteTotals';
-import type { SalesTaxLookup } from '../../api/client';
-import { TaxRatePicker } from '../../pages/admin/FinanceSetupCards';
+import { NTE_WARN_PCT, OT_MULTIPLIER, usd, usd0 } from '../../lib/quoteTotals';
 import { Icon } from '../Icon';
 import { QuoteTerms } from './QuoteTerms';
 
 interface MoneyRailProps {
   totals: QuoteTotals;
   nte: number | null;
-  salesTaxPct: string;
   editable: boolean;
   comp: string | null;
-  /** The derived rate for this WO, when the lookup has answered. */
-  derived?: SalesTaxLookup | null;
   isCostTbd: boolean;
-  onSalesTaxPctChange: (v: string) => void;
   onCostTbdChange: (v: boolean) => void;
   /** 0046 · the rates the quote is priced with, and the contract they came from. */
   rates?: QuoteRates | null;
@@ -34,12 +28,9 @@ interface MoneyRailProps {
 export function MoneyRail({
   totals,
   nte,
-  salesTaxPct,
   editable,
   comp,
-  derived,
   isCostTbd,
-  onSalesTaxPctChange,
   onCostTbdChange,
   rates,
   taxApplies = true,
@@ -49,11 +40,8 @@ export function MoneyRail({
   const over = pct != null && pct > 100;
   const headroom = nte == null ? null : nte - totals.grandTotal;
   const mult = rates?.ot_multiplier ?? OT_MULTIPLIER;
-  const taxErr = Number.isNaN(parsePct(salesTaxPct));
   const yoda = totals.totalRule !== 'options_only';
   const priced = totals.options.find((o) => o.key === totals.pricedKey) ?? null;
-  const derivedDiffers =
-    derived && derived.required && !taxErr && Math.abs(derived.pct - (parsePct(salesTaxPct) || 0)) > 0.0005;
 
   return (
     <section className="card">
@@ -141,63 +129,12 @@ export function MoneyRail({
 
         {taxApplies ? (
         <>
-        <div className="kvrow">
-          <dt>
-            <label htmlFor="sales-tax">Sales tax %</label>
-            <button
-              type="button"
-              className="qmk"
-              title="Derived from the labor-rate card (Comp × FM × Trade) and the site ZIP; override here when needed"
-              aria-label="About Sales tax: derived from the labor-rate card and the site ZIP; override here when needed"
-            >
-              ?
-            </button>
-          </dt>
-          <dd>
-            {editable ? (
-              <span className="money-in tax-in">
-                <input
-                  className={`fld${taxErr ? ' is-err' : ''}`}
-                  id="sales-tax"
-                  inputMode="decimal"
-                  placeholder="0"
-                  aria-label="Sales tax percent"
-                  aria-invalid={taxErr ? true : undefined}
-                  value={salesTaxPct}
-                  onChange={(e) => onSalesTaxPctChange(e.target.value)}
-                />
-                <span className="cur" aria-hidden="true">%</span>
-              </span>
-            ) : (
-              `${totals.salesTaxPct}%`
-            )}
-          </dd>
-        </div>
-        {derived && (
-          <div className="kvrow is-muted kv-note">
-            <dt>
-              {derived.required
-                ? `Derived ${derived.pct}%${derived.zip ? ` · ZIP ${derived.zip}` : ''}`
-                : 'No sales tax required for this Comp × FM × Trade'}
-            </dt>
-            <dd>
-              {editable && derivedDiffers && (
-                <button type="button" className="linkbtn" onClick={() => onSalesTaxPctChange(String(derived.pct))}>
-                  Use {derived.pct}%
-                </button>
-              )}
-            </dd>
-          </div>
-        )}
+        {/* 2026-11-16 (Elise, UAT #27) · the % is typed in the Sales tax bar at
+            the top of the builder; here it is the total it adds. */}
         <div className="kvrow is-muted">
-          <dt>Sales tax</dt>
+          <dt>Sales tax{totals.salesTaxPct > 0 ? ` (${totals.salesTaxPct}%)` : ''}</dt>
           <dd>{usd(totals.salesTax)}</dd>
         </div>
-
-        {/* 0067 · a rate from Admin › Settings fills the % above (the picker
-            works an amount out of `base`; on a base of 100 that amount IS the
-            rate). The field stays hand-editable. */}
-        {editable && <TaxRatePicker base={100} onPick={(rate) => onSalesTaxPctChange(String(rate))} />}
 
         {totals.lineTax > 0 && (
           <div className="kvrow">

@@ -11,6 +11,8 @@
 // ABOVE the last line, so "Clean the working area" stays last; any line may
 // still be removed by hand.
 
+import { isDispatcherRole } from './access';
+
 export const QUOTE_SCOPE_FIRST_LINE = 'Full inspection of the working area';
 export const QUOTE_SCOPE_LAST_LINE = 'Clean the working area';
 
@@ -141,4 +143,51 @@ export function foldQuoteLevelNotes<
           note_to_customer: (x.note_to_customer ?? '').trim() !== '' ? x.note_to_customer : n,
         },
   );
+}
+
+// ── Rates from the price list are not the dispatchers' to change ────────────
+//
+// Elise, 2026-11-16 (UAT #23): a Labor or Trip line bills at the client's
+// price list (Prices, else the Yoda labor rate — `Quote.labor_rate`). A
+// dispatcher (OM Under Probation, OM, Senior OM) cannot type another rate on
+// such a line: the builder draws the unit price read-only with the card's
+// figure, and the API refuses a save that carries a different one (400
+// QUOTE_RATE_LOCKED) unless that exact line was already on the quote. A rate
+// the card does not give is still typed. A wrong card is the admins' to fix.
+
+export interface QuoteRateCard {
+  tech_rate: number | null;
+  helper_rate: number | null;
+  trip_rate: number | null;
+  afterhours_rate: number | null;
+  holiday_rate: number | null;
+}
+
+/** The card's figure for a line of this type and description, or null when
+    the card says nothing. Labor = the tech hour (helper / after-hours /
+    holiday when the description names one); a Trip line (or one named Trip)
+    = the trip charge. */
+export function quoteCardRate(
+  line: { line_type: string; description: string },
+  card: QuoteRateCard | null | undefined,
+): number | null {
+  if (!card) return null;
+  const d = line.description.trim().toLowerCase();
+  let v: number | null = null;
+  if (line.line_type === 'labor') {
+    if (d.includes('helper')) v = card.helper_rate ?? card.tech_rate;
+    else if (d.includes('after')) v = card.afterhours_rate ?? card.tech_rate;
+    else if (d.includes('holiday')) v = card.holiday_rate ?? card.tech_rate;
+    else v = card.tech_rate;
+  } else if (line.line_type === 'trip' || /^trip\b/.test(d)) {
+    v = card.trip_rate;
+  }
+  return v != null && v > 0 ? v : null;
+}
+
+export const QUOTE_RATE_LOCKED_CODE = 'QUOTE_RATE_LOCKED';
+
+/** True when this person may not change a rate the price list sets. */
+export function cardRatesLockedFor(role: string | null | undefined, isSuperAdmin: boolean): boolean {
+  return !isSuperAdmin && isDispatcherRole(role);
 }

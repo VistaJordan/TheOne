@@ -20,6 +20,7 @@ import { Icon } from '../../components/Icon';
 import { errText } from '../../components/ui/Sheet';
 import { AdminShell } from './AdminShell';
 import { ClickUpPanel } from './ClickUpPanel';
+import { GoogleMapsPanel } from './GoogleMapsPanel';
 import { EcotrakPanel } from './EcotrakPanel';
 
 const KEY = ['admin', 'integrations'];
@@ -157,6 +158,11 @@ function IntegrationRow({ it, canEdit, busy, onFlip }: { it: IntegrationStatus; 
       {it.key === 'clickup' && (
         <div className="intg-extra">
           <ClickUpPanel canEdit={canEdit} />
+        </div>
+      )}
+      {it.key === 'google_maps' && it.configured && (
+        <div className="intg-extra">
+          <GoogleMapsPanel enabled={it.enabled} />
         </div>
       )}
     </li>

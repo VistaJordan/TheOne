@@ -169,6 +169,11 @@ export const CREATE_FILLABLE_FIELD_KEYS = [
   'fields.TL',
   'fields.ATL',
   'fields.Sales Owner',
+  // 2026-11-16 (0151): OM Under Probation is view-only on the Dates, but
+  // still types the three Add work order asks for when raising one.
+  'fields.Date-Time Received',
+  'fields.Due Date',
+  'fields.SLA Due Date',
 ] as const;
 
 /** Elise, 2026-11-16 (migration 0147): only a TL or an ATL changes the TL and

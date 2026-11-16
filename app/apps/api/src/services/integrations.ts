@@ -19,12 +19,16 @@
 
 import {
   CLIENT_MESSAGE_INTEGRATION,
+  GOOGLE_USAGE_KINDS,
   INTEGRATIONS,
   INTEGRATIONS_PERM_KEY,
   INTEGRATION_BY_KEY,
   INTEGRATION_KEYS,
   INTEGRATION_OFF,
+  emptyGoogleUsage,
+  googleUsageSentence,
   type ClientMessageTarget,
+  type GoogleUsageKind,
   type IntegrationKey,
   type IntegrationStatus,
   type IntegrationsResponse,
@@ -204,6 +208,25 @@ async function configuredOf(key: IntegrationKey): Promise<Configured> {
       if (token && list) return { configured: true, note: `Token set · new work orders go to the "${list}" List.` };
       const missing = [!token && 'CLICKUP_API_TOKEN on the server', !list && 'the List (set it up below)'].filter(Boolean);
       return { configured: false, note: `Missing ${missing.join(' and ')}.` };
+    }
+    case 'google_maps': {
+      // Read by its literal name, like lib/googleGeocode.ts (which imports
+      // nothing from here either way: this file imports no connector).
+      const key = Boolean(process.env.GOOGLE_MAPS_API_KEY?.trim());
+      if (!key) return { configured: false, note: 'GOOGLE_MAPS_API_KEY is not set on the server.' };
+      let month = emptyGoogleUsage();
+      try {
+        const r = await query<{ kind: string; uses: string }>(
+          `SELECT kind, sum(uses)::text AS uses FROM google_usage
+            WHERE day >= date_trunc('month', (now() AT TIME ZONE 'America/Chicago')::date)::date GROUP BY kind`,
+        );
+        for (const row of r.rows) {
+          if ((GOOGLE_USAGE_KINDS as readonly string[]).includes(row.kind)) month[row.kind as GoogleUsageKind] = Number(row.uses);
+        }
+      } catch {
+        month = emptyGoogleUsage(); // before 0140
+      }
+      return { configured: true, note: `Key set · ${googleUsageSentence(month)}` };
     }
     case 'entra':
       return config.entra

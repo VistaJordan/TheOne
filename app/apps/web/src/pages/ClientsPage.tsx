@@ -151,6 +151,18 @@ export function ClientsPage() {
 
 // ── The form ─────────────────────────────────────────────────────────────────
 
+/** What a NEW client still lacks (UAT #12): every field but Notes, and the
+    first account team (Comp, AM, TL, ATL, Sales). */
+function newClientMissing(d: Draft, team: Record<'billing_entity' | 'am' | 'tl' | 'atl' | 'sales', string>): string[] {
+  const need: [string, string][] = [
+    ['Name', d.name], ['Comp', team.billing_entity], ['AM', team.am], ['TL', team.tl], ['ATL', team.atl], ['Sales', team.sales],
+    ['Code', d.code], ['Contact name', d.contact_name], ['Contact phone', d.contact_phone], ['Contact email', d.contact_email],
+    ['Billing email', d.billing_email], ['Billing entity', d.billing_entity], ['Client portal', d.portal_type],
+    ['Payment terms', d.payment_terms], ['Billing address', d.address],
+  ];
+  return need.filter(([, v]) => v.trim() === '').map(([k]) => k);
+}
+
 type Draft = Record<'name' | 'code' | 'billing_entity' | 'contact_name' | 'contact_email' | 'contact_phone' | 'billing_email' | 'address' | 'portal_type' | 'payment_terms' | 'notes', string> & { is_active: boolean };
 
 function ClientFormDialog({ client, meta, onClose, onSaved }: {
@@ -183,6 +195,13 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
     mutationFn: () => {
       if (!d.name.trim()) throw new Error('The client needs a name.');
       if (!client && teamNamed && !team.billing_entity) throw new Error('Pick the Comp the account team is for.');
+      // 2026-11-16 (Elise, UAT #12): a NEW client is added complete — every
+      // field and its first account team (Notes stay optional).
+      if (!client) {
+        const missing = newClientMissing(d, team);
+        if (missing.length > 0) throw new Error(`Fill in every field to add the client: ${missing.join(', ')}.`);
+        if (!d.contact_email.includes('@') || !d.billing_email.includes('@')) throw new Error('The contact and billing emails must be email addresses.');
+      }
       const input: ClientInput = {
         name: d.name.trim(), code: txt('code'), billing_entity: txt('billing_entity'),
         contact_name: txt('contact_name'), contact_email: txt('contact_email'), contact_phone: txt('contact_phone'), billing_email: txt('billing_email'),
@@ -207,14 +226,17 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
       void qc.invalidateQueries({ queryKey: ['clients'] });
       void qc.invalidateQueries({ queryKey: ['client-teams-overview'] });
       void qc.invalidateQueries({ queryKey: ['wo-create-form'] });
+      // The price list offers the new client at once (UAT #13).
+      void qc.invalidateQueries({ queryKey: ['prices'] });
       qc.setQueryData(['client', res.client.id], res);
       onSaved(res.client);
     },
     onError: (e) => setProblem(errText(e, 'Could not save the client.')),
   });
-  const field = (label: string, node: ReactNode, wide = false, hint?: string) => (
+  const req = client === null;
+  const field = (label: string, node: ReactNode, wide = false, hint?: string, optional = false) => (
     <label className={`pf-field${wide ? ' is-wide' : ''}`}>
-      <span className="lbl">{label}</span>
+      <span className="lbl">{label}{req && !optional && <span className="req" aria-hidden="true"> *</span>}</span>
       {node}
       {hint && <span className="hint">{hint}</span>}
     </label>
@@ -235,15 +257,15 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
               <span className="lbl">Account team</span>
               <div className="client-new-team">
                 <label>
-                  <span className="lbl">Comp</span>
-                  <select className="fld" value={team.billing_entity} onChange={(e) => setTeam({ ...team, billing_entity: e.target.value })}>
+                  <span className="lbl">Comp <span className="req" aria-hidden="true">*</span></span>
+                  <select className="fld" value={team.billing_entity} onChange={(e) => { const v = e.target.value; setTeam({ ...team, billing_entity: v }); if (!d.billing_entity.trim()) set('billing_entity', v); }}>
                     <option value="">—</option>
                     {(vocab.data?.billing_entities ?? []).map((x) => <option key={x} value={x}>{x}</option>)}
                   </select>
                 </label>
                 {(['am', 'tl', 'atl', 'sales'] as const).map((k) => (
                   <label key={k}>
-                    <span className="lbl">{k === 'am' ? 'AM' : k === 'tl' ? 'TL' : k === 'atl' ? 'ATL' : 'Sales'}</span>
+                    <span className="lbl">{k === 'am' ? 'AM' : k === 'tl' ? 'TL' : k === 'atl' ? 'ATL' : 'Sales'} <span className="req" aria-hidden="true">*</span></span>
                     {k === 'sales' ? (
                       <SalesSelect value={team.sales} options={salespeopleOf(vocab.data)} onChange={(v) => setTeam({ ...team, sales: v })} />
                     ) : (
@@ -252,7 +274,7 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
                   </label>
                 ))}
               </div>
-              <span className="hint">Optional. Another Comp’s team can be added on the client’s page or from the list.</span>
+              <span className="hint">Required. Another Comp’s team can be added on the client’s page or from the list.</span>
             </div>
           )}
           {field('Code', <input className="fld mono" value={d.code} onChange={(e) => set('code', e.target.value)} />)}
@@ -275,7 +297,7 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
           ))}
           {field('Payment terms', <input className="fld" value={d.payment_terms} placeholder="e.g. Net 30" onChange={(e) => set('payment_terms', e.target.value)} />)}
           {field('Billing address', <textarea className="fld" rows={2} value={d.address} onChange={(e) => set('address', e.target.value)} />, true)}
-          {field('Notes', <textarea className="fld" rows={3} value={d.notes} onChange={(e) => set('notes', e.target.value)} />, true)}
+          {field('Notes', <textarea className="fld" rows={3} value={d.notes} onChange={(e) => set('notes', e.target.value)} />, true, undefined, true)}
           {client && (
             <label className="tmap-check pf-field">
               <input type="checkbox" checked={d.is_active} onChange={(e) => set('is_active', e.target.checked)} />

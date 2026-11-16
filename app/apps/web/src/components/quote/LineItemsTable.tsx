@@ -22,15 +22,21 @@
    its day (renumberLaborLines). */
 
 import { useEffect, useRef } from 'react';
-import { lineTakesOt } from '@theone/shared';
+import { QUOTE_DEFAULT_TRIP_DESCRIPTION, lineTakesOt } from '@theone/shared';
 import type { DraftLine } from '../../lib/quoteDraft';
-import { LINE_TYPES, blankLine, cardRateFor, fillCardRates, dayChoices, isAutoLaborDescription, moveItem, nextLaborDescription, removeAt, renumberLaborLines, replaceAt } from '../../lib/quoteDraft';
+import { LEGACY_LINE_TYPES, LINE_TYPES, TRIP_LINE_TYPE, blankLine, cardRateFor, fillCardRates, dayChoices, isAutoLaborDescription, moveItem, nextLaborDescription, removeAt, renumberLaborLines, replaceAt } from '../../lib/quoteDraft';
 import { OT_MULTIPLIER, lineAmount, lineErrors, lineFieldId, lineTax, usd } from '../../lib/quoteTotals';
 import { useReorder } from '../../hooks/useReorder';
 import type { LaborRate } from '../../api/client';
 import { Icon } from '../Icon';
 
 /** True when a line sits past Day 1 — the Day column must then be drawn. */
+/** 2026-11-16 (UAT #27) · the per-line Tax % column is drawn only on a
+    section whose lines already carry one; the quote's tax is the bar at the top. */
+export function linesCarryTax(lines: readonly DraftLine[]): boolean {
+  return lines.some((l) => l.tax_pct.trim() !== '' && Number(l.tax_pct) !== 0);
+}
+
 export function linesSpanDays(lines: readonly DraftLine[]): boolean {
   return lines.some((l) => Number(l.day_value || '1') > 1);
 }
@@ -52,6 +58,9 @@ interface LineItemsTableProps {
   /** 2026-11-10 · the work order's rate card (Prices first, then the Yoda
       labor rate). A Labor or Trip line whose rate is blank takes its figure. */
   rate?: LaborRate | null;
+  /** 2026-11-16 (Elise) · a dispatcher keeps the card's rate: a Labor or
+      Trip line the card prices is drawn read-only at the card's figure. */
+  lockCardRates?: boolean;
 }
 
 export function LineItemsTable({
@@ -64,6 +73,7 @@ export function LineItemsTable({
   showDay = false,
   showTax = true,
   rate = null,
+  lockCardRates = false,
 }: LineItemsTableProps) {
   // Every edit re-counts the "Labor tech N" names per day (2026-11-06).
   const onChange = (next: DraftLine[]) => emit(renumberLaborLines(next));
@@ -88,8 +98,9 @@ export function LineItemsTable({
   /** The card's rate for a line whose type or description was just set,
       when its rate is still blank; else its own rate. */
   const rateAfter = (line: DraftLine, next: Pick<DraftLine, 'line_type' | 'description'>): string => {
-    if (line.rate.trim() !== '' && Number(line.rate) !== 0) return line.rate;
     const v = cardRateFor(next, rate);
+    if (lockCardRates && v != null) return v.toFixed(2);
+    if (line.rate.trim() !== '' && Number(line.rate) !== 0) return line.rate;
     return v == null ? line.rate : v.toFixed(2);
   };
   const reorder = useReorder((from, to) => onChange(moveItem(lines, from, to)));
@@ -209,10 +220,13 @@ export function LineItemsTable({
                     onChange={(e) => {
                       const line_type = e.target.value as DraftLine['line_type'];
                       // Labor fills a blank description with "Labor tech N".
+                      // Trip fills it with "Trip" (2026-11-16).
                       const description =
                         line_type === 'labor' && line.description.trim() === ''
                           ? nextLaborDescription(lines, i)
-                          : line.description;
+                          : line_type === TRIP_LINE_TYPE && line.description.trim() === ''
+                            ? QUOTE_DEFAULT_TRIP_DESCRIPTION
+                            : line.description;
                       // Only labor repeats per day: any other type sits on Day 1.
                       const day_value = line_type === 'labor' ? line.day_value : '1';
                       // 2026-11-09 · overtime is for labor only.
@@ -222,6 +236,9 @@ export function LineItemsTable({
                   >
                     {/* 2026-10-27 · a new line opens with no type picked. */}
                     {line.line_type === '' && <option value="">Type…</option>}
+                    {LEGACY_LINE_TYPES.filter((t) => t.value === line.line_type).map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
                     {LINE_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
@@ -280,7 +297,8 @@ export function LineItemsTable({
                       aria-invalid={errs.rate ? true : undefined}
                       aria-describedby={describedBy('rate')}
                       value={line.rate}
-                      disabled={!editable}
+                      disabled={!editable || (lockCardRates && cardRateFor(line, rate) != null)}
+                      title={lockCardRates && cardRateFor(line, rate) != null ? 'Set by the price list — ask an admin to change it' : undefined}
                       onChange={(e) => set(i, { rate: e.target.value })}
                     />
                   </span>

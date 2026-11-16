@@ -65,7 +65,7 @@ describe('the API honours it', () => {
   });
 
   it('2026-11-04: only a draft is edited — a submitted quote is locked for everyone', () => {
-    expect(quotes).toContain("const EDITABLE_STATUSES: QuoteStatus[] = ['draft'];");
+    expect(quotes).toContain("const EDITABLE_STATUSES: QuoteStatus[] = ['draft', 'pending_correction'];");
     const upd = fn(quotes, 'export async function updateQuote(');
     // 2026-11-16 · the UPDATE checks the editable statuses, not draft alone
     // (an approver's save in pending correction was refused and rolled back).

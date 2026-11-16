@@ -250,13 +250,13 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       );
     }
     case 'quote_submitted':
-      return <>submitted the quote for approval</>;
+      return <>submitted the quote for approval<QuoteKept after={e.after} /></>;
     case 'quote_submitted_for_correction':
-      return <>submitted the quote for a manager's correction</>;
+      return <>submitted the quote for a manager's correction<QuoteKept after={e.after} /></>;
     case 'quote_sent':
-      return <>sent the quote to the client</>;
+      return <>sent the quote to the client<QuoteKept after={e.after} /></>;
     case 'quote_approved':
-      return <>approved the quote</>;
+      return <>approved the quote<QuoteKept after={e.after} /></>;
     case 'quote_rejected':
       return <>rejected the quote</>;
     case 'payment_requested':
@@ -367,6 +367,33 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
 
 function Val({ children }: { children: ReactNode }) {
   return <span className="audit-val">{children}</span>;
+}
+
+/** 2026-11-16 (UAT #10): a quote leaving draft is kept whole on its row
+    (`after.quote`, quotes.ts snapshotQuote). The row says its total and folds
+    out every line as it stood at that moment. Older rows carry none. */
+function QuoteKept({ after }: { after: Record<string, unknown> | null | undefined }) {
+  const snap = after?.quote as { grand_total?: unknown; lines?: unknown } | undefined;
+  if (!snap || typeof snap !== 'object') return null;
+  const lines = Array.isArray(snap.lines) ? (snap.lines as unknown[]).map(String) : [];
+  const total = typeof snap.grand_total === 'number' ? snap.grand_total : null;
+  return (
+    <>
+      {total != null && (
+        <> (total <Val>{total.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</Val>)</>
+      )}
+      {lines.length > 0 && (
+        <details className="audit-quote-kept">
+          <summary>Quote as it stood · {lines.length} line{lines.length === 1 ? '' : 's'}</summary>
+          <ul>
+            {lines.map((l, i) => (
+              <li key={i}>{l}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </>
+  );
 }
 
 /** 2026-10-30: a status change that went through a request names both

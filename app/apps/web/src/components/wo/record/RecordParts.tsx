@@ -576,7 +576,7 @@ export function RecordRail({
           {t.on_site_since && <span className="chip chip-accent chip-sm">On site · {live(t.on_site_since)}</span>}
         </div>
         <div className="rec-rows">
-          <Row label="Open for"><b className="num">{record.state.completion ? formatMinutes(record.timelog.open_minutes) : live(t.date_received ? `${t.date_received}T00:00:00Z` : t.created_at)}</b></Row>
+          <Row label="Open for"><b className="num">{record.state.completion ? formatMinutes(record.timelog.open_minutes) : live(t.received_at ?? t.created_at)}</b></Row>
           <Row label="In this status">{live(t.status_since)}</Row>
           <Row label="Received">{dayOnly(t.date_received ?? t.created_at)}</Row>
           <Row label="Scheduled">{t.scheduled ? dayTime(t.scheduled) : '—'}</Row>

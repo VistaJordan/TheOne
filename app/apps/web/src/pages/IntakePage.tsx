@@ -60,6 +60,7 @@ import { Icon } from '../components/Icon';
 import { IncomingTabs } from '../components/IncomingTabs';
 import { AddWorkOrderButton } from '../components/wo/list/AddWorkOrderButton';
 import { useAddressFill } from '../lib/addressFill';
+import { AddressInput } from '../components/AddressInput';
 import { AssigneeSelect } from '../components/wo/AssigneeAvailability';
 import { useWoCatalogue } from '../components/wo/fieldEdit';
 import { useAuth } from '../auth/AuthProvider';
@@ -524,6 +525,10 @@ function DraftForm({ id }: { id: string }) {
     // Zip Code takes digits only; money and numbers digits and one point.
     const zip = f.key === ADDRESS_ZIP_KEY;
     const numeric = d?.type === 'money' || d?.type === 'number';
+    // 0140 · Google Maps' addresses as the address is typed.
+    if (f.key === ADDRESS_KEY) {
+      return <AddressInput id={domId} className={cls} value={val} onChange={(t) => set(f.key, t)} disabled={busy} hint />;
+    }
     return (
       <input
         id={domId}

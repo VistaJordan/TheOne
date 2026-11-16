@@ -6,6 +6,8 @@ import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@
 import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
 // 0073: a work order saved as a PDF.
 import type { WoNotificationsResponse } from '@theone/shared';
+// 0140: address suggestions from Google Maps.
+import type { AddressPlaceResponse, AddressSuggestResponse, GoogleUsageOverview } from '@theone/shared';
 // 0074: Admin › Integrations.
 import type { ClickUpOverview, EcotrakOverview, IntegrationsResponse } from '@theone/shared';
 // 0138: AI usage — models, limits, cost; Improve message.
@@ -2021,6 +2023,29 @@ export function importWorkOrders(input: {
     per field in Admin › Custom fields, so this is read, never hard-coded. */
 export function getWoCreateForm(): Promise<WoCreateForm> {
   return request('/work-orders/new/form');
+}
+
+/** 0140 · GET /api/address/suggest — Google Maps addresses matching what is
+    typed. `available: false` = the box is plain typing (switched off, not
+    set up, or today's cap reached). */
+export function suggestAddresses(q: string, session: string, signal?: AbortSignal): Promise<AddressSuggestResponse> {
+  return request(`/address/suggest?q=${encodeURIComponent(q)}&session=${encodeURIComponent(session)}`, { signal });
+}
+
+/** 0140 · GET /api/address/place — the full address of a picked suggestion. */
+export function fetchAddressPlace(placeId: string, session: string): Promise<AddressPlaceResponse> {
+  return request(`/address/place?place_id=${encodeURIComponent(placeId)}&session=${encodeURIComponent(session)}`);
+}
+
+/** 0140 · GET /api/admin/integrations/google-maps — what we asked Google. */
+export function fetchGoogleUsage(): Promise<GoogleUsageOverview> {
+  return request('/admin/integrations/google-maps');
+}
+
+/** 0141 · PUT /api/admin/integrations/google-maps/limit — the daily limit on
+    suggestion requests (0 = no limit). */
+export function setGoogleDailyCap(daily_cap: number): Promise<GoogleUsageOverview> {
+  return request('/admin/integrations/google-maps/limit', { method: 'PUT', body: JSON.stringify({ daily_cap }) });
 }
 
 /** GET /api/work-orders/new/zip?zip= — the city and state our ZIP table

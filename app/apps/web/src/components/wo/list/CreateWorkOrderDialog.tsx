@@ -99,6 +99,7 @@ import {
 } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthProvider';
 import { useAddressFill } from '../../../lib/addressFill';
+import { AddressInput } from '../../AddressInput';
 import { prepareFile } from '../../../lib/upload';
 import { Icon } from '../../Icon';
 import { AssetStatusChip, ConditionChip, SitePicker, WarrantyChip } from '../../portfolio/PortfolioParts';
@@ -804,6 +805,11 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     const numeric = isMoney || d?.type === 'number' || f.type === 'number';
     if (type === 'datetime-local') {
       return <TenMinuteDateTime id={domId} value={val} onChange={(v) => set(f.key, v)} disabled={busy} />;
+    }
+    // 0140 · the Address box offers Google Maps' addresses as it is typed;
+    // anything typed is still accepted.
+    if (f.key === ADDRESS_KEY) {
+      return <AddressInput id={domId} className="fld" value={val} onChange={(v) => set(f.key, v)} disabled={busy} hint />;
     }
 
     return (

@@ -3079,3 +3079,9 @@ a.photo-img.is-real img {
 .rec-rail .card-people .seats { padding: 4px 14px 12px; }
 .rec-rail .card-people .seat { grid-template-columns: 92px minmax(0, 1fr); gap: 8px; }
 .card-penalties .fld.is-err { border-color: var(--danger); }
+
+/* 2026-11-16 (UAT #10) · the quote kept on a submit / approve / send row. */
+.audit-quote-kept { margin-top: 4px; font-size: 12px; color: var(--ink-2); }
+.audit-quote-kept summary { cursor: pointer; color: var(--accent-text); }
+.audit-quote-kept ul { margin: 4px 0 0 16px; padding: 0; }
+.audit-quote-kept li { margin: 1px 0; font-variant-numeric: tabular-nums; }

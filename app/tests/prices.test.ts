@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatMarkup,
   formatPriceFee,
+  emptyCardFor,
   priceCardClientChoices,
   priceCardProblems,
   priceCardRenamed,
@@ -130,11 +131,24 @@ describe('a card per client of the entity (2026-11-02)', () => {
   it('a new card offers only the clients of the entity that have no card there', () => {
     const meta = {
       clients_by_entity: { AF: ['PH', 'TPM Co', 'Walmart'], BKR: ['PH', 'Dollar'] },
-      cards: [card({ billing_entity: 'AF' }), card({ billing_entity: 'AF', client: 'ph' }), card({ billing_entity: 'BKR', client: 'Walmart' })],
+      cards: [card({ billing_entity: 'AF' }), card({ billing_entity: 'AF', client: 'ph', trip_rate: 95 }), card({ billing_entity: 'BKR', client: 'Walmart', trip_rate: 80 })],
     };
     expect(priceCardClientChoices(meta, 'AF')).toEqual(['TPM Co', 'Walmart']);
     expect(priceCardClientChoices(meta, 'bkr')).toEqual(['PH', 'Dollar']);
     expect(priceCardClientChoices(meta, 'RF')).toEqual([]);
+  });
+  it('2026-11-16 (UAT #13): a new client is offered — its empty card does not hide it, nor does having no Comp yet', () => {
+    const empty = card({ billing_entity: 'BKR', client: 'Acme' });
+    const meta = {
+      clients_by_entity: { BKR: ['Acme', 'Dollar'] },
+      clients: ['Acme', 'Dollar', 'Newco'],
+      cards: [empty],
+    };
+    // Acme's card is the empty one opened when it was added; Newco is filed under no Comp.
+    expect(priceCardClientChoices(meta, 'BKR')).toEqual(['Acme', 'Dollar', 'Newco']);
+    expect(priceCardClientChoices(meta, 'SFM')).toEqual(['Newco']);
+    expect(emptyCardFor(meta.cards, 'bkr', 'acme')?.id).toBe(empty.id);
+    expect(emptyCardFor([{ ...empty, trip_rate: 90 }], 'BKR', 'Acme')).toBeNull();
   });
   it('a card keeps its entity and client', () => {
     expect(priceCardRenamed({ billing_entity: 'AF', client: 'PH' }, { billing_entity: 'af ', client: ' ph' })).toBe(false);

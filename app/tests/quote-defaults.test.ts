@@ -93,7 +93,7 @@ describe('the builder follows the vocabulary', async () => {
     expect(blankLine().day_value).toBe('1');
     const t = tripLine(85);
     expect(t.description).toBe(QUOTE_DEFAULT_TRIP_DESCRIPTION);
-    expect(t.line_type).toBe('service');
+    expect(t.line_type).toBe('trip');
     expect(t.rate).toBe('85.00');
     expect(t.qty).toBe('1');
     expect(tripLine(null).rate).toBe('');

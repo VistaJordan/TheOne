@@ -134,7 +134,7 @@ export const ADMIN_PART: DocPart = {
       key: 'integrations',
       title: 'Admin › Integrations',
       where: 'Admin › Integrations.',
-      purpose: 'Every connector on one page, grouped Client systems / Team tools / Calls, texts and email / AI / Files / Platform, each with the tool\'s mark, what it does, whether it is set up on the server ("Connected", "On · not set up on the server", "Connector not built yet", "Off", "Not connected yet"), a "When off:" line, who changed it and one switch: Ecotrak → OBI, OBI → Ecotrak (locked off until go-live), ServiceChannel, Corrigo, ClickUp, Quo, Outgoing email, Escalation emails, Claude, SharePoint, File storage, Microsoft sign-in (Always on).',
+      purpose: 'Every connector on one page, grouped Client systems / Team tools / Calls, texts and email / AI / Files / Platform, each with the tool\'s mark, what it does, whether it is set up on the server ("Connected", "On · not set up on the server", "Connector not built yet", "Off", "Not connected yet"), a "When off:" line, who changed it and one switch: Ecotrak → OBI, OBI → Ecotrak (locked off until go-live), ServiceChannel, Corrigo, ClickUp, Google Maps, Quo, Outgoing email, Escalation emails, Claude, SharePoint, File storage, Microsoft sign-in (Always on).',
       value: 'An integration misbehaving is switched off in one click, every button that uses it explains itself, and the keys stay on the server so switching back on needs nothing else.',
       features: [
         {
@@ -161,6 +161,14 @@ export const ADMIN_PART: DocPart = {
           permissions: ['admin/integrations view / edit'],
           audit: ['integration_turned_on / integration_turned_off', 'clickup_list_set', 'clickup_map_updated', 'clickup_dedupe_changed'],
           since: '0078, 0080, 0081',
+        },
+        {
+          name: 'Google Maps (address suggestions)',
+          what: 'While an address is typed on Add work order, on a draft or in the work order\'s own Address field, the addresses Google Maps knows are listed under the box (US only, from four characters, "powered by Google"); picking one writes Google\'s spelling of it with its ZIP, which fills Street Address, City, State and Zip code like any typed address, and the line under the box reads "Address from Google Maps". An address the map does not list is still accepted as typed ("Not checked against Google Maps"); the line is a hint on the form and is not stored. The browser asks OBI\'s API, which asks Google\'s Places API with the key on the server (GOOGLE_MAPS_API_KEY, the key the ClickUp address lookup uses). Every request to Google is counted per day — addresses picked, suggestion requests, addresses placed for ClickUp — and the row shows today, this month and last month, with a link to Google Cloud billing for the dollars. Suggestion requests have a daily limit for the whole team, typed in the Daily limit box under the row and saved with Save limit (0 = no limit, at most 100,000; it applies from the next request; until someone sets it the server\'s GOOGLE_PLACES_DAILY_CAP, else 3,000, is in force); past it the box is plain typing until the next day. Off: nothing is sent to Google, the box is plain typing, and addresses going to ClickUp wait without their map point. Work orders that do not come through a form (Ecotrak, the CSV import) are not checked.',
+          value: 'A wrong address from a client is caught against the map at intake, and what the lookup costs is visible and capped.',
+          permissions: ['work_orders view or intake view (suggestions)', 'admin/integrations view / edit (the switch and the counts)'],
+          audit: ['integration_turned_on / integration_turned_off', 'google_maps_limit_changed'],
+          since: '0140, 0141',
         },
         {
           name: 'Quo, Claude, Outgoing email, Escalation emails, SharePoint, File storage, Microsoft sign-in',

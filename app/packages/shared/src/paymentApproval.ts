@@ -8,7 +8,9 @@
 //   under $500          no approval — approved as it is raised
 //   $500 to $3,000      TL / ATL
 //   $3,000 and over     AM
-// (a super admin may always approve.)
+// (a super admin may always approve.) Since 0149 (Elise, 2026-11-16) the
+// payment bands are one ladder: ATL up to $3,000, TL up to $5,000, AM up to
+// $50,000, a super admin above; purchase requests keep 0115's.
 //
 // 0090 had asked an OM Under Probation's request to wait whatever the
 // amount, and let only the OM / Senior OM skip it under $500; since 0115

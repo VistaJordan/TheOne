@@ -881,3 +881,22 @@
 @media print {
   .qpreview { display: none; }
 }
+
+/* 2026-11-16 (UAT #27) · the quote's sales tax bar at the top of the builder. */
+.qb .qtax-bar { padding: 10px 14px; }
+.qb .qtax-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.qb .qtax-lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.qb .qtax-bar .tax-in { width: 110px; }
+.qb .qtax-note { font-size: 12px; color: var(--ink-3); }
+.qb .qtax-pick { margin-left: auto; }

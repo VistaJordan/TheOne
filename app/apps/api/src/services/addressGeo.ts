@@ -5,8 +5,10 @@
 // days. Never throws: null = nothing to send yet (try again on a later run).
 
 import { query } from '../db.js';
-import { GeocodeUnavailable, googleGeocode } from '../lib/googleGeocode.js';
+import { GeocodeUnavailable, googleGeocode, googleKey } from '../lib/googleGeocode.js';
+import { countGoogleUse } from './addressSuggest.js';
 import { geoLookup } from './geo.js';
+import { integrationOn } from './integrations.js';
 
 export interface PlacedAddress {
   lat: number;
@@ -40,6 +42,10 @@ export async function placeAddress(address: string, state: string | null, zip: s
     let point: PlacedAddress | null = null;
     let googleDown: string | null = null;
     try {
+      // 0140 · the Google Maps switch covers this lookup too: off = Google is
+      // not asked, exactly as with no key (nothing sent now, asked again later).
+      if (!integrationOn('google_maps')) throw new GeocodeUnavailable('Google Maps is switched off in Admin › Integrations');
+      if (googleKey()) void countGoogleUse('geocode');
       const g = await googleGeocode(address, state);
       if (g) point = { ...g, source: 'google' };
     } catch (e) {

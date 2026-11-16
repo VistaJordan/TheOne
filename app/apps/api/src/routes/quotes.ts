@@ -49,7 +49,7 @@ import { PERCENT_MAX } from '@theone/shared';
 const idParamsSchema = z.object({ id: z.string().min(1) });
 
 const lineSchema = z.object({
-  line_type: z.enum(['service', 'labor', 'part', 'material', 'fee', 'discount']),
+  line_type: z.enum(['service', 'labor', 'part', 'material', 'fee', 'discount', 'trip']),
   description: z.string().trim().min(1).max(500),
   qty: zMoney('Quantity', 0),
   rate: zMoney('Rate', 0),

@@ -98,13 +98,20 @@ export const QUOTE_CORRECTION_PENDING_TEXT =
     from $280 to $5,080 while it waited, then sent): locked for EVERYONE,
     managers and super admins included; only a draft is edited. A manager
     who wants a change clicks Reject with note: the quote goes back to draft
-    as a new revision and is changed there. `canApprove` stays in the
-    signature so the callers read the same; it no longer opens anything. */
+    as a new revision and is changed there.
+    2026-11-15 (Elise): a quote a dispatcher submitted FOR CORRECTION is
+    edited by whoever may approve or reject it (`quotes` approve) — they
+    correct it, then send it back to the dispatcher (Reject with note) or to
+    the client (Send to client). A quote pending approval stays locked for
+    everyone. */
 export type QuoteEditStatus = 'draft' | 'pending_correction' | 'pending_approval' | string;
 export const QUOTE_SUBMITTED_STATUSES: readonly string[] = ['pending_correction', 'pending_approval'];
-export function quoteEditableBy(status: QuoteEditStatus, canEdit: boolean, _canApprove?: boolean): boolean {
-  return canEdit && status === 'draft';
+/** The statuses a quote approver may still edit in, besides a draft. */
+export const QUOTE_APPROVER_EDITABLE_STATUSES: readonly string[] = ['pending_correction'];
+export function quoteEditableBy(status: QuoteEditStatus, canEdit: boolean, canApprove?: boolean): boolean {
+  if (status === 'draft') return canEdit;
+  return Boolean(canApprove) && QUOTE_APPROVER_EDITABLE_STATUSES.includes(status);
 }
 export const QUOTE_SUBMITTED_LOCKED_CODE = 'QUOTE_SUBMITTED_LOCKED';
 export const QUOTE_SUBMITTED_LOCKED_TEXT =
-  'This quote was submitted, so it is locked. To change it, a manager rejects it back to draft with a note.';
+  'This quote was submitted, so it is locked. A manager can correct it while it waits for correction, or reject it back to draft with a note.';

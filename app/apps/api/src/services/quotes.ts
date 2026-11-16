@@ -23,6 +23,9 @@ import { assertQuoteHeld } from './statusGates.js';
 import {
   CLIENT_APPROVAL_EVIDENCE_CODE,
   isDispatcherRole,
+  cardRatesLockedFor,
+  quoteCardRate,
+  QUOTE_RATE_LOCKED_CODE,
   QUOTE_CLIENT_DECISION_ROLES,
   quoteEventStatusName,
   quoteSubmitTarget,
@@ -984,6 +987,7 @@ function permissionsFor(
     // submit for approval and a Team Lead sends.
     send_limit: sendLimit,
     over_send_limit: quoteOverSendLimit(grandTotal, sendLimit),
+    card_rates_locked: cardRatesLockedFor(actor.role, actor.isSuperAdmin),
   };
 }
 
@@ -1352,10 +1356,10 @@ export interface QuoteUpdateInput {
 }
 
 /** Statuses a quote may still be edited in (§1: edits stop once approved).
-    2026-11-04 (Elise): a draft only — once submitted (pending correction or
-    pending approval) it is locked for everyone (`quoteEditableBy`); a
+    2026-11-04 (Elise): a draft; 2026-11-15 also pending correction, but only
+    by a quote approver (`quoteEditableBy`). Pending approval stays locked; a
     manager's Reject returns it to draft to be changed. */
-const EDITABLE_STATUSES: QuoteStatus[] = ['draft'];
+const EDITABLE_STATUSES: QuoteStatus[] = ['draft', 'pending_correction'];
 
 interface QuoteHead {
   id: string;
@@ -1438,7 +1442,7 @@ export async function createQuote(taskId: string, actor: ActingPrincipal): Promi
     // incurred" affordance, it is always there) AND one proposed option
     // (2026-10-22, Elise: one option is already open; "Add another option"
     // is the second). Each opens with the five default "Required is to…"
-    // lines and a Trip service line at the card's trip rate (quoteDefaults
+    // lines and a Trip line at the card's trip rate (quoteDefaults
     // in shared; the builder's blankOption opens the next option the same).
     const sections = await tx.query<{ id: string }>(
       `INSERT INTO quote_section (quote_id, kind, name, scope_lines, include_in_summary, position, round)
@@ -1450,7 +1454,7 @@ export async function createQuote(taskId: string, actor: ActingPrincipal): Promi
     for (const s of sections.rows) {
       await tx.query(
         `INSERT INTO quote_line (section_id, line_type, description, qty, rate, day_value, day, ot, position, uom, tax_pct, markup_pct)
-         VALUES ($1, 'service', $2, 1, $3, $4, $5, false, 0, NULL, 0, 0)`,
+         VALUES ($1, 'trip', $2, 1, $3, $4, $5, false, 0, NULL, 0, 0)`,
         [s.id, QUOTE_DEFAULT_TRIP_DESCRIPTION, tripRate, `Day ${QUOTE_DEFAULT_DAY}`, QUOTE_DEFAULT_DAY],
       );
     }
@@ -1474,18 +1478,59 @@ export async function createQuote(taskId: string, actor: ActingPrincipal): Promi
  * from round 2 on the incurred section is locked too (its content is the work
  * the client already approved), so an incoming incurred section is a 409.
  */
+/**
+ * 2026-11-16 (Elise, UAT #23) · a dispatcher keeps the price list's rate on a
+ * Labor or Trip line (`quoteCardRate`). A line whose rate differs from the
+ * card is refused unless the same line (type, description, rate) is already
+ * on the quote — so an older quote with a hand-typed rate still autosaves.
+ */
+async function assertCardRatesKept(
+  taskId: string,
+  quoteId: string,
+  sections: NonNullable<QuoteUpdateInput['sections']>,
+  actor: ActingPrincipal,
+): Promise<void> {
+  if (!cardRatesLockedFor(actor.role, actor.isSuperAdmin)) return;
+  const lines = sections.flatMap((s) => s.lines ?? []).filter((l) => l.line_type === 'labor' || l.line_type === 'trip');
+  if (lines.length === 0) return;
+  const t = await query<{ client: string | null; billing_entity: string | null; trade: string | null }>(
+    `SELECT client, billing_entity, trade FROM task WHERE id = $1`,
+    [taskId],
+  );
+  const card = await findLaborRate(t.rows[0]?.billing_entity ?? null, t.rows[0]?.client ?? null, t.rows[0]?.trade ?? null);
+  if (!card) return;
+  const key = (type: string, description: string, rate: number) =>
+    `${type}|${description.trim().toLowerCase()}|${Math.round(rate * 100)}`;
+  const onFile = await query<{ line_type: string; description: string; rate: string | number }>(
+    `SELECT l.line_type, l.description, l.rate
+       FROM quote_line l JOIN quote_section s ON s.id = l.section_id
+      WHERE s.quote_id = $1 AND s.deleted_at IS NULL`,
+    [quoteId],
+  );
+  const kept = new Set(onFile.rows.map((r) => key(r.line_type, r.description ?? '', Number(r.rate))));
+  for (const l of lines) {
+    const expected = quoteCardRate({ line_type: l.line_type, description: l.description ?? '' }, card);
+    if (expected == null || Math.round(Number(l.rate) * 100) === Math.round(expected * 100)) continue;
+    if (kept.has(key(l.line_type, l.description ?? '', Number(l.rate)))) continue;
+    throw badRequest(
+      `“${(l.description ?? '').trim() || 'This line'}” bills at the price list’s ${money(expected)}. Ask an admin to change the rate.`,
+      { code: QUOTE_RATE_LOCKED_CODE, expected, description: l.description },
+    );
+  }
+}
+
 export async function updateQuote(
   taskId: string,
   input: QuoteUpdateInput,
   actor: ActingPrincipal,
 ): Promise<Quote> {
-  assertCanEdit(actor);
   await assertWoAllows(taskId, 'quote.edit');
   const cur = await currentStatus(taskId);
   if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');
-  // 2026-11-04 (Elise): a submitted quote is locked for everyone, managers
-  // included — a change is a Reject back to draft.
-  if (!quoteEditableBy(cur.status, true, canApproveQuote(actor)) || !EDITABLE_STATUSES.includes(cur.status)) {
+  // A draft needs quotes:edit; a quote waiting for correction is edited by a
+  // quote approver (2026-11-15, Elise). Pending approval is locked for all.
+  if (cur.status === 'draft' || !canApproveQuote(actor)) assertCanEdit(actor);
+  if (!quoteEditableBy(cur.status, canEditQuote(actor), canApproveQuote(actor)) || !EDITABLE_STATUSES.includes(cur.status)) {
     if (QUOTE_SUBMITTED_STATUSES.includes(cur.status)) {
       throw conflict(QUOTE_SUBMITTED_LOCKED_TEXT, { code: QUOTE_SUBMITTED_LOCKED_CODE, status: cur.status });
     }
@@ -1495,6 +1540,7 @@ export async function updateQuote(
     });
   }
   const round = await currentRoundOfQuote(cur.id);
+  if (input.sections) await assertCardRatesKept(taskId, cur.id, input.sections, actor);
   if (input.sections && round > 1 && input.sections.some((s) => s.kind === 'incurred')) {
     throw conflict('The incurred section is locked after the first round — only options can change', {
       code: 'SECTION_LOCKED',
@@ -1510,10 +1556,10 @@ export async function updateQuote(
     // above locks the quote for this editor too (sections included).
     const locked = await tx.query<{ status: QuoteStatus }>(`SELECT status FROM quote WHERE id = $1 FOR UPDATE`, [cur.id]);
     const nowStatus = locked.rows[0]?.status;
-    if (nowStatus && QUOTE_SUBMITTED_STATUSES.includes(nowStatus)) {
+    if (nowStatus && QUOTE_SUBMITTED_STATUSES.includes(nowStatus) && !quoteEditableBy(nowStatus, canEditQuote(actor), canApproveQuote(actor))) {
       throw conflict(QUOTE_SUBMITTED_LOCKED_TEXT, { code: QUOTE_SUBMITTED_LOCKED_CODE, status: nowStatus });
     }
-    if (!nowStatus || !EDITABLE_STATUSES.includes(nowStatus) || !quoteEditableBy(nowStatus, true, canApproveQuote(actor))) {
+    if (!nowStatus || !EDITABLE_STATUSES.includes(nowStatus) || !quoteEditableBy(nowStatus, canEditQuote(actor), canApproveQuote(actor))) {
       throw conflict('The quote was approved while you were editing it — reload it', { code: 'QUOTE_MOVED' });
     }
     const before = await snapshotQuote(tx, cur.id);
@@ -1911,10 +1957,17 @@ async function transition(
       });
     }
     if (extra) await extra(tx, cur.id);
+    // 2026-11-16 (Elise, UAT #10): a quote leaving draft — submitted for
+    // correction or approval, approved, sent — is kept WHOLE on its activity
+    // row (every section, scope line, line and total, as snapshotQuote reads
+    // it under this transaction), so what was submitted can be read later
+    // whatever happens to the quote after.
+    const keep = to !== 'draft';
     await logQuoteActivity(tx, actor.id, taskId, action, { status: cur.status }, {
       status: to,
       quote_id: cur.id,
       ...(selfApproved ? { self_approved: true } : {}),
+      ...(keep ? { quote: await snapshotQuote(tx, cur.id) } : {}),
     });
   });
 

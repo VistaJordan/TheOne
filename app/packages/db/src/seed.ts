@@ -596,7 +596,7 @@ const QUOTE_NOTE_TO_CUSTOMER =
   'Parts are stocked in Houston — we can be back on site the morning after approval. Store can keep product in the walk-in until then.';
 
 interface SeedLine {
-  line_type: 'service' | 'labor' | 'part' | 'material';
+  line_type: 'trip' | 'labor' | 'material';
   description: string;
   qty: number;
   rate: number;
@@ -605,14 +605,14 @@ interface SeedLine {
 }
 
 const QUOTE_INCURRED_LINES: SeedLine[] = [
-  { line_type: 'service', description: 'Trip — dispatch to site, Galveston', qty: 1, rate: 75, day_value: 'Day 1', ot: false },
+  { line_type: 'trip', description: 'Trip — dispatch to site, Galveston', qty: 1, rate: 75, day_value: 'Day 1', ot: false },
   { line_type: 'labor', description: 'Tech 1 — diagnostic & temp logging', qty: 1, rate: 180, day_value: 'Day 1', ot: false },
   { line_type: 'labor', description: 'Tech 2 — after-hours assist', qty: 2.5, rate: 180, day_value: 'Day 1', ot: true },
 ];
 
 const QUOTE_OPTION_A_LINES: SeedLine[] = [
-  { line_type: 'part', description: 'Condenser fan motor, OEM', qty: 1, rate: 830, day_value: 'Day 2', ot: false },
-  { line_type: 'part', description: 'Hard-start kit + relay', qty: 1, rate: 260, day_value: 'Day 2', ot: false },
+  { line_type: 'material', description: 'Condenser fan motor, OEM', qty: 1, rate: 830, day_value: 'Day 2', ot: false },
+  { line_type: 'material', description: 'Hard-start kit + relay', qty: 1, rate: 260, day_value: 'Day 2', ot: false },
   { line_type: 'labor', description: 'Tech 1 — install', qty: 6, rate: 180, day_value: 'Day 2', ot: false },
   { line_type: 'labor', description: 'Tech 2 — assist & brazing', qty: 4, rate: 180, day_value: 'Day 2', ot: false },
 ];

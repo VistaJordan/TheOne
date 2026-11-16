@@ -16,6 +16,7 @@ import {
   describeTierBand,
   tierAllows,
   tierFor,
+  tierRolesText,
   type ApprovalTier,
   type ApprovalTierInput,
   type ApprovalTierKind,
@@ -89,7 +90,7 @@ export async function assertTierAllows(
 ): Promise<ApprovalTier | null> {
   const t = await tierForAmount(kind, amount);
   if (tierAllows(t, actor.role, actor.isSuperAdmin)) return t;
-  throw forbidden(`${what} of this amount (${t!.label}) needs one of: ${t!.roles.join(', ')}`, {
+  throw forbidden(`${what} of this amount (${t!.label}) needs ${tierRolesText(t!.roles)}`, {
     code: APPROVAL_TIER_CODE,
     tier: t!.label,
     roles: t!.roles,

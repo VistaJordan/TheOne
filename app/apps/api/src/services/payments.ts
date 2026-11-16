@@ -122,6 +122,7 @@ import { enqueueOutbox } from './outbox.js';
 import { evaluateForTask } from './obligations.js';
 import { dispatchAutomations } from './automations.js';
 import { addToCost } from './moneySync.js';
+import { notify } from './notices.js';
 import type { TaskChange } from './woAudit.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
@@ -1669,11 +1670,22 @@ export async function payPaymentRequest(id: string, actor: ActingPrincipal): Pro
  * requester. Elise, 2026-11-09: whoever may not approve it may not decline it
  * either: the amount's band, or above the NTE an Account Manager.
  */
-export async function rejectPaymentRequest(id: string, reason: string, actor: ActingPrincipal): Promise<PaymentRequest> {
-  assertCanApprove(actor, 'reject');
+export async function rejectPaymentRequest(
+  id: string,
+  reason: string,
+  actor: ActingPrincipal,
+  opts: { fromHold?: boolean } = {},
+): Promise<PaymentRequest> {
+  // 2026-11-16 (Elise): rejecting the NTE / over-quote hold a payment waits
+  // behind rejects the payment too (approvals.ts `rejectApprovalTask`). That
+  // decision was already gated by the hold's own section, and rejecting a
+  // hold is never blocked by the amount, so the bands are not asked here.
+  if (!opts.fromHold) assertCanApprove(actor, 'reject');
   const row = await loadRow(id);
   const facts = await nteFacts(row);
-  if (!facts.aboveNte) {
+  if (opts.fromHold) {
+    // gated by the hold's section
+  } else if (!facts.aboveNte) {
     await assertTierAllows('payment', facts.amount, actor, 'Declining a payment');
     assertManagerForMethod(row, actor, 'Declining a payment');
   } else if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin, facts.amount)) {
@@ -1706,6 +1718,17 @@ export async function rejectPaymentRequest(id: string, reason: string, actor: Ac
   // reason) has nothing left to decide once the request is refused; left
   // open it would hold every other payment on the work order.
   await reconcileApprovalTasks(row.task_id, actor.id);
+  // …and the person who asked for the money is told, with the reason.
+  const who = (row.vendor_id ? row.vendor_name : row.payee_name) ?? 'the technician';
+  await notify([row.requested_by_kind === 'human' ? row.requested_by_id : null], {
+    kind: 'payment_rejected',
+    title: `Payment of ${money(Number(row.amount ?? 0))} to ${who} rejected on ${row.wo_number} by ${actor.name}`,
+    body: note || null,
+    link: `/work-orders/${encodeURIComponent(row.wo_number)}?tab=money`,
+    actorId: actor.id,
+    taskId: row.task_id,
+    dedupeKey: `payment_rejected:${id}`,
+  });
   return out;
 }
 

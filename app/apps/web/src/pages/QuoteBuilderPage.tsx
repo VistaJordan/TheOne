@@ -58,8 +58,9 @@ import { useAuth } from '../auth/AuthProvider';
 import { CopyButton } from '../components/CopyButton';
 import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
 import { Icon } from '../components/Icon';
-import { LineItemsTable, AddLineButton, linesSpanDays } from '../components/quote/LineItemsTable';
+import { LineItemsTable, AddLineButton, linesCarryTax, linesSpanDays } from '../components/quote/LineItemsTable';
 import { MoneyRail } from '../components/quote/MoneyRail';
+import { QuoteTaxBar, sectionTax } from '../components/quote/QuoteTaxBar';
 import { OptionCard } from '../components/quote/OptionCard';
 import { QuotePipeline } from '../components/quote/QuoteStatusPill';
 import { ScopeList } from '../components/quote/ScopeList';
@@ -81,6 +82,7 @@ import {
 import {
   computeQuoteTotals,
   excludedNote,
+  parsePct,
   problemChipText,
   quoteProblems,
   sumLines,
@@ -486,7 +488,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const retractMutation = useMutation({ mutationFn: () => runAction(() => retractQuote(woNumber)) });
   const newRoundMutation = useMutation({ mutationFn: () => runAction(() => startQuoteRound(woNumber)) });
   const rejectMutation = useMutation({
-    mutationFn: () => runAction(() => rejectQuote(woNumber, rejectNote.trim())),
+    // 2026-11-15 · a manager's corrections are saved before it goes back.
+    mutationFn: () => flushThen(() => rejectQuote(woNumber, rejectNote.trim())),
     onSuccess: () => {
       setRejectOpen(false);
       setRejectNote('');
@@ -686,6 +689,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     }, new Map<number, typeof allOptions>()),
   ).sort((a, b) => a[0] - b[0]);
   const incurredTotals = sumLines(incurred.lines, otMult, taxApplies);
+  const taxPct = Number.isNaN(parsePct(draft.sales_tax_pct)) ? 0 : parsePct(draft.sales_tax_pct) || 0;
   const incurredNote = excludedNote(incurredTotals.excluded);
   const includedCount = options.filter((o) => o.s.include_in_summary).length;
   const incurredEditable = editable && !incurred.locked;
@@ -1041,16 +1045,16 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 </>
               ))}
 
-            {/* 0092 · with a manager for correction: they edit it in place and,
-                since 2026-10-27, approve it themselves; a dispatcher's Submit is
-                locked here. */}
+            {/* 0092 · with a manager for correction: since 2026-11-15 (Elise)
+                they edit it in place, then send it back to the dispatcher or
+                on to the client; a dispatcher's Submit is locked here. */}
             {status === 'pending_correction' && (
               <>
                 {retractButton()}
                 {canApprove && allows('quote.approve') && (
                   <button type="button" className="btn btn-lg btn-danger" onClick={() => setRejectOpen(true)}>
-                    <Icon name="x" size={14} />
-                    Reject with note
+                    <Icon name="refresh" size={14} />
+                    Send back to dispatcher
                   </button>
                 )}
                 {canSend
@@ -1166,7 +1170,10 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           <div className="callout" style={{ marginTop: 12, flexDirection: 'column', alignItems: 'stretch' }}>
             <div className="field">
               <label className="lbl" htmlFor="reject-note">
-                Why is this going back to draft? <span className="req" aria-hidden="true">*</span>
+                {status === 'pending_correction'
+                  ? 'What should the dispatcher know about it?'
+                  : 'Why is this going back to draft?'}{' '}
+                <span className="req" aria-hidden="true">*</span>
               </label>
               <textarea
                 className="fld"
@@ -1188,7 +1195,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 aria-disabled={rejectNote.trim() === '' ? true : undefined}
                 onClick={() => rejectNote.trim() !== '' && rejectMutation.mutate()}
               >
-                Reject with note
+                {status === 'pending_correction' ? 'Send back to dispatcher' : 'Reject with note'}
               </button>
             </div>
           </div>
@@ -1356,6 +1363,17 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             were empty (Elise, 2026-10-22) — never on blur, so a form being
             filled in for the first time stays quiet. */}
         <div className="col-main">
+          {/* ── SALES TAX (2026-11-16, UAT #27): one % for the quote, shown in
+              dollars under each section. ── */}
+          {taxApplies && (
+            <QuoteTaxBar
+              salesTaxPct={draft.sales_tax_pct}
+              editable={editable}
+              derived={taxQuery.data ?? null}
+              onChange={(sales_tax_pct) => update({ ...draft, sales_tax_pct })}
+            />
+          )}
+
           {/* ── INCURRED ── */}
           <section className="card">
             <div className="card-head">
@@ -1411,8 +1429,9 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               showErrors={showErrors && incurredEditable}
               otMultiplier={otMult}
               showDay={false}
-              showTax={taxApplies}
+              showTax={taxApplies && linesCarryTax(incurred.lines)}
               rate={quote.labor_rate}
+                lockCardRates={quote.permissions.card_rates_locked === true}
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
 
@@ -1440,6 +1459,11 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               <span className="subtotal-chip" style={{ marginLeft: 'auto' }}>
                 Incurred lines <b className="num">{usd(incurredTotals.total)}</b>
               </span>
+              {taxApplies && taxPct > 0 && (
+                <span className="subtotal-chip" title="The incurred lines × the sales tax at the top">
+                  Sales tax ({taxPct}%) <b className="num">{usd(sectionTax(incurredTotals.total, taxPct))}</b>
+                </span>
+              )}
             </div>
           </section>
 
@@ -1504,9 +1528,11 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 showErrors={showErrors}
                 grandTotal={totals.totalRule === 'incurred_plus_option' ? (totals.options.find((o) => o.key === s.key)?.grandTotal ?? null) : null}
                 rate={quote.labor_rate}
+                lockCardRates={quote.permissions.card_rates_locked === true}
                 decisionActions={status === 'sent' && options.length > 1 ? decisionButton(s.key, true) : undefined}
                 otMultiplier={otMult}
                 taxApplies={taxApplies}
+                salesTaxPct={taxPct}
                 showDay={dayShown[dayKey(s)] === true}
                 onToggleDay={(on) => setDayFor(s, on)}
                 onChange={(next) => setSection(i, next)}
@@ -1539,12 +1565,9 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           <MoneyRail
             totals={totals}
             nte={nte}
-            salesTaxPct={draft.sales_tax_pct}
             editable={editable}
             comp={wo?.billing_entity ?? null}
-            derived={taxQuery.data ?? null}
             isCostTbd={draft.is_cost_tbd}
-            onSalesTaxPctChange={(sales_tax_pct) => update({ ...draft, sales_tax_pct })}
             onCostTbdChange={(is_cost_tbd) => update({ ...draft, is_cost_tbd })}
             rates={quote.rates}
             taxApplies={taxApplies}

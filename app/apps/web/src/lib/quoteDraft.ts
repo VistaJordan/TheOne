@@ -23,7 +23,7 @@ import type {
   QuoteUpdateInput,
 } from '../api/client';
 import type { QuoteDocumentType, QuoteDraftBody, QuoteDraftSection } from '@theone/shared';
-import { QUOTE_DEFAULT_DAY, QUOTE_DEFAULT_TRIP_DESCRIPTION, defaultScopeLines, foldQuoteLevelNotes, lineBillsOt } from '@theone/shared';
+import { QUOTE_DEFAULT_DAY, QUOTE_DEFAULT_TRIP_DESCRIPTION, defaultScopeLines, foldQuoteLevelNotes, lineBillsOt, quoteCardRate } from '@theone/shared';
 import { parseLinePct, parseMoney, parsePct } from './quoteTotals';
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────────
@@ -32,13 +32,23 @@ import { parseLinePct, parseMoney, parsePct } from './quoteTotals';
     Value is the stored lowercase enum; label is the display text. A discount's
     amount is negative BY TYPE — the operator still types a positive number. */
 export const LINE_TYPES: { value: QuoteLineType; label: string }[] = [
-  { value: 'service', label: 'Service' },
   { value: 'labor', label: 'Labor' },
-  { value: 'part', label: 'Part' },
   { value: 'material', label: 'Material' },
+  { value: 'trip', label: 'Trip' },
   { value: 'fee', label: 'Fee' },
   { value: 'discount', label: 'Discount' },
 ];
+
+/** 2026-11-16 (Elise) · Service and Part are no longer offered (a trip is a
+    Trip line, a part a Material). A line still holding one (an older quote
+    copied back, a snapshot) shows its own type so the select is not blank. */
+export const LEGACY_LINE_TYPES: { value: QuoteLineType; label: string }[] = [
+  { value: 'service', label: 'Service' },
+  { value: 'part', label: 'Part' },
+];
+
+/** Picking Trip on a line with no description names it "Trip". */
+export const TRIP_LINE_TYPE: QuoteLineType = 'trip';
 
 /** The Day column's options (Yoda `Day` int). Every line opens on Day 1 and
     the column is drawn only on a multi-day job (2026-10-22). */
@@ -166,7 +176,7 @@ export function blankLine(): DraftLine {
 export function tripLine(tripRate: number | null | undefined): DraftLine {
   return {
     ...blankLine(),
-    line_type: 'service',
+    line_type: 'trip',
     description: QUOTE_DEFAULT_TRIP_DESCRIPTION,
     rate: tripRate != null && tripRate > 0 ? tripRate.toFixed(2) : '',
   };
@@ -180,18 +190,7 @@ export function cardRateFor(
   line: Pick<DraftLine, 'line_type' | 'description'>,
   card: { tech_rate: number | null; helper_rate: number | null; trip_rate: number | null; afterhours_rate: number | null; holiday_rate: number | null } | null | undefined,
 ): number | null {
-  if (!card) return null;
-  const d = line.description.trim().toLowerCase();
-  let v: number | null = null;
-  if (line.line_type === 'labor') {
-    if (d.includes('helper')) v = card.helper_rate ?? card.tech_rate;
-    else if (d.includes('after')) v = card.afterhours_rate ?? card.tech_rate;
-    else if (d.includes('holiday')) v = card.holiday_rate ?? card.tech_rate;
-    else v = card.tech_rate;
-  } else if (/^trip\b/.test(d)) {
-    v = card.trip_rate;
-  }
-  return v != null && v > 0 ? v : null;
+  return quoteCardRate(line, card);
 }
 
 /** Fill the rate of every line whose rate is still blank (or 0) from the

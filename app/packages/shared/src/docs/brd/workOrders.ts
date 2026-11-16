@@ -290,7 +290,7 @@ export const WORK_ORDERS_PART: DocPart = {
         },
         {
           name: 'City, State and Zip code follow the address',
-          what: 'When a work order’s Address is filled (typed in the editor, bulk edit, an automation, Add work order, an intake draft, the CSV import or a planned-maintenance raise), City, State and Zip code are read off its end ("7898 Bradley Long Dr, Sherrills Ford, NC 28673, USA" gives Sherrills Ford / NC / 28673) and written into their fields. On Add work order they appear as the address is typed. A city or state the text leaves out is completed from the ZIP code, from the app’s own ZIP table.',
+          what: 'When a work order’s Address is filled (typed in the editor, bulk edit, an automation, Add work order, an intake draft, the CSV import or a planned-maintenance raise), City, State and Zip code are read off its end ("7898 Bradley Long Dr, Sherrills Ford, NC 28673, USA" gives Sherrills Ford / NC / 28673) and written into their fields. On Add work order they appear as the address is typed. A city or state the text leaves out is completed from the ZIP code, from the app’s own ZIP table. Since 0140 the Address box on Add work order, on a draft and in the field editor lists Google Maps’ addresses as it is typed (Admin › Integrations › Google Maps); a picked one is written with its ZIP, and an address the map does not list is still accepted.',
           value: 'The address is typed once; the intake fields that depend on it fill themselves.',
           rules: [
             'The address is the source: the three fields are overwritten whenever the address changes. A hand edit to them stays until the address changes again; a value typed in the same save as the address is kept.',

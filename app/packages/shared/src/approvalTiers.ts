@@ -79,6 +79,28 @@ export function tierAllows(
   return Boolean(role) && tier.roles.includes(role as string);
 }
 
+/** A band's roles may name this instead of a role code: no role holds it, so
+    only a super admin decides inside the band (Elise, 2026-11-16: payments
+    above $50,000). */
+export const TIER_SUPER_ADMIN_ONLY = 'super_admin';
+
+const TIER_ROLE_NAMES: Record<string, string> = {
+  super_admin: 'a super admin',
+  am: 'AM',
+  tl: 'TL',
+  atl: 'ATL',
+  admin: 'Admin',
+  ar: 'AR',
+  ap: 'AP',
+};
+
+/** "ATL, TL or AM" / "a super admin" — who may decide inside a band, for a sentence. */
+export function tierRolesText(roles: readonly string[]): string {
+  if (roles.length === 0) return 'anyone with the permission';
+  const names = roles.map((r) => TIER_ROLE_NAMES[r] ?? r);
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+}
+
 /** "$500 to $3,000" / "Over $3,000" — how a band reads when it has no label. */
 export function describeTierBand(min: number, max: number | null): string {
   const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;

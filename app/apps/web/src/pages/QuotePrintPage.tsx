@@ -114,6 +114,7 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
     (s) => s.kind === 'option' && s.round === quote.current_round && s.include_in_summary,
   );
   const yoda = quote.totals.total_rule !== 'options_only';
+  const sectionTaxPct = yoda && quote.tax_applies !== false ? quote.totals.sales_tax_pct : 0;
   const priced = quote.totals.option_totals.find((o) => o.section_id === quote.totals.priced_section_id) ?? null;
   const offered = quote.totals.option_totals.filter((o) => o.include_in_summary && options.some((s) => s.id === o.section_id));
   const summaryText = quote.summary.pinned ?? quote.summary.auto;
@@ -160,7 +161,7 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
       </section>
 
       {incurred && incurred.lines.length > 0 && (
-        <LinesBlock section={incurred} heading="Work performed" note="Billed with the work order" />
+        <LinesBlock section={incurred} heading="Work performed" note="Billed with the work order" taxPct={sectionTaxPct} />
       )}
       {incurred && incurred.lines.length === 0 && incurred.note_to_customer?.trim() && (
         <section className="qdoc-note">
@@ -175,6 +176,7 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
           section={s}
           heading={`${s.name ?? 'Approved work'} (approved, round ${s.round})`}
           note="Billed with the work order"
+          taxPct={sectionTaxPct}
         />
       ))}
 
@@ -184,6 +186,7 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
           key={s.id}
           section={s}
           heading={options.length > 1 ? `${s.label}${s.name ? ` — ${s.name}` : ''}` : 'Proposed work'}
+          taxPct={sectionTaxPct}
         />
       ))}
 
@@ -253,7 +256,10 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
   );
 }
 
-function LinesBlock({ section, heading, note }: { section: QuoteSection; heading: string; note?: string }) {
+/** 2026-11-16 (UAT #27) · each section prints its sales tax in dollars under
+    its subtotal: the section's lines × the quote's %. */
+function LinesBlock({ section, heading, note, taxPct = 0 }: { section: QuoteSection; heading: string; note?: string; taxPct?: number }) {
+  const salesTax = taxPct > 0 ? Math.round(section.subtotal * taxPct) / 100 : 0;
   const anyTax = section.lines.some((l) => l.tax > 0);
   // M27 (UAT Wave D): the markup is ours, not the client's — the printed
   // quote has no Markup column; the unit price is the marked-up price, so
@@ -303,6 +309,12 @@ function LinesBlock({ section, heading, note }: { section: QuoteSection; heading
             <th colSpan={anyTax ? 4 : 3}>Subtotal</th>
             <td className="num">{usd(section.subtotal)}</td>
           </tr>
+          {salesTax > 0 && (
+            <tr>
+              <th colSpan={anyTax ? 4 : 3}>Sales tax ({taxPct}%)</th>
+              <td className="num">{usd(salesTax)}</td>
+            </tr>
+          )}
         </tfoot>
       </table>
       {/* 0146 · the section's own note to the customer prints under it. */}

@@ -2035,6 +2035,42 @@ again next run. `GOOGLE_MAPS_API_KEY` is the fifteenth `DEMO_MODE_SECRET_VARS`
 entry. This is the first lookup that sends addresses outside OBI; the
 technician map still uses only our own tables.
 
+**Address suggestions from Google Maps** (migration 0140, Elise 2026-11-15;
+`packages/shared/src/addressSuggest.ts` pure, `lib/googlePlaces.ts`,
+`services/addressSuggest.ts`, `routes/address.ts`,
+`components/AddressInput.tsx`, `pages/admin/GoogleMapsPanel.tsx`,
+`tests/address-suggest.test.ts`). The Address box on Add work order, on a
+draft (`IntakePage`) and in the field editor (`FieldEditor`, so Overview's Job
+details and All fields) is `AddressInput`: a text box that lists Google Maps'
+addresses under it as it is typed (US only, from 4 characters, 300 ms after
+the last key) and, on a pick, writes Google's formatted address with its ZIP —
+which the forms' own `set` then reads into Street Address / City / State / Zip
+Code. **Typing is always accepted**; the line under the box ("Address from
+Google Maps" / "Not checked against Google Maps") is a hint, not stored. The
+browser asks OUR API — `GET /address/suggest?q=&session=` and `GET
+/address/place?place_id=&session=` (`work_orders` view or `intake` view) —
+which asks the Places API (New) with `GOOGLE_MAPS_API_KEY` (the 0132 key; the
+API must be enabled for it in Google Cloud, else Google answers 403 and the
+box is plain typing). One session token per typing session, ended by the
+pick, is how Google bills a session. **The switch** is a new integration key,
+`google_maps` (Admin › Integrations, on by default): off = neither the
+suggestions nor the 0132 ClickUp geocode (`placeAddress` answers `later`)
+contact Google. `available: false` (`switched_off | not_set_up | daily_cap |
+unreachable`) makes every Address box in the tab stop asking for 5 minutes.
+**Use is counted**: `google_usage` (day, kind `autocomplete | place_details |
+geocode`, uses; Chicago day; no FK, not truncated by the seed) is bumped by
+`countGoogleUse` as each request is made; the Integrations row's note and the
+panel under it (`GET /admin/integrations/google-maps`, `admin/integrations`
+view) show today, this month and last month — counts, the dollars are on
+Google's billing page. **The daily limit** on suggestion requests (the whole
+team, 0 = none) is asked of that table before Google is, and is typed under
+the row (migration 0141: `google_setting` row `daily_cap`, `PUT
+/admin/integrations/google-maps/limit {daily_cap}`, `admin/integrations`
+edit, 0 to 100,000, logged `google_maps_limit_changed`; `dailyCapInForce`:
+that row, else `GOOGLE_PLACES_DAILY_CAP`, else 3,000; no FK, not truncated
+by the seed). Not covered: the Ecotrak ingest, the CSV import and bulk edit do
+not go through the box.
+
 **Admin › Documentation** (migration 0075, `packages/shared/src/docs/`,
 `services/docsSnapshot.ts`, `routes/adminDocs.ts`, `pages/admin/AdminDocsPage.tsx`,
 `components/docs/`, `styles/docs.css`, `tests/docs.test.ts` +
@@ -2992,10 +3028,16 @@ arrow going in), `upload` stays for file uploads.
 client's yes** (no migration, Elise 2026-11-04, UAT "quote edited after
 submission"; `tests/quote-approved-move.test.ts`). These replace the
 2026-10-27 / 0092 rules where they clash. (1) `quoteEditableBy` is draft
-only: a quote in pending correction or pending approval is locked for
-everyone, managers and super admins included (409 `QUOTE_SUBMITTED_LOCKED`,
-`EDITABLE_STATUSES = ['draft']`, the AI draft replaces only a draft); a
-change is **Reject with note** back to draft. The 0083 #23 return-to-draft
+(`quotes` edit) — and since 2026-11-15 (Elise) also pending correction for a
+quote APPROVER (`quotes` approve, edit grant not needed;
+`QUOTE_APPROVER_EDITABLE_STATUSES`, `EDITABLE_STATUSES = ['draft',
+'pending_correction']`, `tests/quote-submitted-lock.test.ts`): they correct
+the dispatcher's quote, then click **Send back to dispatcher** (the reject
+route, note required, back to draft rev++; the builder flushes the edits
+first) or **Send to client**. Pending approval stays locked for everyone,
+managers and super admins included (409 `QUOTE_SUBMITTED_LOCKED`, the AI
+draft replaces only a draft); a change there is **Reject with note** back to
+draft. The 0083 #23 return-to-draft
 is gone (nothing can edit a pending quote). The inbox link reads **Review
 and send**. (2) `sendQuote` refuses 409 `QUOTE_OVER_NTE` before approving
 when the dearest option (`quoteTotalForNte`) is above `totals.nte`; the
@@ -3683,6 +3725,24 @@ overrides ignored) is never auto-approved, and
 decline one under `SMALL_NTE_PAYMENT_UNDER` ($500); $500 and over above the NTE
 stays the AM's (`overNteApproverLabel` words the lock). **An exit by mistake keeps the form:** besides ✕ / the scrim, Add work order files what was typed as an intake draft when the page goes away (the browser's "Leave site?" first, then a `keepalive` POST on `pagehide`, `createIntakeDraftOnExit`) or the form unmounts inside the app (Back, a link); Create, Save as draft and Cancel set `finished` and file nothing extra. Needs `intake` create, which migration 0136 grants (view / create / edit) to TL, ATL and AM too — rule 14.1.2 had kept drafts to OP Admin and Admin, from before drafts lived on Add work order. **RF closed too** (migration 0137, Elise 2026-11-14): the 0134 treatment for RF — Comp = SFM, BKR; RF's teams, check-in rows and price cards deleted, its contracts off, RF-only clients inactive, the RF sign-off sheet and form gone (`SIGNOFF_LAYOUTS` = sfm, bkr, bkr_emcor); history untouched; seed.ts in step. **Files attached on Add work order are the client’s:** the form uploads them with `from_client: true`; `addAttachment` files them as kind `client`, approved as they land (reviewed by the uploader, copied to SharePoint), honoured only for the person who created the work order within 60 minutes (`FROM_CLIENT_WINDOW_MIN`, else 400). The same day fixed every upload answering 500 after storing the file (a WITH-INSERT read back by its own statement saw no row). **Production migrations:** `npm run db:migrate:prod` (`app/scripts/migrate-production.mjs`) pulls the Vercel Production env to a temp file, picks the direct Neon URL, lists what is pending and asks before running `db:migrate` (`--check` lists only, `--yes` skips the question).
 
+**Who reads and who writes the client conversation** (migration 0142, Elise
+2026-11-15; `mayViewClientMessages` / `mayMessageClient` /
+`CLIENT_MESSAGE_COLUMN_KEYS` in shared `messaging.ts`,
+`tests/client-messages-view.test.ts`). `work_orders/comments/client` ("Message
+the client") gained a **view** action: without it the Messages tab draws no
+Client visible tab and the API sends none of that conversation — `listMessages`
+and `loadMessage` drop client-visible rows, the Overview feed (`getFeed(taskId,
+withClient)`) leaves them out, the Last client message / … on columns follow it
+(`canViewField`), and neither the watcher notice nor an @mention on a
+client-visible message reaches a person without it (`mentionCandidates(…,
+clientVisible)`, `?client=1` on the candidates route). Posting, Improve and an
+edit to client-visible ask view before create (403 "You cannot see the client
+messages"). 0142: OM and OM Under Probation view false / create false, Senior
+OM view only, TL / ATL / Admin / OP Admin both; every other role unset (inherits
+Messages, then Work orders view), per-person overrides untouched. Not filtered:
+the Logs tab's `message_edited` body, Client Updates (built as the tracker's
+owner), notices raised before 0142.
+
 **AI usage, models and limits; Improve message; the assistant keeps
 confidences** (migration 0138, Elise 2026-11-14; `packages/shared/src/aiUsage.ts`
 pure, `services/aiUsage.ts`, `services/aiImprove.ts`, `routes/ai.ts`,
@@ -3719,24 +3779,6 @@ superAdmin)` in the route guard and the sidebar); everyone else keeps the
 Version 2 screen, and `/` still lands on Work Orders for anyone who may open
 them. **A new AI feature** = an `AI_FEATURES` entry, its labels and defaults,
 the 0138 CHECK on `ai_setting.feature` widened by a migration, and `aiGate` +
-**Who reads and who writes the client conversation** (migration 0142, Elise
-2026-11-15; `mayViewClientMessages` / `mayMessageClient` /
-`CLIENT_MESSAGE_COLUMN_KEYS` in shared `messaging.ts`,
-`tests/client-messages-view.test.ts`). `work_orders/comments/client` ("Message
-the client") gained a **view** action: without it the Messages tab draws no
-Client visible tab and the API sends none of that conversation — `listMessages`
-and `loadMessage` drop client-visible rows, the Overview feed (`getFeed(taskId,
-withClient)`) leaves them out, the Last client message / … on columns follow it
-(`canViewField`), and neither the watcher notice nor an @mention on a
-client-visible message reaches a person without it (`mentionCandidates(…,
-clientVisible)`, `?client=1` on the candidates route). Posting, Improve and an
-edit to client-visible ask view before create (403 "You cannot see the client
-messages"). 0142: OM and OM Under Probation view false / create false, Senior
-OM view only, TL / ATL / Admin / OP Admin both; every other role unset (inherits
-Messages, then Work orders view), per-person overrides untouched. Not filtered:
-the Logs tab's `message_edited` body, Client Updates (built as the tracker's
-owner), notices raised before 0142.
-
 `recordAiUse` around its call. **Improve** on the Messages composer (`POST
 /work-orders/:id/messages/improve {body, mode, instruction?, client_visible}`,
 the posting grants, `resolveTaskId`): Polish · More formal · Shorter ·
@@ -3783,6 +3825,52 @@ still show and can be removed). **A visit's phone is a US number**
 `field: tech_phone`, stored as `formatUsPhone`; the CICO boxes shape it as
 typed, `PhoneInput` in `CicoCard.tsx`). **No "Use this device's location"**
 on a visit — Type coordinates only.
+
+**UAT list of 2026-11-16, second batch** (migrations 0149, 0150, 0151, Elise;
+`tests/uat-2026-11-16-b.test.ts`). **Payment bands are one ladder** (0149,
+payments only — purchase requests keep 0115's): under $500 approved as raised ·
+$500–3,000 ATL / TL / AM · $3,000–5,000 TL / AM · $5,000–50,000 AM · $50,000
+and over a super admin only — the band's roles hold `TIER_SUPER_ADMIN_ONLY`
+(`'super_admin'`, no role has that code; Admin › Settings › Approval tiers
+draws it as "super admins only"; `tierRolesText` words the 403). **A rejected
+payment**: rejecting an `nte_override` / `over_quote` hold whose payment is still
+requested rejects the payment too (`rejectApprovalTask` → `rejectPaymentRequest(…,
+{fromHold: true})`, the bands not asked — rejecting a hold is never blocked),
+and every rejection raises a `payment_rejected` notice for the requester
+(`NOTICE_KINDS_ALWAYS_SHOWN`). **Quote line types** (0150): the builder offers
+Labor · Material · Trip · Fee · Discount (`LINE_TYPES`; a line still holding
+Service or Part shows it, `LEGACY_LINE_TYPES`); 0150 adds `'trip'` to the CHECK,
+moves Service lines named Trip… to Trip and Part to Material; the default Trip
+line, seed.ts and the AI draft (`toDraftBody` maps part / service) follow — keep
+in step. **The price list's rates are not the dispatchers'**
+(`cardRatesLockedFor` / `quoteCardRate` in shared `quoteDefaults.ts`): on a
+Labor or Trip line the card prices, the unit price is read-only for OM Under
+Probation / OM / Senior OM (`Quote.permissions.card_rates_locked`,
+`lockCardRates` on `LineItemsTable`) and `updateQuote` refuses another rate
+(400 `QUOTE_RATE_LOCKED`) unless that exact line is already on the quote.
+**Sales tax bar** (`components/quote/QuoteTaxBar.tsx`): the % is typed at the
+top of the builder (derived hint, Apply a rate…); Incurred and each option show
+"Sales tax (n%) $x" at their foot (`sectionTax`), and so does the printed quote
+under each section's subtotal; the Money rail only totals it; the per-line Tax %
+column shows only on a section whose lines carry one (`linesCarryTax`). **A
+quote leaving draft is kept whole**: `transition()` puts `snapshotQuote` under
+`after.quote` on the submit / submit-for-correction / approve / send rows; Logs
+draws the total and a "Quote as it stood" fold (`QuoteKept` in `AuditTrail.tsx`).
+**A new client is complete**: every field but Notes plus the first account team
+(Comp, AM, TL, ATL, Sales) in the form; `createClient` refuses a missing record
+field (400 `VALIDATION`, `details.missing`). **Price cards for new clients**: an
+empty card (the one `ensureClientPriceCard` opens) no longer hides its client
+from New price card, a client filed under no Comp is offered under every Comp
+(`priceCardClientChoices`), and saving fills that empty card (`emptyCardFor`);
+Prices is refetched after a client is added. **Trades are picked**: a rate has
+no Name box (named by its trades), and the trade list is the Trade field's
+options plus the trades on work orders and rates (`tradeChoices`). **The clock
+starts at Received on**: `receivedStart` in `woRecord.ts` (the Date-Time
+Received stamp, else created_at, else the received day's Chicago midnight) feeds
+the rail's Open for (`time.received_at`) and the timelog — it used to be the
+received day at midnight UTC, hours before the work order existed. **OM Under
+Probation is view-only on the Dates** (0151; Add work order still takes
+Received on, Due Date and SLA Due Date — `CREATE_FILLABLE_FIELD_KEYS`).
 
 ## Verify
 
