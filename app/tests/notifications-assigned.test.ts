@@ -15,6 +15,8 @@ import {
   isAssignedTo,
   quoteDueNoticeTitle,
   quoteDueState,
+  QUOTE_DUE_ROLE_CODES,
+  QUOTE_DUE_SEAT_KEYS,
 } from '@theone/shared';
 import { assignedToSql } from '../apps/api/src/services/woScope';
 import { woNumberOfLink } from '../apps/api/src/services/notices';
@@ -47,7 +49,7 @@ describe('who is on the job', () => {
   });
 
   it('a mention and the answer to your own request always show', () => {
-    expect([...NOTICE_KINDS_ALWAYS_SHOWN].sort()).toEqual(['approval_reminder', 'payment_rejected', 'request_decided', 'wo_mention']);
+    expect([...NOTICE_KINDS_ALWAYS_SHOWN].sort()).toEqual(['approval_reminder', 'payment_rejected', 'quote_due', 'request_decided', 'wo_mention']);
   });
 });
 
@@ -139,11 +141,15 @@ describe('quotes due', () => {
     expect(quoteDueNoticeTitle('WO-9', 'overdue', '2026-11-18')).toBe('Quote overdue on WO-9 (was due Nov 18)');
   });
 
-  it('one reminder per work order per day, to its Assignee, while no quote is on its way', () => {
+  it('one reminder per work order per day, to its OM, TL, ATL and every OP Admin, while no quote is on its way', () => {
+    expect([...QUOTE_DUE_SEAT_KEYS]).toEqual(['Assignee', 'TL', 'ATL']);
+    expect([...QUOTE_DUE_ROLE_CODES]).toEqual(['oa']);
+    expect(NOTICE_KINDS_ALWAYS_SHOWN).toContain('quote_due');
     const svc = read('apps/api/src/services/notices.ts');
     expect(svc).toContain('dedupeKey: `quote_due:${r.task_id}:${r.entered_at.getTime()}:${today}`');
     expect(svc).toContain("q.status IN ('pending_correction', 'pending_approval', 'approved', 'sent', 'client_approved')");
-    expect(svc).toContain("string_to_array(COALESCE(t.fields ->> 'Assignee', ''), ',')");
+    expect(svc).toContain("unnest(ARRAY[${QUOTE_DUE_SEAT_SQL}]) AS seat(k)");
+    expect(svc).toContain('OR p.role = ANY($2::text[])');
     expect(read('apps/api/src/routes/webhooks.ts')).toContain('await raiseQuoteDueNotifications(true)');
   });
 });

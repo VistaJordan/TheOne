@@ -11,6 +11,8 @@ import {
   PULSE_NOTICE_PREFIX,
   QUOTE_DUE_AFTER_HOURS,
   QUOTE_DUE_NOTICE_KIND,
+  QUOTE_DUE_ROLE_CODES,
+  QUOTE_DUE_SEAT_KEYS,
   QUOTE_DUE_STATUS_NAME,
   VENDOR_REVIEW_PERM_KEY,
   businessDay,
@@ -156,12 +158,14 @@ export async function raiseExpiryNotifications(force = false): Promise<void> {
 // A work order in Waiting for Quote owes its quote QUOTE_DUE_AFTER_HOURS
 // working hours after it got there (weekends and holidays skipped, as the
 // quote clock does). From that Chicago day on, while it still sits there with
-// no quote on its way (a draft or a declined one still owes it), the people in its Assignee seat get one reminder a day:
+// no quote on its way (a draft or a declined one still owes it), the OM in its Assignee seat, its TL and ATL and every OP Admin get one reminder a day:
 // "due today" on the day, "overdue" after. The dedupe key (work order, the
 // time it entered the status, the day) makes every later sweep that day a
 // no-op, and a work order sent back to Waiting for Quote starts a new clock.
 // Raised on the inbox's own reads (at most every few minutes per process) and
 // by the hourly cron, so nobody has to open the page for it to be written.
+
+const QUOTE_DUE_SEAT_SQL = QUOTE_DUE_SEAT_KEYS.map((k) => `'${k.replace(/'/g, "''")}'`).join(', ');
 
 let lastQuoteSweep = 0;
 const QUOTE_SWEEP_EVERY_MS = 5 * 60 * 1000;
@@ -184,8 +188,14 @@ export async function raiseQuoteDueNotifications(force = false, now = new Date()
               ARRAY(
                 SELECT p.id::text FROM principal p
                  WHERE p.kind = 'human' AND p.status <> 'disabled' AND btrim(p.display_name) <> ''
-                   AND lower(btrim(p.display_name)) IN (
-                     SELECT lower(btrim(nm)) FROM unnest(string_to_array(COALESCE(t.fields ->> 'Assignee', ''), ',')) AS nm)
+                   AND (
+                     -- The OM in the Assignee seat, and the work order's TL and ATL.
+                     lower(btrim(p.display_name)) IN (
+                       SELECT lower(btrim(nm))
+                         FROM unnest(ARRAY[${QUOTE_DUE_SEAT_SQL}]) AS seat(k),
+                              unnest(string_to_array(COALESCE(t.fields ->> seat.k, ''), ',')) AS nm)
+                     -- Every OP Admin, whoever is on the job (Elise, 2026-11-16).
+                     OR p.role = ANY($2::text[]))
               ) AS people
          FROM task t JOIN status s ON s.id = t.status_id
         WHERE t.deleted_at IS NULL AND s.name = $1
@@ -193,7 +203,7 @@ export async function raiseQuoteDueNotifications(force = false, now = new Date()
           -- (re-quoted in a new round), still has to be submitted.
           AND NOT EXISTS (SELECT 1 FROM quote q WHERE q.task_id = t.id
                              AND q.status IN ('pending_correction', 'pending_approval', 'approved', 'sent', 'client_approved'))`,
-      [QUOTE_DUE_STATUS_NAME],
+      [QUOTE_DUE_STATUS_NAME, [...QUOTE_DUE_ROLE_CODES]],
     );
     out.checked = rows.rows.length;
     if (rows.rows.length === 0) return out;

@@ -212,7 +212,7 @@ export const ASSIGNED_SEAT_KEYS = ['Assignee', 'Support Trainee', 'TL', 'ATL', '
 
 /** Kinds shown whoever holds the work order: someone asked for this person by
     name (a mention), or it answers their own request. */
-export const NOTICE_KINDS_ALWAYS_SHOWN: readonly string[] = ['wo_mention', 'request_decided', 'payment_rejected', 'approval_reminder'];
+export const NOTICE_KINDS_ALWAYS_SHOWN: readonly string[] = ['wo_mention', 'request_decided', 'payment_rejected', 'approval_reminder', 'quote_due'];
 
 /** True when `name` sits in one of the assigned seats of this bag (each seat
     is a comma-joined list of display names). The pure twin of the SQL in
@@ -252,6 +252,12 @@ export interface AfterHoursState {
 export const QUOTE_DUE_NOTICE_KIND = 'quote_due';
 export const QUOTE_DUE_STATUS_NAME = 'Waiting for Quote';
 export const QUOTE_DUE_AFTER_HOURS = 48;
+
+/** Who is reminded (Elise, 2026-11-16): the OM in the Assignee seat and the
+    work order's TL and ATL, plus every OP Admin (`oa`), who is on no seat —
+    which is why `quote_due` is in NOTICE_KINDS_ALWAYS_SHOWN. */
+export const QUOTE_DUE_SEAT_KEYS = ['Assignee', 'TL', 'ATL'] as const;
+export const QUOTE_DUE_ROLE_CODES = ['oa'] as const;
 
 export type QuoteDueState = 'not_yet' | 'due_today' | 'overdue';
 

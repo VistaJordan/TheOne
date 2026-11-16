@@ -3420,8 +3420,12 @@ every 5 min, and the hourly client-updates cron) finds work orders in Waiting
 for Quote with no quote on its way (none, a draft or a declined one), due =
 entry into the status (`STATUS_SINCE_SQL`) + 48 working hours
 (`addWorkingHours`, weekends and holidays skipped), and from that Chicago day
-gives the Assignee one `quote_due` notice a day ("Quote due today on …" /
-"Quote overdue on … (was due …)"; dedupe = task + entry time + day).
+gives one `quote_due` notice a day ("Quote due today on …" /
+"Quote overdue on … (was due …)"; dedupe = task + entry time + day) to the
+people in its Assignee, TL and ATL seats and to every active OP Admin
+(`QUOTE_DUE_SEAT_KEYS` / `QUOTE_DUE_ROLE_CODES`, Elise 2026-11-16); since OP
+Admin sits on no seat, `quote_due` is in `NOTICE_KINDS_ALWAYS_SHOWN`.
+Notifications lists them under Work orders › **Quotes due**.
 
 **No work order goes to a disabled account** (Elise, 2026-10-23, no
 migration; `tests/assignee-disabled.test.ts`). The person paths already
@@ -3866,7 +3870,8 @@ on the Incurred section. **Only TL / ATL change TL and ATL** (0147: edit false
 on `work_orders/fields/people/fields.TL|ATL` for every role but `tl`, `atl`
 and `service` — Admin included; super admins always may) and **OM Under
 Probation is view-only on People** (0147, `work_orders/fields/people` edit
-false). AM / TL / ATL / Sales Owner joined `CREATE_FILLABLE_FIELD_KEYS`, so
+false); since 0154 OM and Senior OM too, `PEOPLE_LOCKED_ROLES`,
+explicit child edit grants on those three roles set false as well). AM / TL / ATL / Sales Owner joined `CREATE_FILLABLE_FIELD_KEYS`, so
 Add work order still fills them from the account team. **The Emergency status
 is gone** (0148: its work orders move to Open with a `status_changed` row and
 the Emergency box ticked, `via: 'migration'`, signed "Status cleanup"; an
