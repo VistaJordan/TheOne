@@ -3667,7 +3667,7 @@ quotes, invoices and payments carrying those Comps are untouched.
 `intakeGate.ts`) — the SLA row names `corrigo`, and `intakeFieldAsked` asks it
 only when `Client Portal Type` reads Corrigo (`clientMessageTarget`), so the
 Ready to Assign gate, Incoming's "Fill before assigning" (the row SQL carries
-the portal type) and a draft's Submit skip it for everyone else. Add work order raises no acceptance, so the gate never runs there: `applyCorrigoSlaRule` (shared `woCreate.ts`, laid over the form in the dialog and again in `createWorkOrder`) makes SLA Due Date required while a Dispatcher is picked and the portal type is Corrigo (only while the field is on the form).
+the portal type) and a draft's Submit skip it for everyone else. Add work order raises no acceptance, so the gate never runs there: `applyCorrigoSlaRule` (shared `woCreate.ts`, laid over the form in the dialog and again in `createWorkOrder`) makes SLA Due Date required while the portal type is Corrigo, Dispatcher picked or not, and optional for every other client even when Admin › Custom fields or a form layout says Required (2026-11-16; only while the field is on the form).
 **A quote above the NTE is sent** (reversing 2026-11-04): `sendQuote` no
 longer refuses; the builder draws an **Above NTE** warning chip
 (`quoteOverNteWarning`) beside an unlocked Send to client, Request NTE

@@ -336,7 +336,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   // 0130 · Original WO appears (and is required) only once "Is this WO a
   // recall?" is ticked.
   const recall = recallTicked(values[RECALL_KEY]);
-  // 2026-11-14 · a Corrigo work order given a Dispatcher here needs its SLA.
+  // 2026-11-16 · the SLA is required for a Corrigo client only (never for others).
   const form = useMemo(
     () => applyCorrigoSlaRule(applyRecallRule(applyFormLayout(configured, layout), recall), values),
     [configured, layout, recall, values],

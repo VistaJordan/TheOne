@@ -140,13 +140,18 @@ describe('files attached on Add work order are the client’s, approved as they 
   });
 });
 
-describe('Add work order: a Corrigo work order assigned while created needs its SLA', () => {
-  const form = { fields: [{ key: 'SLA Due Date', label: 'SLA Due Date', mode: 'optional' }] } as never;
-  const mode = (v: Record<string, unknown>) => (applyCorrigoSlaRule(form, v) as { fields: { mode: string }[] }).fields[0].mode;
-  it('required only with a Dispatcher picked and Client Portal Type Corrigo', () => {
+describe('Add work order: the SLA is required for a Corrigo client only', () => {
+  const formAs = (m: string) => ({ fields: [{ key: 'SLA Due Date', label: 'SLA Due Date', mode: m }] }) as never;
+  const mode = (v: Record<string, unknown>, m = 'optional') =>
+    (applyCorrigoSlaRule(formAs(m), v) as { fields: { mode: string }[] }).fields[0].mode;
+  it('required whenever Client Portal Type is Corrigo, Dispatcher picked or not', () => {
     expect(mode({ Assignee: 'Ana', 'Client Portal Type': 'Corrigo' })).toBe('required');
-    expect(mode({ 'Client Portal Type': 'Corrigo' })).toBe('optional');
-    expect(mode({ Assignee: 'Ana', 'Client Portal Type': 'Ecotrak' })).toBe('optional');
+    expect(mode({ 'Client Portal Type': 'Corrigo' })).toBe('required');
+  });
+  it('never required for anyone else, even when configured "Required"', () => {
+    expect(mode({ Assignee: 'Ana', 'Client Portal Type': 'Ecotrak' }, 'required')).toBe('optional');
+    expect(mode({ Assignee: 'Ana' }, 'required')).toBe('optional');
+    expect(mode({}, 'optional')).toBe('optional');
   });
   it('the form and the API both lay it over the form', () => {
     expect(read('apps', 'web', 'src', 'components', 'wo', 'list', 'CreateWorkOrderDialog.tsx')).toContain('applyCorrigoSlaRule(applyRecallRule(');

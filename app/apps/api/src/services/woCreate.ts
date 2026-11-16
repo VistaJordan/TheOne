@@ -414,7 +414,7 @@ export async function createWorkOrder(
   // same way the browser did it, so "required" and "off" mean one thing.
   // 0130 · and the recall rule: Original WO only (and then required) when the
   // recall box is ticked.
-  // 2026-11-14 · and a Corrigo work order assigned here needs its SLA.
+  // 2026-11-16 · and the SLA: required for a Corrigo client, never for others.
   const form = applyCorrigoSlaRule(
     applyRecallRule(
       applyFormLayout(

@@ -373,21 +373,22 @@ export function applyRecallRule(form: WoCreateForm, recall: boolean): WoCreateFo
   return { ...form, fields };
 }
 
-/** 2026-11-14 (Elise) · a Corrigo client's work order assigned while it is
-    created needs its SLA, as rule 11.1.1 asks at Accept (`intakeFieldAsked`,
-    SLA for Corrigo only): picking a Dispatcher on Add work order makes SLA Due
-    Date required while Client Portal Type reads Corrigo. Only when the field
-    is on the form (Admin › Custom fields can switch it off). */
+/** 2026-11-16 (Elise) · the SLA is a Corrigo client's only, as the assignment
+    gate asks it (`intakeFieldAsked`): on Add work order SLA Due Date is
+    required while Client Portal Type reads Corrigo (Dispatcher picked or
+    not), and never required otherwise — even when Admin › Custom fields or a
+    form layout set it to "Required". Only when the field is on the form
+    (Admin › Custom fields can switch it off). */
 export const SLA_DUE_DATE_KEY = 'SLA Due Date';
 
 export function applyCorrigoSlaRule(form: WoCreateForm, values: Record<string, unknown>): WoCreateForm {
-  const asked =
-    woCreateValueFilled(values['Assignee']) &&
+  const corrigo =
     clientMessageTarget(typeof values[CLIENT_PORTAL_TYPE_KEY] === 'string' ? (values[CLIENT_PORTAL_TYPE_KEY] as string) : null) === 'corrigo';
-  if (!asked) return form;
   return {
     ...form,
-    fields: form.fields.map((f) => (f.key === SLA_DUE_DATE_KEY ? { ...f, mode: 'required' } : f)),
+    fields: form.fields.map((f) =>
+      f.key === SLA_DUE_DATE_KEY ? { ...f, mode: corrigo ? 'required' : 'optional' } : f,
+    ),
   };
 }
 
