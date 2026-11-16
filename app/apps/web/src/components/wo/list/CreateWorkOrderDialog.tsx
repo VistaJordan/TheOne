@@ -123,13 +123,13 @@ const TEAM_KEYS = new Set(CLIENT_TEAM_FIELDS.map((f) => f.key));
 /** Received on — pre-filled with now when the form opens. */
 const RECEIVED_KEY = 'Date-Time Received';
 
-/** This browser's clock as a datetime-local value, 'YYYY-MM-DDTHH:mm', with
-    the minutes taken down to the ten (04:07 → 04:00): the form's times go in
-    tens (Elise, 2026-11-03). */
+/** This browser's clock as a datetime-local value, 'YYYY-MM-DDTHH:mm', to
+    the minute (Elise, 2026-11-16: 3:09 reads 3:09, never rounded to 3:00).
+    The picker still offers minutes in tens and keeps the odd minute on offer. */
 function localNowInput(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(Math.floor(d.getMinutes() / 10) * 10)}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 const TEN_MINUTES = ['00', '10', '20', '30', '40', '50'];
@@ -379,6 +379,9 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   // in, local time, and stays editable. Set once, when the form arrives, and
   // only while the box is still empty.
   const receivedSeeded = useRef(false);
+  // What the form put there itself; while the box still holds it, Create
+  // stamps the moment of the click instead (the form may sit open a while).
+  const receivedSeedValue = useRef<string | null>(null);
   useEffect(() => {
     if (receivedSeeded.current) return;
     const f = form.fields.find((x) => x.key === RECEIVED_KEY);
@@ -387,7 +390,12 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     const d = catalogue.get(`fields.${RECEIVED_KEY}`);
     const isDate = d?.type === 'date' || f.type === 'date';
     const now = localNowInput();
-    setValues((cur) => ((cur[RECEIVED_KEY] ?? '').trim() !== '' ? cur : { ...cur, [RECEIVED_KEY]: isDate ? now.slice(0, 10) : now }));
+    setValues((cur) => {
+      if ((cur[RECEIVED_KEY] ?? '').trim() !== '') return cur;
+      const seed = isDate ? now.slice(0, 10) : now;
+      receivedSeedValue.current = seed;
+      return { ...cur, [RECEIVED_KEY]: seed };
+    });
   }, [form.fields, catalogue]);
 
   // ── The site and the asset ─────────────────────────────────────────────────
@@ -549,7 +557,14 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     mutationFn: () => {
       // A refresh while the work order is being created must not file a draft too.
       finished.current = true;
-      return createWorkOrder({ wo_number: woNumber.trim(), fields: bag, site_id: site?.id ?? null, asset_id: assetId || null });
+      let fields = bag;
+      const seeded = receivedSeedValue.current;
+      if (seeded !== null && values[RECEIVED_KEY] === seeded && seeded.length > 10) {
+        const f = form.fields.find((x) => x.key === RECEIVED_KEY);
+        const v = valueForApi(localNowInput(), catalogue.get(`fields.${RECEIVED_KEY}`), f?.type);
+        if (v !== undefined) fields = { ...bag, [RECEIVED_KEY]: v };
+      }
+      return createWorkOrder({ wo_number: woNumber.trim(), fields, site_id: site?.id ?? null, asset_id: assetId || null });
     },
     onSuccess: async (res) => {
       void qc.invalidateQueries({ queryKey: ['work-orders'] });
