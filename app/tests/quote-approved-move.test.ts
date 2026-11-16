@@ -86,7 +86,8 @@ describe('the status route', () => {
     expect(f).toContain('STATUS_APPROVAL_NOTE_CODE');
     expect(f).toContain('QUOTE_OPTION_REQUIRED_CODE');
     expect(f).toContain('assertCanClientDecide(actor, snap)');
-    expect(f).toContain('assertNoOpenNteOverride(');
+    // 2026-11-16 (Elise): the NTE override holds payments, never the quote.
+    expect(f).not.toContain('assertNoOpenNteOverride(');
     expect(f).toContain('clientApproveQuote(taskId, { section_id: sectionId, note }, actor)');
   });
   it('the status menu opens the dialog for Approved', () => {

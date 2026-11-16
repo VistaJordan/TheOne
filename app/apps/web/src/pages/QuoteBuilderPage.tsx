@@ -50,6 +50,7 @@ import {
   quoteOverNteWarning,
   quoteOverSendLimit,
   quoteSendLimitSentence,
+  quoteTemplateHasContent,
   quoteTotalForNte,
   type QuoteDeclineKind,
 } from '@theone/shared';
@@ -58,6 +59,7 @@ import { NteIncreaseButton } from '../components/quote/NteIncreaseButton';
 import { useAuth } from '../auth/AuthProvider';
 import { CopyButton } from '../components/CopyButton';
 import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
+import { QuoteTemplatesButton } from '../components/quote/QuoteTemplatesButton';
 import { Icon } from '../components/Icon';
 import { LineItemsTable, AddLineButton, linesCarryTax, linesSpanDays } from '../components/quote/LineItemsTable';
 import { MoneyRail } from '../components/quote/MoneyRail';
@@ -77,6 +79,8 @@ import {
   removeAt,
   replaceAt,
   resetDraft,
+  applyTemplate,
+  templateContentFrom,
   toUpdateInput,
   writeLocalDraft,
 } from '../lib/quoteDraft';
@@ -273,13 +277,10 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const canEdit = permissions?.can_edit ?? false;
   const canApprove = permissions?.can_approve ?? false;
   const canClientDecide = permissions?.can_client_decide ?? false;
-  /** Rule 1.5.2: an NTE override waits on a manager, so approve / send / the
-      client's yes are on hold (the API refuses them with a 409) until decided. */
-  const nteHold = quote?.nte_override_open ?? false;
   // 2026-11-14 (Elise): a quote above the NTE is sent with a warning
   // (overNte below); the client's approval then sets the NTE.
-  const NTE_HOLD_TIP = 'On hold — decide the NTE override under Approvals first';
-  const NTE_HOLD_ACTIONS: ReadonlySet<keyof WoActionMap> = new Set(['quote.approve', 'quote.send', 'quote.client_decide']);
+  // 2026-11-16 (Elise): an open NTE override (cost over NTE) no longer holds
+  // the quote — it holds payments only. The quote is how the NTE is raised.
   /** Edits stop once a quote is approved (§1) and whenever the WO status closes quoting. */
   // 2026-10-29 (Elise): once submitted, only a manager (approve grant) edits
   // it — the shared rule the API's updateQuote enforces.
@@ -787,7 +788,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
   /** A permission-or-status-gated CTA: live when every gate passes, else locked
       with the most specific reason (WO status first — it explains itself
-      better — then the NTE hold, then the missing grant). */
+      better — then the missing grant). */
   const gated = (
     label: string,
     icon: 'send' | 'check' | 'plus' | 'history',
@@ -800,9 +801,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   ) =>
     !allows(action)
       ? lockedButton(label, blockedReason(action) ?? 'Not allowed in this work-order status', tipId)
-      : nteHold && NTE_HOLD_ACTIONS.has(action)
-        ? lockedButton(label, NTE_HOLD_TIP, tipId)
-        : roleOk
+      : roleOk
           ? primary(label, icon, run, needsValid)
           : lockedButton(label, roleTip, tipId);
 
@@ -834,17 +833,13 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       ? { ok: false, sent: false, reason: sendLockTip }
       : !allows('quote.send')
         ? { ok: false, sent: false, reason: blockedReason('quote.send') ?? 'Not allowed in this work-order status' }
-        : nteHold
-          ? { ok: false, sent: false, reason: NTE_HOLD_TIP }
-          : blocked && editable
-              ? { ok: false, sent: false, reason: problemChipText(problems.length) }
-              : { ok: true, sent: false, reason: '' };
+        : blocked && editable
+          ? { ok: false, sent: false, reason: problemChipText(problems.length) }
+          : { ok: true, sent: false, reason: '' };
 
   const decisionButton = (sectionKey: string | null, compact: boolean) =>
     !allows('quote.client_decide')
       ? lockedButton(CLIENT_DECISION_APPROVED, blockedReason('quote.client_decide') ?? '', `lockDecide-${sectionKey}`, 'sm')
-      : nteHold
-        ? lockedButton(CLIENT_DECISION_APPROVED, NTE_HOLD_TIP, `lockDecide-${sectionKey}`, 'sm')
       : canClientDecide
         ? (
           <button
@@ -863,11 +858,24 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         )
         : lockedButton(CLIENT_DECISION_APPROVED, 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', `lockDecide-${sectionKey}`, 'sm');
 
-  // Import transcript, Reset quote and the autosave chip.
+  // Import transcript, Templates, Reset quote and the autosave chip.
   const headTools = (
     <>
       {/* 0077 · redraft from a transcript; Submit on the draft asks before replacing. */}
       {editable && <ImportTranscriptButton woNumber={quote.wo_number} />}
+      {/* 0145 · start from a saved template, or save this quote as one. */}
+      {editable && draft && (
+        <QuoteTemplatesButton
+          content={templateContentFrom(draft)}
+          trade={woQuery.data?.trade ?? null}
+          hasContent={quoteTemplateHasContent(templateContentFrom(draft))}
+          onApply={(body) => {
+            setShowErrors(false);
+            setDayShown({});
+            update(applyTemplate(draft, body));
+          }}
+        />
+      )}
       {editable && (
         <button
           type="button"
@@ -1599,7 +1607,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 type="button"
                 className="addopt"
                 onClick={() =>
-                  update({ ...draft, sections: [...draft.sections, blankOption(currentRound, quote.labor_rate?.trip_rate)] })
+                  update({ ...draft, sections: [...draft.sections, blankOption(currentRound)] })
                 }
               >
                 <Icon name="plus" size={14} />
@@ -1793,7 +1801,7 @@ function ResetSheet({ round, onCancel, onReset }: { round: number; onCancel: () 
         </h2>
         <p className="sheet-b" id="resetB">
           Every line, option and scope line, and each section's specs and note to the customer are cleared, and
-          the quote opens again as a new one: Incurred and one option, each with its Trip line.
+          the quote opens again as a new one: Incurred with its Trip line, and one option.
           {round > 1 ? ' Earlier rounds and the approved incurred work stay as they are.' : ''} The
           quote number, sales tax and bill-to / ship-to are kept. This cannot be undone.
         </p>

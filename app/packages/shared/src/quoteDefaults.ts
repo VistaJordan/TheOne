@@ -191,3 +191,22 @@ export const QUOTE_RATE_LOCKED_CODE = 'QUOTE_RATE_LOCKED';
 export function cardRatesLockedFor(role: string | null | undefined, isSuperAdmin: boolean): boolean {
   return !isSuperAdmin && isDispatcherRole(role);
 }
+
+/** 2026-11-16 (Elise) · how a line reads in the client text. A Labor line of
+    more than one hour says how many: "Labor tech 1" × 3 prints "3 labor hours
+    tech 1" (the hours used to be in the amount only, so the client could not
+    see them). A description that does not start with "Labor" keeps its own
+    words after a dash ("3 labor hours — Helper"). One hour, or any other line
+    type, prints its description as typed. */
+export function summaryLineLabel(line: { line_type?: string | null; description: string; qty: number }): string {
+  const desc = line.description.trim();
+  const qty = Number(line.qty);
+  if (line.line_type !== 'labor' || !Number.isFinite(qty) || qty <= 0 || qty === 1) return desc;
+  const hours = `${parseFloat(qty.toFixed(2))} labor hour${qty === 1 ? '' : 's'}`;
+  const m = /^labor\b[\s:·-]*/i.exec(desc);
+  if (m) {
+    const rest = desc.slice(m[0].length).trim();
+    return rest ? `${hours} ${rest}` : hours;
+  }
+  return desc ? `${hours} — ${desc}` : hours;
+}

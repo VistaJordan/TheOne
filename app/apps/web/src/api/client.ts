@@ -10,6 +10,7 @@ import type { WoNotificationsResponse } from '@theone/shared';
 import type { ApprovalReminderResult, PendingApprovalKind, PendingApprovalsResponse } from '@theone/shared';
 // 0140: address suggestions from Google Maps.
 import type { AddressPlaceResponse, AddressSuggestResponse, GoogleUsageOverview } from '@theone/shared';
+import type { QuoteTemplateInput, QuoteTemplatePatch, QuoteTemplatesResponse } from '@theone/shared';
 // 0074: Admin › Integrations.
 import type { ClickUpOverview, EcotrakOverview, IntegrationsResponse } from '@theone/shared';
 // 0138: AI usage — models, limits, cost; Improve message.
@@ -1374,6 +1375,21 @@ export function startQuoteRound(idOrNumber: string): Promise<QuoteResponse> {
 /** GET …/quote/sales-tax — the derived rate for this WO's (Comp, FM, Trade). */
 export function getQuoteSalesTax(idOrNumber: string): Promise<SharedSalesTaxLookup> {
   return request<SharedSalesTaxLookup>(quotePath(idOrNumber, '/sales-tax'));
+}
+
+// ── Quote templates (0145) ───────────────────────────────────────────────────
+
+export function listQuoteTemplates(): Promise<QuoteTemplatesResponse> {
+  return request<QuoteTemplatesResponse>('/quote-templates');
+}
+export function saveQuoteTemplate(input: QuoteTemplateInput): Promise<QuoteTemplatesResponse> {
+  return request<QuoteTemplatesResponse>('/quote-templates', { method: 'POST', body: JSON.stringify(input) });
+}
+export function updateQuoteTemplate(id: string, patch: QuoteTemplatePatch): Promise<QuoteTemplatesResponse> {
+  return request<QuoteTemplatesResponse>(`/quote-templates/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+export function deleteQuoteTemplate(id: string): Promise<QuoteTemplatesResponse> {
+  return request<QuoteTemplatesResponse>(`/quote-templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 // ── Approvals — the manager's inbox (0026) ───────────────────────────────────
