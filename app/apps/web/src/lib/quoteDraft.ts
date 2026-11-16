@@ -455,7 +455,7 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
     // Same for a row whose Type is still empty (2026-10-27): the schema takes
     // only a real type, so it waits locally until one is picked.
     lines: section.lines
-      .filter((line) => line.description.trim() !== '' && line.line_type !== '')
+      .filter((line) => !lineIsUnsent(line))
       .map((line) => ({
         line_type: line.line_type as QuoteLineType,
         description: line.description.trim(),
@@ -468,6 +468,37 @@ function sectionToInput(section: DraftSection): QuoteSectionInput {
         markup_pct: 0,
       })),
   };
+}
+
+/** A row the autosave cannot send yet: no description or no Type. */
+export function lineIsUnsent(line: DraftLine): boolean {
+  return line.description.trim() === '' || line.line_type === '';
+}
+
+/**
+ * 2026-11-16 · when somebody else's save re-seeds the form, the rows this
+ * person has not finished were never on the server, so the fresh copy lacks
+ * them. Carry each one into the section at the same place (same position,
+ * kind and round, still editable), at the row index it had, a row just added
+ * and still empty included. Only unsent rows are kept; everything the server
+ * holds comes from the server.
+ */
+export function carryUnsavedLines(prev: DraftQuote | null, next: DraftQuote): DraftQuote {
+  if (!prev) return next;
+  let changed = false;
+  const sections = next.sections.map((section, i) => {
+    const old = prev.sections[i];
+    if (!old || old.kind !== section.kind || old.round !== section.round || section.locked || old.locked) return section;
+    const unsent = old.lines
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => lineIsUnsent(line));
+    if (unsent.length === 0) return section;
+    changed = true;
+    const lines = [...section.lines];
+    for (const { line, index } of unsent) lines.splice(Math.min(index, lines.length), 0, line);
+    return { ...section, lines };
+  });
+  return changed ? { ...next, sections } : next;
 }
 
 /**

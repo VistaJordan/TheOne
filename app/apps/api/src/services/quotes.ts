@@ -1519,10 +1519,15 @@ export async function updateQuote(
     if (input.ship_to !== undefined) set('ship_to', input.ship_to);
     if (sets.length > 0) {
       params.push(cur.id);
-      // Only while the quote is still a draft, in the statement (#25): a
+      const idParam = params.length;
+      params.push(EDITABLE_STATUSES);
+      // Only while the quote is still editable, in the statement (#25): a
       // submit or approve committed since the read above leaves it locked.
+      // 2026-11-16 · was `status = 'draft'`, which refused every save of a
+      // quote an approver was correcting (pending correction) and rolled
+      // their new lines back.
       const kept = await tx.query(
-        `UPDATE quote SET ${sets.join(', ')} WHERE id = $${params.length} AND status = 'draft' RETURNING id`,
+        `UPDATE quote SET ${sets.join(', ')} WHERE id = $${idParam} AND status::text = ANY($${params.length}::text[]) RETURNING id`,
         params,
       );
       if (!kept.rows[0]) throw conflict('The quote was approved while you were editing it — reload it', { code: 'QUOTE_MOVED' });

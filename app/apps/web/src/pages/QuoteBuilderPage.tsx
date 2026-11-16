@@ -69,6 +69,7 @@ import {
   blankOption,
   clearLocalDraft,
   fromQuote,
+  carryUnsavedLines,
   readLocalDraft,
   removeAt,
   replaceAt,
@@ -228,6 +229,16 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const draftRef = useRef<DraftQuote | null>(null);
   draftRef.current = draft;
   const [saving, setSaving] = useState(false);
+  // 2026-11-16 · lines vanished: a save that came back marked the form clean
+  // even when more had been typed while it was in flight, so those edits were
+  // never sent and the next re-seed dropped them. Every edit bumps
+  // `editVersion`; a save records the version it carried in `savedVersion`,
+  // and the form is clean only when the two agree. Saves also run one at a
+  // time (`inflight`), so an older body can never land after a newer one.
+  const editVersion = useRef(0);
+  const savedVersion = useRef(0);
+  const inflight = useRef<Promise<unknown> | null>(null);
+  const [saveFailedAt, setSaveFailedAt] = useState<number | null>(null);
   useEffect(() => {
     if (!quote || signature === loadedSignature.current) return;
     const sameQuote = loadedSignature.current?.startsWith(`${identity}:`) ?? false;
@@ -237,9 +248,16 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     // 2026-11-06 · a reload brings back what was typed, unfinished lines
     // included, while nobody else has saved the quote since.
     const local = identity ? readLocalDraft(woNumber, identity, quote.updated_at) : null;
-    setDraft(local ?? fromQuote(quote));
+    const fresh = local ?? fromQuote(quote);
+    // Somebody else saved the same quote: take their version, but keep the
+    // rows this person has not finished (no Type or no description yet),
+    // which were never sent and would otherwise vanish.
+    setDraft(sameQuote && !local ? carryUnsavedLines(draftRef.current, fresh) : fresh);
     // A restored copy may hold complete lines typed just before the reload:
     // let the autosave send them.
+    editVersion.current += 1;
+    if (local === null) savedVersion.current = editVersion.current;
+    setSaveFailedAt(null);
     setDirty(local !== null);
     // Seed the chip from the quote's own updated_at, so a saved quote does not
     // greet its author with "not saved yet".
@@ -300,11 +318,11 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
   // ── Autosave ───────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
-    mutationFn: (next: DraftQuote) => putWorkOrderQuote(woNumber, toUpdateInput(next)),
+    mutationFn: (vars: { next: DraftQuote; version: number }) => putWorkOrderQuote(woNumber, toUpdateInput(vars.next)),
     meta: QUIET_MUTATION,
     onMutate: () => setSaving(true),
     onSettled: () => setSaving(false),
-    onSuccess: (res) => {
+    onSuccess: (res, vars) => {
       // Keep the server's canonical numbers/summary, but do NOT let the response
       // re-seed the form (see loadedSignature above).
       loadedSignature.current = `${res.quote.id}:${res.quote.status}:${res.quote.rev}:${res.quote.updated_at}`;
@@ -318,19 +336,38 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       }
       queryClient.setQueryData(quoteKey, { quote: res.quote, permissions });
       setSavedAt(Date.now());
-      setDirty(false);
+      savedVersion.current = Math.max(savedVersion.current, vars.version);
+      setSaveFailedAt(null);
+      // Typed while this save was in flight: still dirty, the autosave below
+      // sends the rest as soon as `saving` drops.
+      if (savedVersion.current === editVersion.current) setDirty(false);
     },
-    onError: (err) => setActionError(errorText(err, 'Could not save the draft.')),
+    onError: (err, vars) => {
+      setSaveFailedAt(vars.version);
+      setActionError(errorText(err, 'Could not save the draft.'));
+    },
   });
 
-  const saveRef = useRef(saveMutation.mutate);
-  saveRef.current = saveMutation.mutate;
+  const saveAsyncRef = useRef(saveMutation.mutateAsync);
+  saveAsyncRef.current = saveMutation.mutateAsync;
+  /** One save at a time; the promise is kept so a flush can wait for it. */
+  const startSave = useCallback(() => {
+    const next = draftRef.current;
+    if (!next || inflight.current) return;
+    const p = saveAsyncRef.current({ next, version: editVersion.current }).catch(() => undefined);
+    inflight.current = p;
+    void p.finally(() => {
+      if (inflight.current === p) inflight.current = null;
+    });
+  }, []);
 
   useEffect(() => {
-    if (!draft || !editable || !dirty) return;
-    const t = setTimeout(() => saveRef.current(draft), AUTOSAVE_MS);
+    if (!draft || !editable || !dirty || saving) return;
+    // A refused save is not retried until something changes.
+    if (saveFailedAt === editVersion.current) return;
+    const t = setTimeout(startSave, AUTOSAVE_MS);
     return () => clearTimeout(t);
-  }, [draft, editable, dirty]);
+  }, [draft, editable, dirty, saving, saveFailedAt, startSave]);
 
   // 2026-11-06 · every change is also kept in this browser at once, so a
   // reload (or leaving by mistake) never loses an unfinished line. A quote
@@ -353,8 +390,14 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     return () => {
       const pending = pendingRef.current;
       if (!pending) return;
-      void putWorkOrderQuote(woNumber, toUpdateInput(pending))
+      const pendingVersion = editVersion.current;
+      // Wait for a save already in flight (never race it), then send only
+      // what it did not already carry.
+      void (inflight.current ?? Promise.resolve())
+        .then(() => (savedVersion.current >= pendingVersion ? null : putWorkOrderQuote(woNumber, toUpdateInput(pending))))
         .then((res) => {
+          if (!res) return;
+          savedVersion.current = pendingVersion;
           // Keep the local copy in step with this save, or coming back to
           // the tab would find it out of date and drop the unfinished lines.
           writeLocalDraft(woNumber, {
@@ -372,12 +415,14 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   }, [embedded, woNumber, queryClient]);
 
   const update = useCallback((next: DraftQuote) => {
+    editVersion.current += 1;
     setDraft(next);
     setDirty(true);
   }, []);
 
   const setSection = useCallback(
     (index: number, next: DraftSection) => {
+      editVersion.current += 1;
       setDraft((cur) => (cur ? { ...cur, sections: replaceAt(cur.sections, index, next) } : cur));
       setDirty(true);
     },
@@ -406,10 +451,15 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   };
 
   const flushThen = async (fn: () => Promise<{ quote: Quote }>) => {
-    if (draft && dirty) {
+    // Let an autosave in flight land first, then send what it did not carry.
+    if (inflight.current) await inflight.current;
+    const current = draftRef.current;
+    const version = editVersion.current;
+    if (current && savedVersion.current < version) {
       try {
-        await putWorkOrderQuote(woNumber, toUpdateInput(draft));
-        setDirty(false);
+        await putWorkOrderQuote(woNumber, toUpdateInput(current));
+        savedVersion.current = version;
+        if (editVersion.current === version) setDirty(false);
         setSavedAt(Date.now());
       } catch (err) {
         setActionError(errorText(err, 'Could not save the draft before submitting.'));
