@@ -404,6 +404,9 @@ const CURATED_FIELDS: CuratedField[] = [
   { key: '25. IVR Link',             label: 'IVR Link',             type: 'short_text' },
   { key: '29. PDF Link',             label: 'PDF Link',             type: 'short_text' },
   { key: '34. Cost',                 label: 'Cost',                 type: 'currency' },
+  // 0152 (Elise, 2026-11-16): the expected cost, typed by hand — Cost comes
+  // from the paid payments only. KEEP IN STEP with migration 0152.
+  { key: 'Projected Cost',           label: 'Projected Cost',       type: 'currency' },
   { key: 'Admin Comment',            label: 'Admin Comment',        type: 'long_text' },
   { key: '18. Check-in/out Status',  label: 'Check-in/out Status',  type: 'dropdown', options: ['Checked-in', 'Checked-out', 'Checked-out - RTN'] },
   // Stamped by the API the moment the status above moves (services/cicoStamps.ts);
@@ -903,6 +906,11 @@ async function main() {
   // supplier owes delivery — no dispatcher effort advances them.
   const PENDING_STATUSES = new Set(['Waiting for Approval', 'Waiting for Advice', 'Waiting for Parts']);
 
+  // 0152 (Elise, 2026-11-16): the assessment's visit follows its scheduling,
+  // then the job's; PM Sched after On Site (Job). KEEP IN STEP with 0152.
+  const STATUS_POSITION: Record<string, number> = {
+    'Assessment Sched': 2, 'On Site (Assessment)': 3, 'Job Sched': 4, 'On Site (Job)': 5, 'PM Sched': 6,
+  };
   const statusIdByName = new Map<string, string>();
   const statusGroupById = new Map<string, StatusGroup>();
   for (const s of data.statuses) {
@@ -913,7 +921,7 @@ async function main() {
     const id = await insertId(
       `INSERT INTO status (status_set_id, name, status_group, color, position, is_archive)
        VALUES ($1, $2, $3, $4, $5, false) RETURNING id`,
-      [statusSetId, s.name, group, s.color, s.order],
+      [statusSetId, s.name, group, s.color, STATUS_POSITION[s.name] ?? s.order],
     );
     statusIdByName.set(s.name, id);
     statusGroupById.set(id, group);

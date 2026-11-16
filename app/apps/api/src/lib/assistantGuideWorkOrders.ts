@@ -47,7 +47,7 @@ Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view):
 - Record a penalty: on the **Penalties** tab (after **Tech Hub**), the card holds the **Bad quote**, **Penalty**, **Late quote**, **Missed ETA** and **Recall** checkboxes and the **Manager description** box (the same fields are the Penalties section of **All fields**); tick and write, then **Save penalties** — a ticked penalty is refused without the Manager description. Same rule: managers edit them, the dispatcher tiers see them.
   - The visit fields (Visit Type, Check-in/out Status, Checked-in At, Checked-out At, Tech Name, Tech Phone Number, CICO Method) cannot be typed: they follow the latest visit, so edit the visit on the CICO tab.
   - Quote Due Date cannot be typed: it is computed from the assessment visit's check-out.
-  - **Cost** fills itself in: paying a payment request adds its amount to Cost, and deleting a paid one takes it back out. Once a payment has written it, it cannot be typed. A work order with no paid payment request still takes a typed Cost.
+  - **Cost** fills itself in: paying a payment request adds its amount to Cost, and deleting a paid one takes it back out. It is never typed by hand. The cost expected on the job goes in **Projected cost** on the Finances card.
   - **Total Invoiced** fills itself in: when the work order's invoice is sent it becomes the invoice total. It can never be typed.
   - Profit is always Total Invoiced minus Cost.
 - Change the status: **Change status** in the header, pick a status. Needs \`work_orders/status\` edit.
@@ -55,7 +55,7 @@ Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view):
 - Request a status change: for people who must request, the same button reads **Request status change**. Pick a status; a manager approves or rejects it in Approvals, and the result shows on a chip in the header. Statuses ticked **Managers only** in Admin › Custom fields › Statuses (Approved, Waiting for Advice, Waiting for Approval, Ready to Invoice, Cancelled / Postponed by default) are not offered to them at all — a manager moves the work order there, or Send to client and the client's approval do.
 - Statuses the app holds back until the work order is ready (the menu tags them):
   - Quote Ready needs a quote with at least one line or scope item.
-  - Waiting for Parts and Please Order Parts need the **Parts Required** field filled.
+  - Waiting for Parts and Please Order Parts need the **Parts Required** field filled. On the Parts tab it is the POP request: press **Fill in the POP request** (or **Edit**), fill the ten lines (POP, Link, QTY, Estimated Total Cost, Specs, Delivery Address, Store or Tech's name, Phone Number, Full Address, Screenshot reference — **Upload screenshot** files the picture on the Drive tab), then **Save POP request**.
   - Done / Incurred needs a visit that was checked in and out, the final **Cost**, a quote with data and an approved after photo (for a Bill For Incurred job: an approved before photo and a sign-off instead).
   - Ready to Invoice, Invoiced Not Paid and Invoiced need the same as Done / Incurred, unless the work order is already in Done / Incurred or another of those three.
   - While the work order sits in one of those statuses, what it needed cannot be emptied: **Parts Required** in the parts statuses, the **Cost** from Done / Incurred on, the quote's lines in Quote Ready and from Done / Incurred on.

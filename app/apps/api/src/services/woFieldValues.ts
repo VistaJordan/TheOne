@@ -122,6 +122,9 @@ export async function validateBagValues(bag: Record<string, unknown>): Promise<R
     }
     if (!f.custom) continue;
     assertNotHistoryField([jsonKey], () => f.label);
+    // 2026-11-16 (Elise): Cost and Total Invoiced are the system's on every
+    // path — a new work order and a draft's Submit too.
+    if (raw !== null && raw !== undefined && raw !== '') await assertMoneyNotLocked(['new'], [jsonKey]);
     const checked = await checkFieldValue(f, coerceValue(f, raw));
     if (checked !== null && (jsonKey === 'Client' || jsonKey === 'State' || f.subtype === 'dropdown')) out[jsonKey] = checked;
   }

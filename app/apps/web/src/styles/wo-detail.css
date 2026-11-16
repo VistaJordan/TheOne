@@ -2015,6 +2015,26 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 
 .parts-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
 
+/* 2026-11-16 (UAT #44) · the POP request over Parts Required. */
+.parts:has(.pop-view), .parts:has(.pop-form) { align-items: flex-start; }
+.pop-view, .pop-form { flex: 1; min-width: 0; }
+.pop-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pop-lines { margin: 10px 0 0; display: grid; gap: 4px; }
+.pop-line { display: grid; grid-template-columns: minmax(140px, 190px) 1fr; gap: 10px; font-size: 12.5px; }
+.pop-line dt { color: var(--ink-3); }
+.pop-line dd { margin: 0; color: var(--ink); white-space: pre-line; overflow-wrap: anywhere; }
+.pop-line.is-blank dd { color: var(--ink-3); }
+.pop-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.pop-grid .field { display: grid; gap: 4px; }
+.pop-grid .field.is-wide { grid-column: 1 / -1; }
+.pop-shot { display: flex; gap: 8px; align-items: center; }
+.pop-shot .fld { flex: 1; min-width: 0; }
+.pop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+@media (max-width: 640px) {
+  .pop-grid { grid-template-columns: 1fr; }
+  .pop-line { grid-template-columns: 1fr; gap: 0; }
+}
+
 /* ── Flags ────────────────────────────────────────────────────────────────── */
 .flags {
   display: grid;

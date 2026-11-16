@@ -168,6 +168,8 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       'fields.1. Not Fully Paid',
       'fields.16. Client NTE 🔴',
       'fields.34. Cost',
+      // 2026-11-16 (0152): the expected cost, typed — Cost comes from payments.
+      'fields.Projected Cost',
       'fields.Total Invoiced',
       'fields.Profit',
       'fields.Discount',

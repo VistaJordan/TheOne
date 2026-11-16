@@ -11,8 +11,9 @@
 //                          invoice's total. syncInvoicedFromQuote (the
 //                          pre-0083 stamp from the quote on a move to
 //                          Invoiced) is no longer called.
-//   assertMoneyNotLocked   called by the field editor and bulk edit, beside
-//                          the visit-owned guard.
+//   assertMoneyNotLocked   called by the field editor, bulk edit and the
+//                          create paths: Cost and Total Invoiced are never
+//                          typed (Cost since 2026-11-16, UAT #24).
 //
 // A system write is an ordinary field change: one `field_updated` row stamped
 // `via: 'payment'` or `via: 'invoice'`, Profit re-derived, and the automations
@@ -155,51 +156,21 @@ export async function syncInvoicedFromQuote(taskId: string, actorId: string, quo
 // ── The write guard ──────────────────────────────────────────────────────────
 
 /**
- * 400 when a hand edit (the field editor, bulk edit, an automation's action)
- * names Total Invoiced — always, since 0083 (#10): it comes only from the
- * invoice that was sent — or Cost on a work order where the SYSTEM put the
- * current figure there: the field's latest change in the audit log is stamped
- * `via: 'payment'` and holds a value. A typed Cost — every work order from
- * before these rules, and any with no paid payment — stays correctable by
- * hand until the system writes it.
+ * 400 when a hand edit (the field editor, bulk edit, an automation's action,
+ * the create paths) names Total Invoiced — it comes only from the invoice
+ * that was sent (0083, #10) — or Cost, which only the payments write (Elise,
+ * 2026-11-16, UAT #24 / #45; the expected figure goes in Projected Cost).
+ * Until 2026-11-16 a typed Cost stood until the system first wrote one.
  *
- * `q` is the caller's transaction when it already holds the task row FOR NO
- * KEY UPDATE: the latest audit row is then read under that lock, so a system
- * write landing between a pool-side check and the lock cannot be typed over
- * (W3-3).
+ * `_q` stays so the callers that hold the task row lock keep passing their
+ * transaction; the check no longer reads anything.
  */
-export async function assertMoneyNotLocked(taskIds: string[], jsonKeys: string[], q: Queryable = { query }): Promise<void> {
+export async function assertMoneyNotLocked(taskIds: string[], jsonKeys: string[], _q: Queryable = { query }): Promise<void> {
   if (taskIds.length === 0) return;
   if (jsonKeys.includes(TOTAL_INVOICED_FIELD_KEY)) {
     throw new ApiError('BAD_REQUEST', INVOICED_LOCKED_MESSAGE, { money_locked_field: TOTAL_INVOICED_FIELD_KEY });
   }
-  const checks: [string, string, string][] = [[COST_FIELD_KEY, 'payment', COST_LOCKED_MESSAGE]];
-  for (const [key, via, message] of checks) {
-    if (!jsonKeys.includes(key)) continue;
-    const res = await q.query<{ wo_number: string }>(
-      `SELECT t.wo_number
-         FROM task t
-         JOIN LATERAL (SELECT a.after
-                         FROM activity_log a
-                        WHERE a.entity_type = 'task' AND a.entity_id = t.id::text
-                          AND a.action = 'field_updated' AND a.field = $2
-                        ORDER BY a.id DESC LIMIT 1) last ON true
-        WHERE t.id = ANY($1::uuid[])
-          AND last.after->>'via' = $3
-          AND last.after->>'value' IS NOT NULL
-        ORDER BY t.wo_number LIMIT 6`,
-      [taskIds, `fields.${key}`, via],
-    );
-    if (res.rows.length > 0) throw locked(key, message, res.rows, taskIds.length);
+  if (jsonKeys.includes(COST_FIELD_KEY)) {
+    throw new ApiError('BAD_REQUEST', COST_LOCKED_MESSAGE, { money_locked_field: COST_FIELD_KEY });
   }
-}
-
-function locked(key: string, message: string, rows: { wo_number: string }[], selected: number): ApiError {
-  // One work order: the message is about "this work order". A selection: name
-  // the ones in the way, so the rest can be edited without them.
-  const text =
-    selected === 1
-      ? message
-      : `${message} In this selection: ${rows.slice(0, 5).map((r) => r.wo_number).join(', ')}${rows.length > 5 ? ' and more' : ''}.`;
-  return new ApiError('BAD_REQUEST', text, { money_locked_field: key, work_orders: rows.map((r) => r.wo_number) });
 }

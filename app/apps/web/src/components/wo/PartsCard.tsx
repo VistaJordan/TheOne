@@ -1,9 +1,9 @@
-import { PARTS_REQUIRED_KEY, partsRequiredFilled } from '@theone/shared';
 import type { WorkOrderDetailV2 } from '../../api/client';
 import { FIELD } from '../../lib/fields';
 import { deriveParts } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 import { InlineField } from './fieldEdit';
+import { PopRequestBlock } from './PopRequestBlock';
 
 interface PartsCardProps {
   wo: WorkOrderDetailV2;
@@ -19,29 +19,14 @@ interface PartsCardProps {
     refused while it is empty, so the empty state says so. */
 export function PartsCard({ wo }: PartsCardProps) {
   const parts = deriveParts(wo);
-  const required = (wo.fields ?? {})[PARTS_REQUIRED_KEY];
-  const requiredText = partsRequiredFilled(required) ? String(required).trim() : null;
 
   return (
     <section className="card">
       <div className="card-head"><h2 className="card-title">Parts</h2></div>
       <div className="parts">
         <span className="parts-ic" aria-hidden="true"><Icon name="list" /></span>
-        <InlineField wo={wo} fieldKey={`fields.${PARTS_REQUIRED_KEY}`} label="Parts required">
-          {requiredText ? (
-            <span>
-              <span className="parts-main">Parts required</span>
-              <span className="parts-sub parts-list">{requiredText}</span>
-            </span>
-          ) : (
-            <span>
-              <span className="parts-main">No parts listed</span>
-              <span className="parts-sub">
-                Waiting for Parts and Please Order Parts need this list first — one part per line.
-              </span>
-            </span>
-          )}
-        </InlineField>
+        {/* 2026-11-16 (UAT #44): the list is the team's POP request. */}
+        <PopRequestBlock wo={wo} />
       </div>
       <div className="parts">
         <span className="parts-ic" aria-hidden="true"><Icon name="package" /></span>

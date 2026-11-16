@@ -175,7 +175,21 @@ describe('#10 · Total Invoiced comes only from the invoice', () => {
   it('is refused by the field editor and bulk edit unconditionally', () => {
     const body = fn(moneySync, 'export async function assertMoneyNotLocked(');
     expect(body).toContain('if (jsonKeys.includes(TOTAL_INVOICED_FIELD_KEY))');
-    expect(body.indexOf('TOTAL_INVOICED_FIELD_KEY')).toBeLessThan(body.indexOf('const checks'));
+  });
+});
+
+describe('UAT #24 / #45 (2026-11-16) · Cost comes only from the payments', () => {
+  it('is a system-only key, refused unconditionally like Total Invoiced', () => {
+    expect(SYSTEM_MONEY_KEYS).toContain('34. Cost');
+    const body = fn(moneySync, 'export async function assertMoneyNotLocked(');
+    expect(body).toContain('if (jsonKeys.includes(COST_FIELD_KEY))');
+    expect(body).not.toContain('activity_log');
+  });
+
+  it('is refused on the create paths too', () => {
+    const fv = src('apps/api/src/services/woFieldValues.ts');
+    const validate = fn(fv, 'export async function validateBagValues(');
+    expect(validate).toContain("await assertMoneyNotLocked(['new'], [jsonKey])");
   });
 
   it('is written when the invoice is sent, inside the send, and no status move stamps it from the quote', () => {

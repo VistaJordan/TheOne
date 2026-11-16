@@ -16,14 +16,16 @@
 //                     total, stamped on a move to Invoiced). It is never typed:
 //                     the field editor and bulk edit always refuse it.
 //
-// Cost is only locked against hand edits while the figure in it is one the
-// system wrote (its latest audit row is stamped via 'payment').
-// A work order with no paid payment still takes a typed Cost — or rule
-// 11.3.2 would keep it from ever reaching Done — and figures typed before
-// these rules existed stay correctable until the system first writes them.
+// Cost is never typed (Elise, 2026-11-16, UAT #24 / #45): only the payments
+// write it, like Total Invoiced. The expected figure goes in Projected Cost
+// (`PROJECTED_COST_FIELD_KEY`, migration 0152), an ordinary money field.
+// Until 2026-11-16 a typed Cost stood until the system first wrote one.
 
 export const COST_FIELD_KEY = '34. Cost';
 export const TOTAL_INVOICED_FIELD_KEY = 'Total Invoiced';
+/** 0152 (Elise, 2026-11-16): the cost expected on the job, typed by hand on
+    the Finances card — Cost itself comes from the paid payments only. */
+export const PROJECTED_COST_FIELD_KEY = 'Projected Cost';
 
 /** The payment-request states the pre-0076 rule counted toward Cost. */
 export const ACCEPTED_PAYMENT_STATUSES = ['approved', 'sent_to_yoda', 'paid'] as const;
@@ -87,10 +89,10 @@ export function invoicedFromQuote(total: number | null | undefined): number | nu
 }
 
 export const COST_LOCKED_MESSAGE =
-  'Cost on this work order is written by the payments — it changes when AP pays a request or a paid request is deleted, and cannot be typed.';
+  'Cost is written by the payments — it changes when AP pays a payment request (or a paid one is deleted) and cannot be typed. Put the expected figure in Projected Cost.';
 export const INVOICED_LOCKED_MESSAGE =
   'Total Invoiced comes from the invoice — it is set when the invoice is sent and cannot be typed.';
 
-/** Bag keys only the system writes, refused by the field editor and bulk
-    edit beside COMPUTED_KEYS (0083). */
-export const SYSTEM_MONEY_KEYS: string[] = [TOTAL_INVOICED_FIELD_KEY];
+/** Bag keys only the system writes, refused by the field editor, bulk edit
+    and the create paths beside COMPUTED_KEYS (0083; Cost since 2026-11-16). */
+export const SYSTEM_MONEY_KEYS: string[] = [TOTAL_INVOICED_FIELD_KEY, COST_FIELD_KEY];

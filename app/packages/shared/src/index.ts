@@ -2223,6 +2223,7 @@ export * from './ecotrak';
 export * from './ecotrakInbound';
 // Rules 11.2.1 / 11.2.2: the Quoting & Parts gate (vocabulary + "filled").
 export * from './statusGates';
+export * from './popRequest';
 export * from './intakeGate';
 export * from './intakeDrafts';
 export * from './visitStatus';

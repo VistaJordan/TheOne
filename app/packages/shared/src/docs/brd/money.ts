@@ -161,7 +161,7 @@ export const MONEY_PART: DocPart = {
           name: 'Cost follows the payments',
           what: 'Cost moves with the money that went out (Yoda UpdateCostInClickUp): Pay adds the amount to whatever Cost holds (a typed or imported figure is the starting point), deleting a paid request subtracts it, never below zero. Approving moves nothing. The system write is an ordinary field_updated row stamped via payment, re-derives Profit and runs the automations, which is how the NTE override is raised.',
           value: 'Cost on the work order is a fact, and the Done gate and Profit read a fact.',
-          rules: ['The lock is conditional: a hand edit is refused only while the field\'s latest audit row is a system write with a value; a work order nothing has been paid on still takes a typed Cost, and figures typed before the rule stay correctable.'],
+          rules: ['Cost is never typed (2026-11-16): the field editor, bulk edit and the create paths refuse it, and the expected figure goes in Projected cost on the Finances card.'],
           brd: ['11.3.2'],
         },
         {

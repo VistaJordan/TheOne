@@ -314,7 +314,7 @@ export const SOP: SopDocument = {
         { kind: 'steps', items: [
           'Make sure the Job visit is **Checked out** on the CICO tab (rule 11.3.1).',
           'Make sure the **After photo** is uploaded and approved (SOP 8). For a Bill For Incurred job, a Before photo and the approved Sign-off instead (rule 11.3.4; the tag reads "Needs sign-off").',
-          'Make sure the technician\'s payment request has been approved (SOP 12): **Cost** is the total of accepted requests and cannot be typed once the system has written it. A work order with no payment request still takes a typed Cost (rule 11.3.2).',
+          'Make sure the technician\'s payment request has been approved (SOP 12): **Cost** moves when AP pays a request and is never typed; the expected figure goes in **Projected cost**.',
           'Make sure the quote has data (rule 11.3.3).',
           'Optionally **Complete service** on the action bar: completion note, fault code, action code.',
           'Change the status to **Done / Incurred**. When a client contract covering this work order has **Bill automatically on completion**, a proposed invoice appears for Accounts to confirm; a time-and-materials vendor contract proposes the vendor bill the same way (rule 6.4).',

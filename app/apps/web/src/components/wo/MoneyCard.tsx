@@ -8,7 +8,7 @@ import { NTE_WARN_PCT, nteBasis, resolveMoney } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 import { InlineField } from './fieldEdit';
 import { NoteField } from './ManagerFlags';
-import { PROFITABILITY_EXCEPTION_KEY, PROFITABILITY_NOTES_KEY } from '@theone/shared';
+import { PROFITABILITY_EXCEPTION_KEY, PROFITABILITY_NOTES_KEY, PROJECTED_COST_FIELD_KEY } from '@theone/shared';
 
 interface MoneyCardProps {
   wo: WorkOrderDetailV2;
@@ -89,12 +89,21 @@ export function MoneyCard({ wo }: MoneyCardProps) {
             <InlineField wo={wo} fieldKey="fields.1. Not Fully Paid" label="Not fully paid" />
           </dd>
         </div>
+        {/* 2026-11-16 (0152): the expected cost is typed here; Cost below
+            is written by the payments only — it moves when AP pays one. */}
+        <MoneyRow
+          wo={wo}
+          label="Projected cost"
+          fieldKey={`fields.${PROJECTED_COST_FIELD_KEY}`}
+          value={num(field(f, PROJECTED_COST_FIELD_KEY))}
+        />
         <MoneyRow
           wo={wo}
           label="Cost"
           fieldKey={`fields.${FIELD.cost}`}
           value={m.cost}
           overNte={isCostOverNte(m.cost, m.nte)}
+          title="Written by the payments — it moves when AP pays a payment request"
         />
         <MoneyRow wo={wo} label="Total invoiced" fieldKey={`fields.${FIELD.invoiced}`} value={m.invoiced} />
         <MoneyRow wo={wo} label="Discount" fieldKey="fields.Discount" value={discount} />
@@ -179,6 +188,7 @@ function MoneyRow({
   fieldKey,
   value,
   overNte,
+  title,
 }: {
   wo: WorkOrderDetailV2;
   label: string;
@@ -186,6 +196,7 @@ function MoneyRow({
   value: number | null;
   /** Cost above the client NTE — the row reads in red everywhere it appears. */
   overNte?: boolean;
+  title?: string;
 }) {
   return (
     <div className={`kvrow${overNte ? ' is-over-nte' : ''}`}>
@@ -194,7 +205,7 @@ function MoneyRow({
         className={[value == null ? 'is-none' : '', overNte ? 'is-over-nte' : '']
           .filter(Boolean)
           .join(' ') || undefined}
-        title={overNte ? 'Cost is above the client NTE' : undefined}
+        title={overNte ? 'Cost is above the client NTE' : title}
       >
         <InlineField wo={wo} fieldKey={fieldKey} label={label}>
           {value == null ? DASH : money(value)}

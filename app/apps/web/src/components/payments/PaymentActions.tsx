@@ -55,6 +55,9 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
     void queryClient.invalidateQueries({ queryKey: ['payments'] });
     void queryClient.invalidateQueries({ queryKey: ['payment-queue'] });
     void queryClient.invalidateQueries({ queryKey: ['work-orders', 'detail'] });
+    // Pay adds to Cost (and deleting a paid one takes it off): the record's
+    // Cost card on the right rail reads the record, not the detail.
+    void queryClient.invalidateQueries({ queryKey: ['wo-record'] });
     // The ledger on the work order and its audit trail show the same row.
     void queryClient.invalidateQueries({ queryKey: ['wo-activity'] });
     void queryClient.invalidateQueries({ queryKey: ['wo-feed'] });

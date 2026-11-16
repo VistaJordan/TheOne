@@ -3898,6 +3898,33 @@ first column after WO #, in bold (a saved column choice gets it moved to the
 front once), and quote rows carry the submitter (`QuoteListItem.
 submitted_by_name`).
 
+**UAT list of 2026-11-16, third batch** (migration 0152, Elise;
+`tests/uat-2026-11-16-c.test.ts`). **Cost is never typed** (#24 / #45):
+`COST_FIELD_KEY` joined `SYSTEM_MONEY_KEYS`, so `assertMoneyNotLocked`
+refuses it unconditionally (field editor, bulk edit, an automation's
+action) and `validateBagValues` refuses a non-blank Cost on Add work order
+and a draft's Submit; only Pay (`addToCost`, +amount) and deleting a paid
+request (−amount) write it. This replaces the 0076 "a typed Cost stands
+until the system first writes one". The Done gate still asks for Cost
+(Elise: revisit later), so Done / Incurred now needs a paid payment. The
+expected figure is **Projected Cost** (0152, currency, Finances section, not
+client-safe; seed.ts in step), drawn above Cost on the Finances card.
+Payment actions also refresh the right rail's Cost (`['wo-record']`).
+**Statuses** (#42): 0152 orders Open · Assessment Sched · On Site
+(Assessment) · Job Sched · On Site (Job) · PM Sched · Return Trip Needed…
+(`status.position`; seed.ts `STATUS_POSITION` in step). **POP request**
+(#44, shared `popRequest.ts` pure, `components/wo/PopRequestBlock.tsx`):
+the Parts tab draws `Parts Required` as the team's ten numbered lines
+(POP, Link, QTY, Estimated Total Cost, Specs if Applicable, Delivery
+Address, Store or Tech's name, Phone Number, Full Address, Screenshot
+reference), stored as that numbered text in the one field so the parts gate
+and ClickUp read it as before; an empty form stores null; text that is not
+one of the lines is kept as "Also on this list"; **Upload screenshot**
+files the picture on Drive (pending review) and writes its name on line 10.
+**Add work order** (#5): no example placeholders, `autoComplete="off"` on
+its text boxes (the browser's remembered entries); the sub-category list,
+Google's address suggestions and the pre-filled Received on stay.
+
 ## Verify
 
 ```

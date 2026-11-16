@@ -758,7 +758,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
       const subs = subcategoriesFor(form.subcategories, trade);
       return (
         <>
-          <input id={domId} className="fld" list={`${domId}-list`} value={val} placeholder={trade ? `Within ${trade}` : 'Pick the trade first for suggestions'} onChange={(e) => set(f.key, e.target.value)} disabled={busy} />
+          <input id={domId} className="fld" list={`${domId}-list`} value={val} autoComplete="off" onChange={(e) => set(f.key, e.target.value)} disabled={busy} />
           <datalist id={`${domId}-list`}>{subs.map((s) => <option key={s} value={s} />)}</datalist>
         </>
       );
@@ -828,7 +828,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
         }
         inputMode={zip ? 'numeric' : numeric ? 'decimal' : undefined}
         maxLength={zip ? 10 : undefined}
-        placeholder={zip ? '77002' : undefined}
+        autoComplete="off"
         disabled={busy}
       />
     );
@@ -927,7 +927,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
                 ref={numberRef}
                 className="fld mono"
                 type="text"
-                placeholder="The number the client knows this job by"
+                autoComplete="off"
                 value={woNumber}
                 onChange={(e) => {
                   setWoNumber(e.target.value);
@@ -1060,7 +1060,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
           {saving && (
             <div className="wo-new-save">
               <label className="lbl" htmlFor="new-wo-template-name">Save what is filled in as a template</label>
-              <input id="new-wo-template-name" className="fld" autoFocus value={saving.name} placeholder="e.g. 7-Eleven refrigeration call" maxLength={120} onChange={(e) => setSaving({ ...saving, name: e.target.value })} />
+              <input id="new-wo-template-name" className="fld" autoFocus value={saving.name} autoComplete="off" maxLength={120} onChange={(e) => setSaving({ ...saving, name: e.target.value })} />
               {can('admin/fields', 'edit') && (
                 <label className="tmap-check">
                   <input type="checkbox" checked={saving.shared} onChange={(e) => setSaving({ ...saving, shared: e.target.checked })} />
@@ -1159,7 +1159,6 @@ function OriginalWoPicker({ id, value, onChange, disabled }: {
         className="fld"
         list={`${id}-list`}
         value={value}
-        placeholder="Type the WO # of the original work order"
         autoComplete="off"
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
