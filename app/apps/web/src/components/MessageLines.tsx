@@ -1,6 +1,6 @@
 /**
  * A message that may carry a list (Elise, 2026-11-16): a refused status move
- * reads "Missing steps to move to X:" followed by one "- " line per step
+ * reads "Missing steps:" followed by one "- " line per step
  * (`missingStepsText` in shared statusGates.ts). Lines starting "- " are drawn
  * as a bulleted list; every other line as plain text. A message with no
  * line breaks renders exactly as the text did before.

@@ -63,21 +63,17 @@ describe('costFilled — "NOT NULL" for the final vendor cost (11.3.2)', () => {
   });
 });
 
-describe('doneGateMissing — which of the three checks fail', () => {
+describe('doneGateMissing — which checks fail (Cost not asked since 2026-11-16)', () => {
   it('is empty when everything is in place', () => {
     expect(doneGateMissing({ visitComplete: true, costValue: '$400', quoteFilled: true })).toEqual([]);
   });
 
-  it('lists what is absent, in the rule order visit → cost → quote', () => {
-    expect(doneGateMissing({ visitComplete: false, costValue: null, quoteFilled: false })).toEqual([
-      'visit',
-      'cost',
-      'quote',
-    ]);
-    expect(doneGateMissing({ visitComplete: true, costValue: '', quoteFilled: true })).toEqual(['cost']);
+  it('lists what is absent, in the rule order visit → quote; Cost is not asked', () => {
+    expect(doneGateMissing({ visitComplete: false, costValue: null, quoteFilled: false })).toEqual(['visit', 'quote']);
+    expect(doneGateMissing({ visitComplete: true, costValue: '', quoteFilled: true })).toEqual([]);
     expect(doneGateMissing({ visitComplete: false, costValue: 12, quoteFilled: true })).toEqual(['visit']);
     expect(doneGateMissing({ visitComplete: true, costValue: 12, quoteFilled: false })).toEqual(['quote']);
-    expect(DONE_GATE_CHECKS).toEqual(['visit', 'cost', 'quote', 'after_photo']);
+    expect(DONE_GATE_CHECKS).toEqual(['visit', 'quote', 'after_photo']);
   });
 });
 
@@ -108,8 +104,8 @@ describe('rule 11.3.4 — proof before Done (0061)', () => {
   it('comes last in the list and has its own words', () => {
     expect(
       doneGateMissing({ visitComplete: false, costValue: null, quoteFilled: false, proof: { bfi: false, approvedKinds: [] } }),
-    ).toEqual(['visit', 'cost', 'quote', 'after_photo']);
-    expect(describeStatusGate('done', DONE_STATUS_NAME, ['after_photo'])).toContain('approved after photo');
+    ).toEqual(['visit', 'quote', 'after_photo']);
+    expect(describeStatusGate('done', DONE_STATUS_NAME, ['after_photo'])).toContain('Must add 1 approved after pic');
     expect(describeStatusGate('done', DONE_STATUS_NAME, ['bfi_proof'])).toContain('sign-off');
     expect(statusGateTag('done', ['after_photo'])).toBe('Needs after photo');
     expect(statusGateTag('done', ['bfi_proof'])).toBe('Needs sign-off');
@@ -119,18 +115,13 @@ describe('rule 11.3.4 — proof before Done (0061)', () => {
 describe('the sentence and the tag name only what is missing', () => {
   it('lists every check when nothing narrower is known', () => {
     const s = describeStatusGate('done', DONE_STATUS_NAME);
-    expect(s).toContain(`Missing steps to move to ${DONE_STATUS_NAME}:`);
-    expect(s).toContain('checked in and checked out');
-    expect(s).toContain(FINAL_COST_KEY);
-    expect(s).toContain('quote');
+    expect(s).toBe('Missing steps:\n- Must CICO\n- Must have a quote\n- Must add 1 approved after pic');
+    expect(s).not.toContain('Cost');
   });
 
   it('narrows to the missing checks', () => {
-    const s = describeStatusGate('done', DONE_STATUS_NAME, ['cost']);
-    expect(s).toContain(FINAL_COST_KEY);
-    expect(s).not.toContain('checked in');
-    expect(s).not.toContain('quote');
-    expect(s).toMatch(/^Missing step to move to .+: the final vendor cost/);
+    const s = describeStatusGate('done', DONE_STATUS_NAME, ['visit']);
+    expect(s).toBe('Missing step:\n- Must CICO');
     const two = describeStatusGate('done', DONE_STATUS_NAME, ['visit', 'quote']);
     expect(two.split('\n')).toHaveLength(3);
     expect(two.split('\n').slice(1).every((l) => l.startsWith('- '))).toBe(true);

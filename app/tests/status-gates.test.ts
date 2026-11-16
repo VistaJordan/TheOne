@@ -116,18 +116,14 @@ describe('quoteGateMissing — what Quote Ready finds missing', () => {
   });
 
   it('names each missing check in the sentence and the tag', () => {
-    expect(describeStatusGate('quote', 'Quote Ready', ['quote_submitted'])).toContain('submitted');
-    expect(describeStatusGate('quote', 'Quote Ready', ['photo'])).toContain('approved picture');
-    expect(describeStatusGate('quote', 'Quote Ready', ['photo'])).toContain('Drive tab');
-    expect(describeStatusGate('quote', 'Quote Ready', ['quote_submitted'])).toMatch(/^Missing step to move to Quote Ready: the quote submitted/);
+    expect(describeStatusGate('quote', 'Quote Ready', ['quote_submitted'])).toBe('Missing step:\n- Must submit the quote');
     expect(describeStatusGate('quote', 'Quote Ready', ['quote_submitted', 'photo'])).toBe(
-      'Missing steps to move to Quote Ready:\n- The quote submitted (Submit for correction or Submit for approval on the Quote tab)\n- At least one approved picture (Drive tab)',
+      'Missing steps:\n- Must submit the quote\n- Must add 1 approved pic',
     );
     // Unknown = every check, so nobody is told less than the gate asks.
-    const all = describeStatusGate('quote', 'Quote Ready');
-    expect(all).toContain('line or scope item');
-    expect(all).toContain('submitted');
-    expect(all).toContain('approved picture');
+    expect(describeStatusGate('quote', 'Quote Ready')).toBe(
+      'Missing steps:\n- Must have a quote\n- Must submit the quote\n- Must add 1 approved pic',
+    );
     expect(statusGateTag('quote', ['quote'])).toBe('Needs quote');
     expect(statusGateTag('quote', ['quote_submitted'])).toBe('Needs quote submitted');
     expect(statusGateTag('quote', ['photo'])).toBe('Needs photo');
@@ -153,11 +149,9 @@ describe('quoteGateMissing — what Quote Ready finds missing', () => {
 });
 
 describe('the sentence and the tag', () => {
-  it('names the status and, for parts, the field to fill', () => {
-    expect(describeStatusGate('quote', 'Quote Ready')).toContain('Quote Ready');
-    expect(describeStatusGate('quote', 'Quote Ready')).toContain('Quote tab');
-    expect(describeStatusGate('parts', 'Waiting for Parts')).toContain(PARTS_REQUIRED_KEY);
-    expect(describeStatusGate('parts', 'Please Order Parts')).toContain('Please Order Parts');
+  it('is short, and for parts names the field to fill', () => {
+    expect(describeStatusGate('parts', 'Waiting for Parts')).toBe(`Missing step:\n- Must fill ${PARTS_REQUIRED_KEY}`);
+    expect(describeStatusGate('parts', 'Please Order Parts')).toContain(PARTS_REQUIRED_KEY);
   });
 
   it('keeps the tags short', () => {

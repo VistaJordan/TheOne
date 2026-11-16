@@ -462,9 +462,11 @@ visit. Deferred with the subsystems they need: the After-photo / BFI check
 (11.3.4, no drive) and the tech rating (11.3.5 / 3.3.1, no tech database).
 
 **Missing steps** (Elise, 2026-11-16, no migration): every gate sentence
-(`describeStatusGate`, `describeCheckInRequired`) reads "Missing step to move
-to X: …" for one thing, or "Missing steps to move to X:" followed by one "- "
-line per step (`missingStepsText` in shared `statusGates.ts`); the web draws
+(`describeStatusGate`, `describeCheckInRequired`) reads "Missing step:" or
+"Missing steps:" followed by one short "- " line per step — "Must CICO",
+"Must add 1 approved after pic", "Must have a quote" (Jack, same day; the
+status is not repeated, the person just picked it; `CHECK_TEXT` and
+`missingStepsText` in shared `statusGates.ts`); the web draws
 the lines as bullets with `components/MessageLines.tsx` (status menu, Approved
 dialog, CICO card, quote builder, record bar, bulk bar, lifecycle chart). A new
 place that shows an API refusal should render it through `MessageLines`.
@@ -3913,8 +3915,10 @@ refuses it unconditionally (field editor, bulk edit, an automation's
 action) and `validateBagValues` refuses a non-blank Cost on Add work order
 and a draft's Submit; only Pay (`addToCost`, +amount) and deleting a paid
 request (−amount) write it. This replaces the 0076 "a typed Cost stands
-until the system first writes one". The Done gate still asks for Cost
-(Elise: revisit later), so Done / Incurred now needs a paid payment. The
+until the system first writes one". **The Done gate no longer asks for
+Cost** (Jack / Elise, same day, "for now": `'cost'` left `DONE_GATE_CHECKS`
+and `doneGateMissing`; the type keeps it, and M3's hold on clearing Cost in
+Done or later stays). The
 expected figure is **Projected Cost** (0152, currency, Finances section, not
 client-safe; seed.ts in step), drawn above Cost on the Finances card.
 Payment actions also refresh the right rail's Cost (`['wo-record']`).

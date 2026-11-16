@@ -64,7 +64,7 @@ export const LIFECYCLE: LifecycleModel = {
       title: 'Soft close and audit',
       phases: ['Done'],
       summary:
-        'Done / Incurred needs a visit checked in and out, the final Cost (paying a request adds it to Cost), a quote with data and an approved after photo (or, for Bill For Incurred, a before photo and a sign-off). Entering the Done group may propose an invoice and a vendor bill when an auto-invoice contract covers the job. AR audits the record and marks it Ready to Invoice.',
+        'Done / Incurred needs a visit checked in and out, a quote with data and an approved after photo (or, for Bill For Incurred, a before photo and a sign-off). Entering the Done group may propose an invoice and a vendor bill when an auto-invoice contract covers the job. AR audits the record and marks it Ready to Invoice.',
       who: ['OM (dispatcher)', 'Accounts Payable', 'Accounts Receivable'],
     },
     {

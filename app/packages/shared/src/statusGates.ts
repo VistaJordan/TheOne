@@ -52,10 +52,13 @@ export type StatusGate = 'quote' | 'parts' | 'done';
 export type QuoteGateCheck = 'quote' | 'quote_submitted' | 'photo';
 export const QUOTE_GATE_CHECKS: readonly QuoteGateCheck[] = ['quote', 'quote_submitted', 'photo'];
 
-/** The Done gate's three checks, in the rule's order. */
+/** The Done gate's checks, in the rule's order. 'cost' stays in the type
+    but is not asked: the Cost requirement was lifted "for now" (Jack /
+    Elise, 2026-11-16) — Cost is written only by Pay, so asking for it made
+    Done wait on a paid payment. */
 export type DoneGateCheck = 'visit' | 'cost' | 'quote' | 'after_photo' | 'bfi_proof';
 /** What a standard completion needs; a BFI job swaps the last for 'bfi_proof'. */
-export const DONE_GATE_CHECKS: readonly DoneGateCheck[] = ['visit', 'cost', 'quote', 'after_photo'];
+export const DONE_GATE_CHECKS: readonly DoneGateCheck[] = ['visit', 'quote', 'after_photo'];
 
 /** Any check a gate can report missing (`details.missing` on the 409). */
 export type GateCheck = DoneGateCheck | QuoteGateCheck;
@@ -170,7 +173,7 @@ export function doneGateMissing(state: {
 }): DoneGateCheck[] {
   const missing: DoneGateCheck[] = [];
   if (!state.visitComplete) missing.push('visit');
-  if (!costFilled(state.costValue)) missing.push('cost');
+  // Cost is not asked for now (2026-11-16); `costValue` is still accepted.
   if (!state.quoteFilled) missing.push('quote');
   if (state.proof) {
     const absent = completionProofMissing(state.proof.bfi, state.proof.approvedKinds);
@@ -230,14 +233,15 @@ export function quoteSectionsHaveData(
   );
 }
 
+/** Short on purpose (Jack, 2026-11-16): "Must CICO", "Must add 1 after pic". */
 const CHECK_TEXT: Record<GateCheck, string> = {
-  visit: 'a visit checked in and checked out (CICO tab)',
-  cost: `the final vendor cost (${FINAL_COST_KEY})`,
-  quote: 'a quote with at least one line or scope item (Quote tab)',
-  quote_submitted: 'the quote submitted (Submit for correction or Submit for approval on the Quote tab)',
-  photo: 'at least one approved picture (Drive tab)',
-  after_photo: 'an approved after photo (Drive tab)',
-  bfi_proof: 'an approved before photo and an approved sign-off (Drive tab — this job is Bill For Incurred)',
+  visit: 'Must CICO',
+  cost: 'Must have the final cost',
+  quote: 'Must have a quote',
+  quote_submitted: 'Must submit the quote',
+  photo: 'Must add 1 approved pic',
+  after_photo: 'Must add 1 approved after pic',
+  bfi_proof: 'Must add 1 approved before pic and the sign-off',
 };
 
 const CHECK_TAG: Record<GateCheck, string> = {
@@ -250,14 +254,14 @@ const CHECK_TAG: Record<GateCheck, string> = {
   bfi_proof: 'Needs sign-off',
 };
 
-/** "Missing steps" (Elise, 2026-11-16): a refusal names what is still to do
-    under that heading — one step on the same line, several as "- " lines,
-    one per step, which the web draws as a bulleted list (MessageLines). */
-export function missingStepsText(target: string, steps: readonly string[]): string {
+/** "Missing steps" (Elise / Jack, 2026-11-16): a refusal reads "Missing
+    steps:" (or "Missing step:") and then one "- " line per step, which the
+    web draws as a bulleted list (MessageLines). The status is not repeated:
+    the person just picked it. */
+export function missingStepsText(steps: readonly string[]): string {
   const clean = steps.map((s) => s.trim().replace(/\.$/, '')).filter((s) => s !== '');
-  if (clean.length <= 1) return `Missing step ${target}: ${clean[0] ?? ''}.`;
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-  return `Missing steps ${target}:\n${clean.map((s) => `- ${cap(s)}`).join('\n')}`;
+  return `${clean.length === 1 ? 'Missing step' : 'Missing steps'}:\n${clean.map((s) => `- ${cap(s)}`).join('\n')}`;
 }
 
 /** The sentence the person sees when a move is refused. For the Done and
@@ -268,13 +272,11 @@ export function describeStatusGate(
   statusName: string,
   missing?: readonly GateCheck[],
 ): string {
-  const target = `to move to ${statusName}`;
-  if (gate === 'parts') {
-    return missingStepsText(target, [`the parts required (${PARTS_REQUIRED_KEY})`]);
-  }
+  void statusName;
+  if (gate === 'parts') return missingStepsText([`Must fill ${PARTS_REQUIRED_KEY}`]);
   const all: readonly GateCheck[] = gate === 'quote' ? QUOTE_GATE_CHECKS : DONE_GATE_CHECKS;
   const checks = missing && missing.length > 0 ? missing : all;
-  return missingStepsText(target, checks.map((c) => CHECK_TEXT[c]));
+  return missingStepsText(checks.map((c) => CHECK_TEXT[c]));
 }
 
 /** The short tag the status menu draws on a pick the gate would refuse. */

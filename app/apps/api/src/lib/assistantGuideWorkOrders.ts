@@ -56,7 +56,7 @@ Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view):
 - Statuses the app holds back until the work order is ready (the menu tags them):
   - Quote Ready needs a quote with at least one line or scope item.
   - Waiting for Parts and Please Order Parts need the **Parts Required** field filled. On the Parts tab it is the POP request: press **Fill in the POP request** (or **Edit**), fill the ten lines (POP, Link, QTY, Estimated Total Cost, Specs, Delivery Address, Store or Tech's name, Phone Number, Full Address, Screenshot reference — **Upload screenshot** files the picture on the Drive tab), then **Save POP request**.
-  - Done / Incurred needs a visit that was checked in and out, the final **Cost**, a quote with data and an approved after photo (for a Bill For Incurred job: an approved before photo and a sign-off instead).
+  - Done / Incurred needs a visit that was checked in and out, a quote with data and an approved after photo (for a Bill For Incurred job: an approved before photo and a sign-off instead).
   - Ready to Invoice, Invoiced Not Paid and Invoiced need the same as Done / Incurred, unless the work order is already in Done / Incurred or another of those three.
   - While the work order sits in one of those statuses, what it needed cannot be emptied: **Parts Required** in the parts statuses, the **Cost** from Done / Incurred on, the quote's lines in Quote Ready and from Done / Incurred on.
   - The quote moves the status too: **Send to client** moves it to Waiting for Approval, the client's approval to Approved, the client's decline back to Waiting for Quote (only from the quote and approval statuses; a work order further along stays put).
