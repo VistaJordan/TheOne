@@ -3119,3 +3119,13 @@ a.photo-img.is-real img {
 .ov-latest-body { color: var(--ink-2); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; text-decoration: none; }
 a.ov-latest-body:hover { color: var(--ink); text-decoration: underline; }
 .ov-chip-client { color: var(--accent-text); border: 1px solid currentColor; }
+
+/* UAT #48 (Elise, 2026-11-16) · Send reminder: the approvals still waiting. */
+.remind-list { border: 0; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.remind-item {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.remind-item.is-on { border-color: var(--accent); }
+.remind-item input { margin-top: 3px; }
+.remind-item-text { display: grid; gap: 2px; }

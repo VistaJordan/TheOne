@@ -1627,6 +1627,25 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             taxApplies={taxApplies}
           />
 
+          {/* UAT #29 (Elise, 2026-11-16): the rail reads Money · Labor rates ·
+              Document; each section carries its own specs and note (0146). */}
+          {quote.labor_rate && (
+            <section className="card">
+              <div className="card-head">
+                <h2 className="card-title grow">Labor rate card</h2>
+                <span className="card-meta">{[quote.labor_rate.billing_entity, quote.labor_rate.trade].filter(Boolean).join(' · ')}</span>
+              </div>
+              <dl className="kvlist">
+                <div className="kvrow"><dt>Tech / hr</dt><dd>{usd(quote.labor_rate.tech_rate)}</dd></div>
+                <div className="kvrow"><dt>Helper / hr</dt><dd>{usd(quote.labor_rate.helper_rate)}</dd></div>
+                <div className="kvrow"><dt>Trip</dt><dd>{usd(quote.labor_rate.trip_rate)}</dd></div>
+                <div className="kvrow"><dt>After-hours / hr</dt><dd>{usd(quote.labor_rate.afterhours_rate)}</dd></div>
+                <div className="kvrow"><dt>Holiday / hr</dt><dd>{usd(quote.labor_rate.holiday_rate)}</dd></div>
+                <div className="kvrow is-muted"><dt>Sales tax</dt><dd>{!taxApplies ? 'Not charged (SFM only)' : quote.labor_rate.is_sales_tax_required ? 'Required' : 'Not required'}</dd></div>
+              </dl>
+            </section>
+          )}
+
           {/* 0048 · the document fields: what the printed quote calls
               itself, who it is billed to, where the work ships. */}
           <section className="card">
@@ -1676,23 +1695,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               </div>
             </div>
           </section>
-
-          {quote.labor_rate && (
-            <section className="card">
-              <div className="card-head">
-                <h2 className="card-title grow">Labor rate card</h2>
-                <span className="card-meta">{[quote.labor_rate.billing_entity, quote.labor_rate.trade].filter(Boolean).join(' · ')}</span>
-              </div>
-              <dl className="kvlist">
-                <div className="kvrow"><dt>Tech / hr</dt><dd>{usd(quote.labor_rate.tech_rate)}</dd></div>
-                <div className="kvrow"><dt>Helper / hr</dt><dd>{usd(quote.labor_rate.helper_rate)}</dd></div>
-                <div className="kvrow"><dt>Trip</dt><dd>{usd(quote.labor_rate.trip_rate)}</dd></div>
-                <div className="kvrow"><dt>After-hours / hr</dt><dd>{usd(quote.labor_rate.afterhours_rate)}</dd></div>
-                <div className="kvrow"><dt>Holiday / hr</dt><dd>{usd(quote.labor_rate.holiday_rate)}</dd></div>
-                <div className="kvrow is-muted"><dt>Sales tax</dt><dd>{!taxApplies ? 'Not charged (SFM only)' : quote.labor_rate.is_sales_tax_required ? 'Required' : 'Not required'}</dd></div>
-              </dl>
-            </section>
-          )}
 
           <SummaryCard
             auto={quote.summary.auto}

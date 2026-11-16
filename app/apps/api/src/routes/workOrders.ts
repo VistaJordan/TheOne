@@ -17,6 +17,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
+  APPROVAL_REMINDER_NOTE_MAX,
   CLIENT_MESSAGE_PERM_KEY,
   mayViewClientMessages,
   MENTION_MAX,
@@ -62,6 +63,7 @@ import { editMessage, listMessages, mentionCandidates, postMessage } from '../se
 import { improveMessage } from '../services/aiImprove.js';
 import { evaluateForTask } from '../services/obligations.js';
 import { listWorkOrderNotices } from '../services/notices.js';
+import { listPendingApprovals, sendApprovalReminder } from '../services/approvalReminders.js';
 import { bulkDelete, bulkUpdate, exportCsv, importWorkOrders, IMPORT_CAP } from '../services/woBulk.js';
 import { assertIdsInScope } from '../services/woScope.js';
 import { boardViewer, requireBoardView } from '../services/dashboards.js';
@@ -793,6 +795,33 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
 
   // 0089 · the people the composer's @ list offers: active people who can
   // open this work order and its Messages tab (each by their own scope).
+  // UAT #48 (Elise, 2026-11-16) · reminders to managers: what is waiting for
+  // a manager on this work order, and Send reminder (the dispatchers and the
+  // OP Admin; one per approval per hour; services/approvalReminders.ts).
+  app.get('/work-orders/:id/pending-approvals', async (req) => {
+    const { p } = requireView(req);
+    const { id } = parse(idParamsSchema, req.params);
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    return listPendingApprovals(taskId, p);
+  });
+
+  app.post('/work-orders/:id/approval-reminders', async (req) => {
+    const { p } = requireView(req);
+    const { id } = parse(idParamsSchema, req.params);
+    const body = parse(
+      z.object({
+        kind: z.enum(['task', 'quote', 'payment', 'nte_request', 'purchase']),
+        id: z.string().uuid(),
+        note: z.string().max(APPROVAL_REMINDER_NOTE_MAX).nullable().optional(),
+      }).strict(),
+      req.body,
+    );
+    const taskId = await resolveTaskId(id, p);
+    if (!taskId) throw notFound('Work order not found');
+    return sendApprovalReminder(taskId, body, p);
+  });
+
   app.get('/work-orders/:id/mention-candidates', async (req) => {
     const { p } = acting(req);
     requirePerm(p, MESSAGE_PERM_KEY, 'create', 'You cannot post messages');

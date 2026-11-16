@@ -35,6 +35,7 @@ import { AcceptanceChip } from './AcceptanceChip';
 import { AssignDialog } from './AssignDialog';
 import { SharePointFolderChip } from '../SharePointFolderChip';
 import { WoCopyButtons } from './WoCopyButtons';
+import { ApprovalReminderButton } from './ApprovalReminderButton';
 
 /** One labelled amount in the worth block. The currency sign is drawn
     separately, smaller and lighter, so label + amount read the way the comp
@@ -326,6 +327,7 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
               {escalated ? 'Escalated · Clear' : 'Escalation'}
             </button>
           )}
+          <ApprovalReminderButton woId={wo.id} woNumber={wo.wo_number} />
           {actions}
           <WoCopyButtons wo={wo} />
           <button

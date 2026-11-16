@@ -54,7 +54,7 @@ import type {
 import { query, withTransaction } from '../db.js';
 import { wallStamp, wallToInstant } from '../lib/businessDays.js';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
-import { NTE_SYNCED_CODE, NTE_SYNCED_MESSAGE } from '@theone/shared';
+import { NTE_SYNCED_CODE, NTE_SYNCED_MESSAGE, nteRequestsLink } from '@theone/shared';
 import type { ActingPrincipal } from './activity.js';
 import { notify } from './notices.js';
 import { allowFor, canViewField, requirePerm } from './permissions.js';
@@ -952,7 +952,9 @@ export async function requestNteIncrease(taskId: string, input: { requested_nte:
     kind: 'nte_increase',
     title: `${actor.name} asks to raise the NTE on ${t.wo_number} to $${amount.toLocaleString('en-US')}`,
     body: reason,
-    link: `/work-orders/${encodeURIComponent(t.wo_number)}?tab=costs`,
+    // UAT #6: open where it is decided, not the work order's Finances.
+    link: nteRequestsLink(t.wo_number),
+    taskId,
     actorId: actor.id,
   });
   return getWoRecord(taskId, actor);
@@ -1053,7 +1055,7 @@ export async function decideNteIncrease(taskId: string, requestId: string, decis
       kind: 'nte_increase_decided',
       title: `${actor.name} ${status} the NTE increase on ${t.wo_number}`,
       body: text,
-      link: `/work-orders/${encodeURIComponent(t.wo_number)}?tab=costs`,
+      link: `/work-orders/${encodeURIComponent(t.wo_number)}`,
       actorId: actor.id,
     });
   }

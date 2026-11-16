@@ -19,8 +19,9 @@ const money = (n: number | null) =>
   n === null ? '—' : `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /** `afterHours`: every work order's requests; otherwise only the work orders
-    the viewer is on (Elise, 2026-11-16). */
-export function NteRequestsPanel({ afterHours = false }: { afterHours?: boolean } = {}) {
+    the viewer is on (Elise, 2026-11-16). `focusWo`: the work order a
+    notice pointed at (UAT #6) — its row is outlined and scrolled to. */
+export function NteRequestsPanel({ afterHours = false, focusWo = null }: { afterHours?: boolean; focusWo?: string | null } = {}) {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: ['nte-requests', afterHours ? 'all' : 'mine'],
@@ -62,6 +63,7 @@ export function NteRequestsPanel({ afterHours = false }: { afterHours?: boolean 
         <div className="quotes-empty">
           <Icon name="inbox" size={22} />
           <b>No NTE increase requests are waiting</b>
+          {focusWo && <span className="hint">The request on {focusWo} has been decided or withdrawn.</span>}
         </div>
       ) : (
         <div className="table-wrap">
@@ -79,7 +81,11 @@ export function NteRequestsPanel({ afterHours = false }: { afterHours?: boolean 
             </thead>
             <tbody>
               {items.map((r) => (
-                <tr key={r.id}>
+                <tr
+                  key={r.id}
+                  className={focusWo && r.wo_number === focusWo ? 'is-focused' : undefined}
+                  ref={focusWo && r.wo_number === focusWo ? (el) => el?.scrollIntoView({ block: 'center' }) : undefined}
+                >
                   <td>
                     <Link to={`/work-orders/${encodeURIComponent(r.wo_number)}`} className="wo-num">
                       {r.wo_number}

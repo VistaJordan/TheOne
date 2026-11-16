@@ -6,6 +6,8 @@ import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@
 import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
 // 0073: a work order saved as a PDF.
 import type { WoNotificationsResponse } from '@theone/shared';
+// UAT #48: reminders to managers.
+import type { ApprovalReminderResult, PendingApprovalKind, PendingApprovalsResponse } from '@theone/shared';
 // 0140: address suggestions from Google Maps.
 import type { AddressPlaceResponse, AddressSuggestResponse, GoogleUsageOverview } from '@theone/shared';
 // 0074: Admin › Integrations.
@@ -302,6 +304,22 @@ export type ThreadItem = ThreadCall | ThreadMessage | ThreadSegment;
 export interface MessagesResponse {
   conversation: QuoConversation | null;
   items: ThreadItem[];
+}
+
+/** UAT #48 · what is waiting for a manager on the work order, and a
+    reminder about one of them (the dispatchers and the OP Admin). */
+export function getPendingApprovals(idOrNumber: string): Promise<PendingApprovalsResponse> {
+  return request<PendingApprovalsResponse>(`/work-orders/${encodeURIComponent(idOrNumber)}/pending-approvals`);
+}
+
+export function sendApprovalReminder(
+  idOrNumber: string,
+  body: { kind: PendingApprovalKind; id: string; note?: string | null },
+): Promise<ApprovalReminderResult> {
+  return request<ApprovalReminderResult>(`/work-orders/${encodeURIComponent(idOrNumber)}/approval-reminders`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 /** POST /api/work-orders/:id/messages/quo — 201 { item }. */

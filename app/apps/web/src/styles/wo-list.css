@@ -1417,3 +1417,40 @@
 
 /* The built-in Due Today tab wears its clock. */
 .view-tab.is-builtin svg { opacity: 0.8; }
+
+/* UAT #39 (Elise, 2026-11-16) · Add work order: a field still missing after a
+   Create click wears the danger ring until it is filled. */
+.modal.is-create-wo .field.is-missing .fld {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);
+}
+.modal.is-create-wo .field.is-missing .lbl { color: var(--danger); }
+
+/* A Create that cannot go yet: drawn dimmed but still clickable (the click
+   paints the missing fields), and hovering it lists them. */
+.cwo-create { position: relative; display: inline-flex; }
+.cwo-create.is-incomplete > .btn-sm { opacity: 0.55; }
+.cwo-missing-tip {
+  display: none;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 50vh;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border-strong);
+  font-size: 12px;
+  text-align: left;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.cwo-missing-tip ul { margin: 6px 0 0; padding-left: 18px; }
+.cwo-missing-tip li { margin: 2px 0; color: var(--danger); }
+.cwo-create.is-incomplete:hover .cwo-missing-tip,
+.cwo-create.is-incomplete:focus-within .cwo-missing-tip { display: block; }

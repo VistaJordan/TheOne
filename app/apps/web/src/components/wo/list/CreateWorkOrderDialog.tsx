@@ -55,6 +55,7 @@ import {
   clientOptionsForComp,
   clientTeamValues,
   describeMissing,
+  woCreateValueFilled,
   formatBytes,
   pickClientTeam,
   PORTAL_TYPE_KEY,
@@ -528,6 +529,21 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
   }, [form.fields, values, catalogue]);
 
   const missing = useMemo(() => woCreateMissing(form, bag, woNumber), [form, bag, woNumber]);
+  // UAT #39 (Elise, 2026-11-16): a Create clicked while something is missing
+  // paints every missing field red (and each one clears as it is filled), and
+  // hovering a blocked Create lists what is still needed.
+  const [triedCreate, setTriedCreate] = useState(false);
+  const missingFields = useMemo(
+    () => form.fields.filter((f) => f.mode === 'required' && !woCreateValueFilled(bag[f.key])),
+    [form.fields, bag],
+  );
+  const missingKeys = useMemo(() => new Set(missingFields.map((f) => f.key)), [missingFields]);
+  const numberMissing = woNumber.trim().length === 0;
+  const missingLabels = [
+    ...(numberMissing ? ['WO #'] : []),
+    ...missingFields.map((f) => (f.key === ASSIGNEE_KEY ? 'Dispatcher' : f.label)),
+  ];
+  const isFlagged = (key: string) => flagged.has(key) || (triedCreate && missingKeys.has(key));
 
   const create = useMutation({
     mutationFn: () => {
@@ -648,7 +664,23 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
     if (canDraft && somethingTyped) saveDraft.mutate();
     else onClose();
   };
-  const blocked = taken || missing.length > 0 || busy;
+  const blocked = taken || busy;
+  const incomplete = missing.length > 0;
+  const tryCreate = () => {
+    if (blocked) return;
+    if (incomplete) {
+      setTriedCreate(true);
+      // Take the person to the first field still to fill.
+      const first = numberMissing ? 'new-wo-number' : missingFields[0] ? `new-wo-${missingFields[0].key.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}` : null;
+      const el = first ? document.getElementById(first) : null;
+      if (el) {
+        el.scrollIntoView({ block: 'center' });
+        el.focus({ preventScroll: true });
+      }
+      return;
+    }
+    create.mutate();
+  };
 
   // 2026-11-14 (Elise): an exit by mistake that skips the ✕ keeps the form
   // too. A refresh or a closed tab first asks the browser's "Leave site?"; if
@@ -918,7 +950,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
             <h3>
               <span className="step-n">1</span> The number
             </h3>
-            <div className={`field${taken ? ' is-missing' : ''}`}>
+            <div className={`field${taken || (triedCreate && numberMissing) ? ' is-missing' : ''}`}>
               <label className="lbl" htmlFor="new-wo-number">
                 WO # <span className="req" aria-hidden="true">*</span>
               </label>
@@ -995,7 +1027,7 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
                 <div className="intake-grid">
                   {s.fields.map((f) => (
                     <div
-                      className={`field${flagged.has(f.key) ? ' is-missing' : ''}${
+                      className={`field${isFlagged(f.key) ? ' is-missing' : ''}${
                         catalogue.get(`fields.${f.key}`)?.subtype === 'long_text' ? ' intake-wide' : ''
                       }`}
                       key={f.key}
@@ -1115,15 +1147,29 @@ export function CreateWorkOrderDialog({ onClose }: CreateWorkOrderDialogProps) {
               {saveDraft.isPending ? 'Saving…' : 'Save as draft'}
             </button>
           )}
-          <button
-            type="button"
-            className="btn-sm is-primary"
-            onClick={() => create.mutate()}
-            disabled={blocked}
-            title={taken ? 'Change the WO # first' : undefined}
-          >
-            {uploading ?? (busy ? 'Creating…' : files.length > 0 ? `Create and upload ${files.length} ${files.length === 1 ? 'file' : 'files'}` : 'Create work order')}
-          </button>
+          <span className={`cwo-create${incomplete && !blocked ? ' is-incomplete' : ''}`}>
+            <button
+              type="button"
+              className="btn-sm is-primary"
+              onClick={tryCreate}
+              disabled={blocked}
+              aria-disabled={incomplete || undefined}
+              aria-describedby={incomplete && !blocked ? 'cwo-missing-tip' : undefined}
+              title={taken ? 'Change the WO # first' : undefined}
+            >
+              {uploading ?? (busy ? 'Creating…' : files.length > 0 ? `Create and upload ${files.length} ${files.length === 1 ? 'file' : 'files'}` : 'Create work order')}
+            </button>
+            {incomplete && !blocked && (
+              <span className="cwo-missing-tip" id="cwo-missing-tip" role="tooltip">
+                <b>Still needed before you can create:</b>
+                <ul>
+                  {missingLabels.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              </span>
+            )}
+          </span>
         </div>
       </div>
     </div>

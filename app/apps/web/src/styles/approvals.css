@@ -153,3 +153,11 @@
 .ct .payq-who .apq-missing .ic { flex: none; }
 .ct .payq-who .apq-missing a { color: inherit; text-decoration: underline; }
 @media (max-width: 900px) { .scr { max-width: 100%; } }
+
+/* UAT #6 · the NTE increase request a notice pointed at. */
+.apq-nte-requests tr.is-focused > td {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.apq-nte-requests tr.is-focused > td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}

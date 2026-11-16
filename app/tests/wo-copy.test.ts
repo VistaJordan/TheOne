@@ -29,6 +29,20 @@ describe('woCopyFull', () => {
   });
 });
 
+describe('Copy full carries the sign-off link (UAT #41)', () => {
+  it('prefills the entity form with the client WO # and the address', () => {
+    const t = woCopyFull({ ...wo, ext_name: 'C-77', fields: { ...wo.fields, '21. Comp': 'SFM' } });
+    expect(t).toContain('Sign-off link: https://seamlessfm.paperform.co/?ed9ra=C-77&bf7ou=7898%20Bradley');
+  });
+  it('falls back to the Sign-Off Link field when the entity has no form', () => {
+    const t = woCopyFull({ ...wo, fields: { ...wo.fields, '24. Sign-Off Link': 'https://x.test/s' } });
+    expect(t.endsWith('Sign-off link: https://x.test/s')).toBe(true);
+  });
+  it('Copy vague never carries it', () => {
+    expect(woCopyVague({ ...wo, fields: { ...wo.fields, '21. Comp': 'SFM' } })).not.toContain('paperform');
+  });
+});
+
 describe('woCopyVague', () => {
   it('gives street, city and ZIP (no state) and the scope', () => {
     expect(woCopyVague(wo)).toBe(

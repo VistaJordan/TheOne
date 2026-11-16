@@ -36,13 +36,21 @@ function CopyTextButton({ value, label, title }: { value: string; label: string;
 }
 
 /** Elise, 2026-11-12 · the two copy buttons at the right of the header.
- *  Copy full: WO #, address, store, scope. Copy vague: street + city + ZIP and
+ *  Copy full: WO #, address, store, scope, sign-off link. Copy vague: street + city + ZIP and
  *  the scope — for a technician not hired yet. Text built in shared woCopy.ts. */
 export function WoCopyButtons({ wo }: { wo: WorkOrderDetailV2 }) {
-  const src = { wo_number: wo.wo_number, description: wo.description, city: wo.city, fields: wo.fields ?? {} };
+  const src = {
+    wo_number: wo.wo_number,
+    ext_name: wo.ext_name,
+    client: wo.client,
+    billing_entity: wo.billing_entity,
+    description: wo.description,
+    city: wo.city,
+    fields: wo.fields ?? {},
+  };
   return (
     <span className="wohead-copies">
-      <CopyTextButton value={woCopyFull(src)} label="Copy full" title="Copies WO #, address, store and scope" />
+      <CopyTextButton value={woCopyFull(src)} label="Copy full" title="Copies WO #, address, store, scope and sign-off link" />
       <CopyTextButton value={woCopyVague(src)} label="Copy vague" title="Copies street, city, ZIP and scope" />
     </span>
   );

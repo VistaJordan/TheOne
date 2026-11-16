@@ -568,6 +568,8 @@ export async function listWorkOrderNotices(
          JOIN principal r ON r.id = n.principal_id
          LEFT JOIN principal a ON a.id = n.actor_id
         WHERE n.link = $1 OR left(n.link, length($1) + 1) IN ($1 || '?', $1 || '#')
+           -- UAT #6: an NTE increase request opens Approvals, not the work order.
+           OR (n.kind = 'nte_increase' AND n.task_id = $2)
        UNION ALL
        SELECT n.id::text, 'pulse', o.rule_key, n.title, n.body, $1,
               r.id::text, r.display_name, NULL, NULL, n.read_at, n.created_at

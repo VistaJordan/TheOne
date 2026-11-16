@@ -21,6 +21,7 @@ import {
   NOTICE_GROUPS,
   kindsInGroup,
   noticeDayBand,
+  noticeOpenLink,
   noticeType,
   type NoticeDayBand,
   type NoticeGroupId,
@@ -335,7 +336,7 @@ function NoticeRow({ n, now, selected, onSelect, onRead, busy }: {
 }) {
   const t = noticeType(n.kind);
   const tier = n.source === 'pulse' ? tierOf(n) : null;
-  const link = n.link && n.link.startsWith('/') ? n.link : null;
+  const link = noticeOpenLink(n.kind, n.link);
   const body = (
     <>
       <span className="ntf-row-top">

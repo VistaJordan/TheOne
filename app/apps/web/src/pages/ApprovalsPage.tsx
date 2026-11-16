@@ -39,7 +39,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ACCEPTANCE_REJECT_STATUS_NAME,
   ACCEPTANCE_SOURCE_LABEL,
@@ -621,7 +621,10 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   const mySuper = actingAs?.is_super_admin === true;
 
   const [section, setSection] = useState<Section>('all');
-  const [nteView, setNteView] = useState(false);
+  // UAT #6: an NTE increase notice links here with ?view=nte-requests&wo=…
+  const [searchParams] = useSearchParams();
+  const [nteView, setNteView] = useState(() => searchParams.get('view') === 'nte-requests');
+  const nteFocusWo = searchParams.get('wo');
   const [columns, setColumns] = useState<ColumnKey[]>(loadColumns);
   const changeColumns = (next: string[]) => {
     const known = new Set<string>(COLUMN_CHOICES.map((c) => c.key));
@@ -984,7 +987,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
         </p>
       )}
 
-      {nteView && <NteRequestsPanel afterHours={afterHours} />}
+      {nteView && <NteRequestsPanel afterHours={afterHours} focusWo={nteFocusWo} />}
 
       {!nteView && approvalsQuery.isError && (
         <div className="quotes-empty">

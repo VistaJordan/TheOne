@@ -48,7 +48,35 @@ export const NOTICE_TYPES: Record<string, { label: string; group: NoticeGroupId 
   vendor_onboarding: { label: 'Vendor onboarding', group: 'vendors' },
   quote_due: { label: 'Quotes due', group: 'work_orders' },
   payment_rejected: { label: 'Payments rejected', group: 'approvals' },
+  approval_reminder: { label: 'Approval reminders', group: 'approvals' },
 };
+
+/** Where an NTE increase request is decided (Elise, 2026-11-16, UAT #6):
+    Approvals › NTE increase requests, with the work order picked out. The
+    notice used to point at the work order's Cost breakdown, which left the
+    work order on 2026-11-05. */
+export function nteRequestsLink(woNumber: string): string {
+  return `/approvals?view=nte-requests&wo=${encodeURIComponent(woNumber)}`;
+}
+
+/** The link a notice opens. An NTE increase request raised before UAT #6
+    still holds `/work-orders/<WO #>?tab=costs`; it opens the Approvals lane. */
+export function noticeOpenLink(kind: string, link: string | null | undefined): string | null {
+  if (!link || !link.startsWith('/')) return null;
+  if (kind === 'nte_increase') {
+    const m = /^\/work-orders\/([^/?#]+)\?tab=costs/.exec(link);
+    if (m) {
+      let wo = m[1];
+      try {
+        wo = decodeURIComponent(wo);
+      } catch {
+        /* keep as written */
+      }
+      return nteRequestsLink(wo);
+    }
+  }
+  return link;
+}
 
 /** A payment request was rejected, told to whoever raised it (Elise,
     2026-11-16): the rejection is theirs to act on, wherever they sit. */
@@ -184,7 +212,7 @@ export const ASSIGNED_SEAT_KEYS = ['Assignee', 'Support Trainee', 'TL', 'ATL', '
 
 /** Kinds shown whoever holds the work order: someone asked for this person by
     name (a mention), or it answers their own request. */
-export const NOTICE_KINDS_ALWAYS_SHOWN: readonly string[] = ['wo_mention', 'request_decided', 'payment_rejected'];
+export const NOTICE_KINDS_ALWAYS_SHOWN: readonly string[] = ['wo_mention', 'request_decided', 'payment_rejected', 'approval_reminder'];
 
 /** True when `name` sits in one of the assigned seats of this bag (each seat
     is a comma-joined list of display names). The pure twin of the SQL in
