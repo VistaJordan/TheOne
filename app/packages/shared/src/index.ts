@@ -1017,6 +1017,12 @@ export interface QuotePermissions {
       for correction or approval, so they may take it back to draft to edit
       (POST …/quote/retract). False once it is approved or sent. */
   can_retract?: boolean;
+  /** 2026-11-16 (Elise) · the most this person may send to a client on their
+      own (`quoteSendLimitFor`), null = no limit. Absent on an older API. */
+  send_limit?: number | null;
+  /** The quote's dearest option is above `send_limit`: Approve and Send are
+      refused (403 QUOTE_SEND_LIMIT); the person submits it for approval. */
+  over_send_limit?: boolean;
 }
 
 /** Yoda LaborRate for the WO's (billing entity, FM, trade) combo — null when none. */
@@ -2287,6 +2293,8 @@ export * from './access';
 export * from './workflow';
 export * from './statusOrder';
 export * from './quoteSubmit';
+// 2026-11-16 · how much a person may send to a client on their own (ATL $5,000).
+export * from './quoteSendLimit';
 export * from './unassigned';
 export * from './managerFlags';
 export * from './paymentApproval';

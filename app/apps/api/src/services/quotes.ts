@@ -75,6 +75,10 @@ import {
   optionDisplayLabel,
   permAllows,
   quoteOverNte,
+  quoteOverSendLimit,
+  quoteSendLimitFor,
+  quoteSendLimitSentence,
+  QUOTE_SEND_LIMIT_CODE,
   quoteTotalForNte,
   quoteTaxApplies,
   reportedSentence,
@@ -940,6 +944,7 @@ function permissionsFor(
   snap: WoStatusSnapshot | null,
   q: { maker_id: string | null; nte: number | null; status: QuoteStatus },
   grandTotal: number,
+  sendLimit: number | null = null,
 ): QuotePermissions {
   return {
     can_edit: canEditQuote(actor),
@@ -960,7 +965,36 @@ function permissionsFor(
     // while it still waits for correction or approval.
     can_retract: QUOTE_RETRACTABLE_FROM.includes(q.status) && canEditQuote(actor)
       && (q.maker_id === actor.id || actor.isSuperAdmin),
+    // 2026-11-16 (Elise) · an ATL sends up to their limit; above it they
+    // submit for approval and a Team Lead sends.
+    send_limit: sendLimit,
+    over_send_limit: quoteOverSendLimit(grandTotal, sendLimit),
   };
+}
+
+/** 2026-11-16 (Elise) · this person's sending limit (`quoteSendLimitFor`):
+    their own figure from Admin › Users, else their role's default, else none. */
+async function actorQuoteSendLimit(actor: ActingPrincipal): Promise<number | null> {
+  if (actor.isSuperAdmin) return null;
+  const res = await query<{ quote_send_limit: string | null }>(
+    `SELECT quote_send_limit FROM principal WHERE id = $1`,
+    [actor.id],
+  );
+  const raw = res.rows[0]?.quote_send_limit;
+  return quoteSendLimitFor(actor.role, raw === null || raw === undefined ? null : Number(raw), actor.isSuperAdmin);
+}
+
+/** 2026-11-16 (Elise) · Approve and Send refuse a quote whose dearest option
+    is above the person's sending limit (403 QUOTE_SEND_LIMIT). */
+async function assertWithinSendLimit(taskId: string, actor: ActingPrincipal): Promise<void> {
+  const limit = await actorQuoteSendLimit(actor);
+  if (limit === null) return;
+  const q = await getQuote(taskId, actor);
+  if (!q) return;
+  const total = quoteTotalForNte(q.totals);
+  if (quoteOverSendLimit(total, limit)) {
+    throw forbidden(quoteSendLimitSentence(total, limit), { code: QUOTE_SEND_LIMIT_CODE, limit, total });
+  }
 }
 
 /** The full quote payload for a work order, or null when none exists. */
@@ -1062,7 +1096,7 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     sections,
     totals,
     summary,
-    permissions: permissionsFor(actor, snap, q, quoteTotalForNte(totals)),
+    permissions: permissionsFor(actor, snap, q, quoteTotalForNte(totals), await actorQuoteSendLimit(actor)),
     nte_override_open: nteOverride !== null,
     wo_actions: snap.actions,
     labor_rate: laborRate,
@@ -1942,6 +1976,7 @@ export async function approveQuote(taskId: string, actor: ActingPrincipal): Prom
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.approve');
   await assertNoOpenNteOverride(taskId, 'Approving the quote');
+  await assertWithinSendLimit(taskId, actor);
   return transition(
     taskId,
     QUOTE_APPROVABLE_FROM,
@@ -1977,6 +2012,7 @@ export async function sendQuote(taskId: string, actor: ActingPrincipal): Promise
   assertCanApprove(actor);
   await assertWoAllows(taskId, 'quote.send');
   await assertNoOpenNteOverride(taskId, 'Sending the quote');
+  await assertWithinSendLimit(taskId, actor);
 
   const cur = await currentStatus(taskId);
   if (!cur) throw new ApiError('NOT_FOUND', 'No quote on this work order');

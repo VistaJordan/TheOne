@@ -18,6 +18,7 @@ import {
   grantsExceeding,
   isTestAccountEmail,
   mayEditRoleDefinitions,
+  roleQuoteSendLimit,
   type PermissionSet,
   type PermMap,
   type PermNode,
@@ -36,6 +37,7 @@ import {
   listPermissionFields,
   listRoles,
   setUserClients,
+  setUserQuoteSendLimit,
   setUserPermissions,
   updateRole,
   updateUser,
@@ -303,7 +305,7 @@ function UsersTable({
   // (T1), and no sign-in refreshes it; a Microsoft account's comes from the
   // directory. So only test accounts get a Rename here.
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
-  const cols = canAdjust ? 8 : 7;
+  const cols = canAdjust ? 9 : 8;
   return (
     <div className="table-wrap">
       <table className="ct">
@@ -312,6 +314,7 @@ function UsersTable({
             <th>User</th><th>Role</th><th>Status</th><th>Super admin</th>
             <th>Last sign-in</th>
             <th title="The clients this person looks after. Their work orders count as theirs on the Sales dashboard and wherever the role says Only theirs.">Clients</th>
+            <th title="The most this person may send to a client on their own. Above it they submit the quote for approval and a Team Lead sends it.">Quote limit</th>
             {canAdjust && <th>Permissions</th>}
             <th />
           </tr>
@@ -439,6 +442,9 @@ function UsersTable({
                       </span>
                     )}
                   </td>
+                  <td>
+                    <QuoteLimitCell user={u} canEdit={canAssignClients} lock={off ? 'This account is disabled' : rowLock} />
+                  </td>
                   {canAdjust && (
                     <td>
                       {u.is_super_admin ? (
@@ -497,6 +503,85 @@ function UsersTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** 0143 · how much this person may send to a client on their own: their
+    own figure, else their role's default (an ATL $5,000), else no limit.
+    Admin › Users edit sets a figure or goes back to the role's default. */
+function QuoteLimitCell({ user, canEdit, lock }: { user: AdminUserItem; canEdit: boolean; lock: string | null }) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: (limit: number | null) => setUserQuoteSendLimit(user.id, limit),
+    onSuccess: () => {
+      setDraft(null);
+      setErr(null);
+      void qc.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (e: unknown) => setErr(e instanceof Error ? e.message : 'Could not save the limit'),
+  });
+  if (user.is_super_admin) {
+    return <span className="faint" title="A super admin sends any quote">No limit</span>;
+  }
+  const roleDefault = roleQuoteSendLimit(user.role);
+  const own = user.quote_send_limit;
+  const effective = own ?? roleDefault;
+  const money = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  if (draft !== null) {
+    const n = Number(draft);
+    const valid = draft.trim() !== '' && Number.isFinite(n) && n >= 0;
+    return (
+      <form className="confirm-row" onSubmit={(e) => { e.preventDefault(); if (valid) save.mutate(n); }}>
+        <input
+          className="fld sm"
+          type="number"
+          min={0}
+          step={100}
+          autoFocus
+          style={{ width: 110 }}
+          aria-label={`Quote limit for ${user.name}`}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setDraft(null); }}
+        />
+        <button type="submit" className="linkbtn" disabled={!valid || save.isPending}>Save</button>
+        {own !== null && (
+          <button
+            type="button"
+            className="linkbtn"
+            disabled={save.isPending}
+            title={roleDefault === null ? 'Back to no limit, as the role has none' : `Back to the role's ${money(roleDefault)}`}
+            onClick={() => save.mutate(null)}
+          >
+            Use role default
+          </button>
+        )}
+        <button type="button" className="linkbtn" onClick={() => setDraft(null)}>Cancel</button>
+        {err && <span className="composer-err" role="alert">{err}</span>}
+      </form>
+    );
+  }
+  return (
+    <span className="confirm-row">
+      <span title={own !== null ? 'Set for this person' : effective !== null ? "The role's default" : undefined}>
+        {effective === null ? <span className="faint">No limit</span> : money(effective)}
+        {own === null && effective !== null && <small className="faint"> (role)</small>}
+      </span>
+      {canEdit && (
+        <button
+          type="button"
+          className="linkbtn"
+          disabled={lock !== null}
+          title={lock ?? 'Set how much this person may send to a client on their own'}
+          onClick={() => setDraft(String(effective ?? ''))}
+        >
+          <Icon name="pencil" size={12} />
+          {own === null ? 'Set' : 'Edit'}
+        </button>
+      )}
+    </span>
   );
 }
 

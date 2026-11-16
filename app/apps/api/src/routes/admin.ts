@@ -39,6 +39,7 @@ import {
   inviteUser,
   listUsers,
   setUserClients,
+  setUserQuoteSendLimit,
   setUserPermissions,
   updateUser,
 } from '../services/users.js';
@@ -68,7 +69,7 @@ import {
   listApprovalTiers,
   updateApprovalTier,
 } from '../services/approvalTiers.js';
-import { APPROVAL_TIER_KINDS, TRASH_RESTORE_REFUSED, mayRestoreFromTrash } from '@theone/shared';
+import { APPROVAL_TIER_KINDS, MONEY_MAX, TRASH_RESTORE_REFUSED, mayRestoreFromTrash } from '@theone/shared';
 import { logAdminEvent, logExport } from '../services/adminAudit.js';
 import {
   createAutomation,
@@ -276,6 +277,18 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       req.body,
     );
     return setUserClients(id, client_ids, actorId, isActingSuperAdmin(req));
+  });
+
+  // 0143 · how much a person may send to a client on their own (an ATL
+  // $5,000 by default). null = back to the role's default.
+  app.put('/admin/users/:id/quote-send-limit', async (req) => {
+    const actorId = requireAdmin(req, 'users', 'edit');
+    const { id } = parse(idParams, req.params);
+    const { limit } = parse(
+      z.object({ limit: z.number().min(0).max(MONEY_MAX).nullable() }).strict(),
+      req.body,
+    );
+    return { user: await setUserQuoteSendLimit(id, limit, actorId, isActingSuperAdmin(req)) };
   });
 
   // ── Roles ──────────────────────────────────────────────────────────────────

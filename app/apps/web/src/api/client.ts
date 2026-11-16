@@ -1531,6 +1531,8 @@ export interface AdminUserItem extends Omit<SessionUser, 'clients'> {
   has_overrides: boolean;
   /** 0072 · the clients assigned to this person (`principal_client`). */
   clients: UserClient[];
+  /** 0143 · their own quote sending limit; null = the role's default. */
+  quote_send_limit: number | null;
 }
 
 /** 0072 · one client on a person's list. */
@@ -1663,6 +1665,15 @@ export function setUserClients(id: string, clientIds: string[]): Promise<UserCli
   return request(`/admin/users/${id}/clients`, {
     method: 'PUT',
     body: JSON.stringify({ client_ids: clientIds }),
+  });
+}
+
+/** 0143 · PUT /api/admin/users/:id/quote-send-limit — a figure, or null for
+    the role's default. */
+export function setUserQuoteSendLimit(id: string, limit: number | null): Promise<{ user: AdminUserItem }> {
+  return request(`/admin/users/${id}/quote-send-limit`, {
+    method: 'PUT',
+    body: JSON.stringify({ limit }),
   });
 }
 

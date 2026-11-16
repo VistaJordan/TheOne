@@ -47,6 +47,8 @@ import {
   quoteEditableBy,
   quoteOverNte,
   quoteOverNteWarning,
+  quoteOverSendLimit,
+  quoteSendLimitSentence,
   quoteTotalForNte,
   type QuoteDeclineKind,
 } from '@theone/shared';
@@ -286,6 +288,15 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     ? quoteTotalForNte({ grand_total: totals.grandTotal, option_totals: totals.options.map((o) => ({ grand_total: o.grandTotal })) })
     : null;
   const overNte = nte !== null && nteTotal !== null ? quoteOverNte(nteTotal, nte) : (quote?.permissions?.over_nte ?? false);
+  // 2026-11-16 (Elise) · an ATL sends up to their limit ($5,000 unless Admin ›
+  // Users says otherwise); above it Send is theirs to watch and Submit for
+  // approval hands the quote to a Team Lead. Live figures, as the API compares.
+  const sendLimit = permissions?.send_limit ?? null;
+  const overSendLimit = nteTotal !== null ? quoteOverSendLimit(nteTotal, sendLimit) : (permissions?.over_send_limit ?? false);
+  const canSend = canApprove && !overSendLimit;
+  const sendLockTip = overSendLimit && sendLimit !== null && nteTotal !== null
+    ? quoteSendLimitSentence(nteTotal, sendLimit)
+    : 'Needs the quote-approve permission';
 
   // ── Autosave ───────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
@@ -740,13 +751,13 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         <span className="chip chip-warn chip-sm" role="note" title={quoteOverNteWarning(nteTotal, nte)}>
           Above NTE
         </span>
-        {gated('Send to client', 'send', canApprove, 'Needs the quote-approve permission', 'quote.send', () => sendMutation.mutate(), 'lockTipSend')}
+        {gated('Send to client', 'send', canSend, sendLockTip, 'quote.send', () => sendMutation.mutate(), 'lockTipSend')}
         {can('work_orders', 'edit') && (
           <NteIncreaseButton woNumber={woNumber} quoteTotal={nteTotal} quoteNumber={quote?.number ?? null} />
         )}
       </>
     ) : (
-      gated('Send to client', 'send', canApprove, 'Needs the quote-approve permission', 'quote.send', () => sendMutation.mutate(), 'lockTipSend')
+      gated('Send to client', 'send', canSend, sendLockTip, 'quote.send', () => sendMutation.mutate(), 'lockTipSend')
     );
 
   /** The preview card's "Mark as sent to client": the Send to client act with
@@ -754,8 +765,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const SENDABLE: string[] = ['draft', 'pending_correction', 'pending_approval', 'approved'];
   const shareState: { ok: boolean; sent: boolean; reason: string } = !SENDABLE.includes(status)
     ? { ok: false, sent: true, reason: 'This quote is already marked as sent to the client' }
-    : !canApprove
-      ? { ok: false, sent: false, reason: 'Needs the quote-approve permission' }
+    : !canSend
+      ? { ok: false, sent: false, reason: sendLockTip }
       : !allows('quote.send')
         ? { ok: false, sent: false, reason: blockedReason('quote.send') ?? 'Not allowed in this work-order status' }
         : nteHold
@@ -970,11 +981,11 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             {/* 2026-10-27 · a manager sends their own draft to the client in
                 one click (approved on the way); everyone else submits it. */}
             {status === 'draft' &&
-              (canApprove ? (
+              (canSend ? (
                 sendToClient()
               ) : (
                 <>
-                  {lockedButton('Send to client', 'Needs the quote-approve permission', 'lockTipSend')}
+                  {lockedButton('Send to client', sendLockTip, 'lockTipSend')}
                   {gated(submitLabel, 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')}
                 </>
               ))}
@@ -991,10 +1002,16 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                     Reject with note
                   </button>
                 )}
-                {canApprove
+                {canSend
                   ? sendToClient()
                   : submitTarget
-                    ? gated('Submit for approval', 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')
+                    ? (
+                      <>
+                        {/* 2026-11-16 · above the ATL's limit: reviewed here, sent by a TL. */}
+                        {overSendLimit && lockedButton('Send to client', sendLockTip, 'lockTipSend')}
+                        {gated('Submit for approval', 'send', canEdit, 'Needs the quote-edit permission', 'quote.submit', () => submitMutation.mutate(), 'lockTipSubmit')}
+                      </>
+                    )
                     : lockedButton('Submit for approval', QUOTE_CORRECTION_PENDING_TEXT, 'lockTipSubmit')}
               </>
             )}

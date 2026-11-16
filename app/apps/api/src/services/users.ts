@@ -54,6 +54,9 @@ export interface AdminUser {
   has_overrides: boolean;
   /** 0072 · the clients assigned to this person (`principal_client`). */
   clients: UserClient[];
+  /** 0143 · this person's own quote sending limit (Admin › Users); null =
+      their role's default (`roleQuoteSendLimit`), which may be none. */
+  quote_send_limit: number | null;
 }
 
 const SELECT_USER = `
@@ -68,6 +71,7 @@ const SELECT_USER = `
          p.last_login_at,
          (p.entra_oid IS NOT NULL) AS has_signed_in,
          (p.permission_overrides <> '{}'::jsonb) AS has_overrides,
+         p.quote_send_limit::float8 AS quote_send_limit,
          COALESCE((SELECT jsonb_agg(jsonb_build_object('id', c.id::text, 'name', c.name) ORDER BY lower(c.name))
                      FROM principal_client pc
                      JOIN client c ON c.id = pc.client_id AND c.deleted_at IS NULL
@@ -560,4 +564,44 @@ export async function setUserClients(
     });
   }
   return { user: updated, clients: updated.clients };
+}
+
+/** 0143 · a person's quote sending limit (Elise, 2026-11-16): a figure, or
+    null for their role's default. Admin › Users edit; not on oneself (#18,
+    403 SELF_EDIT) and a super admin's row by super admins only (W4-1, though
+    a super admin is never limited). Logged `user_quote_send_limit_changed`. */
+export async function setUserQuoteSendLimit(
+  id: string,
+  limit: number | null,
+  actorId: string,
+  actorIsSuperAdmin: boolean,
+): Promise<AdminUser> {
+  assertNotSelfEdit(id, actorId, 'quote_send_limit');
+  const current = await getUser(id);
+  assertMayEditSuperAdmin(current, actorIsSuperAdmin);
+  const value = limit === null ? null : Math.round(limit * 100) / 100;
+  await withTransaction(async (tx) => {
+    // FOR NO KEY UPDATE: no path updates principal.id, so a child insert's FK KEY SHARE never waits on this lock.
+    const locked = await tx.query<{ is_super_admin: boolean }>(
+      `SELECT is_super_admin FROM principal WHERE id = $1 FOR NO KEY UPDATE`,
+      [id],
+    );
+    if (!locked.rows[0]) throw new ApiError('NOT_FOUND', 'No such user');
+    assertMayEditSuperAdmin(locked.rows[0], actorIsSuperAdmin);
+    await tx.query(`UPDATE principal SET quote_send_limit = $2 WHERE id = $1`, [id, value]);
+  });
+  const updated = await getUser(id);
+  const before: Snapshot = { name: current.name, quote_send_limit: current.quote_send_limit };
+  const after: Snapshot = { name: updated.name, quote_send_limit: updated.quote_send_limit };
+  if (snapshotsDiffer(before, after)) {
+    await logAdminEvent({
+      actorId,
+      entity: 'principal',
+      entityId: id,
+      action: 'user_quote_send_limit_changed',
+      before,
+      after,
+    });
+  }
+  return updated;
 }
