@@ -3,6 +3,7 @@
 // cast so the JSON matches the §5 contract (numbers not strings, dates as
 // 'YYYY-MM-DD', timestamps as ISO-8601 UTC).
 
+import { isNteSynced } from './nteSync.js';
 import { query, withTransaction } from '../db.js';
 import type {
   WorkOrderListItem,
@@ -542,6 +543,7 @@ export async function getWorkOrderDetail(idOrWo: string): Promise<WorkOrderDetai
     fields: fieldsOut,
     money,
     actions: allowedWoActions(r.status_name, phaseFor(r.status_name)),
+    nte_synced: await isNteSynced(r.id),
     phases_visited: [...visited],
     memberships: memRes.rows.map((m) => ({
       list_id: m.list_id,

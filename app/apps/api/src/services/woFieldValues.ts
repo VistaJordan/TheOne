@@ -17,6 +17,7 @@ import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { assertNotVisitOwned } from './visits.js';
 import { assertMoneyNotLocked } from './moneySync.js';
+import { assertNteNotSynced } from './nteSync.js';
 import { assertGateHoldsFields } from './statusGates.js';
 import { getWorkOrderDetail } from './workOrders.js';
 import { CREATED_AT_SQL } from './activity.js';
@@ -223,6 +224,9 @@ export async function updateWorkOrderFields(
     // there — asked under the row lock, so a payment or quote write that
     // lands between the pool reads above and this lock is seen (W3-3).
     await assertMoneyNotLocked([task.id], patch.map((p) => p.jsonKey), tx);
+    // 2026-11-16: the Client NTE of a work order linked to Ecotrak is the
+    // sync's alone while "Ecotrak → OBI" is on (services/nteSync.ts).
+    await assertNteNotSynced([task.id], patch.map((p) => p.jsonKey), tx);
     // M3 (Wave C): while the work order sits in a gated status, what the gate
     // asked for is not emptied (Parts Required in a parts status, the Cost
     // done or later). Read under the row lock, so the status cannot move.

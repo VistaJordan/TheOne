@@ -436,6 +436,9 @@ export interface WorkOrderDetail {
   acceptance: AcceptanceState | null;
   /** Which quote / payment actions this WO's status allows (allowedWoActions). */
   actions: WoActionMap;
+  /** 2026-11-16: the Client NTE follows Ecotrak (linked, "Ecotrak → OBI" on) —
+      drawn read-only, and Request NTE increase is not offered. */
+  nte_synced?: boolean;
   /** UAT Wave C (M9): every phase the work order has been in (its status
       history plus now). The phase bar ticks only these. Absent = unknown. */
   phases_visited?: Phase[];
@@ -2298,6 +2301,8 @@ export * from './docs';
 export * from './advisoryLocks';
 // UAT round 1, Wave A (0083): maker ≠ checker, bounds, purpose codes, money holds.
 export * from './moneyGuards';
+// 2026-11-16: the Client NTE follows the portal once its sync is on.
+export * from './nteSync';
 // UAT round 1, Wave B (0084): dispatchers, money roles, client-safe columns, rights.
 export * from './access';
 // UAT round 1, Wave C (0085): request mode, quote-driven status, visit stamps, cancel / reopen.

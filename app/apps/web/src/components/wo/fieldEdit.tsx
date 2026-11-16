@@ -189,7 +189,9 @@ export function InlineField({ wo, fieldKey, children, label, className }: Inline
   // The visit log's mirrored keys (0021) and the computed Quote Due Date
   // (0024) are shown wherever they sit, never typed — the API refuses them.
   const readOnly =
-    !f || f.subtype === 'formula' || f.subtype === 'attachment' || API_OWNED.has(fieldKey);
+    !f || f.subtype === 'formula' || f.subtype === 'attachment' || API_OWNED.has(fieldKey) ||
+    // 2026-11-16: an NTE that follows Ecotrak is the sync's alone.
+    (wo.nte_synced === true && fieldKey === `fields.${FIELD.nte}`);
   if (!canEdit || readOnly) {
     return <span className={className}>{children ?? (f ? displayValue(f, raw) : DASH)}</span>;
   }

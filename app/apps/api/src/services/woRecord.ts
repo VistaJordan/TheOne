@@ -53,7 +53,8 @@ import type {
 } from '@theone/shared';
 import { query, withTransaction } from '../db.js';
 import { wallStamp, wallToInstant } from '../lib/businessDays.js';
-import { badRequest, conflict, forbidden, notFound } from '../errors.js';
+import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
+import { NTE_SYNCED_CODE, NTE_SYNCED_MESSAGE } from '@theone/shared';
 import type { ActingPrincipal } from './activity.js';
 import { notify } from './notices.js';
 import { allowFor, canViewField, requirePerm } from './permissions.js';
@@ -935,6 +936,8 @@ async function nteDeciderIds(): Promise<string[]> {
 export async function requestNteIncrease(taskId: string, input: { requested_nte: number; reason: string }, actor: ActingPrincipal): Promise<WoRecord> {
   requireEdit(actor);
   const t = await loadTask(taskId);
+  // 2026-11-16: an NTE that follows Ecotrak is raised on Ecotrak, not here.
+  await refuseIfNteSynced(taskId);
   const amount = Number(input.requested_nte);
   if (!Number.isFinite(amount) || amount <= 0) throw badRequest('Give the NTE you are asking for', { field: 'requested_nte' });
   const current = num(t.nte) ?? num(t.fields?.[NTE_KEY]);
@@ -1010,6 +1013,11 @@ export interface NteRequestRow {
   can_decide: boolean;
 }
 
+async function refuseIfNteSynced(taskId: string): Promise<void> {
+  const { isNteSynced } = await import('./nteSync.js');
+  if (await isNteSynced(taskId)) throw new ApiError('CONFLICT', NTE_SYNCED_MESSAGE, { code: NTE_SYNCED_CODE });
+}
+
 export async function decideNteIncrease(taskId: string, requestId: string, decision: 'approve' | 'reject' | 'withdraw', note: string | null, actor: ActingPrincipal): Promise<WoRecord> {
   if (!UUID_RE.test(requestId)) throw notFound('That request does not exist');
   const t = await loadTask(taskId);
@@ -1029,6 +1037,9 @@ export async function decideNteIncrease(taskId: string, requestId: string, decis
   }
   const amount = Number(r.requested_nte);
   if (decision === 'approve') {
+    // 2026-11-16: refused before anything is stamped, so the request stays
+    // open (reject or withdraw it; the NTE is raised on Ecotrak).
+    await refuseIfNteSynced(taskId);
     // The new NTE goes in through the ordinary field path: audited, mirrored
     // to task.nte, and the rules that watch cost against NTE run on it.
     const { updateWorkOrderFields } = await import('./woFieldValues.js');

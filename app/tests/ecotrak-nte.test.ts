@@ -2,9 +2,9 @@
  * 0119 · The NTE follows Ecotrak (Elise, 2026-11-03).
  *
  * One NTE: the Client NTE field, which `task.nte` mirrors. The sync writes the
- * field and the mirror together, and only when Ecotrak's own figure moved
- * since the last one it sent — so an NTE raised here stands until Ecotrak's
- * next change, and work orders on file are not touched by the first sighting.
+ * field and the mirror together. Since 2026-11-16 it does so whenever
+ * Ecotrak's figure differs from ours: nothing else may write the NTE of a
+ * linked work order while the sync is on (tests/nte-sync-only.test.ts).
  * Source pins: the ingest opens a database, the suite does not.
  */
 import { readFileSync } from 'node:fs';
@@ -31,9 +31,11 @@ describe('0119 · the NTE follows Ecotrak', () => {
     expect(ingest).toMatch(/jsonb_build_object\(\$2::text, \$3::numeric\),\s*nte = \$3::numeric/);
   });
 
-  it("moves only when Ecotrak's own figure changed, and only after a first sighting", () => {
-    expect(ingest).toMatch(/nteSeen && ecoNte !== null && !same\(link\.ecotrak_nte, ecoNte, true\)/);
-    expect(ingest).toMatch(/ecotrak_nte_seen_at = COALESCE\(ecotrak_nte_seen_at, now\(\)\)/);
+  it("puts Ecotrak's figure in whenever ours differs (2026-11-16: the NTE is the sync's alone)", () => {
+    expect(ingest).not.toMatch(/nteSeen/);
+    expect(ingest).toMatch(/if \(ecoNte !== null\) \{\s*const ours = bagBefore\[K_NTE\] \?\? before\.nte \?\? null;\s*if \(!same\(ours, ecoNte, true\)\)/);
+    // an unchanged payload is still re-read while our NTE drifted from Ecotrak's
+    expect(ingest).toMatch(/prior\?\.last_payload_hash === hash && nteAligned/);
     // a blank on Ecotrak never forgets the last figure
     expect(ingest).toMatch(/ecotrak_nte = COALESCE\(\$5::numeric, ecotrak_nte\)/);
   });

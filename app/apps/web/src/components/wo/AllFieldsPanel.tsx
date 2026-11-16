@@ -267,7 +267,8 @@ export function AllFieldsPanel({ wo, detailKey }: AllFieldsPanelProps) {
     const raw = valueOf(f);
     // Tech name / phone mirror the latest visit (0021) and Quote Due Date is
     // computed from the assessment check-out (0024): shown, never typed.
-    const mirrored = VISIT_OWNED.has(f.key);
+    // 2026-11-16: an NTE that follows Ecotrak is the sync's alone.
+    const mirrored = VISIT_OWNED.has(f.key) || (wo.nte_synced === true && f.key === `fields.${FIELD.nte}`);
     const readOnly = f.subtype === 'formula' || f.subtype === 'attachment' || mirrored;
     const isEditing = editing === f.key;
     const rowProps = dragEnabled ? reorder.rowProps(i) : {};

@@ -1933,12 +1933,20 @@ in Ecotrak's payload. **The NTE follows Ecotrak** (migration 0119, Elise
 2026-11-03, `tests/ecotrak-nte.test.ts`): the Client NTE field is the one
 NTE (`task.nte` its mirror). The ingest writes the field and the mirror
 together, signed "Ecotrak sync" `via: 'ecotrak'`, then dispatches the change
-to the automations after the commit, and only when Ecotrak's OWN figure
-moved since the last one it sent (`cmms_wo_link.ecotrak_nte`). So an NTE
-edited here stands until Ecotrak's next change (last change wins), a blank
-on Ecotrak never empties ours, and a link with no `ecotrak_nte_seen_at`
-(every work order on file before 0119) only records Ecotrak's figure on its
-first sighting. Who may edit the NTE here is unchanged. **Messages** has two tabs, Internal and Client visible
+to the automations after the commit. **Since 2026-11-16 (Elise) the NTE is
+the sync's alone** (`packages/shared/src/nteSync.ts`, `services/nteSync.ts`,
+`tests/nte-sync-only.test.ts`): while "Ecotrak → OBI" is on
+(`integrationOnNow`), a work order with an Ecotrak `cmms_wo_link` refuses
+every other NTE write with 409 `NTE_SYNCED` — the field editor and
+automations (`updateWorkOrderFields`), bulk edit (bag key or the `nte`
+column), an NTE increase request and its approval — and the client's
+approval of a quote no longer sets it (`setNteFromApproval` skips). The
+detail carries `nte_synced`, which draws the field read-only (InlineField,
+All fields) and hides Request NTE increase. The ingest writes Ecotrak's
+figure whenever ours differs (0119's "last change wins" and first-sighting
+record are gone), and re-reads an unchanged payload while the two disagree;
+a blank on Ecotrak never empties ours. Not asked: the CSV import, and work
+orders with no Ecotrak link (or with the switch off), which keep every rule. **Messages** has two tabs, Internal and Client visible
 (`MessagesPanel`); the tab decides how the composer posts (the visibility
 segment is gone), Internal is the default, a `?msg=` link opens the tab that
 holds the message.

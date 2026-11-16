@@ -28,6 +28,7 @@ import { assertNotVisitOwned } from './visits.js';
 import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertPenaltyDescription, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
 import { checkWriteValue } from './woFieldValues.js';
 import { assertMoneyNotLocked } from './moneySync.js';
+import { assertNteNotSynced } from './nteSync.js';
 import { assertGateHoldsFields, doneGateMissingFor, quoteGateMissingFor } from './statusGates.js';
 import {
   PARTS_REQUIRED_KEY,
@@ -212,6 +213,8 @@ export async function bulkUpdate(
   // Cost / Total Invoiced the system put there are not bulk-typed over; the
   // 400 names the work orders in the way.
   await assertMoneyNotLocked(rows.rows.map((r) => r.id), customPatch.map((c) => c.key));
+  // 2026-11-16: nor the Client NTE of a work order that follows Ecotrak.
+  await assertNteNotSynced(rows.rows.map((r) => r.id), customPatch.map((c) => c.key), undefined, patch.nte !== undefined);
 
   const found = new Map(rows.rows.map((r) => [r.id, r]));
   const skipped: { wo_number: string; reason: string }[] = [];

@@ -456,18 +456,25 @@ async function upsertOne(
     last_payload_hash: string | null;
     ecotrak_nte: string | null;
     ecotrak_nte_seen_at: string | null;
+    our_nte: unknown;
   }>(
-    `SELECT task_id, last_seen_external_status, last_payload_hash,
-            ecotrak_nte::text AS ecotrak_nte, ecotrak_nte_seen_at::text AS ecotrak_nte_seen_at
-       FROM cmms_wo_link
-      WHERE connection_id = $1 AND external_id = $2`,
-    [conn.id, externalId],
+    `SELECT l.task_id, l.last_seen_external_status, l.last_payload_hash,
+            l.ecotrak_nte::text AS ecotrak_nte, l.ecotrak_nte_seen_at::text AS ecotrak_nte_seen_at,
+            COALESCE(t.fields->$3::text, to_jsonb(t.nte)) AS our_nte
+       FROM cmms_wo_link l
+       LEFT JOIN task t ON t.id = l.task_id
+      WHERE l.connection_id = $1 AND l.external_id = $2`,
+    [conn.id, externalId, K_NTE],
   );
 
   // 0079 · the poll runs every minute and re-reads today and yesterday:
   // a work order nobody touched on Ecotrak since the last look is left alone
   // (no raw row, no write, no audit row).
-  if (existing.rows[0]?.last_payload_hash === hash) {
+  // 2026-11-16 · …unless our NTE no longer matches Ecotrak's: the NTE is the
+  // sync's alone, so the next look puts Ecotrak's figure back.
+  const prior = existing.rows[0];
+  const nteAligned = !prior || prior.ecotrak_nte === null || same(prior.our_nte, prior.ecotrak_nte, true);
+  if (prior?.last_payload_hash === hash && nteAligned) {
     res.unchanged++;
     return;
   }
@@ -624,7 +631,7 @@ async function upsertOne(
   const mergedFields = (p: string) =>
     `COALESCE(fields, '{}'::jsonb) || ${p}::jsonb || jsonb_build_object('Date Created', COALESCE(fields->'Date Created', ${p}::jsonb->'Date Created'))`;
   // 0119 · neither UPDATE touches the NTE: it is written below, through the
-  // field, and only when Ecotrak's own figure moved.
+  // field, whenever Ecotrak's figure differs from ours (2026-11-16).
   if (externalUnchanged) {
     await tx.query(
       `UPDATE task SET title=$2, description=$3, client=$4, trade=$5, city=$6,
@@ -685,13 +692,13 @@ async function upsertOne(
       col(`fields.${k}`, bagBefore[k], v);
     }
 
-    // 0119 · the NTE follows Ecotrak when ECOTRAK's figure changed since the
-    // last one it sent (not when it differs from ours: an NTE raised here
-    // stands until Ecotrak's next moves — the last change wins). A work order
-    // first seen after 0119 only records Ecotrak's figure; a blank there never
-    // empties ours.
-    const nteSeen = link.ecotrak_nte_seen_at !== null;
-    if (nteSeen && ecoNte !== null && !same(link.ecotrak_nte, ecoNte, true)) {
+    // 2026-11-16 (Elise) · the NTE IS Ecotrak's: whenever Ecotrak sends one
+    // and ours differs, Ecotrak's goes in. Nothing else writes the NTE of a
+    // linked work order while this sync is on (services/nteSync.ts), so this
+    // only corrects figures set here before that rule (0119's "last change
+    // wins" and first-sighting record are gone). A blank on Ecotrak still
+    // never empties ours.
+    if (ecoNte !== null) {
       const ours = bagBefore[K_NTE] ?? before.nte ?? null;
       if (!same(ours, ecoNte, true)) {
         await tx.query(

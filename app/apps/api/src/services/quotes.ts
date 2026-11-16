@@ -2373,6 +2373,10 @@ export async function clientApproveQuote(
 async function setNteFromApproval(taskId: string, amount: number, actor: ActingPrincipal): Promise<void> {
   if (!Number.isFinite(amount) || amount < 0) return;
   try {
+    // 2026-11-16: a work order whose NTE follows Ecotrak keeps Ecotrak's
+    // figure — the client raises it there and the sync brings it in.
+    const { isNteSynced } = await import('./nteSync.js');
+    if (await isNteSynced(taskId)) return;
     const { updateWorkOrderFields } = await import('./woFieldValues.js');
     await updateWorkOrderFields(taskId, { [`fields.${QUOTE_NTE_KEY}`]: Math.round(amount * 100) / 100 }, actor.id);
   } catch (err) {

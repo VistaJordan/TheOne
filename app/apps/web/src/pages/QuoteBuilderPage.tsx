@@ -816,7 +816,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           Above NTE
         </span>
         {gated('Send to client', 'send', canSend, sendLockTip, 'quote.send', () => sendMutation.mutate(), 'lockTipSend')}
-        {can('work_orders', 'edit') && (
+        {/* 2026-11-16: an NTE that follows Ecotrak is raised on Ecotrak. */}
+        {can('work_orders', 'edit') && woQuery.data?.nte_synced !== true && (
           <NteIncreaseButton woNumber={woNumber} quoteTotal={nteTotal} quoteNumber={quote?.number ?? null} />
         )}
       </>
