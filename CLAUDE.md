@@ -3688,6 +3688,24 @@ superAdmin)` in the route guard and the sidebar); everyone else keeps the
 Version 2 screen, and `/` still lands on Work Orders for anyone who may open
 them. **A new AI feature** = an `AI_FEATURES` entry, its labels and defaults,
 the 0138 CHECK on `ai_setting.feature` widened by a migration, and `aiGate` +
+**Who reads and who writes the client conversation** (migration 0142, Elise
+2026-11-15; `mayViewClientMessages` / `mayMessageClient` /
+`CLIENT_MESSAGE_COLUMN_KEYS` in shared `messaging.ts`,
+`tests/client-messages-view.test.ts`). `work_orders/comments/client` ("Message
+the client") gained a **view** action: without it the Messages tab draws no
+Client visible tab and the API sends none of that conversation — `listMessages`
+and `loadMessage` drop client-visible rows, the Overview feed (`getFeed(taskId,
+withClient)`) leaves them out, the Last client message / … on columns follow it
+(`canViewField`), and neither the watcher notice nor an @mention on a
+client-visible message reaches a person without it (`mentionCandidates(…,
+clientVisible)`, `?client=1` on the candidates route). Posting, Improve and an
+edit to client-visible ask view before create (403 "You cannot see the client
+messages"). 0142: OM and OM Under Probation view false / create false, Senior
+OM view only, TL / ATL / Admin / OP Admin both; every other role unset (inherits
+Messages, then Work orders view), per-person overrides untouched. Not filtered:
+the Logs tab's `message_edited` body, Client Updates (built as the tracker's
+owner), notices raised before 0142.
+
 `recordAiUse` around its call. **Improve** on the Messages composer (`POST
 /work-orders/:id/messages/improve {body, mode, instruction?, client_visible}`,
 the posting grants, `resolveTaskId`): Polish · More formal · Shorter ·

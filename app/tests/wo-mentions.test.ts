@@ -119,7 +119,7 @@ describe('API pins', () => {
 
   it('offers only active humans with the work order and the Messages tab in their own scope', () => {
     expect(svc).toMatch(/p\.kind = 'human' AND p\.status <> 'disabled'/);
-    expect(svc).toMatch(/allow\('work_orders', 'view'\) && allow\(tabPermKey\('messages'\), 'view'\)/);
+    expect(svc).toMatch(/allow\('work_orders', 'view'\) &&\s*allow\(tabPermKey\('messages'\), 'view'\)/);
     expect(svc).toMatch(/woScopeSql\(actor, p\)/);
   });
   it('refuses an id that is not a candidate, and keeps only names still in the body', () => {

@@ -18,10 +18,10 @@ interface MentionTextareaProps
 
 /** 0089 · who the @ list offers on one work order. Shared by the composer
     and the edit box, so it is fetched once per work order. */
-export function useMentionCandidates(woId: string, enabled: boolean): MentionCandidate[] {
+export function useMentionCandidates(woId: string, enabled: boolean, clientVisible = false): MentionCandidate[] {
   const q = useQuery({
-    queryKey: ['wo-mention-candidates', woId],
-    queryFn: () => getMentionCandidates(woId),
+    queryKey: ['wo-mention-candidates', woId, clientVisible],
+    queryFn: () => getMentionCandidates(woId, clientVisible),
     enabled,
     staleTime: 5 * 60_000,
     retry: 0,

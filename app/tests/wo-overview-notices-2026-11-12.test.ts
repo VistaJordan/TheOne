@@ -37,7 +37,7 @@ describe('message watchers', () => {
     const src = read('apps/api/src/services/woMessages.ts');
     expect(src).toContain('await notifyWatchers(taskId, commentId, input.body, input.client_visible, mentioned, actor);');
     expect(src).toContain("kind: 'wo_message'");
-    expect(src).toContain('mentionCandidates(taskId, messageWatcherNames(row.fields))');
+    expect(src).toContain('mentionCandidates(taskId, messageWatcherNames(row.fields), clientVisible)'); // 0142
   });
 });
 

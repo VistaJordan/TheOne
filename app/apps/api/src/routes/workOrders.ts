@@ -18,6 +18,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   CLIENT_MESSAGE_PERM_KEY,
+  mayViewClientMessages,
   MENTION_MAX,
   MESSAGE_PERM_KEY,
   TECH_HUB_TAB,
@@ -744,12 +745,12 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
 
   // S2 · the merged updates+activity stream, newest-first.
   app.get('/work-orders/:id/feed', async (req) => {
-    const { p } = requireView(req);
+    const { p, allow } = requireView(req);
     requirePerm(p, tabPermKey('overview'), 'view', 'You cannot view the Overview tab');
     const { id } = parse(idParamsSchema, req.params);
     const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
-    return getFeed(taskId);
+    return getFeed(taskId, mayViewClientMessages(allow));
   });
 
   // 0052 · the Messages tab: the work order's own thread (internal and
@@ -789,7 +790,10 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { id } = parse(idParamsSchema, req.params);
     const taskId = await resolveTaskId(id, p);
     if (!taskId) throw notFound('Work order not found');
-    return { items: await mentionCandidates(taskId) };
+    // 0142 · ?client=1: the @ list of a client-visible message offers only
+    // the people who read the client conversation.
+    const clientVisible = (req.query as Record<string, unknown> | undefined)?.client === '1';
+    return { items: await mentionCandidates(taskId, undefined, clientVisible) };
   });
 
   // 0052 · post a message. Internal needs `work_orders/comments` create;
@@ -801,6 +805,8 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { id } = parse(idParamsSchema, req.params);
     const input = parse(messageBodySchema, req.body);
     if (input.client_visible) {
+      // 0142 · posting to the client needs reading it too.
+      requirePerm(p, CLIENT_MESSAGE_PERM_KEY, 'view', 'You cannot see the client messages');
       requirePerm(p, CLIENT_MESSAGE_PERM_KEY, 'create', 'You cannot message the client');
     }
     const taskId = await resolveTaskId(id, p);
@@ -825,6 +831,8 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { id } = parse(idParamsSchema, req.params);
     const input = parse(improveBodySchema, req.body);
     if (input.client_visible) {
+      // 0142 · posting to the client needs reading it too.
+      requirePerm(p, CLIENT_MESSAGE_PERM_KEY, 'view', 'You cannot see the client messages');
       requirePerm(p, CLIENT_MESSAGE_PERM_KEY, 'create', 'You cannot message the client');
     }
     const taskId = await resolveTaskId(id, p);
@@ -840,6 +848,8 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     const { id, messageId } = parse(messageParamsSchema, req.params);
     const input = parse(messageEditSchema, req.body);
     if (input.client_visible === true) {
+      // 0142 · posting to the client needs reading it too.
+      requirePerm(p, CLIENT_MESSAGE_PERM_KEY, 'view', 'You cannot see the client messages');
       requirePerm(p, CLIENT_MESSAGE_PERM_KEY, 'create', 'You cannot message the client');
     }
     const taskId = await resolveTaskId(id, p);

@@ -728,8 +728,9 @@ export function buildPermissionTree(
             {
               key: 'work_orders/comments/client',
               label: 'Message the client',
-              actions: ['create'],
-              note: 'May post client-visible messages — the ones the client CMMS receives.',
+              // 0142 · view = read the client conversation at all.
+              actions: ['view', 'create'],
+              note: 'View = read the client-visible messages (the Client visible tab, the feed, the Last client message columns); create = post them — the ones the client CMMS receives. Posting needs view too.',
             },
           ],
         },

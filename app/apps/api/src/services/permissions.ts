@@ -8,6 +8,8 @@
 // work-order payloads, which are trimmed to the fields the caller may see.
 
 import {
+  CLIENT_MESSAGE_COLUMN_KEYS,
+  mayViewClientMessages,
   REDACTABLE_CORE_KEYS,
   activityFieldKey,
   fieldPermKey,
@@ -54,6 +56,11 @@ export function parsePermMap(raw: unknown): PermMap {
 // ── Field visibility ─────────────────────────────────────────────────────────
 
 export function canViewField(allow: Allow, catalogueKey: string): boolean {
+  // 0142 · the "Last client message" columns read the client conversation,
+  // so they follow its view, not a field path.
+  if ((CLIENT_MESSAGE_COLUMN_KEYS as readonly string[]).includes(catalogueKey)) {
+    return mayViewClientMessages(allow);
+  }
   return allow(fieldPermKey(catalogueKey), 'view');
 }
 

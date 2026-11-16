@@ -133,3 +133,19 @@ export const WO_MESSAGE_MAX = 4000;
  *  client-visible (unset inherits the first). */
 export const MESSAGE_PERM_KEY = 'work_orders/comments';
 export const CLIENT_MESSAGE_PERM_KEY = 'work_orders/comments/client';
+
+/** Elise, 2026-11-15 (0142) · `view` on the client path is whether a person
+ *  reads the client conversation at all (the Client visible tab, its messages
+ *  in the Updates feed, the "Last client message" columns, the notices about
+ *  them); unset inherits Messages, then Work orders. Posting to the client
+ *  needs `create` AND `view` — nobody writes into a conversation they cannot
+ *  read. */
+export function mayViewClientMessages(allow: (key: string, action: 'view' | 'create') => boolean): boolean {
+  return allow(CLIENT_MESSAGE_PERM_KEY, 'view');
+}
+export function mayMessageClient(allow: (key: string, action: 'view' | 'create') => boolean): boolean {
+  return allow(CLIENT_MESSAGE_PERM_KEY, 'view') && allow(CLIENT_MESSAGE_PERM_KEY, 'create');
+}
+
+/** The list columns that read the client conversation; hidden with it. */
+export const CLIENT_MESSAGE_COLUMN_KEYS = ['last_client_message', 'last_client_message_at'] as const;

@@ -694,9 +694,10 @@ export function patchWorkOrderMessage(
 
 /** GET /api/work-orders/:id/mention-candidates (0089) — the people the
     composer's @ list offers: active, and able to open this work order. */
-export function getMentionCandidates(idOrNumber: string): Promise<MentionCandidatesResponse> {
+export function getMentionCandidates(idOrNumber: string, clientVisible = false): Promise<MentionCandidatesResponse> {
+  // 0142 · a client-visible message offers only people who read the client conversation.
   return request<MentionCandidatesResponse>(
-    `/work-orders/${encodeURIComponent(idOrNumber)}/mention-candidates`,
+    `/work-orders/${encodeURIComponent(idOrNumber)}/mention-candidates${clientVisible ? '?client=1' : ''}`,
   );
 }
 

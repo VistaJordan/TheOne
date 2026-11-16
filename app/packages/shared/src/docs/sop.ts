@@ -236,7 +236,7 @@ export const SOP: SopDocument = {
       lead: 'What everyone else sees about the job.',
       who: ['Dispatchers', 'Managers', 'Operations Admin'],
       where: 'Header, All fields, Messages tab, Drive tab',
-      needs: ['work_orders/comments create / edit', 'work_orders/comments/client create', 'work_orders/attachments create / approve', 'work_orders/history view'],
+      needs: ['work_orders/comments create / edit', 'work_orders/comments/client view / create', 'work_orders/attachments create / approve', 'work_orders/history view'],
       blocks: [
         { kind: 'sub', title: 'Flags' },
         { kind: 'bullets', items: [

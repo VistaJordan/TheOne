@@ -92,6 +92,7 @@ const FEED_SQL = `
       FROM comment c
       LEFT JOIN principal p ON p.id = c.author_principal_id
      WHERE c.task_id = $1
+       AND ($2::boolean OR NOT c.client_visible)
     UNION ALL
     SELECT a.action::text,
            a.id::text,
@@ -117,9 +118,10 @@ const FEED_SQL = `
   ORDER BY f.created_ts DESC, f.sort_key DESC
 `;
 
-/** A work order's merged feed, newest-first. */
-export async function getFeed(taskId: string): Promise<FeedResponse> {
-  const res = await query<FeedRow>(FEED_SQL, [taskId]);
+/** A work order's merged feed, newest-first. 0142 · `withClient` false
+ *  leaves the client-visible messages out (the reader may not see them). */
+export async function getFeed(taskId: string, withClient = true): Promise<FeedResponse> {
+  const res = await query<FeedRow>(FEED_SQL, [taskId, withClient]);
   const items = res.rows.map(mapFeedRow);
   return { items, total: items.length };
 }

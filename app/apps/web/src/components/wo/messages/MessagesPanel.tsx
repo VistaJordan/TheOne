@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { markMessageNoticesSeen, type WoMessagesResponse } from '../../../api/client';
+import { mayMessageClient, mayViewClientMessages } from '@theone/shared';
 import { useAuth } from '../../../auth/AuthProvider';
 import { Icon } from '../../Icon';
 import { feedTime } from '../../../lib/fields';
@@ -29,7 +30,10 @@ type Lane = 'internal' | 'client';
 export function MessagesPanel({ woId, woNumber, data, loading, error, queryKey }: MessagesPanelProps) {
   const [params] = useSearchParams();
   const { can } = useAuth();
-  const canMessageClient = can('work_orders/comments/client', 'create');
+  // 0142 · OM / OM Under Probation do not read the client conversation (the
+  // API sends none of it); Senior OM reads it but does not post to it.
+  const canSeeClient = mayViewClientMessages(can);
+  const canMessageClient = mayMessageClient(can);
   const [picked, setPicked] = useState<Lane | null>(null);
   if (loading) {
     return (
@@ -53,7 +57,7 @@ export function MessagesPanel({ woId, woNumber, data, loading, error, queryKey }
 
   const { items: all, client_system: clientSystem } = data;
   const linked = params.get('msg') ? all.find((m) => m.id === params.get('msg')) : undefined;
-  const lane: Lane = picked ?? (linked?.client_visible ? 'client' : 'internal');
+  const lane: Lane = canSeeClient ? (picked ?? (linked?.client_visible ? 'client' : 'internal')) : 'internal';
   const clientItems = all.filter((m) => m.client_visible);
   const internalItems = all.filter((m) => !m.client_visible);
   const items = lane === 'client' ? clientItems : internalItems;
@@ -83,6 +87,7 @@ export function MessagesPanel({ woId, woNumber, data, loading, error, queryKey }
               No client system linked
             </span>
           )}
+          {canSeeClient && (
           <div className="seg msg-lanes" role="tablist" aria-label="Which messages">
             <button
               type="button"
@@ -105,6 +110,7 @@ export function MessagesPanel({ woId, woNumber, data, loading, error, queryKey }
               Client visible <span className="msg-lane-count">{clientItems.length}</span>
             </button>
           </div>
+          )}
           <span className="card-meta">
             {items.length} message{items.length === 1 ? '' : 's'}
             {last ? ` · last ${feedTime(last)}` : ' · oldest first'}

@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { WO_MESSAGE_MAX, mentionsInBody, splitMentions } from '@theone/shared';
+import { WO_MESSAGE_MAX, mayMessageClient, mentionsInBody, splitMentions } from '@theone/shared';
 import type { ClientSystem, MentionCandidate, MessageDelivery, WoMessage, WoMessagesResponse } from '../../../api/client';
 import { patchWorkOrderMessage } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthProvider';
@@ -77,7 +77,7 @@ export function WoMessageBubble({ message: m, woId, queryKey, clientSystem, high
   ].filter(Boolean).join(' ');
 
   const { can, actingAs } = useAuth();
-  const canMessageClient = can('work_orders/comments/client', 'create');
+  const canMessageClient = mayMessageClient(can); // 0142 · view and create
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.body);

@@ -38,7 +38,7 @@ export function MessageComposer({ woId, woNumber, queryKey, clientSystem, client
 
   // 0089 · @mentions: the people picked from the list; only those whose
   // "@Name" is still in the text are sent.
-  const candidates = useMentionCandidates(woId, can('work_orders/comments', 'create'));
+  const candidates = useMentionCandidates(woId, can('work_orders/comments', 'create'), clientVisible);
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
   const mentioned = mentionsInBody(body, picked);
 

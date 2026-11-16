@@ -31,6 +31,7 @@ import {
   messageEditableBy,
   messageWatcherNames,
   messageIsSent,
+  mayViewClientMessages,
   tabPermKey,
 } from '@theone/shared';
 import type {
@@ -200,8 +201,11 @@ export async function listMessages(
   allow: Allow,
 ): Promise<WoMessagesResponse> {
   const mayEdit = allow(MESSAGE_PERM_KEY, 'edit');
+  // 0142 · without the client path's view the client conversation is not
+  // there at all: its messages never leave the API.
+  const internalOnly = mayViewClientMessages(allow) ? '' : ' AND NOT c.client_visible';
   const res = await query<MessageRow>(
-    `${MESSAGE_SELECT} WHERE c.task_id = $1 ORDER BY c.created_at ASC, c.id ASC`,
+    `${MESSAGE_SELECT} WHERE c.task_id = $1${internalOnly} ORDER BY c.created_at ASC, c.id ASC`,
     [taskId],
   );
   const link = await loadLink(taskId);
@@ -224,6 +228,7 @@ async function loadMessage(
     [taskId, messageId],
   );
   const r = res.rows[0];
+  if (r && r.client_visible === true && !mayViewClientMessages(allow)) return null; // 0142
   return r ? mapRow(r, actor, allow(MESSAGE_PERM_KEY, 'edit')) : null;
 }
 
@@ -237,7 +242,12 @@ async function loadMessage(
 
 const SCOPE_CHUNK = 200;
 
-export async function mentionCandidates(taskId: string, names?: readonly string[]): Promise<MentionCandidate[]> {
+export async function mentionCandidates(
+  taskId: string,
+  names?: readonly string[],
+  /** 0142 · a client-visible message: only people who read the client conversation. */
+  clientVisible = false,
+): Promise<MentionCandidate[]> {
   if (names && names.length === 0) return [];
   const res = names
     ? await query<PrincipalRow>(
@@ -256,7 +266,11 @@ export async function mentionCandidates(taskId: string, names?: readonly string[
     .map((r) => ({ row: r, actor: actingFromPrincipal(toPrincipal(r)) }))
     .filter(({ actor }) => {
       const allow = allowFor(actor);
-      return allow('work_orders', 'view') && allow(tabPermKey('messages'), 'view');
+      return (
+        allow('work_orders', 'view') &&
+        allow(tabPermKey('messages'), 'view') &&
+        (!clientVisible || mayViewClientMessages(allow))
+      );
     });
 
   const inScope = new Set<string>();
@@ -284,17 +298,26 @@ export async function mentionCandidates(taskId: string, names?: readonly string[
 /** The people a message may mention: every id asked for must be a candidate
  *  (400 `MENTION_NOT_ALLOWED` otherwise, naming nobody the asker cannot see),
  *  and only those whose "@Name" is in the body are kept. */
-async function resolveMentions(taskId: string, body: string, ids: readonly string[] | undefined): Promise<MentionCandidate[]> {
+async function resolveMentions(
+  taskId: string,
+  body: string,
+  ids: readonly string[] | undefined,
+  clientVisible = false,
+): Promise<MentionCandidate[]> {
   if (!ids || ids.length === 0) return [];
-  const candidates = await mentionCandidates(taskId);
+  const candidates = await mentionCandidates(taskId, undefined, clientVisible);
   const byId = new Map(candidates.map((c) => [c.id, c]));
   const unknown = ids.filter((id) => !byId.has(id));
   if (unknown.length > 0) {
     throw new ApiError(
       'BAD_REQUEST',
       unknown.length === 1
-        ? 'One of the people mentioned cannot open this work order, so they cannot be mentioned on it'
-        : `${unknown.length} of the people mentioned cannot open this work order, so they cannot be mentioned on it`,
+        ? clientVisible
+          ? 'One of the people mentioned cannot see the client messages, so they cannot be mentioned on one'
+          : 'One of the people mentioned cannot open this work order, so they cannot be mentioned on it'
+        : clientVisible
+          ? `${unknown.length} of the people mentioned cannot see the client messages, so they cannot be mentioned on one`
+          : `${unknown.length} of the people mentioned cannot open this work order, so they cannot be mentioned on it`,
       { code: 'MENTION_NOT_ALLOWED', principal_ids: unknown },
     );
   }
@@ -343,7 +366,7 @@ async function notifyWatchers(
     const row = wo.rows[0];
     if (!row) return;
     const told = new Set([actor.id, ...alreadyTold.map((p) => p.id)]);
-    const people = (await mentionCandidates(taskId, messageWatcherNames(row.fields))).filter((p) => !told.has(p.id));
+    const people = (await mentionCandidates(taskId, messageWatcherNames(row.fields), clientVisible)).filter((p) => !told.has(p.id));
     if (people.length === 0) return;
     const snippet = body.length > 280 ? `${body.slice(0, 279)}…` : body;
     await notify(people.map((p) => p.id), {
@@ -379,7 +402,7 @@ export async function postMessage(
 ): Promise<WoMessage> {
   const link = await loadLink(taskId);
   const target = input.client_visible ? (link?.target ?? null) : null;
-  const mentioned = await resolveMentions(taskId, input.body, input.mentions);
+  const mentioned = await resolveMentions(taskId, input.body, input.mentions, input.client_visible);
   let commentId: string | null = null;
 
   await withTransaction(async (tx) => {
@@ -481,7 +504,7 @@ export async function editMessage(
   // 0089 · who it mentions after the edit, and the difference from before.
   const mentioned: MessageMention[] =
     input.mentions !== undefined
-      ? await resolveMentions(taskId, body, input.mentions)
+      ? await resolveMentions(taskId, body, input.mentions, clientVisible)
       : mentionsInBody(body, current.mentions);
   const before = new Set(current.mentions.map((m) => m.id));
   const after = new Set(mentioned.map((m) => m.id));
