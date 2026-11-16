@@ -445,9 +445,19 @@ export function buildAutoSummary(
   const pricedOptions = sections.filter(
     (s) => s.kind === 'option' && !incurredLike.includes(s) && s.include_in_summary,
   );
+  // 2026-11-16 (Elise, #50) · an approved option is incurred work: once there
+  // is one, INCURRED reads Day 0 (the original work), Day 1, Day 2… (each
+  // approval, in round order).
+  const dayed = incurredLike.some((s) => s.kind === 'option');
+  if (dayed) out.push('', 'INCURRED');
+  let day = 0;
   for (const section of incurredLike) {
-    out.push('', section.kind === 'incurred' ? 'INCURRED' : `INCURRED — ${section.label.toUpperCase()} (APPROVED)`);
-    if (section.name && section.kind === 'option') out.push(...wrap(section.name, SUMMARY_WIDTH));
+    if (!dayed) out.push('', 'INCURRED');
+    else if (section.kind === 'incurred') out.push('', 'Day 0');
+    else {
+      day += 1;
+      out.push('', section.name ? `Day ${day} — ${section.name}` : `Day ${day} — approved work`);
+    }
     if (section.narrative_reported) {
       out.push(
         ...wrap(
@@ -465,7 +475,12 @@ export function buildAutoSummary(
     out.push(...lineRows(section.lines, false));
     pushNote(out, section.note_to_customer);
   }
-  if (incurredLike.length > 0) out.push(...amountRows('Total incurred',totals.incurred_subtotal));
+  if (incurredLike.length > 0) {
+    const incurredTotal = dayed
+      ? round2(incurredLike.reduce((sum, s) => sum + s.subtotal, 0))
+      : totals.incurred_subtotal;
+    out.push(...amountRows('Total incurred', incurredTotal));
+  }
 
   // ── Proposed options ──────────────────────────────────────────────────────
 
@@ -674,6 +689,7 @@ interface QuoteRow {
   /** 0083 (D2): who sent it for approval (else who created it) — the one
       person who may not approve or send it. */
   maker_id: string | null;
+  maker_name: string | null;
 }
 
 /** The quote SELECT without a WHERE — every reader adds its own through
@@ -695,6 +711,7 @@ export const QUOTE_BASE_SQL = `
          c.name                           AS contract_name,
          q.ot_multiplier::float8          AS ot_multiplier,
          COALESCE(q.submitted_by, q.created_by)::text AS maker_id,
+         mb.display_name                  AS maker_name,
          ${ISO('q.sent_at')}              AS sent_at,
          ${ISO('q.client_decided_at')}    AS client_decided_at,
          ${ISO('q.created_at')}           AS created_at,
@@ -717,6 +734,7 @@ export const QUOTE_BASE_SQL = `
     LEFT JOIN principal cb ON cb.id = q.created_by
     LEFT JOIN principal ab ON ab.id = q.approved_by
     LEFT JOIN principal sb ON sb.id = q.sent_by
+    LEFT JOIN principal mb ON mb.id = COALESCE(q.submitted_by, q.created_by)
 `;
 
 /** QUOTE_BASE_SQL + `WHERE <where>` + an optional tail (ORDER BY / LIMIT).
@@ -1243,6 +1261,8 @@ export interface QuoteListItem {
   /** UAT T5b (D2): who sent it for approval, else who created it — the one
       person whose Approve is drawn locked (quoteSelfApprovalLock). */
   submitted_by: string | null;
+  /** The same person's display name (the Approvals inbox's Requested by). */
+  submitted_by_name: string | null;
   /** 0109: which kind of decline (null unless client_declined) — a BFI
       decline is ready to invoice like a client-approved quote. */
   client_decline_kind: 'challenged' | 'bfi' | null;
@@ -1301,6 +1321,7 @@ export async function listQuotes(
       wo_emergency: Boolean(r.wo_emergency),
       wo_escalated: Boolean(r.wo_escalated),
       submitted_by: r.maker_id,
+      submitted_by_name: r.maker_name ?? null,
       client_decline_kind: r.client_decline_kind ?? null,
     });
   }

@@ -33,6 +33,7 @@
 /* Payment method column — amber when the method itself needs a manager. */
 .ct .col-method { white-space: nowrap; }
 .ct .col-requester { white-space: nowrap; }
+.ct .apq-requester { font-weight: 600; color: var(--ink); }
 .ct .apq-method-manager { color: var(--warn); font-weight: 600; }
 
 /* Date cells on the Approvals, Payments and Quotes queues. NOT `.col-list`:

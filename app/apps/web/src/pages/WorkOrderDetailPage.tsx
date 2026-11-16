@@ -22,6 +22,7 @@ import { UpdatesFeed } from '../components/wo/UpdatesFeed';
 import { PhotosCard } from '../components/wo/PhotosCard';
 import { NotificationsTab } from '../components/wo/NotificationsTab';
 import { OverviewDetailsCard } from '../components/wo/OverviewDetailsCard';
+import { OverviewLatestCards } from '../components/wo/OverviewLatestCards';
 import { PenaltiesCard } from '../components/wo/ManagerFlags';
 import { MoneyCard } from '../components/wo/MoneyCard';
 import { QuoteBuilder } from './QuoteBuilderPage';
@@ -408,6 +409,16 @@ export function WorkOrderDetailPage() {
                 <OverviewDetailsCard wo={wo} />
                 {showDates && <DatesCard wo={wo} />}
               </div>
+              {/* 2026-11-16 (#43) · the last few messages and the last
+                  notification, each behind its own tab's permission. */}
+              <OverviewLatestCards
+                woId={wo.id}
+                woNumber={wo.wo_number}
+                messages={messagesQuery.data?.items}
+                messagesLoading={messagesQuery.isLoading}
+                showMessages={show('messages')}
+                showNotifications={show('notifications')}
+              />
               {/* S5 — what is owed: a running clock is an action. */}
               <ObligationsCard
                 items={obligations}

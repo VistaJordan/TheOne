@@ -483,6 +483,8 @@ export interface QuoteListItem {
   /** UAT T5b (D2): who submitted it (else who created it) — their Approve is
       drawn locked (quoteSelfApprovalLock). */
   submitted_by: string | null;
+  /** Their display name (Approvals › Requested by). */
+  submitted_by_name?: string | null;
   /** 0109: which kind of decline (null unless client_declined) — a BFI
       decline is ready to invoice like a client-approved quote. */
   client_decline_kind: 'challenged' | 'bfi' | null;

@@ -3085,3 +3085,16 @@ a.photo-img.is-real img {
 .audit-quote-kept summary { cursor: pointer; color: var(--accent-text); }
 .audit-quote-kept ul { margin: 4px 0 0 16px; padding: 0; }
 .audit-quote-kept li { margin: 1px 0; font-variant-numeric: tabular-nums; }
+
+/* Overview (2026-11-16, #43): latest messages and the latest notification. */
+.ov-latest-list { list-style: none; margin: 0; padding: 2px 16px 10px; }
+.ov-latest-card > .ov-latest-item { padding: 2px 16px 12px; }
+.ov-latest-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; }
+.ov-latest-list .ov-latest-item + .ov-latest-item { border-top: 1px solid var(--border); }
+.ov-latest-text { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.ov-latest-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.ov-latest-time { margin-left: auto; color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.ov-latest-title { font-weight: 600; }
+.ov-latest-body { color: var(--ink-2); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; text-decoration: none; }
+a.ov-latest-body:hover { color: var(--ink); text-decoration: underline; }
+.ov-chip-client { color: var(--accent-text); border: 1px solid currentColor; }

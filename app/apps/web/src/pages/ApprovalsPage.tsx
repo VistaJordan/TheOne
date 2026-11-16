@@ -194,6 +194,7 @@ function acceptanceSource(item: ApprovalListItem): string {
 type ColumnKey = 'client' | 'ask' | 'method' | 'nte' | 'cost' | 'due' | 'owner' | 'requester' | 'raised' | 'status';
 
 const COLUMN_CHOICES: (ColumnChoice & { key: ColumnKey })[] = [
+  { key: 'requester', label: 'Requested by' },
   { key: 'client', label: 'Client' },
   { key: 'ask', label: 'Waiting for' },
   { key: 'method', label: 'Payment method' },
@@ -201,12 +202,12 @@ const COLUMN_CHOICES: (ColumnChoice & { key: ColumnKey })[] = [
   { key: 'cost', label: 'Cost' },
   { key: 'due', label: 'WO Due Date' },
   { key: 'owner', label: 'For' },
-  { key: 'requester', label: 'Requested by' },
   { key: 'raised', label: 'Requested on' },
   { key: 'status', label: 'Status' },
 ];
 
-const DEFAULT_COLUMNS: ColumnKey[] = ['client', 'ask', 'method', 'nte', 'cost', 'due', 'owner', 'requester', 'raised', 'status'];
+// 2026-11-16 (Elise, #28): who asked is the first thing read after the WO #.
+const DEFAULT_COLUMNS: ColumnKey[] = ['requester', 'client', 'ask', 'method', 'nte', 'cost', 'due', 'owner', 'raised', 'status'];
 
 const COLUMNS_KEY = 'theone.approvals.columns';
 /** Columns added after people had saved a choice: each is put into a saved
@@ -215,6 +216,8 @@ const ADDED_COLUMNS: { key: ColumnKey; after: ColumnKey; seen: string }[] = [
   { key: 'method', after: 'ask', seen: 'theone.approvals.columns.method' },
   { key: 'requester', after: 'owner', seen: 'theone.approvals.columns.requester' },
 ];
+
+const REQUESTER_FIRST_SEEN = 'theone.approvals.columns.requester-first';
 
 function loadColumns(): ColumnKey[] {
   try {
@@ -233,6 +236,17 @@ function loadColumns(): ColumnKey[] {
       const at = parsed.indexOf(add.after);
       parsed.splice(at < 0 ? parsed.length : at + 1, 0, add.key);
       changed = true;
+    }
+    // #28: Requested by moves to the front of a saved choice once (it was
+    // added after For); moving it back afterwards sticks.
+    if (!localStorage.getItem(REQUESTER_FIRST_SEEN)) {
+      localStorage.setItem(REQUESTER_FIRST_SEEN, '1');
+      const at = parsed.indexOf('requester');
+      if (at > 0) {
+        parsed.splice(at, 1);
+        parsed.unshift('requester');
+        changed = true;
+      }
     }
     if (changed) saveColumns(parsed);
     return parsed;
@@ -1491,7 +1505,9 @@ function InboxRow(props: RowProps) {
         ? (row.data.item.requested_by?.display_name ?? null)
         : row.data.kind === 'purchase'
           ? (row.data.item.requested_by?.name ?? null)
-          : null;
+          : row.data.kind === 'quote'
+            ? (row.data.item.submitted_by_name ?? null)
+            : null;
   const overNte = isCostOverNte(row.cost, row.nte);
   const lane =
     row.data.kind === 'task' && row.data.item.assigned_to && row.data.item.assigned_role_label
@@ -1559,7 +1575,11 @@ function InboxRow(props: RowProps) {
         );
       }
       case 'requester':
-        return <td key={k} className="col-requester">{raisedBy ?? '—'}</td>;
+        return (
+          <td key={k} className="col-requester">
+            {raisedBy ? <span className="apq-requester">{raisedBy}</span> : '—'}
+          </td>
+        );
       case 'raised':
         return <td key={k} className="col-date">{when}</td>;
       case 'status':

@@ -3880,6 +3880,24 @@ received day at midnight UTC, hours before the work order existed. **OM Under
 Probation is view-only on the Dates** (0151; Add work order still takes
 Received on, Due Date and SLA Due Date — `CREATE_FILLABLE_FIELD_KEYS`).
 
+**Approved work reads as Incurred Day N; latest messages on Overview;
+Requested by first** (Elise, 2026-11-16, no migration; UAT #50, #43, #28).
+An option the client approved (`approved_at`, any round) is drawn INSIDE the
+Incurred card as Day 1, Day 2… in round order, the original incurred work as
+Day 0 (`approvedWork` in `QuoteBuilderPage.tsx`); it leaves the options list
+and the earlier-rounds cards. The text summary (`buildAutoSummary`: INCURRED,
+Day 0, Day N — name, Total incurred = every incurred-like section) and the
+printed quote (`QuoteDocument`: Work performed — Day 0, Day N — name, Work
+performed total adds an approval of this round) read the same. Display only:
+sections, totals and the NTE are unchanged, and an NTE increase request's
+approval moves nothing. Overview gains **Latest messages** (the last 3, from
+the page's Messages query) and **Latest notification** (the newest of
+`/work-orders/:id/notifications`), each behind its tab's permission
+(`components/wo/OverviewLatestCards.tsx`). Approvals: **Requested by** is the
+first column after WO #, in bold (a saved column choice gets it moved to the
+front once), and quote rows carry the submitter (`QuoteListItem.
+submitted_by_name`).
+
 ## Verify
 
 ```

@@ -105,14 +105,25 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
   const entity = wo?.billing_entity ?? '';
   const issued = (quote.sent_at ?? quote.updated_at).slice(0, 10);
   const incurred = quote.sections.find((s) => s.kind === 'incurred') ?? null;
-  // 0076 · rounds: an option the client approved in an earlier round is work
-  // already performed; the document offers only the current round's options.
-  const approvedEarlier = quote.sections.filter(
-    (s) => s.kind === 'option' && s.round < quote.current_round && s.approved_at !== null,
-  );
+  // 0076 · rounds: an option the client approved is work already performed;
+  // the document offers only the current round's undecided options.
+  // 2026-11-16 (Elise, #50) · approved work prints under the work performed
+  // as Day 1, Day 2… and the original incurred work as Day 0.
+  const approvedWork = quote.sections
+    .filter((s) => s.kind === 'option' && s.approved_at !== null)
+    .sort((a, b) => a.round - b.round);
+  const dayed = approvedWork.length > 0;
   const options = quote.sections.filter(
-    (s) => s.kind === 'option' && s.round === quote.current_round && s.include_in_summary,
+    (s) => s.kind === 'option' && s.round === quote.current_round && s.include_in_summary && s.approved_at === null,
   );
+  // An option approved in an earlier round already prices as incurred; one
+  // approved in this round is still priced as the option, so add it here.
+  const performedTotal =
+    Math.round(
+      (quote.totals.incurred_subtotal +
+        approvedWork.filter((s) => s.round === quote.current_round).reduce((sum, s) => sum + s.subtotal, 0)) *
+        100,
+    ) / 100;
   const yoda = quote.totals.total_rule !== 'options_only';
   const sectionTaxPct = yoda && quote.tax_applies !== false ? quote.totals.sales_tax_pct : 0;
   const priced = quote.totals.option_totals.find((o) => o.section_id === quote.totals.priced_section_id) ?? null;
@@ -161,7 +172,7 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
       </section>
 
       {incurred && incurred.lines.length > 0 && (
-        <LinesBlock section={incurred} heading="Work performed" note="Billed with the work order" taxPct={sectionTaxPct} />
+        <LinesBlock section={incurred} heading={dayed ? 'Work performed — Day 0' : 'Work performed'} note="Billed with the work order" taxPct={sectionTaxPct} />
       )}
       {incurred && incurred.lines.length === 0 && incurred.note_to_customer?.trim() && (
         <section className="qdoc-note">
@@ -170,11 +181,11 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
         </section>
       )}
 
-      {approvedEarlier.map((s) => (
+      {approvedWork.map((s, idx) => (
         <LinesBlock
           key={s.id}
           section={s}
-          heading={`${s.name ?? 'Approved work'} (approved, round ${s.round})`}
+          heading={`Day ${idx + 1} — ${s.name?.trim() || 'Approved work'}`}
           note="Billed with the work order"
           taxPct={sectionTaxPct}
         />
@@ -196,8 +207,8 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
       <section className="qdoc-totals">
         <table>
           <tbody>
-            {yoda && quote.totals.incurred_subtotal !== 0 && (
-              <tr><th>Work performed</th><td>{usd(quote.totals.incurred_subtotal)}</td></tr>
+            {yoda && performedTotal !== 0 && (
+              <tr><th>Work performed</th><td>{usd(performedTotal)}</td></tr>
             )}
             {offered.map((o) => (
               <tr key={o.section_id}>

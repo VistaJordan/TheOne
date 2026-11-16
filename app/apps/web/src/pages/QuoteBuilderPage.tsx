@@ -680,9 +680,14 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   const incurred = draft.sections[0];
   const currentRound = draft.current_round;
   const allOptions = draft.sections.map((s, i) => ({ s, i })).filter((x) => x.s.kind === 'option');
-  const options = allOptions.filter((x) => x.s.round === currentRound);
+  // 2026-11-16 (Elise, #50) · an option the client approved is work we now
+  // owe: it is drawn inside Incurred as Day 1, Day 2… (one per approval, in
+  // round order) and the original incurred lines read Day 0. Display only —
+  // the sections and the totals are as they were.
+  const approvedWork = allOptions.filter((x) => x.s.approved).sort((a, b) => a.s.round - b.s.round);
+  const options = allOptions.filter((x) => x.s.round === currentRound && !x.s.approved);
   const priorRounds = Array.from(
-    allOptions.filter((x) => x.s.round < currentRound).reduce((m, x) => {
+    allOptions.filter((x) => x.s.round < currentRound && !x.s.approved).reduce((m, x) => {
       const list = m.get(x.s.round) ?? [];
       list.push(x);
       m.set(x.s.round, list);
@@ -690,6 +695,9 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     }, new Map<number, typeof allOptions>()),
   ).sort((a, b) => a[0] - b[0]);
   const incurredTotals = sumLines(incurred.lines, otMult, taxApplies);
+  const approvedTotals = approvedWork.map((x) => sumLines(x.s.lines, otMult, taxApplies).total);
+  const incurredCardTotal = approvedTotals.reduce((sum, t) => sum + t, incurredTotals.total);
+  const daysShown = approvedWork.length > 0;
   const taxPct = Number.isNaN(parsePct(draft.sales_tax_pct)) ? 0 : parsePct(draft.sales_tax_pct) || 0;
   const incurredNote = excludedNote(incurredTotals.excluded);
   const includedCount = options.filter((o) => o.s.include_in_summary).length;
@@ -1379,7 +1387,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           <section className="card">
             <div className="card-head">
               <span className="sec-badge is-incurred">Incurred</span>
-              <h2 className="card-title">{currentRound > 1 ? 'Work already performed & approved' : 'Work already performed'}</h2>
+              <h2 className="card-title">{currentRound > 1 || daysShown ? 'Work already performed & approved' : 'Work already performed'}</h2>
               <span className="sec-sub">
                 {incurred.lines.length} line{incurred.lines.length === 1 ? '' : 's'}
               </span>
@@ -1390,9 +1398,16 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 </span>
               )}
               <span className="subtotal-chip push">
-                Subtotal <b className="num">{usd(totals.incurredSubtotal)}</b>
+                Subtotal <b className="num">{usd(daysShown ? incurredCardTotal : totals.incurredSubtotal)}</b>
               </span>
             </div>
+
+            {daysShown && (
+              <div className="inc-day-head">
+                <span className="inc-day-badge">Day 0</span>
+                <span className="inc-day-title">Initial incurred work</span>
+              </div>
+            )}
 
             <div className="narr">
               <div className="field">
@@ -1458,7 +1473,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                   `Amount is computed (qty × unit price, ×${otMult} when OT; discounts subtract) and read-only.`}
               </span>
               <span className="subtotal-chip" style={{ marginLeft: 'auto' }}>
-                Incurred lines <b className="num">{usd(incurredTotals.total)}</b>
+                {daysShown ? 'Day 0 lines' : 'Incurred lines'} <b className="num">{usd(incurredTotals.total)}</b>
               </span>
               {taxApplies && taxPct > 0 && (
                 <span className="subtotal-chip" title="The incurred lines × the sales tax at the top">
@@ -1466,6 +1481,41 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 </span>
               )}
             </div>
+
+            {approvedWork.map(({ s }, idx) => (
+              <div className="inc-day" key={s.key}>
+                <div className="inc-day-head">
+                  <span className="inc-day-badge">Day {idx + 1}</span>
+                  <span className="inc-day-title">{s.name.trim() || 'Approved work'}</span>
+                  <span className="sec-sub">Approved by the client{s.round > 1 ? ` · round ${s.round}` : ''}</span>
+                  <span className="subtotal-chip push">
+                    Day {idx + 1} lines <b className="num">{usd(approvedTotals[idx] ?? 0)}</b>
+                  </span>
+                </div>
+                {(s.narrative.trim() !== '' || s.scope_lines.some((l) => l.trim() !== '')) && (
+                  <div className="narr">
+                    {s.narrative.trim() !== '' && <p className="inc-day-report">{s.narrative}</p>}
+                    <ScopeList sectionKey={s.key} lines={s.scope_lines} editable={false} showError={false} onChange={() => undefined} />
+                  </div>
+                )}
+                <LineItemsTable
+                  label={`Day ${idx + 1}`}
+                  lines={s.lines}
+                  editable={false}
+                  showErrors={false}
+                  otMultiplier={otMult}
+                  showDay={false}
+                  showTax={taxApplies && linesCarryTax(s.lines)}
+                  rate={quote.labor_rate}
+                  onChange={() => undefined}
+                />
+                {(s.note_to_customer.trim() !== '' || s.specs.trim() !== '') && (
+                  <div className="narr">
+                    <SectionNotes section={s} editable={false} onChange={() => undefined} />
+                  </div>
+                )}
+              </div>
+            ))}
           </section>
 
           {/* ── EARLIER ROUNDS (decided, read-only) ── */}
@@ -1515,7 +1565,9 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
             {options.length === 0 && (
               <div className="empty-flat">
-                No proposed options yet — the client sees nothing to approve until one is added.
+                {approvedWork.some((x) => x.s.round === currentRound)
+                  ? `The client approved this round — the approved work is in Incurred as Day ${approvedWork.length}.`
+                  : 'No proposed options yet — the client sees nothing to approve until one is added.'}
               </div>
             )}
 
