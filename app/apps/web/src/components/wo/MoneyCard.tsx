@@ -4,11 +4,11 @@ import type { ApprovalTask, WorkOrderDetailV2 } from '../../api/client';
 import { listWorkOrderApprovals } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
 import { DASH, FIELD, field, isCostOverNte, money, num, numericDate, str } from '../../lib/fields';
-import { NTE_WARN_PCT, nteBasis, resolveMoney } from '../../lib/woDerive';
+import { resolveMoney } from '../../lib/woDerive';
 import { Icon } from '../Icon';
 import { InlineField } from './fieldEdit';
 import { NoteField } from './ManagerFlags';
-import { PROFITABILITY_EXCEPTION_KEY, PROFITABILITY_NOTES_KEY, PROJECTED_COST_FIELD_KEY } from '@theone/shared';
+import { PROFITABILITY_EXCEPTION_KEY, PROFITABILITY_NOTES_KEY, PROJECTED_COST_FIELD_KEY, markupPct } from '@theone/shared';
 
 interface MoneyCardProps {
   wo: WorkOrderDetailV2;
@@ -16,22 +16,19 @@ interface MoneyCardProps {
 
 /** The Finances tab card. Mirrors the All-fields FINANCES section (Not Fully
     Paid, Client NTE, Cost, Total Invoiced, Discount, Profit) in the section's
-    own clean labels — no ClickUp key prefixes — plus the one thing this tab
-    alone has: the NTE meter (how much of the NTE the invoiced amount has
-    eaten). The margin (a percentage only) closes the list as a total row. Every
+    own clean labels — no ClickUp key prefixes. The NTE meter (quote or
+    invoiced against the NTE) was removed on 2026-11-16 (Elise); the Markup
+    ((Total Invoiced − Cost) ÷ Cost) and the Margin (percentages only) close
+    the list. Every
     stored value edits in place (InlineField); the margin stays derived. The
     Client Quote moved to its own card beside this one (ClientQuoteCard). */
 export function MoneyCard({ wo }: MoneyCardProps) {
   const m = resolveMoney(wo);
   const f = wo.fields ?? {};
   const comp = wo.billing_entity ?? str(field(f, FIELD.comp));
-  const basis = nteBasis(m);
   const discount = num(field(f, 'Discount'));
-
-  // The meter only means something when there is an NTE to press against.
-  const pct = basis && m.nte != null && m.nte > 0 ? (basis.value / m.nte) * 100 : null;
-  const warn = pct != null && pct >= NTE_WARN_PCT;
-  const over = pct != null && pct > 100;
+  // 2026-11-16 (Elise): Markup = (Total Invoiced − Cost) ÷ Cost.
+  const markup = markupPct(m.invoiced, m.cost);
 
   return (
     <section className="card card-fin">
@@ -46,39 +43,6 @@ export function MoneyCard({ wo }: MoneyCardProps) {
           {money(m.nte)}
         </InlineField>
       </div>
-
-      {pct != null && basis && (
-        <div className="ntemeter">
-          <div
-            className="ntemeter-track"
-            role="img"
-            aria-label={`${basis.label} is ${Math.round(pct)} percent of the client NTE`}
-          >
-            <div
-              className={`ntemeter-fill${over ? ' is-over' : warn ? ' is-warn' : ''}`}
-              style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }}
-            />
-            <div className="ntemeter-thresh" title={`${NTE_WARN_PCT}% warning threshold`} />
-          </div>
-          <div className="ntemeter-scale">
-            <span>
-              {basis.label} {money(basis.value)}
-              <span className={`ntemeter-pct${over ? ' is-over' : warn ? ' is-warn' : ''}`}>
-                {Math.round(pct)}%
-              </span>
-            </span>
-            <span>NTE {money(m.nte)}</span>
-          </div>
-          {warn && (
-            <div className={`ntemeter-cap${over ? ' is-over' : ''}`}>
-              <Icon name="alert" size={12} />
-              {over
-                ? `Over NTE by ${money(basis.value - (m.nte ?? 0))}`
-                : `Past the ${NTE_WARN_PCT}% mark — ${money((m.nte ?? 0) - basis.value)} left`}
-            </div>
-          )}
-        </div>
-      )}
 
       <NteOverrideLine wo={wo} />
 
@@ -125,6 +89,18 @@ export function MoneyCard({ wo }: MoneyCardProps) {
               label="Manager notes"
               placeholder="Why this margin is accepted"
             />
+          </dd>
+        </div>
+        {/* 2026-11-16 (Elise) · how much we marked the job up: (Total
+            Invoiced − Cost) ÷ Cost. A percentage only, like the margin. */}
+        <div className="kvrow" title="(Total invoiced − Cost) ÷ Cost">
+          <dt>Markup</dt>
+          <dd className={[
+            markup == null ? 'is-none' : '',
+            markup != null && markup < 0 ? 'is-neg' : '',
+          ].filter(Boolean).join(' ')}
+          >
+            {markup == null ? DASH : `${Math.round(markup)}%`}
           </dd>
         </div>
         {/* 2026-11-03 (Elise) · the margin shows as a percentage only, never

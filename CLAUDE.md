@@ -4013,6 +4013,15 @@ clearing as it fills, focus on the first) and hovering lists them
 Two tests (`assignment-notice`, `uat-2026-11-13`) fail only on a Windows
 checkout: they look for `\n` in files git writes CRLF; CI (LF) passes them.
 
+**Markup on the Finances card** (Elise, 2026-11-16, no migration;
+`markupPct` in shared `moneyRules.ts`, `tests/finances-markup.test.ts`). The
+Finances card (`MoneyCard`) lost its NTE meter (the quote / invoiced against
+the NTE) and gained a **Markup** row above the Margin: (Total Invoiced − Cost)
+÷ Cost × 100, a percentage only; a dash when either figure is missing or
+hidden from the viewer (0084 redaction) or the cost is 0. The Margin is
+unchanged (profit ÷ invoiced). The quote builder's own NTE meter (`MoneyRail`)
+stays.
+
 ## Verify
 
 ```

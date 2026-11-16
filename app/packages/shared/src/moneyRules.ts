@@ -96,3 +96,14 @@ export const INVOICED_LOCKED_MESSAGE =
 /** Bag keys only the system writes, refused by the field editor, bulk edit
     and the create paths beside COMPUTED_KEYS (0083; Cost since 2026-11-16). */
 export const SYSTEM_MONEY_KEYS: string[] = [TOTAL_INVOICED_FIELD_KEY, COST_FIELD_KEY];
+
+/** Markup on the Finances card (Elise, 2026-11-16): how much we put on top of
+    what the job cost us, as a percentage of the COST —
+    (Total Invoiced − Cost) ÷ Cost × 100. Not the margin, which divides by what
+    we billed. Null when either figure is missing (or hidden from the viewer),
+    or when the cost is zero (no base to mark up). */
+export function markupPct(invoiced: number | null | undefined, cost: number | null | undefined): number | null {
+  if (invoiced == null || cost == null) return null;
+  if (!Number.isFinite(invoiced) || !Number.isFinite(cost) || cost <= 0) return null;
+  return ((invoiced - cost) / cost) * 100;
+}
