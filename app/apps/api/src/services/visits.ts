@@ -58,7 +58,6 @@ import {
   VISIT_METHODS,
   VISIT_MIRROR_KEYS,
   VISIT_OWNED_KEYS,
-  isStatusRequestMode,
   nextVisitStamps,
   onSiteStatusNameForVisitType,
   type ActivityActor,
@@ -537,11 +536,10 @@ async function logVisitEvent(
  * check-in: it comes back as the reason. The audit row reads `via: 'visit'`,
  * like the mirrored keys.
  *
- * Who checked in decides how (UAT Wave C, #15): a person in request mode
- * (work_orders/status create without edit — the dispatchers) raises a
- * status-change request to the On Site status, which a manager approves like
- * any other; a manager, anyone else allowed to log visits, or the system
- * moves it directly, without asking the status permission.
+ * Whoever checked in, the move is direct, without asking the status
+ * permission (Elise, 2026-11-15: a check-in is the obvious next step, so a
+ * dispatcher no longer sends a request to a manager for it — UAT Wave C #15
+ * had them raise one).
  */
 async function moveOnSite(taskId: string, visitType: string, actor: ActingPrincipal): Promise<VisitStatusMove | null> {
   const actorId = actor.id;
@@ -559,16 +557,6 @@ async function moveOnSite(taskId: string, visitType: string, actor: ActingPrinci
   if (!row) return null;
   if (!row.target) return { status: name, moved: false, reason: `There is no "${name}" status` };
   if (row.current === row.target) return { status: name, moved: false, reason: null };
-  if (isStatusRequestMode(actor.perms, actor.isSuperAdmin)) {
-    try {
-      const { requestStatusChange } = await import('./approvals.js');
-      const { item } = await requestStatusChange(taskId, row.target, actor);
-      return { status: name, moved: false, reason: null, requested: true, approval_task_id: item.id };
-    } catch (err) {
-      if (err instanceof ApiError) return { status: name, moved: false, reason: err.message };
-      throw err;
-    }
-  }
   try {
     // Dynamic: workOrders.ts sits above this module in the import graph.
     const { changeStatus } = await import('./workOrders.js');

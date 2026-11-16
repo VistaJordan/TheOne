@@ -113,7 +113,7 @@ export const LIFECYCLE: LifecycleModel = {
     {
       status: 'On Site (Assessment)',
       meaning: 'The technician is checked in on the assessment visit.',
-      enteredBy: 'Automatically when an Assessment visit is checked in on the CICO tab (rule 2.2.2), whatever the status before; a check-in by someone who must request status changes raises a request to it instead (UAT #15).',
+      enteredBy: 'Automatically when an Assessment visit is checked in on the CICO tab (rule 2.2.2), whatever the status before, whoever checks in (no status request).',
       who: 'The system, from the visit log.',
       onEnter: ['Ecotrak would push: ENROUTE then ARRIVED.', 'Checking out stamps Quote Due Date = check-out + 48 business hours (Chicago, weekends and holidays skipped).'],
     },
@@ -187,7 +187,7 @@ export const LIFECYCLE: LifecycleModel = {
     {
       status: 'On Site (Job)',
       meaning: 'The technician is checked in on the job (or a return trip).',
-      enteredBy: 'Automatically when a Job or Return trip visit is checked in (rule 2.2.2), whatever the status before; a check-in by someone who must request status changes raises a request to it instead (UAT #15).',
+      enteredBy: 'Automatically when a Job or Return trip visit is checked in (rule 2.2.2), whatever the status before, whoever checks in (no status request).',
       who: 'The system, from the visit log.',
       onEnter: ['Ecotrak would push: ENROUTE then ARRIVED.'],
     },

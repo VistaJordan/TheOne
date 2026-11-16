@@ -27,10 +27,25 @@ export function isStatusRequestMode(perms: PermissionSet, isSuperAdmin = false):
     folded; the gates (11.2.1: a quote with data) still apply. */
 export const NO_APPROVAL_STATUS_NAMES = ['Quote Ready'] as const;
 
-export function statusMoveNeedsNoApproval(statusName: string | null | undefined): boolean {
+/** Moves a request-mode person makes DIRECTLY because they are the path
+    most jobs take (Elise, 2026-11-15): Assessment Sched → On Site (Job)
+    ("job ongoing"). Only this from → to pair; every other move into On Site
+    (Job) is still a request. Matched by name, case folded; the gates, the
+    status order and the Ecotrak check still apply. */
+export const NO_APPROVAL_STATUS_MOVES: readonly { from: string; to: string }[] = [
+  { from: 'Assessment Sched', to: 'On Site (Job)' },
+];
+
+export function statusMoveNeedsNoApproval(
+  statusName: string | null | undefined,
+  fromStatusName?: string | null,
+): boolean {
   if (typeof statusName !== 'string') return false;
   const n = statusName.trim().toLowerCase();
-  return (NO_APPROVAL_STATUS_NAMES as readonly string[]).some((s) => s.toLowerCase() === n);
+  if ((NO_APPROVAL_STATUS_NAMES as readonly string[]).some((s) => s.toLowerCase() === n)) return true;
+  if (typeof fromStatusName !== 'string') return false;
+  const f = fromStatusName.trim().toLowerCase();
+  return NO_APPROVAL_STATUS_MOVES.some((m) => m.from.toLowerCase() === f && m.to.toLowerCase() === n);
 }
 
 // ── Approving a status request: a note only for these (Elise, 2026-10-27) ──

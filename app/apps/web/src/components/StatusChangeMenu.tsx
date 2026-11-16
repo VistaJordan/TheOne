@@ -143,10 +143,11 @@ export function StatusChangeMenu({
   // 2026-11-04 (Elise): the move to Approved records the client's approval
   // on the quote, so it opens a dialog first (how, which option).
   const [approving, setApproving] = useState<{ id: string; name: string } | null>(null);
-  /** A move that goes straight through, no request: Quote Ready for anyone
-      in request mode, Approved for OA (managers move everything directly). */
+  /** A move that goes straight through, no request: Quote Ready (and
+      Assessment Sched → On Site (Job)) for anyone in request mode, Approved
+      for OA (managers move everything directly). */
   const movesDirectly = (name: string) =>
-    mode === 'direct' || statusMoveNeedsNoApproval(name) || (statusApprovalNeedsNote(name) && mayMoveToApprovedDirectly(role));
+    mode === 'direct' || statusMoveNeedsNoApproval(name, current.name) || (statusApprovalNeedsNote(name) && mayMoveToApprovedDirectly(role));
 
   useEffect(() => {
     if (!open) setSearch('');

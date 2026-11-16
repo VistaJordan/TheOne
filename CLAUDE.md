@@ -467,15 +467,14 @@ work order to **On Site (Assessment)** for an Assessment visit and **On Site
 (Job)** for a Job *or a Return trip* (`onSiteStatusNameForVisitType` in
 `packages/shared/src/visitStatus.ts`; an unknown visit type moves nothing).
 `moveOnSite` in `services/visits.ts` runs after the visit's transaction and
-decides by WHO checked in (UAT Wave C, #15): a person in request mode
-(`isStatusRequestMode`: `work_orders/status` create without edit — the
-dispatchers) raises a status-change request to the On Site status through
-`requestStatusChange` (the reply's `status_move` reads `requested: true` with
-the `approval_task_id`, the CICO card says a request went to a manager, and
-the approval moves it); a manager, anyone else allowed to log visits, or the
-system moves it directly through the ordinary `changeStatus` with source
-`'visit'` (the audit row reads `via: 'visit'`), without asking the status
-permission. Both still run the gates and the Ecotrak check. A refusal never
+moves the work order directly through the ordinary `changeStatus` with source
+`'visit'` (the audit row reads `via: 'visit'`), whoever checked in and without
+asking the status permission — a dispatcher in request mode included (Elise,
+2026-11-15; UAT Wave C #15 had them raise a status request instead). Likewise
+`NO_APPROVAL_STATUS_MOVES` (shared `workflow.ts`, read by
+`statusMoveNeedsNoApproval(target, from)`) lets a request-mode person move
+**Assessment Sched → On Site (Job)** directly from the status menu (the route
+reads the current status); every other move still asks a manager. Both still run the gates and the Ecotrak check. A refusal never
 undoes the check-in: the reply's `status_move` carries the reason and the
 CICO card prints it. Correcting a stamp or checking out moves nothing; since
 M8 typing a check-in time on a planned visit IS a check-in (the status is

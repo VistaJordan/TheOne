@@ -212,15 +212,12 @@ describe('#15 / #16 · people who request status changes have no side doors', ()
     expect(bar).toContain('const lifecycle = record.can.lifecycle;');
   });
 
-  it('a request-mode check-in raises a status request; anyone else moves it', () => {
+  it('a check-in moves the work order directly, whoever checks in (2026-11-15)', () => {
     const visits = src('apps/api/src/services/visits.ts');
     const move = visits.slice(visits.indexOf('async function moveOnSite('), visits.indexOf('// ── Writes'));
-    expect(move).toContain('if (isStatusRequestMode(actor.perms, actor.isSuperAdmin)) {');
-    expect(move).toContain('requestStatusChange(taskId, row.target, actor)');
+    expect(move).not.toContain('isStatusRequestMode');
+    expect(move).not.toContain('requestStatusChange');
     expect(move).toContain("changeStatus(taskId, row.target, actorId, undefined, 'visit')");
-    expect(move.indexOf('requestStatusChange')).toBeLessThan(move.indexOf('changeStatus('));
-    const card = src('apps/web/src/components/wo/CicoCard.tsx');
-    expect(card).toContain('if (m?.requested) {');
   });
 });
 

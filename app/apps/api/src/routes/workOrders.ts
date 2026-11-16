@@ -651,12 +651,21 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     // still move DIRECTLY to a status that needs no approval — Quote Ready,
     // internal, nothing changes for the client (Elise, 2026-10-22). OA moves
     // straight to Approved too (2026-11-04: "all OA+ positions can edit the
-    // status to approved"). Anyone else without edit is refused as before.
+    // status to approved"). Assessment Sched → On Site (Job) is the path most
+    // jobs take, so it is direct too (2026-11-15). Anyone else without edit is
+    // refused as before.
     if (!permAllows(p.perms, STATUS_PERM_KEY, 'edit', p.isSuperAdmin)) {
       const target = await query<{ name: string }>(`SELECT name FROM status WHERE id = $1 LIMIT 1`, [status_id]);
       const name = target.rows[0]?.name;
+      const scoped = await resolveTaskId(id, p);
+      const from = scoped
+        ? (await query<{ name: string }>(
+            `SELECT s.name FROM task t JOIN status s ON s.id = t.status_id WHERE t.id = $1`,
+            [scoped],
+          )).rows[0]?.name
+        : null;
       const direct =
-        (permAllows(p.perms, STATUS_PERM_KEY, 'create', p.isSuperAdmin) && statusMoveNeedsNoApproval(name)) ||
+        (permAllows(p.perms, STATUS_PERM_KEY, 'create', p.isSuperAdmin) && statusMoveNeedsNoApproval(name, from)) ||
         (statusApprovalNeedsNote(name) && mayMoveToApprovedDirectly(p.role));
       if (!direct) {
         requirePerm(p, STATUS_PERM_KEY, 'edit', 'You cannot change work-order status');

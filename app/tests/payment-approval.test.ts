@@ -52,6 +52,15 @@ describe('statusMoveNeedsNoApproval — Quote Ready is internal', () => {
     expect(statusMoveNeedsNoApproval(null)).toBe(false);
     expect(statusMoveNeedsNoApproval(undefined)).toBe(false);
   });
+
+  it('Assessment Sched → On Site (Job) is direct; that pair only (2026-11-15)', () => {
+    expect(statusMoveNeedsNoApproval('On Site (Job)', 'Assessment Sched')).toBe(true);
+    expect(statusMoveNeedsNoApproval(' on site (job) ', 'assessment sched')).toBe(true);
+    expect(statusMoveNeedsNoApproval('On Site (Job)')).toBe(false);
+    expect(statusMoveNeedsNoApproval('On Site (Job)', 'Job Sched')).toBe(false);
+    expect(statusMoveNeedsNoApproval('On Site (Assessment)', 'Assessment Sched')).toBe(false);
+    expect(statusMoveNeedsNoApproval('Quote Ready', 'Assessment Sched')).toBe(true);
+  });
 });
 
 describe('the wiring (source pins)', () => {
@@ -69,7 +78,7 @@ describe('the wiring (source pins)', () => {
     const src = read('apps/web/src/components/StatusChangeMenu.tsx');
     // 2026-11-04: one test for every direct move (Quote Ready, OA's Approved).
     expect(src).toContain('if (!movesDirectly(s.name))');
-    expect(src).toContain("mode === 'direct' || statusMoveNeedsNoApproval(name)");
+    expect(src).toContain("mode === 'direct' || statusMoveNeedsNoApproval(name, current.name)");
   });
 
   it('createPaymentRequest asks the verdict and stores the outcome', () => {
