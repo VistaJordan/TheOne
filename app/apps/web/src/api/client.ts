@@ -495,6 +495,8 @@ export interface QuoteListItem {
   wo_due: string | null;
   wo_nte: number | null;
   wo_cost: number | null;
+  /** UAT #31: paid payment requests + paid vendor bills on the work order. */
+  wo_paid: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency. */
   wo_emergency: boolean;
   /** Rules 7.3.x: the work order is flagged Escalated. */

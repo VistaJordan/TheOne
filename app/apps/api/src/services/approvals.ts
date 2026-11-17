@@ -137,6 +137,7 @@ interface Row {
   wo_due: string | null;
   wo_nte: number | string | null;
   wo_cost: string | null;
+  wo_paid: number | string | null;
   wo_emergency: boolean | null;
   wo_escalated: boolean | null;
   /** Rule 11.1.1 (the intake gate): the bag's intake keys plus the three
@@ -181,6 +182,10 @@ const SELECT_SQL = `
          t.fields->>'Due Date'   AS wo_due,
          t.nte::float8           AS wo_nte,
          t.fields->>'34. Cost'   AS wo_cost,
+         (SELECT COALESCE(sum(pp.amount), 0)::float8 FROM payment_request pp
+           WHERE pp.task_id = t.id AND pp.status = 'paid' AND pp.deleted_at IS NULL)
+         + (SELECT COALESCE(sum(vb.total), 0)::float8 FROM vendor_bill vb
+           WHERE vb.task_id = t.id AND vb.status = 'paid') AS wo_paid,
          COALESCE(t.fields->'Emergency' = 'true'::jsonb, false) AS wo_emergency,
          COALESCE(t.fields->'Escalated' = 'true'::jsonb, false) AS wo_escalated,
          t.description            AS wo_description,
@@ -249,6 +254,7 @@ function mapListItem(r: Row): ApprovalListItem {
     wo_due: r.wo_due,
     wo_nte: num(r.wo_nte),
     wo_cost: num(r.wo_cost),
+    wo_paid: num(r.wo_paid),
     wo_emergency: Boolean(r.wo_emergency),
     wo_escalated: Boolean(r.wo_escalated),
     // Rule 11.1.1: only an acceptance row asks; everything else reads [].

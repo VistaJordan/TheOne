@@ -27,6 +27,7 @@ import { AddLineButton, LineItemsTable, linesCarryTax } from './LineItemsTable';
 import { sectionTax } from './QuoteTaxBar';
 import { ScopeList } from './ScopeList';
 import { SectionNotes } from './SectionNotes';
+import { SectionFoldButton } from './SectionFold';
 import { Icon } from '../Icon';
 
 interface OptionCardProps {
@@ -95,7 +96,7 @@ export function OptionCard({
   }, [section.narrative]);
 
   return (
-    <div className={`opt-card${section.approved ? ' is-approved' : ''}${declined ? ' is-declined' : ''}${section.locked ? ' is-locked' : ''}`}>
+    <div data-fold="" className={`opt-card${section.approved ? ' is-approved' : ''}${declined ? ' is-declined' : ''}${section.locked ? ' is-locked' : ''}`}>
       <div className="opt-head">
         {!sole && <span className="opt-tag" aria-hidden="true">{optionTag(index)}</span>}
         {sole ? (
@@ -172,6 +173,10 @@ export function OptionCard({
             Locked
           </span>
         )}
+        {/* UAT #9 · fold this option to its head and totals. */}
+        <span style={{ alignSelf: 'flex-end', marginBottom: 4 }}>
+          <SectionFoldButton foldKey={section.key} label={label} forceOpen={showErrors} />
+        </span>
       </div>
 
       {declined && section.rejection_note && (

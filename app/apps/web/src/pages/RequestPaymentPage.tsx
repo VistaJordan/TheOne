@@ -26,6 +26,7 @@ import {
   getWorkOrder,
   getWorkOrderMessages,
   postPaymentRequest,
+  searchVendors,
 } from '../api/client';
 import type { PaymentMethod, PaymentRequest, Vendor } from '../api/client';
 import {
@@ -475,7 +476,17 @@ export function RequestPayment({
                         )}
                       </div>
                     </div>
-                  ) : payee ? (
+                  ) : null}
+                  {mode === 'manual' && (
+                    <ManualPayeeHint
+                      phone={phoneProblem === null ? manualPhone : ''}
+                      onUse={(v) => {
+                        setPicked(v);
+                        setMode('search');
+                      }}
+                    />
+                  )}
+                  {mode === 'manual' ? null : payee ? (
                     <div className={`vpick${blacklisted ? ' is-blocked' : ''}`} role="group" aria-labelledby="lbl-vendor">
                       <div className="vpick-top">
                         <span className="chip chip-outline">
@@ -527,7 +538,12 @@ export function RequestPayment({
                         setPicked(v);
                         setMode('search');
                       }}
-                      onManual={() => setMode('manual')}
+                      onManual={(prefill) => {
+                        // UAT #7: what was searched for carries over.
+                        if (prefill.name) setManualName(prefill.name);
+                        if (prefill.phone) setManualPhone(usPhoneInputValue(prefill.phone));
+                        setMode('manual');
+                      }}
                     />
                   )}
 
@@ -815,7 +831,7 @@ export function RequestPayment({
                 {submitted && (
                   <>
                     <Icon name="check-circle" size={12} />
-                    {submitted.auto_approved ? 'Submitted · approved as requested (under $500) · with AP to pay' : 'Submitted · in the AP queue'}
+                    {submitted.auto_approved ? 'Submitted · approved as requested (you may approve this amount) · with AP to pay' : 'Submitted · in the AP queue'}
                     {submitted.needs_w9 ? ' · W9 needed' : ''}
                   </>
                 )}
@@ -937,5 +953,40 @@ export function RequestPayment({
         </aside>
       </div>
     </>,
+  );
+}
+
+/** UAT #7 (2026-11-16): a new technician is saved to the vendor list when the
+    request is submitted. While the phone is being typed, a vendor already on
+    file under that number is offered instead (the API would link to it
+    anyway), so nobody is entered twice. */
+function ManualPayeeHint({ phone, onUse }: { phone: string; onUse: (v: Vendor) => void }) {
+  const digits = phone.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+  const lookup = useQuery({
+    queryKey: ['vendors', 'search', 'phone', digits],
+    queryFn: () => searchVendors(digits, null),
+    enabled: digits.length === 10,
+    staleTime: 30_000,
+  });
+  const match = (lookup.data?.items ?? []).find(
+    (v) => (v.phone ?? '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '') === digits,
+  );
+  if (match) {
+    return (
+      <div className="callout" style={{ marginTop: 8 }}>
+        <Icon name="info" size={14} />
+        <span>
+          This number is on file as <b>{match.name}</b>.{' '}
+          <button type="button" className="linkbtn" onClick={() => onUse(match)}>
+            Pay {match.name}
+          </button>
+        </span>
+      </div>
+    );
+  }
+  return (
+    <p className="fhelp" style={{ marginTop: 6 }}>
+      <Icon name="user-plus" size={12} /> Saved to the vendor list as a technician when you submit — next time they come up in the search.
+    </p>
   );
 }

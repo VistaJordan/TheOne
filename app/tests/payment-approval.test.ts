@@ -1,8 +1,8 @@
 /* 0090 (Elise, 2026-10-22) — who has to say yes.
  *
  * Two pure rules and the source pins that keep them wired:
- *   - paymentApprovalVerdict: under $500 is approved as it is raised, for
- *     every requester since 0115; $500 and over waits.
+ *   - paymentApprovalVerdict: since UAT #33 (2026-11-16) every request waits
+ *     for a second person unless the requester could approve it themselves.
  *   - statusMoveNeedsNoApproval: Quote Ready is internal, so a request-mode
  *     person moves to it directly instead of raising a status request.
  *   - Approve on a payment asks the 6.2.3 amount band again (0076 had
@@ -20,21 +20,38 @@ import { NO_APPROVAL_STATUS_NAMES, statusMoveNeedsNoApproval } from '../packages
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
-describe('paymentApprovalVerdict — who has to ask (0115: the amount alone)', () => {
+describe('paymentApprovalVerdict — maker ≠ checker unless the maker clears it (UAT #33)', () => {
   it.each(['om_probation', 'om', 'senior_om', 'tl', 'atl', 'am', 'admin', 'oa', 'ar', 'ap', null, undefined])(
-    '%s: under $500 is approved as requested, $500 and over waits',
+    '%s: a small request waits for a second person unless the requester clears it',
     (role) => {
-      expect(paymentApprovalVerdict(role, 0).needed).toBe(false);
-      expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER - 0.01).needed).toBe(false);
-      expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER).needed).toBe(true);
+      expect(paymentApprovalVerdict(role, 0).needed).toBe(true);
+      expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER - 0.01).needed).toBe(true);
       expect(paymentApprovalVerdict(role, 3_500).needed).toBe(true);
+      expect(paymentApprovalVerdict(role, 100, 'ach', true).needed).toBe(false);
+      expect(paymentApprovalVerdict(role, 3_500, 'ach', true).needed).toBe(false);
     },
   );
 
   it('never auto-approves a nonsense amount', () => {
-    expect(paymentApprovalVerdict('om', Number.NaN).needed).toBe(true);
-    expect(paymentApprovalVerdict('om', Number.POSITIVE_INFINITY).needed).toBe(true);
-    expect(paymentApprovalVerdict('om', -1).needed).toBe(true);
+    expect(paymentApprovalVerdict('om', Number.NaN, null, true).needed).toBe(true);
+    expect(paymentApprovalVerdict('om', Number.POSITIVE_INFINITY, null, true).needed).toBe(true);
+    expect(paymentApprovalVerdict('om', -1, null, true).needed).toBe(true);
+  });
+
+  it('the requester clears it only with the grant, the band and the method rule', () => {
+    const src = read('apps/api/src/services/payments.ts');
+    const fn = src.slice(src.indexOf('async function requesterMayApprove('));
+    const body = fn.slice(0, fn.indexOf('\n}\n'));
+    expect(body).toContain('canApprovePayments(actor)');
+    expect(body).toContain('mayApproveManagerMethod(actor.role, actor.isSuperAdmin)');
+    expect(body).toContain("tierForAmount('payment', amount)");
+    expect(body).toContain('tierAllows(tier, actor.role, actor.isSuperAdmin)');
+  });
+
+  it('0153 gives the under-$500 payment band to ATL / TL / AM', () => {
+    const mig = read('packages/db/migrations/0153_payment_under_500_band.sql');
+    expect(mig).toContain("SET roles = '{atl,tl,am}'");
+    expect(mig).toContain("kind = 'payment' AND min_amount = 0 AND max_amount = 500");
   });
 
   it('the threshold is the bottom of the second band', () => {
@@ -85,7 +102,8 @@ describe('the wiring (source pins)', () => {
     const src = read('apps/api/src/services/payments.ts');
     const fn = src.slice(src.indexOf('export async function createPaymentRequest('));
     const body = fn.slice(0, fn.indexOf('export interface PaymentEditInput'));
-    expect(body).toContain('paymentApprovalVerdict(actor.role, input.amount, input.method)');
+    expect(body).toContain('paymentApprovalVerdict(actor.role, input.amount, input.method, requesterClears)');
+    expect(body).toContain('CASE WHEN $16 THEN $14::uuid ELSE NULL END');
     // 2026-10-28: an overage (past the NTE or the quote) is never auto-approved.
     expect(body).toContain('const autoApproved = !approval.needed && !overage && !lossJob;');
     expect(body).toContain("autoApproved ? 'approved' : 'requested'");

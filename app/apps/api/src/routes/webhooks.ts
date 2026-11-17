@@ -97,7 +97,11 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
     // due today (48 working hours in Waiting for Quote), once a day.
     const { raiseQuoteDueNotifications } = await import('../services/notices.js');
     const quotes_due = await raiseQuoteDueNotifications(true);
-    return { ok: true, ...(await runDueClientUpdates()), dispatch_advanced: dispatch.advanced, sharepoint, quotes_due };
+    // Elise 2026-11-16 · and ticks Late Quote where the Quote Due Date passed
+    // with no quote submitted (services/lateQuote.ts; never throws).
+    const { sweepLateQuotes } = await import('../services/lateQuote.js');
+    const late_quotes = await sweepLateQuotes();
+    return { ok: true, ...(await runDueClientUpdates()), dispatch_advanced: dispatch.advanced, sharepoint, quotes_due, late_quotes };
   };
   app.get('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));
   app.post('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));

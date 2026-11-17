@@ -474,6 +474,7 @@ export function buildAutoSummary(
     if (section.lines.length > 0) out.push('');
     // 2026-11-10 (Elise) · incurred work is never split into days.
     out.push(...lineRows(section.lines, false));
+    pushSpecs(out, section.specs);
     pushNote(out, section.note_to_customer);
   }
   if (incurredLike.length > 0) {
@@ -511,6 +512,7 @@ export function buildAutoSummary(
       }
       out.push(...amountRows(optionCount > 1 ? `${section.label} grand total` : 'Grand total', total.grand_total));
     }
+    pushSpecs(out, section.specs);
     pushNote(out, section.note_to_customer);
   }
 
@@ -545,6 +547,14 @@ export function buildAutoSummary(
   pushNote(out, ctx.note_to_customer);
 
   return out.join('\n');
+}
+
+/** UAT #25 (Elise, 2026-11-16): a section's equipment & part specs print
+    under it, after a blank line, headed "Specs:". */
+function pushSpecs(out: string[], specs: string | null | undefined): void {
+  if (!specs || specs.trim() === '') return;
+  out.push('', 'Specs:');
+  for (const para of specs.trim().split(/\n+/)) out.push(...wrap(para, SUMMARY_WIDTH));
 }
 
 /** A note to the customer, paragraph by paragraph, after a blank line. */
@@ -1255,6 +1265,9 @@ export interface QuoteListItem {
   wo_due: string | null;
   wo_nte: number | null;
   wo_cost: number | null;
+  /** UAT #31 (2026-11-16): money already paid out on the work order — paid
+      payment requests plus paid vendor bills. */
+  wo_paid: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency. */
   wo_emergency: boolean;
   /** Rules 7.3.x: the work order is flagged Escalated. */
@@ -1279,6 +1292,25 @@ function moneyNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** UAT #31 (2026-11-16): paid payment requests plus paid vendor bills per
+    work order — the Approvals inbox's "Paid so far". */
+async function paidSoFarFor(taskIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (taskIds.length === 0) return out;
+  const res = await query<{ task_id: string; paid: number | string }>(
+    `SELECT x.task_id, sum(x.amount)::float8 AS paid FROM (
+       SELECT task_id::text AS task_id, amount FROM payment_request
+        WHERE task_id = ANY($1::uuid[]) AND status = 'paid' AND deleted_at IS NULL
+       UNION ALL
+       SELECT task_id::text, total FROM vendor_bill
+        WHERE task_id = ANY($1::uuid[]) AND status = 'paid') x
+      GROUP BY x.task_id`,
+    [[...new Set(taskIds)]],
+  );
+  for (const r of res.rows) out.set(r.task_id, Number(r.paid) || 0);
+  return out;
+}
+
 /**
  * Every quote the viewer may see (0026 scope), newest-updated first, for the
  * sidebar list page. grand_total goes through computeQuoteTotals() like every
@@ -1295,6 +1327,8 @@ export async function listQuotes(
     p.values,
   );
 
+  // UAT #31: what has been paid on each row's work order, in one read.
+  const paidByTask = await paidSoFarFor(res.rows.map((r) => r.task_id));
   // One batched read of every row's sections (UAT T5), not one per row.
   const sectionsByQuote = await loadSectionsFor(
     res.rows.map((r) => r.id),
@@ -1319,6 +1353,7 @@ export async function listQuotes(
       wo_due: r.wo_due,
       wo_nte: moneyNum(r.nte),
       wo_cost: moneyNum(r.wo_cost),
+      wo_paid: paidByTask.get(r.task_id) ?? 0,
       wo_emergency: Boolean(r.wo_emergency),
       wo_escalated: Boolean(r.wo_escalated),
       submitted_by: r.maker_id,

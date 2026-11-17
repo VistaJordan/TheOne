@@ -1,7 +1,7 @@
 /* A quote section's own specs and note to the customer (migration 0146,
    Elise 2026-11-16). Every section carries them — the Incurred card and each
-   option of every round. Specs are internal (never printed or sent); the
-   note prints under its section in the summary and on the printed quote.
+   option of every round. Both print under their section in the summary and
+   on the printed quote (specs since UAT #25, 2026-11-16 — they were internal).
    A read-only section draws only what was written. */
 
 import type { DraftSection } from '../../lib/quoteDraft';
@@ -24,7 +24,7 @@ export function SectionNotes({ section, editable, onChange }: SectionNotesProps)
       {showSpecs && (
         <div className="field">
           <label className="lbl" htmlFor={specsId}>
-            Equipment &amp; part specs <span className="opt">internal · optional</span>
+            Equipment &amp; part specs <span className="opt">optional</span>
           </label>
           <textarea
             className="fld"
@@ -34,7 +34,7 @@ export function SectionNotes({ section, editable, onChange }: SectionNotesProps)
             disabled={!editable}
             onChange={(e) => onChange({ ...section, specs: e.target.value })}
           />
-          <span className="hint">Not sent to the client — kept for the tech and for warranty claims.</span>
+          <span className="hint">Prints under this section in the quote summary and on the printed quote.</span>
         </div>
       )}
       {showNote && (

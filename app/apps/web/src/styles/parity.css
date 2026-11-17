@@ -238,3 +238,6 @@
 
 .card-foot .tipwrap:hover .tip,
 .card-foot .tipwrap:focus-within .tip { opacity: 1; }
+
+/* UAT #7 (2026-11-16) · "Add … as a new technician" in an empty search. */
+.vpick-row.vpick-add .vpick-row-name { color: var(--accent); gap: 6px; }

@@ -98,6 +98,7 @@ import {
   purposeBase,
   selfApprovalMessage,
   selfApprovalVerdict,
+  tierAllows,
   formatUsPhone,
   usPhoneProblem,
 } from '@theone/shared';
@@ -116,7 +117,7 @@ import {
   raiseMoneyHold,
   reconcileApprovalTasks,
 } from './approvals.js';
-import { assertTierAllows, listApprovalTiers, tierSummary } from './approvalTiers.js';
+import { assertTierAllows, listApprovalTiers, tierForAmount, tierSummary } from './approvalTiers.js';
 import { assertWoAllows } from './woPolicy.js';
 import { enqueueOutbox } from './outbox.js';
 import { evaluateForTask } from './obligations.js';
@@ -189,6 +190,7 @@ interface PaymentRow {
   wo_due: string | null;
   wo_nte: number | string | null;
   wo_cost: string | null;
+  wo_paid: number | string | null;
   /** "Paying twice": the approved and paid vendor bills on the work order. */
   wo_bills: number | string | null;
   wo_emergency: boolean | null;
@@ -237,6 +239,10 @@ const SELECT_SQL = `
          t.fields->>'Due Date'   AS wo_due,
          t.nte::float8           AS wo_nte,
          t.fields->>'34. Cost'   AS wo_cost,
+         (SELECT COALESCE(sum(pp.amount), 0)::float8 FROM payment_request pp
+           WHERE pp.task_id = pr.task_id AND pp.status = 'paid' AND pp.deleted_at IS NULL)
+         + (SELECT COALESCE(sum(vb.total), 0)::float8 FROM vendor_bill vb
+           WHERE vb.task_id = pr.task_id AND vb.status = 'paid') AS wo_paid,
          (SELECT COALESCE(sum(b.total), 0)::float8 FROM vendor_bill b
            WHERE b.task_id = pr.task_id AND b.status IN ('approved', 'paid'))
                             AS wo_bills,
@@ -376,6 +382,16 @@ function assertManagerForMethod(row: PaymentRow, actor: ActingPrincipal, what: s
   });
 }
 
+/** UAT #33: could this person approve this request themselves? `payments`
+    approve, the amount's band (0153: under $500 = ATL / TL / AM), and a
+    TL / ATL / AM for Zelle / Cash App. A super admin always could. */
+async function requesterMayApprove(actor: ActingPrincipal, amount: number, method: string | null | undefined): Promise<boolean> {
+  if (!canApprovePayments(actor)) return false;
+  if (needsManagerForMethod(method) && !mayApproveManagerMethod(actor.role, actor.isSuperAdmin)) return false;
+  const tier = await tierForAmount('payment', amount);
+  return tierAllows(tier, actor.role, actor.isSuperAdmin);
+}
+
 async function withTiers(opts: MapOpts): Promise<MapOpts> {
   if (!opts.viewer || opts.tiers) return opts;
   return { ...opts, tiers: await listApprovalTiers() };
@@ -483,6 +499,7 @@ function mapListItem(r: PaymentRow, opts?: MapOpts, quotes?: QuoteFigures): Paym
     wo_due: r.wo_due,
     wo_nte: moneyNum(r.wo_nte),
     wo_cost: moneyNum(r.wo_cost),
+    wo_paid: moneyNum(r.wo_paid),
     wo_emergency: Boolean(r.wo_emergency),
     wo_escalated: Boolean(r.wo_escalated),
   };
@@ -1067,7 +1084,10 @@ export async function createPaymentRequest(
   // 0090: who has to say yes. A dispatcher's request under $500 is cleared
   // for AP as it is raised; a probation dispatcher's, and anyone's at $500
   // or over, waits in the queue for the band's approver.
-  const approval = paymentApprovalVerdict(actor.role, input.amount, input.method);
+  // UAT #33 (Elise, 2026-11-16): maker ≠ checker for every amount, unless the
+  // requester could approve this request themselves — then they are the checker.
+  const requesterClears = await requesterMayApprove(actor, input.amount, input.method);
+  const approval = paymentApprovalVerdict(actor.role, input.amount, input.method, requesterClears);
   // Elise, 2026-10-28: past the NTE or the approved quote the request is
   // still filed — with the requester's reason — and always waits in the
   // queue: the hold raised below is what a manager decides first.
@@ -1155,9 +1175,10 @@ export async function createPaymentRequest(
       `INSERT INTO payment_request
          (task_id, vendor_id, payee_name, payee_phone, purpose, amount, method, payment_address, note,
           recipient_name, recipient_phone, recipient_is_store, attachment_id, status, requested_by,
-          auto_approved, approved_at, overage_reason, submit_key)
+          auto_approved, approved_at, overage_reason, approved_by, submit_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $15, $14,
-               $16, CASE WHEN $16 THEN now() ELSE NULL END, $17, $18)
+               $16, CASE WHEN $16 THEN now() ELSE NULL END, $17,
+               CASE WHEN $16 THEN $14::uuid ELSE NULL END, $18)
        RETURNING id::text AS id`,
       [
         taskId,

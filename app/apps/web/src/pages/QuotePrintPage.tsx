@@ -174,10 +174,15 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
       {incurred && incurred.lines.length > 0 && (
         <LinesBlock section={incurred} heading={dayed ? 'Work performed — Day 0' : 'Work performed'} note="Billed with the work order" taxPct={sectionTaxPct} />
       )}
-      {incurred && incurred.lines.length === 0 && incurred.note_to_customer?.trim() && (
+      {incurred && incurred.lines.length === 0 && (incurred.note_to_customer?.trim() || incurred.specs?.trim()) && (
         <section className="qdoc-note">
           <h3>Work performed</h3>
-          <p>{incurred.note_to_customer}</p>
+          {incurred.specs?.trim() && (
+            <p>
+              <b>Specs:</b> {incurred.specs}
+            </p>
+          )}
+          {incurred.note_to_customer?.trim() && <p>{incurred.note_to_customer}</p>}
         </section>
       )}
 
@@ -328,7 +333,12 @@ function LinesBlock({ section, heading, note, taxPct = 0 }: { section: QuoteSect
           )}
         </tfoot>
       </table>
-      {/* 0146 · the section's own note to the customer prints under it. */}
+      {/* UAT #25 (2026-11-16) · the section's specs, then (0146) its note to the customer. */}
+      {section.specs?.trim() && (
+        <p className="qdoc-narr qdoc-section-note qdoc-section-specs">
+          <b>Specs:</b> {section.specs}
+        </p>
+      )}
       {section.note_to_customer?.trim() && <p className="qdoc-narr qdoc-section-note">{section.note_to_customer}</p>}
     </section>
   );

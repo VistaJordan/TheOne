@@ -16,7 +16,7 @@
 
 import { MessageLines } from '../components/MessageLines';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { FocusEvent, ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -68,6 +68,7 @@ import { OptionCard } from '../components/quote/OptionCard';
 import { QuotePipeline } from '../components/quote/QuoteStatusPill';
 import { ScopeList } from '../components/quote/ScopeList';
 import { SectionNotes } from '../components/quote/SectionNotes';
+import { SectionFoldButton } from '../components/quote/SectionFold';
 import { SummaryCard } from '../components/quote/SummaryCard';
 import type { DraftLine, DraftQuote, DraftSection } from '../lib/quoteDraft';
 import {
@@ -603,15 +604,24 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       )}
     </>
   );
+  // UAT #25 (2026-11-16): leaving a text box (a note to the customer, specs,
+  // a scope line) saves at once instead of waiting for the autosave pause, so
+  // the Quote card at the top shows it as soon as the person moves on.
+  const saveOnLeave = (e: FocusEvent<HTMLElement>) => {
+    const el = e.target;
+    if (!(el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement)) return;
+    if (!editable || !dirty || saveFailedAt === editVersion.current) return;
+    startSave();
+  };
   const shell = (children: ReactNode) =>
     embedded ? (
-      <div className="qb qb-embedded">
+      <div className="qb qb-embedded" onBlurCapture={saveOnLeave}>
         {children}
         {sheets}
       </div>
     ) : (
       <AppShell active="Work Orders" breadcrumb={breadcrumb}>
-        <div className="canvas-inner qb">{children}</div>
+        <div className="canvas-inner qb" onBlurCapture={saveOnLeave}>{children}</div>
         {sheets}
       </AppShell>
     );
@@ -1393,7 +1403,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           )}
 
           {/* ── INCURRED ── */}
-          <section className="card">
+          <section className="card q-incurred" data-fold="">
             <div className="card-head">
               <span className="sec-badge is-incurred">Incurred</span>
               <h2 className="card-title">{currentRound > 1 || daysShown ? 'Work already performed & approved' : 'Work already performed'}</h2>
@@ -1409,6 +1419,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               <span className="subtotal-chip push">
                 Subtotal <b className="num">{usd(daysShown ? incurredCardTotal : totals.incurredSubtotal)}</b>
               </span>
+              {/* UAT #9 · fold the Incurred card to this head. */}
+              <SectionFoldButton foldKey={incurred.key} label="Incurred" forceOpen={showErrors} />
             </div>
 
             {daysShown && (

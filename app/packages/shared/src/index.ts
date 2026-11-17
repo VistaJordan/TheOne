@@ -1250,6 +1250,9 @@ export interface PaymentListItem extends PaymentRequest {
   wo_due: string | null;
   wo_nte: number | null;
   wo_cost: number | null;
+  /** UAT #31 (2026-11-16): money already paid out on the work order — paid
+      payment requests plus paid vendor bills. */
+  wo_paid: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency. */
   wo_emergency: boolean;
   /** Rules 7.3.x: the work order is flagged Escalated. */
@@ -1813,6 +1816,9 @@ export interface ApprovalListItem extends ApprovalTask {
   wo_due: string | null;
   wo_nte: number | null;
   wo_cost: number | null;
+  /** UAT #31 (2026-11-16): money already paid out on the work order — paid
+      payment requests plus paid vendor bills. */
+  wo_paid: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency. */
   wo_emergency: boolean;
   /** Rules 7.3.x: the work order is flagged Escalated — the inbox pins it. */
@@ -1992,6 +1998,7 @@ export * from './addressSuggest';
 export * from './numericInput';
 export * from './woCopy';
 export * from './approvalReminders';
+export * from './lateQuote';
 export * from './mentions';
 import type { ClientSystem, WoMessage } from './messaging';
 

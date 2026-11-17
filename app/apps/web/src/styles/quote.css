@@ -943,3 +943,9 @@
   .qtpl-row { flex-direction: column; }
   .qtpl-row-acts { justify-content: flex-start; }
 }
+
+/* UAT #9 (2026-11-16) · a folded quote section shows its head (and, for an
+   option, the totals at its foot); SectionFold.tsx sets data-folded. */
+.qb [data-fold][data-folded="true"] > :not(.card-head):not(.opt-head):not(.opt-foot) { display: none; }
+.qb .opt-card[data-folded="true"] .opt-foot > :not(.subtotal-chip) { display: none; }
+.qb .card-head .sec-fold-btn { margin-left: 4px; }

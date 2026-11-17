@@ -261,7 +261,7 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       return <>rejected the quote</>;
     case 'payment_requested':
       return e.after?.auto_approved === true ? (
-        <>requested a technician payment — approved as requested (under $500)</>
+        <>requested a technician payment — approved as requested (the requester may approve this amount)</>
       ) : (
         <>requested a technician payment</>
       );

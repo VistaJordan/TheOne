@@ -4022,6 +4022,44 @@ hidden from the viewer (0084 redaction) or the cost is 0. The Margin is
 unchanged (profit ÷ invoiced). The quote builder's own NTE meter (`MoneyRail`)
 stays.
 
+**UAT list of 2026-11-16, fifth batch** (migration 0153, Elise;
+`tests/uat-2026-11-16-e.test.ts`, `tests/payment-approval.test.ts`). **Maker ≠
+checker on every payment (#33):** a payment request waits for a second person
+at any amount unless its requester could approve it themselves —
+`requesterMayApprove` in `services/payments.ts` (`payments` approve, the
+amount's band, a TL / ATL / AM for Zelle / Cash App; a super admin always);
+then it lands approved with `approved_by` = the requester. 0153 gives the
+under-$500 payment band to ATL / TL / AM (it was empty = approved as raised);
+`paymentApprovalVerdict` takes `requesterClears`. Purchase requests keep
+`APPROVAL_NOT_NEEDED_UNDER`. An NTE / quote overage still forces `requested`.
+**Approvals, one table per type (#31):** `SECTION_DEFAULT_COLUMNS` in
+`ApprovalsPage.tsx` — each section has its own columns (the Columns menu is
+per type, `theone.approvals.columns.<section>`); under All the page's rows are
+split into one table per type (`SECTION_ORDER`). New columns: Paid so far
+(`wo_paid` on approvals, payments and quotes rows = paid payment requests +
+paid vendor bills; quotes read it batched, `paidSoFarFor`, because
+`QUOTE_BASE_SQL` takes no WHERE), Amount, Payee, Status change, Reason, Over
+NTE by. **Quote specs print (#25):** a section's specs print under it in the
+text summary (`pushSpecs`, "Specs:") and on the printed quote (internal since
+0146 until now); leaving any text box in the builder saves at once
+(`saveOnLeave` on `onBlurCapture`) instead of waiting for the autosave pause.
+**Fold a quote section (#9):** `components/quote/SectionFold.tsx` — a button at
+the top right of the Incurred card and each option folds the nearest
+`[data-fold]` to its head (an option keeps its totals), remembered per browser
+(`theone.quote.folded`); a Submit with problems opens them again. **New
+technicians on Request payment (#7):** an empty vendor search offers "Add …
+as a new technician" with the typed phone or name carried over
+(`prefillFromSearch`); while a phone is typed, a vendor already on file under
+it is offered (`ManualPayeeHint`). The API already created the `kind = 'tech'`
+vendor on submit. **Late Quote ticks itself:** `sweepLateQuotes`
+(`services/lateQuote.ts`, the rule in shared `lateQuote.ts`) runs on the hourly
+cron (every 15 min under `npm run dev`) and ticks `Late Quote` where the Quote
+Due Date has passed, the work order still owes a quote (`isQuoteOwed`) and
+there is no quote or only a draft; signed "Late quotes", an empty Manager
+Description gets the reason. A work order whose Late Quote field was ever
+written (by the sweep or a person) is never touched again, so a manager's
+removal sticks.
+
 ## Verify
 
 ```

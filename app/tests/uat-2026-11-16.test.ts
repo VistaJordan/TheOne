@@ -62,12 +62,12 @@ describe('specs and the note to the customer per section (0146)', () => {
     expect(kept[0]).toMatchObject({ specs: 'own', note_to_customer: 'own' });
   });
 
-  it('the summary prints each section’s note under it, never its specs', () => {
+  it('the summary prints each section’s specs and note under it (specs since UAT #25)', () => {
     const ctx = { client: null, store: null, city: null, state: null, ext_name: null, trade: null, title: null, note_to_customer: null };
     const totals = { total_rule: 'yoda', incurred_subtotal: 0, option_totals: [], priced_section_id: null, sales_tax_pct: 0, sales_tax: 0, grand_total: 0, nte: null };
     const section = (kind: string, note: string) => ({
       id: kind, kind, label: kind, lines: [], scope_lines: [], approved_at: null, locked: false,
-      include_in_summary: true, narrative_reported: null, name: null, specs: 'SECRET SPEC', note_to_customer: note,
+      include_in_summary: true, narrative_reported: null, name: null, specs: kind + ' spec', note_to_customer: note,
     });
     const text = buildAutoSummary(
       ctx,
@@ -76,7 +76,10 @@ describe('specs and the note to the customer per section (0146)', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       totals as any,
     );
-    expect(text).not.toContain('SECRET SPEC');
+    expect(text.indexOf('incurred spec')).toBeGreaterThan(text.indexOf('INCURRED'));
+    expect(text.indexOf('incurred spec')).toBeLessThan(text.indexOf('Incurred note'));
+    expect(text.indexOf('option spec')).toBeGreaterThan(text.indexOf('PROPOSED'));
+    expect(text).toContain('Specs:');
     expect(text.indexOf('Incurred note')).toBeGreaterThan(text.indexOf('INCURRED'));
     expect(text.indexOf('Incurred note')).toBeLessThan(text.indexOf('PROPOSED'));
     expect(text.indexOf('Option note')).toBeGreaterThan(text.indexOf('PROPOSED'));

@@ -6,6 +6,7 @@ import { buildApp } from './app.js';
 import { config, describeAuth } from './config.js';
 import { startAutomationScheduler } from './services/automations.js';
 import { runClickUpSync } from './services/clickup.js';
+import { sweepLateQuotes } from './services/lateQuote.js';
 
 async function main(): Promise<void> {
   const app = await buildApp();
@@ -20,6 +21,11 @@ async function main(): Promise<void> {
   setInterval(() => {
     void runClickUpSync('timer').catch((e: unknown) => app.log.warn({ err: e }, 'ClickUp sync failed'));
   }, 60_000);
+
+  // Late Quote: the local stand-in for the hourly cron's sweep (every 15 min).
+  setInterval(() => {
+    void sweepLateQuotes();
+  }, 15 * 60_000);
 
   app.log.info(describeAuth());
   if (config.authMode === 'bypass') {

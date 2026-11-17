@@ -161,3 +161,14 @@
 .apq-nte-requests tr.is-focused > td:first-child {
   box-shadow: inset 3px 0 0 var(--accent);
 }
+
+/* UAT #31 (2026-11-16): one table per approval type under All. */
+.apq-type-table + .apq-type-table { margin-top: 20px; }
+.apq-type-title {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--ink);
+}
+.ct .apq-reason span {
+  display: inline-block; max-width: 260px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; color: var(--ink-2);
+}

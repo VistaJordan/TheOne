@@ -55,16 +55,34 @@ export function mayApproveManagerMethod(role: string | null | undefined, isSuper
   return isSuperAdmin || MANAGER_APPROVAL_ROLES.includes(role ?? '');
 }
 
+// ── Maker ≠ checker, unless the maker has the clearance (Elise, 2026-11-16,
+// UAT #33) ─────────────────────────────────────────────────────────────────
+//
+// Replaces 0115's "under $500 needs no approval" for payments: every payment
+// request, small ones included, waits for a second person — UNLESS the person
+// raising it could approve that very request themselves (they hold
+// `payments` approve, their role is in the amount's band — 0153 gives the
+// under-$500 band to ATL / TL / AM — and for Zelle / Cash App they are a TL /
+// ATL / AM). Then a checker adds nothing and the request lands approved,
+// signed by its requester. The API works out `requesterClears` (it has the
+// bands); this function words it. A request that takes Cost past the NTE or
+// the approved quote is still never approved as it is raised (payments.ts).
+// Purchase requests keep APPROVAL_NOT_NEEDED_UNDER.
+
 export function paymentApprovalVerdict(
   _requesterRole: string | null | undefined,
   amount: number,
   method?: string | null,
+  requesterClears = false,
 ): PaymentApprovalVerdict {
+  if (!Number.isFinite(amount) || amount < 0) {
+    return { needed: true, reason: 'Waits for a second person to approve it' };
+  }
+  if (requesterClears) {
+    return { needed: false, reason: 'Approved as requested — the requester may approve this amount' };
+  }
   if (needsManagerForMethod(method)) {
     return { needed: true, reason: 'Zelle and Cash App payments always need a manager’s approval' };
   }
-  if (Number.isFinite(amount) && amount >= 0 && amount < APPROVAL_NOT_NEEDED_UNDER) {
-    return { needed: false, reason: `Under $${APPROVAL_NOT_NEEDED_UNDER} — approved as requested` };
-  }
-  return { needed: true, reason: `$${APPROVAL_NOT_NEEDED_UNDER} and over needs approval` };
+  return { needed: true, reason: 'Waits for a second person to approve it (maker ≠ checker)' };
 }

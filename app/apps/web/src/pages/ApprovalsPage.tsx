@@ -66,6 +66,7 @@ import {
   type AcceptanceDetail,
   type ApprovalSectionKey,
   type PurchaseRequest,
+  type SnoozeRequestDetail,
 } from '@theone/shared';
 import type {
   ApprovalListItem,
@@ -191,7 +192,10 @@ function acceptanceSource(item: ApprovalListItem): string {
 // first and last. Everything between is chosen from the Columns menu, in the
 // order chosen, and remembered per browser like the header fold.
 
-type ColumnKey = 'client' | 'ask' | 'method' | 'nte' | 'cost' | 'due' | 'owner' | 'requester' | 'raised' | 'status';
+type ColumnKey =
+  | 'client' | 'ask' | 'method' | 'nte' | 'cost' | 'due' | 'owner' | 'requester' | 'raised' | 'status'
+  // UAT #31 (Elise, 2026-11-16): the columns one approval type needs.
+  | 'paid' | 'amount' | 'payee' | 'move' | 'reason' | 'over';
 
 const COLUMN_CHOICES: (ColumnChoice & { key: ColumnKey })[] = [
   { key: 'requester', label: 'Requested by' },
@@ -204,7 +208,55 @@ const COLUMN_CHOICES: (ColumnChoice & { key: ColumnKey })[] = [
   { key: 'owner', label: 'For' },
   { key: 'raised', label: 'Requested on' },
   { key: 'status', label: 'Status' },
+  { key: 'paid', label: 'Paid so far' },
+  { key: 'amount', label: 'Amount' },
+  { key: 'payee', label: 'Payee' },
+  { key: 'move', label: 'Status change' },
+  { key: 'reason', label: 'Reason' },
+  { key: 'over', label: 'Over NTE by' },
 ];
+
+/** UAT #31: each approval type has its own table and its own columns. The
+    WO # and the Decision stay first and last; these are the defaults, and the
+    Columns menu changes them per type (remembered per browser). */
+const SECTION_DEFAULT_COLUMNS: Record<Kind, ColumnKey[]> = {
+  intake: ['requester', 'client', 'ask', 'nte', 'due', 'owner', 'raised', 'status'],
+  nte: ['requester', 'client', 'ask', 'reason', 'nte', 'cost', 'paid', 'over', 'owner', 'raised', 'status'],
+  money: ['requester', 'client', 'ask', 'reason', 'nte', 'cost', 'paid', 'owner', 'raised', 'status'],
+  status: ['requester', 'client', 'move', 'nte', 'paid', 'due', 'owner', 'raised', 'status'],
+  snooze: ['requester', 'client', 'ask', 'reason', 'due', 'raised', 'status'],
+  reviews: ['requester', 'client', 'ask', 'owner', 'raised', 'status'],
+  quotes: ['requester', 'client', 'amount', 'nte', 'paid', 'cost', 'due', 'raised', 'status'],
+  payments: ['requester', 'client', 'payee', 'amount', 'method', 'reason', 'nte', 'paid', 'cost', 'raised', 'status'],
+  purchases: ['requester', 'ask', 'amount', 'raised', 'status'],
+};
+
+/** The order the per-type tables stand in under All. */
+const SECTION_ORDER: Kind[] = ['payments', 'quotes', 'status', 'nte', 'money', 'snooze', 'reviews', 'purchases', 'intake'];
+
+const sectionColumnsKey = (s: Kind) => `theone.approvals.columns.${s}`;
+
+function loadSectionColumns(s: Kind): ColumnKey[] {
+  try {
+    const raw = localStorage.getItem(sectionColumnsKey(s));
+    if (!raw) return SECTION_DEFAULT_COLUMNS[s];
+    const known = new Set<string>(COLUMN_CHOICES.map((c) => c.key));
+    const parsed = (JSON.parse(raw) as unknown[]).filter(
+      (k): k is ColumnKey => typeof k === 'string' && known.has(k),
+    );
+    return parsed.length > 0 ? parsed : SECTION_DEFAULT_COLUMNS[s];
+  } catch {
+    return SECTION_DEFAULT_COLUMNS[s];
+  }
+}
+
+function saveSectionColumns(s: Kind, cols: ColumnKey[]): void {
+  try {
+    localStorage.setItem(sectionColumnsKey(s), JSON.stringify(cols));
+  } catch {
+    /* storage disabled — the choice simply does not survive the reload */
+  }
+}
 
 // 2026-11-16 (Elise, #28): who asked is the first thing read after the WO #.
 const DEFAULT_COLUMNS: ColumnKey[] = ['requester', 'client', 'ask', 'method', 'nte', 'cost', 'due', 'owner', 'raised', 'status'];
@@ -268,6 +320,9 @@ const COLUMN_CLASS: Partial<Record<ColumnKey, string>> = {
   client: 'col-client',
   nte: 'num',
   cost: 'num',
+  paid: 'num',
+  amount: 'num',
+  over: 'num',
   method: 'col-method',
   requester: 'col-requester',
   due: 'col-date',
@@ -296,6 +351,8 @@ interface Row {
   due: string | null;
   nte: number | null;
   cost: number | null;
+  /** UAT #31: paid payment requests + paid vendor bills on the work order. */
+  paid: number | null;
   /** Rule 2.5.1: the work order is flagged Emergency — red rail + badge. */
   emergency: boolean;
   /** Rules 7.3.x: the work order is flagged Escalated — amber, and pinned
@@ -392,6 +449,7 @@ function taskRow(
     due: item.wo_due,
     nte: item.wo_nte,
     cost: item.wo_cost,
+    paid: item.wo_paid ?? null,
     emergency: item.wo_emergency,
     escalated: item.wo_escalated,
     raised_at: item.created_at,
@@ -444,6 +502,7 @@ function quoteRow(item: QuoteListItem, canDecide: boolean): Row {
     due: item.wo_due,
     nte: item.wo_nte,
     cost: item.wo_cost,
+    paid: item.wo_paid ?? null,
     emergency: item.wo_emergency,
     escalated: item.wo_escalated,
     raised_at: item.updated_at ?? '',
@@ -509,6 +568,7 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
     due: item.wo_due,
     nte: item.wo_nte,
     cost: item.wo_cost,
+    paid: item.wo_paid ?? null,
     emergency: item.wo_emergency,
     escalated: item.wo_escalated,
     raised_at: item.created_at,
@@ -554,6 +614,7 @@ function purchaseRow(item: PurchaseRequest, canDecide: boolean): Row {
     due: null,
     nte: null,
     cost: null,
+    paid: null,
     emergency: false,
     escalated: false,
     raised_at: item.submitted_at ?? item.created_at,
@@ -627,10 +688,20 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   const [searchParams] = useSearchParams();
   const [nteView, setNteView] = useState(() => searchParams.get('view') === 'nte-requests');
   const nteFocusWo = searchParams.get('wo');
+  // The mixed list (All with nothing per type yet, and the intake page) keeps
+  // the saved choice it always had; each type has its own since UAT #31.
   const [columns, setColumns] = useState<ColumnKey[]>(loadColumns);
+  const [typeColumns, setTypeColumns] = useState<Partial<Record<Kind, ColumnKey[]>>>({});
+  const columnsFor = (s: Kind): ColumnKey[] => typeColumns[s] ?? loadSectionColumns(s);
   const changeColumns = (next: string[]) => {
     const known = new Set<string>(COLUMN_CHOICES.map((c) => c.key));
     const cols = next.filter((k): k is ColumnKey => known.has(k));
+    if (section !== 'all' && !intake) {
+      const s = section;
+      setTypeColumns((m) => ({ ...m, [s]: cols }));
+      saveSectionColumns(s, cols);
+      return;
+    }
     setColumns(cols);
     saveColumns(cols);
   };
@@ -885,6 +956,23 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
           : `No ${SECTION_LABEL[section].toLowerCase()} are waiting for a decision.`
         : 'Nothing has been decided yet.';
 
+  // UAT #31: one table per approval type, each with its own columns. Under
+  // All the page's rows are split by type (in SECTION_ORDER); one type picked
+  // or the intake page is one table. Nothing to show = one table that says so.
+  const tableGroups: { key: string; title: string | null; count: number; columns: ColumnKey[]; rows: Row[] }[] = (() => {
+    if (intake) return [{ key: 'intake', title: null, count: pageRows.length, columns, rows: pageRows }];
+    if (section !== 'all') {
+      return [{ key: section, title: null, count: pageRows.length, columns: columnsFor(section), rows: pageRows }];
+    }
+    if (loading || filtered.length === 0) {
+      return [{ key: 'all', title: null, count: 0, columns, rows: [] }];
+    }
+    return SECTION_ORDER.map((s) => {
+      const rs = pageRows.filter((r) => r.section === s);
+      return { key: s, title: SECTION_LABEL[s], count: filtered.filter((r) => r.section === s).length, columns: columnsFor(s), rows: rs };
+    }).filter((g) => g.rows.length > 0);
+  })();
+
   return (
     <AppShell active={intake ? 'Incoming Work Orders' : 'Approvals'}>
       {intake && <IncomingTabs tab="accept" />}
@@ -971,14 +1059,16 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
               Clear filters
             </button>
           )}
-          <div className="apq-columns">
-            <ColumnsMenu
-              fields={COLUMN_CHOICES}
-              columns={columns}
-              defaults={DEFAULT_COLUMNS}
-              onChange={changeColumns}
-            />
-          </div>
+          {(intake || section !== 'all') && (
+            <div className="apq-columns">
+              <ColumnsMenu
+                fields={COLUMN_CHOICES}
+                columns={intake ? columns : columnsFor(section as Kind)}
+                defaults={intake ? DEFAULT_COLUMNS : SECTION_DEFAULT_COLUMNS[section as Kind]}
+                onChange={changeColumns}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -1003,13 +1093,18 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
         </div>
       )}
 
-      {!nteView && !approvalsQuery.isError && (
-        <div className="table-wrap">
+      {!nteView && !approvalsQuery.isError && tableGroups.map((g) => (
+        <div className="table-wrap apq-type-table" key={g.key}>
+          {g.title && (
+            <h3 className="apq-type-title">
+              {g.title} <span className="payq-count">{g.count}</span>
+            </h3>
+          )}
           <table className="ct">
             <thead>
               <tr>
                 <th className="col-wo">WO #</th>
-                {columns.map((k) => (
+                {g.columns.map((k) => (
                   <th key={k} className={COLUMN_CLASS[k]}>
                     {COLUMN_CHOICES.find((c) => c.key === k)?.label}
                   </th>
@@ -1019,16 +1114,16 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
             </thead>
             <tbody>
               {loading && (
-                <tr className="ct-empty"><td colSpan={columns.length + 2}>{intake ? 'Loading the incoming queue…' : 'Loading the inbox…'}</td></tr>
+                <tr className="ct-empty"><td colSpan={g.columns.length + 2}>{intake ? 'Loading the incoming queue…' : 'Loading the inbox…'}</td></tr>
               )}
               {!loading && filtered.length === 0 && (
-                <tr className="ct-empty"><td colSpan={columns.length + 2}>{emptyText}</td></tr>
+                <tr className="ct-empty"><td colSpan={g.columns.length + 2}>{emptyText}</td></tr>
               )}
-              {pageRows.map((r) => (
+              {g.rows.map((r) => (
                 <InboxRow
                   key={r.key}
                   row={r}
-                  columns={columns}
+                  columns={g.columns}
                   myId={myId}
                   mySuper={actingAs?.is_super_admin === true}
                   myRole={myRole}
@@ -1064,7 +1159,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
             </tbody>
           </table>
         </div>
-      )}
+      ))}
 
       {!nteView && !approvalsQuery.isError && (
         <ListPagination
@@ -1587,6 +1682,75 @@ function InboxRow(props: RowProps) {
         );
       case 'raised':
         return <td key={k} className="col-date">{when}</td>;
+      case 'paid':
+        return (
+          <td key={k} className="num" title="Paid payment requests and paid vendor bills on this work order">
+            {row.paid == null ? '—' : usd(row.paid)}
+          </td>
+        );
+      case 'amount': {
+        const d = row.data;
+        const amount =
+          d.kind === 'payment' ? d.item.amount
+          : d.kind === 'quote' ? d.item.grand_total
+          : d.kind === 'purchase' ? d.item.estimate
+          : null;
+        return <td key={k} className="num">{amount == null ? '—' : usd(Number(amount))}</td>;
+      }
+      case 'payee':
+        return (
+          <td key={k}>
+            {row.data.kind === 'payment' ? (
+              <span className="site payq-who">
+                <strong>{payeeLabel(row.data.item)}</strong>
+                {row.data.item.purpose && <small>{row.data.item.purpose}</small>}
+              </span>
+            ) : '—'}
+          </td>
+        );
+      case 'move': {
+        const d = row.data;
+        if (d.kind !== 'task' || d.item.type !== 'status_change') return <td key={k}>—</td>;
+        const mv = d.item.detail as Partial<StatusChangeDetail>;
+        const verdict = row.open ? checkEcotrakTransition(d.item.wo_ecotrak_status, mv.to_status_name ?? '') : null;
+        const note = verdict && ecotrakTransitionRefused(verdict) ? describeEcotrakRefusal(verdict) : null;
+        return (
+          <td key={k}>
+            <span className="apq-move">
+              <span>{mv.from_status_name ?? '?'}</span>
+              <span className="apq-arrow" aria-hidden="true">→</span>
+              <b>{mv.to_status_name ?? '?'}</b>
+              {note && (
+                <span className="status-menu-ecotrak" title={note} aria-label={note}>Ecotrak</span>
+              )}
+            </span>
+          </td>
+        );
+      }
+      case 'reason': {
+        const d = row.data;
+        const text =
+          d.kind === 'task'
+            ? (holdReason(d.item) ??
+              (d.item.type === 'snooze_request' ? ((d.item.detail as Partial<SnoozeRequestDetail>).reason ?? null) : null))
+            : d.kind === 'payment'
+              ? (d.item.overage_reason ?? null)
+              : null;
+        return (
+          <td key={k} className="apq-reason">
+            {text ? <span title={text}>“{text}”</span> : '—'}
+          </td>
+        );
+      }
+      case 'over': {
+        const over = row.cost != null && row.nte != null && row.cost > row.nte ? row.cost - row.nte : null;
+        const d = row.data;
+        const nd = d.kind === 'task' ? (d.item.detail as { cost?: unknown; nte?: unknown; projected?: unknown }) : null;
+        const projected =
+          nd && nd.projected === true && typeof nd.cost === 'number' && typeof nd.nte === 'number' ? nd.cost - nd.nte : null;
+        const v = projected ?? over;
+        return <td key={k} className={`num${v != null ? ' is-over-nte' : ''}`}>{v == null ? '—' : usd(v)}</td>;
+      }
       case 'status':
         return (
           <td key={k} className="col-status">
