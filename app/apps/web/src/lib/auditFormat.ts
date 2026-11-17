@@ -35,6 +35,7 @@ export function viaLabel(after: unknown): string | null {
   if (via === 'ecotrak') return 'Ecotrak';
   if (via === 'payment') return 'an accepted payment request';
   if (via === 'quote') return 'the quote, on invoicing';
+  if (via === 'reopen') return 'Reopen';
   return via === 'visit' ? 'the visit log' : via === 'approval_task' ? 'an approved status change request' : via;
 }
 

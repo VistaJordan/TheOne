@@ -350,9 +350,9 @@ describe('M31 · Reopen says why and goes back', () => {
     const rec = src('apps/api/src/services/woRecord.ts');
     const reopen = fn(rec, 'export async function reopenWo(');
     expect(reopen).toContain("if (!why) throw badRequest('Say why it is reopened', { field: 'reason' });");
-    expect(reopen).toContain('moveStatus(taskId, st.rows[0].id, st.rows[0].name, actor)');
+    expect(reopen).toContain("moveStatus(taskId, st.rows[0].id, st.rows[0].name, actor, 'reopen')");
     expect(fn(rec, 'export async function cancelWo(')).toContain('cancelled_from_status_id = status_id');
-    expect(rec).toContain('await changeStatus(taskId, statusId, actor.id);');
+    expect(rec).toContain('await changeStatus(taskId, statusId, actor.id, undefined, source);');
     const route = src('apps/api/src/routes/woRecord.ts');
     expect(route).toContain('return reopenWo(taskId, reason ?? null, actor);');
     expect(MIGRATION).toContain('ADD COLUMN IF NOT EXISTS cancelled_from_status_id uuid');

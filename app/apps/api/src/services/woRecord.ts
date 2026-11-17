@@ -31,6 +31,7 @@ import {
   permAllows,
   recordMarginFrom,
   isCancelStatusName,
+  isReopenableStatusName,
   mayReopenWorkOrder,
   REOPEN_FORBIDDEN_SENTENCE,
   siteEventPhase,
@@ -111,10 +112,10 @@ async function cancelBlocked(taskId: string): Promise<string | null> {
 }
 
 /** A status move run for a record-bar act: what happened, never a throw. */
-async function moveStatus(taskId: string, statusId: string, statusName: string, actor: ActingPrincipal): Promise<VisitStatusMove> {
+async function moveStatus(taskId: string, statusId: string, statusName: string, actor: ActingPrincipal, source?: 'reopen'): Promise<VisitStatusMove> {
   try {
     const { changeStatus } = await import('./workOrders.js');
-    await changeStatus(taskId, statusId, actor.id);
+    await changeStatus(taskId, statusId, actor.id, undefined, source);
     return { status: statusName, moved: true, reason: null };
   } catch (err) {
     return { status: statusName, moved: false, reason: err instanceof Error ? err.message : 'The status could not be moved' };
@@ -395,7 +396,7 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
       see_vendors: seeVendors,
       lifecycle: can(actor, 'work_orders', 'edit') && can(actor, LIFECYCLE_PERM_KEY, 'edit'),
       cancel_blocked: t.cancelled_at ? null : await cancelBlocked(taskId),
-      reopen: Boolean(t.cancelled_at) || isCancelStatusName(t.status_name),
+      reopen: Boolean(t.cancelled_at) || isReopenableStatusName(t.status_name),
       may_reopen: mayReopenWorkOrder(actor.role, actor.isSuperAdmin),
     },
   };
@@ -762,13 +763,16 @@ export async function cancelWo(taskId: string, reason: string | null, actor: Act
  *  to Open (`REOPEN_STATUS_NAME`), through changeStatus, and it reopens any
  *  work order sitting in a Cancel… status — stamped by Cancel or moved there
  *  some other way (the status menu, a rejected acceptance, an approved
- *  request) — so no cancelled job is left without a way back. */
+ *  request) — so no cancelled job is left without a way back. Since
+ *  2026-11-17 (Elise) a work order in Done / Incurred is reopened the same
+ *  way (`REOPEN_DONE_STATUS_NAMES`), and the move skips the portal's step
+ *  order (source 'reopen'), which never leads back to Open. */
 export async function reopenWo(taskId: string, reason: string | null, actor: ActingPrincipal): Promise<WoRecord> {
   // Elise, 2026-11-17: by role, not the lifecycle grant (OP Admin has none).
   if (!mayReopenWorkOrder(actor.role, actor.isSuperAdmin)) throw forbidden(REOPEN_FORBIDDEN_SENTENCE);
   const t = await loadTask(taskId);
-  const inCancelStatus = isCancelStatusName(t.status_name);
-  if (!t.cancelled_at && !inCancelStatus) throw conflict('This work order is not cancelled');
+  const inCancelStatus = isReopenableStatusName(t.status_name);
+  if (!t.cancelled_at && !inCancelStatus) throw conflict('This work order is not cancelled or done');
   const why = clean(reason);
   if (!why) throw badRequest('Say why it is reopened', { field: 'reason' });
 
@@ -779,7 +783,7 @@ export async function reopenWo(taskId: string, reason: string | null, actor: Act
         WHERE id = $1 AND (cancelled_at IS NOT NULL OR status_id = $2::uuid) RETURNING id`,
       [taskId, t.status_id],
     );
-    if (!won.rows[0]) throw conflict('This work order is not cancelled');
+    if (!won.rows[0]) throw conflict('This work order is not cancelled or done');
     await logTaskChanges(tx, actor.id, taskId, [
       ...(t.cancelled_at ? [{ field: 'Cancelled', before: t.cancel_reason, after: null }] : []),
       { field: 'Reopened', before: null, after: why },
@@ -787,7 +791,7 @@ export async function reopenWo(taskId: string, reason: string | null, actor: Act
   });
 
   let status_move: VisitStatusMove | null = null;
-  // Only while it still sits in a Cancel… status: a work order somebody moved
+  // Only while it still sits in a Cancel… or Done status: a work order somebody moved
   // on by hand since is left where they put it.
   if (inCancelStatus) {
     const st = await query<{ id: string; name: string }>(
@@ -795,7 +799,7 @@ export async function reopenWo(taskId: string, reason: string | null, actor: Act
       [REOPEN_STATUS_NAME],
     );
     status_move = st.rows[0]
-      ? await moveStatus(taskId, st.rows[0].id, st.rows[0].name, actor)
+      ? await moveStatus(taskId, st.rows[0].id, st.rows[0].name, actor, 'reopen')
       : { status: REOPEN_STATUS_NAME, moved: false, reason: `There is no ${REOPEN_STATUS_NAME} status in the workflow — set the status by hand` };
   }
   return { ...(await getWoRecord(taskId, actor)), status_move };

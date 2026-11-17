@@ -737,9 +737,10 @@ export async function changeStatus(
 
     // BRD 2.7 (2026-11-04): the client's portal decides which status may
     // follow which. A person's move, a check-in, an approved request and
-    // Cancel / Reopen are asked; an automation and the quote's own moves
-    // (Send, the client's decision — the portal's acts) are not.
-    if (!auto && source !== 'quote') {
+    // Cancel are asked; an automation, the quote's own moves (Send, the
+    // client's decision — the portal's acts) and Reopen (a manager's way back
+    // to Open, with a reason — 2026-11-17) are not.
+    if (!auto && source !== 'quote' && source !== 'reopen') {
       await assertStatusOrder(tx, task_id, newStatusName, currentStatusName);
     }
 

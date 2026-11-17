@@ -65,7 +65,7 @@ describe('wiring', () => {
     expect(body).toContain('await nteFacts(row)');
     expect(body).toContain('NTE_PAYMENT_APPROVER_CODE');
     expect(body).toContain('NTE_APPROVAL_REASON_CODE');
-    expect(body).toContain("assertPaymentNotHeld(row, actor, 'Approving this payment', true)");
+    expect(body).toContain("assertPaymentNotHeld(row, actor, 'Approving this payment', true, decidesQuote)");
     expect(body).toContain('await approveOverNte(tx, row, projected, reason, actor)');
     // The band is asked only on the within-NTE branch, before the AM's.
     expect(body.indexOf('assertTierAllows(')).toBeLessThan(body.indexOf('mayApproveOverNtePayment('));

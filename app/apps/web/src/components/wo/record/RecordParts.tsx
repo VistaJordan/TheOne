@@ -265,7 +265,8 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
 }
 
 /** Elise, 2026-11-17: the More menu is gone; Reopen is its own header button,
-    drawn only on a cancelled work order and only for OP Admin, TL, ATL, AM,
+    drawn on a cancelled work order or one in Done / Incurred (since the same
+    day, `record.can.reopen`), and only for OP Admin, TL, ATL, AM,
     Admin and super admins (`record.can.may_reopen`, asked again by the API). */
 export function ReopenButton({ woId, woNumber, record, onNote }: { woId: string; woNumber: string; record: WoRecord | undefined; onNote: (note: string | null) => void }) {
   const [open, setOpen] = useState(false);

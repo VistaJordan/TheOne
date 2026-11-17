@@ -117,7 +117,7 @@ describe('where it is asked', () => {
   const header = read('apps/web/src/components/wo/WoHeader.tsx');
 
   it('changeStatus, except automations and the quote', () => {
-    expect(wo).toMatch(/if \(!auto && source !== 'quote'\) \{\s*await assertStatusOrder\(tx, task_id, newStatusName, currentStatusName\);/);
+    expect(wo).toMatch(/if \(!auto && source !== 'quote' && source !== 'reopen'\) \{\s*await assertStatusOrder\(tx, task_id, newStatusName, currentStatusName\);/);
   });
   it('a status request and its approval', () => {
     expect(appr.match(/await assertStatusOrder\(\{ query \}/g)?.length).toBe(2);

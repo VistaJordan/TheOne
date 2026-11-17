@@ -333,6 +333,17 @@ export function isCancelStatusName(name: string | null | undefined): boolean {
   return /^cancel/i.test((name ?? '').trim());
 }
 
+/** Statuses besides a Cancel… one that Reopen takes a work order out of
+    (Elise, 2026-11-17): a finished job that has to be worked again. */
+export const REOPEN_DONE_STATUS_NAMES: readonly string[] = ['Done / Incurred'];
+
+/** Reopen is offered (and accepted) for a work order in one of these. */
+export function isReopenableStatusName(name: string | null | undefined): boolean {
+  if (isCancelStatusName(name)) return true;
+  const n = (name ?? '').trim().toLowerCase();
+  return REOPEN_DONE_STATUS_NAMES.some((s) => s.toLowerCase() === n);
+}
+
 /** Where Reopen takes a work order (Elise, 2026-10-29): back to Open, the
     start of the workflow, whatever it was before the cancel. */
 export const REOPEN_STATUS_NAME = 'Open';
@@ -341,7 +352,7 @@ export const REOPEN_STATUS_NAME = 'Open';
     which asks why. A plain status move out of it is refused with this code. */
 export const REOPEN_REQUIRED_CODE = 'REOPEN_REQUIRED';
 export const REOPEN_REQUIRED_MESSAGE =
-  'This work order is cancelled. Reopen it from More › Reopen, which asks why — it goes back to Open.';
+  'This work order is cancelled. Reopen it with the Reopen button, which asks why — it goes back to Open.';
 
 /** The status a reopen returns to: the one the cancel moved the work order
     out of. Null when it was never moved (no cancel status) or nothing says. */

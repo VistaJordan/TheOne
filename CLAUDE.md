@@ -4077,6 +4077,11 @@ routes are untouched). **Reopen** is its own header button (`ReopenButton` in
 (`can.reopen`) and only for `REOPEN_ROLES` (oa, tl, atl, am, admin) or a super
 admin (`mayReopenWorkOrder` in shared `managerFlags.ts`, `can.may_reopen`);
 `reopenWo` asks the same role check (403) in place of the lifecycle grant.
+Same day: it is also drawn (and accepted) on a work order in **Done /
+Incurred** (`REOPEN_DONE_STATUS_NAMES` / `isReopenableStatusName` in shared
+`workflow.ts`); Reopen still goes to Open with a reason, and its move
+(`changeStatus` source `'reopen'`, audit `via: 'reopen'`) skips the portal
+step order, which never leads back to Open.
 
 **No browser suggestions in any box** (Elise, 2026-11-17, no migration;
 `apps/web/src/lib/noAutofill.ts`, called from `main.tsx`,

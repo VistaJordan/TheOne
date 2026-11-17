@@ -12,6 +12,7 @@ import {
   REOPEN_REQUIRED_CODE,
   REOPEN_STATUS_NAME,
   isCancelStatusName,
+  isReopenableStatusName,
 } from '../packages/shared/src/workflow';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -28,6 +29,12 @@ describe('what counts as cancelled', () => {
     expect(isCancelStatusName('Open')).toBe(false);
     expect(isCancelStatusName(null)).toBe(false);
   });
+  it('Done / Incurred is reopenable too (2026-11-17), other statuses are not', () => {
+    expect(isReopenableStatusName('Done / Incurred')).toBe(true);
+    expect(isReopenableStatusName('Cancelled / Postponed')).toBe(true);
+    expect(isReopenableStatusName('Ready to Invoice')).toBe(false);
+    expect(isReopenableStatusName('Open')).toBe(false);
+  });
   it('reopen goes to Open', () => {
     expect(REOPEN_STATUS_NAME).toBe('Open');
     expect(REOPEN_REQUIRED_CODE).toBe('REOPEN_REQUIRED');
@@ -42,12 +49,12 @@ describe('the wiring (source pins)', () => {
     expect(reopen).toContain("if (!why) throw badRequest('Say why it is reopened', { field: 'reason' });");
     expect(reopen).toContain('if (!t.cancelled_at && !inCancelStatus)');
     expect(reopen).toContain('[REOPEN_STATUS_NAME]');
-    expect(reopen).toContain('moveStatus(taskId, st.rows[0].id, st.rows[0].name, actor)');
+    expect(reopen).toContain("moveStatus(taskId, st.rows[0].id, st.rows[0].name, actor, 'reopen')");
     expect(reopen).not.toContain('cancelled_from_status_id) {');
   });
 
   it('the record offers Reopen for a Cancel… status', () => {
-    expect(rec).toContain('reopen: Boolean(t.cancelled_at) || isCancelStatusName(t.status_name),');
+    expect(rec).toContain('reopen: Boolean(t.cancelled_at) || isReopenableStatusName(t.status_name),');
     const menu = read('apps/web/src/components/wo/record/RecordParts.tsx');
     expect(menu).toContain('const cancelled = Boolean(s.cancelled) || Boolean(record.can.reopen);');
     expect(menu).toContain('{lifecycle && (cancelled ? (');
