@@ -17,9 +17,10 @@
 // the amount alone decides, whoever raises it. `requesterRole` is kept so
 // callers and the audit row read as before.
 //
-// Pay still needs `approved` and a second person (D2), and the NTE / quote
-// holds are asked again before any money goes out, so an auto-approved
-// request is cleared for AP, not paid. A request that takes Cost past the
+// The NTE / quote holds are asked again before any money goes out, so an
+// auto-approved request is cleared for AP, not paid. Since 2026-11-17 a
+// manager whose band covers the amount may also Pay it straight from
+// requested (the pay is the approval); AP still pays only approved requests. A request that takes Cost past the
 // NTE or the approved quote is never auto-approved (payments.ts).
 
 /** Below this amount a payment request or a purchase request needs no approval. */
@@ -69,6 +70,16 @@ export function mayApproveManagerMethod(role: string | null | undefined, isSuper
 // the approved quote is still never approved as it is raised (payments.ts).
 // Purchase requests keep APPROVAL_NOT_NEEDED_UNDER.
 
+//
+// 2026-11-17 (Elise, UAT #36 restated): under $500 needs nobody's approval
+// again — the request is approved as it is raised, whoever raises it, except
+// Zelle / Cash App (a TL / ATL / AM still approves) and a payment that takes
+// the job past its NTE or the approved quote (payments.ts asks those). From
+// $500 the bands decide, each level covering the ones below it — ATL to
+// $3,000, TL to $5,000, AM to $50,000 — and a manager whose band covers the
+// amount may approve or pay it, their own request included
+// (`mayPayDirectly` in payments.ts).
+
 export function paymentApprovalVerdict(
   _requesterRole: string | null | undefined,
   amount: number,
@@ -76,13 +87,16 @@ export function paymentApprovalVerdict(
   requesterClears = false,
 ): PaymentApprovalVerdict {
   if (!Number.isFinite(amount) || amount < 0) {
-    return { needed: true, reason: 'Waits for a second person to approve it' };
+    return { needed: true, reason: 'Waits for a manager to approve it' };
+  }
+  if (needsManagerForMethod(method) && !requesterClears) {
+    return { needed: true, reason: 'Zelle and Cash App payments always need a manager’s approval' };
+  }
+  if (amount < APPROVAL_NOT_NEEDED_UNDER) {
+    return { needed: false, reason: 'Under $500 — no approval needed' };
   }
   if (requesterClears) {
     return { needed: false, reason: 'Approved as requested — the requester may approve this amount' };
   }
-  if (needsManagerForMethod(method)) {
-    return { needed: true, reason: 'Zelle and Cash App payments always need a manager’s approval' };
-  }
-  return { needed: true, reason: 'Waits for a second person to approve it (maker ≠ checker)' };
+  return { needed: true, reason: 'Waits for a manager whose band covers this amount' };
 }

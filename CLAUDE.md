@@ -4013,6 +4013,31 @@ clearing as it fills, focus on the first) and hovering lists them
 Two tests (`assignment-notice`, `uat-2026-11-13`) fail only on a Windows
 checkout: they look for `\n` in files git writes CRLF; CI (LF) passes them.
 
+**Payments: under $500 needs nobody; a manager in band approves or pays**
+(Elise, 2026-11-17, no migration; UAT #36 restated, replaces 0153's maker ≠
+checker for payments; `paymentApprovalVerdict` in shared `paymentApproval.ts`,
+`mayPayDirectly` / `ownRequest` in `services/payments.ts`,
+`tests/payment-approval.test.ts`). Under `APPROVAL_NOT_NEEDED_UNDER` ($500) a
+request is approved as raised, whoever raises it — except Zelle / Cash App (a
+TL / ATL / AM unless the requester is one) and a payment over the NTE or the
+approved quote. From $500 the 0149 bands decide (ATL to $3,000, TL to $5,000,
+AM to $50,000, a super admin above; each level covers the ones below). A
+manager whose band covers the amount (`requesterMayApprove`: `payments`
+approve + the band + the Zelle / Cash App rule) approves it — their own
+included, logged `self_approved` — or **pays it straight from requested**
+without `payments/process` edit (the pay is the approval, `approved_by =
+COALESCE(…, payer)`, logged `approved_and_paid`). Above the NTE a requested
+payment is approved first (the AM's reason, unchanged), then paid. AP still
+pays only approved requests and never their own (D2). The under-$500 band
+keeps `{atl,tl,am}`: it names who may pay those directly.
+
+**No More menu in the work-order header** (Elise, 2026-11-17, no migration):
+`WorkOrderDetailPage` no longer passes `RecordActions` to `WoHeader`, so
+Pause / Resume, Complete service, Cancel work order and Reopen are offered
+to nobody (`RecordActions` stays in `RecordParts.tsx`, undrawn; the API
+routes are untouched). Reopen was the only way out of a Cancel… status
+(`REOPEN_REQUIRED`), so a cancelled work order now stays cancelled from the UI.
+
 **Markup on the Finances card** (Elise, 2026-11-16, no migration;
 `markupPct` in shared `moneyRules.ts`, `tests/finances-markup.test.ts`). The
 Finances card (`MoneyCard`) lost its NTE meter (the quote / invoiced against

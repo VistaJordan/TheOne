@@ -1942,14 +1942,13 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
             {verb(
               'Approve',
               'check',
-              canApprovePayments && nteApprover && !own(d.item.requested_by?.id) && !d.item.approve_hold,
+              // 2026-11-17: a manager may approve their own payment request.
+              canApprovePayments && nteApprover && !d.item.approve_hold,
               !canApprovePayments
                 ? 'Requires payment approval rights'
                 : !nteApprover
                   ? `Above the client NTE — ${nteWho} approves it`
-                  : own(d.item.requested_by?.id)
-                    ? OWN
-                    : (d.item.approve_hold ?? ''),
+                  : (d.item.approve_hold ?? ''),
               () => onDecide('approve'),
               'primary',
             )}
@@ -1974,17 +1973,14 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
             canApprovePayments &&
               !(d.item.tier && !d.item.tier.allowed) &&
               !row.held &&
-              !own(d.item.requested_by?.id) &&
               !d.item.money_hold,
             !canApprovePayments
               ? 'Requires payment approval rights'
               : d.item.tier && !d.item.tier.allowed
                 ? `${d.item.tier.label}: needs a role allowed for this amount`
-                : own(d.item.requested_by?.id)
-                  ? OWN
-                  : row.held
-                    ? NTE_HOLD
-                    : (d.item.money_hold ?? NTE_HOLD),
+                : row.held
+                  ? NTE_HOLD
+                  : (d.item.money_hold ?? NTE_HOLD),
             () => onDecide('approve'),
             'primary',
           )}

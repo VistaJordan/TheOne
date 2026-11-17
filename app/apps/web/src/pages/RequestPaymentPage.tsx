@@ -838,7 +838,7 @@ export function RequestPayment({
                 {submitted && (
                   <>
                     <Icon name="check-circle" size={12} />
-                    {submitted.auto_approved ? 'Submitted · approved as requested (you may approve this amount) · with AP to pay' : 'Submitted · in the AP queue'}
+                    {submitted.auto_approved ? 'Submitted · approved as requested · with AP to pay' : 'Submitted · in the AP queue'}
                     {submitted.needs_w9 ? ' · W9 needed' : ''}
                   </>
                 )}

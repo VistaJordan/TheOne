@@ -63,8 +63,8 @@ describe('Zelle and Cash App always ask a manager', () => {
     expect(MANAGER_APPROVAL_METHODS).toEqual(['zelle', 'cashapp']);
     expect(paymentApprovalVerdict('om', 50, 'zelle').needed).toBe(true);
     expect(paymentApprovalVerdict('om', 50, 'cashapp').needed).toBe(true);
-    // UAT #33: a small one waits too, unless its requester clears it.
-    expect(paymentApprovalVerdict('om', 50, 'ach').needed).toBe(true);
+    // 2026-11-17: under $500 by any other method needs nobody's approval.
+    expect(paymentApprovalVerdict('om', 50, 'ach').needed).toBe(false);
     expect(paymentApprovalVerdict('tl', 50, 'zelle', true).needed).toBe(false);
     expect(needsManagerForMethod('Zelle')).toBe(true);
   });

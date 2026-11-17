@@ -20,17 +20,35 @@ import { NO_APPROVAL_STATUS_NAMES, statusMoveNeedsNoApproval } from '../packages
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
-describe('paymentApprovalVerdict — maker ≠ checker unless the maker clears it (UAT #33)', () => {
+describe('paymentApprovalVerdict — under $500 needs nobody; above it the band (2026-11-17)', () => {
   it.each(['om_probation', 'om', 'senior_om', 'tl', 'atl', 'am', 'admin', 'oa', 'ar', 'ap', null, undefined])(
-    '%s: a small request waits for a second person unless the requester clears it',
+    '%s: under $500 is approved as raised; $500 and over waits unless the requester clears it',
     (role) => {
-      expect(paymentApprovalVerdict(role, 0).needed).toBe(true);
-      expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER - 0.01).needed).toBe(true);
+      expect(paymentApprovalVerdict(role, 0).needed).toBe(false);
+      expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER - 0.01, 'ach').needed).toBe(false);
+      expect(paymentApprovalVerdict(role, PAYMENT_AUTO_APPROVE_UNDER).needed).toBe(true);
       expect(paymentApprovalVerdict(role, 3_500).needed).toBe(true);
-      expect(paymentApprovalVerdict(role, 100, 'ach', true).needed).toBe(false);
       expect(paymentApprovalVerdict(role, 3_500, 'ach', true).needed).toBe(false);
     },
   );
+
+  it('Zelle / Cash App under $500 still waits for a manager unless the requester is one', () => {
+    expect(paymentApprovalVerdict('om', 100, 'zelle').needed).toBe(true);
+    expect(paymentApprovalVerdict('om', 100, 'cashapp').needed).toBe(true);
+    expect(paymentApprovalVerdict('atl', 100, 'zelle', true).needed).toBe(false);
+  });
+
+  it('a manager in band pays directly, from requested, their own included; AP still needs approved', () => {
+    const src = read('apps/api/src/services/payments.ts');
+    const fn = src.slice(src.indexOf('export async function payPaymentRequest('));
+    const body = fn.slice(0, fn.indexOf('export async function rejectPaymentRequest('));
+    expect(body).toContain('const manager = await mayPayDirectly(row, actor);');
+    expect(body).toContain("if (!manager) assertCanProcess(actor, 'Paying');");
+    expect(body).toContain("manager ? ['requested', 'approved', 'sent_to_yoda'] : ['approved', 'sent_to_yoda']");
+    expect(body).toContain('manager ? ownRequest(row, actor) : assertNotOwnRequest(row, actor, \'pay\')');
+    expect(body).toContain('.aboveNte');
+    expect(body.indexOf('assertPaymentNotHeld(')).toBeLessThan(body.indexOf('setStatus('));
+  });
 
   it('never auto-approves a nonsense amount', () => {
     expect(paymentApprovalVerdict('om', Number.NaN, null, true).needed).toBe(true);

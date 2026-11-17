@@ -146,9 +146,25 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
   const nteApproverLock = mayApproveOverNtePayment(actingAs?.role, actingAs?.is_super_admin === true, Number(item.amount))
     ? null
     : `Above the client NTE — ${overNteApproverLabel(Number(item.amount))} approves it`;
+  // 2026-11-17 (Elise): a manager whose band covers the amount approves or
+  // pays it themselves — their own request included — without AP's grant
+  // (the API's mayPayDirectly). `tier.allowed` is that band (and the
+  // Zelle / Cash App rule) read for this viewer.
+  const bandManager = canApprove && item.tier != null && item.tier.allowed;
   const approveLocked = aboveNte
-    ? approveLock ?? nteApproverLock ?? ownLock ?? item.approve_hold
-    : approveLock ?? tierLock ?? ownLock ?? (hold ? HOLD : null) ?? moneyHold;
+    ? approveLock ?? nteApproverLock ?? item.approve_hold
+    : approveLock ?? tierLock ?? (hold ? HOLD : null) ?? moneyHold;
+  const payLocked = bandManager
+    ? (item.status === 'requested' && aboveNte
+        ? 'Above the client NTE — approve it with the reason first, then pay it'
+        : null) ??
+      (hold ? HOLD : null) ??
+      moneyHold
+    : apLock ??
+      (item.status === 'requested' ? 'Approve the request first — paying needs an approved request' : null) ??
+      ownLock ??
+      (hold ? HOLD : null) ??
+      moneyHold;
 
   return (
     <div className={`pay-actions${compact ? ' is-compact' : ''}`}>
@@ -167,16 +183,15 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
             btn('Approve', 'check', () => (aboveNte ? setSheet(sheet === 'nte' ? null : 'nte') : approve.mutate()), {
               locked: approveLocked,
             })}
-          {/* 0083 (#4): Pay only once a second person approved the request. */}
+          {/* AP pays an approved request; a manager within their band pays it
+              straight away (2026-11-17), which approves it too. */}
           {open && btn('Mark paid', 'dollar', () => pay.mutate(), {
             primary: true,
-            locked:
-              apLock ??
-              (item.status === 'requested' ? 'Approve the request first — paying needs an approved request' : null) ??
-              ownLock ??
-              (hold ? HOLD : null) ??
-              moneyHold,
-            title: 'Yoda “Verify” — stamps the payer and rolls the amount into the WO cost',
+            locked: payLocked,
+            title:
+              bandManager && item.status === 'requested'
+                ? 'Approve and pay in one step — stamps you as approver and payer and rolls the amount into the WO cost'
+                : 'Yoda “Verify” — stamps the payer and rolls the amount into the WO cost',
           })}
           {open && btn('Reject', 'x', () => setSheet(sheet === 'reject' ? null : 'reject'), { danger: true, locked: approveLock ?? (aboveNte ? nteApproverLock : tierLock) })}
           {item.status !== 'paid' && btn('Change method', 'swap', () => setSheet(sheet === 'method' ? null : 'method'), { locked: apLock })}

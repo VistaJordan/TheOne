@@ -392,6 +392,21 @@ async function requesterMayApprove(actor: ActingPrincipal, amount: number, metho
   return tierAllows(tier, actor.role, actor.isSuperAdmin);
 }
 
+/** 2026-11-17 (Elise): a manager whose band covers the amount may approve
+    or PAY the request themselves — their own included — without AP's
+    process grant: ATL to $3,000, TL to $5,000, AM to $50,000 (each level
+    covers the ones below), Zelle / Cash App a TL / ATL / AM. The same test
+    as `requesterMayApprove`, read for the row. */
+async function mayPayDirectly(row: PaymentRow, actor: ActingPrincipal): Promise<boolean> {
+  return requesterMayApprove(actor, Number(row.amount ?? 0), row.method);
+}
+
+/** A manager deciding a request they raised: allowed within their band
+    since 2026-11-17, and logged `self_approved` so the audit shows it. */
+function ownRequest(row: PaymentRow, actor: ActingPrincipal): boolean {
+  return row.requested_by_id != null && row.requested_by_id === actor.id;
+}
+
 async function withTiers(opts: MapOpts): Promise<MapOpts> {
   if (!opts.viewer || opts.tiers) return opts;
   return { ...opts, tiers: await listApprovalTiers() };
@@ -1610,7 +1625,9 @@ export async function approvePaymentRequest(
 ): Promise<PaymentRequest> {
   assertCanApprove(actor, 'approve');
   const row = await loadRow(id);
-  const selfApproved = assertNotOwnRequest(row, actor, 'approve');
+  // 2026-11-17 (Elise): a manager approves their own request when the
+  // amount is in their band (asked below); logged self_approved.
+  const selfApproved = ownRequest(row, actor);
   const { amount, nte, cost, aboveNte } = await nteFacts(row);
 
   if (!aboveNte) {
@@ -1656,25 +1673,39 @@ export async function approvePaymentRequest(
 }
 
 /**
- * approved → paid (payments/process:edit) — Yoda VerifyPayment: stamps the
- * payer, rolls the amount into the WO's Cost field and queues the
- * confirmation post. 0083 (#4): only from approved — paying straight from
- * requested is retired, so every dollar out had a second person's yes — and
- * never by the requester (D2). Rule 1.5.2 and the 0083 holds apply.
+ * → paid — Yoda VerifyPayment: stamps the payer, rolls the amount into the
+ * WO's Cost field and queues the confirmation post. Two ways in:
+ *   - AP (payments/process:edit) pays an APPROVED request, never their own
+ *     (D2, 0083 #4);
+ *   - since 2026-11-17 (Elise) a manager whose band covers the amount
+ *     (`mayPayDirectly`) pays it from requested or approved, their own
+ *     included — paying is the approval. Above the client NTE the request
+ *     is approved first (the AM's reason), so a requested one is refused.
+ * Rule 1.5.2 and the 0083 holds apply to both.
  */
 export async function payPaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
-  assertCanProcess(actor, 'Paying');
   const row = await loadRow(id);
+  const manager = await mayPayDirectly(row, actor);
+  if (!manager) assertCanProcess(actor, 'Paying');
   if (row.status === 'requested') {
-    throw conflict('Approve this payment request before paying it', {
-      code: 'PAYMENT_NOT_APPROVED',
-      payment_request_id: id,
-    });
+    if (!manager) {
+      throw conflict('Approve this payment request before paying it', {
+        code: 'PAYMENT_NOT_APPROVED',
+        payment_request_id: id,
+      });
+    }
+    if ((await nteFacts(row)).aboveNte) {
+      throw conflict('This payment is above the client NTE — approve it with the reason first, then pay it', {
+        code: 'PAYMENT_NOT_APPROVED',
+        payment_request_id: id,
+      });
+    }
   }
-  const selfApproved = assertNotOwnRequest(row, actor, 'pay');
+  const selfApproved = manager ? ownRequest(row, actor) : assertNotOwnRequest(row, actor, 'pay');
   await assertPaymentNotHeld(row, actor, 'Paying this request');
   const amount = Number(row.amount ?? 0);
-  return setStatus(row, ['approved', 'sent_to_yoda'], 'paid', 'payment_paid', actor,
+  const from: PaymentRequestStatus[] = manager ? ['requested', 'approved', 'sent_to_yoda'] : ['approved', 'sent_to_yoda'];
+  return setStatus(row, from, 'paid', 'payment_paid', actor,
     'approved_by = COALESCE(approved_by, $3), approved_at = COALESCE(approved_at, now()), paid_by = $3, paid_at = now()', [actor.id],
     async (tx) => {
       await enqueueOutbox(tx, 'payment.paid', 'payment_request', id, {
@@ -1683,7 +1714,7 @@ export async function payPaymentRequest(id: string, actor: ActingPrincipal): Pro
         paid_by: actor.name,
       });
       return rollCost(tx, row.task_id, actor.id, amount);
-    }, selfApproved);
+    }, selfApproved, row.status === 'requested' ? { approved_and_paid: true } : {});
 }
 
 /**

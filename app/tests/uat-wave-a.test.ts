@@ -63,7 +63,8 @@ describe('D2 · maker ≠ checker (selfApprovalVerdict)', () => {
   });
 
   it.each([
-    ['payments approve', payments, 'export async function approvePaymentRequest('],
+    // 2026-11-17 (Elise): payment approve no longer refuses its maker — a
+    // manager decides their own request within their band; AP's Pay still does.
     ['payments pay', payments, 'export async function payPaymentRequest('],
     ['approval tasks decide', approvals, 'async function decide('],
     ['invoice send', invoices, 'async function move('],
@@ -90,12 +91,11 @@ describe('D2 · maker ≠ checker (selfApprovalVerdict)', () => {
 });
 
 describe('#4 / #25 · payments: pay only from approved, one winner per move', () => {
-  it('pay refuses a request that was never approved and moves only from approved', () => {
+  it('AP pays only an approved request; a manager in band may pay from requested (2026-11-17)', () => {
     const body = fn(payments, 'export async function payPaymentRequest(');
     expect(body).toContain("row.status === 'requested'");
     expect(body).toContain('PAYMENT_NOT_APPROVED');
-    expect(body).toContain("setStatus(row, ['approved', 'sent_to_yoda'], 'paid'");
-    expect(body).not.toContain("['requested', 'approved', 'sent_to_yoda'], 'paid'");
+    expect(body).toContain("manager ? ['requested', 'approved', 'sent_to_yoda'] : ['approved', 'sent_to_yoda']");
   });
 
   it('every status move is one conditional UPDATE on the status it was read in', () => {
