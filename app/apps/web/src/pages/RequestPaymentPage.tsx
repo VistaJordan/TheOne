@@ -39,7 +39,7 @@ import {
   usPhoneProblem,
   type PaymentPurposeCode,
 } from '@theone/shared';
-import { PAYMENTS_PAGE_PERM_KEY } from '@theone/shared';
+import { MONEY_MAX, PAYMENTS_PAGE_PERM_KEY } from '@theone/shared';
 import { useCan } from '../auth/AuthProvider';
 import { AppShell } from '../components/AppShell';
 import { CopyButton } from '../components/CopyButton';
@@ -206,8 +206,11 @@ export function RequestPayment({
   const methodHint = PAYMENT_METHODS.find((m) => m.value === method)?.hint ?? '';
 
   const parsedAmount = parseMoney(amount);
-  const amountValid = !Number.isNaN(parsedAmount);
-  const amountError = amountTouched && !amountValid;
+  // The API takes at most MONEY_MAX ($9,999,999.99); say so here rather than
+  // let the submit come back with a refusal about the format.
+  const amountTooLarge = !Number.isNaN(parsedAmount) && parsedAmount > MONEY_MAX;
+  const amountValid = !Number.isNaN(parsedAmount) && !amountTooLarge;
+  const amountError = (amountTouched || amountTooLarge) && !amountValid;
   const purposeValid = purpose !== '';
   // What the server will store for it — shown so a repeat is no surprise.
   const nextCode = purpose === '' ? null : nextPurpose(purpose, items.map((p) => p.purpose));
@@ -240,7 +243,9 @@ export function RequestPayment({
         : !purposeValid
           ? 'Pick the purpose to submit'
           : !amountValid
-            ? 'Enter an amount to submit'
+            ? amountTooLarge
+              ? `The amount can be at most $${MONEY_MAX.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+              : 'Enter an amount to submit'
             : 'Complete the payout details to submit';
 
   // 0122: one key per request being filled in, renewed by Request another, so
@@ -619,7 +624,9 @@ export function RequestPayment({
                     {amountError && (
                       <p className="ferr" id="amount-err">
                         <Icon name="alert-circle" size={12} />
-                        Enter an amount greater than $0
+                        {amountTooLarge
+                          ? `The amount can be at most $${MONEY_MAX.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                          : 'Enter an amount greater than $0'}
                       </p>
                     )}
                   </div>

@@ -57,7 +57,20 @@ const RAW_MONEY_RE = new RegExp(
   'g',
 );
 
+// A well-formed amount with more than seven whole digits is refused for its
+// size, and the sentence says so (it used to blame the format).
+const TOO_LARGE_RE = /^\d{8,}(?:\.\d{1,2})?$/;
+const MAX_TEXT = '9,999,999.99';
+
 function reject(field: string, token: string, min: number): never {
+  const bare = token.startsWith('"') && token.endsWith('"') ? token.slice(1, -1).trim() : token;
+  if (TOO_LARGE_RE.test(bare)) {
+    throw badRequest(`The ${field.replace(/_/g, ' ')} can be at most ${MAX_TEXT}`, {
+      field,
+      received: token.slice(0, 40),
+      max: MAX_TEXT,
+    });
+  }
   throw badRequest(
     `"${field}" must be a plain amount of at least ${min.toFixed(2)} — digits with at most two decimals, no sign, comma or exponent`,
     { field, received: token.slice(0, 40), pattern: MONEY_RE.source, min },
@@ -94,6 +107,10 @@ export function zMoney(label: string, min: number) {
     .union([z.number(), z.string()])
     .superRefine((v, ctx) => {
       const text = (typeof v === 'number' ? String(v) : v).trim();
+      if (TOO_LARGE_RE.test(text)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${label} can be at most ${MAX_TEXT}` });
+        return;
+      }
       if (!MONEY_RE.test(text)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
