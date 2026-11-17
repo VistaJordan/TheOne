@@ -27,21 +27,48 @@ import { COMPLETION_ASSIGNEE_KEY, SUPPORT_TRAINEE_KEY, EMERGENCY_KEY, ESCALATED_
 import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNoDisabledAssignees, assertPenaltyDescription, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
-import { PARTS_REQUIRED_KEY, isPopRequestText, parsePopRequest, popRequestMissing, popRequestMissingSentence } from '@theone/shared';
+import {
+  PARTS_REQUIRED_KEY,
+  POP_SCREENSHOT_NEEDS_PICTURE,
+  isPopRequestText,
+  parsePopRequest,
+  popRequestMissing,
+  popRequestMissingSentence,
+  popRequestProblems,
+} from '@theone/shared';
 
 /** Elise, 2026-11-17: a POP request (Parts Required written in the form's
-    numbered lines) is saved only with every line but Specs filled. A
-    free-text list, or clearing the field, is not asked. A rule's own write
-    is not asked either. */
-function assertPopRequestComplete(jsonKey: string, value: unknown): void {
+    numbered lines) is saved only with every line but Specs filled, QTY a
+    whole number and the phone a US number — and, on an existing work
+    order, a picture behind the screenshot line (an image on the work order,
+    not declined). A free-text list, or clearing the field, is not asked. A
+    rule's own write is not asked either. */
+async function assertPopRequestComplete(jsonKey: string, value: unknown, taskId: string | null): Promise<void> {
   if (jsonKey !== PARTS_REQUIRED_KEY || !isPopRequestText(value)) return;
-  const missing = popRequestMissing(parsePopRequest(value));
-  if (missing.length === 0) return;
-  throw new ApiError('BAD_REQUEST', popRequestMissingSentence(missing), {
-    code: VALIDATION_CODE,
-    field: PARTS_REQUIRED_KEY,
-    missing,
-  });
+  const r = parsePopRequest(value);
+  const missing = popRequestMissing(r);
+  if (missing.length > 0) {
+    throw new ApiError('BAD_REQUEST', popRequestMissingSentence(missing), {
+      code: VALIDATION_CODE,
+      field: PARTS_REQUIRED_KEY,
+      missing,
+    });
+  }
+  const problem = popRequestProblems(r)[0];
+  if (problem) {
+    throw new ApiError('BAD_REQUEST', problem.message, { code: VALIDATION_CODE, field: PARTS_REQUIRED_KEY, line: problem.key });
+  }
+  if (!taskId) return;
+  const pic = await query<{ ok: boolean }>(
+    `SELECT true AS ok FROM attachment
+      WHERE task_id = $1 AND storage_key IS NOT NULL AND content_type LIKE 'image/%'
+        AND review_status IS DISTINCT FROM 'declined'
+      LIMIT 1`,
+    [taskId],
+  );
+  if (!pic.rows[0]) {
+    throw new ApiError('BAD_REQUEST', POP_SCREENSHOT_NEEDS_PICTURE, { code: VALIDATION_CODE, field: PARTS_REQUIRED_KEY, line: 'screenshot' });
+  }
 }
 
 // ── Promoted-column mirrors ──────────────────────────────────────────────────
@@ -143,7 +170,8 @@ export async function validateBagValues(bag: Record<string, unknown>): Promise<R
     // path — a new work order and a draft's Submit too.
     if (raw !== null && raw !== undefined && raw !== '') await assertMoneyNotLocked(['new'], [jsonKey]);
     const checked = await checkFieldValue(f, coerceValue(f, raw));
-    assertPopRequestComplete(jsonKey, checked);
+    // A new work order has no files yet: the lines are asked, the picture not.
+    await assertPopRequestComplete(jsonKey, checked, null);
     if (checked !== null && (jsonKey === 'Client' || jsonKey === 'State' || f.subtype === 'dropdown')) out[jsonKey] = checked;
   }
   assertDateOrder(out, Object.keys(out));
@@ -189,7 +217,6 @@ export async function updateWorkOrderFields(
     // record, an option, a state code, no negative money, no date before
     // 2000 — and stored in the record's / option's own spelling.
     const value = await checkFieldValue(f, coerceValue(f, raw));
-    if (!auto) assertPopRequestComplete(f.jsonKey as string, value);
     patch.push({ jsonKey: f.jsonKey as string, value, resolved: f });
   }
   // L3 (Wave D): a history the system keeps is never typed, super admins included.
@@ -211,6 +238,9 @@ export async function updateWorkOrderFields(
   );
   if (!row.rows[0]) throw new ApiError('NOT_FOUND', 'Work order not found');
   const task = row.rows[0];
+  if (!auto) {
+    for (const p of patch) await assertPopRequestComplete(p.jsonKey, p.value, task.id);
+  }
   // Reads that need no lock run on the pool first; the bag is read FOR NO KEY UPDATE inside the transaction.
   const log: TaskChange[] = [];
   // City / State / Zip Code read off an address this save wrote, logged

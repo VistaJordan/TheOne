@@ -13,6 +13,8 @@
 // that is not one of the ten lines (a list typed before the form existed) is
 // kept as notes after them, never dropped. Pure: no I/O.
 
+import { usPhoneProblem } from './vendors';
+
 export type PopRequestKey =
   | 'pop'
   | 'link'
@@ -60,6 +62,30 @@ export function isPopRequestText(text: unknown): boolean {
   return POP_REQUEST_LINES.some((l) => r.values[l.key].trim() !== '') ||
     /^\s*\d{1,2}\s*-\s*POP\s*:/im.test(String(text));
 }
+
+/** Elise, 2026-11-17: QTY is a whole number, the phone a US number. */
+export function popQtyProblem(raw: string): string | null {
+  const t = raw.trim();
+  if (t === '') return null;
+  return /^\d{1,6}$/.test(t) && Number(t) > 0 ? null : 'QTY takes a whole number';
+}
+
+/** Each filled line that is not in its shape, as {key, message}. Blanks are
+    `popRequestMissing`'s; the screenshot's picture is asked by the caller
+    (it needs the work order's files). */
+export function popRequestProblems(r: PopRequest): { key: PopRequestKey; message: string }[] {
+  const out: { key: PopRequestKey; message: string }[] = [];
+  const qty = popQtyProblem(r.values.qty);
+  if (qty) out.push({ key: 'qty', message: qty });
+  if (r.values.phone.trim() !== '') {
+    const phone = usPhoneProblem(r.values.phone);
+    if (phone) out.push({ key: 'phone', message: phone });
+  }
+  return out;
+}
+
+/** The sentence for a screenshot line with no picture behind it. */
+export const POP_SCREENSHOT_NEEDS_PICTURE = 'Attach the screenshot with Upload screenshot';
 
 /** The sentence for a POP request saved with required lines blank. */
 export function popRequestMissingSentence(missing: readonly string[]): string {

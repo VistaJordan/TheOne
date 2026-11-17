@@ -9,7 +9,9 @@ import {
   formatPopRequest,
   isPopRequestText,
   parsePopRequest,
+  popQtyProblem,
   popRequestMissing,
+  popRequestProblems,
 } from '../packages/shared/src/popRequest';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -43,13 +45,29 @@ describe('POP request required lines', () => {
     expect(isPopRequestText(null)).toBe(false);
   });
 
-  it('the API refuses an incomplete one; the form asks first', () => {
+  it('QTY is a whole number and the phone a US number', () => {
+    const r = full();
+    r.values.qty = 'tes';
+    r.values.phone = '555';
+    expect(popRequestProblems(r).map((p) => p.key)).toEqual(['qty', 'phone']);
+    r.values.qty = '12';
+    r.values.phone = '(409) 555-0143';
+    expect(popRequestProblems(r)).toEqual([]);
+    expect(popQtyProblem('0')).not.toBeNull();
+    expect(popQtyProblem('1.5')).not.toBeNull();
+  });
+
+  it('the API refuses an incomplete one and a screenshot with no picture; the form asks first', () => {
     const api = read('apps/api/src/services/woFieldValues.ts');
-    expect(api).toContain('function assertPopRequestComplete(');
-    expect(api).toContain('if (!auto) assertPopRequestComplete(');
-    expect(api).toContain('assertPopRequestComplete(jsonKey, checked);');
+    expect(api).toContain('async function assertPopRequestComplete(');
+    expect(api).toContain('for (const p of patch) await assertPopRequestComplete(p.jsonKey, p.value, task.id);');
+    expect(api).toContain('await assertPopRequestComplete(jsonKey, checked, null);');
+    expect(api).toContain("content_type LIKE 'image/%'");
+    expect(api).toContain('POP_SCREENSHOT_NEEDS_PICTURE');
     const form = read('apps/web/src/components/wo/PopRequestBlock.tsx');
     expect(form).toContain('const missing = popRequestMissing(draft);');
+    expect(form).toContain('const problems = popRequestProblems(draft);');
+    expect(form).toContain("const shotOk = shotUploaded || saved.values.screenshot.trim() !== '';");
     expect(form).toContain('setTriedSave(true);');
   });
 });

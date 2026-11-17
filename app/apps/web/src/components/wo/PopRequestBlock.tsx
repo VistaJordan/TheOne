@@ -6,8 +6,12 @@ import {
   formatPopRequest,
   parsePopRequest,
   popRequestEmpty,
+  POP_SCREENSHOT_NEEDS_PICTURE,
+  formatUsPhone,
   popRequestMissing,
   popRequestMissingSentence,
+  popRequestProblems,
+  usPhoneInputValue,
   type PopRequest,
   type PopRequestKey,
 } from '@theone/shared';
@@ -46,14 +50,24 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
   // Elise, 2026-11-17: every line but Specs is required; the boxes paint red
   // only after a Save attempt, and clear as they are filled.
   const [triedSave, setTriedSave] = useState(false);
+  // Elise, 2026-11-17: line 10 needs a picture. Typing on the line is fine,
+  // but Save waits for one uploaded with Upload screenshot in this edit — or
+  // a screenshot line already saved (it was asked then; the API still checks
+  // the work order holds an image).
+  const [shotUploaded, setShotUploaded] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const save = useWoFieldSave(wo.id, () => {
     setDraft(null);
     setTriedSave(false);
+    setShotUploaded(false);
   });
 
   const setLine = (key: PopRequestKey, value: string) =>
     setDraft((d) => (d ? { ...d, values: { ...d.values, [key]: value } } : d));
+  /** What a box holds after a keystroke: QTY digits only, the phone shaped
+      as a US number as it is typed. */
+  const typed = (key: PopRequestKey, value: string) =>
+    key === 'qty' ? value.replace(/\D/g, '').slice(0, 6) : key === 'phone' ? usPhoneInputValue(value) : value;
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
@@ -67,7 +81,13 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
         data: prepared.data,
         client_visible: false,
       });
-      setLine('screenshot', `${res.item.file_name} (on the Drive tab)`);
+      setDraft((d) => {
+        if (!d) return d;
+        const note = `${res.item.file_name} (on the Drive tab)`;
+        const cur = d.values.screenshot.trim();
+        return { ...d, values: { ...d.values, screenshot: cur ? `${cur} · ${note}` : note } };
+      });
+      setShotUploaded(true);
       void qc.invalidateQueries({ queryKey: ['wo-attachments', wo.id] });
       void qc.invalidateQueries({ queryKey: ['wo-activity', wo.id] });
     } catch (err) {
@@ -81,6 +101,12 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
   if (draft) {
     const busy = save.isPending || uploading;
     const missing = popRequestMissing(draft);
+    const problems = popRequestProblems(draft);
+    const shotOk = shotUploaded || saved.values.screenshot.trim() !== '';
+    const lineError = (key: PopRequestKey): string | null =>
+      problems.find((p) => p.key === key)?.message ??
+      (key === 'screenshot' && !shotOk ? POP_SCREENSHOT_NEEDS_PICTURE : null);
+    const blocked = missing.length > 0 || problems.length > 0 || !shotOk;
     return (
       <form
         className="pop-form"
@@ -88,20 +114,25 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          if (missing.length > 0) {
+          if (blocked) {
             setTriedSave(true);
-            const first = POP_REQUEST_LINES.find((l) => l.required && draft.values[l.key].trim() === '');
+            const first = POP_REQUEST_LINES.find(
+              (l) => (l.required && draft.values[l.key].trim() === '') || lineError(l.key) !== null,
+            );
             if (first) document.getElementById(`pop-${wo.id}-${first.key}`)?.focus();
             return;
           }
-          save.mutate({ key: FIELD_KEY, value: formatPopRequest(draft) });
+          const phone = formatUsPhone(draft.values.phone) ?? draft.values.phone;
+          save.mutate({ key: FIELD_KEY, value: formatPopRequest({ ...draft, values: { ...draft.values, phone } }) });
         }}
       >
         <div className="pop-grid">
           {POP_REQUEST_LINES.map((l, i) => {
             const id = `pop-${wo.id}-${l.key}`;
             const value = draft.values[l.key];
-            const isMissing = triedSave && l.required && value.trim() === '';
+            const blank = l.required && value.trim() === '';
+            const err = triedSave && !blank ? lineError(l.key) : null;
+            const isMissing = triedSave && (blank || err !== null);
             return (
               <div key={l.key} className={`field${LONG.has(l.key) ? ' is-wide' : ''}${isMissing ? ' is-error' : ''}`}>
                 <label className="lbl" htmlFor={id}>
@@ -118,7 +149,12 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
                     <input id={id} className="fld" value={value} onChange={(e) => setLine(l.key, e.target.value)} disabled={busy} />
                     {canUpload && (
                       <>
-                        <button type="button" className="btn btn-sm" onClick={() => fileInput.current?.click()} disabled={busy}>
+                        <button
+                          type="button"
+                          className={`btn btn-sm${triedSave && !shotOk ? ' btn-primary' : ''}`}
+                          onClick={() => fileInput.current?.click()}
+                          disabled={busy}
+                        >
                           <Icon name="upload" size={12} /> {uploading ? 'Uploading…' : 'Upload screenshot'}
                         </button>
                         <input
@@ -139,11 +175,13 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
                     className="fld"
                     type={l.key === 'phone' ? 'tel' : l.key === 'link' ? 'url' : 'text'}
                     inputMode={l.key === 'qty' ? 'numeric' : l.key === 'estimated_total_cost' ? 'decimal' : undefined}
+                    placeholder={l.key === 'phone' ? '(409) 555-0143' : undefined}
                     value={value}
-                    onChange={(e) => setLine(l.key, e.target.value)}
+                    onChange={(e) => setLine(l.key, typed(l.key, e.target.value))}
                     disabled={busy}
                   />
                 )}
+                {err && <span className="pop-err">{err}</span>}
               </div>
             );
           })}

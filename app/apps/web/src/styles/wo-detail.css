@@ -2031,6 +2031,7 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .pop-shot .fld { flex: 1; min-width: 0; }
 .pop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .pop-grid .lbl .req { color: var(--danger); }
+.pop-grid .pop-err { color: var(--danger); font-size: 12px; }
 .pop-grid .field.is-error .fld {
   border-color: var(--danger);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 14%, transparent);
