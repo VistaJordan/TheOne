@@ -29,20 +29,42 @@ export interface PopRequestLine {
   key: PopRequestKey;
   /** As the team writes it on the numbered line. */
   label: string;
+  /** Elise, 2026-11-17: every line but "Specs if Applicable" is required. */
+  required: boolean;
 }
 
 export const POP_REQUEST_LINES: readonly PopRequestLine[] = [
-  { key: 'pop', label: 'POP' },
-  { key: 'link', label: 'Link' },
-  { key: 'qty', label: 'QTY' },
-  { key: 'estimated_total_cost', label: 'Estimated Total Cost' },
-  { key: 'specs', label: 'Specs if Applicable' },
-  { key: 'delivery_address', label: 'Delivery Address' },
-  { key: 'store_or_tech', label: "Store or Tech's name" },
-  { key: 'phone', label: 'Phone Number' },
-  { key: 'full_address', label: 'Full Address' },
-  { key: 'screenshot', label: 'Screenshot reference' },
+  { key: 'pop', label: 'POP', required: true },
+  { key: 'link', label: 'Link', required: true },
+  { key: 'qty', label: 'QTY', required: true },
+  { key: 'estimated_total_cost', label: 'Estimated Total Cost', required: true },
+  { key: 'specs', label: 'Specs if Applicable', required: false },
+  { key: 'delivery_address', label: 'Delivery Address', required: true },
+  { key: 'store_or_tech', label: "Store or Tech's name", required: true },
+  { key: 'phone', label: 'Phone Number', required: true },
+  { key: 'full_address', label: 'Full Address', required: true },
+  { key: 'screenshot', label: 'Screenshot reference', required: true },
 ];
+
+/** The required lines left blank, in order (labels). Empty = complete. */
+export function popRequestMissing(r: PopRequest): string[] {
+  return POP_REQUEST_LINES.filter((l) => l.required && r.values[l.key].trim() === '').map((l) => l.label);
+}
+
+/** Does this stored text use the POP form (at least one of its numbered
+    lines)? A free-text list typed before the form existed does not, and is
+    not held to the required lines. */
+export function isPopRequestText(text: unknown): boolean {
+  if (text === null || text === undefined) return false;
+  const r = parsePopRequest(text);
+  return POP_REQUEST_LINES.some((l) => r.values[l.key].trim() !== '') ||
+    /^\s*\d{1,2}\s*-\s*POP\s*:/im.test(String(text));
+}
+
+/** The sentence for a POP request saved with required lines blank. */
+export function popRequestMissingSentence(missing: readonly string[]): string {
+  return `The POP request needs: ${missing.join(', ')}`;
+}
 
 export type PopRequestValues = Record<PopRequestKey, string>;
 

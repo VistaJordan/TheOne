@@ -6,6 +6,8 @@ import {
   formatPopRequest,
   parsePopRequest,
   popRequestEmpty,
+  popRequestMissing,
+  popRequestMissingSentence,
   type PopRequest,
   type PopRequestKey,
 } from '@theone/shared';
@@ -41,8 +43,14 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
   const [draft, setDraft] = useState<PopRequest | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Elise, 2026-11-17: every line but Specs is required; the boxes paint red
+  // only after a Save attempt, and clear as they are filled.
+  const [triedSave, setTriedSave] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const save = useWoFieldSave(wo.id, () => setDraft(null));
+  const save = useWoFieldSave(wo.id, () => {
+    setDraft(null);
+    setTriedSave(false);
+  });
 
   const setLine = (key: PopRequestKey, value: string) =>
     setDraft((d) => (d ? { ...d, values: { ...d.values, [key]: value } } : d));
@@ -72,12 +80,20 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
 
   if (draft) {
     const busy = save.isPending || uploading;
+    const missing = popRequestMissing(draft);
     return (
       <form
         className="pop-form"
         autoComplete="off"
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
+          if (missing.length > 0) {
+            setTriedSave(true);
+            const first = POP_REQUEST_LINES.find((l) => l.required && draft.values[l.key].trim() === '');
+            if (first) document.getElementById(`pop-${wo.id}-${first.key}`)?.focus();
+            return;
+          }
           save.mutate({ key: FIELD_KEY, value: formatPopRequest(draft) });
         }}
       >
@@ -85,9 +101,18 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
           {POP_REQUEST_LINES.map((l, i) => {
             const id = `pop-${wo.id}-${l.key}`;
             const value = draft.values[l.key];
+            const isMissing = triedSave && l.required && value.trim() === '';
             return (
-              <div key={l.key} className={`field${LONG.has(l.key) ? ' is-wide' : ''}`}>
-                <label className="lbl" htmlFor={id}>{i + 1}- {l.label}</label>
+              <div key={l.key} className={`field${LONG.has(l.key) ? ' is-wide' : ''}${isMissing ? ' is-error' : ''}`}>
+                <label className="lbl" htmlFor={id}>
+                  {i + 1}- {l.label}
+                  {l.required && (
+                    <>
+                      {' '}<span className="req" aria-hidden="true">*</span>
+                      <span className="sr">(required)</span>
+                    </>
+                  )}
+                </label>
                 {l.key === 'screenshot' ? (
                   <div className="pop-shot">
                     <input id={id} className="fld" value={value} onChange={(e) => setLine(l.key, e.target.value)} disabled={busy} />
@@ -136,9 +161,12 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
             </div>
           )}
         </div>
+        {triedSave && missing.length > 0 && (
+          <p className="ife-err" role="alert">{popRequestMissingSentence(missing)}</p>
+        )}
         {(save.error || uploadError) && <p className="ife-err" role="alert">{save.error ?? uploadError}</p>}
         <div className="pop-actions">
-          <button type="button" className="btn btn-sm" onClick={() => { setDraft(null); save.clearError(); setUploadError(null); }} disabled={busy}>
+          <button type="button" className="btn btn-sm" onClick={() => { setDraft(null); setTriedSave(false); save.clearError(); setUploadError(null); }} disabled={busy}>
             Cancel
           </button>
           <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>

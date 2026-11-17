@@ -27,6 +27,22 @@ import { COMPLETION_ASSIGNEE_KEY, SUPPORT_TRAINEE_KEY, EMERGENCY_KEY, ESCALATED_
 import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNoDisabledAssignees, assertPenaltyDescription, assertNotHistoryField, checkFieldValue } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
+import { PARTS_REQUIRED_KEY, isPopRequestText, parsePopRequest, popRequestMissing, popRequestMissingSentence } from '@theone/shared';
+
+/** Elise, 2026-11-17: a POP request (Parts Required written in the form's
+    numbered lines) is saved only with every line but Specs filled. A
+    free-text list, or clearing the field, is not asked. A rule's own write
+    is not asked either. */
+function assertPopRequestComplete(jsonKey: string, value: unknown): void {
+  if (jsonKey !== PARTS_REQUIRED_KEY || !isPopRequestText(value)) return;
+  const missing = popRequestMissing(parsePopRequest(value));
+  if (missing.length === 0) return;
+  throw new ApiError('BAD_REQUEST', popRequestMissingSentence(missing), {
+    code: VALIDATION_CODE,
+    field: PARTS_REQUIRED_KEY,
+    missing,
+  });
+}
 
 // ── Promoted-column mirrors ──────────────────────────────────────────────────
 // The map moved to woMirrors.ts (the automations engine reads it too). The
@@ -127,6 +143,7 @@ export async function validateBagValues(bag: Record<string, unknown>): Promise<R
     // path — a new work order and a draft's Submit too.
     if (raw !== null && raw !== undefined && raw !== '') await assertMoneyNotLocked(['new'], [jsonKey]);
     const checked = await checkFieldValue(f, coerceValue(f, raw));
+    assertPopRequestComplete(jsonKey, checked);
     if (checked !== null && (jsonKey === 'Client' || jsonKey === 'State' || f.subtype === 'dropdown')) out[jsonKey] = checked;
   }
   assertDateOrder(out, Object.keys(out));
@@ -171,7 +188,9 @@ export async function updateWorkOrderFields(
     // Wave D (M2 / #11): the value is checked for its type — a client
     // record, an option, a state code, no negative money, no date before
     // 2000 — and stored in the record's / option's own spelling.
-    patch.push({ jsonKey: f.jsonKey as string, value: await checkFieldValue(f, coerceValue(f, raw)), resolved: f });
+    const value = await checkFieldValue(f, coerceValue(f, raw));
+    if (!auto) assertPopRequestComplete(f.jsonKey as string, value);
+    patch.push({ jsonKey: f.jsonKey as string, value, resolved: f });
   }
   // L3 (Wave D): a history the system keeps is never typed, super admins included.
   assertNotHistoryField(
