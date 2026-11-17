@@ -52,3 +52,17 @@ describe('the API asks it before creating a vendor', () => {
     expect(src).toContain('[payeeName, newPayeePhone, actor.id]');
   });
 });
+
+describe("a client's Contact phone is a US number (Elise, 2026-11-17)", () => {
+  const api = readFileSync(resolve(__dirname, '../apps/api/src/services/portfolioExtras.ts'), 'utf8');
+  const web = readFileSync(resolve(__dirname, '../apps/web/src/pages/ClientsPage.tsx'), 'utf8');
+  it('the API checks it on create and on a changed phone, and stores it formatted', () => {
+    expect(api).toMatch(/function clientPhone\([^)]*\)[\s\S]*?usPhoneProblem\(t\)[\s\S]*?field: 'contact_phone'[\s\S]*?return formatUsPhone\(t\)/);
+    expect(api).toContain('input = { ...input, contact_phone: clientPhone(input.contact_phone) };');
+    expect(api).toMatch(/clean\(input\.contact_phone\) !== clean\(before\.contact_phone\)/);
+  });
+  it('the form shapes it as typed and says why it is refused', () => {
+    expect(web).toContain("set('contact_phone', usPhoneInputValue(e.target.value))");
+    expect(web).toMatch(/usPhoneProblem\(d\.contact_phone\)/);
+  });
+});

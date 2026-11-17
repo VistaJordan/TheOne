@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useLinkNav } from '../lib/linkNav';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CLIENT_PORTAL_TYPES, CLIENT_TEAM_HOUSE } from '@theone/shared';
+import { CLIENT_PORTAL_TYPES, CLIENT_TEAM_HOUSE, usPhoneInputValue, usPhoneProblem } from '@theone/shared';
 import type { ClientDetail, ClientInput, ClientsListResponse, ClientTeamInput } from '@theone/shared';
 import { ApiRequestError, createClient, deleteClient, getClient, getClientHistory, getClientTeams, getClientTeamsOverview, listClients, saveClientTeam, updateClient } from '../api/client';
 import { AppShell } from '../components/AppShell';
@@ -191,10 +191,15 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
   const [created, setCreated] = useState<ClientDetail | null>(null);
   const txt = (k: keyof Draft) => (d[k] as string).trim() || null;
   const inUse = Boolean(client && (client.work_orders > 0 || client.sites > 0));
+  // 2026-11-17 (Elise) · Contact phone is a US number; a phone stored before
+  // the rule is only checked once it is changed (the API does the same).
+  const phoneChanged = d.contact_phone.trim() !== (client?.contact_phone ?? '').trim();
+  const phoneProblem = d.contact_phone.trim() !== '' && phoneChanged ? usPhoneProblem(d.contact_phone) : null;
   const save = useMutation({
     mutationFn: () => {
       if (!d.name.trim()) throw new Error('The client needs a name.');
       if (!client && teamNamed && !team.billing_entity) throw new Error('Pick the Comp the account team is for.');
+      if (phoneProblem) throw new Error(`Contact phone: ${phoneProblem}`);
       // 2026-11-16 (Elise, UAT #12): a NEW client is added complete — every
       // field and its first account team (Notes stay optional).
       if (!client) {
@@ -279,7 +284,20 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
           )}
           {field('Code', <input className="fld mono" value={d.code} onChange={(e) => set('code', e.target.value)} />)}
           {field('Contact name', <input className="fld" value={d.contact_name} onChange={(e) => set('contact_name', e.target.value)} />)}
-          {field('Contact phone', <input className="fld" value={d.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} />)}
+          {field('Contact phone', (
+            <>
+              <input
+                className={`fld${phoneProblem ? ' is-err' : ''}`}
+                type="tel"
+                inputMode="numeric"
+                value={d.contact_phone}
+                placeholder="(000) 000-0000"
+                aria-invalid={phoneProblem ? true : undefined}
+                onChange={(e) => set('contact_phone', usPhoneInputValue(e.target.value))}
+              />
+              {phoneProblem && <span className="err"><Icon name="alert" size={12} />{phoneProblem}</span>}
+            </>
+          ))}
           {field('Contact email', <input className="fld" type="email" value={d.contact_email} onChange={(e) => set('contact_email', e.target.value)} />)}
           {field('Billing email', <input className="fld" type="email" value={d.billing_email} onChange={(e) => set('billing_email', e.target.value)} />)}
           {field('Billing entity', (

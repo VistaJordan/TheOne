@@ -14,6 +14,8 @@ import {
   assetRequestProblem,
   permAllows,
   CLIENT_TEAM_SEAT_ROLE,
+  formatUsPhone,
+  usPhoneProblem,
 } from '@theone/shared';
 import type {
   AdminPortfolioResponse,
@@ -244,6 +246,17 @@ const CLIENT_TEXT: (keyof ClientInput)[] = [
   'code', 'billing_entity', 'contact_name', 'contact_email', 'contact_phone', 'billing_email', 'address', 'portal_type', 'payment_terms', 'notes',
 ];
 
+/** 2026-11-17 (Elise) · a client's Contact phone is a US number, stored as
+ *  (409) 555-0143. Blank stays blank; anything else that is not a dialable US
+ *  number is a 400 on contact_phone. */
+function clientPhone(raw: string | null | undefined): string | null {
+  const t = clean(raw ?? null);
+  if (t === null) return null;
+  const problem = usPhoneProblem(t);
+  if (problem) throw badRequest(`Contact phone: ${problem}`, { code: 'VALIDATION', field: 'contact_phone' });
+  return formatUsPhone(t);
+}
+
 function checkManager(input: ClientInput): void {
   if (input.account_manager && !UUID_RE.test(input.account_manager)) throw badRequest('That is not a person', { field: 'account_manager' });
 }
@@ -273,6 +286,7 @@ export async function createClient(input: ClientInput, actor: ActingPrincipal): 
     throw badRequest(`Fill in every field to add the client: ${missing.join(', ')}`, { code: 'VALIDATION', field: CLIENT_REQUIRED_ON_CREATE.find(([, l]) => l === missing[0])?.[0], missing });
   }
   checkManager(input);
+  input = { ...input, contact_phone: clientPhone(input.contact_phone) };
   const dup = await query<{ id: string }>(`SELECT id::text AS id FROM client WHERE deleted_at IS NULL AND lower(btrim(name)) = lower($1)`, [name]);
   if (dup.rows[0]) throw conflict(`${name} is already on file`, { field: 'name', existing_id: dup.rows[0].id });
   const cols = ['name', 'created_by'];
@@ -311,6 +325,10 @@ export async function updateClient(id: string, input: ClientInput, actor: Acting
   if (!UUID_RE.test(id)) throw notFound('Client not found');
   checkManager(input);
   const before = await loadClient(id, actor);
+  // A phone stored before the US rule is not re-checked: only a changed one is.
+  if (input.contact_phone !== undefined && clean(input.contact_phone) !== clean(before.contact_phone)) {
+    input = { ...input, contact_phone: clientPhone(input.contact_phone) };
+  }
   const sets: string[] = [];
   const vals: unknown[] = [];
   const set = (col: string, v: unknown) => {
