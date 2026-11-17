@@ -29,6 +29,7 @@ import './styles/docs.css';
 import './styles/parity.css';
 import { App } from './App';
 import { initOKnob } from './lib/oknob';
+import { initNoAutofill } from './lib/noAutofill';
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Root element #root not found');
@@ -36,6 +37,8 @@ if (!rootEl) throw new Error('Root element #root not found');
 // Native scrollbars are hidden app-wide (app.css); the O-knob manager mounts
 // the branded replacement on every scrollable that ever appears.
 initOKnob();
+// The browser's remembered entries are never offered in our boxes.
+initNoAutofill();
 
 createRoot(rootEl).render(
   <StrictMode>

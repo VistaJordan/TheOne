@@ -4041,6 +4041,16 @@ routes are untouched). **Reopen** is its own header button (`ReopenButton` in
 admin (`mayReopenWorkOrder` in shared `managerFlags.ts`, `can.may_reopen`);
 `reopenWo` asks the same role check (403) in place of the lifecycle grant.
 
+**No browser suggestions in any box** (Elise, 2026-11-17, no migration;
+`apps/web/src/lib/noAutofill.ts`, called from `main.tsx`,
+`tests/no-autofill.test.ts`). The browser's remembered entries ("test",
+"AMC" under Store) are never offered: every input and textarea that does not
+set its own `autocomplete` gets `autocomplete="off"`, on the page and on every
+one that appears later (a MutationObserver plus a focusin catch) — Add work
+order, drafts, the inline editors, everything. Boxes that ask for something
+specific (sign-in's username / password, `tel-national`) keep it; the app's
+own lists (datalists, Google addresses, pickers) are unaffected.
+
 **Markup on the Finances card** (Elise, 2026-11-16, no migration;
 `markupPct` in shared `moneyRules.ts`, `tests/finances-markup.test.ts`). The
 Finances card (`MoneyCard`) lost its NTE meter (the quote / invoiced against
