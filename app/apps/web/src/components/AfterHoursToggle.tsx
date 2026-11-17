@@ -1,53 +1,65 @@
-// After hours (Elise, 2026-11-16): the switch on Notifications and Approvals.
+// After hours (Elise, 2026-11-16; in the header since 2026-11-17).
 //
-// By default both pages show only what is about the work orders the person is
-// ON (an assigned seat: Assignee, Support Trainee, TL, ATL, AM, Completion
-// Assignee). After hours shows every work order they may open — for whoever
-// covers at night. Each press is logged on the API (`after_hours_opened` /
-// `after_hours_closed`), and the API only honours the wide view while the
-// person's latest press is "on" and less than AFTER_HOURS_HOURS old, so the
-// state lives on the server and lapses by itself.
+// The AM / TL / ATL / OP Admin on call (Admin › Settings › On call, read from
+// the team's Google Sheet) gets this button in the header while their shift
+// runs — 12 AM to 3 PM Chicago on the shift's day by default. During the shift
+// the wide view is ON by default: every work order they may open, every
+// approval their role may see, every notification addressed to them. A press
+// goes back to their own jobs; another press, everything again. The server
+// decides what each request returns (services/afterHours.ts), so the button
+// only shows the state and logs the press; the shift ending switches it all
+// back on its own.
 
-import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AFTER_HOURS_HOURS, adminPermKey, type AfterHoursPage } from '@theone/shared';
+import { useState } from 'react';
+import type { AfterHoursState } from '@theone/shared';
 import { ApiRequestError, getAfterHours, getAfterHoursLog, setAfterHours } from '../api/client';
-import { useAuth } from '../auth/AuthProvider';
 import { Icon } from './Icon';
 
-/** Is After hours on for this page? (false while loading) */
-export function useAfterHours(page: AfterHoursPage): boolean {
-  const q = useQuery({ queryKey: ['after-hours'], queryFn: getAfterHours, retry: 0, staleTime: 30_000 });
-  return q.data?.[page] === true;
+const KEY = ['after-hours'] as const;
+
+function useAfterHoursState() {
+  return useQuery({
+    queryKey: KEY,
+    queryFn: getAfterHours,
+    retry: 0,
+    staleTime: 30_000,
+    // The shift starts and ends on the clock: look again every minute.
+    refetchInterval: 60_000,
+  });
 }
 
-const PAGE_WORD: Record<AfterHoursPage, string> = { notifications: 'notifications', approvals: 'approvals' };
+/** Is the wide view on for the signed-in person right now? (false while loading) */
+export function useAfterHours(): boolean {
+  return useAfterHoursState().data?.wide === true;
+}
 
-export function AfterHoursToggle({ page }: { page: AfterHoursPage }) {
+const timeLabel = (iso: string) =>
+  new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' });
+
+/** The header button: drawn only while the person's on-call shift runs. */
+export function AfterHoursButton() {
   const qc = useQueryClient();
-  const { can } = useAuth();
-  const on = useAfterHours(page);
+  const q = useAfterHoursState();
   const [error, setError] = useState<string | null>(null);
-  const [showLog, setShowLog] = useState(false);
-  const mayReadLog = can(adminPermKey('audit'), 'view');
 
   const flip = useMutation({
-    mutationFn: (next: boolean) => setAfterHours(page, next),
-    onSuccess: (state) => {
+    mutationFn: (next: boolean) => setAfterHours(next),
+    onSuccess: (state: AfterHoursState) => {
       setError(null);
-      qc.setQueryData(['after-hours'], state);
-      void qc.invalidateQueries({ queryKey: ['after-hours-log'] });
-      // Every list on the page re-reads with the new view.
-      void qc.invalidateQueries({ queryKey: page === 'notifications' ? ['notices'] : ['approvals'] });
-      if (page === 'approvals') {
-        for (const k of ['quotes', 'payments', 'purchasing', 'nte-requests']) void qc.invalidateQueries({ queryKey: [k] });
-      }
+      qc.setQueryData(KEY, state);
+      // Every list, queue, badge and work order re-reads with the new scope.
+      void qc.invalidateQueries({ predicate: (query) => query.queryKey[0] !== KEY[0] });
     },
     onError: (err) => setError(err instanceof ApiRequestError ? err.message : 'After hours could not be switched.'),
   });
 
+  const s = q.data;
+  if (!s?.on_call) return null;
+  const on = s.wide;
+  const until = s.ends_at ? ` until ${timeLabel(s.ends_at)}` : '';
   return (
-    <div className={`afterhours${on ? ' is-on' : ''}`}>
+    <span className="afterhours-head">
       <button
         type="button"
         className={`btn btn-sm afterhours-btn${on ? ' is-on' : ''}`}
@@ -55,40 +67,31 @@ export function AfterHoursToggle({ page }: { page: AfterHoursPage }) {
         disabled={flip.isPending}
         onClick={() => flip.mutate(!on)}
         title={
-          on
-            ? `Showing every work order's ${PAGE_WORD[page]}. Click to go back to your jobs only.`
-            : `Show every work order's ${PAGE_WORD[page]}, not only the jobs you are on. Each use is logged.`
+          error ??
+          (on
+            ? `You are on call${until}: showing every work order, approval and notification. Click to see only your own jobs. Each switch is logged.`
+            : `You are on call${until}: showing only your own jobs. Click to see every work order, approval and notification. Each switch is logged.`)
         }
       >
         <Icon name="moon" size={14} />
-        {on ? 'After hours: on' : 'After hours'}
+        {on ? 'After hours: all work orders' : 'After hours: my jobs'}
       </button>
-      <span className="afterhours-note">
-        {on
-          ? `Every work order · logged as you · ends after ${AFTER_HOURS_HOURS} h`
-          : 'Your jobs only'}
-      </span>
-      {mayReadLog && (
-        <button type="button" className="linkbtn afterhours-loglink" onClick={() => setShowLog((v) => !v)} aria-expanded={showLog}>
-          {showLog ? 'Hide log' : 'Who used it'}
-        </button>
-      )}
       {error && (
         <span className="afterhours-err" role="alert">
           {error}
         </span>
       )}
-      {showLog && mayReadLog && <AfterHoursLog />}
-    </div>
+    </span>
   );
 }
 
-function AfterHoursLog() {
+/** Everyone's presses, newest first (Admin › Settings › On call). */
+export function AfterHoursLog() {
   const q = useQuery({ queryKey: ['after-hours-log'], queryFn: getAfterHoursLog, retry: 0 });
   if (q.isLoading) return <p className="hint afterhours-log">Loading…</p>;
   if (q.isError) return <p className="hint afterhours-log">The log could not be read.</p>;
   const items = q.data?.items ?? [];
-  if (items.length === 0) return <p className="hint afterhours-log">Nobody has used After hours yet.</p>;
+  if (items.length === 0) return <p className="hint afterhours-log">Nobody has switched After hours yet.</p>;
   return (
     <div className="afterhours-log">
       <table className="afterhours-table">
@@ -96,8 +99,8 @@ function AfterHoursLog() {
           <tr>
             <th>When</th>
             <th>Who</th>
-            <th>Page</th>
-            <th>Switched</th>
+            <th>Shift</th>
+            <th>Switched to</th>
           </tr>
         </thead>
         <tbody>
@@ -108,8 +111,8 @@ function AfterHoursLog() {
                 {r.person.name}
                 {r.by && <span className="hint"> (by {r.by.name}, viewing as)</span>}
               </td>
-              <td>{r.page === 'notifications' ? 'Notifications' : r.page === 'approvals' ? 'Approvals' : r.page}</td>
-              <td>{r.action === 'after_hours_opened' ? 'On' : 'Off'}</td>
+              <td>{r.shift ?? (r.page === 'notifications' ? 'Notifications page' : r.page === 'approvals' ? 'Approvals page' : '—')}</td>
+              <td>{r.action === 'after_hours_opened' ? 'All work orders' : 'My jobs'}</td>
             </tr>
           ))}
         </tbody>

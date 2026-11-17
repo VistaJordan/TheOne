@@ -101,8 +101,10 @@ export type AdminEntity =
   | 'price_card'
   // 0138: an AI feature's model, daily limit and monthly budget (Dashboard › AI usage), keyed by feature.
   | 'ai_setting'
-  // Elise 2026-11-16 · a press of After hours on Notifications / Approvals.
+  // Elise 2026-11-16 · a press of After hours (in the header since 2026-11-17).
   | 'after_hours'
+  // 0155: the on-call sheet's settings and each read of it (entity_id 'config' / 'sync').
+  | 'on_call'
   // 0145: a saved quote template (private, or shared with everyone).
   | 'quote_template';
 

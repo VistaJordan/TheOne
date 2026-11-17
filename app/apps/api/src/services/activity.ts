@@ -77,6 +77,10 @@ export interface ActingPrincipal {
       person is ON (an assigned seat) — the Approvals page's queues without
       After hours. Never set on a session; a route copies the actor with it. */
   assignedOnly?: boolean;
+  /** 2026-11-17 · on call with After hours on (services/afterHours.ts): every
+      work-order scope opens — `woScopeSql` drops "Only theirs" and
+      `assignedOnly`, the inboxes drop their "on the job" filter. */
+  afterHoursWide?: boolean;
   /** The permission tree (0015) — what every gate resolves against. */
   perms: PermissionSet;
   /** Resolved from the `role` table, not from a hardcoded list (0005). */
@@ -100,6 +104,7 @@ export function actingFromPrincipal(p: SessionPrincipal): ActingPrincipal {
     siteRestricted: p.siteRestricted,
     hasClients: p.clients.length > 0,
     isTestAccount: p.isTestAccount,
+    afterHoursWide: p.afterHoursWide === true,
     perms: p.perms,
     can: p.can,
   };

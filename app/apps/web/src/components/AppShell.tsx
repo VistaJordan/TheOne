@@ -10,6 +10,7 @@ import { Icon, IconSprite } from './Icon';
 import { NavIcon } from './NavIcon';
 import type { IconName } from './Icon';
 import { ActorSwitcher } from './ActorSwitcher';
+import { AfterHoursButton } from './AfterHoursToggle';
 import { CanvasBackdrop } from './CanvasBackdrop';
 import { GlobalSearch } from './GlobalSearch';
 import { AssistantButton } from './assistant/AssistantPanel';
@@ -376,6 +377,8 @@ export function AppShell({
               Test account
             </span>
           )}
+          {/* 2026-11-17 · only for the AM / TL / ATL / OP Admin on call, during the shift. */}
+          <AfterHoursButton />
           <ActorSwitcher />
           {/* 0068 — ask anything; answers are looked up as the person asking. */}
           {can(ASSISTANT_PERM_KEY, 'view') && <AssistantButton />}

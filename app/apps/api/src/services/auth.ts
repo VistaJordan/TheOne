@@ -16,6 +16,7 @@ import { ApiError } from '../errors.js';
 import type { EntraIdentity } from '../auth/entra.js';
 import { testSessionAllowed } from '../lib/testAccountAuth.js';
 import { logAdminEvent } from './adminAudit.js';
+import { afterHoursWideFor } from './afterHours.js';
 import {
   isTestAccountEmail,
   normalizePermMap,
@@ -63,6 +64,10 @@ export interface SessionPrincipal {
   perms: PermissionSet;
   /** The five legacy booleans, now DERIVED from `perms` for the older gates. */
   can: Capabilities;
+  /** 2026-11-17 · on call with the After hours view on (services/afterHours.ts):
+      every work-order scope opens to everything they may open. Set by the
+      session loader on the acting identity only. */
+  afterHoursWide?: boolean;
 }
 
 export interface AuthContext {
@@ -408,6 +413,10 @@ export async function loadSession(sessionId: string | undefined): Promise<AuthCo
     // revoking that privilege drops them back to themselves immediately.
     if (target.rows[0] && user.isSuperAdmin) actingAs = toPrincipal(target.rows[0]);
   }
+
+  // 2026-11-17 · the person on call sees every work order while their After
+  // hours view is on (memoised a few seconds; never throws, false on doubt).
+  actingAs = { ...actingAs, afterHoursWide: await afterHoursWideFor(actingAs).catch(() => false) };
 
   // Cheap liveness for the admin session list; not on the hot path for auth.
   // "Keep me signed in": a remembered session that has run a day since it was

@@ -38,7 +38,8 @@ export function woScopeSql(actor: ActingPrincipal, p: Params, alias = 't'): stri
   const base = woScopeBaseSql(actor, p, alias);
   // Elise 2026-11-16 · the Approvals page's queues ask for the work orders
   // the person is ON (an assigned seat), unless After hours is on.
-  if (!actor.assignedOnly) return base;
+  // 2026-11-17 · …and the person on call sees past it while After hours is on.
+  if (!actor.assignedOnly || actor.afterHoursWide) return base;
   const mine = assignedToSql(p.add(actor.name), alias);
   return base ? `(${base} AND ${mine})` : mine;
 }
@@ -71,7 +72,9 @@ function woScopeBaseSql(actor: ActingPrincipal, p: Params, alias: string): strin
     actor.siteRestricted && !actor.isSuperAdmin
       ? `${alias}.site_id IN (SELECT ps.site_id FROM principal_site ps WHERE ps.principal_id = ${p.add(actor.id)})`
       : null;
-  if (scope.all) return sites;
+  // 2026-11-17 · on call with After hours on: every work order (the site
+  // restriction, a different rule, still holds).
+  if (scope.all || actor.afterHoursWide) return sites;
   const name = p.add(actor.name);
   const parts = [
     `EXISTS (

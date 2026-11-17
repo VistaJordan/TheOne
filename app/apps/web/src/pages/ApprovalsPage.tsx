@@ -79,7 +79,7 @@ import type {
 } from '../api/client';
 import { AssigneeSelect } from '../components/wo/AssigneeAvailability';
 import { NteRequestsPanel } from '../components/approvals/NteRequestsPanel';
-import { AfterHoursToggle, useAfterHours } from '../components/AfterHoursToggle';
+import { useAfterHours } from '../components/AfterHoursToggle';
 import {
   ApiRequestError,
   acknowledgeApprovalTask,
@@ -94,7 +94,6 @@ import {
   listApprovals,
   listPayments,
   listQuotesForInbox,
-  listApprovalsAfterHours,
   rejectApprovalTask,
   rejectPayment,
   rejectQuote,
@@ -710,13 +709,14 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Elise 2026-11-16: the inbox shows the work orders the viewer is on; After
-  // hours (a logged switch) shows every one. Incoming is never narrowed — a
-  // new work order has nobody on it yet (the API exempts acceptances).
-  const afterHours = useAfterHours('approvals') && !intake;
+  // Elise 2026-11-16: the inbox shows the work orders the viewer is on; the
+  // person on call with After hours on (the header button, 2026-11-17) sees
+  // every one — the API decides. Incoming is never narrowed — a new work order
+  // has nobody on it yet (the API exempts acceptances).
+  const afterHours = useAfterHours() && !intake;
   const approvalsQuery = useQuery({
     queryKey: ['approvals', afterHours ? 'all' : 'mine'],
-    queryFn: afterHours ? listApprovalsAfterHours : listApprovals,
+    queryFn: listApprovals,
     retry: 0,
   });
   // The two other sources are read only when the viewer may see them; a section
@@ -992,7 +992,6 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
             <AddWorkOrderButton />
           </div>
         )}
-        {!intake && <AfterHoursToggle page="approvals" />}
       </div>
 
       <div className="payq-head">

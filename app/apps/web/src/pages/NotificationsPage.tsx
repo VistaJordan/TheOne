@@ -30,7 +30,7 @@ import {
   type NoticeTypeCount,
 } from '@theone/shared';
 import { getNoticeInbox, markNotices } from '../api/client';
-import { AfterHoursToggle, useAfterHours } from '../components/AfterHoursToggle';
+import { useAfterHours } from '../components/AfterHoursToggle';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
 import { errText } from '../components/ui/Sheet';
@@ -85,12 +85,13 @@ export function NotificationsPage() {
   // A group the person has no type of yet matches nothing — not everything.
   const emptyGroup = group !== null && !type && kinds !== null && kinds.length === 0 && knownTypes !== null;
 
-  // Elise 2026-11-16: only the jobs the person is on, unless After hours.
-  const afterHours = useAfterHours('notifications');
+  // Elise 2026-11-16: only the jobs the person is on, unless they are on call
+  // with After hours on (the header button; the API decides, the key re-reads).
+  const afterHours = useAfterHours();
   const q = useInfiniteQuery({
     queryKey: [...NOTICE_INBOX_KEY, 'inbox', show, kinds, search.trim(), afterHours],
     queryFn: async ({ pageParam }) => {
-      const res = await getNoticeInbox({ show, kinds, q: search, before: pageParam, afterHours });
+      const res = await getNoticeInbox({ show, kinds, q: search, before: pageParam });
       setKnownTypes(res.types);
       return res;
     },
@@ -156,7 +157,6 @@ export function NotificationsPage() {
               {first ? (unread > 0 ? `${unread.toLocaleString('en-US')} unread of ${total.toLocaleString('en-US')}` : total > 0 ? 'All caught up' : 'Nothing yet') : ' '}
             </p>
           </div>
-          <AfterHoursToggle page="notifications" />
         </div>
 
         <div className="ntf-layout">

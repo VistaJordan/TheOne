@@ -452,14 +452,15 @@ export async function listInbox(principalId: string, o: InboxOptions): Promise<N
   };
 }
 
-/** The sidebar badge: every unread row of the inbox — the person's own jobs
-    only (the badge never follows After hours). */
-export async function inboxUnread(principalId: string, withPulse: boolean, name: string): Promise<number> {
+/** The sidebar badge: every unread row of the inbox as the page shows it by
+    default — the person's own jobs, or every work order while they are on
+    call with After hours on (2026-11-17). */
+export async function inboxUnread(principalId: string, withPulse: boolean, name: string, allWorkOrders = false): Promise<number> {
   await raiseExpiryNotifications();
   await raiseQuoteDueNotifications();
   const res = await query<{ n: number }>(
     `${INBOX_CTE} SELECT count(*)::int AS n FROM inbox WHERE read_at IS NULL`,
-    [principalId, withPulse, false, name],
+    [principalId, withPulse, allWorkOrders, name],
   );
   return res.rows[0]?.n ?? 0;
 }

@@ -1414,10 +1414,6 @@ export function listApprovals(): Promise<ApprovalListResponse> {
   return request<ApprovalListResponse>('/approvals');
 }
 
-/** The inbox with After hours on: every work order, not only the viewer's. */
-export function listApprovalsAfterHours(): Promise<ApprovalListResponse> {
-  return request<ApprovalListResponse>('/approvals?after_hours=1');
-}
 
 /** GET /api/work-orders/:id/approval-tasks — the tasks on one work order. */
 export function listWorkOrderApprovals(idOrNumber: string): Promise<ApprovalTasksResponse> {
@@ -3437,35 +3433,44 @@ export function markAllNoticesRead(): Promise<{ unread: number }> {
 
 // ── The Notifications page (2026-11-04) — the inbox in the sidebar ───────────
 
-import type { AfterHoursPage, AfterHoursState, NoticeInboxResponse, NoticeReadFilter, NoticeSource } from '@theone/shared';
+import type { AfterHoursState, NoticeInboxResponse, NoticeReadFilter, NoticeSource, OnCallSettings } from '@theone/shared';
 
 export interface NoticeInboxParams {
   show: NoticeReadFilter;
   kinds: string[] | null;
   q: string;
   before?: string | null;
-  /** After hours: every work order's notices (honoured only while it is on). */
-  afterHours?: boolean;
 }
 
-// ── After hours (Elise, 2026-11-16) ─────────────────────────────────────────
+// ── After hours (Elise, 2026-11-16; the header button since 2026-11-17) ──
 
+/** The person's on-call state; the API re-reads the on-call sheet when stale. */
 export const getAfterHours = (): Promise<AfterHoursState> => request<AfterHoursState>('/after-hours');
-/** A press of the switch — logged as an audit row on the API. */
-export const setAfterHours = (page: AfterHoursPage, on: boolean): Promise<AfterHoursState> =>
-  post<AfterHoursState>('/after-hours', { page, on });
+/** A press of the header button — logged as an audit row on the API. */
+export const setAfterHours = (on: boolean): Promise<AfterHoursState> => post<AfterHoursState>('/after-hours', { on });
 export interface AfterHoursLogRow {
   at: string;
   action: 'after_hours_opened' | 'after_hours_closed';
   page: string;
+  shift: string | null;
   person: { id: string; name: string };
   by: { id: string; name: string } | null;
 }
 export const getAfterHoursLog = (): Promise<{ items: AfterHoursLogRow[] }> => request('/after-hours/log');
 
+export interface OnCallOverview {
+  settings: OnCallSettings;
+  service_account: string | null;
+  last_sync: { ok: boolean; at: string; error: string | null; shifts: number; unmatched: { row: number; text: string }[] } | null;
+  upcoming: { day: string; people: { id: string; name: string; role: string | null }[] }[];
+}
+export const getOnCall = (): Promise<OnCallOverview> => request<OnCallOverview>('/admin/on-call');
+export const saveOnCall = (body: { sheet: string | null; tab: string | null; start_hour: number; end_hour: number }): Promise<OnCallOverview> =>
+  request<OnCallOverview>('/admin/on-call', { method: 'PUT', body: JSON.stringify(body) });
+export const syncOnCallNow = (): Promise<OnCallOverview> => post<OnCallOverview>('/admin/on-call/sync', {});
+
 export function getNoticeInbox(p: NoticeInboxParams): Promise<NoticeInboxResponse> {
   const qs = new URLSearchParams({ show: p.show });
-  if (p.afterHours) qs.set('after_hours', '1');
   if (p.kinds?.length) qs.set('kinds', p.kinds.join(','));
   if (p.q.trim()) qs.set('q', p.q.trim());
   if (p.before) qs.set('before', p.before);

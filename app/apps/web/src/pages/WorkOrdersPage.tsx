@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAfterHours } from '../components/AfterHoursToggle';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { businessDay, isDispatcherRole, isQuoteOwed, resolveWoScope, type StatusGroup } from '@theone/shared';
@@ -156,9 +157,11 @@ export function WorkOrdersPage() {
   const { can, actingAs } = useAuth();
   // 0026: a scoped person's list is "theirs" before any filter; say so, so an
   // empty list or a missing number is not read as a bug.
+  // 2026-11-17 · on call with After hours on, the API returns every work order.
+  const afterHours = useAfterHours();
   const scope = useMemo(
-    () => resolveWoScope(actingAs?.perms, actingAs?.is_super_admin),
-    [actingAs],
+    () => (afterHours ? { all: true, entities: [] as string[] } : resolveWoScope(actingAs?.perms, actingAs?.is_super_admin)),
+    [actingAs, afterHours],
   );
   // 0072 · the entities ticked on the role plus the clients assigned to the
   // person — both widen "theirs" and the chip names them alike.

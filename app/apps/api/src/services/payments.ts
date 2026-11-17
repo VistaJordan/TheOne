@@ -80,6 +80,7 @@ import {
   PAYMENT_PURPOSE_CODES,
   isPaymentPurposeCode,
   mayApproveOverNtePayment,
+  mayDecideOverQuote,
   overNteApproverLabel,
   nextPurpose,
   overNte,
@@ -467,7 +468,10 @@ function mapPayment(
     nte_override_open: Boolean(r.nte_override_open),
     money_hold: moneyHoldOf(r, quotes),
     above_nte: aboveNteOf(r),
-    approve_hold: moneyHoldOf(r, quotes, true),
+    // 2026-11-17 (#35): whoever may decide the over-quote hold (ATL / TL / AM /
+    // Admin) settles it with their above-NTE approval, so it does not lock them.
+    approve_hold:
+      opts.viewer && mayDecideOverQuote(opts.viewer.role, opts.viewer.isSuperAdmin) ? null : moneyHoldOf(r, quotes, true),
     tier:
       opts.viewer && opts.tiers
         ? paymentTierSummary(opts.tiers, Number(r.amount ?? 0), r.method, opts.viewer)
@@ -1448,8 +1452,12 @@ async function assertPaymentNotHeld(
   /** 2026-11-03: the AM approving a payment above the NTE decides the NTE in
       the same act (approveOverNte), so only the quote is asked here. */
   nteDecidedHere = false,
+  /** 2026-11-17 (#35): …and, when they may decide over-quote holds, the
+      approved quote too (a negative margin), so nothing is asked. */
+  quoteDecidedHere = false,
 ): Promise<void> {
   if (!nteDecidedHere) await assertNoOpenNteOverride(row.task_id, move);
+  if (quoteDecidedHere) return;
   await assertNoOpenMoneyHold(row.task_id, 'over_quote', move, OVER_QUOTE_CODE);
   const amount = Number(row.amount ?? 0);
   // "Paying twice" (2026-11-02): the approved and paid vendor bills are vendor
@@ -1597,6 +1605,103 @@ async function approveOverNte(
   );
 }
 
+/** 2026-11-17 (#35): the over-quote sentence when paying this request takes
+    Cost past the approved quote (or an over-quote hold is already open for
+    the work order), else null. */
+async function overQuoteToDecide(row: PaymentRow, projected: number): Promise<string | null> {
+  const open = await query<{ title: string }>(
+    `SELECT title FROM approval_task WHERE task_id = $1 AND type = 'over_quote' AND status = 'open' LIMIT 1`,
+    [row.task_id],
+  );
+  const quote = await approvedQuoteFigures(row.task_id);
+  const cover = await approvedCover(row.task_id, 'over_quote');
+  return overQuoteReason(projected, quote, cover?.covers) ?? open.rows[0]?.title ?? null;
+}
+
+/**
+ * 2026-11-17 (#35): the quote half of approving a payment above the NTE, as
+ * approveOverNte is the NTE half — the open over-quote hold is approved with
+ * the approver's reason and made to cover the projected cost; with none open,
+ * an approved one is filed. Logged and posted as an internal comment.
+ */
+async function approveOverQuote(
+  tx: Queryable,
+  row: PaymentRow,
+  projected: number,
+  why: string,
+  reason: string,
+  actor: ActingPrincipal,
+): Promise<void> {
+  const amount = Number(row.amount ?? 0);
+  const payee = (row.vendor_id ? row.vendor_name : row.payee_name) ?? 'the technician';
+  const title = `${why} (paying ${money(amount)} to ${payee})`;
+  const facts = {
+    cost: projected,
+    payment_request_id: row.id,
+    ...(row.overage_reason ? { reason: row.overage_reason } : {}),
+    approved_with_payment: true,
+  };
+  const open = await tx.query<{ id: string; detail: Record<string, unknown> | null }>(
+    `SELECT id::text AS id, detail FROM approval_task
+      WHERE task_id = $1 AND type = 'over_quote' AND status = 'open' LIMIT 1 FOR UPDATE`,
+    [row.task_id],
+  );
+  const cur = open.rows[0];
+  let taskId: string;
+  if (cur) {
+    const prev = typeof cur.detail?.covers === 'number' ? (cur.detail.covers as number) : 0;
+    await tx.query(
+      `UPDATE approval_task
+          SET status = 'approved', decided_by = $2, decided_at = now(), decision_note = $3,
+              assigned_to = COALESCE(assigned_to, $2), updated_at = now(),
+              detail = detail || $4::jsonb
+        WHERE id = $1`,
+      [cur.id, actor.id, reason, JSON.stringify({ ...facts, covers: Math.max(prev, projected) })],
+    );
+    taskId = cur.id;
+  } else {
+    const ins = await tx.query<{ id: string }>(
+      `INSERT INTO approval_task
+         (type, task_id, title, detail, status, created_by, decided_by, decided_at, decision_note, assigned_to)
+       VALUES ('over_quote', $1, $2, $3::jsonb, 'approved', $4, $4, now(), $5, $4)
+       RETURNING id::text AS id`,
+      [row.task_id, title, JSON.stringify({ ...facts, covers: projected }), actor.id, reason],
+    );
+    taskId = ins.rows[0].id;
+  }
+  await tx.query(
+    `INSERT INTO activity_log
+       (actor_principal_id, entity_type, entity_id, action, field, before, after)
+     VALUES ($1, 'task', $2, 'approval_task_approved', 'approval_task.status', $3::jsonb, $4::jsonb)`,
+    [
+      actor.id,
+      row.task_id,
+      cur ? JSON.stringify({ approval_task_id: taskId, status: 'open' }) : null,
+      JSON.stringify({ approval_task_id: taskId, type: 'over_quote', status: 'approved', title, detail: facts, note: reason }),
+    ],
+  );
+  const c = await tx.query<{ id: string }>(
+    `INSERT INTO comment (task_id, author_principal_id, body, client_visible)
+     VALUES ($1, $2, $3, false) RETURNING id::text AS id`,
+    [row.task_id, actor.id, `Over-quote hold approved with the payment — ${title} — ${reason}`],
+  );
+  await tx.query(
+    `INSERT INTO activity_log
+       (actor_principal_id, entity_type, entity_id, action, field, before, after)
+     VALUES ($1, 'task', $2, 'comment_added', NULL, NULL, $3::jsonb)`,
+    [
+      actor.id,
+      row.task_id,
+      JSON.stringify({
+        comment_id: c.rows[0].id,
+        client_visible: false,
+        approval_task_id: taskId,
+        approval: { type: 'over_quote', title, detail: facts, status: 'approved', note: reason },
+      }),
+    ],
+  );
+}
+
 /** What the NTE rule needs to know about a request right now. */
 async function nteFacts(row: PaymentRow): Promise<{ amount: number; nte: number | null; cost: number; aboveNte: boolean }> {
   const amount = Number(row.amount ?? 0);
@@ -1663,13 +1768,27 @@ export async function approvePaymentRequest(
       min_length: OVERAGE_REASON_MIN,
     });
   }
-  await assertPaymentNotHeld(row, actor, 'Approving this payment', true);
+  // 2026-11-17 (#35, Elise): a payment far over the NTE is usually past the
+  // approved quote too (a negative margin), which raised an over-quote hold
+  // the AM's approval did not settle — the Approve stayed locked. Whoever may
+  // decide over-quote holds (ATL / TL / AM / Admin, a super admin) now decides
+  // it here with the same reason, in the same transaction.
+  const decidesQuote = mayDecideOverQuote(actor.role, actor.isSuperAdmin);
+  const quoteOver = decidesQuote ? await overQuoteToDecide(row, projected) : null;
+  await assertPaymentNotHeld(row, actor, 'Approving this payment', true, decidesQuote);
   return setStatus(row, ['requested'], 'approved', 'payment_approved', actor,
     'approved_by = $3, approved_at = now()', [actor.id],
     async (tx) => {
       await approveOverNte(tx, row, projected, reason, actor);
+      if (quoteOver) await approveOverQuote(tx, row, projected, quoteOver, reason, actor);
       await enqueueOutbox(tx, 'payment.approved', 'payment_request', id, { task_id: row.task_id });
-    }, selfApproved, { above_nte: true, reason, nte, projected_cost: projected });
+    }, selfApproved, {
+      above_nte: true,
+      reason,
+      nte,
+      projected_cost: projected,
+      ...(quoteOver ? { over_quote: true } : {}),
+    });
 }
 
 /**

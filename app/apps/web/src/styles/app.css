@@ -2607,13 +2607,16 @@ a.dash-widget-total:hover strong { color: var(--accent-text); }
   .intg-switch { grid-column: 2; justify-self: start; }
 }
 
-/* ── After hours (Elise, 2026-11-16): Notifications and Approvals ─────────── */
-.afterhours { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-left: auto; }
-.afterhours-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* ── After hours (Elise, 2026-11-16): the header button for the person on call (2026-11-17) ── */
+.afterhours-head { display: inline-flex; align-items: center; gap: 6px; }
+.afterhours-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .afterhours-btn.is-on { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn); }
-.afterhours-note { font-size: 12px; color: var(--ink-3); }
-.afterhours.is-on .afterhours-note { color: var(--warn); }
 .afterhours-err { font-size: 12px; color: var(--danger); }
+@media (max-width: 720px) { .afterhours-btn { font-size: 0; gap: 0; } .afterhours-btn svg { font-size: 14px; } }
+.oncall-sub { font-size: 13px; font-weight: 600; margin: 14px 0 0; }
+.oncall-days { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; margin: 8px 0 0; }
+.oncall-days dt { color: var(--ink-3); }
+.oncall-days dd { margin: 0; }
 .afterhours-log { flex-basis: 100%; max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .afterhours-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .afterhours-table th, .afterhours-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--row-border); }

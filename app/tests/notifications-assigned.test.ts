@@ -82,40 +82,46 @@ describe('the inbox and the badge', () => {
     expect(cte).toContain('n.task_id IS NULL OR t.id IS NULL OR n.kind IN (${ALWAYS_SHOWN})');
     expect(svc).toContain('const base: unknown[] = [principalId, o.withPulse, o.allWorkOrders, o.name];');
   });
-  it('the badge never follows After hours', () => {
-    expect(svc).toContain('[principalId, withPulse, false, name],');
+  it('the badge counts what the page shows by default (wide while on call, 2026-11-17)', () => {
+    expect(svc).toContain('[principalId, withPulse, allWorkOrders, name],');
+    expect(read('apps/api/src/routes/notices.ts')).toContain('me.afterHoursWide === true');
   });
 });
 
 describe('After hours', () => {
-  it('the wide view is honoured only through a logged press', () => {
+  it('the wide view is decided on the server, from the on-call shift and the logged presses', () => {
     const notices = read('apps/api/src/routes/notices.ts');
-    expect(notices).toContain("q.after_hours === '1' && (await afterHoursOn(me.id, 'notifications'))");
+    expect(notices).toContain('const all = me.afterHoursWide === true;');
     const approvals = read('apps/api/src/routes/approvals.ts');
-    expect(approvals).toContain("after_hours === '1' && (await afterHoursOn(actor.id, 'approvals'))");
+    expect(approvals).toContain('listApprovalTasks(actor, 500, { allWorkOrders: actor.afterHoursWide === true })');
     const svc = read('apps/api/src/services/afterHours.ts');
     expect(svc).toContain("action: on ? 'after_hours_opened' : 'after_hours_closed'");
-    expect(svc).toContain("entity: ENTITY");
+    expect(svc).toContain('entity: ENTITY');
+    expect(read('apps/api/src/services/auth.ts')).toContain('afterHoursWide: await afterHoursWideFor(actingAs)');
   });
 
   it('approvals: acceptances and your own requests are never narrowed; the badge counts your jobs', () => {
     const svc = read('apps/api/src/services/approvals.ts');
     expect(svc).toContain("AND (a.type = 'wo_acceptance' OR a.created_by = ${p.add(viewer.id)} OR ${assignedToSql(p.add(viewer.name), 't')})");
     expect(svc).toContain("${opts.allWorkOrders ? '' : onTheJobSql(viewer, p)}");
+    expect(svc).toContain('if (viewer.afterHoursWide) return');
     expect(svc).toContain('const moneyScope = woScopeSql({ ...viewer, assignedOnly: true }, qp);');
   });
 
-  it('the quotes, payments, purchases and NTE-increase queues take ?assigned=1', () => {
+  it('the quotes, payments, purchases and NTE-increase queues take ?assigned=1, lifted while wide', () => {
     for (const f of ['quotes', 'payments', 'purchasing', 'woRecord']) {
       expect(read(`apps/api/src/routes/${f}.ts`), f).toContain('withAssignedOnly(');
     }
-    expect(read('apps/api/src/services/woScope.ts')).toContain('if (!actor.assignedOnly) return base;');
+    const scope = read('apps/api/src/services/woScope.ts');
+    expect(scope).toContain('if (!actor.assignedOnly || actor.afterHoursWide) return base;');
+    expect(scope).toContain('if (scope.all || actor.afterHoursWide) return sites;');
   });
 
-  it('both pages draw the switch; the audit log names the action', () => {
-    expect(read('apps/web/src/pages/NotificationsPage.tsx')).toContain('<AfterHoursToggle page="notifications" />');
-    expect(read('apps/web/src/pages/ApprovalsPage.tsx')).toContain('{!intake && <AfterHoursToggle page="approvals" />}');
-    expect(read('apps/web/src/lib/auditFormat.ts')).toContain("after_hours_opened: 'After hours switched on'");
+  it('one button in the header, none on the pages; the audit log names the action', () => {
+    expect(read('apps/web/src/components/AppShell.tsx')).toContain('<AfterHoursButton />');
+    expect(read('apps/web/src/pages/NotificationsPage.tsx')).not.toContain('<AfterHoursToggle');
+    expect(read('apps/web/src/pages/ApprovalsPage.tsx')).not.toContain('<AfterHoursToggle');
+    expect(read('apps/web/src/lib/auditFormat.ts')).toContain("after_hours_opened: 'After hours: all work orders'");
   });
 });
 

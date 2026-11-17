@@ -7,6 +7,7 @@ import { SubcategoriesCard } from './SubcategoriesCard';
 import { CodesCard, FormLayoutsCard } from './WoRecordSettings';
 import { FinanceSetupCards } from './FinanceSetupCards';
 import { SharePointCard } from './SharePointCard';
+import { OnCallCard } from './OnCallCard';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -155,6 +156,8 @@ export function AdminSettingsPage() {
       )}
 
       <HolidaysCard />
+      {/* 0155 · who is on call (a Google Sheet) and the After hours button. */}
+      <OnCallCard />
       {/* 0071 · folders in the team's SharePoint library per client and work order. */}
       <SharePointCard />
       {/* 0063 · what each trade can be narrowed to on "Add work order". */}

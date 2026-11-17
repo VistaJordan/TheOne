@@ -26,7 +26,14 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { NOTICE_PAGE_SIZE, PULSE_PERM_KEY, adminPermKey, permAllows } from '@theone/shared';
 import { parse } from '../errors.js';
-import { afterHoursLog, afterHoursOn, afterHoursState, setAfterHours } from '../services/afterHours.js';
+import {
+  afterHoursLog,
+  afterHoursState,
+  onCallOverview,
+  saveOnCallSettings,
+  setAfterHours,
+  syncOnCall,
+} from '../services/afterHours.js';
 import { requirePerm } from '../services/permissions.js';
 import { actingPrincipalFromRequest } from '../services/activity.js';
 import {
@@ -51,8 +58,8 @@ const inboxQuerySchema = z.object({
   q: z.string().max(200).optional(),
   before: z.string().max(120).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(NOTICE_PAGE_SIZE),
-  /** Elise 2026-11-16 · every work order, not only the person's jobs —
-      honoured only while After hours is on for this page (a logged press). */
+  /** Kept for old tabs; ignored. Since 2026-11-17 the server decides: the
+      person on call with After hours on sees every work order's notices. */
   after_hours: z.enum(['0', '1']).optional(),
 });
 
@@ -82,7 +89,7 @@ export default async function noticeRoutes(app: FastifyInstance): Promise<void> 
     const pulse = await withPulse(req);
     await pruneNotifications(me.id);
     if (pulse) await evaluateDebounced();
-    const all = q.after_hours === '1' && (await afterHoursOn(me.id, 'notifications'));
+    const all = me.afterHoursWide === true;
     return listInbox(me.id, {
       read: q.show,
       kinds: parseKinds(q.kinds),
@@ -95,16 +102,17 @@ export default async function noticeRoutes(app: FastifyInstance): Promise<void> 
     });
   });
 
-  app.get('/notices/count', async (req) => ({
-    unread: await inboxUnread(actingPrincipalFromRequest(req).id, await withPulse(req), actingPrincipalFromRequest(req).name),
-  }));
+  app.get('/notices/count', async (req) => {
+    const me = actingPrincipalFromRequest(req);
+    return { unread: await inboxUnread(me.id, await withPulse(req), me.name, me.afterHoursWide === true) };
+  });
 
   app.post('/notices/mark', async (req) => {
     const me = actingPrincipalFromRequest(req);
     const body = parse(markSchema, req.body);
     const pulse = await withPulse(req);
     const changed = await markInbox(me.id, pulse, body);
-    return { changed, unread: await inboxUnread(me.id, pulse, me.name) };
+    return { changed, unread: await inboxUnread(me.id, pulse, me.name, me.afterHoursWide === true) };
   });
 
   // Elise 2026-11-14: the Messages tab calls this with the messages it shows,
@@ -116,23 +124,53 @@ export default async function noticeRoutes(app: FastifyInstance): Promise<void> 
       req.body,
     );
     const changed = await markMessageNoticesSeen(me.id, body.wo_number, body.message_ids);
-    return { changed, unread: await inboxUnread(me.id, await withPulse(req), me.name) };
+    return { changed, unread: await inboxUnread(me.id, await withPulse(req), me.name, me.afterHoursWide === true) };
   });
 
-  // ── After hours (Elise, 2026-11-16) ──────────────────────────────────────
-  // The switch on Notifications and Approvals: shows every work order the
-  // person may open, not only their own jobs. Each press is an audit row
-  // (services/afterHours.ts); the log is for whoever reads Admin › Audit.
-  app.get('/after-hours', async (req) => afterHoursState(actingPrincipalFromRequest(req).id));
+  // ── After hours (Elise, 2026-11-16; the header button since 2026-11-17) ──
+  // Shown only to the AM / TL / ATL / OP Admin whose on-call shift is running
+  // (services/afterHours.ts). GET re-reads the on-call sheet when it is stale.
+  app.get('/after-hours', async (req) => afterHoursState(actingPrincipalFromRequest(req), { sync: true }));
 
   app.post('/after-hours', async (req) => {
-    const body = parse(z.object({ page: z.enum(['notifications', 'approvals']), on: z.boolean() }), req.body);
-    return setAfterHours(actingPrincipalFromRequest(req), body.page, body.on);
+    const body = parse(z.object({ on: z.boolean(), page: z.string().max(40).optional() }), req.body);
+    return setAfterHours(actingPrincipalFromRequest(req), body.on);
   });
 
   app.get('/after-hours/log', async (req) => {
     requirePerm(actingPrincipalFromRequest(req), adminPermKey('audit'), 'view', 'The After hours log is not available to you');
     return { items: await afterHoursLog() };
+  });
+
+  // Admin › Settings › On call: the sheet, the shift's hours, the roster read
+  // from it and Sync now (grant admin/settings, as the other Settings cards).
+  app.get('/admin/on-call', async (req) => {
+    requirePerm(actingPrincipalFromRequest(req), adminPermKey('settings'), 'view', 'Admin › settings is not available to you');
+    return onCallOverview();
+  });
+
+  app.put('/admin/on-call', async (req) => {
+    const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, adminPermKey('settings'), 'edit', 'You cannot make changes in Admin › settings');
+    const body = parse(
+      z.object({
+        sheet: z.string().max(500).nullable(),
+        tab: z.string().max(100).nullable(),
+        start_hour: z.number().int().min(0).max(23),
+        end_hour: z.number().int().min(1).max(24),
+      }),
+      req.body,
+    );
+    await saveOnCallSettings(actor, body);
+    if (body.sheet?.trim()) await syncOnCall(actor);
+    return onCallOverview();
+  });
+
+  app.post('/admin/on-call/sync', async (req) => {
+    const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, adminPermKey('settings'), 'edit', 'You cannot make changes in Admin › settings');
+    await syncOnCall(actor);
+    return onCallOverview();
   });
 
   app.get('/notices', async (req) => {

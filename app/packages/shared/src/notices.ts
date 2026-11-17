@@ -230,17 +230,7 @@ export function isAssignedTo(bag: Record<string, unknown> | null | undefined, na
   return assignee === '' && legacy !== '' && legacy === me;
 }
 
-/** The two pages that have the After hours switch. */
-export type AfterHoursPage = 'notifications' | 'approvals';
-export const AFTER_HOURS_PAGES: readonly AfterHoursPage[] = ['notifications', 'approvals'];
-
-/** How long a press lasts before the page goes back to "my jobs". */
-export const AFTER_HOURS_HOURS = 12;
-
-export interface AfterHoursState {
-  notifications: boolean;
-  approvals: boolean;
-}
+// After hours moved to the header (2026-11-17): see onCall.ts.
 
 // ── Quotes due (Elise, 2026-11-16) ──────────────────────────────────────────
 //

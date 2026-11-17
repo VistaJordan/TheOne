@@ -37,7 +37,6 @@ import {
   withdrawApprovalTask,
 } from '../services/approvals.js';
 import { requirePerm } from '../services/permissions.js';
-import { afterHoursOn } from '../services/afterHours.js';
 import { assertRecordInScope } from '../services/recordScope.js';
 
 const idParamsSchema = z.object({ id: z.string().min(1) });
@@ -62,11 +61,10 @@ export default async function approvalRoutes(app: FastifyInstance): Promise<void
   app.get('/approvals', async (req) => {
     const actor = actingPrincipalFromRequest(req);
     requirePerm(actor, APPROVALS_PERM_KEY, 'view', 'You cannot view approvals');
-    // Elise 2026-11-16 · the work orders the viewer is on, unless After hours
-    // is on for them (a logged press, services/afterHours.ts).
-    const { after_hours } = parse(z.object({ after_hours: z.enum(['0', '1']).optional() }), req.query);
-    const all = after_hours === '1' && (await afterHoursOn(actor.id, 'approvals'));
-    return listApprovalTasks(actor, 500, { allWorkOrders: all });
+    // Elise 2026-11-16 · the work orders the viewer is on, unless they are on
+    // call with After hours on (2026-11-17: decided on the server, the actor's
+    // `afterHoursWide`, services/afterHours.ts — a query flag is ignored).
+    return listApprovalTasks(actor, 500, { allWorkOrders: actor.afterHoursWide === true });
   });
 
   // No permission gate: a zero is the honest answer for someone who may do

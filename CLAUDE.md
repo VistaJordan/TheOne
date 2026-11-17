@@ -3409,13 +3409,8 @@ when it is a `wo_acceptance` (Incoming is never narrowed), the viewer's own
 request, or on a work order they are on; the quotes, payments, purchases and
 NTE-increase lanes ask `?assigned=1` (`withAssignedOnly` → `actor.assignedOnly`,
 which `woScopeSql` ANDs in); their own pages are unchanged. Super admins are
-narrowed too. **After hours** is a button on both pages (`POST /after-hours
-{page, on}`): each press is an audit row `after_hours_opened|closed` (entity
-`after_hours`, entity_id = the person, `after.page`), and `?after_hours=1` is
-honoured only while the person's latest row for that page is "opened" and under
-`AFTER_HOURS_HOURS` (12) old — so the wide view cannot be had unlogged and
-lapses on its own. "Who used it" (`GET /after-hours/log`, `admin/audit` view)
-lists every press. **Quotes due:** `raiseQuoteDueNotifications` (on inbox reads
+narrowed too. **After hours** is the on-call person's header button since 0155
+(next paragraph); the per-page switch and `?after_hours=1` are gone. **Quotes due:** `raiseQuoteDueNotifications` (on inbox reads
 every 5 min, and the hourly client-updates cron) finds work orders in Waiting
 for Quote with no quote on its way (none, a draft or a declined one), due =
 entry into the status (`STATUS_SINCE_SQL`) + 48 working hours
@@ -3426,6 +3421,48 @@ people in its Assignee, TL and ATL seats and to every active OP Admin
 (`QUOTE_DUE_SEAT_KEYS` / `QUOTE_DUE_ROLE_CODES`, Elise 2026-11-16); since OP
 Admin sits on no seat, `quote_due` is in `NOTICE_KINDS_ALWAYS_SHOWN`.
 Notifications lists them under Work orders › **Quotes due**.
+
+**On call and After hours in the header** (migration 0155, Elise 2026-11-17;
+`packages/shared/src/onCall.ts` pure, `services/afterHours.ts`,
+`lib/googleSheets.ts`, `components/AfterHoursToggle.tsx` (`AfterHoursButton`),
+`pages/admin/OnCallCard.tsx`, `tests/on-call.test.ts`). Who is on call is a
+Google Sheet set in **Admin › Settings › On call** (`GET|PUT /admin/on-call`,
+`POST /admin/on-call/sync`, `admin/settings`; logged `on_call_settings_updated`
+/ `on_call_synced`, entity `on_call`). The Gmail service account reads it
+WITHOUT `sub` (the sheet is shared with its email as a Viewer) into
+`on_call_shift` (day, principal_id; no FK, not truncated by the seed), from
+yesterday on, when someone asks and the last read is over
+`ON_CALL_SYNC_MINUTES` (15) old, hourly from the client-updates cron, and on
+Sync now. `parseOnCallSheet` reads the layout loosely: a row with one date is
+that day, with two dates every day between; every other cell is split into
+names matched to an active AM / TL / ATL / OP Admin (`ON_CALL_ROLE_CODES`) by
+display name, email, first name or first name + last initial, only when one
+person answers; unmatched names show on the card. A shift on day D runs
+`start_hour` → `end_hour` Chicago (default **12 AM → 3 PM**, an end at or
+before the start runs overnight; `onCallShiftNow`). During it the header shows
+**After hours** and the wide view is ON by default; a press (`POST
+/after-hours {on}`, 409 `NOT_ON_CALL` outside a shift) logs
+`after_hours_opened|closed` with `after.shift`, and only presses made during
+the running shift count, so every shift starts wide. **The server decides:**
+`loadSession` stamps `afterHoursWide` on the acting principal
+(`afterHoursWideFor`, a 15 s memo cleared by a press or a sync), and
+`woScopeSql` then drops "Only theirs" and `assignedOnly` (the site restriction
+stays), `onTheJobSql` drops the "on the job" filter on approvals and the badge,
+and the notices inbox and badge read every work order — so the lists, queues,
+counts and per-work-order routes all widen together, and what the person may
+DO is still their role's. The Work Orders "Yours only" chip hides while wide.
+"Who switched After hours" (`GET /after-hours/log`, `admin/audit` view) is on
+the On call card.
+
+**The AM approves a payment far over the NTE** (#35, Elise 2026-11-17, no
+migration; `tests/on-call.test.ts`). A payment far enough over the NTE is also
+past the approved quote (a negative margin), so an `over_quote` hold kept the
+AM's above-NTE Approve locked. Now whoever may decide over-quote holds
+(`mayDecideOverQuote`: ATL / TL / AM / Admin, a super admin) settles it in the
+same act: `approvePaymentRequest` approves the open over-quote hold (or files an
+approved one) with the same reason in the payment's transaction
+(`approveOverQuote`, covers = the projected cost, internal comment), and the
+row's `approve_hold` is null for such a viewer.
 
 **No work order goes to a disabled account** (Elise, 2026-10-23, no
 migration; `tests/assignee-disabled.test.ts`). The person paths already

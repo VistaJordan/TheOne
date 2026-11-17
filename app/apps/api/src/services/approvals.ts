@@ -294,6 +294,8 @@ function num(v: unknown): number | null {
  * on the Approvals page lifts it (`allWorkOrders`).
  */
 function onTheJobSql(viewer: ActingPrincipal, p: Params): string {
+  // 2026-11-17 · the person on call, with After hours on, sees them all.
+  if (viewer.afterHoursWide) return '';
   return `AND (a.type = 'wo_acceptance' OR a.created_by = ${p.add(viewer.id)} OR ${assignedToSql(p.add(viewer.name), 't')})`;
 }
 

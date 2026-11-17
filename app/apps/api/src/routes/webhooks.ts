@@ -101,7 +101,11 @@ export default async function webhookRoutes(app: FastifyInstance): Promise<void>
     // with no quote submitted (services/lateQuote.ts; never throws).
     const { sweepLateQuotes } = await import('../services/lateQuote.js');
     const late_quotes = await sweepLateQuotes();
-    return { ok: true, ...(await runDueClientUpdates()), dispatch_advanced: dispatch.advanced, sharepoint, quotes_due, late_quotes };
+    // 2026-11-17 · and reads the on-call sheet again (services/afterHours.ts;
+    // never throws — a failed read is kept for Admin › Settings › On call).
+    const { syncOnCall } = await import('../services/afterHours.js');
+    const on_call = await syncOnCall(null).then((r) => ({ ok: r.ok, shifts: r.shifts })).catch(() => ({ ok: false, shifts: 0 }));
+    return { ok: true, ...(await runDueClientUpdates()), dispatch_advanced: dispatch.advanced, sharepoint, quotes_due, late_quotes, on_call };
   };
   app.get('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));
   app.post('/webhooks/client-updates-run', async (req) => clientUpdatesRun(req));
