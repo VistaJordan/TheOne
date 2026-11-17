@@ -48,6 +48,7 @@ import { PurchasingPage } from './pages/PurchasingPage';
 import { InvoicePrintPage, PurchaseOrderPrintPage } from './pages/DocPrintPages';
 import { ClientUpdatesPage } from './pages/ClientUpdatesPage';
 import { ClientSharePage } from './pages/ClientSharePage';
+import { SignoffFormPage } from './pages/SignoffFormPage';
 import { PulsePage } from './pages/PulsePage';
 import { ReceivablesPage } from './pages/ReceivablesPage';
 import { PaymentsPage } from './pages/PaymentsPage';
@@ -174,6 +175,8 @@ export function App() {
               <Route path="/share/client-updates/:token" element={<ClientSharePage />} />
               {/* 0066 — a vendor's own link: no sign-in, the token is the credential. */}
               <Route path="/vendor-portal/:token" element={<VendorPortalPage />} />
+              {/* 0156 — the sign-off form a manager on site signs: no sign-in, the token is the credential. */}
+              <Route path="/signoff/:token" element={<SignoffFormPage />} />
 
               <Route
                 path="/dashboard"

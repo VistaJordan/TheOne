@@ -3,7 +3,7 @@
 // boundary (SPRINT1-SPEC §8 Card C). Web never imports @theone/db.
 import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@theone/shared';
 // 0070: sign-off sheets.
-import type { SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
+import type { SignoffFormSubmit, SignoffFormView, SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
 // 0073: a work order saved as a PDF.
 import type { WoNotificationsResponse } from '@theone/shared';
 // UAT #48: reminders to managers.
@@ -2592,6 +2592,11 @@ export function shareWorkOrderSignoff(idOrNumber: string, input: SignoffShareInp
     body: JSON.stringify(input),
   });
 }
+
+// 0156 · The sign-off form a manager signs on: no session, the token is the credential.
+export const getSignoffForm = (token: string) => request<SignoffFormView>(`/public/signoff/${encodeURIComponent(token)}/form`);
+export const submitSignoffForm = (token: string, body: SignoffFormSubmit) =>
+  request<SignoffFormView>(`/public/signoff/${encodeURIComponent(token)}/submit`, { method: 'POST', body: JSON.stringify(body) });
 
 export function claimSignoffReply(idOrNumber: string, replyId: string): Promise<WoSignoffResponse> {
   return request(`/work-orders/${encodeURIComponent(idOrNumber)}/signoff/replies/${replyId}/claim`, { method: 'POST' });

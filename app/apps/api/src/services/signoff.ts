@@ -15,6 +15,16 @@
 // one open sheet parks the file in `wo_signoff_reply` until a person says
 // which work order it belongs to.
 //
+// 0156 (Elise, 2026-11-17): the sheet is also a FORM. The link texted as
+// "Form link" opens /signoff/<token> in the web app (no sign-in, the token is
+// the credential, like the PDF's): the manager types their name (and an
+// EMCOR closeout number) and signs with a finger; Submit draws the signed PDF
+// in the entity's design (lib/signoffPdf.ts), files it on the work order as a
+// sign-off file APPROVED as it lands (Drive, named SO1…) and — through the
+// same path an approval takes — copies it to the work order's SharePoint
+// folder when that integration copies files. A sheet is signed on the form
+// once; a new sheet (new token) is how it is signed again.
+//
 // Nothing here writes to a client system; Quo is our own line.
 
 import { randomBytes } from 'node:crypto';
@@ -24,14 +34,18 @@ import {
   ATTACHMENT_MAX_BYTES,
   SIGNOFF_ENTITY_NAMES,
   SIGNOFF_PERM_KEY,
+  SIGNOFF_SIGNATURE_MAX_BYTES,
   SIGNOFF_TOKEN_RE,
   VISIT_MIRROR_KEYS,
   normalizePhone,
-  signoffFormLink,
   signoffFormMessageText,
+  signoffFormPath,
+  signoffFormProblem,
   signoffLayoutFor,
   signoffMessageText,
   signoffPublicPath,
+  type SignoffFormSubmit,
+  type SignoffFormView,
   type SignoffLayout,
   type SignoffReply,
   type SignoffShare,
@@ -116,12 +130,15 @@ interface SheetRow {
   created_at: Date | string;
   signed_attachment_id: string | null;
   signed_at: Date | string | null;
+  signed_name: string | null;
+  signed_via: 'form' | 'text' | null;
 }
 
 const SHEET_SQL = `
   SELECT g.id::text AS id, g.layout, g.entity, g.wo_ref, g.address, g.storage_key, g.token,
          g.created_by::text AS created_by_id, p.display_name AS created_by_name,
-         g.created_at, g.signed_attachment_id::text AS signed_attachment_id, g.signed_at
+         g.created_at, g.signed_attachment_id::text AS signed_attachment_id, g.signed_at,
+         g.signed_name, g.signed_via
     FROM wo_signoff g LEFT JOIN principal p ON p.id = g.created_by`;
 
 async function currentSheet(q: Queryable, taskId: string): Promise<SheetRow | null> {
@@ -159,6 +176,11 @@ function publicUrl(token: string): string {
   return `${config.webOrigin}${signoffPublicPath(token)}`;
 }
 
+/** 0156: the sign-off form the manager signs on (the web app's page). */
+function formUrl(token: string): string {
+  return `${config.webOrigin}${signoffFormPath(token)}`;
+}
+
 async function present(row: SheetRow, f: Facts): Promise<WoSignoff> {
   return {
     id: row.id,
@@ -173,6 +195,9 @@ async function present(row: SheetRow, f: Facts): Promise<WoSignoff> {
     shares: await sharesOf({ signoffId: row.id }),
     signed_attachment_id: row.signed_attachment_id,
     signed_at: iso(row.signed_at),
+    signed_name: row.signed_name,
+    signed_via: row.signed_via,
+    form_url: formUrl(row.token),
   };
 }
 
@@ -258,7 +283,7 @@ export async function getSignoff(taskId: string, actor: ActingPrincipal): Promis
   const layout = layoutOf(f);
   return {
     signoff: row ? await present(row, f) : null,
-    form_link: signoffFormLink(layout, refOf(f), f.address),
+    form_link: row ? formUrl(row.token) : null,
     link_shares: await sharesOf({ taskId }),
     layout,
     technicians: await techniciansOf(taskId, f),
@@ -322,10 +347,10 @@ async function generate(taskId: string, actorId: string, via: 'button' | 'assign
     await logSignoff(tx, actorId, taskId, 'signoff_generated', ins.rows[0].id, {
       layout, entity: f.billing_entity, wo_ref, address: f.address, via, replaced: old.rows.map((r) => r.id),
     });
-    // The field shows the sheet from the start: the technician's link until
-    // the signed copy replaces it (fileSignedCopy).
+    // The field shows the sheet from the start: its sign-off form (0156)
+    // until the signed copy replaces it (fileSignedCopy).
     const before = bag[K_LINK] ?? null;
-    const link = publicUrl(linkToken);
+    const link = formUrl(linkToken);
     if (changed(before, link)) {
       await tx.query(`UPDATE task SET fields = $2::jsonb, updated_at = now() WHERE id = $1`, [taskId, JSON.stringify({ ...bag, [K_LINK]: link })]);
       await logTaskChanges(tx, actorId, taskId, [{ field: `fields.${K_LINK}`, before, after: link }], 'signoff');
@@ -410,24 +435,22 @@ export async function shareSignoff(taskId: string, input: SignoffShareInput, act
   if (!phone) throw badRequest('That is not a phone number we can text', { field: 'phone' });
   const kind = input.kind ?? 'pdf';
 
-  // 0116: the prefilled Paperform the team used to send. Built from the work
-  // order as it is now; no sheet has to be drawn (nor storage connected).
+  // 0156: the form link is OBI's own sign-off form for the current sheet
+  // (0116 sent the entity's Paperform), so a sheet is drawn first when there
+  // is none.
   let row: SheetRow | null = null;
   let text: string;
   let link: string | null = null;
   if (kind === 'link') {
     const f = await facts({ query }, taskId);
     const layout = layoutOf(f);
-    link = signoffFormLink(layout, refOf(f), f.address);
-    if (!layout || !link) {
-      throw badRequest(
-        !layout
-          ? 'Set the Comp (billing entity) first — it picks which form the link opens'
-          : `${SIGNOFF_ENTITY_NAMES[layout]} has no sign-off form link — send the PDF instead`,
-        { code: 'SIGNOFF_NO_FORM' },
-      );
+    if (!layout) {
+      throw badRequest('Set the Comp (billing entity) first — it picks which form the link opens', { code: 'SIGNOFF_NO_FORM' });
     }
-    text = signoffFormMessageText(SIGNOFF_ENTITY_NAMES[layout], refOf(f), f.address, link);
+    row = await currentSheet({ query }, taskId);
+    if (!row) row = await generate(taskId, actor.id, 'button');
+    link = formUrl(row.token);
+    text = signoffFormMessageText(SIGNOFF_ENTITY_NAMES[row.layout] ?? row.entity, row.wo_ref, row.address, link);
   } else {
     row = await currentSheet({ query }, taskId);
     if (!row) row = await generate(taskId, actor.id, 'button');
@@ -451,7 +474,7 @@ export async function shareSignoff(taskId: string, input: SignoffShareInput, act
     await tx.query(
       `INSERT INTO wo_signoff_share (signoff_id, task_id, vendor_id, tech_name, phone, channel, quo_message_id, sent_by, kind)
        VALUES ($1::uuid, $2, $3::uuid, $4, $5, $6, $7, $8, $9)`,
-      [row?.id ?? null, taskId, input.vendor_id ?? null, techName, phone, channel, quoMessageId, actor.id, kind],
+      [kind === 'pdf' ? row?.id ?? null : null, taskId, input.vendor_id ?? null, techName, phone, channel, quoMessageId, actor.id, kind],
     );
     await logSignoff(tx, actor.id, taskId, 'signoff_shared', row?.id ?? null, {
       phone, tech_name: techName, vendor_id: input.vendor_id ?? null, channel, quo_message_id: quoMessageId,
@@ -467,13 +490,15 @@ function quoActorId(): Promise<string> {
   return serviceActorId('Quo', 'QU');
 }
 
-/** File a signed copy on the work order and point the field at it. */
+/** File a signed copy on the work order and point the field at it. A copy
+    signed on the form (0156) is filed approved, against that sheet. */
 async function fileSignedCopy(
   taskId: string,
   src: { bytes?: Buffer; storageKey?: string; byteSize?: number; fileName: string; contentType: string },
   actorId: string,
   via: string,
   extra: Record<string, unknown>,
+  opts: { approved?: boolean; sheetId?: string } = {},
 ): Promise<string> {
   const f = await facts({ query }, taskId);
   const attachment = await addSystemAttachment(taskId, f.wo_number, {
@@ -485,6 +510,7 @@ async function fileSignedCopy(
     kind: 'signoff',
     actorId,
     via,
+    approved: opts.approved,
   });
   const link = `${config.webOrigin}/api/work-orders/${encodeURIComponent(f.wo_number)}/attachments/${attachment.id}`;
   let changes: TaskChange[] = [];
@@ -501,9 +527,12 @@ async function fileSignedCopy(
     if (!locked.rows[0]) throw notFound('Work order not found');
     const bag = locked.rows[0].fields ?? {};
     const sheet = await tx.query<{ id: string }>(
-      `UPDATE wo_signoff SET signed_attachment_id = $2, signed_at = now()
-        WHERE task_id = $1 AND superseded_at IS NULL RETURNING id::text AS id`,
-      [taskId, attachment.id],
+      `UPDATE wo_signoff
+          SET signed_attachment_id = $2, signed_at = now(),
+              signed_via = CASE WHEN $3::text = 'form' THEN 'form' ELSE COALESCE(signed_via, 'text') END
+        WHERE task_id = $1 AND (CASE WHEN $4::uuid IS NULL THEN superseded_at IS NULL ELSE id = $4::uuid END)
+        RETURNING id::text AS id`,
+      [taskId, attachment.id, via, opts.sheetId ?? null],
     );
     const before = bag[K_LINK] ?? null;
     if (changed(before, link)) {
@@ -677,4 +706,115 @@ export async function dismissReply(taskId: string, replyId: string, actor: Actin
     try { await del(r.storage_key, { token: blobToken() }); } catch { /* already gone */ }
   }
   return getSignoff(taskId, actor);
+}
+
+// ── 0156 · The sign-off form ─────────────────────────────────────────────────
+
+const CHICAGO_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', year: 'numeric' });
+const CHICAGO_TIME = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' });
+
+function formActorId(): Promise<string> {
+  return serviceActorId('Sign-off form', 'SF');
+}
+
+/** The current (not superseded) sheet a token names, or a 404. */
+async function sheetByToken(token: string): Promise<SheetRow & { task_id: string; signed_closeout: string | null }> {
+  if (!SIGNOFF_TOKEN_RE.test(token)) throw notFound('No such sheet');
+  const res = await query<SheetRow & { task_id: string; signed_closeout: string | null }>(
+    `${SHEET_SQL.replace('SELECT g.id::text AS id,', 'SELECT g.id::text AS id, g.task_id::text AS task_id, g.signed_closeout,')}
+      WHERE g.token = $1 AND g.superseded_at IS NULL`,
+    [token],
+  );
+  if (!res.rows[0]) throw notFound('No such sheet');
+  return res.rows[0];
+}
+
+/** What the form page shows: the sheet's own facts as they are on the work
+    order now, and whether it has been signed. Nothing else is sent. */
+export async function publicSignoffForm(token: string): Promise<SignoffFormView> {
+  const row = await sheetByToken(token);
+  const f = await facts({ query }, row.task_id);
+  const layout = layoutOf(f) ?? row.layout;
+  return {
+    layout,
+    entity_name: SIGNOFF_ENTITY_NAMES[layout],
+    wo_ref: refOf(f),
+    address: f.address,
+    closeout_required: layout === 'bkr_emcor',
+    date_label: CHICAGO_DAY.format(new Date()),
+    signed: row.signed_name ? { name: row.signed_name, at: iso(row.signed_at) ?? new Date().toISOString() } : null,
+    pdf_url: signoffPublicPath(token),
+  };
+}
+
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/**
+ * Submit: the signed sheet is drawn, filed on the work order (approved) and
+ * sent to SharePoint. The sheet is claimed first — `signed_name` set where it
+ * was NULL — so two presses, or two phones, never file it twice; when the
+ * filing fails the claim is undone and the form can be sent again.
+ */
+export async function submitSignoffForm(token: string, input: SignoffFormSubmit): Promise<SignoffFormView> {
+  const row = await sheetByToken(token);
+  if (row.signed_name) throw conflict('This sheet has already been signed', { code: 'SIGNOFF_ALREADY_SIGNED' });
+  const f = await facts({ query }, row.task_id);
+  const layout = layoutOf(f) ?? row.layout;
+  const closeoutRequired = layout === 'bkr_emcor';
+
+  const raw = (input.signature_png ?? '').replace(/^data:image\/png;base64,/, '');
+  const png = Buffer.from(raw, 'base64');
+  const hasSignature = png.length > PNG_MAGIC.length && png.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC);
+  const problem = signoffFormProblem(
+    { manager_name: input.manager_name, closeout_number: input.closeout_number, has_signature: hasSignature },
+    closeoutRequired,
+  );
+  if (problem) throw badRequest(problem, { code: 'VALIDATION' });
+  if (png.length > SIGNOFF_SIGNATURE_MAX_BYTES) throw badRequest('The signature is too large — clear it and sign again', { code: 'VALIDATION' });
+  if (!storageReady()) throw conflict('The sheet cannot be filed right now. Try again in a few minutes.', { code: 'ATTACHMENT_STORAGE_MISSING' });
+
+  const name = input.manager_name.trim();
+  const closeout = closeoutRequired ? (input.closeout_number ?? '').trim() : null;
+  const claim = await query(
+    `UPDATE wo_signoff SET signed_name = $2, signed_closeout = $3, signed_via = 'form'
+      WHERE id = $1 AND superseded_at IS NULL AND signed_name IS NULL`,
+    [row.id, name, closeout],
+  );
+  if (claim.rowCount === 0) throw conflict('This sheet has already been signed', { code: 'SIGNOFF_ALREADY_SIGNED' });
+
+  try {
+    const now = new Date();
+    const dateLabel = CHICAGO_DAY.format(now);
+    const wo_ref = refOf(f);
+    const bytes = await renderSignoffSheet({
+      layout,
+      wo_ref,
+      address: f.address,
+      signed: {
+        manager_name: name,
+        date_label: dateLabel,
+        closeout_number: closeout,
+        signature_png: new Uint8Array(png),
+        stamp: `Signed electronically · ${dateLabel}, ${CHICAGO_TIME.format(now)} CT`,
+      },
+    });
+    const actorId = await formActorId();
+    await fileSignedCopy(
+      row.task_id,
+      { bytes: Buffer.from(bytes), fileName: `Signoff-${wo_ref.replace(/[^A-Za-z0-9._-]+/g, '-')}-signed.pdf`, contentType: 'application/pdf' },
+      actorId,
+      'form',
+      { manager_name: name, ...(closeout ? { closeout_number: closeout } : {}), sheet_id: row.id },
+      { approved: true, sheetId: row.id },
+    );
+  } catch (err) {
+    await query(
+      `UPDATE wo_signoff SET signed_name = NULL, signed_closeout = NULL,
+              signed_via = CASE WHEN signed_attachment_id IS NULL THEN NULL ELSE 'text' END
+        WHERE id = $1 AND signed_via = 'form' AND signed_name = $2`,
+      [row.id, name],
+    ).catch(() => undefined);
+    throw err;
+  }
+  return publicSignoffForm(token);
 }

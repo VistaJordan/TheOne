@@ -4,3 +4,14 @@
 @font-face{font-family:'Barlow';font-weight:600;font-display:swap;src:url(/fonts/barlow-600.woff2) format('woff2');}
 @font-face{font-family:'Barlow Condensed';font-weight:700;font-display:swap;src:url(/fonts/barlow-condensed-700.woff2) format('woff2');}
 @font-face{font-family:'Barlow Condensed';font-weight:800;font-display:swap;src:url(/fonts/barlow-condensed-800.woff2) format('woff2');}
+/* 2026-11-17 · the sign-off form and the printed quote, in each billing
+   entity's design (Seamless: Sora / Inter / JetBrains Mono; BKR: Barlow).
+   Google Fonts' latin subsets, self-hosted like the four above (OFL). */
+@font-face{font-family:'Barlow';font-weight:500;font-display:swap;src:url(/fonts/barlow-500.woff2) format('woff2');}
+@font-face{font-family:'Barlow Condensed';font-weight:600;font-display:swap;src:url(/fonts/barlow-condensed-600.woff2) format('woff2');}
+@font-face{font-family:'Sora';font-weight:600;font-display:swap;src:url(/fonts/sora-600.woff2) format('woff2');}
+@font-face{font-family:'Sora';font-weight:700;font-display:swap;src:url(/fonts/sora-700.woff2) format('woff2');}
+@font-face{font-family:'Inter';font-weight:400;font-display:swap;src:url(/fonts/inter-400.woff2) format('woff2');}
+@font-face{font-family:'Inter';font-weight:500;font-display:swap;src:url(/fonts/inter-500.woff2) format('woff2');}
+@font-face{font-family:'Inter';font-weight:600;font-display:swap;src:url(/fonts/inter-600.woff2) format('woff2');}
+@font-face{font-family:'JetBrains Mono';font-weight:500;font-display:swap;src:url(/fonts/jetbrains-mono-500.woff2) format('woff2');}

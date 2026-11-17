@@ -370,7 +370,13 @@ export async function addAttachment(
 export async function addSystemAttachment(
   taskId: string,
   woNumber: string,
-  input: { bytes?: Buffer; storageKey?: string; byteSize?: number; fileName: string; contentType: string; kind: AttachmentKind; actorId: string; via: string },
+  input: {
+    bytes?: Buffer; storageKey?: string; byteSize?: number; fileName: string; contentType: string; kind: AttachmentKind; actorId: string; via: string;
+    /** 0156: filed approved as it lands (a sheet signed on OBI's own form is
+        not a photo anyone has to look at first), named like an approval
+        (SO1, SO2…) and copied to SharePoint like one. */
+    approved?: boolean;
+  },
 ): Promise<Attachment> {
   const blobToken = requireStorage();
   const contentType = input.contentType.toLowerCase().split(';')[0].trim();
@@ -391,13 +397,23 @@ export async function addSystemAttachment(
     storageKey = blob.pathname;
     byteSize = bytes.length;
   }
-  const ins = await query<{ id: string }>(
-    `INSERT INTO attachment
-       (task_id, file_name, storage_key, content_type, byte_size, client_visible, uploaded_by, kind)
-     VALUES ($1, $2, $3, $4, $5, false, $6, $7)
-     RETURNING id::text AS id`,
-    [taskId, fileName, storageKey, contentType, byteSize, input.actorId, input.kind],
-  );
+  const approved = input.approved === true;
+  let storedName = fileName;
+  const ins = await withTransaction(async (tx) => {
+    if (approved) {
+      await lockTaskForNaming(tx, taskId);
+      storedName = await autoNameFor(tx, taskId, null, input.kind, fileName);
+    }
+    return tx.query<{ id: string }>(
+      `INSERT INTO attachment
+         (task_id, file_name, storage_key, content_type, byte_size, client_visible, uploaded_by, kind,
+          review_status, reviewed_by, reviewed_at)
+       VALUES ($1, $2, $3, $4, $5, false, $6, $7,
+          $8, CASE WHEN $9 THEN $6::uuid END, CASE WHEN $9 THEN now() END)
+       RETURNING id::text AS id`,
+      [taskId, storedName, storageKey, contentType, byteSize, input.actorId, input.kind, approved ? 'approved' : 'pending', approved],
+    );
+  });
   await query(
     `INSERT INTO activity_log (actor_principal_id, entity_type, entity_id, action, field, before, after)
      VALUES ($1, 'task', $2, 'attachment_added', $3, NULL, $4::jsonb)`,
@@ -405,9 +421,19 @@ export async function addSystemAttachment(
       input.actorId,
       taskId,
       `attachment:${ins.rows[0].id}`,
-      JSON.stringify({ file_name: fileName, content_type: contentType, byte_size: byteSize, client_visible: false, visit_id: null, review_status: 'pending', kind: input.kind, via: input.via }),
+      JSON.stringify({
+        file_name: storedName,
+        ...(storedName !== fileName ? { uploaded_as: fileName } : {}),
+        content_type: contentType, byte_size: byteSize, client_visible: false, visit_id: null,
+        review_status: approved ? 'approved' : 'pending', kind: input.kind, via: input.via,
+      }),
     ],
   );
+  // 0071 · approved as it landed, so it goes to SharePoint like an approval.
+  if (approved) {
+    const { fileAttachment } = await import('./sharepoint.js');
+    await fileAttachment(ins.rows[0].id, input.actorId);
+  }
   return readInserted(ins.rows[0].id);
 }
 

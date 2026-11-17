@@ -15,10 +15,11 @@
 //     to several work orders waits in a strip until someone claims or
 //     dismisses it.
 //
-// 0116 (Elise, 2026-11-02): the entity's Paperform, prefilled with the work
-// order number and the address — the link the team texted before The One —
-// sits under the sheet with Copy link, and needs no drawn sheet. Send to tech
-// asks which to send: the form link or the PDF.
+// 0116 (Elise, 2026-11-02): a form link sits above the sheet with Copy link,
+// and Send to tech asks which to send: the form link or the PDF. Since 0156
+// (2026-11-17) the form is OBI's own (/signoff/<token>): the manager signs on
+// the technician's phone and Submit files the signed PDF on the Drive tab
+// (approved) and in SharePoint — no photo to text back.
 //
 // Without the Quo API configured on the server, Send opens the Quo app on
 // this PC with the text pre-filled (an `sms:` link) and still records the
@@ -180,7 +181,9 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
               <a className="icon-btn so-dl" href={fileUrl} download={fileName ?? undefined} aria-label="Download the sheet" title="Download">
                 <Icon name="download" size={14} />
               </a>
-              {s.signed_at && <span className="chip chip-ok chip-sm">Signed copy received</span>}
+              {s.signed_at && (
+                <span className="chip chip-ok chip-sm">{s.signed_via === 'form' && s.signed_name ? `Signed on the form by ${s.signed_name}` : 'Signed copy received'}</span>
+              )}
               {!s.signed_at && s.shares.length > 0 && <span className="chip chip-warn chip-sm">Waiting for the signed copy</span>}
               {s.stale && <span className="chip chip-outline chip-sm" title="The work order's number or address changed after this sheet was drawn">Details changed</span>}
             </div>
@@ -210,7 +213,11 @@ export function SignoffPanel({ wo, fallback }: { wo: WorkOrderDetailV2; fallback
       {(s?.signed_at || shares.length > 0) && (
         <ul className="so-shares">
           {s?.signed_at && (
-            <li><span>Signed copy received {feedTime(s.signed_at)}</span><span>awaiting approval in Photos &amp; files</span></li>
+            <li>
+              {s.signed_via === 'form'
+                ? <><span>Signed on the form{s.signed_name ? <> by <b>{s.signed_name}</b></> : null} {feedTime(s.signed_at)}</span><span>filed on the Drive tab</span></>
+                : <><span>Signed copy received {feedTime(s.signed_at)}</span><span>awaiting approval on the Drive tab</span></>}
+            </li>
           )}
           {shares.map((sh) => (
             <li key={sh.id}>
@@ -263,7 +270,9 @@ function ShareSheet({ wo, data, onClose, onSent }: {
   const techs = data.technicians;
   // A PDF share draws the sheet when none exists, which needs storage.
   const pdfPossible = Boolean(data.signoff) || data.storage_ready;
-  const [kind, setKind] = useState<SignoffShareKind>(data.form_link ? 'link' : 'pdf');
+  // The form needs a sheet; sending it draws one when there is none.
+  const linkPossible = Boolean(data.form_link) || (data.storage_ready && data.layout !== null);
+  const [kind, setKind] = useState<SignoffShareKind>(linkPossible ? 'link' : 'pdf');
   const [pick, setPick] = useState<string>(techs[0]?.key ?? 'other');
   const [otherName, setOtherName] = useState('');
   const [otherPhone, setOtherPhone] = useState('');
@@ -308,7 +317,7 @@ function ShareSheet({ wo, data, onClose, onSent }: {
           <span className="overline">What to send</span>
           <div className="seg" role="radiogroup" aria-label="What to send">
             <button type="button" role="radio" aria-checked={kind === 'link'} className={`seg-btn${kind === 'link' ? ' is-on' : ''}`}
-              disabled={!data.form_link} title={data.form_link ? undefined : 'This entity has no sign-off form link'} onClick={() => setKind('link')}>
+              disabled={!linkPossible} title={linkPossible ? undefined : !data.layout ? 'Set the Comp first: it picks the sheet' : 'File storage is not connected, so no sheet can be drawn'} onClick={() => setKind('link')}>
               Form link
             </button>
             <button type="button" role="radio" aria-checked={kind === 'pdf'} className={`seg-btn${kind === 'pdf' ? ' is-on' : ''}`}
@@ -320,8 +329,9 @@ function ShareSheet({ wo, data, onClose, onSent }: {
 
         <p className="sheet-b">
           {kind === 'link' ? (
-            <>The technician gets a text with the sign-off form, already filled in with <b>{data.signoff?.wo_ref ?? wo.wo_number}</b> and
-            the address; the manager on site signs it on the form.</>
+            <>The technician gets a text with the sign-off form for <b>{data.signoff?.wo_ref ?? wo.wo_number}</b>, with the address already
+            on it. The manager on site types their name and signs on the phone; once they press Submit the signed sheet is filed on the
+            Drive tab, and copied to SharePoint when that integration is on.</>
           ) : (
             <>The technician gets a text with a link to the blank sheet for <b>{data.signoff?.wo_ref ?? wo.wo_number}</b>, and is
             asked to reply with a photo or scan once the manager on site has signed it.</>
@@ -377,7 +387,7 @@ function ShareSheet({ wo, data, onClose, onSent }: {
 
         <div className="sheet-f">
           <button type="button" className="btn" onClick={onClose} disabled={share.isPending}>Cancel</button>
-          <button type="button" className="btn btn-primary" onClick={() => share.mutate()} disabled={!phone || share.isPending || (kind === 'pdf' && !pdfPossible) || (kind === 'link' && !data.form_link)}>
+          <button type="button" className="btn btn-primary" onClick={() => share.mutate()} disabled={!phone || share.isPending || (kind === 'pdf' && !pdfPossible) || (kind === 'link' && !linkPossible)}>
             <Icon name="send" size={14} />
             {share.isPending ? 'Sending…' : !data.quo_api_ready ? 'Open in Quo' : kind === 'link' ? 'Text the link' : 'Text the sheet'}
           </button>

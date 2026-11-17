@@ -11,6 +11,9 @@
 //
 //   GET    /public/signoff/:token                         the technician's download (no session; the
 //                                                         token is the credential — plugins/authGuard)
+//   GET    /public/signoff/:token/form                    0156: what the sign-off form page shows
+//   POST   /public/signoff/:token/submit                  0156: { manager_name, closeout_number?, signature_png }
+//                                                         → the signed PDF, filed on the work order
 //
 // The signed copy arrives through POST /webhooks/quo (message.received) —
 // routes/webhooks.ts → services/woCalls → services/signoff.
@@ -25,8 +28,10 @@ import {
   generateSignoff,
   getSignoff,
   publicSignoffFile,
+  publicSignoffForm,
   readSignoffFile,
   shareSignoff,
+  submitSignoffForm,
   type SheetFile,
 } from '../services/signoff.js';
 
@@ -40,6 +45,15 @@ const shareSchema = z
     kind: z.enum(['pdf', 'link']).optional(),
     tech_name: z.string().trim().max(200).nullable().optional().transform((v) => (v ? v : null)),
     vendor_id: z.string().uuid().nullable().optional().transform((v) => (v ? v : null)),
+  })
+  .strict();
+
+const submitSchema = z
+  .object({
+    manager_name: z.string().max(400),
+    closeout_number: z.string().max(400).nullable().optional(),
+    // base64 PNG; the service checks the decoded size against SIGNOFF_SIGNATURE_MAX_BYTES.
+    signature_png: z.string().max(1_500_000),
   })
   .strict();
 
@@ -90,5 +104,19 @@ export default async function signoffRoutes(app: FastifyInstance): Promise<void>
     const { token } = parse(tokenParams, req.params);
     const file = await publicSignoffFile(token);
     return sendPdf(reply, file, 'inline');
+  });
+
+  // 0156 · The sign-off form (the web page /signoff/:token reads these).
+  app.get('/public/signoff/:token/form', async (req, reply) => {
+    const { token } = parse(tokenParams, req.params);
+    reply.header('Cache-Control', 'private, no-store').header('X-Robots-Tag', 'noindex, nofollow');
+    return publicSignoffForm(token);
+  });
+
+  app.post('/public/signoff/:token/submit', { bodyLimit: 2 * 1024 * 1024 }, async (req, reply) => {
+    const { token } = parse(tokenParams, req.params);
+    const body = parse(submitSchema, req.body);
+    reply.header('Cache-Control', 'private, no-store');
+    return submitSignoffForm(token, body);
   });
 }

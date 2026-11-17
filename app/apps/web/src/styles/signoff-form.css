@@ -1,0 +1,249 @@
+/* 0156 · The sign-off form (/signoff/:token), in the billing entity's design.
+ *
+ * The colours here are the two brands' own (Seamless cyan / blue on black,
+ * BKR red and slate), the same the signed PDF is drawn in — brand-mandated, so
+ * they live on this page rather than in theme/tokens.css. The page is a sheet
+ * of paper on a phone: one light design, whatever the app's theme. */
+
+.sof {
+  --sof-ink: #0e1116;
+  --sof-soft: #4a5361;
+  --sof-line: #9aa4b2;
+  --sof-paper: #ffffff;
+  --sof-tint: #f5f8fc;
+  --sof-err: #c81e40;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--sof-paper);
+  color: var(--sof-ink);
+  color-scheme: light;
+  /* The BKR stub's notches sit on the screen's edge: never a sideways scroll. */
+  overflow-x: clip;
+}
+.sof-sfm {
+  --sof-accent: #0b63f6;
+  --sof-accent-2: #1ec8f5;
+  --sof-head-bg: #000000;
+  --sof-label-font: 'Sora', system-ui, sans-serif;
+  --sof-body-font: 'Inter', system-ui, sans-serif;
+  font-family: var(--sof-body-font);
+}
+.sof-bkr {
+  --sof-ink: #1f2933;
+  --sof-soft: #5b6673;
+  --sof-line: #8a96a3;
+  --sof-tint: #f4f6f8;
+  --sof-accent: #e3244b;
+  --sof-accent-2: #e3244b;
+  --sof-slate: #3e4a56;
+  --sof-band: #c81e40;
+  --sof-label-font: 'Barlow Condensed', system-ui, sans-serif;
+  --sof-body-font: 'Barlow', system-ui, sans-serif;
+  font-family: var(--sof-body-font);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.sof-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 16px; }
+.sof-sfm .sof-head { background: var(--sof-head-bg); min-height: 88px; padding-left: 4px; }
+.sof-sfm .sof-logo { height: auto; width: auto; max-height: 72px; max-width: calc(100% - 150px); min-width: 0; display: block; }
+.sof-bkr .sof-head { padding-top: 16px; }
+.sof-bkr .sof-logo { height: 76px; width: auto; display: block; flex: none; }
+.sof-head-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; max-width: 150px; text-align: right; }
+.sof-bkr .sof-head-side { flex: 1; max-width: none; min-width: 0; }
+.sof-kicker { font-family: var(--sof-label-font); font-size: 10px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; }
+.sof-sfm .sof-kicker { color: var(--sof-accent-2); }
+.sof-bkr .sof-kicker { color: var(--sof-soft); font-size: 11px; }
+.sof-head-ref { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #c9d3df; overflow-wrap: anywhere; }
+.sof-head-title { font-family: var(--sof-label-font); font-weight: 700; font-size: 30px; line-height: 0.95; text-transform: uppercase; color: var(--sof-slate); }
+
+/* The seam (Seamless) / the double rule (BKR). */
+.sof-rule { display: flex; flex-direction: column; gap: 2px; }
+.sof-sfm .sof-rule span:first-child { height: 4px; background: linear-gradient(90deg, var(--sof-accent-2), var(--sof-accent)); }
+.sof-sfm .sof-rule span:last-child { display: none; }
+.sof-bkr .sof-rule { margin: 14px 16px 0; }
+.sof-bkr .sof-rule span:first-child { height: 4px; background: var(--sof-accent); }
+.sof-bkr .sof-rule span:last-child { height: 1px; background: var(--sof-accent); }
+
+/* ── Body ───────────────────────────────────────────────────────────────── */
+.sof-main { flex: 1; width: 100%; max-width: 640px; margin: 0 auto; padding: 24px 16px 32px; box-sizing: border-box; }
+.sof-state { padding: 32px 0; }
+.sof-state h1 { font-family: var(--sof-label-font, system-ui); font-size: 24px; margin: 0 0 8px; }
+.sof-state p { color: var(--sof-soft); margin: 0; line-height: 1.5; }
+
+.sof-form { display: flex; flex-direction: column; gap: 22px; }
+.sof-title h1 { margin: 0; font-family: var(--sof-label-font); font-weight: 700; font-size: 30px; letter-spacing: -0.01em; line-height: 1.1; }
+.sof-title p { margin: 8px 0 0; font-size: 14px; color: var(--sof-soft); line-height: 1.5; }
+
+.sof-lbl {
+  display: block;
+  font-family: var(--sof-label-font);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sof-soft);
+}
+.sof-bkr .sof-lbl { font-size: 13px; }
+
+/* The numbered facts: nodes on the seam (Seamless), red numerals (BKR). */
+.sof-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 20px; position: relative; }
+.sof-facts li, .sof-field-closeout { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 16px; align-items: start; }
+.sof-bkr .sof-facts li, .sof-bkr .sof-field-closeout { grid-template-columns: 44px minmax(0, 1fr); }
+.sof-facts li > div, .sof-field-closeout > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sof-bkr .sof-facts li > div { border-bottom: 1px solid #d5dbe1; padding-bottom: 12px; }
+.sof-sfm .sof-facts::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--sof-accent-2), var(--sof-accent));
+}
+.sof-n { position: relative; }
+.sof-sfm .sof-n {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--sof-accent-2);
+  background: var(--sof-paper);
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  font-family: var(--sof-label-font);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--sof-accent);
+}
+.sof-bkr .sof-n { font-family: var(--sof-label-font); font-weight: 700; font-size: 34px; line-height: 0.9; color: var(--sof-accent); }
+.sof-ref { font-size: 22px; overflow-wrap: anywhere; }
+.sof-sfm .sof-ref { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; }
+.sof-bkr .sof-ref { font-family: var(--sof-label-font); font-weight: 600; font-size: 26px; letter-spacing: 0.03em; }
+.sof-addr { font-weight: 500; font-size: 17px; line-height: 1.4; }
+
+/* ── The manager's part ─────────────────────────────────────────────────── */
+.sof-stub { display: flex; flex-direction: column; gap: 18px; }
+.sof-stub h2 { margin: 0; font-family: var(--sof-label-font); font-weight: 700; font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; display: flex; align-items: center; gap: 12px; }
+.sof-stub h2::after { content: ''; flex: 1; height: 1px; background: #d5dbe1; }
+.sof-bkr .sof-stub {
+  position: relative;
+  margin: 8px -16px 0;
+  padding: 26px 16px 22px;
+  background: var(--sof-tint);
+  border-top: 2px dashed #b9c2cc;
+}
+.sof-bkr .sof-stub h2 { color: var(--sof-slate); font-size: 18px; }
+/* The ticket's notches. */
+.sof-bkr .sof-stub::before, .sof-bkr .sof-stub::after {
+  content: '';
+  position: absolute;
+  top: -15px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--sof-paper);
+}
+.sof-bkr .sof-stub::before { left: -14px; }
+.sof-bkr .sof-stub::after { right: -14px; }
+
+.sof-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+.sof-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sof-input {
+  font: inherit;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--sof-ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1.5px solid var(--sof-line);
+  border-radius: 0;
+  padding: 6px 0;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+}
+.sof-input:focus { border-bottom-color: var(--sof-accent); box-shadow: 0 1px 0 var(--sof-accent); }
+.sof-date { font-size: 17px; font-weight: 500; padding: 6px 0; border-bottom: 1.5px solid var(--sof-line); }
+.sof-field.is-missing .sof-input, .sof-field.is-missing .sof-sig { border-color: var(--sof-err); }
+.sof-field.is-missing .sof-lbl { color: var(--sof-err); }
+
+.sof-lbl-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sof-clear { font: inherit; font-size: 13px; font-weight: 600; color: var(--sof-accent); background: none; border: 0; padding: 4px 0; cursor: pointer; }
+.sof-clear:disabled { color: var(--sof-line); cursor: default; }
+
+.sof-sig { position: relative; height: 200px; background: var(--sof-tint); border: 1.5px solid transparent; }
+.sof-sfm .sof-sig {
+  /* the crop corners of the printed sheet */
+  background:
+    linear-gradient(var(--sof-accent-2), var(--sof-accent-2)) left top / 22px 2px no-repeat,
+    linear-gradient(var(--sof-accent-2), var(--sof-accent-2)) left top / 2px 22px no-repeat,
+    linear-gradient(#1290f0, #1290f0) right top / 22px 2px no-repeat,
+    linear-gradient(#1290f0, #1290f0) right top / 2px 22px no-repeat,
+    linear-gradient(#1290f0, #1290f0) left bottom / 22px 2px no-repeat,
+    linear-gradient(#1290f0, #1290f0) left bottom / 2px 22px no-repeat,
+    linear-gradient(var(--sof-accent), var(--sof-accent)) right bottom / 22px 2px no-repeat,
+    linear-gradient(var(--sof-accent), var(--sof-accent)) right bottom / 2px 22px no-repeat,
+    var(--sof-tint);
+}
+.sof-bkr .sof-sig { background: var(--sof-paper); border: 1px solid #c3cbd3; border-left: 6px solid var(--sof-accent); }
+.sof-sig-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; z-index: 1; }
+.sof-sig-line { position: absolute; left: 20px; right: 20px; bottom: 34px; height: 1px; background: var(--sof-line); }
+.sof-sig-hint {
+  position: absolute;
+  left: 20px;
+  bottom: 42px;
+  font-family: var(--sof-label-font);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sof-line);
+}
+.sof-attest { margin: 0; font-size: 13px; line-height: 1.5; color: var(--sof-soft); }
+
+.sof-error { margin: 0; color: var(--sof-err); font-weight: 600; font-size: 14px; }
+.sof-submit {
+  font-family: var(--sof-label-font);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+  border: 0;
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  background: var(--sof-accent);
+}
+.sof-sfm .sof-submit { background: linear-gradient(90deg, #0b8fe0, var(--sof-accent)); }
+.sof-bkr .sof-submit { background: var(--sof-band); border-radius: 4px; text-transform: uppercase; letter-spacing: 0.12em; }
+.sof-submit:disabled { opacity: 0.6; cursor: progress; }
+.sof-submit:focus-visible, .sof-clear:focus-visible, .sof-paper a:focus-visible { outline: 3px solid var(--sof-accent-2); outline-offset: 2px; }
+.sof-paper { margin: -8px 0 0; text-align: center; font-size: 13px; color: var(--sof-soft); }
+.sof-paper a { color: var(--sof-accent); }
+
+/* ── Signed ─────────────────────────────────────────────────────────────── */
+.sof-done { padding: 28px 0; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.sof-done-mark { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; color: #ffffff; background: var(--sof-accent); }
+.sof-done h1 { margin: 6px 0 0; font-family: var(--sof-label-font); font-weight: 700; font-size: 26px; }
+.sof-bkr .sof-done h1 { text-transform: uppercase; color: var(--sof-slate); }
+.sof-done p { margin: 0; font-size: 15px; line-height: 1.55; }
+.sof-done-sub { color: var(--sof-soft); }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+.sof-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; padding: 14px 16px; font-size: 12px; }
+.sof-sfm .sof-foot { border-top: 1px solid #e3e8ef; color: var(--sof-soft); }
+.sof-sfm .sof-foot b { font-family: var(--sof-label-font); font-weight: 600; color: var(--sof-ink); }
+.sof-bkr .sof-foot { background: var(--sof-band); color: #ffffff; }
+.sof-bkr .sof-foot b { font-family: var(--sof-label-font); font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
+
+@media (min-width: 640px) {
+  .sof-sfm .sof-head { min-height: 110px; padding-right: 32px; }
+  .sof-sfm .sof-logo { max-height: 92px; max-width: calc(100% - 220px); }
+  .sof-head-side { max-width: 220px; }
+  .sof-bkr .sof-head { padding: 24px 32px 0; }
+  .sof-bkr .sof-logo { height: 96px; }
+  .sof-head-title { font-size: 40px; }
+  .sof-bkr .sof-rule { margin: 18px 32px 0; }
+  .sof-sig { height: 230px; }
+}

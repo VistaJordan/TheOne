@@ -65,7 +65,12 @@ export function signoffFormLink(layout: SignoffLayout | null, woRef: string | nu
   return `${base}?${parts.join('&')}`;
 }
 
-/** Send to tech: the prefilled form link, or the PDF. */
+/** Send to tech: the sign-off form, or the PDF.
+ *
+ * Since 0156 (Elise, 2026-11-17) the form is OBI's own (`signoffFormPath`):
+ * the manager signs on the technician's phone and Submit files the signed PDF
+ * on the work order. The Paperform links above are what the team texted
+ * before; nothing sends them any more. */
 export type SignoffShareKind = 'pdf' | 'link';
 
 /** What goes on the sheet. Pure data so the renderer can be tested alone. */
@@ -74,6 +79,65 @@ export interface SignoffSheetData {
   /** The client's work order number (ext_name), falling back to ours. */
   wo_ref: string;
   address: string | null;
+  /** 0156: what the manager put on the form. Absent = the blank sheet. */
+  signed?: SignoffSignedData;
+}
+
+export interface SignoffSignedData {
+  manager_name: string;
+  /** The day it was signed, as printed ("Nov 17, 2026", Chicago). */
+  date_label: string;
+  closeout_number?: string | null;
+  /** The signature drawn on the form, as PNG bytes. */
+  signature_png: Uint8Array;
+  /** The line printed under the signature ("Signed on the OBI form …"). */
+  stamp: string;
+}
+
+// ── 0156 · The sign-off form ─────────────────────────────────────────────────
+
+/** The page the technician's link opens (the web app, no sign-in). */
+export const signoffFormPath = (token: string): string => `/signoff/${token}`;
+
+export const SIGNOFF_NAME_MAX = 120;
+export const SIGNOFF_CLOSEOUT_MAX = 60;
+/** The drawn signature, as PNG bytes (the browser sends ~20–150KB). */
+export const SIGNOFF_SIGNATURE_MAX_BYTES = 1_000_000;
+
+/** What the form page reads. Only the sheet's own facts: no money, no names
+    of ours, nothing else about the work order. */
+export interface SignoffFormView {
+  layout: SignoffLayout;
+  entity_name: string;
+  wo_ref: string;
+  address: string | null;
+  /** The EMCOR sheet asks for the closeout number too. */
+  closeout_required: boolean;
+  /** Today, as the sheet will print it (Chicago). */
+  date_label: string;
+  /** Set once the form was submitted; the page then says so and takes no more. */
+  signed: { name: string; at: string } | null;
+  /** The blank sheet, for a technician who prefers paper. */
+  pdf_url: string;
+}
+
+export interface SignoffFormSubmit {
+  manager_name: string;
+  closeout_number?: string | null;
+  /** base64 of the PNG (no data: prefix). */
+  signature_png: string;
+}
+
+/** The first thing wrong with a submission, or null. The API asks the same. */
+export function signoffFormProblem(input: { manager_name?: string | null; closeout_number?: string | null; has_signature: boolean }, closeoutRequired: boolean): string | null {
+  const name = (input.manager_name ?? '').trim();
+  if (name.length < 2) return 'Type the name of the manager on site';
+  if (name.length > SIGNOFF_NAME_MAX) return `The name is longer than ${SIGNOFF_NAME_MAX} characters`;
+  const closeout = (input.closeout_number ?? '').trim();
+  if (closeoutRequired && !closeout) return 'Type the closeout number';
+  if (closeout.length > SIGNOFF_CLOSEOUT_MAX) return `The closeout number is longer than ${SIGNOFF_CLOSEOUT_MAX} characters`;
+  if (!input.has_signature) return 'Sign in the box';
+  return null;
 }
 
 export interface SignoffShare {
@@ -103,6 +167,12 @@ export interface WoSignoff {
   shares: SignoffShare[];
   signed_attachment_id: string | null;
   signed_at: string | null;
+  /** 0156: the manager's name when it was signed on the form. */
+  signed_name: string | null;
+  /** How the signed copy came: on the form, or texted back as a photo. */
+  signed_via: 'form' | 'text' | null;
+  /** The sign-off form for this sheet (the link texted as "Form link"). */
+  form_url: string;
 }
 
 /** A signed copy that came back from a number holding several open sheets:
@@ -120,9 +190,8 @@ export interface SignoffReply {
 export interface WoSignoffResponse {
   /** The current sheet, or null when none has been generated yet. */
   signoff: WoSignoff | null;
-  /** The entity's Paperform, prefilled with this work order's number and
-      address as they are NOW — null when the entity has no form, Comp
-      is unset, or the work order has no number. Needs no drawn sheet. */
+  /** The sign-off form of the current sheet (0156) — null until a sheet is
+      drawn. Sending the form link draws one when there is none. */
   form_link: string | null;
   /** Every form-link share on the work order (a PDF share sits under its
       sheet's `signoff.shares`), newest first. */
@@ -174,7 +243,7 @@ export function signoffMessageText(entityName: string, woRef: string, address: s
   );
 }
 
-/** The text for the form link: the technician signs on the form itself, so
+/** The text for the form link: the manager signs on the form itself, so
     nothing has to be texted back. */
 export function signoffFormMessageText(entityName: string, woRef: string, address: string | null, url: string): string {
   const where = address ? ` at ${address}` : '';

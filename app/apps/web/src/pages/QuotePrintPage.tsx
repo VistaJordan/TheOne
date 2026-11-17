@@ -15,10 +15,17 @@
  *
  * 2026-10-28 (Elise) · the document itself is `QuoteDocument`, so the quote
  * builder (and the work order's Quotes tab) draws the same page at its top,
- * live, as the client would see it. */
+ * live, as the client would see it.
+ *
+ * 2026-11-17 (Elise approved the design canvas) · an SFM or BKR quote wears
+ * its company's design, the same two the sign-off sheet is drawn in: Seamless
+ * "the seam" (black band, the cyan-to-blue line, a black Total bar) and BKR's
+ * field service ticket (slate strip, numbered sections, a red-ruled totals
+ * box, a tear-off client approval stub). Both end with a client acceptance
+ * block (name, signature, date). Any other Comp prints as before. */
 
 import { useEffect } from 'react';
-import { lineBillsOt, optionDisplayLabel, visibleScopeLines } from '@theone/shared';
+import { lineBillsOt, optionDisplayLabel, signoffLayoutFor, visibleScopeLines } from '@theone/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { QUOTE_DOCUMENT_TYPE_LABELS, type QuoteSection } from '@theone/shared';
@@ -97,6 +104,13 @@ export function QuotePrintPage() {
 
 type WoDetail = Awaited<ReturnType<typeof getWorkOrder>>;
 
+/** Which company design the document wears: by Comp, as the sign-off sheet. */
+type QuoteBrand = 'sfm' | 'bkr';
+function quoteBrandFor(entity: string | null | undefined): QuoteBrand | null {
+  const layout = signoffLayoutFor(entity, null);
+  return layout === 'sfm' ? 'sfm' : layout ? 'bkr' : null;
+}
+
 /** The quote as the client receives it: the printed page, and the preview at
     the top of the builder. Internal figures never appear here. */
 export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail | undefined; tpl: PrintTemplate | null }) {
@@ -129,9 +143,18 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
   const priced = quote.totals.option_totals.find((o) => o.section_id === quote.totals.priced_section_id) ?? null;
   const offered = quote.totals.option_totals.filter((o) => o.include_in_summary && options.some((s) => s.id === o.section_id));
   const summaryText = quote.summary.pinned ?? quote.summary.auto;
+  const brand = quoteBrandFor(entity);
+  const billTo = quote.bill_to?.trim() || wo?.client || '—';
+  const shipTo = quote.ship_to?.trim() || [site?.name, ...(site?.addressLines ?? [])].filter(Boolean).join('\n') || '—';
+  // BKR numbers its sections (01 Work performed, 02 Proposed work…).
+  let sectionNo = 0;
+  const nextNo = () => (brand === 'bkr' ? String(++sectionNo).padStart(2, '0') : undefined);
 
   return (
-    <article className="qdoc">
+    <article className={`qdoc${brand ? ` qdoc-b qdoc-b-${brand}` : ''}`}>
+      {brand ? (
+        <BrandHead brand={brand} title={title} quote={quote} issued={issued} extName={wo?.ext_name ?? null} billTo={billTo} shipTo={shipTo} subject={wo?.title ?? null} tpl={tpl} />
+      ) : (<>
       <header className="qdoc-head">
         <div>
           <div className="qdoc-entity">{tpl?.company_name || entity || 'Seamless FM'}</div>
@@ -170,9 +193,10 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
           </div>
         )}
       </section>
+      </>)}
 
       {incurred && incurred.lines.length > 0 && (
-        <LinesBlock section={incurred} heading={dayed ? 'Work performed — Day 0' : 'Work performed'} note="Billed with the work order" taxPct={sectionTaxPct} />
+        <LinesBlock num={nextNo()} section={incurred} heading={dayed ? 'Work performed — Day 0' : 'Work performed'} note="Billed with the work order" taxPct={sectionTaxPct} />
       )}
       {incurred && incurred.lines.length === 0 && (incurred.note_to_customer?.trim() || incurred.specs?.trim()) && (
         <section className="qdoc-note">
@@ -189,6 +213,7 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
       {approvedWork.map((s, idx) => (
         <LinesBlock
           key={s.id}
+          num={nextNo()}
           section={s}
           heading={`Day ${idx + 1} — ${s.name?.trim() || 'Approved work'}`}
           note="Billed with the work order"
@@ -200,6 +225,7 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
       {options.map((s) => (
         <LinesBlock
           key={s.id}
+          num={nextNo()}
           section={s}
           heading={options.length > 1 ? `${s.label}${s.name ? ` — ${s.name}` : ''}` : 'Proposed work'}
           taxPct={sectionTaxPct}
@@ -260,21 +286,103 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
         </section>
       )}
 
+      {brand && <Acceptance brand={brand} title={title} />}
+
       <footer className="qdoc-foot">
         {quote.rates.contract
           ? `Priced under ${quote.rates.contract.name}.`
           : ''}
         {' '}
         This {title.toLowerCase()} is valid for 30 days from the date above.
+        {brand && ` Prices in ${quote.currency}.`}
       </footer>
       <DocTerms template={tpl} />
+      {brand && <BrandFoot brand={brand} />}
     </article>
+  );
+}
+
+/** The company's header: the logo and the document's name and number, then
+    who it is for, where, and the details (BKR: in a slate strip). */
+function BrandHead({ brand, title, quote, issued, extName, billTo, shipTo, subject, tpl }: {
+  brand: QuoteBrand; title: string; quote: Quote; issued: string; extName: string | null;
+  billTo: string; shipTo: string; subject: string | null; tpl: PrintTemplate | null;
+}) {
+  const details = (
+    <dl className="qdoc-b-details">
+      <div><dt>Date</dt><dd>{issued}</dd></div>
+      <div><dt>Work order</dt><dd className="mono">{quote.wo_number}</dd></div>
+      {extName && <div><dt>Client ref</dt><dd className="mono">{extName}</dd></div>}
+      <div><dt>Revision</dt><dd>{quote.rev}</dd></div>
+    </dl>
+  );
+  return (
+    <>
+      <header className="qdoc-b-band">
+        {brand === 'sfm'
+          ? <img className="qdoc-b-logo" src="/brand/sheets/sfm-header.png" alt="Seamless Facility Management" />
+          : <img className="qdoc-b-logo" src="/brand/sheets/bkr-logo.png" alt="BKR National Facility Services" />}
+        <div className="qdoc-b-title">
+          <span className="qdoc-b-kind">{title}</span>
+          <span className="qdoc-b-no mono">{quote.number ?? '—'}</span>
+        </div>
+      </header>
+      <div className="qdoc-b-rule" aria-hidden="true"><span /><span /></div>
+      <DocLetterhead template={tpl} />
+      {brand === 'bkr' && <div className="qdoc-b-strip">{details}</div>}
+      <section className="qdoc-b-parties">
+        <div>
+          <h3>Bill to</h3>
+          <p>{billTo}</p>
+        </div>
+        <div>
+          <h3>{brand === 'sfm' ? 'Site' : 'Service address'}</h3>
+          <p>{shipTo}</p>
+        </div>
+        {brand === 'sfm' && details}
+        {subject && (
+          <div className="qdoc-wide">
+            <h3>Subject</h3>
+            <p>{subject}</p>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+/** Where the client says yes on paper: name, signature, date. */
+function Acceptance({ brand, title }: { brand: QuoteBrand; title: string }) {
+  return (
+    <section className="qdoc-b-accept">
+      <h3>{brand === 'sfm' ? 'Client acceptance' : 'Client approval'}</h3>
+      <p>By signing, the client accepts this {title.toLowerCase()} and authorizes the work.</p>
+      <div className="qdoc-b-accept-row">
+        <div><span /><small>Name</small></div>
+        <div><span /><small>Signature</small></div>
+        <div><span /><small>Date</small></div>
+      </div>
+    </section>
+  );
+}
+
+function BrandFoot({ brand }: { brand: QuoteBrand }) {
+  return brand === 'sfm' ? (
+    <footer className="qdoc-b-foot">
+      <b>Seamless Facility Management</b>
+      <span>+1 (469) 501-1510 · info@seamlessfm.com · 1910 Pacific Ave, Suite 2000 #3299, Dallas, TX 75201</span>
+    </footer>
+  ) : (
+    <footer className="qdoc-b-foot">
+      <b>BKR National Facility Services</b>
+      <span>www.bkrnational.com</span>
+    </footer>
   );
 }
 
 /** 2026-11-16 (UAT #27) · each section prints its sales tax in dollars under
     its subtotal: the section's lines × the quote's %. */
-function LinesBlock({ section, heading, note, taxPct = 0 }: { section: QuoteSection; heading: string; note?: string; taxPct?: number }) {
+function LinesBlock({ section, heading, note, taxPct = 0, num }: { section: QuoteSection; heading: string; note?: string; taxPct?: number; num?: string }) {
   const salesTax = taxPct > 0 ? Math.round(section.subtotal * taxPct) / 100 : 0;
   const anyTax = section.lines.some((l) => l.tax > 0);
   // M27 (UAT Wave D): the markup is ours, not the client's — the printed
@@ -285,6 +393,7 @@ function LinesBlock({ section, heading, note, taxPct = 0 }: { section: QuoteSect
   return (
     <section className="qdoc-lines">
       <h3>
+        {num && <span className="qdoc-b-num">{num}</span>}
         {heading}
         {note && <small> · {note}</small>}
       </h3>
