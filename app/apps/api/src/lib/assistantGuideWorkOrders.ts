@@ -62,10 +62,8 @@ Tabs, each shown only if the role includes it (\`work_orders/tabs/<tab>\` view):
   - The quote moves the status too: **Send to client** moves it to Waiting for Approval, the client's approval to Approved, the client's decline back to Waiting for Quote (only from the quote and approval statuses; a work order further along stays put).
   - A move Ecotrak would refuse is tagged **Ecotrak**; it is a warning unless the site is set to block.
 
-The **More** menu in the header (all need \`work_orders\` edit; Pause, Complete service, Cancel and Reopen also need \`work_orders/lifecycle\` edit, which people who must request status changes do not have, so they do not see those items):
-- **Pause**: type why, click **Pause**; **Resume** ends it. A pause is a marker: it does not stop any clock.
-- **Complete service**: fill the **Completion note**, fault code and action code, click **Complete service**. It records the completion and does not change the status.
-- **Cancel work order**: type why, **Cancel the work order**. The button is gone once the client invoice is sent or paid, or a vendor payment is paid. **Reopen** undoes it: type why, click **Reopen**; the work order goes back to Open. Reopen is offered whenever the work order sits in a Cancelled status, however it got there, and the status menu will not move it out of one — Reopen is the way back.
+The work order's header has no More menu any more: Pause, Complete service and Cancel work order are not offered on the page. A pause, a completion or a cancellation already on file still shows as a chip under the header.
+- **Reopen**: on a cancelled work order (stamped cancelled, or sitting in a Cancelled status) the header shows **Reopen** to OP Admin, TL, ATL, AM, Admin and super admins only. Type why, click **Reopen**; the work order goes back to Open. The status menu will not move a work order out of a Cancelled status — Reopen is the way back.
 
 Elsewhere on the page (need \`work_orders\` edit):
 - **Assign vendor** / **Re-assign vendor**: **Tech Hub** tab, the **Responsible vendor** card; search under **Find a vendor** and click one. Blacklisted vendors cannot be picked.

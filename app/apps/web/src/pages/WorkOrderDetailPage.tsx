@@ -40,7 +40,7 @@ import { AuditTrail } from '../components/wo/AuditTrail';
 import { MessagesPanel } from '../components/wo/messages/MessagesPanel';
 import { CallsCard } from '../components/wo/calls/CallsCard';
 import { TechTextsCard } from '../components/wo/tech/TechTextsCard';
-import { EtaCard, RecordActions, RecordBar, RecordRail, ResponsibleVendorCard, useWoRecord } from '../components/wo/record/RecordParts';
+import { EtaCard, RecordBar, ReopenButton, RecordRail, ResponsibleVendorCard, useWoRecord } from '../components/wo/record/RecordParts';
 import { ChecklistTab, RelatedTab, TimelogTab } from '../components/wo/record/RecordTabs';
 import { JobPlanServicesCard, PermitsCard, TimeCard } from '../components/wo/maint/WoMaintCards';
 import { ConsumablesCard, DispatchCard } from '../components/wo/maint/WoVendorCards';
@@ -359,7 +359,7 @@ export function WorkOrderDetailPage() {
           onClockClick={revealObligations}
           quoteFilled={quoteQuery.data ? quoteSectionsHaveData(quoteQuery.data.quote?.sections) : null}
           quoteStatus={quoteQuery.data ? (quoteQuery.data.quote?.status ?? null) : undefined}
-          actions={<RecordActions woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} onNote={setRecordNote} />}
+          actions={<ReopenButton woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} onNote={setRecordNote} />}
           folded={tab !== 'overview'}
         />
 

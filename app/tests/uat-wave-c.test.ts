@@ -195,13 +195,13 @@ describe('#15 / #16 · people who request status changes have no side doors', ()
     expect(FIELD_LOCKED_ROLES as readonly string[]).not.toContain('oa');
   });
 
-  it('cancel, reopen, pause, resume and complete all need the lifecycle grant', () => {
+  it('cancel, pause, resume and complete need the lifecycle grant; reopen asks the role (2026-11-17)', () => {
     const rec = src('apps/api/src/services/woRecord.ts');
+    expect(fn(rec, 'export async function reopenWo(')).toContain('mayReopenWorkOrder(actor.role, actor.isSuperAdmin)');
     for (const sig of [
       'export async function pauseWo(',
       'export async function resumeWo(',
       'export async function cancelWo(',
-      'export async function reopenWo(',
       'export async function completeWoService(',
       'export async function clearWoCompletion(',
     ]) {

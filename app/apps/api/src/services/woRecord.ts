@@ -31,6 +31,8 @@ import {
   permAllows,
   recordMarginFrom,
   isCancelStatusName,
+  mayReopenWorkOrder,
+  REOPEN_FORBIDDEN_SENTENCE,
   siteEventPhase,
 } from '@theone/shared';
 import type {
@@ -394,6 +396,7 @@ export async function getWoRecord(taskId: string, actor: ActingPrincipal): Promi
       lifecycle: can(actor, 'work_orders', 'edit') && can(actor, LIFECYCLE_PERM_KEY, 'edit'),
       cancel_blocked: t.cancelled_at ? null : await cancelBlocked(taskId),
       reopen: Boolean(t.cancelled_at) || isCancelStatusName(t.status_name),
+      may_reopen: mayReopenWorkOrder(actor.role, actor.isSuperAdmin),
     },
   };
 }
@@ -761,7 +764,8 @@ export async function cancelWo(taskId: string, reason: string | null, actor: Act
  *  some other way (the status menu, a rejected acceptance, an approved
  *  request) — so no cancelled job is left without a way back. */
 export async function reopenWo(taskId: string, reason: string | null, actor: ActingPrincipal): Promise<WoRecord> {
-  requireLifecycle(actor);
+  // Elise, 2026-11-17: by role, not the lifecycle grant (OP Admin has none).
+  if (!mayReopenWorkOrder(actor.role, actor.isSuperAdmin)) throw forbidden(REOPEN_FORBIDDEN_SENTENCE);
   const t = await loadTask(taskId);
   const inCancelStatus = isCancelStatusName(t.status_name);
   if (!t.cancelled_at && !inCancelStatus) throw conflict('This work order is not cancelled');

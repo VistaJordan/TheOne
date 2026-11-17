@@ -264,6 +264,33 @@ export function RecordActions({ woId, woNumber, record, onNote }: { woId: string
   );
 }
 
+/** Elise, 2026-11-17: the More menu is gone; Reopen is its own header button,
+    drawn only on a cancelled work order and only for OP Admin, TL, ATL, AM,
+    Admin and super admins (`record.can.may_reopen`, asked again by the API). */
+export function ReopenButton({ woId, woNumber, record, onNote }: { woId: string; woNumber: string; record: WoRecord | undefined; onNote: (note: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!record) return null;
+  const cancelled = Boolean(record.state.cancelled) || Boolean(record.can.reopen);
+  if (!cancelled || !record.can.may_reopen) return null;
+  const report = (r: WoRecord): WoRecord => {
+    const m = r.status_move;
+    onNote(m && !m.moved && m.reason ? `Status not moved to ${m.status}: ${m.reason}` : null);
+    return r;
+  };
+  return (
+    <>
+      <button type="button" className="btn" onClick={() => { onNote(null); setOpen(true); }}>
+        <Icon name="clock" size={14} /> Reopen
+      </button>
+      {open && (
+        <ReasonDialog title="Reopen this work order" icon="clock" label="Why is it reopened?" confirm="Reopen"
+          hint="It goes back to Open. The reason is kept on its history."
+          woId={woId} woNumber={woNumber} run={async (reason) => report(await reopenWo(woId, reason))} onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
+}
+
 /** People › Technicians: the one vendor answering for the job (was Assign
     vendor on the bar under the header). */
 export function ResponsibleVendorCard({ woId, woNumber }: { woId: string; woNumber: string }) {

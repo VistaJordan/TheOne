@@ -4035,8 +4035,11 @@ keeps `{atl,tl,am}`: it names who may pay those directly.
 `WorkOrderDetailPage` no longer passes `RecordActions` to `WoHeader`, so
 Pause / Resume, Complete service, Cancel work order and Reopen are offered
 to nobody (`RecordActions` stays in `RecordParts.tsx`, undrawn; the API
-routes are untouched). Reopen was the only way out of a Cancel… status
-(`REOPEN_REQUIRED`), so a cancelled work order now stays cancelled from the UI.
+routes are untouched). **Reopen** is its own header button (`ReopenButton` in
+`RecordParts.tsx`, the `actions` slot), drawn only on a cancelled work order
+(`can.reopen`) and only for `REOPEN_ROLES` (oa, tl, atl, am, admin) or a super
+admin (`mayReopenWorkOrder` in shared `managerFlags.ts`, `can.may_reopen`);
+`reopenWo` asks the same role check (403) in place of the lifecycle grant.
 
 **Markup on the Finances card** (Elise, 2026-11-16, no migration;
 `markupPct` in shared `moneyRules.ts`, `tests/finances-markup.test.ts`). The

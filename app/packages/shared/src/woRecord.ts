@@ -265,6 +265,8 @@ export interface WoRecord {
     /** 2026-10-29: Reopen is offered — the work order is stamped cancelled
         or sits in a Cancel… status, however it got there. */
     reopen: boolean;
+    /** 2026-11-17: the viewer may click Reopen (mayReopenWorkOrder). */
+    may_reopen: boolean;
   };
   /** M31: the reply to Cancel / Reopen — the status move it made, or why the
       move was refused (the stamp stands either way). */

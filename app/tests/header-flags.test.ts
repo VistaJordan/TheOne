@@ -4,7 +4,15 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { flagTicked, mayClearEmergency, mayClearEscalation, onlyHeaderFlags } from '@theone/shared';
+import { flagTicked, mayClearEmergency, mayClearEscalation, mayReopenWorkOrder, onlyHeaderFlags } from '@theone/shared';
+
+describe('Reopen button (Elise, 2026-11-17)', () => {
+  it('OP Admin, TL, ATL, AM, Admin and super admins only', () => {
+    for (const r of ['oa', 'tl', 'atl', 'am', 'admin']) expect(mayReopenWorkOrder(r, false)).toBe(true);
+    for (const r of ['om', 'senior_om', 'om_probation', 'ar', 'ap', 'vr_officer', 'qc', null]) expect(mayReopenWorkOrder(r, false)).toBe(false);
+    expect(mayReopenWorkOrder('om', true)).toBe(true);
+  });
+});
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 

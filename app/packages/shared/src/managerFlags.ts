@@ -115,6 +115,16 @@ export function mayClearEscalation(roleCode: string | null | undefined, isSuperA
   return isSuperAdmin || (!!roleCode && (ESCALATION_CLEAR_ROLES as readonly string[]).includes(roleCode));
 }
 
+// Elise, 2026-11-17: the header's More menu is gone; Reopen is its own header
+// button on a cancelled work order, for OP Admin, TL, ATL, AM, Admin and super
+// admins only (the API asks the same in reopenWo).
+export const REOPEN_ROLES = ['oa', 'tl', 'atl', 'am', 'admin'] as const;
+export const REOPEN_FORBIDDEN_SENTENCE = 'Only an OP Admin, TL, ATL, AM or Admin can reopen a work order.';
+
+export function mayReopenWorkOrder(roleCode: string | null | undefined, isSuperAdmin: boolean): boolean {
+  return isSuperAdmin || (!!roleCode && (REOPEN_ROLES as readonly string[]).includes(roleCode));
+}
+
 // Elise, 2026-11-12: the dispatchers (OM, Senior OM, OM Under Probation) may
 // turn Emergency ON but not off; anyone else who may edit the field clears it.
 export const EMERGENCY_CLEAR_CODE = 'EMERGENCY_CLEAR_FORBIDDEN';
