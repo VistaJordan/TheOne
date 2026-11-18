@@ -50,7 +50,10 @@ function Frame({ brand, view, children }: { brand: Brand; view?: SignoffFormView
       {brand === 'sfm' ? (
         <footer className="sof-foot">
           <b>Seamless Facility Management</b>
-          <span>+1 (469) 501-1510 · info@seamlessfm.com</span>
+          <span className="sof-foot-side">
+            <span>+1 (469) 501-1510 · info@seamlessfm.com</span>
+            <span>1910 Pacific Ave, Suite 2000 #3299, Dallas, TX 75201</span>
+          </span>
         </footer>
       ) : (
         <footer className="sof-foot">
@@ -90,10 +93,11 @@ export function SignoffFormPage() {
   );
 }
 
-function Facts({ view, brand }: { view: SignoffFormView; brand: Brand }) {
+/** Steps 1 and 2: the job (the PDF's first two numbered steps). */
+function FactItems({ view, brand }: { view: SignoffFormView; brand: Brand }) {
   const n = (i: number) => (brand === 'sfm' ? String(i) : String(i).padStart(2, '0'));
   return (
-    <ol className="sof-facts">
+    <>
       <li>
         <span className="sof-n">{n(1)}</span>
         <div>
@@ -108,7 +112,7 @@ function Facts({ view, brand }: { view: SignoffFormView; brand: Brand }) {
           <span className="sof-addr">{view.address ?? '—'}</span>
         </div>
       </li>
-    </ol>
+    </>
   );
 }
 
@@ -142,59 +146,80 @@ function SignForm({ token, view }: { token: string; view: SignoffFormView }) {
     submit.mutate();
   };
 
-  const n = (i: number) => (brand === 'sfm' ? String(i) : String(i).padStart(2, '0'));
   const nameMissing = tried && name.trim().length < 2;
   const closeoutMissing = tried && view.closeout_required && !closeout.trim();
   const sigMissing = tried && empty;
 
+  const sfm = brand === 'sfm';
+  const nameAndDate = (
+    <div className="sof-row">
+      <label className={`sof-field${nameMissing ? ' is-missing' : ''}`}>
+        <span className="sof-lbl">{sfm ? 'Name of manager on site' : 'Store manager name'}</span>
+        <input className="sof-input" value={name} maxLength={SIGNOFF_NAME_MAX} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+      </label>
+      <div className="sof-field sof-field-date">
+        <span className="sof-lbl">Date</span>
+        <span className="sof-date">{view.date_label}</span>
+      </div>
+    </div>
+  );
+  const signature = (
+    <div className={`sof-field${sigMissing ? ' is-missing' : ''}`}>
+      <span className="sof-lbl-row">
+        <span className="sof-lbl">{sfm ? 'Signature of manager on site' : 'Store manager signature'}</span>
+        <button type="button" className="sof-clear" onClick={() => pad.current?.clear()} disabled={empty}>Clear</button>
+      </span>
+      <div className="sof-sig">
+        <SignaturePad ref={pad} className="sof-sig-canvas" label="Signature box: sign here" onChange={setEmpty} />
+        {empty && <span className="sof-sig-hint" aria-hidden="true">Sign here</span>}
+        <span className="sof-sig-line" aria-hidden="true" />
+      </div>
+      <p className="sof-attest">
+        By signing, I confirm the work on this work order was completed {sfm ? 'on site' : 'at my store'}.
+      </p>
+    </div>
+  );
+
   return (
     <form className="sof-form" onSubmit={onSubmit} noValidate>
-      {brand === 'sfm' && (
-        <div className="sof-title">
-          <h1>Sign-off sheet</h1>
-          <p>To be signed by the manager on site once the work is complete.</p>
-        </div>
+      {sfm ? (
+        <>
+          <div className="sof-title">
+            <h1>Sign-off sheet</h1>
+            <p>To be signed by the manager on site once the work is complete.</p>
+          </div>
+          {/* The four numbered steps on the seam, as the PDF draws them. */}
+          <ol className="sof-facts sof-steps">
+            <FactItems view={view} brand={brand} />
+            <li>
+              <span className="sof-n">3</span>
+              {nameAndDate}
+            </li>
+            <li>
+              <span className="sof-n is-last">4</span>
+              {signature}
+            </li>
+          </ol>
+        </>
+      ) : (
+        <>
+          <ol className="sof-facts"><FactItems view={view} brand={brand} /></ol>
+          {view.closeout_required && (
+            <label className={`sof-field sof-field-closeout${closeoutMissing ? ' is-missing' : ''}`}>
+              <span className="sof-n">03</span>
+              <div>
+                <span className="sof-lbl">Closeout number</span>
+                <input className="sof-input" value={closeout} maxLength={SIGNOFF_CLOSEOUT_MAX} onChange={(e) => setCloseout(e.target.value)} autoComplete="off" />
+              </div>
+            </label>
+          )}
+          <section className="sof-stub">
+            <h2>Store manager sign-off</h2>
+            {nameAndDate}
+            {signature}
+          </section>
+        </>
       )}
-      <Facts view={view} brand={brand} />
-
-      {view.closeout_required && (
-        <label className={`sof-field sof-field-closeout${closeoutMissing ? ' is-missing' : ''}`}>
-          <span className="sof-n">{n(3)}</span>
-          <div>
-            <span className="sof-lbl">Closeout number</span>
-            <input className="sof-input" value={closeout} maxLength={SIGNOFF_CLOSEOUT_MAX} onChange={(e) => setCloseout(e.target.value)} autoComplete="off" />
-          </div>
-        </label>
-      )}
-
-      <section className="sof-stub">
-        <h2>{brand === 'sfm' ? 'Manager on site' : 'Store manager sign-off'}</h2>
-        <div className="sof-row">
-          <label className={`sof-field${nameMissing ? ' is-missing' : ''}`}>
-            <span className="sof-lbl">{brand === 'sfm' ? 'Name of manager on site' : 'Store manager name'}</span>
-            <input className="sof-input" value={name} maxLength={SIGNOFF_NAME_MAX} onChange={(e) => setName(e.target.value)} autoComplete="off" />
-          </label>
-          <div className="sof-field sof-field-date">
-            <span className="sof-lbl">Date</span>
-            <span className="sof-date">{view.date_label}</span>
-          </div>
-        </div>
-
-        <div className={`sof-field${sigMissing ? ' is-missing' : ''}`}>
-          <span className="sof-lbl-row">
-            <span className="sof-lbl">{brand === 'sfm' ? 'Signature of manager on site' : 'Store manager signature'}</span>
-            <button type="button" className="sof-clear" onClick={() => pad.current?.clear()} disabled={empty}>Clear</button>
-          </span>
-          <div className="sof-sig">
-            <SignaturePad ref={pad} className="sof-sig-canvas" label="Signature box: sign here" onChange={setEmpty} />
-            {empty && <span className="sof-sig-hint" aria-hidden="true">Sign here</span>}
-            <span className="sof-sig-line" aria-hidden="true" />
-          </div>
-          <p className="sof-attest">
-            By signing, I confirm the work on this work order was completed {brand === 'sfm' ? 'on site' : 'at my store'}.
-          </p>
-        </div>
-      </section>
 
       {tried && problem && <p className="sof-error" role="alert">{problem}</p>}
       {error && <p className="sof-error" role="alert">{error}</p>}

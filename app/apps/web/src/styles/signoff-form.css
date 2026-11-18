@@ -45,11 +45,23 @@
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
 .sof-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 16px; }
-.sof-sfm .sof-head { background: var(--sof-head-bg); min-height: 88px; padding-left: 4px; }
-.sof-sfm .sof-logo { height: auto; width: auto; max-height: 72px; max-width: calc(100% - 150px); min-width: 0; display: block; }
+.sof-sfm .sof-head { background: var(--sof-head-bg); min-height: 76px; padding: 8px 16px 8px 4px; }
+/* The header image is the logo plus a long black run to its right: show only
+ * the logo part (its left 300 of 772 px), sized by height, so on a phone the
+ * mark is as big as it can be beside the reference instead of shrinking with
+ * the whole strip. */
+.sof-sfm .sof-logo {
+  height: 60px;
+  width: auto;
+  aspect-ratio: 300 / 141;
+  object-fit: cover;
+  object-position: left center;
+  flex: none;
+  display: block;
+}
 .sof-bkr .sof-head { padding-top: 16px; }
 .sof-bkr .sof-logo { height: 76px; width: auto; display: block; flex: none; }
-.sof-head-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; max-width: 150px; text-align: right; }
+.sof-head-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 1; min-width: 0; text-align: right; }
 .sof-bkr .sof-head-side { flex: 1; max-width: none; min-width: 0; }
 .sof-kicker { font-family: var(--sof-label-font); font-size: 10px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; }
 .sof-sfm .sof-kicker { color: var(--sof-accent-2); }
@@ -92,15 +104,22 @@
 .sof-bkr .sof-facts li, .sof-bkr .sof-field-closeout { grid-template-columns: 44px minmax(0, 1fr); }
 .sof-facts li > div, .sof-field-closeout > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .sof-bkr .sof-facts li > div { border-bottom: 1px solid #d5dbe1; padding-bottom: 12px; }
-.sof-sfm .sof-facts::before {
+/* The seam: one segment from each node down to the next (the PDF's line,
+ * which stops at step 4 rather than running beside the signature box). */
+.sof-sfm .sof-facts { gap: 26px; }
+.sof-sfm .sof-facts li { position: relative; }
+.sof-sfm .sof-facts li:not(:last-child)::after {
   content: '';
   position: absolute;
-  left: 13px;
-  top: 14px;
-  bottom: 14px;
+  left: 12px;
+  top: 26px;
+  bottom: -26px;
   width: 2px;
   background: linear-gradient(180deg, var(--sof-accent-2), var(--sof-accent));
 }
+.sof-sfm .sof-facts li > .sof-row, .sof-sfm .sof-facts li > .sof-field { min-width: 0; }
+/* Step 3 keeps the name and the date side by side (the list's column rule above would stack them). */
+.sof-facts li > .sof-row { display: grid; gap: 16px; align-items: end; }
 .sof-n { position: relative; }
 .sof-sfm .sof-n {
   width: 26px;
@@ -115,7 +134,9 @@
   font-weight: 700;
   font-size: 11px;
   color: var(--sof-accent);
+  z-index: 1;
 }
+.sof-sfm .sof-n.is-last { background: var(--sof-accent); border-color: var(--sof-accent); color: #ffffff; }
 .sof-bkr .sof-n { font-family: var(--sof-label-font); font-weight: 700; font-size: 34px; line-height: 0.9; color: var(--sof-accent); }
 .sof-ref { font-size: 22px; overflow-wrap: anywhere; }
 .sof-sfm .sof-ref { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; }
@@ -147,7 +168,8 @@
 .sof-bkr .sof-stub::before { left: -14px; }
 .sof-bkr .sof-stub::after { right: -14px; }
 
-.sof-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+.sof-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
+.sof-field-date { min-width: 96px; }
 .sof-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .sof-input {
   font: inherit;
@@ -239,11 +261,13 @@
 
 @media (min-width: 640px) {
   .sof-sfm .sof-head { min-height: 110px; padding-right: 32px; }
-  .sof-sfm .sof-logo { max-height: 92px; max-width: calc(100% - 220px); }
-  .sof-head-side { max-width: 220px; }
+  .sof-sfm .sof-logo { height: 92px; }
+  .sof-row { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); }
   .sof-bkr .sof-head { padding: 24px 32px 0; }
   .sof-bkr .sof-logo { height: 96px; }
   .sof-head-title { font-size: 40px; }
   .sof-bkr .sof-rule { margin: 18px 32px 0; }
   .sof-sig { height: 230px; }
 }
+.sof-foot-side { display: flex; flex-direction: column; gap: 2px; }
+@media (min-width: 640px) { .sof-foot-side { text-align: right; } }

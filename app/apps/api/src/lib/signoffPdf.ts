@@ -209,7 +209,7 @@ async function drawSeamless(doc: PDFDocument, page: PDFPage, data: SignoffSheetD
   pen.gradient(0, 136, DW, 4, SFM.cyan, SFM.blue);
 
   // Title.
-  pen.text('Sign-off Sheet', 64, 184, f.Sora_Bold, 40, c(SFM.ink), { spacing: -0.5 });
+  pen.text('Sign-off sheet', 64, 184, f.Sora_Bold, 40, c(SFM.ink), { spacing: -0.5 });
   pen.text(
     signed ? `Signed by the manager on site on ${safeText(signed.date_label)}.` : 'To be signed by the manager on site once the work is complete.',
     64, 238, f.Inter_Regular, 14, c(SFM.soft),
@@ -275,8 +275,10 @@ async function drawSeamless(doc: PDFDocument, page: PDFPage, data: SignoffSheetD
   corner(bx + bw - 1, boxTop + 1, -1, 1, SFM.mid);
   corner(bx + 1, bb - 1, 1, -1, SFM.mid);
   corner(bx + bw - 1, bb - 1, -1, -1, SFM.blue);
-  pen.text('×', bx + 28, bb - 60, f.Sora_SemiBold, 30, c(SFM.mark));
-  pen.line(bx + 64, bb - 34, bx + bw - 32, bb - 34, 1, c(SFM.rule));
+  // "Sign here" on the line, as the form draws it (2026-11-18: the PDF and
+  // the link read the same).
+  if (!signed) pen.text('Sign here', bx + 20, bb - 34 - 20, f.Sora_SemiBold, 11, c(SFM.rule), { spacing: 2, upper: true });
+  pen.line(bx + 20, bb - 34, bx + bw - 20, bb - 34, 1, c(SFM.rule));
   if (signed) {
     const sig = await doc.embedPng(signed.signature_png);
     pen.imageContain(sig, bx + 64, boxTop + 14, bw - 96, boxH - 14 - 36);
