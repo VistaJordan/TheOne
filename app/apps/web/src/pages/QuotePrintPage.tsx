@@ -281,14 +281,8 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
 
       {brand && <Acceptance brand={brand} title={title} />}
 
-      <footer className="qdoc-foot">
-        {quote.rates.contract
-          ? `Priced under ${quote.rates.contract.name}.`
-          : ''}
-        {' '}
-        This {title.toLowerCase()} is valid for 30 days from the date above.
-        {brand && ` Prices in ${quote.currency}.`}
-      </footer>
+      {/* Elise, 2026-11-19: no validity / currency sentence. */}
+      {quote.rates.contract && <footer className="qdoc-foot">Priced under {quote.rates.contract.name}.</footer>}
       <DocTerms template={tpl} />
       {brand && <BrandFoot brand={brand} />}
     </article>

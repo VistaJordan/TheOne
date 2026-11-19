@@ -68,7 +68,7 @@ export const MONEY_PART: DocPart = {
         },
         {
           name: 'The printed quote',
-          what: 'Letterhead, terms and footer from the default document template; Revision, Currency, Client ref, Bill to (the client) and Ship to (the site); the incurred block (and any option the client approved in an earlier round) prints as "Work performed · Billed with the work order"; the totals list the work performed, each offered option, the sales tax (n %) and the Total — the priced option\'s, with "Total with Option B instead" lines when several are offered; "This <quote | proposal | estimate> is valid for 30 days from the date above."; "Priced under <contract>."; internal fields (specs, cost, profit, NTE) are left off. Save as PDF is the browser\'s print dialog.',
+          what: 'Letterhead, terms and footer from the default document template; Revision, Currency, Client ref, Bill to (the client) and Ship to (the site); the incurred block (and any option the client approved in an earlier round) prints as "Work performed · Billed with the work order"; the totals list the work performed, each offered option, the sales tax (n %) and the Total — the priced option\'s, with "Total with Option B instead" lines when several are offered; no validity or currency sentence (removed 2026-11-19); "Priced under <contract>."; internal fields (specs, cost, profit, NTE) are left off. Save as PDF is the browser\'s print dialog.',
           value: 'What the client receives is exactly the summary, nothing internal.',
         },
         {
