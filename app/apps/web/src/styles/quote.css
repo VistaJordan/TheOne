@@ -1078,3 +1078,22 @@
   .qdoc-b-band, .qdoc-b-sfm .qdoc-b-rule, .qdoc-b-foot, .qdoc-b-bkr .qdoc-b-accept { margin-left: 0; margin-right: 0; }
   .qdoc-b h3, .qdoc-b .qdoc-table th, .qdoc-b .qdoc-foot { color: var(--qb-soft); }
 }
+
+/* Download PDF (2026-11-19): the document drawn off screen at Letter width
+   (7.5 in of content at 96 px) in the day theme's colours, whatever the
+   viewer's theme, then captured into the PDF and removed. */
+.qdoc-export {
+  --surface: #ffffff; --ink: #191c21; --ink-2: #555c68; --ink-3: #6c727b;
+  --border: #e3e6ea; --border-strong: #d4d9df; --row-border: #edf0f3; --chip: #eceff2;
+  --accent: #1a9fd4; --accent-text: #0d6e97;
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 720px;
+  background: #ffffff;
+  color: #191c21;
+  pointer-events: none;
+}
+.qdoc-export .qdoc { max-width: none; margin: 0; border: 0; border-radius: 0; box-shadow: none; padding: 0; }
+.qdoc-export .qdoc.qdoc-b { padding: 0 28px; }
+.qdoc-export .qdoc-b-band, .qdoc-export .qdoc-b-sfm .qdoc-b-rule, .qdoc-export .qdoc-b-foot, .qdoc-export .qdoc-b-bkr .qdoc-b-accept { margin-left: -28px; margin-right: -28px; padding-left: 28px; padding-right: 28px; }

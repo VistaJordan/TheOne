@@ -3776,8 +3776,11 @@ summary the client gets (`summary.pinned ?? summary.auto`, with a copy
 button) — and a **Text** / **Client view** switch shows the client's document
 instead (`QuoteDocument`, exported from `QuotePrintPage.tsx`, which renders it
 under its print bar); the choice is remembered per browser
-(`theone.quote.preview`). **PDF** opens the print page in a new tab with
-`?pdf=1`, which opens the print dialog once the document has drawn. **Share
+(`theone.quote.preview`). **PDF** saves the client's document straight to a
+.pdf file (2026-11-19, `QuotePdfButton` + `lib/pdfDownload.ts`: drawn off screen
+in paper colours, captured by html-to-image, cut into Letter pages at row /
+section bottoms by jsPDF, both loaded on click; the text is an image); the print
+page has the same **Download PDF** beside **Print**, and `?pdf=1` downloads. **Share
 with client** is drawn locked ("not decided yet") until Elise picks how quotes
 reach clients. The body scrolls inside the card (`.qpreview-body`, max 70vh)
 and the card is hidden in print. **On the work order's Quotes tab** (`embedded`,

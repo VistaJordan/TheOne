@@ -8,7 +8,8 @@
  * Elise, 2026-11-19; it stays the builder's Text view). Internal
  * things — specs, cost, profit, the NTE meter — are deliberately absent.
  *
- * "PDF output" is the browser's print dialog: this page carries its own
+ * (Since 2026-11-19 Download PDF saves a file directly — QuotePdfButton,
+ * lib/pdfDownload.ts; Print below stays.) "PDF output" was the browser's print dialog: this page carries its own
  * print stylesheet (quote.css, @media print) and the button calls
  * window.print(), which every browser offers to save as PDF. No server-side
  * renderer, no template engine, nothing to keep in step with the builder —
@@ -25,7 +26,8 @@
  * box, a tear-off client approval stub). Both end with a client acceptance
  * block (name, signature, date). Any other Comp prints as before. */
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { lineBillsOt, optionDisplayLabel, signoffLayoutFor, visibleScopeLines } from '@theone/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
@@ -36,6 +38,7 @@ import { Icon } from '../components/Icon';
 import { deriveSite } from '../lib/woDerive';
 import { usd } from '../lib/quoteTotals';
 import { DocLetterhead, DocTerms, usePrintTemplate } from './DocPrintPages';
+import { downloadElementAsPdf, pdfFileName } from '../lib/pdfDownload';
 
 export function QuotePrintPage() {
   const { woNumber = '' } = useParams<{ woNumber: string }>();
@@ -53,16 +56,10 @@ export function QuotePrintPage() {
   const tpl = usePrintTemplate('quote');
   const quote = quoteQuery.data?.quote ?? null;
   const wo = woQuery.data;
-  // ?pdf=1 (the builder's PDF button): open the print dialog once the
-  // document has drawn, so saving it as a PDF is one more click.
+  // ?pdf=1 (an older link to the builder's PDF button): download the PDF
+  // once the document has drawn (2026-11-19, it opened the print dialog).
   const [params] = useSearchParams();
   const wantsPdf = params.get('pdf') === '1';
-  const ready = quote !== null && !woQuery.isLoading;
-  useEffect(() => {
-    if (!wantsPdf || !ready) return;
-    const t = window.setTimeout(() => window.print(), 300);
-    return () => window.clearTimeout(t);
-  }, [wantsPdf, ready]);
 
   useEffect(() => {
     if (quote) document.title = `${quote.number ?? 'Quote'} · ${quote.wo_number}`;
@@ -93,10 +90,10 @@ export function QuotePrintPage() {
         <Link className="btn" to={backHref}>
           <Icon name="arrow-l" size={14} /> Back to the builder
         </Link>
-        <span className="hint">Save as PDF from the print dialog.</span>
-        <button type="button" className="btn btn-primary" onClick={() => window.print()}>
-          <Icon name="file" size={14} /> Print / Save as PDF
+        <button type="button" className="btn" onClick={() => window.print()}>
+          <Icon name="file" size={14} /> Print
         </button>
+        <QuotePdfButton quote={quote} wo={wo} tpl={tpl} autoStart={wantsPdf} primary />
       </div>
       <QuoteDocument quote={quote} wo={wo} tpl={tpl} />
     </div>
@@ -104,6 +101,74 @@ export function QuotePrintPage() {
 }
 
 type WoDetail = Awaited<ReturnType<typeof getWorkOrder>>;
+
+/** Download PDF (Elise, 2026-11-19): the client's document saved straight
+    to a .pdf file, no print dialog. The document is drawn off screen at
+    Letter width in paper colours (`.qdoc-export`), captured, and removed. */
+export function QuotePdfButton({
+  quote,
+  wo,
+  tpl,
+  autoStart = false,
+  primary = false,
+  small = false,
+}: {
+  quote: Quote;
+  wo: WoDetail | undefined;
+  tpl: PrintTemplate | null;
+  autoStart?: boolean;
+  primary?: boolean;
+  small?: boolean;
+}) {
+  const [busy, setBusy] = useState(autoStart);
+  const [error, setError] = useState<string | null>(null);
+  const holder = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!busy) return;
+    let cancelled = false;
+    // Two frames: the portal is in the page and laid out before it is read.
+    const raf = requestAnimationFrame(() =>
+      requestAnimationFrame(async () => {
+        const el = holder.current?.firstElementChild as HTMLElement | null;
+        try {
+          if (!el) throw new Error('The document did not draw');
+          await downloadElementAsPdf(el, pdfFileName(quote.number ?? 'Quote', quote.wo_number));
+          if (!cancelled) setError(null);
+        } catch (e) {
+          if (!cancelled) setError(e instanceof Error ? e.message : 'The PDF could not be made');
+        } finally {
+          if (!cancelled) setBusy(false);
+        }
+      }),
+    );
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [busy, quote.number, quote.wo_number]);
+  return (
+    <>
+      <button
+        type="button"
+        className={`btn${primary ? ' btn-primary' : ''}${small ? ' btn-sm' : ''}`}
+        onClick={() => setBusy(true)}
+        disabled={busy}
+        title={error ?? 'Save the client’s document as a PDF file'}
+      >
+        <Icon name="download" size={small ? 12 : 14} />
+        {busy ? 'Making the PDF…' : small ? 'PDF' : 'Download PDF'}
+      </button>
+      {error && <span className="hint" role="alert">{error}</span>}
+      {busy &&
+        createPortal(
+          <div className="qdoc-export" ref={holder} aria-hidden="true">
+            <QuoteDocument quote={quote} wo={wo} tpl={tpl} />
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
 
 /** Which company design the document wears: by Comp, as the sign-off sheet. */
 type QuoteBrand = 'sfm' | 'bkr';

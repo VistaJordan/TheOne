@@ -97,7 +97,7 @@ import {
 import { FIELD, field, str } from '../lib/fields';
 import { deriveSite } from '../lib/woDerive';
 import { useInvalidateObligations } from '../hooks/useObligations';
-import { QuoteDocument } from './QuotePrintPage';
+import { QuoteDocument, QuotePdfButton } from './QuotePrintPage';
 import { usePrintTemplate } from './DocPrintPages';
 import { QUIET_MUTATION } from '../lib/queryClient';
 
@@ -940,16 +940,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
             {previewMode === 'text' && (
               <CopyButton value={quote.summary.pinned ?? quote.summary.auto} label="Copy the quote text" size={14} />
             )}
-            <a
-              className="btn btn-sm"
-              href={`/work-orders/${encodeURIComponent(quote.wo_number)}/quote/print?pdf=1`}
-              target="_blank"
-              rel="noopener"
-              title="Open the client's document and save it as a PDF from the print dialog"
-            >
-              <Icon name="download" size={12} />
-              PDF
-            </a>
+            <QuotePdfButton quote={quote} wo={wo} tpl={printTpl} small />
             {/* How a quote reaches the client is still to be decided, so for
                 now (Elise, 2026-11-13) this records the send and delivers
                 nothing: the same act as Send to client below (approved on the
