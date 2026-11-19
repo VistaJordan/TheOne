@@ -274,68 +274,19 @@
 .sof-bkr .sof-foot { background: var(--sof-band); color: #ffffff; }
 .sof-bkr .sof-foot b { font-family: var(--sof-label-font); font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
 
-@media (min-width: 640px) {
-  .sof-sfm .sof-head { min-height: 110px; padding-right: 32px; }
-  .sof-sfm .sof-logo { height: 92px; }
-  .sof-row { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); }
-  .sof-bkr .sof-head { padding: 24px 32px 0; }
-  .sof-bkr .sof-logo { height: 96px; }
-  .sof-head-title { font-size: 40px; }
-  .sof-bkr .sof-rule { margin: 18px 32px 0; }
-  .sof-sig { height: 230px; }
-}
 .sof-foot-side { display: flex; flex-direction: column; gap: 2px; }
-@media (min-width: 640px) { .sof-foot-side { text-align: right; } }
 
-/* A computer screen (Elise, 2026-11-19): the phone sizes above read small on
- * a wide window, so the sheet grows — a wider column, larger type, bigger
- * stars and signature box. The phone layout is untouched. */
-@media (min-width: 1024px) {
-  .sof-sfm .sof-head { min-height: 132px; padding: 12px 48px 12px 16px; }
-  .sof-sfm .sof-logo { height: 110px; }
-  .sof-bkr .sof-head { padding: 32px 48px 0; }
-  .sof-bkr .sof-logo { height: 116px; }
-  .sof-bkr .sof-rule { margin: 22px 48px 0; }
-  .sof-kicker { font-size: 13px; }
-  .sof-bkr .sof-kicker { font-size: 14px; }
-  .sof-head-ref { font-size: 15px; }
-  .sof-head-title { font-size: 48px; }
-
-  .sof-main { max-width: 900px; padding: 44px 32px 56px; }
-  .sof-form { gap: 32px; }
-  .sof-title h1 { font-size: 42px; }
-  .sof-title p { font-size: 17px; margin-top: 10px; }
-
-  .sof-lbl { font-size: 14px; }
-  .sof-bkr .sof-lbl { font-size: 16px; }
-  .sof-facts, .sof-sfm .sof-facts { gap: 36px; }
-  .sof-facts li, .sof-field-closeout { grid-template-columns: 36px minmax(0, 1fr); column-gap: 22px; }
-  .sof-bkr .sof-facts li, .sof-bkr .sof-field-closeout { grid-template-columns: 56px minmax(0, 1fr); }
-  .sof-facts li > div, .sof-field-closeout > div { gap: 8px; }
-  .sof-sfm .sof-n { width: 34px; height: 34px; font-size: 14px; }
-  .sof-sfm .sof-facts li:not(:last-child)::after { left: 16px; top: 34px; bottom: -36px; }
-  .sof-bkr .sof-n { font-size: 44px; }
-  .sof-ref { font-size: 30px; }
-  .sof-bkr .sof-ref { font-size: 34px; }
-  .sof-addr { font-size: 22px; }
-
-  .sof-field { gap: 10px; }
-  .sof-input, .sof-date { font-size: 22px; padding: 8px 0; }
-  .sof-stars { gap: 8px; }
-  .sof-star { width: 60px; height: 60px; }
-  .sof-star-word { font-size: 18px; margin-left: 12px; }
-  .sof-clear { font-size: 15px; }
-  .sof-sig { height: 300px; }
-  .sof-sig-line { left: 28px; right: 28px; bottom: 44px; }
-  .sof-sig-hint { left: 28px; bottom: 54px; font-size: 14px; }
-  .sof-attest { font-size: 15px; }
-  .sof-stub { gap: 24px; }
-  .sof-stub h2 { font-size: 18px; }
-  .sof-bkr .sof-stub { margin: 8px -32px 0; padding: 32px 32px 28px; }
-  .sof-bkr .sof-stub h2 { font-size: 22px; }
-
-  .sof-error { font-size: 16px; }
-  .sof-submit { font-size: 20px; padding: 20px; }
-  .sof-paper { font-size: 15px; }
-  .sof-foot { padding: 18px 48px; font-size: 14px; }
+/* A computer screen (Elise, 2026-11-19): the sheet keeps its phone size — a
+ * centred card the width of a phone, logo and title above the work order —
+ * rather than stretching across the window. */
+@media (min-width: 640px) {
+  body:has(.sof) { background: #e6eaf0; }
+  .sof {
+    max-width: 440px;
+    min-height: calc(100vh - 48px);
+    margin: 24px auto;
+    border-radius: 18px;
+    box-shadow: 0 1px 2px rgba(14, 17, 22, 0.08), 0 12px 40px rgba(14, 17, 22, 0.14);
+    overflow: clip;
+  }
 }
