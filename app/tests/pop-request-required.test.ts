@@ -7,8 +7,10 @@ import {
   POP_REQUEST_LINES,
   emptyPopRequest,
   formatPopRequest,
+  formatPopRequests,
   isPopRequestText,
   parsePopRequest,
+  parsePopRequests,
   popCostInputValue,
   popCostProblem,
   popQtyProblem,
@@ -74,10 +76,38 @@ describe('POP request required lines', () => {
     expect(read('apps/web/src/components/wo/PopRequestBlock.tsx')).toContain("? popCostInputValue(value)");
   });
 
+  it('holds several POP requests in the one field (2026-11-19)', () => {
+    const a = full();
+    a.values.pop = 'Home Depot';
+    const b = full();
+    b.values.pop = 'Grainger';
+    const text = formatPopRequests([a, b])!;
+    expect(text).toContain('--- POP request 2 ---');
+    const back = parsePopRequests(text);
+    expect(back.map((r) => r.values.pop)).toEqual(['Home Depot', 'Grainger']);
+    expect(back[1].notes).toBe('');
+    // One request reads and writes as before.
+    expect(formatPopRequests([a])).toBe(formatPopRequest(a));
+    expect(parsePopRequests(formatPopRequest(a))).toHaveLength(1);
+    // Empty ones are dropped; nothing at all is null.
+    expect(formatPopRequests([emptyPopRequest()])).toBeNull();
+    expect(parsePopRequests(formatPopRequests([emptyPopRequest(), b]))[0].values.pop).toBe('Grainger');
+    expect(isPopRequestText(text)).toBe(true);
+    // The API checks each one and says which.
+    const api = read('apps/api/src/services/woFieldValues.ts');
+    expect(api).toContain('const all = parsePopRequests(value);');
+    expect(api).toContain("const which = all.length > 1 ? `POP request ${i + 1}: ` : '';");
+    const form = read('apps/web/src/components/wo/PopRequestBlock.tsx');
+    expect(form).toContain('Add another POP request');
+    // Remove takes one request out and saves the rest.
+    expect(form).toContain('formatPopRequests(requests.filter((_, i) => i !== removing))');
+    expect(form).toContain('confirmLabel="Remove"');
+  });
+
   it('an open form survives a refresh until Save, Cancel or Reset (2026-11-19)', () => {
     const form = read('apps/web/src/components/wo/PopRequestBlock.tsx');
     expect(form).toContain('const keptKey = (woId: string) => `theone.pop.draft.${woId}`;');
-    expect(form).toContain('writeKept(wo.id, draft ? { draft, shotUploaded } : null);');
+    expect(form).toContain('writeKept(wo.id, draft ? { draft, shotUploaded, index: editing } : null);');
     expect(form).toContain('useState<PopRequest | null>(() => (canEdit ? (readKept(wo.id)?.draft ?? null) : null))');
     expect(form).toContain('setDraft(emptyPopRequest());');
     expect(form).toMatch(/>\s*Reset\s*</);
@@ -100,7 +130,7 @@ describe('POP request required lines', () => {
     const form = read('apps/web/src/components/wo/PopRequestBlock.tsx');
     expect(form).toContain('const missing = popRequestMissing(draft);');
     expect(form).toContain('const problems = popRequestProblems(draft);');
-    expect(form).toContain("const shotOk = shotUploaded || saved.values.screenshot.trim() !== '';");
+    expect(form).toContain("const shotOk = shotUploaded || (savedOne?.values.screenshot.trim() ?? '') !== '';");
     expect(form).toContain('setTriedSave(true);');
   });
 });

@@ -29,9 +29,10 @@ import { addressWritten, fillFromAddress } from './addressFill.js';
 import { ADDRESS_KEY } from '@theone/shared';
 import {
   PARTS_REQUIRED_KEY,
+  POP_REQUEST_LINES,
   POP_SCREENSHOT_NEEDS_PICTURE,
   isPopRequestText,
-  parsePopRequest,
+  parsePopRequests,
   popRequestMissing,
   popRequestMissingSentence,
   popRequestProblems,
@@ -45,18 +46,30 @@ import {
     rule's own write is not asked either. */
 async function assertPopRequestComplete(jsonKey: string, value: unknown, taskId: string | null): Promise<void> {
   if (jsonKey !== PARTS_REQUIRED_KEY || !isPopRequestText(value)) return;
-  const r = parsePopRequest(value);
-  const missing = popRequestMissing(r);
-  if (missing.length > 0) {
-    throw new ApiError('BAD_REQUEST', popRequestMissingSentence(missing), {
-      code: VALIDATION_CODE,
-      field: PARTS_REQUIRED_KEY,
-      missing,
-    });
-  }
-  const problem = popRequestProblems(r)[0];
-  if (problem) {
-    throw new ApiError('BAD_REQUEST', problem.message, { code: VALIDATION_CODE, field: PARTS_REQUIRED_KEY, line: problem.key });
+  // 2026-11-19: every POP request the field holds is asked (a free-text list
+  // with none of the numbered lines is not); the sentence names which one.
+  const all = parsePopRequests(value);
+  for (const [i, r] of all.entries()) {
+    if (!POP_REQUEST_LINES.some((l) => r.values[l.key].trim() !== '')) continue;
+    const which = all.length > 1 ? `POP request ${i + 1}: ` : '';
+    const missing = popRequestMissing(r);
+    if (missing.length > 0) {
+      throw new ApiError('BAD_REQUEST', `${which}${popRequestMissingSentence(missing)}`, {
+        code: VALIDATION_CODE,
+        field: PARTS_REQUIRED_KEY,
+        missing,
+        request: i + 1,
+      });
+    }
+    const problem = popRequestProblems(r)[0];
+    if (problem) {
+      throw new ApiError('BAD_REQUEST', `${which}${problem.message}`, {
+        code: VALIDATION_CODE,
+        field: PARTS_REQUIRED_KEY,
+        line: problem.key,
+        request: i + 1,
+      });
+    }
   }
   if (!taskId) return;
   const pic = await query<{ ok: boolean }>(

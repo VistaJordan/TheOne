@@ -4,8 +4,8 @@ import {
   PARTS_REQUIRED_KEY,
   POP_REQUEST_LINES,
   emptyPopRequest,
-  formatPopRequest,
-  parsePopRequest,
+  formatPopRequests,
+  parsePopRequests,
   popCostInputValue,
   popRequestEmpty,
   POP_SCREENSHOT_NEEDS_PICTURE,
@@ -21,6 +21,7 @@ import type { WorkOrderDetailV2 } from '../../api/client';
 import { uploadAttachment } from '../../api/client';
 import { useAuth } from '../../auth/AuthProvider';
 import { prepareFile } from '../../lib/upload';
+import { ConfirmDialog } from '../ConfirmDialog';
 import { Icon } from '../Icon';
 import { useCanEditField, useWoFieldSave } from './fieldEdit';
 
@@ -43,6 +44,9 @@ const isUrl = (s: string) => /^https?:\/\//i.test(s.trim());
 interface KeptPop {
   draft: PopRequest;
   shotUploaded: boolean;
+  /** Which request is open: an existing one's place, or one past the last
+      for a new one. */
+  index: number;
 }
 const keptKey = (woId: string) => `theone.pop.draft.${woId}`;
 function readKept(woId: string): KeptPop | null {
@@ -51,7 +55,11 @@ function readKept(woId: string): KeptPop | null {
     if (!raw) return null;
     const v = JSON.parse(raw) as Partial<KeptPop>;
     if (!v.draft || typeof v.draft !== 'object' || !v.draft.values) return null;
-    return { draft: { ...emptyPopRequest(), ...v.draft, values: { ...emptyPopRequest().values, ...v.draft.values } }, shotUploaded: v.shotUploaded === true };
+    return {
+      draft: { ...emptyPopRequest(), ...v.draft, values: { ...emptyPopRequest().values, ...v.draft.values } },
+      shotUploaded: v.shotUploaded === true,
+      index: typeof v.index === 'number' && v.index >= 0 ? v.index : 0,
+    };
   } catch {
     return null;
   }
@@ -79,8 +87,11 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
   const canEdit = useCanEditField(FIELD_KEY);
   const canUpload = can('work_orders/attachments', 'create');
   const raw = (wo.fields ?? {})[PARTS_REQUIRED_KEY];
-  const saved = parsePopRequest(raw);
+  // 2026-11-19 (Elise): one or more POP requests, all in the same field.
+  const requests = parsePopRequests(raw);
+  const firstEmpty = requests.length === 1 && popRequestEmpty(requests[0]);
   const [draft, setDraft] = useState<PopRequest | null>(() => (canEdit ? (readKept(wo.id)?.draft ?? null) : null));
+  const [editing, setEditing] = useState<number>(() => readKept(wo.id)?.index ?? 0);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   // Elise, 2026-11-17: every line but Specs is required; the boxes paint red
@@ -92,15 +103,23 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
   // the work order holds an image).
   const [shotUploaded, setShotUploaded] = useState(() => readKept(wo.id)?.shotUploaded === true);
   const [dragging, setDragging] = useState(false);
+  // 2026-11-19 (Elise): a saved request can be removed (after a confirm).
+  const [removing, setRemoving] = useState<number | null>(null);
   // Keep the open form through a refresh; closing it (Save, Cancel) forgets it.
   useEffect(() => {
-    writeKept(wo.id, draft ? { draft, shotUploaded } : null);
-  }, [wo.id, draft, shotUploaded]);
+    writeKept(wo.id, draft ? { draft, shotUploaded, index: editing } : null);
+  }, [wo.id, draft, shotUploaded, editing]);
+  /** Open request `i` (an existing one) or a new one (i = requests.length). */
+  const open = (i: number) => {
+    setEditing(i);
+    setDraft(i < requests.length && !(firstEmpty && i === 0) ? requests[i] : emptyPopRequest());
+  };
   const fileInput = useRef<HTMLInputElement>(null);
   const save = useWoFieldSave(wo.id, () => {
     setDraft(null);
     setTriedSave(false);
     setShotUploaded(false);
+    setRemoving(null);
   });
 
   const setLine = (key: PopRequestKey, value: string) =>
@@ -149,7 +168,10 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
     const busy = save.isPending || uploading;
     const missing = popRequestMissing(draft);
     const problems = popRequestProblems(draft);
-    const shotOk = shotUploaded || saved.values.screenshot.trim() !== '';
+    const savedOne = editing < requests.length ? requests[editing] : null;
+    const shotOk = shotUploaded || (savedOne?.values.screenshot.trim() ?? '') !== '';
+    const isNew = editing >= requests.length || (firstEmpty && editing === 0);
+    const number = firstEmpty ? 1 : Math.min(editing, requests.length) + 1;
     const lineError = (key: PopRequestKey): string | null =>
       problems.find((p) => p.key === key)?.message ??
       (key === 'screenshot' && !shotOk ? POP_SCREENSHOT_NEEDS_PICTURE : null);
@@ -170,9 +192,16 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
             return;
           }
           const phone = formatUsPhone(draft.values.phone) ?? draft.values.phone;
-          save.mutate({ key: FIELD_KEY, value: formatPopRequest({ ...draft, values: { ...draft.values, phone } }) });
+          const next = firstEmpty ? [] : [...requests];
+          next[Math.min(firstEmpty ? 0 : editing, next.length)] = { ...draft, values: { ...draft.values, phone } };
+          save.mutate({ key: FIELD_KEY, value: formatPopRequests(next) });
         }}
       >
+        {(number > 1 || requests.length > 1) && (
+          <p className="parts-main pop-form-title">
+            {isNew ? `New POP request (request ${number})` : `POP request ${number}`}
+          </p>
+        )}
         <div className="pop-grid">
           {POP_REQUEST_LINES.map((l, i) => {
             const id = `pop-${wo.id}-${l.key}`;
@@ -315,44 +344,103 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
     );
   }
 
-  const empty = popRequestEmpty(saved);
-  return (
-    <div className="pop-view">
-      <div className="pop-head">
-        <span>
-          <span className="parts-main">{empty ? 'No parts listed' : 'POP request'}</span>
-          {empty && (
+  if (firstEmpty) {
+    return (
+      <div className="pop-view">
+        <div className="pop-head">
+          <span>
+            <span className="parts-main">No parts listed</span>
             <span className="parts-sub">
               Waiting for Parts and Please Order Parts need the POP request filled in first.
             </span>
+          </span>
+          {canEdit && (
+            <button type="button" className="btn btn-sm" onClick={() => open(0)}>
+              <Icon name="pencil" size={12} /> Fill in the POP request
+            </button>
           )}
-        </span>
-        {canEdit && (
-          <button type="button" className="btn btn-sm" onClick={() => setDraft(parsePopRequest(raw))}>
-            <Icon name="pencil" size={12} /> {empty ? 'Fill in the POP request' : 'Edit'}
-          </button>
-        )}
+        </div>
       </div>
-      {!empty && (
-        <dl className="pop-lines">
-          {POP_REQUEST_LINES.map((l, i) => {
-            const v = saved.values[l.key];
-            return (
-              <div key={l.key} className={`pop-line${v ? '' : ' is-blank'}`}>
-                <dt>{i + 1}- {l.label}</dt>
-                <dd>
-                  {!v ? '—' : isUrl(v) ? <a href={v.trim()} target="_blank" rel="noreferrer">{v}</a> : v}
-                </dd>
+    );
+  }
+  const several = requests.length > 1;
+  return (
+    <div className="pop-view">
+      {requests.map((r, ri) => (
+        <div key={ri} className="pop-request">
+          <div className="pop-head">
+            <span>
+              <span className="parts-main">{several ? `POP request ${ri + 1}` : 'POP request'}</span>
+            </span>
+            {canEdit && (
+              <span className="pop-request-actions">
+                <button
+                  type="button"
+                  className="btn btn-sm is-ghost"
+                  onClick={() => {
+                    save.clearError();
+                    setRemoving(ri);
+                  }}
+                  disabled={save.isPending}
+                >
+                  <Icon name="trash" size={12} /> Remove
+                </button>
+                <button type="button" className="btn btn-sm" onClick={() => open(ri)}>
+                  <Icon name="pencil" size={12} /> Edit
+                </button>
+              </span>
+            )}
+          </div>
+          <dl className="pop-lines">
+            {POP_REQUEST_LINES.map((l, i) => {
+              const v = r.values[l.key];
+              return (
+                <div key={l.key} className={`pop-line${v ? '' : ' is-blank'}`}>
+                  <dt>{i + 1}- {l.label}</dt>
+                  <dd>
+                    {!v ? '—' : isUrl(v) ? <a href={v.trim()} target="_blank" rel="noreferrer">{v}</a> : v}
+                  </dd>
+                </div>
+              );
+            })}
+            {r.notes && (
+              <div className="pop-line is-notes">
+                <dt>Also on this list</dt>
+                <dd>{r.notes}</dd>
               </div>
-            );
-          })}
-          {saved.notes && (
-            <div className="pop-line is-notes">
-              <dt>Also on this list</dt>
-              <dd>{saved.notes}</dd>
-            </div>
-          )}
-        </dl>
+            )}
+          </dl>
+        </div>
+      ))}
+      {save.error && removing === null && <p className="ife-err" role="alert">{save.error}</p>}
+      {removing !== null && removing < requests.length && (
+        <ConfirmDialog
+          title={several ? `Remove POP request ${removing + 1}?` : 'Remove the POP request?'}
+          icon="trash"
+          danger
+          message={
+            several
+              ? 'Its ten lines are taken off this work order; the other requests stay as they are.'
+              : 'Its ten lines are taken off this work order and Parts Required is left empty.'
+          }
+          note={save.error ?? 'A screenshot it named stays on the Drive tab.'}
+          noteTone={save.error ? 'danger' : 'info'}
+          confirmLabel="Remove"
+          busy={save.isPending}
+          busyLabel="Removing…"
+          onConfirm={() => save.mutate({ key: FIELD_KEY, value: formatPopRequests(requests.filter((_, i) => i !== removing)) })}
+          onCancel={() => {
+            setRemoving(null);
+            save.clearError();
+          }}
+        />
+      )}
+      {canEdit && (
+        <div className="pop-add">
+          <button type="button" className="btn btn-sm" onClick={() => open(requests.length)}>
+            <Icon name="plus" size={12} /> Add another POP request
+          </button>
+        </div>
       )}
     </div>
   );

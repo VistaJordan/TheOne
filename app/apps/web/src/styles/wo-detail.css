@@ -2033,6 +2033,11 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .pop-shot { border-radius: 8px; outline: 2px dashed transparent; outline-offset: 3px; }
 .pop-shot.is-dragging { outline-color: var(--accent); }
 .pop-shot-hint { margin: 2px 0 0; font-size: 12px; color: var(--ink-3); }
+/* 2026-11-19: several POP requests on one work order. */
+.pop-request + .pop-request { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.pop-add { margin-top: 12px; }
+.pop-request-actions { display: inline-flex; gap: 6px; }
+.pop-form-title { margin: 0 0 10px; }
 .pop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .pop-grid .lbl .req { color: var(--danger); }
 .pop-grid .pop-err { color: var(--danger); font-size: 12px; }

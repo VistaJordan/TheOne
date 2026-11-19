@@ -58,8 +58,7 @@ export function popRequestMissing(r: PopRequest): string[] {
     not held to the required lines. */
 export function isPopRequestText(text: unknown): boolean {
   if (text === null || text === undefined) return false;
-  const r = parsePopRequest(text);
-  return POP_REQUEST_LINES.some((l) => r.values[l.key].trim() !== '') ||
+  return parsePopRequests(text).some((r) => POP_REQUEST_LINES.some((l) => r.values[l.key].trim() !== '')) ||
     /^\s*\d{1,2}\s*-\s*POP\s*:/im.test(String(text));
 }
 
@@ -154,6 +153,34 @@ export function parsePopRequest(text: unknown): PopRequest {
   }
   out.notes = notes.join('\n').trim();
   return out;
+}
+
+/** Elise, 2026-11-19: a work order may need more than one POP request. They
+    all live in the same `Parts Required` text, the second and later ones each
+    under a line "--- POP request N ---", so the parts gate and ClickUp still
+    read one field. Text with no such line is one request, as before. */
+const POP_SEPARATOR_RE = /^\s*-{2,}\s*POP request\s*\d+\s*-{2,}\s*$/im;
+
+export function popRequestSeparator(n: number): string {
+  return `--- POP request ${n} ---`;
+}
+
+/** Every request the text holds, in order; always at least one. */
+export function parsePopRequests(text: unknown): PopRequest[] {
+  if (text === null || text === undefined) return [emptyPopRequest()];
+  const chunks = String(text).replace(/\r\n?/g, '\n').split(new RegExp(POP_SEPARATOR_RE.source, 'gim'));
+  const out = chunks.map((c, i) => ({ c, i })).filter(({ c, i }) => i === 0 || c.trim() !== '').map(({ c }) => parsePopRequest(c));
+  // A blank first chunk before a separator is not a request of its own.
+  if (out.length > 1 && popRequestEmpty(out[0])) out.shift();
+  return out.length > 0 ? out : [emptyPopRequest()];
+}
+
+/** The text for several requests: empty ones dropped, numbered from 2 on;
+    null when none says anything. */
+export function formatPopRequests(rs: readonly PopRequest[]): string | null {
+  const texts = rs.map(formatPopRequest).filter((t): t is string => t !== null);
+  if (texts.length === 0) return null;
+  return texts.map((t, i) => (i === 0 ? t : `${popRequestSeparator(i + 1)}\n${t}`)).join('\n\n');
 }
 
 /** True when the request says nothing at all. */
