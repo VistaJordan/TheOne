@@ -236,7 +236,7 @@ function ImportTranscriptDialog({ woNumber, onClose }: { woNumber: string; onClo
                 className="fld"
                 rows={8}
                 value={text}
-                placeholder={'Matt: What did you find?\nGulf Coast: The condenser fan motor is seized…'}
+                placeholder="Name: what they said — one line each"
                 onChange={(e) => {
                   setText(e.target.value);
                   if (fileName) setFileName(null);
@@ -261,7 +261,6 @@ function ImportTranscriptDialog({ woNumber, onClose }: { woNumber: string; onClo
                 inputMode="tel"
                 value={phone}
                 maxLength={40}
-                placeholder="(409) 555-0143"
                 aria-label="The number you spoke with"
                 style={{ flex: 1 }}
                 onChange={(e) => setPhone(e.target.value)}

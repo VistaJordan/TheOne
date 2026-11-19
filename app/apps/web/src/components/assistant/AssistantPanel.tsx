@@ -431,11 +431,11 @@ function NoteForm({ note, draft, onClose }: { note: AssistantNote | null; draft:
     >
       <label>
         <span className="lbl">What it is about</span>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={ASSISTANT_NOTE_TITLE_MAX} placeholder="“Pending vendor”" autoFocus />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={ASSISTANT_NOTE_TITLE_MAX} autoFocus />
       </label>
       <label>
         <span className="lbl">What the assistant should know</span>
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={ASSISTANT_NOTE_BODY_MAX} rows={4} placeholder="When someone says pending vendor they mean the statuses Waiting for Vendor and Vendor Scheduled." />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={ASSISTANT_NOTE_BODY_MAX} rows={4} />
       </label>
       {save.isError && <p className="asst-problem" role="alert">{errText(save.error, 'The note could not be saved.')}</p>}
       <div className="asst-noteform-f">

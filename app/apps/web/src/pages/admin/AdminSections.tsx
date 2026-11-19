@@ -447,7 +447,6 @@ function HolidaysCard() {
             className="fld"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Thanksgiving Day, Company holiday…"
             disabled={busy}
           />
         </label>
@@ -1206,7 +1205,6 @@ function AutomationBuilder({ initial, fields, opsByType, busy, onCancel, onSave 
           <label className="lbl" htmlFor="au-name">Name <span className="req">*</span></label>
           <input
             className="fld" id="au-name" type="text"
-            placeholder="Rush new quote approvals"
             value={name} onChange={(e) => setName(e.target.value)}
           />
         </div>
@@ -2626,7 +2624,6 @@ function CicoMethodsCard() {
               list="adm-cico-portal-options"
               value={portal}
               onChange={(e) => setPortal(e.target.value)}
-              placeholder="Service Channel, Corrigo…"
               maxLength={80}
               disabled={busy}
             />
@@ -2641,7 +2638,6 @@ function CicoMethodsCard() {
             className="fld"
             value={detail}
             onChange={(e) => setDetail(e.target.value)}
-            placeholder="IVR number, “Service Channel”, “Submit request on Teams”…"
             disabled={busy}
           />
         </label>
@@ -2975,7 +2971,7 @@ function NewFieldForm({ busy, onCancel, onSubmit }: {
         {type === 'dropdown' && (
           <div className="field">
             <label className="lbl" htmlFor="nf-options">Dropdown values <span className="opt">one per line</span></label>
-            <textarea className="fld" id="nf-options" rows={4} placeholder={'Value A\nValue B'}
+            <textarea className="fld" id="nf-options" rows={4} placeholder="One value per line"
               value={optionsText} onChange={(e) => setOptionsText(e.target.value)} />
           </div>
         )}

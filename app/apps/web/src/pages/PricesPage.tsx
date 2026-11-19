@@ -343,7 +343,7 @@ function PriceCardDialog({ card, entity, meta, onClose, onSaved }: {
           <input className="fld" inputMode="decimal" value={markup} onChange={(e) => setMarkup(e.target.value)} />
         </F>
         <F label="Note" wide>
-          <input className="fld" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. After-hours rates start at 5pm." />
+          <input className="fld" value={note} onChange={(e) => setNote(e.target.value)} />
         </F>
       </div>
 
@@ -396,9 +396,9 @@ function PriceCardDialog({ card, entity, meta, onClose, onSaved }: {
           <tbody>
             {fees.map((f) => (
               <tr key={f.key}>
-                <td><input className="fld" value={f.name} onChange={(e) => setFee(f.key, { name: e.target.value })} placeholder="Snake" aria-label="Fee name" /></td>
+                <td><input className="fld" value={f.name} onChange={(e) => setFee(f.key, { name: e.target.value })} aria-label="Fee name" /></td>
                 <td className="num"><input className="fld price-num" inputMode="decimal" value={f.amount} onChange={(e) => setFee(f.key, { amount: e.target.value })} aria-label="Amount" /></td>
-                <td><input className="fld" value={f.note} onChange={(e) => setFee(f.key, { note: e.target.value })} placeholder="e.g. $350-550" aria-label="Note" /></td>
+                <td><input className="fld" value={f.note} onChange={(e) => setFee(f.key, { note: e.target.value })} aria-label="Note" /></td>
                 <td><button type="button" className="icon-btn" aria-label="Remove fee" onClick={() => setFees((cur) => cur.filter((x) => x.key !== f.key))}><Icon name="trash" size={12} /></button></td>
               </tr>
             ))}

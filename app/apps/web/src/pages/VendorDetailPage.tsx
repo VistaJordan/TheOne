@@ -562,7 +562,7 @@ export function VendorDetailPage() {
               <div className="vrec-list">
                 {phones.map((p, i) => (
                   <div className="vrec-rowedit" key={i}>
-                    <input className="fld mono" type="tel" placeholder="(409) 555-0143" value={p.phone} aria-label={`Phone ${i + 1}`} onChange={(e) => setPhones((l) => l.map((x, j) => (j === i ? { ...x, phone: e.target.value } : x)))} />
+                    <input className="fld mono" type="tel" value={p.phone} aria-label={`Phone ${i + 1}`} onChange={(e) => setPhones((l) => l.map((x, j) => (j === i ? { ...x, phone: e.target.value } : x)))} />
                     <input className="fld" placeholder="Label" value={p.label} aria-label={`Phone ${i + 1} label`} onChange={(e) => setPhones((l) => l.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
                     <button type="button" className="icon-btn" aria-label="Remove this phone" onClick={() => setPhones((l) => l.filter((_, j) => j !== i))}><Icon name="x" size={12} /></button>
                   </div>

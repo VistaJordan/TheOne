@@ -233,7 +233,6 @@ export function CallDialog({ wo, onClose, preset, side = 'tech' }: {
                     type="tel"
                     value={otherPhone}
                     maxLength={40}
-                    placeholder="(409) 555-0143"
                     onChange={(e) => setOtherPhone(e.target.value)}
                   />
                 </div>

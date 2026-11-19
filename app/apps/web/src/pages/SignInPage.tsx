@@ -315,7 +315,7 @@ function TestAccountForm({
       <input
         className="signin-test-input"
         aria-label="Test account username (a role code, such as om)"
-        placeholder="Username (role code, e.g. om)"
+        placeholder="Username (a role code)"
         autoComplete="username"
         autoCapitalize="none"
         spellCheck={false}

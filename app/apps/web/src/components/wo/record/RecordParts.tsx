@@ -418,7 +418,7 @@ function EtaDialog({ woId, woNumber, record, onClose }: DialogProps) {
           {past && <span className="err" role="alert"><Icon name="alert" size={12} />{ETA_IN_PAST_MESSAGE}</span>}
         </label>
         <label className="field"><span className="lbl">Note (optional)</span>
-          <input className="fld" value={note} placeholder="e.g. Leaving Houston at 2" onChange={(e) => setNote(e.target.value)} />
+          <input className="fld" value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
       </div>
       {save.isError && <p className="snooze-err" role="alert"><Icon name="alert-circle" size={12} />{errText(save.error, 'Could not save the ETA.')}</p>}

@@ -287,7 +287,7 @@ function PreferredCard({ data, canEdit }: { data: AdminVendorsResponse; canEdit:
           </div>
           <div className="field" style={{ flex: '2 1 180px' }}>
             <label className="lbl" htmlFor="pv-note">Note</label>
-            <input className="fld" id="pv-note" value={note} maxLength={1000} placeholder="Why — contract, pricing…" onChange={(e) => setNote(e.target.value)} />
+            <input className="fld" id="pv-note" value={note} maxLength={1000} placeholder="Why?" onChange={(e) => setNote(e.target.value)} />
           </div>
           <button type="button" className="btn btn-primary" disabled={!ready || add.isPending} title={!ready ? 'Pick a client or a trade, and a vendor' : undefined} onClick={() => add.mutate()}>
             <Icon name="plus" size={14} />

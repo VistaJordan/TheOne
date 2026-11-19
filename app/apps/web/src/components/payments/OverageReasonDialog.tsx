@@ -57,7 +57,7 @@ export function OverageReasonDialog({ message, busy, error, onSubmit, onCancel }
             <textarea
               autoFocus
               className="composer-input snooze-reason"
-              placeholder="Why does this payment go over? e.g. extra parts the client agreed on the phone, second trip…"
+              placeholder="Why does this payment go over?"
               value={reason}
               maxLength={OVERAGE_REASON_MAX}
               onChange={(e) => setReason(e.target.value)}

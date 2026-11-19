@@ -119,7 +119,7 @@ export function OnCallCard() {
           >
             <label className="field">
               <span className="lbl">Sheet link</span>
-              <input className="fld mono" value={sheet} disabled={busy || !canEdit} placeholder="https://docs.google.com/spreadsheets/d/…" onChange={(e) => setSheet(e.target.value)} />
+              <input className="fld mono" value={sheet} disabled={busy || !canEdit} placeholder="Link to the Google Sheet" onChange={(e) => setSheet(e.target.value)} />
               <span className="hint">Paste the link from the browser. The tab open in the link is the one read.</span>
             </label>
             <label className="field">

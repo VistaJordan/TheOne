@@ -185,7 +185,7 @@ function CallRow({ call, woId, woNumber, side }: { call: WoCall; woId: string; w
                 rows={6}
                 autoFocus
                 value={text}
-                placeholder={'Matt: What did you find?\nGulf Coast: The condenser fan motor is seized…'}
+                placeholder="Name: what they said — one line each"
                 onChange={(e) => setText(e.target.value)}
               />
               <span className="hint">One line per turn, as “Name: what they said”. Copy it from the call in the Quo app.</span>

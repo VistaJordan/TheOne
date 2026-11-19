@@ -175,7 +175,6 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
                     className="fld"
                     type={l.key === 'phone' ? 'tel' : l.key === 'link' ? 'url' : 'text'}
                     inputMode={l.key === 'qty' ? 'numeric' : l.key === 'estimated_total_cost' ? 'decimal' : undefined}
-                    placeholder={l.key === 'phone' ? '(409) 555-0143' : undefined}
                     value={value}
                     onChange={(e) => setLine(l.key, typed(l.key, e.target.value))}
                     disabled={busy}

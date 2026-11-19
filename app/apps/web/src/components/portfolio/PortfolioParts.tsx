@@ -301,14 +301,14 @@ export function SiteFormDialog({ site, meta, onClose, onSaved }: {
           <Field label="Second phone"><input className="fld" value={d.phone_2} onChange={(e) => set('phone_2', e.target.value)} /></Field>
           <Field label="Site contact"><input className="fld" value={d.contact_name} onChange={(e) => set('contact_name', e.target.value)} /></Field>
           <Field label="Contact email"><input className="fld" type="email" value={d.contact_email} onChange={(e) => set('contact_email', e.target.value)} /></Field>
-          <Field label="Opening hours" wide><input className="fld" value={d.hours} placeholder="Mon–Sun 6am–11pm" onChange={(e) => set('hours', e.target.value)} /></Field>
+          <Field label="Opening hours" wide><input className="fld" value={d.hours} onChange={(e) => set('hours', e.target.value)} /></Field>
           <Field label="Getting in" wide hint="Gate codes, where to park, who to ask for — what a technician needs on arrival.">
             <textarea className="fld" rows={2} value={d.access_notes} onChange={(e) => set('access_notes', e.target.value)} />
           </Field>
           <Field label="Notes" wide><textarea className="fld" rows={2} value={d.notes} onChange={(e) => set('notes', e.target.value)} /></Field>
 
           <Field label="Boundary (feet)" hint="How far from the pin still counts as on site.">
-            <input className="fld mono" inputMode="numeric" value={d.boundary_radius_ft} placeholder="e.g. 500" onChange={(e) => set('boundary_radius_ft', e.target.value)} />
+            <input className="fld mono" inputMode="numeric" value={d.boundary_radius_ft} onChange={(e) => set('boundary_radius_ft', e.target.value)} />
           </Field>
           <Field label="Latitude" hint="Only to place the pin by hand."><input className="fld mono" value={d.lat} placeholder="from the address" onChange={(e) => set('lat', e.target.value)} /></Field>
           <Field label="Longitude"><input className="fld mono" value={d.lng} placeholder="from the address" onChange={(e) => set('lng', e.target.value)} /></Field>
@@ -468,7 +468,7 @@ export function AssetFormDialog({ asset, site: fixedSite, meta, onClose, onSaved
               }}
             />
           </Field>
-          <Field label="Name" wide><input className="fld" value={d.name} placeholder="e.g. Walk-in cooler" onChange={(e) => set('name', e.target.value)} /></Field>
+          <Field label="Name" wide><input className="fld" value={d.name} onChange={(e) => set('name', e.target.value)} /></Field>
           <Field label="Category"><Suggest id="pf-cats" value={d.category} onChange={(v) => set('category', v)} options={meta?.asset_categories ?? []} /></Field>
           <Field label="Type"><Suggest id="pf-atypes" value={d.asset_type} onChange={(v) => set('asset_type', v)} options={meta?.asset_types ?? []} /></Field>
           <Field label="Manufacturer"><input className="fld" value={d.manufacturer} onChange={(e) => set('manufacturer', e.target.value)} /></Field>

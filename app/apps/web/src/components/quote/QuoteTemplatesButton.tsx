@@ -373,7 +373,6 @@ function SaveTab({
           maxLength={QUOTE_TEMPLATE_NAME_MAX}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Walk-in cooler compressor replacement"
           autoFocus
         />
       </div>

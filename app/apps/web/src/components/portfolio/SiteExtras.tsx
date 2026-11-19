@@ -81,7 +81,7 @@ export function SiteEventsCard({ siteId, canEdit }: { siteId: string; canEdit: b
             </select>
           </label>
           <label><span className="lbl">What is happening</span>
-            <input className="fld" autoFocus value={form.title} maxLength={200} placeholder="e.g. Parking lot resurfacing" onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <input className="fld" autoFocus value={form.title} maxLength={200} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           </label>
           <label><span className="lbl">From</span><input className="fld" type="date" value={form.starts_on} onChange={(e) => setForm({ ...form, starts_on: e.target.value })} /></label>
           <label><span className="lbl">Until (empty = until ended)</span><input className="fld" type="date" value={form.ends_on} min={form.starts_on} onChange={(e) => setForm({ ...form, ends_on: e.target.value })} /></label>

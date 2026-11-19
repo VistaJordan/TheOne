@@ -213,7 +213,7 @@ export function BulkSearchDialog({ onClose, onShow }: { onClose: () => void; onS
             </button>
           ))}
         </div>
-        <textarea className="fld vend-paste" rows={7} value={text} placeholder={field === 'phone' ? '(409) 555-0143\n713-555-0188' : field === 'name' ? 'Bayou Mechanical\nGulf Coast Refrigeration' : 'ops@example.com'} onChange={(e) => { setText(e.target.value); setResults(null); }} aria-label="The list" />
+        <textarea className="fld vend-paste" rows={7} value={text} placeholder="One per line" onChange={(e) => { setText(e.target.value); setResults(null); }} aria-label="The list" />
         {run.isError && <p className="snooze-err" role="alert"><Icon name="alert-circle" size={12} />{errText(run.error, 'Could not look the list up.')}</p>}
         {results && (
           <div className="vend-bs">

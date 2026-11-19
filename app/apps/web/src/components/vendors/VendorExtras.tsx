@@ -150,7 +150,7 @@ export function VendorQualificationsPanel({ vendorId }: { vendorId: string }) {
             <button type="button" className="btn btn-primary" disabled={!induction.title.trim() || saveInd.isPending} onClick={() => saveInd.mutate()}>{saveInd.isPending ? 'Saving…' : 'Save'}</button>
           </>}>
           <div className="pf-form">
-            <F label="Induction" wide><input className="fld" autoFocus value={induction.title} placeholder="e.g. Site safety briefing" onChange={(e) => setInduction((c) => c && { ...c, title: e.target.value })} /></F>
+            <F label="Induction" wide><input className="fld" autoFocus value={induction.title} onChange={(e) => setInduction((c) => c && { ...c, title: e.target.value })} /></F>
             <F label="For client" wide hint="Leave empty when it is not tied to one client.">
               <input className="fld" list="vx-clients" value={induction.client} onChange={(e) => setInduction((c) => c && { ...c, client: e.target.value })} />
               <datalist id="vx-clients">{d.clients.map((c) => <option key={c} value={c} />)}</datalist>

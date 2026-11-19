@@ -310,7 +310,6 @@ function SaveAsMenu({
               value={name}
               autoFocus
               maxLength={80}
-              placeholder="e.g. Chicago HVAC — awaiting approval"
               onChange={(e) => setName(e.target.value)}
             />
           </label>

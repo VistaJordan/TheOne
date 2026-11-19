@@ -1001,7 +1001,6 @@ function PhoneInput({ value, onChange, disabled }: { value: string; onChange: (v
         inputMode="numeric"
         value={value}
         onChange={(e) => onChange(usPhoneInputValue(e.target.value))}
-        placeholder="(000) 000-0000"
         aria-invalid={problem ? true : undefined}
         disabled={disabled}
       />

@@ -450,7 +450,6 @@ export function RequestPayment({
                           className="finput"
                           id="payee-name"
                           type="text"
-                          placeholder="e.g. Gulf Coast Refrigeration LLC"
                           value={manualName}
                           onChange={(e) => setManualName(e.target.value)}
                         />
@@ -465,8 +464,6 @@ export function RequestPayment({
                           id="payee-phone"
                           type="tel"
                           inputMode="tel"
-                          autoComplete="tel-national"
-                          placeholder="(409) 555-0143"
                           value={manualPhone}
                           aria-invalid={phoneError ? true : undefined}
                           aria-describedby={phoneError ? 'payee-phone-err' : undefined}
@@ -613,7 +610,6 @@ export function RequestPayment({
                         id="amount"
                         type="text"
                         inputMode="decimal"
-                        placeholder="0.00"
                         value={amount}
                         aria-invalid={amountError ? true : undefined}
                         aria-describedby={amountError ? 'amount-err' : undefined}
@@ -789,7 +785,6 @@ export function RequestPayment({
                           className="finput"
                           id="recipient-phone"
                           type="tel"
-                          placeholder="(409) 555-0100"
                           value={recipientPhone}
                           disabled={recipientIsStore}
                           onChange={(e) => setRecipientPhone(e.target.value)}

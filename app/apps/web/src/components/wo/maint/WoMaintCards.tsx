@@ -216,7 +216,7 @@ export function TimeEntryDialog({ woId, entry, technicians, onClose }: { woId: s
         <F label="Kind">
           <select className="fld" value={d.kind} onChange={(e) => set('kind', e.target.value as TimeKind)}>{TIME_KINDS.map((k) => <option key={k} value={k}>{TIME_KIND_LABELS[k]}</option>)}</select>
         </F>
-        <F label="Hourly rate"><input className="fld" type="number" min="0" step="0.01" placeholder="e.g. 85" value={d.hourly_rate} onChange={(e) => set('hourly_rate', e.target.value)} /></F>
+        <F label="Hourly rate"><input className="fld" type="number" min="0" step="0.01" value={d.hourly_rate} onChange={(e) => set('hourly_rate', e.target.value)} /></F>
         <F label="Note" wide><input className="fld" value={d.note} onChange={(e) => set('note', e.target.value)} /></F>
         <label className="tmap-check pf-field"><input type="checkbox" checked={d.billable} onChange={(e) => set('billable', e.target.checked)} /><span>Billable</span></label>
       </div>

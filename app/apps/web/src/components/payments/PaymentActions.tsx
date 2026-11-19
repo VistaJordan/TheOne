@@ -206,7 +206,7 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
       {sheet === 'nte' && (
         <div className="pay-sheet">
           <label className="flabel" htmlFor={`nte-${item.id}`}>Why approve it over the NTE? <span className="req" aria-hidden="true">*</span></label>
-          <input className="finput" id={`nte-${item.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Client agreed by phone, extra parts needed…" />
+          <input className="finput" id={`nte-${item.id}`} value={reason} onChange={(e) => setReason(e.target.value)} />
           <p className="fhelp">
             <Icon name="info" size={12} />
             {item.overage_reason
@@ -240,7 +240,7 @@ export function PaymentActions({ item, compact = false, onChanged }: Props) {
       {sheet === 'delete' && (
         <div className="pay-sheet">
           <label className="flabel" htmlFor={`del-${item.id}`}>Deletion reason <span className="req" aria-hidden="true">*</span></label>
-          <input className="finput" id={`del-${item.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Duplicate, wrong WO, wrong amount…" />
+          <input className="finput" id={`del-${item.id}`} value={reason} onChange={(e) => setReason(e.target.value)} />
           <p className="fhelp">
             <Icon name="info" size={12} />
             {item.status === 'paid'

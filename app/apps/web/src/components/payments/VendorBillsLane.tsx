@@ -385,7 +385,7 @@ export function RecordBillDialog({
             </div>
             <div className="field">
               <label className="lbl" htmlFor="vb-tax">Tax</label>
-              <input id="vb-tax" className="fld" inputMode="decimal" value={tax} onChange={(e) => setTax(e.target.value)} placeholder="0.00" />
+              <input id="vb-tax" className="fld" inputMode="decimal" value={tax} onChange={(e) => setTax(e.target.value)} />
             </div>
             <div className="field">
               <label className="lbl" htmlFor="vb-note">Note</label>
@@ -407,7 +407,7 @@ export function RecordBillDialog({
                 <tr key={l.key}>
                   <td><input className="fld" value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} aria-label={`Line ${i + 1}`} /></td>
                   <td><input className="fld" inputMode="decimal" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label={`Line ${i + 1} quantity`} /></td>
-                  <td><input className="fld" inputMode="decimal" value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} aria-label={`Line ${i + 1} unit price`} placeholder="0.00" /></td>
+                  <td><input className="fld" inputMode="decimal" value={l.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} aria-label={`Line ${i + 1} unit price`} /></td>
                   <td>
                     <button type="button" className="rowdel" aria-label={`Remove line ${i + 1}`} onClick={() => setLines(lines.filter((_, j) => j !== i))}>
                       <Icon name="trash" size={14} />

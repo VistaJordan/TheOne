@@ -66,7 +66,7 @@ export function FinanceSetupCards() {
         {d.tax_rates.length === 0 && <div className="empty-flat">No tax rates. Without one, purchase orders carry no tax and quotes keep their hand-typed sales tax.</div>}
         {edit && (
           <form className="rec-add mt-add" onSubmit={(e) => { e.preventDefault(); addRate.mutate(); }}>
-            <input className="fld" placeholder="Name, e.g. Texas sales tax" value={rate.name} onChange={(e) => setRate((c) => ({ ...c, name: e.target.value }))} aria-label="Tax rate name" />
+            <input className="fld" placeholder="Name" value={rate.name} onChange={(e) => setRate((c) => ({ ...c, name: e.target.value }))} aria-label="Tax rate name" />
             <input className="fld mt-qty" type="number" min="0" max="100" step="0.001" placeholder="%" value={rate.rate} onChange={(e) => setRate((c) => ({ ...c, rate: e.target.value }))} aria-label="Percent" />
             <input className="fld mt-qty" placeholder="State" value={rate.state} onChange={(e) => setRate((c) => ({ ...c, state: e.target.value }))} aria-label="State" />
             <button type="submit" className="btn btn-sm" disabled={addRate.isPending}>Add</button>

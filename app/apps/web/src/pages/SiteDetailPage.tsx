@@ -330,7 +330,7 @@ function LocationsCard({ site, siteKey, spaceTypes }: { site: SiteDetail; siteKe
       {draft && (
         <form className="pf-loc-form" onSubmit={(e) => { e.preventDefault(); if (draft.name.trim()) save.mutate(); }}>
           <b>{draft.id ? `Edit ${SITE_LOCATION_KIND_LABELS[draft.kind].toLowerCase()}` : `New ${SITE_LOCATION_KIND_LABELS[draft.kind].toLowerCase()}`}</b>
-          <input className="fld" autoFocus placeholder={draft.kind === 'building' ? 'Main building' : draft.kind === 'floor' ? 'Ground floor' : 'Kitchen'} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} aria-label="Name" />
+          <input className="fld" autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} aria-label="Name" />
           {!draft.id && draft.kind !== 'building' && (
             <select className="fld" value={draft.parent_id} onChange={(e) => setDraft({ ...draft, parent_id: e.target.value })} aria-label="Inside">
               {draft.kind === 'space' && <option value="">On the site itself</option>}

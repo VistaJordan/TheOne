@@ -41,7 +41,6 @@ export function QuoteTaxBar({ salesTaxPct, editable, derived, onChange }: QuoteT
               className={`fld${err ? ' is-err' : ''}`}
               id="sales-tax"
               inputMode="decimal"
-              placeholder="0"
               aria-label="Sales tax percent"
               aria-invalid={err ? true : undefined}
               value={salesTaxPct}

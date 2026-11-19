@@ -86,7 +86,7 @@ export function CodesCard() {
       </ul>
       {canEdit && (
         <form className="vadm-add" onSubmit={(e) => { e.preventDefault(); if (code.trim() && label.trim()) add.mutate(); }}>
-          <input className="fld mono" style={{ flex: '0 0 120px' }} placeholder="CODE" value={code} maxLength={20} onChange={(e) => setCode(e.target.value.toUpperCase())} aria-label="Code" />
+          <input className="fld mono" style={{ flex: '0 0 120px' }} value={code} maxLength={20} onChange={(e) => setCode(e.target.value.toUpperCase())} aria-label="Code" />
           <input className="fld" placeholder="What it means" value={label} maxLength={120} onChange={(e) => setLabel(e.target.value)} aria-label="Meaning" />
           <button type="submit" className="btn btn-sm" disabled={code.trim() === '' || label.trim() === '' || add.isPending}>Add</button>
         </form>
@@ -167,7 +167,7 @@ export function FormLayoutsCard() {
       ) : (
         <>
           <div className="lay-head">
-            <label>Name<input className="fld" autoFocus value={draft.name} maxLength={120} placeholder="e.g. 7-Eleven refrigeration" onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
+            <label>Name<input className="fld" autoFocus value={draft.name} maxLength={120} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
             <label>For the client
               <input className="fld" list="lay-clients" value={draft.client} placeholder="Any client" onChange={(e) => setDraft({ ...draft, client: e.target.value })} />
               <datalist id="lay-clients">{clients.map((c) => <option key={c} value={c} />)}</datalist>

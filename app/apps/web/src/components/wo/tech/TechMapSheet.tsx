@@ -665,7 +665,7 @@ function AddTechDialog({ woId, woNumber, trades, defaultTrade, defaultState, can
           </div>
           <div className="field">
             <label className="lbl" htmlFor="at-phone">Phone</label>
-            <input className="fld mono" id="at-phone" type="tel" value={phone} maxLength={40} placeholder="(409) 555-0143" onChange={(e) => setPhone(e.target.value)} />
+            <input className="fld mono" id="at-phone" type="tel" value={phone} maxLength={40} onChange={(e) => setPhone(e.target.value)} />
           </div>
           <div className="field">
             <label className="lbl" htmlFor="at-city">City</label>

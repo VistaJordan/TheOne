@@ -62,7 +62,7 @@ export function VendorPicker({ trade, onPick, onManual }: Props) {
             className="amt-in"
             id="vendor-q"
             type="text"
-            placeholder="Name or phone — e.g. Gulf Coast, 409 555"
+            placeholder="Name or phone"
             value={q}
             autoComplete="off"
             onChange={(e) => setQ(e.target.value)}

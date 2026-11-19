@@ -221,7 +221,7 @@ export function AssetRequestDialog({ asset, meta, onClose, onDone }: {
           )}
           <label className="pf-field">
             <span className="lbl">Work order (optional)</span>
-            <input className="fld mono" value={wo} placeholder="WO-39403" onChange={(e) => setWo(e.target.value)} />
+            <input className="fld mono" value={wo} onChange={(e) => setWo(e.target.value)} />
           </label>
           <label className="pf-field is-wide">
             <span className="lbl">Why</span>

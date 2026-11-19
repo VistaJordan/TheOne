@@ -161,7 +161,7 @@ function Job({ token, job, onDone }: { token: string; job: PortalJob; onDone: (v
         <ul className="vp-notes">{job.notes.map((n, i) => <li key={i}><small>{when(n.created_at)}</small>{n.body}</li>)}</ul>
       )}
       <form className="vp-row" onSubmit={(e) => { e.preventDefault(); if (note.trim()) saveNote.mutate(); }}>
-        <label>Note for the dispatcher<textarea className="fld" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Part ordered, back on Thursday" /></label>
+        <label>Note for the dispatcher<textarea className="fld" rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></label>
         <button type="submit" className="btn" disabled={!note.trim() || saveNote.isPending}>Send note</button>
       </form>
     </article>
@@ -249,7 +249,7 @@ function Onboarding({ token, view }: { token: string; view: PortalView }) {
             </>
           ))}
           {f('Other trades', text('secondary_trades', 'Separate several with a comma'))}
-          {f('How far you travel', text('max_travel_radius', 'e.g. 50 miles'))}
+          {f('How far you travel', text('max_travel_radius'))}
           {f('Same-day emergencies', yesNo('emergency_same_day'))}
           {f('After hours', yesNo('after_hours'))}
           {f('Weekends', yesNo('weekends'))}

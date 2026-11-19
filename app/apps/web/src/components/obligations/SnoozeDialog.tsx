@@ -103,7 +103,7 @@ export function SnoozeDialog({ ob, onClose }: SnoozeDialogProps) {
           <textarea
             autoFocus
             className="composer-input snooze-reason"
-            placeholder="Why is this waiting? e.g. tech confirmed for 7am, client asked us to hold…"
+            placeholder="Why is this waiting?"
             value={reason}
             maxLength={500}
             onChange={(e) => setReason(e.target.value)}

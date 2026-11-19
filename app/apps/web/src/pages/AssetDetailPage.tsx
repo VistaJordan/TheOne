@@ -230,7 +230,7 @@ export function AssetDetailPage() {
                   ))}
                 </div>
                 <textarea className="fld" rows={2} placeholder="What was seen (optional)" value={reading.note} onChange={(e) => setReading({ ...reading, note: e.target.value })} aria-label="Note" />
-                <input className="fld mono" placeholder="Work order it was seen on, e.g. WO-39403 (optional)" value={reading.wo} onChange={(e) => setReading({ ...reading, wo: e.target.value })} aria-label="Work order" />
+                <input className="fld mono" placeholder="Work order it was seen on (optional)" value={reading.wo} onChange={(e) => setReading({ ...reading, wo: e.target.value })} aria-label="Work order" />
                 <span style={{ display: 'flex', gap: 6 }}>
                   <button type="button" className="btn btn-sm" disabled={record.isPending} onClick={() => record.mutate()}>Record</button>
                   <button type="button" className="btn btn-sm is-ghost" onClick={() => setReading(null)}>Cancel</button>

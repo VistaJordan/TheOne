@@ -116,12 +116,12 @@ export function PaymentAddressFields({ method, value, showErrors, onChange }: Pr
 
   switch (method) {
     case 'zelle':
-      return <div className="frow">{field('zelle_handle', 'Zelle email or phone', { placeholder: 'tech@example.com or (409) 555-0143', inputMode: 'email', required: true })}</div>;
+      return <div className="frow">{field('zelle_handle', 'Zelle email or phone', { inputMode: 'email', required: true })}</div>;
     case 'ach':
       return (
         <>
           <div className="frow">
-            {field('bank_name', 'Bank', { placeholder: 'e.g. Chase' })}
+            {field('bank_name', 'Bank', {})}
             <div className="field">
               <label className="flabel" htmlFor="addr-account_type">Account type <span className="opt">(optional)</span></label>
               <div className="selwrap">
@@ -150,7 +150,7 @@ export function PaymentAddressFields({ method, value, showErrors, onChange }: Pr
         </>
       );
     case 'cashapp':
-      return <div className="frow">{field('cashtag', 'Cash App $cashtag', { placeholder: '$gulfcoastrefrig', required: true, mono: true })}</div>;
+      return <div className="frow">{field('cashtag', 'Cash App $cashtag', { required: true, mono: true })}</div>;
     case 'check':
       return (
         <>

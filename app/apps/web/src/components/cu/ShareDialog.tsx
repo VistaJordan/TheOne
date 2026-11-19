@@ -262,13 +262,13 @@ function EmailTab({ tracker, mail, onSent }: { tracker: ClientUpdate; mail: Mail
             className="fld"
             rows={2}
             value={to}
-            placeholder="name@client.com, Another Person <another@client.com>"
+            placeholder="Email addresses, separated by commas"
             onChange={(e) => setTo(e.target.value)}
           />
         </label>
         <label className="field cu-wide">
           <span className="lbl">Cc</span>
-          <input className="fld" value={cc} placeholder="Our account manager, their regional lead…" onChange={(e) => setCc(e.target.value)} />
+          <input className="fld" value={cc} onChange={(e) => setCc(e.target.value)} />
         </label>
         {invalid.length > 0 && (
           <p className="modal-error cu-wide">Not email addresses: {invalid.join(', ')}</p>
@@ -291,7 +291,6 @@ function EmailTab({ tracker, mail, onSent }: { tracker: ClientUpdate; mail: Mail
             rows={3}
             value={intro}
             maxLength={4000}
-            placeholder="Hi team, here is where every open work order stands today. Items waiting on you are listed first."
             onChange={(e) => setIntro(e.target.value)}
           />
         </label>

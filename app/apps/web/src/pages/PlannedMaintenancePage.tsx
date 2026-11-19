@@ -369,7 +369,7 @@ function ScheduleDialog({
           <div className="intake-grid">
             <div className="field intake-wide">
               <label className="lbl" htmlFor="pm-name">What is the job?</label>
-              <input id="pm-name" className="fld" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Quarterly HVAC filter change" />
+              <input id="pm-name" className="fld" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="field">
               <label className="lbl" htmlFor="pm-client">Client</label>
@@ -386,11 +386,11 @@ function ScheduleDialog({
             </div>
             <div className="field">
               <label className="lbl" htmlFor="pm-entity">Billing entity</label>
-              <input id="pm-entity" className="fld" value={entity} onChange={(e) => setEntity(e.target.value)} placeholder="SFM" />
+              <input id="pm-entity" className="fld" value={entity} onChange={(e) => setEntity(e.target.value)} />
             </div>
             <div className="field">
               <label className="lbl" htmlFor="pm-store">Store</label>
-              <input id="pm-store" className="fld" value={store} onChange={(e) => setStore(e.target.value)} placeholder="1234" />
+              <input id="pm-store" className="fld" value={store} onChange={(e) => setStore(e.target.value)} />
             </div>
             <div className="field">
               <label className="lbl" htmlFor="pm-site">Site name</label>
@@ -410,7 +410,7 @@ function ScheduleDialog({
             </div>
             <div className="field">
               <label className="lbl" htmlFor="pm-trade">Trade</label>
-              <input id="pm-trade" className="fld" value={trade} onChange={(e) => setTrade(e.target.value)} placeholder="HVAC" />
+              <input id="pm-trade" className="fld" value={trade} onChange={(e) => setTrade(e.target.value)} />
             </div>
             <div className="field">
               <label className="lbl" htmlFor="pm-nte">Client NTE</label>

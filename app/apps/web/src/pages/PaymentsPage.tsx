@@ -194,7 +194,6 @@ export function PaymentsPage() {
                 <input
                   className="finput"
                   id="pq-company"
-                  placeholder="SFM, BKR…"
                   value={company}
                   onChange={(e) => {
                     setCompany(e.target.value);

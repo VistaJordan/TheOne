@@ -155,7 +155,7 @@ export function ImproveButton({ improve, body }: { improve: Improve; body: strin
                 className="fld"
                 autoFocus
                 maxLength={AI_IMPROVE_INSTRUCTION_MAX}
-                placeholder="e.g. mention the technician arrives tomorrow morning"
+                placeholder="What should change?"
                 value={instruction}
                 onChange={(e) => setInstruction(e.target.value)}
               />

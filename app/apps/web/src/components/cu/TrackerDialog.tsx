@@ -158,7 +158,6 @@ export function TrackerDialog({ tracker, busy, error, onSave, onDelete, onClose 
                 <input
                   className="fld"
                   value={name}
-                  placeholder={client ? 'Tracking' : 'e.g. SUN Holdings open work'}
                   onChange={(e) => setName(e.target.value)}
                   maxLength={200}
                 />

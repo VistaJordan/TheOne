@@ -304,7 +304,7 @@ function ContractDialog({
           <div className="intake-grid">
             <div className="field intake-wide">
               <label className="lbl" htmlFor="c-name">Name</label>
-              <input id="c-name" className="fld" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Wendy's T&M 2026" />
+              <input id="c-name" className="fld" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="field">
               <label className="lbl" htmlFor="c-party">Whose terms</label>
@@ -326,7 +326,7 @@ function ContractDialog({
             </div>
             <div className="field">
               <label className="lbl" htmlFor="c-entity">Billing entity (blank = every entity)</label>
-              <input id="c-entity" className="fld" value={entity} onChange={(e) => setEntity(e.target.value)} placeholder="SFM" />
+              <input id="c-entity" className="fld" value={entity} onChange={(e) => setEntity(e.target.value)} />
             </div>
             <div className="field">
               <label className="lbl" htmlFor="c-kind">Kind</label>
@@ -350,11 +350,11 @@ function ContractDialog({
             </div>
             <div className="field">
               <label className="lbl" htmlFor="c-trades">Trades covered (comma-separated, blank = all)</label>
-              <input id="c-trades" className="fld" value={trades} onChange={(e) => setTrades(e.target.value)} placeholder="HVAC, Plumbing" />
+              <input id="c-trades" className="fld" value={trades} onChange={(e) => setTrades(e.target.value)} />
             </div>
             <div className="field">
               <label className="lbl" htmlFor="c-sites">Sites covered (store numbers or names, blank = all)</label>
-              <input id="c-sites" className="fld" value={sites} onChange={(e) => setSites(e.target.value)} placeholder="1234, 1240" />
+              <input id="c-sites" className="fld" value={sites} onChange={(e) => setSites(e.target.value)} />
             </div>
             <div className="field intake-wide">
               <label className="lbl" htmlFor="c-notes">Notes</label>

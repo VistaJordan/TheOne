@@ -929,7 +929,7 @@ function WidgetDialog({
                 <input
                   id="w-url"
                   className="fld"
-                  placeholder={kind === 'image' ? 'https://…/floor-plan.png' : '/?filter=… or https://…'}
+                  placeholder={kind === 'image' ? 'Link to the image' : 'A page in OBI or a web link'}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                 />

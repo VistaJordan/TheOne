@@ -376,7 +376,6 @@ function ShareSheet({ wo, data, onClose, onSent }: {
                 type="tel"
                 value={otherPhone}
                 maxLength={40}
-                placeholder="(409) 555-0143"
                 onChange={(e) => setOtherPhone(e.target.value)}
               />
             </div>

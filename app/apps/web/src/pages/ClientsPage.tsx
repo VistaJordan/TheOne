@@ -291,7 +291,6 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
                 type="tel"
                 inputMode="numeric"
                 value={d.contact_phone}
-                placeholder="(000) 000-0000"
                 aria-invalid={phoneProblem ? true : undefined}
                 onChange={(e) => set('contact_phone', usPhoneInputValue(e.target.value))}
               />
@@ -313,7 +312,7 @@ function ClientFormDialog({ client, meta, onClose, onSaved }: {
               {CLIENT_PORTAL_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
           ))}
-          {field('Payment terms', <input className="fld" value={d.payment_terms} placeholder="e.g. Net 30" onChange={(e) => set('payment_terms', e.target.value)} />)}
+          {field('Payment terms', <input className="fld" value={d.payment_terms} onChange={(e) => set('payment_terms', e.target.value)} />)}
           {field('Billing address', <textarea className="fld" rows={2} value={d.address} onChange={(e) => set('address', e.target.value)} />, true)}
           {field('Notes', <textarea className="fld" rows={3} value={d.notes} onChange={(e) => set('notes', e.target.value)} />, true, undefined, true)}
           {client && (
