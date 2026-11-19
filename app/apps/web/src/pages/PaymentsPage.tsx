@@ -342,6 +342,11 @@ function PaymentRow({ item }: { item: PaymentListItem }) {
           {item.overage_reason && (
             <small title={item.overage_reason}>Over NTE / quote — “{item.overage_reason}”</small>
           )}
+          {item.hold && (
+            <small title={item.hold.note ?? undefined}>
+              On hold{item.hold.by ? ` by ${item.hold.by.display_name}` : ''}{item.hold.note ? ` — “${item.hold.note}”` : ''} · decide it in Approvals
+            </small>
+          )}
         </div>
       </td>
       <td className="num">{usd(item.amount)}</td>

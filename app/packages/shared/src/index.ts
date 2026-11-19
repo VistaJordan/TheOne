@@ -1240,6 +1240,10 @@ export interface PaymentRequest {
       Cost past the NTE or the approved quote (asked in a popup at submit,
       `PAYMENT_OVERAGE_REASON`); also on the hold it raised. Null = none. */
   overage_reason: string | null;
+  /** 0159: a waiting request someone who may decide it put on hold ("not
+      yet"). Still `requested`, still in the Approvals › Payments lane, still
+      approvable or rejectable; Release clears it. Null = not held. */
+  hold: { by: ActivityActor | null; at: string; note: string | null } | null;
 }
 
 /** One row of GET /api/payments — the request plus the work order it sits on. */
@@ -1341,7 +1345,9 @@ export type PaymentHistoryAction =
   | 'payment_method_changed'
   | 'payment_delete_requested'
   | 'payment_delete_rejected'
-  | 'payment_deleted';
+  | 'payment_deleted'
+  | 'payment_held'
+  | 'payment_released';
 
 export interface PaymentHistoryEvent {
   id: string;

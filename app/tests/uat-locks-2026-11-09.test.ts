@@ -33,8 +33,11 @@ describe('declining follows the approval rules', () => {
   const svc = read('apps/api/src/services/payments.ts');
   const fn = svc.slice(svc.indexOf('export async function rejectPaymentRequest'), svc.indexOf('Yoda ConvertToAch'));
   it('a payment decline asks the band, or above the NTE the Account Manager', () => {
-    expect(fn).toContain("assertTierAllows('payment', facts.amount, actor, 'Declining a payment')");
-    expect(fn).toContain('mayApproveOverNtePayment(actor.role, actor.isSuperAdmin, facts.amount)');
+    // 0159: the gate moved into assertMayDecide, which Hold / Release ask too.
+    expect(fn).toContain("await assertMayDecide(row, actor, 'Declining a payment', 'declines')");
+    const gate = svc.slice(svc.indexOf('async function assertMayDecide('), svc.indexOf('export async function holdPaymentRequest'));
+    expect(gate).toContain("assertTierAllows('payment', facts.amount, actor, what)");
+    expect(gate).toContain('mayApproveOverNtePayment(actor.role, actor.isSuperAdmin, facts.amount)');
   });
   it('a purchase request decline asks the band', () => {
     expect(read('apps/api/src/services/purchasing.ts')).toContain("assertTierAllows('purchase_request', cur.estimate, actor, 'Rejecting a purchase request')");

@@ -373,7 +373,7 @@ describe('#13 · every per-record route checks the work order’s scope', () => 
     ['routes/payments.ts', 'payment_request', [
       "app.get('/payment-requests/:pid'", "app.patch('/payment-requests/:pid'", "app.post('/payment-requests/:pid/approve'",
       "app.post('/payment-requests/:pid/pay'", "app.post('/payment-requests/:pid/mark-paid'", "app.post('/payment-requests/:pid/reject'",
-      "app.post('/payment-requests/:pid/convert-method'", "app.post('/payment-requests/:pid/delete'",
+      "app.post('/payment-requests/:pid/convert-method'", "app.post('/payment-requests/:pid/hold'", "app.post('/payment-requests/:pid/release'", "app.post('/payment-requests/:pid/delete'",
       "app.post('/payment-requests/:pid/confirm-delete'", "app.post('/payment-requests/:pid/reject-delete'",
     ]],
     ['routes/invoices.ts', 'invoice', [

@@ -1276,6 +1276,17 @@ export function rejectPaymentRequest(id: string, reason: string): Promise<Paymen
   return decidePayment(id, 'reject', { reason });
 }
 
+/** POST …/hold — 0159: a waiting request stays waiting, on hold; the people
+    who may reject it put it there. The note is optional. */
+export function holdPaymentRequest(id: string, note: string | null): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'hold', { note });
+}
+
+/** POST …/release — 0159: lifts the hold. */
+export function releasePaymentRequest(id: string): Promise<PaymentRequestResponse> {
+  return decidePayment(id, 'release');
+}
+
 /** POST …/convert-method — a processor changes the method; payout details are cleared. */
 export function convertPaymentMethod(id: string, method: SharedPaymentMethod): Promise<PaymentRequestResponse> {
   return decidePayment(id, 'convert-method', { method });

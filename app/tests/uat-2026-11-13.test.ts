@@ -76,7 +76,9 @@ describe('Zelle and Cash App always ask a manager', () => {
   it('is asked at approve, decline, and when a processor switches the method', () => {
     const src = read('apps', 'api', 'src', 'services', 'payments.ts');
     expect(src).toContain("assertManagerForMethod(row, actor, 'Approving a payment');");
-    expect(src).toContain("assertManagerForMethod(row, actor, 'Declining a payment');");
+    // 0159: declining (and Hold / Release) ask it through assertMayDecide.
+    expect(src).toContain("await assertMayDecide(row, actor, 'Declining a payment', 'declines')");
+    expect(src).toContain('assertManagerForMethod(row, actor, what);');
     expect(src).toContain("status = 'requested', approved_by = NULL, approved_at = NULL, auto_approved = false");
     expect(src).toContain('paymentTierSummary(opts.tiers, Number(r.amount ?? 0), r.method, opts.viewer)');
   });

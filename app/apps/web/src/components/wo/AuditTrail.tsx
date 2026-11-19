@@ -269,6 +269,10 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       return <>approved a technician payment</>;
     case 'payment_rejected':
       return <>rejected a technician payment</>;
+    case 'payment_held':
+      return <>put a technician payment on hold</>;
+    case 'payment_released':
+      return <>released a technician payment from hold</>;
     case 'payment_sent_to_yoda':
       return <>sent a technician payment to Yoda</>;
     case 'payment_paid':

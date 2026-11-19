@@ -186,6 +186,11 @@ export function PaymentsTable({ items, loading, error, woNumber, totalPaid, acti
                     {p.overage_reason && (
                       <span className="ctx-sub" title={p.overage_reason}> · over NTE / quote: “{p.overage_reason}”</span>
                     )}
+                    {p.hold && (
+                      <span className="ctx-sub" title={p.hold.note ?? undefined}>
+                        {' '}· On hold{p.hold.by ? ` by ${p.hold.by.display_name}` : ''}{p.hold.note ? `: “${p.hold.note}”` : ''}
+                      </span>
+                    )}
                   </td>
                   <td>
                     <PaymentStatusPill status={p.status} pendingDelete={p.pending_delete} />

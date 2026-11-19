@@ -201,6 +201,12 @@ interface PaymentRow {
   over_quote_open: boolean;
   /** UAT T5: the largest cost an approved over-quote hold lets through. */
   quote_covers: number | string | null;
+  /** 0159: the hold on a waiting request. */
+  held_by_id: string | null;
+  held_by_name: string | null;
+  held_by_kind: 'human' | 'service' | null;
+  held_at: string | null;
+  hold_note: string | null;
 }
 
 const SELECT_SQL = `
@@ -237,6 +243,9 @@ const SELECT_SQL = `
          pr.yoda_ref,
          pb.id::text AS paid_by_id, pb.display_name AS paid_by_name, pb.kind::text AS paid_by_kind,
          ${ISO('pr.paid_at')} AS paid_at,
+         hb.id::text AS held_by_id, hb.display_name AS held_by_name, hb.kind::text AS held_by_kind,
+         ${ISO('pr.held_at')} AS held_at,
+         pr.hold_note,
          t.fields->>'Due Date'   AS wo_due,
          t.nte::float8           AS wo_nte,
          t.fields->>'34. Cost'   AS wo_cost,
@@ -271,6 +280,7 @@ const SELECT_SQL = `
     LEFT JOIN principal rj ON rj.id = pr.rejected_by
     LEFT JOIN principal sb ON sb.id = pr.sent_to_yoda_by
     LEFT JOIN principal pb ON pb.id = pr.paid_by
+    LEFT JOIN principal hb ON hb.id = pr.held_by
 `;
 
 function actorOf(
@@ -478,6 +488,11 @@ function mapPayment(
         : null,
     auto_approved: r.auto_approved === true,
     overage_reason: r.overage_reason ?? null,
+    // 0159: a hold means something only while the request waits.
+    hold:
+      r.status === 'requested' && r.held_at
+        ? { by: actorOf(r.held_by_id, r.held_by_name, r.held_by_kind), at: r.held_at, note: r.hold_note ?? null }
+        : null,
   };
 }
 
@@ -578,6 +593,7 @@ export async function listPaymentRequests(taskId: string, viewer?: ActingPrincip
 const HISTORY_ACTIONS: PaymentHistoryAction[] = [
   'payment_requested', 'payment_updated', 'payment_approved', 'payment_paid', 'payment_rejected',
   'payment_method_changed', 'payment_delete_requested', 'payment_delete_rejected', 'payment_deleted',
+  'payment_held', 'payment_released',
 ];
 
 interface HistoryRow {
@@ -1385,7 +1401,7 @@ async function setStatus(
     // clicks on Pay race here; the second matches no row and is refused, so
     // the money and the Cost roll-up below happen exactly once.
     const moved = await tx.query(
-      `UPDATE payment_request SET status = $1${extraSet ? `, ${extraSet}` : ''}
+      `UPDATE payment_request SET status = $1, held_by = NULL, held_at = NULL, hold_note = NULL${extraSet ? `, ${extraSet}` : ''}
         WHERE id = $2 AND status = $${3 + extraParams.length} AND deleted_at IS NULL
         RETURNING id`,
       [to, row.id, ...extraParams, row.status],
@@ -1836,6 +1852,73 @@ export async function payPaymentRequest(id: string, actor: ActingPrincipal): Pro
     }, selfApproved, row.status === 'requested' ? { approved_and_paid: true } : {});
 }
 
+/** Elise, 2026-11-09: whoever may not approve a request may not decline it
+    either — the amount's band (and a TL / ATL / AM for Zelle / Cash App), or
+    above the NTE an Account Manager. 0159: Hold and Release ask the same. */
+async function assertMayDecide(row: PaymentRow, actor: ActingPrincipal, what: string, verb: string): Promise<void> {
+  const facts = await nteFacts(row);
+  if (!facts.aboveNte) {
+    await assertTierAllows('payment', facts.amount, actor, what);
+    assertManagerForMethod(row, actor, what);
+  } else if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin, facts.amount)) {
+    throw forbidden(`This payment is above the client NTE — ${overNteApproverLabel(facts.amount)} ${verb} it`, {
+      code: NTE_PAYMENT_APPROVER_CODE,
+      payment_request_id: row.id,
+    });
+  }
+}
+
+/**
+ * 0159 (Elise, 2026-11-19): requested stays requested, on hold — "not yet".
+ * The people who may approve or reject the request (same gate as Reject) put
+ * it on hold, with an optional note; it stays in the Approvals › Payments lane
+ * and can still be approved or rejected later. Release lifts the hold. Both
+ * are ONE conditional UPDATE on a waiting, (un)held row, logged on the work
+ * order like every other payment step.
+ */
+export async function holdPaymentRequest(id: string, note: string | null, actor: ActingPrincipal): Promise<PaymentRequest> {
+  return setHold(id, true, note, actor);
+}
+
+export async function releasePaymentRequest(id: string, actor: ActingPrincipal): Promise<PaymentRequest> {
+  return setHold(id, false, null, actor);
+}
+
+async function setHold(id: string, on: boolean, rawNote: string | null, actor: ActingPrincipal): Promise<PaymentRequest> {
+  assertCanApprove(actor, on ? 'hold' : 'release');
+  const row = await loadRow(id);
+  if (row.status !== 'requested') {
+    throw conflict(`This payment request is already ${LABEL[row.status]}; only a waiting request can be ${on ? 'put on hold' : 'released'}`, {
+      code: 'PAYMENT_MOVED',
+      payment_request_id: id,
+      status: row.status,
+    });
+  }
+  await assertMayDecide(row, actor, on ? 'Putting a payment on hold' : 'Releasing a payment', on ? 'holds' : 'releases');
+  const note = rawNote?.trim() ? rawNote.trim() : null;
+  await withTransaction(async (tx) => {
+    const moved = await tx.query(
+      on
+        ? `UPDATE payment_request SET held_by = $2, held_at = now(), hold_note = $3, updated_at = now()
+            WHERE id = $1 AND status = 'requested' AND held_at IS NULL AND deleted_at IS NULL RETURNING id`
+        : `UPDATE payment_request SET held_by = NULL, held_at = NULL, hold_note = NULL, updated_at = now()
+            WHERE id = $1 AND status = 'requested' AND held_at IS NOT NULL AND deleted_at IS NULL RETURNING id`,
+      on ? [id, actor.id, note] : [id],
+    );
+    if (!moved.rows[0]) {
+      throw conflict(on ? 'This payment request is already on hold — reload it' : 'This payment request is not on hold any more — reload it', {
+        code: 'PAYMENT_MOVED',
+        payment_request_id: id,
+      });
+    }
+    const payee = row.vendor_id ? row.vendor_name : row.payee_name;
+    await logPayment(tx, actor.id, row.task_id, on ? 'payment_held' : 'payment_released',
+      { payment_request_id: id, status: row.status, held: !on },
+      { payment_request_id: id, status: row.status, held: on, amount: Number(row.amount ?? 0), payee, ...(on && note ? { reason: note } : {}) });
+  });
+  return mapOne(await loadRow(id), { fullAddress: canProcessPayments(actor), viewer: actor });
+}
+
 /**
  * requested | approved → rejected (payments:approve) with the reason for the
  * requester. Elise, 2026-11-09: whoever may not approve it may not decline it
@@ -1853,18 +1936,8 @@ export async function rejectPaymentRequest(
   // hold is never blocked by the amount, so the bands are not asked here.
   if (!opts.fromHold) assertCanApprove(actor, 'reject');
   const row = await loadRow(id);
-  const facts = await nteFacts(row);
-  if (opts.fromHold) {
-    // gated by the hold's section
-  } else if (!facts.aboveNte) {
-    await assertTierAllows('payment', facts.amount, actor, 'Declining a payment');
-    assertManagerForMethod(row, actor, 'Declining a payment');
-  } else if (!mayApproveOverNtePayment(actor.role, actor.isSuperAdmin, facts.amount)) {
-    throw forbidden(`This payment is above the client NTE — ${overNteApproverLabel(facts.amount)} declines it`, {
-      code: NTE_PAYMENT_APPROVER_CODE,
-      payment_request_id: id,
-    });
-  }
+  // fromHold: gated by the hold's own section, never by the amount.
+  if (!opts.fromHold) await assertMayDecide(row, actor, 'Declining a payment', 'declines');
   const note = reason.trim();
   const out = await setStatus(row, ['requested', 'approved', 'sent_to_yoda'], 'rejected', 'payment_rejected', actor,
     'rejected_by = $3, rejected_at = now(), rejection_note = $4', [actor.id, note],

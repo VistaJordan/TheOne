@@ -32,6 +32,8 @@ import {
   approvePaymentRequest,
   payPaymentRequest,
   rejectPaymentRequest,
+  holdPaymentRequest,
+  releasePaymentRequest,
   convertPaymentMethod,
   deletePaymentRequest,
   confirmDeletePaymentRequest,
@@ -119,6 +121,9 @@ const editSchema = z
   .strict();
 
 // 0016 called the field `note`; the parity UI sends `reason`. Accept either.
+/** 0159: the note on a hold is optional. */
+const holdSchema = z.object({ note: z.string().max(2000).nullable().optional() });
+
 const reasonSchema = z
   .object({
     reason: z.string().trim().min(1).max(2000).optional(),
@@ -251,6 +256,20 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
     await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
     const { reason } = parse(reasonSchema, req.body);
     return { item: await rejectPaymentRequest(pid, reason, actingPrincipalFromRequest(req)) };
+  });
+
+  // 0159: Hold / Release a waiting request — the people who may reject it.
+  app.post('/payment-requests/:pid/hold', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
+    const body = parse(holdSchema, req.body ?? {});
+    return { item: await holdPaymentRequest(pid, body.note ?? null, actingPrincipalFromRequest(req)) };
+  });
+
+  app.post('/payment-requests/:pid/release', async (req) => {
+    const { pid } = parse(pidParamsSchema, req.params);
+    await assertRecordInScope('payment_request', pid, actingPrincipalFromRequest(req)); // #13
+    return { item: await releasePaymentRequest(pid, actingPrincipalFromRequest(req)) };
   });
 
   app.post('/payment-requests/:pid/convert-method', async (req) => {

@@ -395,7 +395,7 @@ export const SOP: SopDocument = {
         ] },
         { kind: 'bullets', items: [
           'Lanes: **For me**, **Open**, **Done**, **My requests**. Filters **Entity / Client / Trade / For**; **Columns** adds Client, Waiting for, NTE, Cost, WO Due Date, For, Raised, Status; pages of rows, up to 500. Escalated rows pin to the top; open rows are oldest first and every decision is per row.',
-          '**Approve** is one click with no note (a status change into Approved asks how the client approved); **Reject** needs the reason, then **Reject with note**. A locked verb says why ("Requires new work order approval rights", "On hold — the NTE override on this work order has to be decided first").',
+          '**Approve** is one click with no note (a status change into Approved asks how the client approved); **Reject** needs the reason, then **Reject with note**. A status change request or a payment request can also be put on **Hold** ("not yet", with an optional note): it stays in its place in the list, reads On hold, and is approved or rejected later; **Release** lifts the hold. Only the people who may reject it see Hold unlocked. A locked verb says why ("Requires new work order approval rights", "On hold — the NTE override on this work order has to be decided first").',
           'Under **My requests**: **Withdraw** a request still open; an approved one clears by itself; after a rejection click **Understood** to clear it from the header banner.',
           'Acceptances are not here: they have their own page, Incoming Work Orders (SOP 3). Approvals raise no notice; the badge is the signal.',
         ] },

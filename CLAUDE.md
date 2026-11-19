@@ -3536,6 +3536,23 @@ approved one) with the same reason in the payment's transaction
 (`approveOverQuote`, covers = the projected cost, internal comment), and the
 row's `approve_hold` is null for such a viewer.
 
+**Hold on a payment request** (migration 0159, Elise 2026-11-19;
+`holdPaymentRequest` / `releasePaymentRequest` / `assertMayDecide` in
+`services/payments.ts`, `POST /payment-requests/:pid/hold {note?}` and
+`…/release`, `tests/payment-hold.test.ts`). The 0123 status-request hold for
+payments: a waiting (`requested`) request can be put on hold by exactly the
+people who may reject it — `assertMayDecide`, which Reject now calls too
+(`payments` approve, the amount band, a TL / ATL / AM for Zelle / Cash App,
+above the NTE `mayApproveOverNtePayment`). `payment_request.held_by / held_at
+/ hold_note`; the status stays `requested`, so it stays in Approvals ›
+Payments in its oldest-first place, reads On hold with who and why
+(`PaymentRequest.hold`, null unless requested), and can still be approved,
+rejected or paid. Release lifts it; every status move (`setStatus`) clears
+it. Both are one conditional UPDATE (409 `PAYMENT_MOVED` on a double click),
+logged `payment_held` / `payment_released` (in `HISTORY_ACTIONS`). The
+Payments page and the work order's payment list print "On hold"; the buttons
+are in the Approvals inbox only.
+
 **No work order goes to a disabled account** (Elise, 2026-10-23, no
 migration; `tests/assignee-disabled.test.ts`). The person paths already
 refused one through `assertDispatchers` (`status <> 'disabled'`). The paths

@@ -92,6 +92,7 @@ import {
   claimApprovalTask,
   getPrincipals,
   holdApprovalTask,
+  holdPaymentRequest,
   listApprovals,
   listPayments,
   listQuotesForInbox,
@@ -99,6 +100,7 @@ import {
   rejectPayment,
   rejectQuote,
   releaseApprovalTask,
+  releasePaymentRequest,
   withdrawApprovalTask,
 } from '../api/client';
 import { AppShell } from '../components/AppShell';
@@ -580,7 +582,19 @@ function paymentRow(item: PaymentListItem, canDecide: boolean, held: Set<string>
       : needsManagerForMethod(item.method)
         ? 'TL / ATL / AM'
         : 'Payment approvers',
-    status: {
+    // 0159: a payment on hold still waits (same lane, same place in the
+    // oldest-first order); the Status column says so, who held it and why.
+    status: item.hold
+      ? {
+          label: 'On hold',
+          chip: 'chip-outline',
+          trail:
+            [item.hold.by ? `by ${item.hold.by.display_name}` : null, numericDate(item.hold.at)]
+              .filter(Boolean)
+              .join(' · ') || null,
+          note: item.hold.note,
+        }
+      : {
       label: PAYMENT_STATUS_LABEL[item.status],
       chip: PAYMENT_CHIP[item.status],
       trail: open
@@ -872,6 +886,9 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
       assignee = null,
     }: Pending & { text: string | null; assignee?: string | null }) => {
       const d = row.data;
+      if (d.kind === 'payment' && (kind === 'hold' || kind === 'release')) {
+        return kind === 'hold' ? holdPaymentRequest(d.item.id, text) : releasePaymentRequest(d.item.id);
+      }
       if (kind === 'claim' || kind === 'acknowledge' || kind === 'withdraw' || kind === 'hold' || kind === 'release') {
         if (d.kind !== 'task') throw new Error('Only tasks can be claimed, held, acknowledged or withdrawn');
         return kind === 'claim'
@@ -1276,11 +1293,15 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
       {/* 0123 · Hold: the request stays open and keeps its place; the note is optional. */}
       {pending?.kind === 'hold' && (
         <TextDialog
-          title="Put this status change on hold"
+          title={pending.row.data.kind === 'payment' ? 'Put this payment on hold' : 'Put this status change on hold'}
           facts={facts(pending.row)}
           idKey={pending.row.key}
           label="Why is it on hold?"
-          hint="Optional. The request stays open and in its place in the list — any manager can still approve or reject it."
+          hint={
+            pending.row.data.kind === 'payment'
+              ? 'Optional. The payment stays waiting here, in its place in the list — it can still be approved or rejected later.'
+              : 'Optional. The request stays open and in its place in the list — any manager can still approve or reject it.'
+          }
           multiline
           confirmLabel="Put on hold"
           busy={busy}
@@ -1949,6 +1970,15 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
               () => onDecide('reject'),
               'danger',
             )}
+            {/* 0159: Hold / Release — whoever may decline it. */}
+            {verb(
+              d.item.hold ? 'Release' : 'Hold',
+              d.item.hold ? 'refresh' : 'clock',
+              canApprovePayments && nteApprover,
+              !canApprovePayments ? 'Requires payment approval rights' : `Above the client NTE — ${nteWho} decides it`,
+              () => onDecide(d.item.hold ? 'release' : 'hold'),
+              'plain',
+            )}
             {verb(
               'Approve',
               'check',
@@ -1976,6 +2006,17 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
               : `${d.item.tier?.label}: needs a role allowed for this amount`,
             () => onDecide('reject'),
             'danger',
+          )}
+          {/* 0159: Hold / Release — whoever may decline it. */}
+          {verb(
+            d.item.hold ? 'Release' : 'Hold',
+            d.item.hold ? 'refresh' : 'clock',
+            canApprovePayments && !(d.item.tier && !d.item.tier.allowed),
+            !canApprovePayments
+              ? 'Requires payment approval rights'
+              : `${d.item.tier?.label}: needs a role allowed for this amount`,
+            () => onDecide(d.item.hold ? 'release' : 'hold'),
+            'plain',
           )}
           {verb(
             'Approve',

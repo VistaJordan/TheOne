@@ -413,6 +413,8 @@ export const ACTION_LABELS: Record<string, string> = {
   payment_updated: 'Payment request edited',
   payment_approved: 'Payment approved',
   payment_rejected: 'Payment rejected',
+  payment_held: 'Payment put on hold',
+  payment_released: 'Payment released from hold',
   payment_sent_to_yoda: 'Payment sent to Yoda',   // retired verb (0016) — old rows only
   payment_paid: 'Payment paid',
   payment_method_changed: 'Payment method changed',
