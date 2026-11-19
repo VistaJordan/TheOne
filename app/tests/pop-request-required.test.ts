@@ -9,6 +9,8 @@ import {
   formatPopRequest,
   isPopRequestText,
   parsePopRequest,
+  popCostInputValue,
+  popCostProblem,
   popQtyProblem,
   popRequestMissing,
   popRequestProblems,
@@ -45,16 +47,38 @@ describe('POP request required lines', () => {
     expect(isPopRequestText(null)).toBe(false);
   });
 
-  it('QTY is a whole number and the phone a US number', () => {
+  it('QTY is a whole number, the cost a number and the phone a US number', () => {
     const r = full();
     r.values.qty = 'tes';
+    r.values.estimated_total_cost = 'about 300';
     r.values.phone = '555';
-    expect(popRequestProblems(r).map((p) => p.key)).toEqual(['qty', 'phone']);
+    expect(popRequestProblems(r).map((p) => p.key)).toEqual(['qty', 'estimated_total_cost', 'phone']);
     r.values.qty = '12';
+    r.values.estimated_total_cost = '250.50';
     r.values.phone = '(409) 555-0143';
     expect(popRequestProblems(r)).toEqual([]);
     expect(popQtyProblem('0')).not.toBeNull();
     expect(popQtyProblem('1.5')).not.toBeNull();
+  });
+
+  it('Estimated Total Cost keeps only a number as it is typed (2026-11-19)', () => {
+    expect(popCostInputValue('$1,250.5')).toBe('1250.5');
+    expect(popCostInputValue('12.345')).toBe('12.34');
+    expect(popCostInputValue('1.2.3')).toBe('1.23');
+    expect(popCostInputValue('abc')).toBe('');
+    expect(popCostInputValue('123456789')).toBe('1234567');
+    expect(popCostProblem('300')).toBeNull();
+    expect(popCostProblem('300.5')).toBeNull();
+    expect(popCostProblem('about 300')).not.toBeNull();
+    expect(popCostProblem('$300')).not.toBeNull();
+    expect(read('apps/web/src/components/wo/PopRequestBlock.tsx')).toContain("? popCostInputValue(value)");
+  });
+
+  it('the screenshot can be pasted or dropped as well as uploaded (2026-11-19)', () => {
+    const form = read('apps/web/src/components/wo/PopRequestBlock.tsx');
+    expect(form).toContain('const pic = imageOf(e.clipboardData.files);');
+    expect(form).toContain('const pic = imageOf(e.dataTransfer.files);');
+    expect(form).toContain('if (pic) void upload(pic);');
   });
 
   it('the API refuses an incomplete one and a screenshot with no picture; the form asks first', () => {

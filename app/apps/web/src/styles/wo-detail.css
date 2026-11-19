@@ -2029,6 +2029,10 @@ a.chip-folder:hover { border-color: var(--accent); color: var(--accent-text); }
 .pop-grid .field.is-wide { grid-column: 1 / -1; }
 .pop-shot { display: flex; gap: 8px; align-items: center; }
 .pop-shot .fld { flex: 1; min-width: 0; }
+/* 2026-11-19: a picture dragged over the screenshot line. */
+.pop-shot { border-radius: 8px; outline: 2px dashed transparent; outline-offset: 3px; }
+.pop-shot.is-dragging { outline-color: var(--accent); }
+.pop-shot-hint { margin: 2px 0 0; font-size: 12px; color: var(--ink-3); }
 .pop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .pop-grid .lbl .req { color: var(--danger); }
 .pop-grid .pop-err { color: var(--danger); font-size: 12px; }

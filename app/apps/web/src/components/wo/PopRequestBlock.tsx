@@ -5,6 +5,7 @@ import {
   POP_REQUEST_LINES,
   formatPopRequest,
   parsePopRequest,
+  popCostInputValue,
   popRequestEmpty,
   POP_SCREENSHOT_NEEDS_PICTURE,
   formatUsPhone,
@@ -26,6 +27,11 @@ const FIELD_KEY = `fields.${PARTS_REQUIRED_KEY}`;
 
 /** Lines drawn as a bigger box: free text the team writes long. */
 const LONG: ReadonlySet<PopRequestKey> = new Set(['specs', 'delivery_address', 'full_address']);
+
+/** A drag that carries files (not text dragged from the page). */
+const hasFiles = (dt: DataTransfer) => Array.from(dt.types).includes('Files');
+/** The first picture among pasted or dropped files. */
+const imageOf = (files: FileList) => Array.from(files).find((f) => f.type.startsWith('image/'));
 
 const isUrl = (s: string) => /^https?:\/\//i.test(s.trim());
 
@@ -55,6 +61,7 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
   // a screenshot line already saved (it was asked then; the API still checks
   // the work order holds an image).
   const [shotUploaded, setShotUploaded] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const save = useWoFieldSave(wo.id, () => {
     setDraft(null);
@@ -64,10 +71,16 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
 
   const setLine = (key: PopRequestKey, value: string) =>
     setDraft((d) => (d ? { ...d, values: { ...d.values, [key]: value } } : d));
-  /** What a box holds after a keystroke: QTY digits only, the phone shaped
-      as a US number as it is typed. */
+  /** What a box holds after a keystroke: QTY digits only, the cost a number
+      (2026-11-19), the phone shaped as a US number as it is typed. */
   const typed = (key: PopRequestKey, value: string) =>
-    key === 'qty' ? value.replace(/\D/g, '').slice(0, 6) : key === 'phone' ? usPhoneInputValue(value) : value;
+    key === 'qty'
+      ? value.replace(/\D/g, '').slice(0, 6)
+      : key === 'estimated_total_cost'
+        ? popCostInputValue(value)
+        : key === 'phone'
+          ? usPhoneInputValue(value)
+          : value;
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
@@ -145,8 +158,43 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
                   )}
                 </label>
                 {l.key === 'screenshot' ? (
-                  <div className="pop-shot">
-                    <input id={id} className="fld" value={value} onChange={(e) => setLine(l.key, e.target.value)} disabled={busy} />
+                  <>
+                  <div
+                    className={`pop-shot${dragging ? ' is-dragging' : ''}`}
+                    // 2026-11-19 (Elise): a picture can also be dropped on the
+                    // line, or pasted into its box — same upload as the button.
+                    onDragOver={(e) => {
+                      if (!canUpload || busy || !hasFiles(e.dataTransfer)) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'copy';
+                      setDragging(true);
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+                    }}
+                    onDrop={(e) => {
+                      if (!canUpload || !hasFiles(e.dataTransfer)) return;
+                      e.preventDefault();
+                      setDragging(false);
+                      const pic = imageOf(e.dataTransfer.files);
+                      if (pic) void upload(pic);
+                      else setUploadError('Drop a picture (an image file)');
+                    }}
+                  >
+                    <input
+                      id={id}
+                      className="fld"
+                      value={value}
+                      onChange={(e) => setLine(l.key, e.target.value)}
+                      onPaste={(e) => {
+                        if (!canUpload || busy) return;
+                        const pic = imageOf(e.clipboardData.files);
+                        if (!pic) return; // plain text pastes as text
+                        e.preventDefault();
+                        void upload(pic);
+                      }}
+                      disabled={busy}
+                    />
                     {canUpload && (
                       <>
                         <button
@@ -167,6 +215,8 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
                       </>
                     )}
                   </div>
+                  {canUpload && <p className="pop-shot-hint">or paste a picture into the box (Ctrl+V), or drop one here</p>}
+                  </>
                 ) : LONG.has(l.key) ? (
                   <textarea id={id} className="fld" rows={2} value={value} onChange={(e) => setLine(l.key, e.target.value)} disabled={busy} />
                 ) : (

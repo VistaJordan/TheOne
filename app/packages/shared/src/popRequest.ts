@@ -70,6 +70,23 @@ export function popQtyProblem(raw: string): string | null {
   return /^\d{1,6}$/.test(t) && Number(t) > 0 ? null : 'QTY takes a whole number';
 }
 
+/** Elise, 2026-11-19: Estimated Total Cost is a number — dollars, up to two
+    cents. What the box keeps of a keystroke: digits and one dot, at most seven
+    whole digits and two decimals ("$1,250.5" typed → "1250.5"). */
+export function popCostInputValue(raw: string): string {
+  const clean = raw.replace(/[^\d.]/g, '');
+  const dot = clean.indexOf('.');
+  const whole = (dot === -1 ? clean : clean.slice(0, dot)).slice(0, 7);
+  if (dot === -1) return whole;
+  return `${whole}.${clean.slice(dot + 1).replace(/\./g, '').slice(0, 2)}`;
+}
+
+export function popCostProblem(raw: string): string | null {
+  const t = raw.trim();
+  if (t === '') return null;
+  return /^\d{1,7}(\.\d{1,2})?$/.test(t) ? null : 'Estimated Total Cost takes a number';
+}
+
 /** Each filled line that is not in its shape, as {key, message}. Blanks are
     `popRequestMissing`'s; the screenshot's picture is asked by the caller
     (it needs the work order's files). */
@@ -77,6 +94,8 @@ export function popRequestProblems(r: PopRequest): { key: PopRequestKey; message
   const out: { key: PopRequestKey; message: string }[] = [];
   const qty = popQtyProblem(r.values.qty);
   if (qty) out.push({ key: 'qty', message: qty });
+  const cost = popCostProblem(r.values.estimated_total_cost);
+  if (cost) out.push({ key: 'estimated_total_cost', message: cost });
   if (r.values.phone.trim() !== '') {
     const phone = usPhoneProblem(r.values.phone);
     if (phone) out.push({ key: 'phone', message: phone });
@@ -85,7 +104,7 @@ export function popRequestProblems(r: PopRequest): { key: PopRequestKey; message
 }
 
 /** The sentence for a screenshot line with no picture behind it. */
-export const POP_SCREENSHOT_NEEDS_PICTURE = 'Attach the screenshot with Upload screenshot';
+export const POP_SCREENSHOT_NEEDS_PICTURE = 'Attach the screenshot: paste it, drop it, or use Upload screenshot';
 
 /** The sentence for a POP request saved with required lines blank. */
 export function popRequestMissingSentence(missing: readonly string[]): string {
