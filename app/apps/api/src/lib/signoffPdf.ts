@@ -131,6 +131,36 @@ class Pen {
     });
   }
 
+  /** A five-pointed star centred on (cx, cy), outer radius r (px). */
+  star(cx: number, cy: number, r: number, fill: RGB | null, border?: { color: RGB; width: number }): void {
+    const pts: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const a = (Math.PI / 5) * i;
+      const rr = i % 2 === 0 ? r : r * 0.45;
+      pts.push(`${(rr * Math.sin(a)).toFixed(2)} ${(-rr * Math.cos(a)).toFixed(2)}`);
+    }
+    this.page.drawSvgPath(`M ${pts.join(' L ')} Z`, {
+      x: cx * P,
+      y: (DH - cy) * P,
+      scale: P,
+      ...(fill ? { color: fill } : {}),
+      ...(border ? { borderColor: border.color, borderWidth: border.width } : {}),
+    });
+  }
+
+  /**
+   * The rating row: five stars from `x`, centred on `cy`; `rating` of them
+   * filled, or all five outlined on the blank sheet (circled by hand).
+   */
+  stars(x: number, cy: number, r: number, gap: number, rating: number | null | undefined, on: RGB, off: RGB): number {
+    for (let i = 0; i < 5; i++) {
+      const cx = x + r + i * (2 * r + gap);
+      if (rating && i < rating) this.star(cx, cy, r, on);
+      else this.star(cx, cy, r, null, { color: off, width: 1.4 * P });
+    }
+    return 5 * 2 * r + 4 * gap;
+  }
+
   width(text: string, font: PDFFont, size: number, spacing = 0): number {
     return font.widthOfTextAtSize(text, size * P) / P + spacing * Math.max(0, text.length - 1);
   }
@@ -222,13 +252,15 @@ async function drawSeamless(doc: PDFDocument, page: PDFPage, data: SignoffSheetD
   const s1 = 303;
   const s2 = s1 + 52 + 34;
   const s3 = s2 + 22 + Math.max(1, addrLines.length) * 26.6 + 34;
-  const s4 = s3 + 45 + 34;
-  const boxTop = s4 + 26;
+  // 3 · the rating (Elise, 2026-11-19), then 4 · who and when, 5 · the signature.
+  const s4 = s3 + 54 + 34;
+  const s5 = s4 + 45 + 34;
+  const boxTop = s5 + 26;
   const reserve = signed ? 52 : 34; // attestation (+ stamp) and a margin above the footer
   const boxH = Math.max(150, Math.min(240, 980 - 24 - reserve - boxTop));
 
   // The seam running down the page, joining every step (drawn under the nodes).
-  pen.gradient(75, s1 + 12, 2, s4 - s1, SFM.cyan, SFM.blue, true);
+  pen.gradient(75, s1 + 12, 2, s5 - s1, SFM.cyan, SFM.blue, true);
 
   const node = (n: number, top: number, border: string, filled = false) => {
     pen.circle(76, top + 12, 11, filled ? c(SFM.blue) : c('#ffffff'), filled ? undefined : { color: c(border), width: 2 });
@@ -247,22 +279,28 @@ async function drawSeamless(doc: PDFDocument, page: PDFPage, data: SignoffSheetD
   if (addrLines.length) addrLines.forEach((l, i) => pen.text(l, X, s2 + 22 + i * 26.6, f.Inter_Medium, 19, c(SFM.ink)));
   else pen.line(X, s2 + 48, X + CW, s2 + 48, 1, c(SFM.rule));
 
-  // 3 · who and when.
-  node(3, s3, SFM.mid);
+  // 3 · how the work was.
+  node(3, s3, '#1a9ff1');
+  label(signed ? 'Rating of the work' : 'Rate the work (circle 1 to 5 stars)', X, s3 + 2);
+  const sw = pen.stars(X, s3 + 38, 14, 12, signed?.rating, c(SFM.blue), c(SFM.rule));
+  if (signed?.rating) pen.text(`${signed.rating} / 5`, X + sw + 18, s3 + 29, f.Inter_Medium, 17, c(SFM.ink));
+
+  // 4 · who and when.
+  node(4, s4, SFM.mid);
   const nameW = ((CW - 32) * 1.8) / 2.8;
   const dateX = X + nameW + 32;
-  label('Name of manager on site', X, s3 + 2);
-  label('Date', dateX, s3 + 2);
+  label('Name of manager on site', X, s4 + 2);
+  label('Date', dateX, s4 + 2);
   if (signed) {
-    pen.text(safeText(signed.manager_name), X, s3 + 22, f.Inter_Medium, 17, c(SFM.ink));
-    pen.text(safeText(signed.date_label), dateX, s3 + 22, f.Inter_Medium, 17, c(SFM.ink));
+    pen.text(safeText(signed.manager_name), X, s4 + 22, f.Inter_Medium, 17, c(SFM.ink));
+    pen.text(safeText(signed.date_label), dateX, s4 + 22, f.Inter_Medium, 17, c(SFM.ink));
   }
-  pen.line(X, s3 + 45, X + nameW, s3 + 45, 1, c(SFM.rule));
-  pen.line(dateX, s3 + 45, X + CW, s3 + 45, 1, c(SFM.rule));
+  pen.line(X, s4 + 45, X + nameW, s4 + 45, 1, c(SFM.rule));
+  pen.line(dateX, s4 + 45, X + CW, s4 + 45, 1, c(SFM.rule));
 
-  // 4 · the signature: a tinted field with crop corners instead of a box.
-  node(4, s4, SFM.blue, true);
-  label('Signature of manager on site', X, s4 + 2);
+  // 5 · the signature: a tinted field with crop corners instead of a box.
+  node(5, s5, SFM.blue, true);
+  label('Signature of manager on site', X, s5 + 2);
   const bx = X;
   const bw = CW;
   const bb = boxTop + boxH;
@@ -361,7 +399,13 @@ async function drawBkr(doc: PDFDocument, page: PDFPage, data: SignoffSheetData, 
   const tw = pen.text('Store manager sign-off', 56, t0, f.BarlowCondensed_Bold, 22, c(BKR.slate), { spacing: 2, upper: true });
   pen.line(56 + tw + 14, t0 + 12, 760, t0 + 12, 1, c(BKR.rule));
 
-  const t1 = t0 + 50;
+  // The rating (Elise, 2026-11-19): five stars, circled by hand on paper.
+  const tr = t0 + 50;
+  label(signed ? 'Rating of the work' : 'Rate the work (circle 1 to 5 stars)', 56, tr);
+  const sw = pen.stars(56, tr + 36, 13, 10, signed?.rating, c(BKR.red), c(BKR.line));
+  if (signed?.rating) pen.text(`${signed.rating} / 5`, 56 + sw + 16, tr + 26, f.Barlow_Medium, 19, c(BKR.ink));
+
+  const t1 = tr + 66;
   const nameW = 448;
   const dateX = 56 + nameW + 32;
   label('Store manager name', 56, t1);

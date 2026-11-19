@@ -1112,6 +1112,17 @@ draws a sheet first when there is none. The Paperform links (0116) stay in
 shared but nothing sends them. The page and the printed quote use the same
 fonts, self-hosted in `public/fonts/` (declared in `theme/fonts.css`), and
 the logos in `public/brand/sheets/`.
+**The manager rates the work** (migration 0158, Elise 2026-11-19;
+`signoffRatingSeats` / `SIGNOFF_LOW_RATING_*` in shared `signoff.ts`,
+`tests/signoff-form.test.ts`): the form asks "How was the work?", 1 to 5
+stars, required (`signoffFormProblem`, the route schema); step 3 of five on the
+Seamless sheet, first in the BKR stub. Stored in `wo_signoff.signed_rating`
+(cleared with the claim if filing fails), in the `signoff_received` row, and
+printed on the signed PDF (the blank sheet draws five empty stars to circle).
+After the filing, 3 stars or fewer raise a `signoff_low_rating` notice for the
+work order's TL and ATL, 2 or fewer for its AM as well (`notifyLowRating`,
+seat names matched to active people, one per sheet, never throws).
+Notifications only: nothing to approve.
 **The printed quote wears its company's design** (same day, no migration):
 `QuoteDocument` picks `quoteBrandFor(Comp)` (`signoffLayoutFor`): SFM and BKR
 get the branded header (`BrandHead`), numbered sections for BKR, the black

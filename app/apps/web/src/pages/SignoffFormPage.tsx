@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SIGNOFF_CLOSEOUT_MAX, SIGNOFF_NAME_MAX, signoffFormProblem, type SignoffFormView } from '@theone/shared';
+import { SIGNOFF_CLOSEOUT_MAX, SIGNOFF_NAME_MAX, SIGNOFF_RATING_MAX, signoffFormProblem, type SignoffFormView } from '@theone/shared';
 import { ApiRequestError, getSignoffForm, submitSignoffForm } from '../api/client';
 import { SignaturePad, type SignaturePadHandle } from '../components/SignaturePad';
 import '../styles/signoff-form.css';
@@ -93,6 +93,33 @@ export function SignoffFormPage() {
   );
 }
 
+const RATING_WORDS = ['', 'Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
+
+/** The manager's 1–5 star rating of the work (Elise, 2026-11-19). */
+function StarRating({ value, onChange, missing }: { value: number; onChange: (n: number) => void; missing: boolean }) {
+  return (
+    <div className={`sof-field${missing ? ' is-missing' : ''}`}>
+      <span className="sof-lbl" id="sof-rating-lbl">How was the work?</span>
+      <div className="sof-stars" role="radiogroup" aria-labelledby="sof-rating-lbl">
+        {Array.from({ length: SIGNOFF_RATING_MAX }, (_, i) => i + 1).map((n) => (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={value === n}
+            aria-label={`${n} star${n === 1 ? '' : 's'} — ${RATING_WORDS[n]}`}
+            className={`sof-star${n <= value ? ' is-on' : ''}`}
+            onClick={() => onChange(n)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.4l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" /></svg>
+          </button>
+        ))}
+        <span className="sof-star-word">{value ? RATING_WORDS[value] : 'Tap a star'}</span>
+      </div>
+    </div>
+  );
+}
+
 /** Steps 1 and 2: the job (the PDF's first two numbered steps). */
 function FactItems({ view, brand }: { view: SignoffFormView; brand: Brand }) {
   const n = (i: number) => (brand === 'sfm' ? String(i) : String(i).padStart(2, '0'));
@@ -122,16 +149,18 @@ function SignForm({ token, view }: { token: string; view: SignoffFormView }) {
   const pad = useRef<SignaturePadHandle>(null);
   const [name, setName] = useState('');
   const [closeout, setCloseout] = useState('');
+  const [rating, setRating] = useState(0);
   const [empty, setEmpty] = useState(true);
   const [tried, setTried] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const problem = signoffFormProblem({ manager_name: name, closeout_number: closeout, has_signature: !empty }, view.closeout_required);
+  const problem = signoffFormProblem({ manager_name: name, closeout_number: closeout, rating, has_signature: !empty }, view.closeout_required);
 
   const submit = useMutation({
     mutationFn: () => submitSignoffForm(token, {
       manager_name: name.trim(),
       closeout_number: view.closeout_required ? closeout.trim() : null,
+      rating,
       signature_png: pad.current?.toPngBase64() ?? '',
     }),
     onSuccess: (next) => { qc.setQueryData(['signoff-form', token], next); window.scrollTo({ top: 0 }); },
@@ -149,8 +178,10 @@ function SignForm({ token, view }: { token: string; view: SignoffFormView }) {
   const nameMissing = tried && name.trim().length < 2;
   const closeoutMissing = tried && view.closeout_required && !closeout.trim();
   const sigMissing = tried && empty;
+  const ratingMissing = tried && !rating;
 
   const sfm = brand === 'sfm';
+  const stars = <StarRating value={rating} onChange={setRating} missing={ratingMissing} />;
   const nameAndDate = (
     <div className="sof-row">
       <label className={`sof-field${nameMissing ? ' is-missing' : ''}`}>
@@ -188,15 +219,19 @@ function SignForm({ token, view }: { token: string; view: SignoffFormView }) {
             <h1>Sign-off sheet</h1>
             <p>To be signed by the manager on site once the work is complete.</p>
           </div>
-          {/* The four numbered steps on the seam, as the PDF draws them. */}
+          {/* The five numbered steps on the seam, as the PDF draws them. */}
           <ol className="sof-facts sof-steps">
             <FactItems view={view} brand={brand} />
             <li>
               <span className="sof-n">3</span>
+              {stars}
+            </li>
+            <li>
+              <span className="sof-n">4</span>
               {nameAndDate}
             </li>
             <li>
-              <span className="sof-n is-last">4</span>
+              <span className="sof-n is-last">5</span>
               {signature}
             </li>
           </ol>
@@ -215,6 +250,7 @@ function SignForm({ token, view }: { token: string; view: SignoffFormView }) {
           )}
           <section className="sof-stub">
             <h2>Store manager sign-off</h2>
+            {stars}
             {nameAndDate}
             {signature}
           </section>

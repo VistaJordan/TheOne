@@ -52,6 +52,8 @@ const submitSchema = z
   .object({
     manager_name: z.string().max(400),
     closeout_number: z.string().max(400).nullable().optional(),
+    // 1–5 stars; the service checks it (signoffFormProblem).
+    rating: z.number().int().min(1).max(5),
     // base64 PNG; the service checks the decoded size against SIGNOFF_SIGNATURE_MAX_BYTES.
     signature_png: z.string().max(1_500_000),
   })

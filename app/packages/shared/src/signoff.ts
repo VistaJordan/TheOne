@@ -88,6 +88,8 @@ export interface SignoffSignedData {
   /** The day it was signed, as printed ("Nov 17, 2026", Chicago). */
   date_label: string;
   closeout_number?: string | null;
+  /** The manager's rating of the work, 1 to 5 stars. */
+  rating?: number | null;
   /** The signature drawn on the form, as PNG bytes. */
   signature_png: Uint8Array;
   /** The line printed under the signature ("Signed on the OBI form …"). */
@@ -124,18 +126,51 @@ export interface SignoffFormView {
 export interface SignoffFormSubmit {
   manager_name: string;
   closeout_number?: string | null;
+  /** 1 to 5 stars, required (Elise, 2026-11-19). */
+  rating: number;
   /** base64 of the PNG (no data: prefix). */
   signature_png: string;
 }
 
+// ── The manager's rating (Elise, 2026-11-19) ─────────────────────────────────
+//
+// The form asks the manager on site to rate the work, 1 to 5 stars, before
+// they sign. A low rating goes straight to the people who lead the job: 3
+// stars or fewer to the work order's TL and ATL, 2 or fewer to its AM as well
+// — a notification, nothing to approve.
+
+export const SIGNOFF_RATING_MAX = 5;
+/** At or under this, the TL and ATL are told. */
+export const SIGNOFF_LOW_RATING_TEAM = 3;
+/** At or under this, the AM is told as well. */
+export const SIGNOFF_LOW_RATING_AM = 2;
+export const SIGNOFF_LOW_RATING_NOTICE_KIND = 'signoff_low_rating';
+
+export const signoffRatingValid = (r: unknown): r is number =>
+  typeof r === 'number' && Number.isInteger(r) && r >= 1 && r <= SIGNOFF_RATING_MAX;
+
+/** The work-order seats a rating is sent to (empty = nobody). */
+export function signoffRatingSeats(rating: number): ('TL' | 'ATL' | 'AM')[] {
+  if (!signoffRatingValid(rating) || rating > SIGNOFF_LOW_RATING_TEAM) return [];
+  return rating <= SIGNOFF_LOW_RATING_AM ? ['TL', 'ATL', 'AM'] : ['TL', 'ATL'];
+}
+
+/** "Rated 2 of 5 stars at sign-off on WO-123". */
+export const signoffRatingNoticeTitle = (woNumber: string, rating: number): string =>
+  `Rated ${rating} of ${SIGNOFF_RATING_MAX} star${rating === 1 ? '' : 's'} at sign-off on ${woNumber}`;
+
 /** The first thing wrong with a submission, or null. The API asks the same. */
-export function signoffFormProblem(input: { manager_name?: string | null; closeout_number?: string | null; has_signature: boolean }, closeoutRequired: boolean): string | null {
+export function signoffFormProblem(
+  input: { manager_name?: string | null; closeout_number?: string | null; rating?: number | null; has_signature: boolean },
+  closeoutRequired: boolean,
+): string | null {
   const name = (input.manager_name ?? '').trim();
   if (name.length < 2) return 'Type the name of the manager on site';
   if (name.length > SIGNOFF_NAME_MAX) return `The name is longer than ${SIGNOFF_NAME_MAX} characters`;
   const closeout = (input.closeout_number ?? '').trim();
   if (closeoutRequired && !closeout) return 'Type the closeout number';
   if (closeout.length > SIGNOFF_CLOSEOUT_MAX) return `The closeout number is longer than ${SIGNOFF_CLOSEOUT_MAX} characters`;
+  if (!signoffRatingValid(input.rating)) return 'Rate the work from 1 to 5 stars';
   if (!input.has_signature) return 'Sign in the box';
   return null;
 }

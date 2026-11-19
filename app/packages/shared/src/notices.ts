@@ -49,6 +49,7 @@ export const NOTICE_TYPES: Record<string, { label: string; group: NoticeGroupId 
   quote_due: { label: 'Quotes due', group: 'work_orders' },
   payment_rejected: { label: 'Payments rejected', group: 'approvals' },
   approval_reminder: { label: 'Approval reminders', group: 'approvals' },
+  signoff_low_rating: { label: 'Low sign-off ratings', group: 'work_orders' },
 };
 
 /** Where an NTE increase request is decided (Elise, 2026-11-16, UAT #6):

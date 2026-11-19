@@ -193,6 +193,19 @@
 .sof-lbl-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .sof-clear { font: inherit; font-size: 13px; font-weight: 600; color: var(--sof-accent); background: none; border: 0; padding: 4px 0; cursor: pointer; }
 .sof-clear:disabled { color: var(--sof-line); cursor: default; }
+/* The rating (Elise, 2026-11-19): five big stars, easy to hit on a phone. */
+.sof-stars { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-left: -6px; }
+.sof-star { width: 48px; height: 48px; padding: 6px; border: 0; background: none; cursor: pointer; color: var(--sof-line); -webkit-tap-highlight-color: transparent; }
+.sof-star svg { width: 100%; height: 100%; display: block; fill: transparent; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.sof-star.is-on { color: var(--sof-accent); }
+.sof-star.is-on svg { fill: currentColor; }
+.sof-star:focus-visible { outline: 3px solid var(--sof-accent-2); outline-offset: 0; border-radius: 8px; }
+.sof-star-word { margin-left: 8px; font-size: 15px; font-weight: 600; color: var(--sof-soft); }
+.sof-field.is-missing .sof-star:not(.is-on) { color: var(--sof-err); }
+@media (prefers-reduced-motion: no-preference) {
+  .sof-star svg { transition: transform 120ms ease-out, fill 120ms ease-out; }
+  .sof-star:active svg { transform: scale(0.88); }
+}
 
 .sof-sig { position: relative; height: 200px; background: var(--sof-tint); border: 1.5px solid transparent; }
 .sof-sfm .sof-sig {

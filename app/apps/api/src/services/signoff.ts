@@ -33,6 +33,8 @@ import {
   ATTACHMENT_ALLOWED_TYPES,
   ATTACHMENT_MAX_BYTES,
   SIGNOFF_ENTITY_NAMES,
+  SIGNOFF_LOW_RATING_NOTICE_KIND,
+  SIGNOFF_RATING_MAX,
   SIGNOFF_PERM_KEY,
   SIGNOFF_SIGNATURE_MAX_BYTES,
   SIGNOFF_TOKEN_RE,
@@ -44,6 +46,8 @@ import {
   signoffLayoutFor,
   signoffMessageText,
   signoffPublicPath,
+  signoffRatingNoticeTitle,
+  signoffRatingSeats,
   type SignoffFormSubmit,
   type SignoffFormView,
   type SignoffLayout,
@@ -63,6 +67,7 @@ import { fetchQuoMedia, quoApiReady, sendQuoText } from '../lib/quoApi.js';
 import { renderSignoffSheet } from '../lib/signoffPdf.js';
 import type { ActingPrincipal } from './activity.js';
 import { addSystemAttachment, storageReady } from './attachments.js';
+import { notify } from './notices.js';
 import { dispatchAutomations } from './automations.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { serviceActorId } from './serviceActors.js';
@@ -766,7 +771,7 @@ export async function submitSignoffForm(token: string, input: SignoffFormSubmit)
   const png = Buffer.from(raw, 'base64');
   const hasSignature = png.length > PNG_MAGIC.length && png.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC);
   const problem = signoffFormProblem(
-    { manager_name: input.manager_name, closeout_number: input.closeout_number, has_signature: hasSignature },
+    { manager_name: input.manager_name, closeout_number: input.closeout_number, rating: input.rating, has_signature: hasSignature },
     closeoutRequired,
   );
   if (problem) throw badRequest(problem, { code: 'VALIDATION' });
@@ -775,10 +780,11 @@ export async function submitSignoffForm(token: string, input: SignoffFormSubmit)
 
   const name = input.manager_name.trim();
   const closeout = closeoutRequired ? (input.closeout_number ?? '').trim() : null;
+  const rating = input.rating;
   const claim = await query(
-    `UPDATE wo_signoff SET signed_name = $2, signed_closeout = $3, signed_via = 'form'
+    `UPDATE wo_signoff SET signed_name = $2, signed_closeout = $3, signed_rating = $4, signed_via = 'form'
       WHERE id = $1 AND superseded_at IS NULL AND signed_name IS NULL`,
-    [row.id, name, closeout],
+    [row.id, name, closeout, rating],
   );
   if (claim.rowCount === 0) throw conflict('This sheet has already been signed', { code: 'SIGNOFF_ALREADY_SIGNED' });
 
@@ -794,6 +800,7 @@ export async function submitSignoffForm(token: string, input: SignoffFormSubmit)
         manager_name: name,
         date_label: dateLabel,
         closeout_number: closeout,
+        rating,
         signature_png: new Uint8Array(png),
         stamp: `Signed electronically · ${dateLabel}, ${CHICAGO_TIME.format(now)} CT`,
       },
@@ -804,17 +811,52 @@ export async function submitSignoffForm(token: string, input: SignoffFormSubmit)
       { bytes: Buffer.from(bytes), fileName: `Signoff-${wo_ref.replace(/[^A-Za-z0-9._-]+/g, '-')}-signed.pdf`, contentType: 'application/pdf' },
       actorId,
       'form',
-      { manager_name: name, ...(closeout ? { closeout_number: closeout } : {}), sheet_id: row.id },
+      { manager_name: name, rating, ...(closeout ? { closeout_number: closeout } : {}), sheet_id: row.id },
       { approved: true, sheetId: row.id },
     );
   } catch (err) {
     await query(
-      `UPDATE wo_signoff SET signed_name = NULL, signed_closeout = NULL,
+      `UPDATE wo_signoff SET signed_name = NULL, signed_closeout = NULL, signed_rating = NULL,
               signed_via = CASE WHEN signed_attachment_id IS NULL THEN NULL ELSE 'text' END
         WHERE id = $1 AND signed_via = 'form' AND signed_name = $2`,
       [row.id, name],
     ).catch(() => undefined);
     throw err;
   }
+  await notifyLowRating(row.task_id, row.id, f, rating, name);
   return publicSignoffForm(token);
+}
+
+/**
+ * A low rating goes to the people who lead the job (Elise, 2026-11-19): 3
+ * stars or fewer to the work order's TL and ATL, 2 or fewer to its AM too
+ * (`signoffRatingSeats`). The seats hold display names (comma-joined); each is
+ * matched to an active person. After the filing committed; never throws.
+ */
+async function notifyLowRating(taskId: string, sheetId: string, f: Facts, rating: number, managerName: string): Promise<void> {
+  const seats = signoffRatingSeats(rating);
+  if (seats.length === 0) return;
+  try {
+    const names = seats
+      .flatMap((k) => String(f.fields[k] ?? '').split(','))
+      .map((n) => n.trim().toLowerCase())
+      .filter(Boolean);
+    if (names.length === 0) return;
+    const people = await query<{ id: string }>(
+      `SELECT id::text AS id FROM principal
+        WHERE kind = 'human' AND status <> 'disabled' AND lower(btrim(display_name)) = ANY($1::text[])`,
+      [[...new Set(names)]],
+    );
+    if (people.rows.length === 0) return;
+    await notify(people.rows.map((p) => p.id), {
+      kind: SIGNOFF_LOW_RATING_NOTICE_KIND,
+      title: signoffRatingNoticeTitle(f.wo_number, rating),
+      body: `${managerName} rated the work ${rating} of ${SIGNOFF_RATING_MAX} on the sign-off sheet.`,
+      link: `/work-orders/${encodeURIComponent(f.wo_number)}?tab=drive`,
+      taskId,
+      dedupeKey: `signoff_rating:${sheetId}`,
+    });
+  } catch (err) {
+    console.error('[signoff] could not send the low-rating notice', err);
+  }
 }
