@@ -85,7 +85,6 @@ const FROM_SHARED: Record<string, { file: string; literal?: string }> = {
   'Which work orders it counts': { file: 'packages/shared/src/permissions.ts' },
   'Not on the form': { file: 'packages/shared/src/woCreate.ts' },
   'On the form': { file: 'packages/shared/src/woCreate.ts' },
-  'Parts Required': { file: 'packages/shared/src/statusGates.ts' },
   // The quote builder's Submit button reads its label from QUOTE_SUBMIT_LABEL.
   'Submit for correction': { file: 'packages/shared/src/quoteSubmit.ts' },
   // 2026-11-18 · the visit row's check-out options are CHECK_OUT_OUTCOME_LABEL.

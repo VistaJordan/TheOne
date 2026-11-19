@@ -904,12 +904,13 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       {editable && (
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-sm btn-icon"
           onClick={() => setResetOpen(true)}
-          title="Clear the lines, options and notes and start the quote again"
+          // 2026-11-19 (Elise): icon only, the header row was too long.
+          aria-label="Reset quote"
+          title="Reset quote — clear the lines, options and notes and start the quote again"
         >
-          <Icon name="refresh" size={12} />
-          Reset quote
+          <Icon name="refresh" size={14} />
         </button>
       )}
       <AutosaveChip

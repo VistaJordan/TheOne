@@ -43,12 +43,13 @@ export function QuoteHistoryButton({ quote, wo, tpl }: { quote: Quote; wo: WoDet
     <>
       <button
         type="button"
-        className="btn btn-ghost btn-sm"
+        className="btn btn-ghost btn-sm btn-icon"
         onClick={() => setOpen(true)}
-        title="Every version of this quote that was submitted, sent or decided, with its date"
+        // 2026-11-19 (Elise): icon only, the header row was too long.
+        aria-label="History"
+        title="History — every version of this quote that was submitted, sent or decided, with its date"
       >
-        <Icon name="history" size={12} />
-        History
+        <Icon name="history" size={14} />
       </button>
       {open &&
         createPortal(

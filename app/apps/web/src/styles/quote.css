@@ -326,6 +326,9 @@
 .qb .qhead.is-embedded .ctas { gap: 6px; }
 .qb .qhead.is-embedded .ctas .btn-lg { height: 28px; padding: 0 10px; font-size: 12px; }
 .qb .qhead.is-embedded .ctas .chip { font-size: 11px; }
+/* 2026-11-19: History and Reset quote are icon-only squares; the icon keeps
+   the button's own colour (the generic .btn-icon greys it). */
+.qb .qhead .ctas .btn-icon { width: 28px; min-width: 28px; padding: 0; justify-content: center; color: inherit; }
 .qb .qactor { margin: 10px 0 0; }
 
 /* action bar */
