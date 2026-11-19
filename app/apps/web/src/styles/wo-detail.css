@@ -3252,3 +3252,7 @@ button.photo-img.is-pdf:focus-visible { outline: 2px solid var(--accent); outlin
   color: color-mix(in srgb, var(--accent-text) 70%, var(--ink-3));
 }
 .photo-column.is-drop-over .photo-col-drop { border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent-text); }
+
+/* 2026-11-19 · a kept tab panel: no box of its own while shown, gone while hidden. */
+.wo-tabkeep { display: contents; }
+.wo-tabkeep[hidden] { display: none; }

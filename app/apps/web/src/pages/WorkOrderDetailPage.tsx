@@ -18,6 +18,7 @@ import { ApiRequestError } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
 import { WO_TABS_ASIDE_ID } from '../lib/woTabsAside';
+import { WoTabActiveContext } from '../lib/woTabActive';
 import { WoHeader } from '../components/wo/WoHeader';
 import { UpdatesFeed } from '../components/wo/UpdatesFeed';
 import { PhotosCard } from '../components/wo/PhotosCard';
@@ -130,6 +131,12 @@ export function WorkOrderDetailPage() {
   const financeFocus = tab === 'money' && asked === 'payables' && show(asked) ? asked : null;
   const setTab = (t: Tab) =>
     setSearchParams(t === 'overview' ? {} : { tab: t }, { replace: true });
+  // 2026-11-19 (Elise) · a tab, once opened, stays mounted and is only hidden
+  // when another is picked, so nothing typed in it is lost on a switch. The
+  // set starts again for another work order (its panels remount by key).
+  const visitedRef = useRef<{ wo: string; tabs: Set<Tab> }>({ wo: woNumber, tabs: new Set() });
+  if (visitedRef.current.wo !== woNumber) visitedRef.current = { wo: woNumber, tabs: new Set() };
+  visitedRef.current.tabs.add(tab);
   // What Cancel / Reopen / Resume could not do, said under the header.
   const [recordNote, setRecordNote] = useState<string | null>(null);
 
@@ -341,6 +348,19 @@ export function WorkOrderDetailPage() {
     });
   };
 
+  /** A tab's panel: drawn once the tab has been opened, then kept (hidden
+      while another tab shows). WoTabActiveContext tells what is inside. */
+  const keep = (id: Tab, node: ReactNode) => {
+    const active = tab === id;
+    if (!active && !visitedRef.current.tabs.has(id)) return null;
+    return (
+      <WoTabActiveContext.Provider value={active} key={`${wo.id}:${id}`}>
+        <div className="wo-tabkeep" hidden={!active}>
+          {node}
+        </div>
+      </WoTabActiveContext.Provider>
+    );
+  };
   return shell(
     <>
       {liveNote && (
@@ -405,7 +425,7 @@ export function WorkOrderDetailPage() {
         }`}
       >
         <div className="col-main">
-          {tab === 'overview' && (
+          {keep('overview', (
             <div role="tabpanel" aria-label="Overview">
               {/* Elise, 2026-11-12 · the job itself leads: Address, Store,
                   Description, Sign-Off Link and the dates. People and Time
@@ -463,21 +483,22 @@ export function WorkOrderDetailPage() {
               {/* Every change of the Assignee: who made it and when. */}
               {showPeople && <AssignmentHistoryCard wo={wo} />}
             </div>
-          )}
+          ))}
 
           {/* 2026-10-22 · Drive: the work order's photos and files, on a tab
               of their own (they used to close the Overview tab). */}
-          {tab === 'drive' && (
+          {keep('drive', (
             <div role="tabpanel" aria-label="Drive">
               <PhotosCard wo={wo} />
             </div>
-          )}
+          ))}
 
           {/* 0095 · Messages is the conversation with the team and the client:
               the calls to the client above the written thread. Technician
               calls, texts and the AI quote draft are on Tech Hub. */}
-          {tab === 'messages' && <CallsCard wo={wo} side="client" />}
-          {tab === 'messages' && (
+          {keep('messages', (
+            <>
+            <CallsCard wo={wo} side="client" />
             <MessagesPanel
               woId={wo.id}
               woNumber={wo.wo_number}
@@ -486,9 +507,10 @@ export function WorkOrderDetailPage() {
               error={messagesQuery.isError}
               queryKey={messagesKey}
             />
-          )}
+            </>
+          ))}
 
-          {tab === 'audit' && (
+          {keep('audit', (
             <div className="card audit-card" role="tabpanel" aria-label="Logs">
               <AuditTrail
                 entries={activityQuery.data ?? wo.recent_activity ?? []}
@@ -496,25 +518,25 @@ export function WorkOrderDetailPage() {
                 error={activityQuery.isError}
               />
             </div>
-          )}
+          ))}
 
-          {tab === 'notifications' && <NotificationsTab woId={wo.id} />}
+          {keep('notifications', <NotificationsTab woId={wo.id} />)}
 
-          {tab === 'fields' && (
+          {keep('fields', (
             // No outer card: the toolbar and each section are cards of their
             // own, sitting on the canvas like the rest of the tab panels.
             <div role="tabpanel" aria-label="All fields">
               <AllFieldsPanel wo={wo} detailKey={['work-orders', 'detail', woNumber]} />
             </div>
-          )}
+          ))}
 
           {/* 2026-10-27 · the Quotes tab IS the quote: the builder opens
               right here (Create quote when there is none), no "Open quote". */}
-          {tab === 'quotes' && (
+          {keep('quotes', (
             <div role="tabpanel" aria-label="Quotes" className="quote-tab">
               <QuoteBuilder woNumber={wo.wo_number} embedded />
             </div>
-          )}
+          ))}
 
           {/* 2026-11-05 (Elise) · Finances opens straight on the payment
               request form, like the Quote tab opens on the builder: the
@@ -522,7 +544,7 @@ export function WorkOrderDetailPage() {
               this work order sit under it. The Client invoice and the Cost breakdown
               left the tab (Receivables › Invoicing raises invoices). Someone
               who may see payments but not request one gets the list alone. */}
-          {tab === 'money' && (
+          {keep('money', (
             <div role="tabpanel" aria-label="Finances" className="fin-stack">
               {show('payables') && can('payments', 'create') ? (
                 <section id="fin-payables" aria-label="Payables">
@@ -549,21 +571,21 @@ export function WorkOrderDetailPage() {
                 </div>
               )}
             </div>
-          )}
+          ))}
 
           {/* 2026-10-27 · Penalties, a tab of its own (after Messages since 2026-11-04): Bad
               quote, Penalty, Late quote, Missed ETA, Recall and the manager's
               description (also a section of All fields). */}
-          {tab === 'penalties' && (
+          {keep('penalties', (
             <div role="tabpanel" aria-label="Penalties" className="penalties-tab">
               <PenaltiesCard wo={wo} />
             </div>
-          )}
+          ))}
 
           {/* 0095 · Tech Hub (was People › Technicians): finding, hiring and
               talking to the technician — calls (with the AI quote draft) and
               the Quo texts sit here, away from the client conversation. */}
-          {tab === TECH_HUB_TAB && (
+          {keep(TECH_HUB_TAB, (
             <div role="tabpanel" aria-label="Tech Hub">
               {/* 0064 · the one vendor answering for the job (was Assign vendor on the bar). */}
               <ResponsibleVendorCard woId={wo.id} woNumber={wo.wo_number} />
@@ -583,13 +605,13 @@ export function WorkOrderDetailPage() {
               {/* 0066 · offering the job to the preferred vendors in turn (hidden while switched off). */}
               <DispatchCard woId={wo.id} />
             </div>
-          )}
+          ))}
 
-          {tab === 'site' && (
+          {keep('site', (
             <div role="tabpanel" aria-label="Site"><SiteCard wo={wo} /></div>
-          )}
+          ))}
 
-          {tab === 'cico' && (
+          {keep('cico', (
             <div role="tabpanel" aria-label="Check-in / check-out">
               {/* 0064 · when the technician is expected (was Add ETA on the bar). */}
               <EtaCard woId={wo.id} woNumber={wo.wo_number} />
@@ -604,16 +626,16 @@ export function WorkOrderDetailPage() {
                 </div>
               )}
             </div>
-          )}
+          ))}
 
-          {tab === 'parts' && (
+          {keep('parts', (
             <div role="tabpanel" aria-label="Parts">
               <PartsCard wo={wo} />
               {/* 0067 · what was requested, quoted and ordered for this job
                   (moved here from Payables, 2026-11-03). */}
               <WoPurchasingCard woId={wo.id} woNumber={wo.wo_number} />
             </div>
-          )}
+          ))}
 
           {/* 0064 · the tabs that read the record (Cost breakdown is on Finances). */}
           {(tab === 'tasks' || tab === 'timelog' || tab === 'related') && (

@@ -714,6 +714,18 @@ files with a blob behind them count. The header feeds the status menu the
 approved kinds from the same `['wo-attachments', id]` cache entry, so the
 "Needs after photo" tag clears the moment a photo is approved.
 
+**Switching tabs keeps what was typed** (Elise, 2026-11-19, no migration;
+`keep()` in `WorkOrderDetailPage.tsx`, `lib/woTabActive.ts`). A work-order tab
+is mounted the first time it is opened and then only hidden (`.wo-tabkeep`,
+`display: contents` / `[hidden]`) when another is picked, so a half-written
+message, a payment request, penalties, CICO forms and the rest are still there
+on the way back; the set starts again for another work order (panels keyed by
+its id). Inside a tab, `useWoTabActive()` says whether it is the one showing:
+the Drive drop zone (window listeners) ignores drags while hidden, and the
+Quote tab portals its autosave chip beside the tab strip only while shown. A
+hidden tab's queries keep their own refresh rules. Checklist / Timelog /
+Related (no buttons) still mount per visit.
+
 **Drop on a Drive column** (Elise, 2026-11-19, no migration; `PhotosCard.tsx`
 `kindUnder` / `data-drop-kind`, `AttachmentUpload.kind`). While a file is
 dragged over the Drive tab, Before · After · Sign-off · From client are each a

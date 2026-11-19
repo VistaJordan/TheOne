@@ -23,7 +23,7 @@ function GrowBox({ id, value, disabled, onChange }: { id: string; value: string;
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || el.offsetParent === null) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight + 2}px`;
   }, [value]);

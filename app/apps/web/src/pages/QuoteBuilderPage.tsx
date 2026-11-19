@@ -65,6 +65,7 @@ import { QuoteTemplatesButton } from '../components/quote/QuoteTemplatesButton';
 import { Icon } from '../components/Icon';
 import { createPortal } from 'react-dom';
 import { WO_TABS_ASIDE_ID } from '../lib/woTabsAside';
+import { useWoTabActive } from '../lib/woTabActive';
 import { LineItemsTable, AddLineButton, linesCarryTax, linesSpanDays } from '../components/quote/LineItemsTable';
 import { MoneyRail } from '../components/quote/MoneyRail';
 import { QuoteTaxBar, sectionTax } from '../components/quote/QuoteTaxBar';
@@ -637,6 +638,11 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       </AppShell>
     );
 
+  // Hooks before the early returns below (2026-11-19): the autosave chip's
+  // slot beside the tab strip, and whether the tab is the one showing.
+  // 2026-11-19 · the tab stays mounted while hidden: no chip beside another tab.
+  const tabActive = useWoTabActive();
+
   if (quoteQuery.isLoading || woQuery.isLoading) {
     return shell(<div className="wo-state"><b>Loading the quote for {woNumber}…</b></div>);
   }
@@ -934,7 +940,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         </button>
       )}
       {autosaveSlot ? (
-        createPortal(autosaveChip, autosaveSlot)
+        tabActive ? createPortal(autosaveChip, autosaveSlot) : null
       ) : (
         autosaveChip
       )}

@@ -53,6 +53,7 @@ import { numericDate } from '../../lib/fields';
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../Icon';
 import { PhotoReviewViewer } from './PhotoReviewViewer';
+import { useWoTabActive } from '../../lib/woTabActive';
 
 interface PhotosCardProps {
   wo: WorkOrderDetailV2;
@@ -163,9 +164,15 @@ export function PhotosCard({ wo }: PhotosCardProps) {
   busyRef.current = uploading > 0;
   const closedRef = useRef<string | null>(null);
   closedRef.current = uploadsClosed;
+  // 2026-11-19 · the Drive tab stays mounted while another tab shows; its
+  // window-wide drop must not catch a file let go on that other tab.
+  const tabActive = useWoTabActive();
+  const activeRef = useRef(tabActive);
+  activeRef.current = tabActive;
 
   useEffect(() => {
-    const hasFiles = (e: globalThis.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+    const hasFiles = (e: globalThis.DragEvent) =>
+      activeRef.current && Array.from(e.dataTransfer?.types ?? []).includes('Files');
     const onEnter = (e: globalThis.DragEvent) => {
       if (!hasFiles(e)) return;
       e.preventDefault();
