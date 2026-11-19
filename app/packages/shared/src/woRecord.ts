@@ -17,6 +17,11 @@ import type { SiteLocation } from './portfolio';
     to the minute, so the minute now running still counts as "now". */
 export const ETA_IN_PAST_MESSAGE = 'An ETA must be the current time or later.';
 export const ETA_IN_PAST_CODE = 'ETA_IN_PAST';
+
+/** Elise, 2026-11-19: an NTE increase is asked from site — a visit on the
+    work order must be checked in and not yet checked out. */
+export const NTE_INCREASE_CHECK_IN_MESSAGE = 'Check in first: an NTE increase is requested while the technician is on site.';
+export const NTE_INCREASE_CHECK_IN_CODE = 'NTE_INCREASE_CHECK_IN';
 export function etaInPast(at: Date | number, now: Date | number = Date.now()): boolean {
   const minuteStart = Math.floor(new Date(now).getTime() / 60_000) * 60_000;
   return new Date(at).getTime() < minuteStart;

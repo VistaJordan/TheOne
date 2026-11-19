@@ -306,8 +306,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
     [draft, totalCost, otMult, taxApplies],
   );
   const problems = useMemo(() => (draft ? quoteProblems(draft) : []), [draft]);
-  // 2026-11-04 (Elise): above the NTE the quote is not sent until the NTE is
-  // raised — the dearest option, from the live figures, as the API compares.
+  // Above the NTE (the dearest option, from the live figures, as the API
+  // compares) the quote is sent with a warning since 2026-11-14.
   const nteTotal = totals
     ? quoteTotalForNte({ grand_total: totals.grandTotal, option_totals: totals.options.map((o) => ({ grand_total: o.grandTotal })) })
     : null;

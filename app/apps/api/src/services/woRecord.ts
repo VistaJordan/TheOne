@@ -57,7 +57,7 @@ import type {
 import { query, withTransaction } from '../db.js';
 import { wallStamp, wallToInstant } from '../lib/businessDays.js';
 import { ApiError, badRequest, conflict, forbidden, notFound } from '../errors.js';
-import { NTE_SYNCED_CODE, NTE_SYNCED_MESSAGE, nteRequestsLink } from '@theone/shared';
+import { NTE_INCREASE_CHECK_IN_CODE, NTE_INCREASE_CHECK_IN_MESSAGE, NTE_SYNCED_CODE, NTE_SYNCED_MESSAGE, nteRequestsLink } from '@theone/shared';
 import type { ActingPrincipal } from './activity.js';
 import { notify } from './notices.js';
 import { allowFor, canViewField, requirePerm } from './permissions.js';
@@ -952,6 +952,12 @@ export async function requestNteIncrease(taskId: string, input: { requested_nte:
   if (current !== null && amount <= current) throw badRequest(`That is not an increase — the NTE is already ${current.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}`, { field: 'requested_nte' });
   const reason = clean(input.reason);
   if (!reason) throw badRequest('Say why more is needed', { field: 'reason' });
+  // Elise, 2026-11-19: only while a visit is checked in (on site, not checked out).
+  const onSite = await query<{ id: string }>(
+    `SELECT id::text AS id FROM wo_visit WHERE task_id = $1 AND checked_in_at IS NOT NULL AND checked_out_at IS NULL LIMIT 1`,
+    [taskId],
+  );
+  if (!onSite.rows[0]) throw conflict(NTE_INCREASE_CHECK_IN_MESSAGE, { code: NTE_INCREASE_CHECK_IN_CODE });
   const open = await query<{ id: string }>(`SELECT id FROM wo_nte_request WHERE task_id = $1 AND status = 'open'`, [taskId]);
   if (open.rows[0]) throw conflict('An NTE increase is already waiting for a decision on this work order');
   await query(`INSERT INTO wo_nte_request (task_id, current_nte, requested_nte, reason, requested_by) VALUES ($1, $2, $3, $4, $5)`, [taskId, current, amount, reason, actor.id]);

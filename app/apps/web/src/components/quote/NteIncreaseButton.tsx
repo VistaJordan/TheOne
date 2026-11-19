@@ -13,6 +13,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiRequestError, requestNteIncrease } from '../../api/client';
 import { useWoRecord } from '../wo/record/RecordParts';
 import { Icon } from '../Icon';
+import { NTE_INCREASE_CHECK_IN_MESSAGE } from '@theone/shared';
 
 const usd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
@@ -42,6 +43,22 @@ export function NteIncreaseButton({ woNumber, quoteTotal, quoteNumber }: { woNum
       <span className="chip chip-accent" title={pending.reason}>
         <Icon name="clock" size={12} />
         NTE increase to {usd(pending.requested_nte)} waiting for a manager
+      </span>
+    );
+  }
+
+  // Elise, 2026-11-19: asked from site only — a visit checked in, not out.
+  if (record.data && !record.data.time.on_site_since) {
+    return (
+      <span className="tipwrap">
+        <button type="button" className="btn btn-lg btn-locked" tabIndex={0} aria-disabled="true" aria-describedby="lockTipNteAsk">
+          <Icon name="lock" size={14} />
+          Request NTE increase
+        </button>
+        <span className="tip tip-below" id="lockTipNteAsk" role="tooltip">
+          <Icon name="lock" size={12} />
+          {NTE_INCREASE_CHECK_IN_MESSAGE}
+        </span>
       </span>
     );
   }
@@ -93,7 +110,7 @@ export function NteIncreaseButton({ woNumber, quoteTotal, quoteNumber }: { woNum
                   Why is more needed? <span className="req" aria-hidden="true">*</span>
                 </label>
                 <textarea id="nte-ask-reason" className="fld" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
-                <span className="hint">A manager decides it under Approvals › NTE increase requests. Once approved, Send to client unlocks.</span>
+                <span className="hint">A manager decides it under Approvals › NTE increase requests.</span>
               </div>
               {error && <p className="composer-err" role="alert">{error}</p>}
             </div>

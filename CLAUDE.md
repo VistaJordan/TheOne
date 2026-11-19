@@ -3879,7 +3879,9 @@ the portal type) and a draft's Submit skip it for everyone else. Add work order 
 **A quote above the NTE is sent** (reversing 2026-11-04): `sendQuote` no
 longer refuses; the builder draws an **Above NTE** warning chip
 (`quoteOverNteWarning`) beside an unlocked Send to client, Request NTE
-increase stays as an option, and the client's approval still sets the NTE.
+increase stays as an option (since 2026-11-19 only while a visit is checked in
+and not checked out: the button locks with `NTE_INCREASE_CHECK_IN_MESSAGE` and
+`requestNteIncrease` refuses 409 `NTE_INCREASE_CHECK_IN`), and the client's approval still sets the NTE.
 `QUOTE_OVER_NTE_CODE` is no longer raised. **A message seen is a notice
 read:** the Messages tab posts the ids it shows to `POST
 /notices/seen-messages` (`markMessageNoticesSeen`, quiet for live sync: under
