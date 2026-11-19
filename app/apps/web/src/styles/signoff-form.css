@@ -171,6 +171,8 @@
 .sof-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
 .sof-field-date { min-width: 96px; }
 .sof-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* The closeout number keeps its numbered grid (the rule above would stack it). */
+.sof-field.sof-field-closeout { display: grid; }
 .sof-input {
   font: inherit;
   font-size: 17px;
@@ -284,3 +286,56 @@
 }
 .sof-foot-side { display: flex; flex-direction: column; gap: 2px; }
 @media (min-width: 640px) { .sof-foot-side { text-align: right; } }
+
+/* A computer screen (Elise, 2026-11-19): the phone sizes above read small on
+ * a wide window, so the sheet grows — a wider column, larger type, bigger
+ * stars and signature box. The phone layout is untouched. */
+@media (min-width: 1024px) {
+  .sof-sfm .sof-head { min-height: 132px; padding: 12px 48px 12px 16px; }
+  .sof-sfm .sof-logo { height: 110px; }
+  .sof-bkr .sof-head { padding: 32px 48px 0; }
+  .sof-bkr .sof-logo { height: 116px; }
+  .sof-bkr .sof-rule { margin: 22px 48px 0; }
+  .sof-kicker { font-size: 13px; }
+  .sof-bkr .sof-kicker { font-size: 14px; }
+  .sof-head-ref { font-size: 15px; }
+  .sof-head-title { font-size: 48px; }
+
+  .sof-main { max-width: 900px; padding: 44px 32px 56px; }
+  .sof-form { gap: 32px; }
+  .sof-title h1 { font-size: 42px; }
+  .sof-title p { font-size: 17px; margin-top: 10px; }
+
+  .sof-lbl { font-size: 14px; }
+  .sof-bkr .sof-lbl { font-size: 16px; }
+  .sof-facts, .sof-sfm .sof-facts { gap: 36px; }
+  .sof-facts li, .sof-field-closeout { grid-template-columns: 36px minmax(0, 1fr); column-gap: 22px; }
+  .sof-bkr .sof-facts li, .sof-bkr .sof-field-closeout { grid-template-columns: 56px minmax(0, 1fr); }
+  .sof-facts li > div, .sof-field-closeout > div { gap: 8px; }
+  .sof-sfm .sof-n { width: 34px; height: 34px; font-size: 14px; }
+  .sof-sfm .sof-facts li:not(:last-child)::after { left: 16px; top: 34px; bottom: -36px; }
+  .sof-bkr .sof-n { font-size: 44px; }
+  .sof-ref { font-size: 30px; }
+  .sof-bkr .sof-ref { font-size: 34px; }
+  .sof-addr { font-size: 22px; }
+
+  .sof-field { gap: 10px; }
+  .sof-input, .sof-date { font-size: 22px; padding: 8px 0; }
+  .sof-stars { gap: 8px; }
+  .sof-star { width: 60px; height: 60px; }
+  .sof-star-word { font-size: 18px; margin-left: 12px; }
+  .sof-clear { font-size: 15px; }
+  .sof-sig { height: 300px; }
+  .sof-sig-line { left: 28px; right: 28px; bottom: 44px; }
+  .sof-sig-hint { left: 28px; bottom: 54px; font-size: 14px; }
+  .sof-attest { font-size: 15px; }
+  .sof-stub { gap: 24px; }
+  .sof-stub h2 { font-size: 18px; }
+  .sof-bkr .sof-stub { margin: 8px -32px 0; padding: 32px 32px 28px; }
+  .sof-bkr .sof-stub h2 { font-size: 22px; }
+
+  .sof-error { font-size: 16px; }
+  .sof-submit { font-size: 20px; padding: 20px; }
+  .sof-paper { font-size: 15px; }
+  .sof-foot { padding: 18px 48px; font-size: 14px; }
+}
