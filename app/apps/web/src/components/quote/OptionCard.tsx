@@ -210,6 +210,8 @@ export function OptionCard({
           onChange={(scope_lines) => onChange({ ...section, scope_lines })}
         />
 
+        {/* 2026-11-19 · the option's specs and note sit to the right of its lines. */}
+        <div className="lt-notes-row">
         <LineItemsTable
           label={label}
           lines={section.lines}
@@ -222,8 +224,8 @@ export function OptionCard({
           lockCardRates={lockCardRates}
           onChange={setLines}
         />
-
         <SectionNotes section={section} editable={canEdit} onChange={onChange} />
+        </div>
       </div>
 
       <div className="opt-foot">

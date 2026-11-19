@@ -1466,6 +1466,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               />
             </div>
 
+            {/* 2026-11-19 · the section's specs and note sit to the right of its lines. */}
+            <div className="lt-notes-row">
             <LineItemsTable
               label="Incurred"
               lines={incurred.lines}
@@ -1478,8 +1480,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 lockCardRates={quote.permissions.card_rates_locked === true}
               onChange={(lines: DraftLine[]) => setSection(0, { ...incurred, lines })}
             />
-
-            <div className="narr">
               <SectionNotes section={incurred} editable={incurredEditable} onChange={(next) => setSection(0, next)} />
             </div>
 
@@ -1526,6 +1526,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                     <ScopeList sectionKey={s.key} lines={s.scope_lines} editable={false} showError={false} onChange={() => undefined} />
                   </div>
                 )}
+                <div className="lt-notes-row">
                 <LineItemsTable
                   label={`Day ${idx + 1}`}
                   lines={s.lines}
@@ -1538,10 +1539,9 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                   onChange={() => undefined}
                 />
                 {(s.note_to_customer.trim() !== '' || s.specs.trim() !== '') && (
-                  <div className="narr">
-                    <SectionNotes section={s} editable={false} onChange={() => undefined} />
-                  </div>
+                  <SectionNotes section={s} editable={false} onChange={() => undefined} />
                 )}
+                </div>
               </div>
             ))}
           </section>

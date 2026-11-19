@@ -2,8 +2,13 @@
    Elise 2026-11-16). Every section carries them — the Incurred card and each
    option of every round. Both print under their section in the summary and
    on the printed quote (specs since UAT #25, 2026-11-16 — they were internal).
-   A read-only section draws only what was written. */
+   A read-only section draws only what was written.
 
+   2026-11-19 (Elise, UAT follow-up) · both are client-visible and say so;
+   they are small and sit to the right of the line items (`.lt-notes-row`),
+   one line each, growing as more is written. */
+
+import { useLayoutEffect, useRef } from 'react';
 import type { DraftSection } from '../../lib/quoteDraft';
 import { Icon } from '../Icon';
 
@@ -12,6 +17,35 @@ interface SectionNotesProps {
   editable: boolean;
   onChange: (next: DraftSection) => void;
 }
+
+/** One line tall, taller as the text needs. */
+function GrowBox({ id, value, disabled, onChange }: { id: string; value: string; disabled: boolean; onChange: (v: string) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      className="fld fld-grow sec-note-box"
+      id={id}
+      rows={1}
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+const ClientTag = () => (
+  <span className="sec-note-tag" title="Printed for the client under this section">
+    <Icon name="globe" size={12} />
+    Client-visible
+  </span>
+);
 
 export function SectionNotes({ section, editable, onChange }: SectionNotesProps) {
   const showSpecs = editable || section.specs.trim() !== '';
@@ -22,39 +56,26 @@ export function SectionNotes({ section, editable, onChange }: SectionNotesProps)
   return (
     <div className="sec-notes">
       {showSpecs && (
-        <div className="field">
-          <label className="lbl" htmlFor={specsId}>
-            Equipment &amp; part specs <span className="opt">optional</span>
+        <div className="sec-note">
+          <label className="sec-note-lbl" htmlFor={specsId}>
+            Equipment &amp; part specs
+            <ClientTag />
           </label>
-          <textarea
-            className="fld"
-            id={specsId}
-            rows={2}
-            value={section.specs}
-            disabled={!editable}
-            onChange={(e) => onChange({ ...section, specs: e.target.value })}
-          />
-          <span className="hint">Prints under this section in the quote summary and on the printed quote.</span>
+          <GrowBox id={specsId} value={section.specs} disabled={!editable} onChange={(specs) => onChange({ ...section, specs })} />
         </div>
       )}
       {showNote && (
-        <div className="field">
-          <label className="lbl" htmlFor={noteId}>
-            Note to customer <span className="opt">optional</span>
-            <span className="chip chip-sm chip-accent" style={{ marginLeft: 6 }}>
-              <Icon name="globe" size={12} />
-              Client-visible
-            </span>
+        <div className="sec-note">
+          <label className="sec-note-lbl" htmlFor={noteId}>
+            Note to customer
+            <ClientTag />
           </label>
-          <textarea
-            className="fld"
+          <GrowBox
             id={noteId}
-            rows={2}
             value={section.note_to_customer}
             disabled={!editable}
-            onChange={(e) => onChange({ ...section, note_to_customer: e.target.value })}
+            onChange={(note_to_customer) => onChange({ ...section, note_to_customer })}
           />
-          <span className="hint">Prints under this section in the text your client sees.</span>
         </div>
       )}
     </div>
