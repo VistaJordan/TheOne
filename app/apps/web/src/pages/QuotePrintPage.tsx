@@ -4,7 +4,8 @@
  * top, the number, the date, bill-to and ship-to, the incurred work and the
  * included options as line tables with UOM / unit price (marked up — the
  * Markup column is not printed for the client, M27) / tax, the
- * totals, the client summary text and the note to customer. Internal
+ * totals and the note to customer (the summary text is not printed —
+ * Elise, 2026-11-19; it stays the builder's Text view). Internal
  * things — specs, cost, profit, the NTE meter — are deliberately absent.
  *
  * "PDF output" is the browser's print dialog: this page carries its own
@@ -142,7 +143,6 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
   const sectionTaxPct = yoda && quote.tax_applies !== false ? quote.totals.sales_tax_pct : 0;
   const priced = quote.totals.option_totals.find((o) => o.section_id === quote.totals.priced_section_id) ?? null;
   const offered = quote.totals.option_totals.filter((o) => o.include_in_summary && options.some((s) => s.id === o.section_id));
-  const summaryText = quote.summary.pinned ?? quote.summary.auto;
   const brand = quoteBrandFor(entity);
   const billTo = quote.bill_to?.trim() || wo?.client || '—';
   const shipTo = quote.ship_to?.trim() || [site?.name, ...(site?.addressLines ?? [])].filter(Boolean).join('\n') || '—';
@@ -270,13 +270,6 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
           </tbody>
         </table>
       </section>
-
-      {summaryText.trim() !== '' && (
-        <section className="qdoc-summary">
-          <h3>Summary</h3>
-          <pre>{summaryText}</pre>
-        </section>
-      )}
 
       {/* A quote from before 0146 may still hold a quote-wide note. */}
       {quote.note_to_customer && (
