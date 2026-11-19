@@ -23,7 +23,7 @@ import {
 } from '@theone/shared';
 
 const root = resolve(__dirname, '..');
-const read = (...p: string[]) => readFileSync(join(root, ...p), 'utf8');
+const read = (...p: string[]) => readFileSync(join(root, ...p), 'utf8').replace(/\r\n/g, '\n');
 const mig = read('packages', 'db', 'migrations', '0134_entities_due_date_senior_om.sql');
 
 describe('Notifications: Unread first, no Read view, no Mark all', () => {

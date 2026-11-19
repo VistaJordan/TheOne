@@ -62,14 +62,15 @@ describe('what each tab draws', () => {
   const page = read('apps/web/src/pages/WorkOrderDetailPage.tsx');
 
   it('Messages has the client calls and no Quo thread', () => {
-    expect(page).toContain(`{tab === 'messages' && <CallsCard wo={wo} side="client" />}`);
+    const messages = page.slice(page.indexOf("keep('messages'"));
+    expect(messages.slice(0, messages.indexOf('<MessagesPanel'))).toContain('<CallsCard wo={wo} side="client" />');
     const panel = read('apps/web/src/components/wo/messages/MessagesPanel.tsx');
     expect(panel).not.toContain('TextComposer');
     expect(panel).not.toContain('MessageThread');
   });
 
   it('Tech Hub has suggestions, technicians, technician calls, texts and dispatch', () => {
-    const hub = page.slice(page.indexOf('{tab === TECH_HUB_TAB && ('));
+    const hub = page.slice(page.indexOf('keep(TECH_HUB_TAB'));
     const panel = hub.slice(0, hub.indexOf('</div>'));
     for (const card of ['<ResponsibleVendorCard', '<SuggestedVendorsCard', '<TechniciansCard', '<CallsCard wo={wo} side="tech" />', '<TechTextsCard', '<DispatchCard']) {
       expect(panel, card).toContain(card);

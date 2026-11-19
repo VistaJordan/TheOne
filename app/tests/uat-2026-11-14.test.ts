@@ -134,7 +134,7 @@ describe('files attached on Add work order are the client’s, approved as they 
     expect(dlg).toContain('data: prepared.data, from_client: true });');
     const svc = read('apps', 'api', 'src', 'services', 'attachments.ts');
     expect(svc).toContain("const reviewStatus = fromClient ? 'approved' : 'pending';");
-    expect(svc).toContain("fromClient ? 'client' : null,");
+    expect(svc).toContain("fromClient ? 'client' : (input.kind ?? null),");
     expect(svc).toContain("AND actor_principal_id = $2");
     expect(read('apps', 'api', 'src', 'routes', 'workOrders.ts')).toContain('from_client: z.boolean().optional(),');
   });

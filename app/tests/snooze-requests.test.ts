@@ -154,7 +154,7 @@ describe('snooze requests are wired', () => {
     expect(stale).toBeLessThan(commit);
     expect(apply).toBeGreaterThan(commit);
     expect(approvals).toContain('await reconcileSnoozeRequests(taskId, actorId);');
-    expect(approvals).toContain("'snooze_request', 'manager_review'] as ApprovalTaskType[]");
+    expect(approvals).toMatch(/'snooze_request',[^\]]*'manager_review'\] as ApprovalTaskType\[\]/);
     // A repeat ask replaces the open one and becomes the asker's, as a status request does.
     expect(approvals).toContain("input.type === 'status_change' || input.type === 'snooze_request'");
   });

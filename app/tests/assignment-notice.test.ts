@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { WO_ASSIGNED_NOTICE_KIND, assignedNoticeTitle } from '../packages/shared/src/index';
 
-const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
+const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 describe('assigned to you', () => {
   it('says who assigned it, or that it was assigned', () => {
