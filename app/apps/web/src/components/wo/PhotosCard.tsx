@@ -33,6 +33,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ATTACHMENT_ALLOWED_TYPES,
@@ -467,7 +468,8 @@ function PhotoColumn({
   onRemove?: (id: string) => void;
 }) {
   const images = items.filter((a) => isImageType(a.content_type));
-  const others = items.filter((a) => !isImageType(a.content_type));
+  const pdfs = items.filter((a) => isPdfType(a.content_type));
+  const others = items.filter((a) => !isImageType(a.content_type) && !isPdfType(a.content_type));
   return (
     <div className="photo-group photo-column">
       <div className="group-label">
@@ -487,6 +489,7 @@ function PhotoColumn({
       ) : (
         <>
           {images.length > 0 && <PhotoGrid woId={woId} items={images} badge={label} onRemove={onRemove} />}
+          {pdfs.length > 0 && <PdfGrid woId={woId} items={pdfs} badge={label} onRemove={onRemove} />}
           {others.length > 0 && <FileList woId={woId} items={others} onRemove={onRemove} />}
         </>
       )}
@@ -560,5 +563,81 @@ function PhotoGrid({
         </figure>
       ))}
     </div>
+  );
+}
+
+const isPdfType = (type: string | null | undefined) => (type ?? '').toLowerCase() === 'application/pdf';
+
+/** Elise, 2026-11-19: a PDF on Drive (the signed sign-off sheet, a file from
+    the client) shows its first page as a tile, like a photo; a click opens it
+    full screen. The file stays a PDF: the preview is the browser's own PDF
+    viewer in a frame, which cannot be clicked into (the tile is the button). */
+function PdfGrid({
+  woId,
+  items,
+  badge,
+  onRemove,
+}: {
+  woId: string;
+  items: Attachment[];
+  badge: string;
+  onRemove?: (id: string) => void;
+}) {
+  const [open, setOpen] = useState<Attachment | null>(null);
+  return (
+    <>
+      <div className="photo-grid">
+        {items.map((a) => (
+          <figure className="photo" key={a.id}>
+            <button type="button" className="photo-img is-real is-pdf" onClick={() => setOpen(a)} title={`Open ${a.file_name}`}>
+              <iframe
+                src={`${attachmentUrl(woId, a.id)}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                title={`Preview of ${a.file_name}`}
+                loading="lazy"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <span className="photo-badge">{badge}</span>
+              <span className="pdf-tag">PDF</span>
+            </button>
+            <figcaption title={a.file_name}>
+              {a.file_name}
+              {numericDate(a.created_at) ? ` · ${numericDate(a.created_at)}` : ''}
+              {onRemove && (
+                <button type="button" className="linkbtn photo-remove" onClick={() => onRemove(a.id)}>
+                  Remove
+                </button>
+              )}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      {open && <PdfViewer url={attachmentUrl(woId, open.id)} name={open.file_name} onClose={() => setOpen(null)} />}
+    </>
+  );
+}
+
+function PdfViewer({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return createPortal(
+    <div className="pdf-viewer" role="dialog" aria-modal="true" aria-label={name} onClick={onClose}>
+      <div className="pdf-viewer-bar" onClick={(e) => e.stopPropagation()}>
+        <span className="pdf-viewer-name">{name}</span>
+        <a className="btn btn-sm" href={url} target="_blank" rel="noreferrer">
+          Open in a new tab
+        </a>
+        <button type="button" className="icon-btn" onClick={onClose} aria-label="Close" autoFocus>
+          <Icon name="x" size={16} />
+        </button>
+      </div>
+      <iframe className="pdf-viewer-frame" src={`${url}#view=FitH&navpanes=0`} title={name} onClick={(e) => e.stopPropagation()} />
+    </div>,
+    document.body,
   );
 }
