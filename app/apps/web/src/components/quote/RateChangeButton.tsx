@@ -20,12 +20,15 @@ const REASON_MIN = 5;
 export function RateChangeButton({
   quote,
   beforeOpen,
-  sectionId,
+  at,
 }: {
   quote: Quote;
   beforeOpen?: () => Promise<unknown> | void;
-  /** 2026-11-19 · drawn at the foot of one section: only that section's lines. */
-  sectionId?: string | null;
+  /** 2026-11-19 · drawn at the foot of one section: only that section's lines.
+      By position (Incurred, or the Nth option of the round being written), not
+      by id — a section added in this session has no id in the open form until
+      the page reloads, though the autosave stored it. */
+  at?: { kind: 'incurred' } | { kind: 'option'; index: number };
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -37,14 +40,21 @@ export function RateChangeButton({
   const lines = useMemo(
     () =>
       quote.sections
-        .filter((s) => !s.locked && (s.kind === 'incurred' || (s.round === quote.current_round && s.approved_at === null)))
-        .filter((s) => sectionId === undefined || s.id === sectionId)
+        .filter((s) => s.kind === 'incurred' || (s.round === quote.current_round && s.approved_at === null))
+        .filter((s, _i, all) =>
+          !at
+            ? true
+            : at.kind === 'incurred'
+              ? s.kind === 'incurred'
+              : all.filter((x) => x.kind === 'option')[at.index]?.id === s.id,
+        )
+        .filter((s) => !s.locked)
         .flatMap((s) =>
           s.lines
             .filter((l) => cardRateFor(l, quote.labor_rate) != null)
             .map((l) => ({ line: l, section: s.kind === 'incurred' ? 'Incurred' : s.name?.trim() || s.label })),
         ),
-    [quote, sectionId],
+    [quote, at?.kind, at && at.kind === 'option' ? at.index : -1],
   );
 
   const ask = useMutation({

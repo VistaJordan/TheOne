@@ -900,11 +900,11 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   // 2026-11-19 (Elise) · Request rate change sits at the foot of each section
   // whose lines the price list prices (only for someone the card locks), and
   // asks about that section's lines only.
-  const rateChangeFor = (sectionId: string | null) =>
-    editable && quote.permissions.card_rates_locked === true && sectionId ? (
+  const rateChangeFor = (section: { kind: 'incurred' } | { kind: 'option'; index: number }) =>
+    editable && quote.permissions.card_rates_locked === true ? (
       <RateChangeButton
         quote={quote}
-        sectionId={sectionId}
+        at={section}
         beforeOpen={() =>
           flushThen(async () => {
             const res = await getWorkOrderQuote(woNumber);
@@ -1527,7 +1527,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                   onToggleDay={linesSpanDays(incurred.lines) ? (on) => setDayFor(incurred, on) : undefined}
                 />
               )}
-              {incurredEditable && rateChangeFor(incurred.id)}
+              {incurredEditable && rateChangeFor({ kind: 'incurred' })}
               <span className="lt-note">
                 <Icon name={incurredNote ? 'alert' : 'info'} size={12} />
                 {incurredNote ??
@@ -1644,7 +1644,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 rate={quote.labor_rate}
                 lockCardRates={quote.permissions.card_rates_locked === true}
                 decisionActions={status === 'sent' && options.length > 1 ? decisionButton(s.key, true) : undefined}
-                rateChange={rateChangeFor(s.id)}
+                rateChange={rateChangeFor({ kind: 'option', index: idx })}
                 otMultiplier={otMult}
                 taxApplies={taxApplies}
                 salesTaxPct={taxPct}
