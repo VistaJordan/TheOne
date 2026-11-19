@@ -3,7 +3,7 @@
    in both places. Row shapes are documented in api/services/woAudit.ts. */
 
 import type { WoFieldDescriptor } from '@theone/shared';
-import { PERM_ACTION_LABELS, PERM_SNAPSHOT_KEYS, permGrantWord, permMapChanges } from '@theone/shared';
+import { CHECK_OUT_OUTCOME_LABEL, PERM_ACTION_LABELS, PERM_SNAPSHOT_KEYS, isCheckOutOutcome, permGrantWord, permMapChanges } from '@theone/shared';
 import { DASH, fieldValueToString, money } from './fields';
 
 /** New rows carry `{ value }`; rows written before woAudit.ts hold the bare
@@ -134,6 +134,7 @@ const VISIT_KEY_LABELS: Record<string, string> = {
   checked_in_at: 'check-in time',
   checked_out_at: 'check-out time',
   return_trip_needed: 'return trip needed',
+  checkout_outcome: 'how it ended',
 };
 
 function visitValueText(key: string, v: unknown): string {
@@ -163,7 +164,11 @@ export function describeVisitChange(before: unknown, after: unknown): string {
   if (b.status !== a.status) {
     if (a.status === 'checked_in') return `checked in ${name} at ${visitStampText(a.checked_in_at)}`;
     if (a.status === 'checked_out') {
-      return `checked out ${name} at ${visitStampText(a.checked_out_at)}${a.return_trip_needed ? ' — return trip needed' : ''}`;
+      // 2026-11-18 · how the visit ended (Check out - Completed / Quote / …).
+      const how = isCheckOutOutcome(a.checkout_outcome)
+        ? ` — ${CHECK_OUT_OUTCOME_LABEL[a.checkout_outcome]}`
+        : a.return_trip_needed ? ' — return trip needed' : '';
+      return `checked out ${name} at ${visitStampText(a.checked_out_at)}${how}`;
     }
     return `reset ${name} to not checked in`;
   }

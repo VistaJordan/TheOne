@@ -1708,6 +1708,10 @@ export interface StatusChangeDetail {
   from_status_name: string;
   to_status_id: string;
   to_status_name: string;
+  /** 2026-11-18 · set when the request is a check-in / check-out: the visit
+      is stamped when it is approved, then the status moves (to_status may
+      equal from_status when the work order is already there). */
+  visit?: import('./visitStatus').VisitRequestDetail;
 }
 
 /**
@@ -1727,6 +1731,12 @@ export interface StatusChangeState {
   /** 0123: a manager put the open request on hold — it stays open and
       waiting; null when it is not held. */
   hold: ApprovalHold | null;
+  /** 2026-11-18 · a check-in / check-out request: "Check out - Quote ·
+      Visit 2 (Job)"; null for a plain status request. */
+  visit_label: string | null;
+  /** false when approving it moves no status (the work order is already
+      where the visit leads). Always true for a plain status request. */
+  moves: boolean;
 }
 
 /** 0123 · Hold on a status change request: who held it, when, and the
@@ -2155,6 +2165,13 @@ export interface WoVisit {
   created_by: ActivityActor | null;
   created_at: string;
   updated_at: string;
+  /** 0157 · how the visit ended (Check out - Completed / Quote / Return /
+      Parts); null before it checks out, and on visits checked out before 0157
+      that needed no return trip. */
+  checkout_outcome: import('./visitStatus').CheckOutOutcome | null;
+  /** 2026-11-18 · the check-in / check-out waiting for a manager on this
+      visit, or null. */
+  pending_request: import('./visitStatus').VisitPendingRequest | null;
 }
 
 /** POST /api/work-orders/:id/visits and PATCH /api/visits/:id. Every key is
@@ -2172,6 +2189,8 @@ export interface VisitInput {
   method_portal?: string | null;
   checked_in_at?: string | null;
   checked_out_at?: string | null;
+  /** 0157 · required with a new check-out: decides where the status goes. */
+  checkout_outcome?: import('./visitStatus').CheckOutOutcome | null;
   /** 0057 · the vendor record the technician was picked from (null = typed by
       hand). The name and phone still travel as text. */
   vendor_id?: string | null;

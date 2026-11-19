@@ -100,6 +100,17 @@ export function StatusChangeBanner({
     ack.isPending || withdraw.isPending || approve.isPending || reject.isPending || hold.isPending || release.isPending;
   const by = state.decided_by ? ` by ${state.decided_by.display_name}` : '';
   const when = state.decided_at ? numericDate(state.decided_at) : null;
+  // 2026-11-18 · a check-in / check-out request names the visit, and the
+  // status it leads to only when it moves one.
+  const what = state.visit_label ? (
+    <>
+      <b>{state.visit_label}</b>
+      {state.moves && <> → {state.to_status.name}</>}
+    </>
+  ) : (
+    <b>→ {state.to_status.name}</b>
+  );
+  const askLabel = state.visit_label ? 'request' : 'status change';
 
   if (state.status === 'open') {
     // The requester withdraws; a manager (not deciding their own ask) decides.
@@ -111,7 +122,7 @@ export function StatusChangeBanner({
         <span className={`scr scr-open${held ? ' is-held' : ''}`} role="status">
           <Icon name="clock" size={12} />
           <span className="scr-text">
-            <b>→ {state.to_status.name}</b> · {held ? 'on hold' : 'pending approval'}
+            {what} · {held ? 'on hold' : 'pending approval'}
             {held?.by && <small> · held by {held.by.display_name}</small>}
             {held?.note && <small className="scr-note" title={held.note}> · {held.note}</small>}
             {state.requested_by && !mine && <small> · asked by {state.requested_by.display_name}</small>}
@@ -179,9 +190,9 @@ export function StatusChangeBanner({
               aria-modal="true"
               aria-label={
                 asking === 'reject'
-                  ? 'Reject this status change'
+                  ? `Reject this ${askLabel}`
                   : asking === 'hold'
-                    ? 'Put this status change on hold'
+                    ? `Put this ${askLabel} on hold`
                     : `Approve the move to ${state.to_status.name}`
               }
               onClick={(e) => e.stopPropagation()}
@@ -189,9 +200,9 @@ export function StatusChangeBanner({
               <div className="modal-head">
                 <h2>
                   {asking === 'reject'
-                    ? 'Reject this status change'
+                    ? `Reject this ${askLabel}`
                     : asking === 'hold'
-                      ? 'Put this status change on hold'
+                      ? `Put this ${askLabel} on hold`
                       : `Approve the move to ${state.to_status.name}?`}
                 </h2>
                 <button type="button" className="icon-btn" onClick={() => setAsking(null)} aria-label="Close" disabled={busy}>
@@ -267,13 +278,13 @@ export function StatusChangeBanner({
     <span className="scr scr-rejected" role="status">
       <Icon name="x" size={12} />
       <span className="scr-text">
-        <b>→ {state.to_status.name}</b> · rejected{by}
+        {what} · rejected{by}
         {when && <small> · {when}</small>}
         {state.decision_note && (
           <small className="scr-note" title={state.decision_note}> · {state.decision_note}</small>
         )}
       </span>
-      {mine && onRequestAgain && (
+      {mine && onRequestAgain && !state.visit_label && (
         <button type="button" className="scr-act" disabled={busy} onClick={onRequestAgain}>
           Request again
         </button>

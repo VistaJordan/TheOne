@@ -59,7 +59,11 @@ import {
   describeRequestHidden,
   STATUS_APPROVAL_NOTE_CODE,
   statusApprovalNeedsNote,
+  checkOutStatusName,
+  onSiteStatusNameForVisitType,
+  visitRequestLabel,
   type SnoozeRequestDetail,
+  type VisitRequestDetail,
 } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
 import type { ActingPrincipal } from './activity.js';
@@ -68,7 +72,7 @@ import { assignedToSql, woScopeSql } from './woScope.js';
 import { assertDispatchers } from './dataRules.js';
 import { allowFor, requirePerm } from './permissions.js';
 import { K_COST } from './money.js';
-import { assertRequestHasCheckIn, assertStatusGate } from './statusGates.js';
+import { assertCheckOutGate, assertRequestHasCheckIn, assertStatusGate } from './statusGates.js';
 import { assertStatusOrder } from './statusOrder.js';
 import { assertReadyToAssign } from './intakeGate.js';
 
@@ -669,7 +673,18 @@ async function decide(
   // The target must still exist before anything is written, so an approval
   // never lands without the move it promises.
   let moveTo: string | null = null;
-  if (to === 'approved' && cur.type === 'status_change') {
+  // 2026-11-18 (Elise): a check-in / check-out request stamps its visit when
+  // it is approved (after the commit, before the move).
+  let visitToApply: VisitRequestDetail | null = null;
+  const visitAsk = cur.type === 'status_change' ? (cur.detail as Partial<StatusChangeDetail>).visit : undefined;
+  if (to === 'approved' && visitAsk) {
+    const { assertVisitRequestLive, assertNoOtherCheckedIn } = await import('./visits.js');
+    await assertVisitRequestLive(visitAsk);
+    if (visitAsk.action === 'check_in') await assertNoOtherCheckedIn(cur.task_id, visitAsk.visit_id);
+    const plan = await visitRequestPlan(cur.task_id, visitAsk.action, visitAsk.visit_type, visitAsk.outcome, visitAsk.visit_id);
+    moveTo = plan.moves ? plan.to.id : null;
+    visitToApply = visitAsk;
+  } else if (to === 'approved' && cur.type === 'status_change') {
     const d = cur.detail as Partial<StatusChangeDetail>;
     const hit = d.to_status_id
       ? await query<{ id: string; name: string }>(`SELECT id::text AS id, name FROM status WHERE id = $1 LIMIT 1`, [d.to_status_id])
@@ -810,6 +825,12 @@ async function decide(
   // Rule 2.4.3, "update WO_Status to requested status" — and rule 7.1.2's
   // move to Cancelled / Postponed: the manager's decision is the act that
   // moves it, so the manager is the actor on the status row.
+  if (visitToApply) {
+    // Stamped with the time asked for and signed by the requester; the
+    // visit_updated row is the approver's act.
+    const { applyVisitRequest } = await import('./visits.js');
+    await applyVisitRequest(visitToApply, cur.created_by?.id ?? actor.id, actor.id);
+  }
   if (moveTo !== null) {
     const { changeStatus } = await import('./workOrders.js');
     await changeStatus(cur.task_id, moveTo, actor.id, undefined, { kind: 'approval_task', id });
@@ -1395,7 +1416,18 @@ async function reconcileStatusChange(taskId: string, actorId: string): Promise<v
     [taskId],
   );
   const r = open.rows[0];
-  if (!r || !r.to_id) return;
+  if (!r) return;
+  // 2026-11-18: a check-in / check-out request is about its visit, not the
+  // status (the work order may already sit in the status it leads to). It
+  // has nothing left to decide once the visit is gone or already moved.
+  const ask = (r.detail as Partial<StatusChangeDetail> | null)?.visit;
+  if (ask) {
+    const { visitRequestStaleReason } = await import('./visits.js');
+    const why = await visitRequestStaleReason(ask);
+    if (why) await cancelTask(taskId, r.id, 'status_change', r.title, why, actorId, r.detail);
+    return;
+  }
+  if (!r.to_id) return;
   const cur = await query<{ status_id: string }>(
     `SELECT status_id::text AS status_id FROM task WHERE id = $1 LIMIT 1`,
     [taskId],
@@ -1486,6 +1518,7 @@ export async function requestStatusChange(
   actor: ActingPrincipal,
 ): Promise<{ item: ApprovalTask; created: boolean }> {
   requirePerm(actor, STATUS_PERM_KEY, 'create', 'You cannot request status changes');
+  await assertNoOtherVisitRequest(taskId, null);
   // Rules 11.2.1 / 11.2.2: a request for a move the gate would refuse is
   // refused here, with the same sentence a direct move gets — a manager is
   // never asked to approve something the system will then block.
@@ -1516,6 +1549,106 @@ export async function requestStatusChange(
     type: 'status_change',
     actorId: actor.id,
     toStatusId,
+  });
+}
+
+// ── Check-in / check-out requests (Elise, 2026-11-18) ───────────────────────
+
+export const VISIT_REQUEST_PENDING_CODE = 'VISIT_REQUEST_PENDING';
+
+/** A work order holds one open status request, and a new ask replaces it —
+    which must never silently drop a check-in / check-out waiting for a
+    manager. 409 while one is open on another visit (`exceptVisitId`) or, for
+    a plain status request (null), on any visit: withdraw it first. */
+async function assertNoOtherVisitRequest(taskId: string, exceptVisitId: string | null): Promise<void> {
+  const res = await query<{ detail: Partial<StatusChangeDetail> | null }>(
+    `SELECT detail FROM approval_task
+      WHERE task_id = $1 AND type = 'status_change' AND status = 'open' AND detail ? 'visit' LIMIT 1`,
+    [taskId],
+  );
+  const v = res.rows[0]?.detail?.visit;
+  if (!v || (exceptVisitId && v.visit_id === exceptVisitId)) return;
+  throw conflict(`${visitRequestLabel(v)} is waiting for a manager — withdraw it before asking for something else`, {
+    code: VISIT_REQUEST_PENDING_CODE,
+  });
+}
+
+export interface VisitRequestPlan {
+  from: { id: string; name: string };
+  to: { id: string; name: string };
+  /** false when the work order already sits where the visit leads (or the
+      visit type leads nowhere): the request is for the stamp alone. */
+  moves: boolean;
+}
+
+/**
+ * Where a check-in / check-out leads, and whether a status request for that
+ * move would be refused — asked when the request is sent and again when it
+ * is approved, with the sentences a status request gets: Managers only
+ * statuses, the status gates (a check-out counting as the Done gate's
+ * check-out), Ecotrak in block mode and the portal's steps.
+ */
+export async function visitRequestPlan(
+  taskId: string,
+  action: VisitRequestDetail['action'],
+  visitType: string,
+  outcome: VisitRequestDetail['outcome'],
+  /** The visit asked about; null for a visit not logged yet. */
+  visitId: string | null,
+): Promise<VisitRequestPlan> {
+  await assertNoOtherVisitRequest(taskId, visitId);
+  const cur = await query<{ id: string; name: string }>(
+    `SELECT s.id::text AS id, s.name FROM task t JOIN status s ON s.id = t.status_id
+      WHERE t.id = $1 AND t.deleted_at IS NULL LIMIT 1`,
+    [taskId],
+  );
+  const from = cur.rows[0];
+  if (!from) throw new ApiError('NOT_FOUND', 'Work order not found');
+  const targetName = action === 'check_in' ? onSiteStatusNameForVisitType(visitType) : checkOutStatusName(outcome);
+  if (!targetName) return { from, to: from, moves: false };
+  const hit = await query<{ id: string; name: string; request_hidden: boolean }>(
+    `SELECT id::text AS id, name, request_hidden FROM status WHERE lower(name) = lower($1) LIMIT 1`,
+    [targetName],
+  );
+  const target = hit.rows[0];
+  if (!target) throw conflict(`There is no "${targetName}" status to move the work order to`, { status_name: targetName });
+  if (target.id === from.id) return { from, to: from, moves: false };
+  if (target.request_hidden) {
+    throw conflict(describeRequestHidden(target.name), { code: STATUS_REQUEST_HIDDEN_CODE, status_name: target.name });
+  }
+  if (action === 'check_out') await assertCheckOutGate({ query }, taskId, target.name);
+  else await assertStatusGate({ query }, taskId, target.name);
+  await assertEcotrakAllowsMove(taskId, target.name);
+  await assertStatusOrder({ query }, taskId, target.name);
+  return { from, to: { id: target.id, name: target.name }, moves: true };
+}
+
+/** Raise (or re-target — one open status request per work order) the
+    check-in / check-out request. `plan` is visitRequestPlan's answer. */
+export async function raiseVisitRequest(
+  taskId: string,
+  plan: VisitRequestPlan,
+  visit: VisitRequestDetail,
+  actor: ActingPrincipal,
+): Promise<{ item: ApprovalTask; created: boolean }> {
+  requirePerm(actor, STATUS_PERM_KEY, 'create', 'You cannot request status changes');
+  await assertNoOtherVisitRequest(taskId, visit.visit_id);
+  const label = visitRequestLabel(visit);
+  const title = plan.moves
+    ? `${label} requested: ${plan.from.name} → ${plan.to.name}`
+    : `${label} requested`;
+  const detail: StatusChangeDetail = {
+    from_status_id: plan.from.id,
+    from_status_name: plan.from.name,
+    to_status_id: plan.to.id,
+    to_status_name: plan.to.name,
+    visit,
+  };
+  return createApprovalTask({
+    taskId,
+    type: 'status_change',
+    actorId: actor.id,
+    preset: { title, detail: { ...detail } },
   });
 }
 

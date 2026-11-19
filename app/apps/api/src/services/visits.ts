@@ -61,6 +61,15 @@ import {
   nextVisitStamps,
   formatUsPhone,
   onSiteStatusNameForVisitType,
+  checkOutStatusName,
+  isCheckOutOutcome,
+  isStatusRequestMode,
+  VISIT_OUTCOME_REQUIRED_CODE,
+  VISIT_OUTCOME_REQUIRED_TEXT,
+  type CheckOutOutcome,
+  type StatusChangeDetail,
+  type VisitPendingRequest,
+  type VisitRequestDetail,
   usPhoneProblem,
   type ActivityActor,
   type ActivityEntry,
@@ -81,6 +90,7 @@ import { changed, logTaskChanges, type TaskChange } from './woAudit.js';
 import { dispatchAutomations } from './automations.js';
 import { addWorkingHours } from '../lib/businessDays.js';
 import { holidayDays } from './holidays.js';
+import type { VisitRequestPlan } from './approvals.js';
 
 const ISO = (col: string) => `to_char((${col} AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`;
 const K_FM = '22. FM';
@@ -144,6 +154,7 @@ interface Row {
   method: string | null;
   method_detail: string | null;
   method_portal: string | null;
+  checkout_outcome: CheckOutOutcome | null;
   checked_in_at: string | null;
   checked_out_at: string | null;
   ci_id: string | null; ci_name: string | null; ci_kind: 'human' | 'service' | null;
@@ -156,6 +167,7 @@ interface Row {
 const SELECT_SQL = `
   SELECT v.id::text AS id, v.task_id::text AS task_id, v.seq, v.visit_type, v.status,
          v.return_trip_needed, v.tech_name, v.tech_phone, v.method, v.method_detail, v.method_portal,
+         v.checkout_outcome,
          ${ISO('v.checked_in_at')}  AS checked_in_at,
          ${ISO('v.checked_out_at')} AS checked_out_at,
          ci.id::text AS ci_id, ci.display_name AS ci_name, ci.kind::text AS ci_kind,
@@ -185,6 +197,7 @@ function mapRow(r: Row): WoVisit {
     method: r.method,
     method_detail: r.method_detail,
     method_portal: r.method_portal,
+    checkout_outcome: r.checkout_outcome ?? null,
     checked_in_at: r.checked_in_at,
     checked_out_at: r.checked_out_at,
     checked_in_by: actorOf(r.ci_id, r.ci_name, r.ci_kind),
@@ -192,19 +205,49 @@ function mapRow(r: Row): WoVisit {
     created_by: actorOf(r.cb_id, r.cb_name, r.cb_kind),
     created_at: r.created_at,
     updated_at: r.updated_at,
+    pending_request: null,
   };
 }
 
 type Q = { query: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<{ rows: T[] }> };
 
+/** 2026-11-18 · the open check-in / check-out requests on a work order's
+    visits (status_change tasks carrying `visit`), keyed by visit id. */
+async function pendingByVisit(q: Q, taskId: string): Promise<Map<string, VisitPendingRequest>> {
+  const res = await q.query<{ id: string; detail: Partial<StatusChangeDetail> | null; who: string | null }>(
+    `SELECT a.id::text AS id, a.detail, p.display_name AS who
+       FROM approval_task a
+       LEFT JOIN principal p ON p.id = a.created_by
+      WHERE a.task_id = $1 AND a.type = 'status_change' AND a.status = 'open' AND a.detail ? 'visit'`,
+    [taskId],
+  );
+  const out = new Map<string, VisitPendingRequest>();
+  for (const r of res.rows) {
+    const v = r.detail?.visit;
+    if (!v?.visit_id) continue;
+    out.set(v.visit_id, {
+      approval_task_id: r.id,
+      action: v.action,
+      outcome: v.outcome ?? null,
+      at: v.action === 'check_in' ? v.checked_in_at : v.checked_out_at,
+      to_status_name: r.detail?.to_status_id !== r.detail?.from_status_id ? r.detail?.to_status_name ?? null : null,
+      requested_by: r.who,
+    });
+  }
+  return out;
+}
+
 async function rowsForTask(q: Q, taskId: string): Promise<WoVisit[]> {
   const res = await q.query<Row>(`${SELECT_SQL} WHERE v.task_id = $1 ORDER BY v.seq ASC`, [taskId]);
-  return res.rows.map(mapRow);
+  const pending = await pendingByVisit(q, taskId);
+  return res.rows.map((r) => ({ ...mapRow(r), pending_request: pending.get(r.id) ?? null }));
 }
 
 async function rowById(q: Q, id: string): Promise<WoVisit | null> {
   const res = await q.query<Row>(`${SELECT_SQL} WHERE v.id = $1 LIMIT 1`, [id]);
-  return res.rows[0] ? mapRow(res.rows[0]) : null;
+  if (!res.rows[0]) return null;
+  const pending = await pendingByVisit(q, res.rows[0].task_id);
+  return { ...mapRow(res.rows[0]), pending_request: pending.get(id) ?? null };
 }
 
 /** The work order a visit belongs to — for the permission gates before a write. */
@@ -380,6 +423,7 @@ interface Clean {
   method_portal?: string | null;
   checked_in_at?: string | null;
   checked_out_at?: string | null;
+  checkout_outcome?: CheckOutOutcome | null;
 }
 
 function clean(input: VisitInput, forCreate: boolean): Clean {
@@ -405,6 +449,12 @@ function clean(input: VisitInput, forCreate: boolean): Clean {
   if ('method_portal' in input) out.method_portal = text(input.method_portal, 'Portal', 80);
   if ('checked_in_at' in input) out.checked_in_at = stamp(input.checked_in_at, 'Checked-in time');
   if ('checked_out_at' in input) out.checked_out_at = stamp(input.checked_out_at, 'Checked-out time');
+  if ('checkout_outcome' in input && input.checkout_outcome !== undefined) {
+    if (input.checkout_outcome !== null && !isCheckOutOutcome(input.checkout_outcome)) {
+      throw new ApiError('BAD_REQUEST', VISIT_OUTCOME_REQUIRED_TEXT, { code: VISIT_OUTCOME_REQUIRED_CODE });
+    }
+    out.checkout_outcome = input.checkout_outcome;
+  }
   return out;
 }
 
@@ -510,6 +560,7 @@ function snapshot(v: WoVisit): Record<string, unknown> & { name: string } {
     method: v.method,
     method_detail: v.method_detail,
     method_portal: v.method_portal,
+    checkout_outcome: v.checkout_outcome,
     checked_in_at: v.checked_in_at,
     checked_out_at: v.checked_out_at,
   };
@@ -555,8 +606,18 @@ async function logVisitEvent(
  * had them raise one).
  */
 async function moveOnSite(taskId: string, visitType: string, actor: ActingPrincipal): Promise<VisitStatusMove | null> {
+  return moveForVisit(taskId, onSiteStatusNameForVisitType(visitType), actor);
+}
+
+/** 2026-11-18 (Elise) · a check-out moves the work order by how the visit
+    ended (CHECK_OUT_STATUS_NAME): Done / Incurred, Waiting for Quote, Return
+    Trip Needed, Waiting for Parts. Same terms as the check-in's move. */
+async function moveAfterCheckOut(taskId: string, outcome: CheckOutOutcome | null, actor: ActingPrincipal): Promise<VisitStatusMove | null> {
+  return moveForVisit(taskId, checkOutStatusName(outcome), actor);
+}
+
+async function moveForVisit(taskId: string, name: string | null, actor: ActingPrincipal): Promise<VisitStatusMove | null> {
   const actorId = actor.id;
-  const name = onSiteStatusNameForVisitType(visitType);
   if (!name) return null;
   const res = await query<{ current: string; target: string | null }>(
     `SELECT t.status_id::text AS current, s.id::text AS target
@@ -608,6 +669,23 @@ async function assertNoOpenVisit(tx: Q, taskId: string, exceptId: string | null)
   });
 }
 
+/** The request a status-request person's check-in / check-out becomes. */
+function requestModeOf(actor: ActingPrincipal): boolean {
+  return isStatusRequestMode(actor.perms, actor.isSuperAdmin);
+}
+
+/** 400 unless a new check-out says how the visit ended. */
+function requireOutcome(outcome: CheckOutOutcome | null | undefined): CheckOutOutcome {
+  if (!outcome) throw new ApiError('BAD_REQUEST', VISIT_OUTCOME_REQUIRED_TEXT, { code: VISIT_OUTCOME_REQUIRED_CODE });
+  return outcome;
+}
+
+/** The status_move a raised request answers with: `status` is where the
+    work order goes once approved, '' when it stays where it is. */
+function requestedMove(plan: VisitRequestPlan, task: { id: string }): VisitStatusMove {
+  return { status: plan.moves ? plan.to.name : '', moved: false, reason: null, requested: true, approval_task_id: task.id };
+}
+
 export async function createVisit(
   taskId: string,
   input: VisitInput,
@@ -636,10 +714,26 @@ export async function createVisit(
     { status: c.status, checked_in_at: c.checked_in_at, checked_out_at: c.checked_out_at },
     now,
   );
-  const status: VisitStatus = stamps.status;
-  const checkedIn = stamps.checked_in_at;
-  const checkedOut = stamps.checked_out_at;
-  const rtn = status === 'checked_out' ? Boolean(c.return_trip_needed) : false;
+  const outcome = stamps.status === 'checked_out' ? requireOutcome(c.checkout_outcome) : null;
+
+  // 2026-11-18 (Elise) · someone who requests status changes requests the
+  // check-in / check-out too: the visit is logged planned, the request is
+  // asked everything its status move would be asked BEFORE anything is
+  // written, and the stamps land when a manager approves it.
+  const request = requestModeOf(actor) && stamps.status !== 'planned';
+  const action: VisitRequestDetail['action'] = stamps.status === 'checked_out' ? 'check_out' : 'check_in';
+  let plan: VisitRequestPlan | null = null;
+  if (request) {
+    if (action === 'check_in') await assertNoOtherCheckedIn(taskId, null);
+    const { visitRequestPlan } = await import('./approvals.js');
+    plan = await visitRequestPlan(taskId, action, c.visit_type!, outcome, null);
+  }
+
+  const status: VisitStatus = request ? 'planned' : stamps.status;
+  const checkedIn = request ? null : stamps.checked_in_at;
+  const checkedOut = request ? null : stamps.checked_out_at;
+  const storedOutcome = request ? null : outcome;
+  const rtn = status === 'checked_out' ? (outcome ? outcome === 'return' : Boolean(c.return_trip_needed)) : false;
 
   let created: WoVisit | null = null;
   let items: WoVisit[] = [];
@@ -661,9 +755,9 @@ export async function createVisit(
       `INSERT INTO wo_visit
          (task_id, seq, visit_type, status, return_trip_needed, tech_name, tech_phone, method,
           method_detail, checked_in_at, checked_out_at, checked_in_by, checked_out_by, created_by,
-          method_portal)
+          method_portal, checkout_outcome)
        VALUES ($1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM wo_visit WHERE task_id = $1),
-               $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::timestamptz, $11, $12, $13, $14)
+               $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::timestamptz, $11, $12, $13, $14, $15)
        RETURNING id::text AS id`,
       [
         taskId,
@@ -680,6 +774,7 @@ export async function createVisit(
         checkedOut ? actor.id : null,
         actor.id,
         portal,
+        storedOutcome,
       ],
     );
     created = await rowById(tx, ins.rows[0].id);
@@ -691,9 +786,32 @@ export async function createVisit(
   // Rules on the mirrored fields ("when Check-in/out Status changes to …")
   // fire after the commit, exactly as a hand edit of the old field did.
   await dispatchAutomations({ taskId, kind: 'changed', changes: mirror });
-  // Rule 2.2.2: a visit logged straight as checked in is a check-in.
-  const status_move = status === 'checked_in' ? await moveOnSite(taskId, c.visit_type!, actor) : null;
-  return { item: created!, items, status_move };
+  const made = created as WoVisit | null;
+  if (!made) throw new ApiError('INTERNAL', 'Visit insert produced no row');
+
+  if (plan) {
+    const { raiseVisitRequest } = await import('./approvals.js');
+    const { item } = await raiseVisitRequest(taskId, plan, {
+      action,
+      visit_id: made.id,
+      visit_seq: made.seq,
+      visit_type: made.visit_type,
+      checked_in_at: stamps.checked_in_at,
+      checked_out_at: action === 'check_out' ? stamps.checked_out_at : null,
+      outcome,
+    }, actor);
+    const fresh = await rowsForTask({ query }, taskId);
+    return { item: fresh.find((x) => x.id === made.id) ?? made, items: fresh, status_move: requestedMove(plan, item) };
+  }
+  // Rule 2.2.2: a visit logged straight as checked in is a check-in; one
+  // logged straight as checked out moves by how it ended (2026-11-18).
+  const status_move =
+    status === 'checked_in'
+      ? await moveOnSite(taskId, made.visit_type, actor)
+      : status === 'checked_out'
+        ? await moveAfterCheckOut(taskId, outcome, actor)
+        : null;
+  return { item: made, items, status_move };
 }
 
 export async function updateVisit(
@@ -736,9 +854,37 @@ export async function updateVisit(
     { status: c.status, checked_in_at: c.checked_in_at, checked_out_at: c.checked_out_at },
     now,
   );
-  next.status = stamps.status;
-  next.checked_in_at = stamps.checked_in_at;
-  next.checked_out_at = stamps.checked_out_at;
+  // Rule 2.2.2: only the move INTO checked_in is a check-in — correcting a
+  // stamp on a visit that is already in is not. M8: typing the check-in time
+  // on a planned visit is that move too. A check-out is the move INTO
+  // checked_out (2026-11-18); it must say how the visit ended, and an outcome
+  // changed afterwards is a correction that moves nothing.
+  const checkInNow = stamps.status === 'checked_in' && cur.status !== 'checked_in';
+  const checkOutNow = stamps.status === 'checked_out' && cur.status !== 'checked_out';
+  const outcome: CheckOutOutcome | null =
+    stamps.status !== 'checked_out'
+      ? null
+      : checkOutNow
+        ? requireOutcome(c.checkout_outcome)
+        : c.checkout_outcome !== undefined
+          ? c.checkout_outcome
+          : cur.checkout_outcome;
+
+  // 2026-11-18 (Elise) · a status-request person's check-in / check-out is a
+  // request: the visit keeps its status and stamps until a manager approves.
+  // The rest of the patch (type, technician) is saved as usual.
+  const request = requestModeOf(actor) && (checkInNow || checkOutNow);
+  let plan: VisitRequestPlan | null = null;
+  if (request) {
+    if (checkInNow) await assertNoOtherCheckedIn(cur.task_id, visitId);
+    const { visitRequestPlan } = await import('./approvals.js');
+    plan = await visitRequestPlan(cur.task_id, checkInNow ? 'check_in' : 'check_out', next.visit_type, outcome, visitId);
+  } else {
+    next.status = stamps.status;
+    next.checked_in_at = stamps.checked_in_at;
+    next.checked_out_at = stamps.checked_out_at;
+    next.checkout_outcome = outcome;
+  }
   // Who stamped: kept while the stamp is the one already there, the actor
   // when the stamp is new or changed, nobody once it is cleared.
   let inBy = cur.checked_in_by?.id ?? null;
@@ -748,55 +894,150 @@ export async function updateVisit(
   if (!next.checked_out_at) outBy = null;
   else if (next.checked_out_at !== cur.checked_out_at || !outBy) outBy = actor.id;
   if (next.status !== 'checked_out') next.return_trip_needed = false;
-  if (c.return_trip_needed !== undefined && next.status === 'checked_out') next.return_trip_needed = c.return_trip_needed;
+  else if (next.checkout_outcome) next.return_trip_needed = next.checkout_outcome === 'return';
+  else if (c.return_trip_needed !== undefined) next.return_trip_needed = c.return_trip_needed;
 
   let updated: WoVisit | null = null;
   let items: WoVisit[] = [];
   let mirror: TaskChange[] = [];
-  await withTransaction(async (tx) => {
-    // 2026-11-10 (Elise) · a visit moving INTO checked in waits for every other
-    // visit on the work order to be checked out (task row locked first, as in
-    // createVisit).
-    if (next.status === 'checked_in' && cur.status !== 'checked_in') {
-      await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [cur.task_id]);
-      await assertNoOpenVisit(tx, cur.task_id, visitId);
+  const nothingToWrite = request && JSON.stringify(snapshot(next)) === JSON.stringify(snapshot(cur));
+  if (!nothingToWrite) {
+    await withTransaction(async (tx) => {
+      // 2026-11-10 (Elise) · a visit moving INTO checked in waits for every other
+      // visit on the work order to be checked out (task row locked first, as in
+      // createVisit).
+      if (next.status === 'checked_in' && cur.status !== 'checked_in') {
+        await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [cur.task_id]);
+        await assertNoOpenVisit(tx, cur.task_id, visitId);
+      }
+      await writeVisitRow(tx, visitId, next, inBy, outBy);
+      updated = await rowById(tx, visitId);
+      await logVisitEvent(tx, actor.id, cur.task_id, 'visit_updated', visitId, cur, updated);
+      mirror = await syncMirrors(tx, cur.task_id);
+      await logTaskChanges(tx, actor.id, cur.task_id, mirror, 'visit');
+      items = await rowsForTask(tx, cur.task_id);
+    });
+    await dispatchAutomations({ taskId: cur.task_id, kind: 'changed', changes: mirror });
+  }
+
+  if (plan) {
+    const { raiseVisitRequest } = await import('./approvals.js');
+    const { item } = await raiseVisitRequest(cur.task_id, plan, {
+      action: checkInNow ? 'check_in' : 'check_out',
+      visit_id: visitId,
+      visit_seq: cur.seq,
+      visit_type: next.visit_type,
+      // A visit checked out without ever checking in (recorded after the
+      // fact) carries both stamps.
+      checked_in_at: checkInNow || !cur.checked_in_at ? stamps.checked_in_at : null,
+      checked_out_at: checkOutNow ? stamps.checked_out_at : null,
+      outcome,
+    }, actor);
+    const fresh = await rowsForTask({ query }, cur.task_id);
+    return { item: fresh.find((x) => x.id === visitId) ?? cur, items: fresh, status_move: requestedMove(plan, item) };
+  }
+
+  const status_move = checkInNow
+    ? await moveOnSite(cur.task_id, next.visit_type, actor)
+    : checkOutNow
+      ? await moveAfterCheckOut(cur.task_id, outcome, actor)
+      : null;
+  return { item: updated ?? cur, items, status_move };
+}
+
+async function writeVisitRow(tx: Q, visitId: string, next: WoVisit, inBy: string | null, outBy: string | null): Promise<void> {
+  await tx.query(
+    `UPDATE wo_visit
+        SET visit_type = $2, status = $3, return_trip_needed = $4,
+            tech_name = $5, tech_phone = $6, method = $7, method_detail = $12, method_portal = $13,
+            checked_in_at = $8::timestamptz, checked_out_at = $9::timestamptz,
+            checked_in_by = $10, checked_out_by = $11, checkout_outcome = $14
+      WHERE id = $1`,
+    [
+      visitId,
+      next.visit_type,
+      next.status,
+      next.return_trip_needed,
+      next.tech_name,
+      next.tech_phone,
+      next.method,
+      next.checked_in_at,
+      next.checked_out_at,
+      inBy,
+      outBy,
+      next.method_detail,
+      next.method_portal,
+      next.checkout_outcome,
+    ],
+  );
+}
+
+// ── Check-in / check-out requests (Elise, 2026-11-18) ───────────────────────
+
+/** 409 VISIT_STILL_CHECKED_IN outside a transaction — asked when a check-in
+    request is sent and approved (the approval asks again under the lock). */
+export async function assertNoOtherCheckedIn(taskId: string, exceptVisitId: string | null): Promise<void> {
+  await assertNoOpenVisit({ query }, taskId, exceptVisitId);
+}
+
+/** Why an open check-in / check-out request has nothing left to decide — the
+    visit was deleted, or was checked in / out some other way — or null. */
+export async function visitRequestStaleReason(d: Partial<VisitRequestDetail>): Promise<string | null> {
+  if (!d.visit_id) return 'The visit is no longer on the work order';
+  const v = await rowById({ query }, d.visit_id);
+  if (!v) return 'The visit was deleted';
+  if (d.action === 'check_in' && v.status !== 'planned') return `Visit ${v.seq} was checked in another way`;
+  if (d.action === 'check_out' && v.status === 'checked_out') return `Visit ${v.seq} was checked out another way`;
+  return null;
+}
+
+/** 409 when the visit a request is about can no longer take it. */
+export async function assertVisitRequestLive(d: Partial<VisitRequestDetail>): Promise<void> {
+  const why = await visitRequestStaleReason(d);
+  if (why) throw new ApiError('CONFLICT', `${why}, so this request cannot be approved. Reject it with a note instead.`);
+}
+
+/**
+ * An approved check-in / check-out request: the visit takes the stamps asked
+ * for, signed by the requester; the visit_updated row is the approver's. The
+ * status move follows in the caller (decide), through changeStatus.
+ */
+export async function applyVisitRequest(d: VisitRequestDetail, requesterId: string, approverId: string): Promise<void> {
+  const cur = await rowById({ query }, d.visit_id);
+  if (!cur) throw new ApiError('CONFLICT', 'The visit was deleted');
+  const next = { ...cur };
+  let inBy = cur.checked_in_by?.id ?? null;
+  let outBy = cur.checked_out_by?.id ?? null;
+  if (d.action === 'check_in') {
+    next.checked_in_at = d.checked_in_at ?? nowStamp();
+    next.checked_out_at = null;
+    next.status = 'checked_in';
+    next.checkout_outcome = null;
+    next.return_trip_needed = false;
+    inBy = requesterId;
+    outBy = null;
+  } else {
+    if (!cur.checked_in_at) {
+      next.checked_in_at = d.checked_in_at ?? d.checked_out_at ?? nowStamp();
+      inBy = requesterId;
     }
-    await tx.query(
-      `UPDATE wo_visit
-          SET visit_type = $2, status = $3, return_trip_needed = $4,
-              tech_name = $5, tech_phone = $6, method = $7, method_detail = $12, method_portal = $13,
-              checked_in_at = $8::timestamptz, checked_out_at = $9::timestamptz,
-              checked_in_by = $10, checked_out_by = $11
-        WHERE id = $1`,
-      [
-        visitId,
-        next.visit_type,
-        next.status,
-        next.return_trip_needed,
-        next.tech_name,
-        next.tech_phone,
-        next.method,
-        next.checked_in_at,
-        next.checked_out_at,
-        inBy,
-        outBy,
-        next.method_detail,
-        next.method_portal,
-      ],
-    );
-    updated = await rowById(tx, visitId);
-    await logVisitEvent(tx, actor.id, cur.task_id, 'visit_updated', visitId, cur, updated);
+    next.checked_out_at = d.checked_out_at ?? nowStamp();
+    next.status = 'checked_out';
+    next.checkout_outcome = d.outcome;
+    next.return_trip_needed = d.outcome === 'return';
+    outBy = requesterId;
+  }
+  let mirror: TaskChange[] = [];
+  await withTransaction(async (tx) => {
+    await tx.query(`SELECT 1 FROM task WHERE id = $1 FOR NO KEY UPDATE`, [cur.task_id]);
+    if (d.action === 'check_in') await assertNoOpenVisit(tx, cur.task_id, cur.id);
+    await writeVisitRow(tx, cur.id, next, inBy, outBy);
+    const updated = await rowById(tx, cur.id);
+    await logVisitEvent(tx, approverId, cur.task_id, 'visit_updated', cur.id, cur, updated);
     mirror = await syncMirrors(tx, cur.task_id);
-    await logTaskChanges(tx, actor.id, cur.task_id, mirror, 'visit');
-    items = await rowsForTask(tx, cur.task_id);
+    await logTaskChanges(tx, approverId, cur.task_id, mirror, 'visit');
   });
   await dispatchAutomations({ taskId: cur.task_id, kind: 'changed', changes: mirror });
-  // Rule 2.2.2: only the move INTO checked_in is a check-in — correcting a
-  // stamp on a visit that is already in, or checking out, moves nothing. M8:
-  // typing the check-in time on a planned visit is that move too.
-  const checkedInNow = next.status === 'checked_in' && cur.status !== 'checked_in';
-  const status_move = checkedInNow ? await moveOnSite(cur.task_id, next.visit_type, actor) : null;
-  return { item: updated!, items, status_move };
 }
 
 export async function deleteVisit(visitId: string, actor: ActingPrincipal): Promise<{ items: WoVisit[] }> {

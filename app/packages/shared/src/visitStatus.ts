@@ -51,3 +51,87 @@ export function describeCheckInRequired(statusName: string): string {
   // Same shape as missingStepsText (statusGates.ts).
   return `Missing step:\n- Must check in on ${visit}`;
 }
+
+// ── Check-in / check-out requests and the check-out outcomes (Elise, 2026-11-18)
+//
+// A check-out says how the visit ended, and that decides where the work order
+// goes: Completed → Done / Incurred, Quote → Waiting for Quote, Return →
+// Return Trip Needed, Parts → Waiting for Parts. Someone who must REQUEST
+// status changes (work_orders/status create without edit) requests the
+// check-in and the check-out too: the visit stays as it was, a status_change
+// task carrying `visit` (VisitRequestDetail) waits under Approvals › Status
+// change, and approving it stamps the visit with the time asked for, then
+// moves the status. A check-out request is asked everything a status request
+// for its target is asked (gates, Ecotrak, the portal's steps), the visit
+// being checked out counting as the check-out the Done gate wants.
+
+export const CHECK_OUT_OUTCOMES = ['completed', 'quote', 'return', 'parts'] as const;
+export type CheckOutOutcome = (typeof CHECK_OUT_OUTCOMES)[number];
+
+export const CHECK_OUT_OUTCOME_LABEL: Record<CheckOutOutcome, string> = {
+  completed: 'Check out - Completed',
+  quote: 'Check out - Quote',
+  return: 'Check out - Return',
+  parts: 'Check out - Parts',
+};
+
+/** The short word a checked-out visit wears ("Completed", "Quote"…). */
+export const CHECK_OUT_OUTCOME_SHORT: Record<CheckOutOutcome, string> = {
+  completed: 'Completed',
+  quote: 'Quote',
+  return: 'Return trip needed',
+  parts: 'Parts',
+};
+
+export const CHECK_OUT_STATUS_NAME: Record<CheckOutOutcome, string> = {
+  completed: 'Done / Incurred',
+  quote: 'Waiting for Quote',
+  return: 'Return Trip Needed',
+  parts: 'Waiting for Parts',
+};
+
+export function isCheckOutOutcome(v: unknown): v is CheckOutOutcome {
+  return typeof v === 'string' && (CHECK_OUT_OUTCOMES as readonly string[]).includes(v);
+}
+
+/** The status a check-out with this outcome moves the work order to. */
+export function checkOutStatusName(outcome: CheckOutOutcome | null | undefined): string | null {
+  return outcome ? CHECK_OUT_STATUS_NAME[outcome] : null;
+}
+
+export const VISIT_OUTCOME_REQUIRED_CODE = 'VISIT_OUTCOME_REQUIRED';
+export const VISIT_OUTCOME_REQUIRED_TEXT =
+  'Pick how the visit ended: Check out - Completed, Quote, Return or Parts';
+
+export type VisitRequestAction = 'check_in' | 'check_out';
+
+/** `detail.visit` on a status_change task raised by a check-in / check-out. */
+export interface VisitRequestDetail {
+  action: VisitRequestAction;
+  visit_id: string;
+  visit_seq: number;
+  visit_type: string;
+  /** The check-in stamp to write (check_in, or a check_out of a visit that
+      was never checked in), UTC ISO to the second. */
+  checked_in_at: string | null;
+  /** check_out only. */
+  checked_out_at: string | null;
+  outcome: CheckOutOutcome | null;
+}
+
+/** How a request reads in a title, a chip, the inbox. */
+export function visitRequestLabel(v: Pick<VisitRequestDetail, 'action' | 'outcome' | 'visit_seq' | 'visit_type'>): string {
+  const what = v.action === 'check_in' ? 'Check in' : v.outcome ? CHECK_OUT_OUTCOME_LABEL[v.outcome] : 'Check out';
+  return `${what} · Visit ${v.visit_seq} (${v.visit_type})`;
+}
+
+/** The open request on one visit, carried on the visit for the CICO card. */
+export interface VisitPendingRequest {
+  approval_task_id: string;
+  action: VisitRequestAction;
+  outcome: CheckOutOutcome | null;
+  /** The stamp asked for (check-in for check_in, check-out for check_out). */
+  at: string | null;
+  to_status_name: string | null;
+  requested_by: string | null;
+}

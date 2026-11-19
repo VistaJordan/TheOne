@@ -486,9 +486,39 @@ asking the status permission — a dispatcher in request mode included (Elise,
 **Assessment Sched → On Site (Job)** directly from the status menu (the route
 reads the current status); every other move still asks a manager. Both still run the gates and the Ecotrak check. A refusal never
 undoes the check-in: the reply's `status_move` carries the reason and the
-CICO card prints it. Correcting a stamp or checking out moves nothing; since
+CICO card prints it. Correcting a stamp moves nothing; since
 M8 typing a check-in time on a planned visit IS a check-in (the status is
 read off the stamps, `nextVisitStamps`).
+
+**Check-in / check-out requests and the four check-outs** (migration 0157,
+Elise 2026-11-18; vocabulary at the foot of shared `visitStatus.ts`,
+`tests/cico-requests.test.ts`). "Checked out" became **Check out -
+Completed / Quote / Return / Parts** (`wo_visit.checkout_outcome`,
+`CHECK_OUT_OUTCOMES`; `return_trip_needed` = outcome `return`; a new
+check-out without one is 400 `VISIT_OUTCOME_REQUIRED`), and a check-out moves
+the work order (`moveAfterCheckOut`, `CHECK_OUT_STATUS_NAME`): Done /
+Incurred, Waiting for Quote, Return Trip Needed, Waiting for Parts; changing
+the outcome afterwards moves nothing. **This replaces the 2026-11-15 "no
+request" rule above for the people in request mode** (`isStatusRequestMode`):
+their check-in and check-out are requests. `createVisit` / `updateVisit` ask
+`visitRequestPlan` (approvals.ts) first — Managers only statuses, the gates
+(`assertCheckOutGate`: the Done gate's visit check counts the check-out being
+asked), Ecotrak, the portal's steps, one check-in at a time — then save the
+rest of the patch with the visit unstamped (a new visit is logged planned)
+and `raiseVisitRequest` files a `status_change` task whose `detail.visit`
+(`VisitRequestDetail`) holds the action, the stamps asked for and the
+outcome (to = from when the work order is already there). So it rides
+Approvals › Status change, the header chip (`visit_label`, `moves`), Hold,
+Withdraw and Understood unchanged. `decide` re-asks the plan, then after the
+commit `applyVisitRequest` stamps the visit with the requested times, signed
+by the requester (the `visit_updated` row is the approver's), then
+`changeStatus` moves it. One open status request per work order, so while a
+visit request waits nothing replaces it (409 `VISIT_REQUEST_PENDING`, also on
+`requestStatusChange`); reconcile cancels one whose visit was deleted or
+moved another way, never by the status. Each visit carries
+`pending_request`; the card draws "… requested · waiting for a manager",
+locks the row's select and reads **Request check-in** / Request Check out - …
+for them. The Assessment Sched → On Site (Job) direct status move stays.
 
 **Reassignment lock** (rule 8.5.4, migration 0039) is one permission, not
 code: OM / OM Under Probation / Senior OM are view-only on

@@ -51,6 +51,7 @@ import {
   approvalSectionOf,
   approvalSectionPermKey,
   checkEcotrakTransition,
+  visitRequestLabel,
   describeEcotrakRefusal,
   describeIntakeGate,
   ecotrakTransitionRefused,
@@ -1713,12 +1714,22 @@ function InboxRow(props: RowProps) {
         const mv = d.item.detail as Partial<StatusChangeDetail>;
         const verdict = row.open ? checkEcotrakTransition(d.item.wo_ecotrak_status, mv.to_status_name ?? '') : null;
         const note = verdict && ecotrakTransitionRefused(verdict) ? describeEcotrakRefusal(verdict) : null;
+        // 2026-11-18 · a check-in / check-out request names its visit; one
+        // that moves no status says the work order stays where it is.
+        const stays = Boolean(mv.visit) && mv.to_status_id === mv.from_status_id;
         return (
           <td key={k}>
+            {mv.visit && <b className="apq-visit">{visitRequestLabel(mv.visit)}</b>}
             <span className="apq-move">
-              <span>{mv.from_status_name ?? '?'}</span>
-              <span className="apq-arrow" aria-hidden="true">→</span>
-              <b>{mv.to_status_name ?? '?'}</b>
+              {stays ? (
+                <span>Stays in {mv.from_status_name ?? '?'}</span>
+              ) : (
+                <>
+                  <span>{mv.from_status_name ?? '?'}</span>
+                  <span className="apq-arrow" aria-hidden="true">→</span>
+                  <b>{mv.to_status_name ?? '?'}</b>
+                </>
+              )}
               {note && (
                 <span className="status-menu-ecotrak" title={note} aria-label={note}>Ecotrak</span>
               )}

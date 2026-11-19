@@ -6,6 +6,7 @@
 import { isNteSynced } from './nteSync.js';
 import { query, withTransaction } from '../db.js';
 import type {
+  StatusChangeDetail,
   WorkOrderListItem,
   WorkOrderListResponse,
   WorkOrderDetail,
@@ -36,6 +37,7 @@ import { woScopeSql } from './woScope.js';
 import { computeMoney } from './money.js';
 import { getBindableQuoteTotal } from './quotes.js';
 import { assertStatusGate } from './statusGates.js';
+import { visitRequestLabel } from '@theone/shared';
 import { assertStatusOrder } from './statusOrder.js';
 import { intakeMissingFor } from './intakeGate.js';
 import { obligationsReady, worstObligationsByTask, evaluateForTask } from './obligations.js';
@@ -593,7 +595,7 @@ async function pendingStatusChange(taskId: string): Promise<StatusChangeState | 
   const res = await query<{
     id: string;
     status: 'open' | 'approved' | 'rejected';
-    detail: { to_status_id?: string; to_status_name?: string } | null;
+    detail: Partial<StatusChangeDetail> | null;
     to_id: string | null;
     to_name: string | null;
     to_group: StatusRef['group'] | null;
@@ -631,6 +633,7 @@ async function pendingStatusChange(taskId: string): Promise<StatusChangeState | 
   );
   const r = res.rows[0];
   if (!r) return null;
+  const visitAsk = r.detail?.visit;
   return {
     approval_task_id: r.id,
     status: r.status,
@@ -649,6 +652,8 @@ async function pendingStatusChange(taskId: string): Promise<StatusChangeState | 
       r.status === 'open' && r.held_at
         ? { by: r.hb_id ? { id: r.hb_id, display_name: r.hb_name ?? '' } : null, at: r.held_at, note: r.hold_note }
         : null,
+    visit_label: visitAsk ? visitRequestLabel(visitAsk) : null,
+    moves: !visitAsk || r.detail?.to_status_id !== r.detail?.from_status_id,
   };
 }
 

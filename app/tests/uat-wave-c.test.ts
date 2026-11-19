@@ -307,7 +307,7 @@ describe('M8 · a visit\'s status follows its stamps', () => {
     const visits = src('apps/api/src/services/visits.ts');
     expect(fn(visits, 'export async function createVisit(')).toContain('nextVisitStamps(');
     expect(fn(visits, 'export async function updateVisit(')).toContain('nextVisitStamps(');
-    expect(fn(visits, 'export async function updateVisit(')).toContain("const checkedInNow = next.status === 'checked_in' && cur.status !== 'checked_in';");
+    expect(fn(visits, 'export async function updateVisit(')).toContain("const checkInNow = stamps.status === 'checked_in' && cur.status !== 'checked_in';");
   });
 });
 

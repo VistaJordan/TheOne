@@ -87,6 +87,7 @@
 .ct .apq-move { display: inline-flex; align-items: center; gap: 6px; }
 .ct .apq-move .apq-arrow { color: var(--accent); font-weight: 700; }
 .ct .apq-move b { font-weight: 600; }
+.ct .apq-visit { display: block; font-weight: 600; margin-bottom: 2px; }
 
 /* ── The request chip on the work-order header ──────────────────────────────
    Sits beside the status pill: open = warn, approved = accent, rejected =

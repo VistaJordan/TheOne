@@ -120,7 +120,9 @@ describe('where it is asked', () => {
     expect(wo).toMatch(/if \(!auto && source !== 'quote' && source !== 'reopen'\) \{\s*await assertStatusOrder\(tx, task_id, newStatusName, currentStatusName\);/);
   });
   it('a status request and its approval', () => {
-    expect(appr.match(/await assertStatusOrder\(\{ query \}/g)?.length).toBe(2);
+    // requestStatusChange, decide, and visitRequestPlan (a check-in / check-out
+    // request, asked when sent and again when approved — 2026-11-18).
+    expect(appr.match(/await assertStatusOrder\(\{ query \}/g)?.length).toBe(3);
   });
   it('bulk edit and Cancel', () => {
     expect(bulk).toContain('checkStatusOrder(');

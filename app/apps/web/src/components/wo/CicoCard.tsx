@@ -22,8 +22,13 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
+  CHECK_OUT_OUTCOMES,
+  CHECK_OUT_OUTCOME_LABEL,
+  CHECK_OUT_OUTCOME_SHORT,
+  CHECK_OUT_STATUS_NAME,
   CICO_SECTION_SLUG,
   DEFAULT_VISIT_TYPES,
+  STATUS_PERM_KEY,
   QUOTE_DUE_KEY,
   SIGNOFF_FIELD_KEY,
   VISIT_HIDDEN_KEYS,
@@ -33,6 +38,7 @@ import {
   usPhoneInputValue,
   usPhoneProblem,
   type ActivityEntry,
+  type CheckOutOutcome,
   type VisitInput,
   type WoVisitResponse,
   type VisitStatus,
@@ -65,22 +71,46 @@ const HIDDEN = new Set(VISIT_HIDDEN_KEYS.map((k) => `fields.${k}`));
 const VISIT_TYPE_KEY = `fields.${VISIT_MIRROR_KEYS.visitType}`;
 const FOLD_PREF = 'wo.cico.collapsed';
 
-/** The status select's vocabulary: three states, the last one twice because
-    "checked out, but somebody has to go back" is its own outcome. */
-const STATUS_OPTIONS: { value: string; label: string }[] = [
+/** The status select's vocabulary (2026-11-18, Elise): not checked in,
+    checked in, and four ways to check out — each moves the work order to its
+    own status (CHECK_OUT_STATUS_NAME). A visit checked out before 0157 with no
+    outcome reads plain "Checked out", offered only while it is the value. */
+const STATUS_OPTIONS: { value: string; label: string; title?: string }[] = [
   { value: 'planned', label: 'Not checked in' },
   { value: 'checked_in', label: 'Checked in' },
-  { value: 'checked_out', label: 'Checked out' },
-  { value: 'checked_out:rtn', label: 'Checked out · return trip needed' },
+  ...CHECK_OUT_OUTCOMES.map((o) => ({
+    value: `checked_out:${o}`,
+    label: CHECK_OUT_OUTCOME_LABEL[o],
+    title: `Moves the work order to ${CHECK_OUT_STATUS_NAME[o]}`,
+  })),
 ];
+const LEGACY_CHECKED_OUT: { value: string; label: string; title?: string } = { value: 'checked_out', label: 'Checked out' };
 
 function statusValueOf(v: WoVisit): string {
-  return v.status === 'checked_out' && v.return_trip_needed ? 'checked_out:rtn' : v.status;
+  if (v.status !== 'checked_out') return v.status;
+  if (v.checkout_outcome) return `checked_out:${v.checkout_outcome}`;
+  return v.return_trip_needed ? 'checked_out:return' : 'checked_out';
 }
 
 function patchForStatus(value: string): VisitInput {
-  if (value === 'checked_out:rtn') return { status: 'checked_out', return_trip_needed: true };
-  return { status: value as VisitStatus, return_trip_needed: false };
+  if (value.startsWith('checked_out:')) {
+    return { status: 'checked_out', checkout_outcome: value.slice('checked_out:'.length) as CheckOutOutcome };
+  }
+  return { status: value as VisitStatus };
+}
+
+/** What an option reads for someone who requests check-ins / check-outs. */
+function optionLabel(o: { value: string; label: string }, v: WoVisit, requestMode: boolean): string {
+  if (!requestMode) return o.label;
+  if (v.status === 'planned' && o.value === 'checked_in') return 'Request check-in';
+  if (v.status !== 'checked_out' && o.value.startsWith('checked_out:')) return `Request ${o.label}`;
+  return o.label;
+}
+
+/** '15 Jul 09:02' of a stamp, for the request chip. */
+function shortTime(iso: string | null): string {
+  const p = stampParts(iso);
+  return p ? `${p.day} ${p.hm}` : '';
 }
 
 // ── Time helpers ─────────────────────────────────────────────────────────────
@@ -333,6 +363,10 @@ function VisitLog({
   const qc = useQueryClient();
   const { can } = useAuth();
   const canAdmin = can('admin/fields', 'view');
+  // 2026-11-18 (Elise) · whoever requests status changes requests the
+  // check-in and the check-out too; a manager approves them under Approvals.
+  const requestMode = can(STATUS_PERM_KEY, 'create') && !can(STATUS_PERM_KEY, 'edit');
+  const pendingVisit = visits.find((v) => v.pending_request) ?? null;
 
   // A running "on site" figure ticks while somebody is checked in.
   const [now, setNow] = useState(() => Date.now());
@@ -357,14 +391,19 @@ function VisitLog({
   const [moveNote, setMoveNote] = useState<string | null>(null);
   const noteMove = (res: WoVisitResponse) => {
     const m = res.status_move;
-    // UAT Wave C (#15): someone who requests status changes raises a request
-    // to On Site on check-in; the card says so, and the manager decides.
+    // 2026-11-18: a check-in / check-out request was sent; the visit changes
+    // once a manager approves it.
     if (m?.requested) {
-      setMoveNote(`Checked in. A request to move the work order to ${m.status} was sent to a manager.`);
+      const what = res.item.pending_request?.action === 'check_out' ? 'Check-out' : 'Check-in';
+      setMoveNote(
+        `${what} request sent to a manager.${m.status ? ` Once approved, the work order moves to ${m.status}.` : ''}`,
+      );
       void qc.invalidateQueries({ queryKey: ['approval-counts'] });
+      void qc.invalidateQueries({ queryKey: ['approvals'] });
       return;
     }
-    setMoveNote(m && !m.moved && m.reason ? `Checked in, but the status stayed put: ${m.reason}` : null);
+    const verb = res.item.status === 'checked_out' ? 'Checked out' : 'Checked in';
+    setMoveNote(m && !m.moved && m.reason ? `${verb}, but the status stayed put: ${m.reason}` : null);
   };
 
   const invalidate = (opts?: { deleted?: boolean }) => {
@@ -466,6 +505,8 @@ function VisitLog({
               busy={busy}
               visitTypes={visitTypes}
               checkInBlocked={openVisit !== null && openVisit.id !== v.id}
+              requestMode={requestMode}
+              otherPending={pendingVisit !== null && pendingVisit.id !== v.id}
               onPatch={(input) => update.mutate({ id: v.id, input })}
               onDelete={() => remove.mutate(v.id)}
             />
@@ -486,6 +527,7 @@ function VisitLog({
             defaultDetail={defaultDetail}
             defaultPortal={defaultPortal}
             busy={create.isPending}
+            requestMode={requestMode}
             onCancel={() => { setComposing(false); setError(null); }}
             onSubmit={(input) => create.mutate(input)}
           />
@@ -495,13 +537,14 @@ function VisitLog({
               type="button"
               className="btn btn-sm"
               onClick={() => setComposing(true)}
-              disabled={busy || openVisit !== null}
-              title={checkInBlockedText ?? undefined}
+              disabled={busy || openVisit !== null || (requestMode && pendingVisit !== null)}
+              title={checkInBlockedText ?? (requestMode && pendingVisit ? PENDING_HINT : undefined)}
             >
               <Icon name="plus" size={14} />
               New visit
             </button>
             {checkInBlockedText && <span className="cv-hint">{checkInBlockedText}.</span>}
+            {!checkInBlockedText && requestMode && pendingVisit && <span className="cv-hint">{PENDING_HINT}.</span>}
             {(client || fm) && !defaultMethod && (
               <span className="cv-hint">
                 No check-in method on file for{' '}
@@ -518,6 +561,8 @@ function VisitLog({
   );
 }
 
+const PENDING_HINT = 'A check-in / check-out request is waiting for a manager';
+
 // ── One visit ────────────────────────────────────────────────────────────────
 
 interface VisitRowProps {
@@ -528,11 +573,21 @@ interface VisitRowProps {
   visitTypes: string[];
   /** Another visit is still checked in: this one cannot check in yet. */
   checkInBlocked?: boolean;
+  /** 2026-11-18 · this person requests check-ins / check-outs. */
+  requestMode?: boolean;
+  /** Another visit's request is waiting: a new one would replace it. */
+  otherPending?: boolean;
   onPatch: (input: VisitInput) => void;
   onDelete: () => void;
 }
 
-function VisitRow({ v, now, canEdit, busy, visitTypes, checkInBlocked = false, onPatch, onDelete }: VisitRowProps) {
+function VisitRow({
+  v, now, canEdit, busy, visitTypes, checkInBlocked = false, requestMode = false, otherPending = false, onPatch, onDelete,
+}: VisitRowProps) {
+  const pending = v.pending_request;
+  // A pending request holds the status select: the visit moves when a
+  // manager decides (Withdraw is on the header chip).
+  const statusLocked = Boolean(pending) || (requestMode && otherPending);
   // 0064 · where the check-in happened, against the site's boundary — drawn
   // once the visit has a check-in to place.
   const locatable = v.status !== 'planned';
@@ -600,8 +655,19 @@ function VisitRow({ v, now, canEdit, busy, visitTypes, checkInBlocked = false, o
               {v.method_detail && <span className="cv-detail">{v.method_detail}</span>}
               {done && (v.return_trip_needed
                 ? <span className="chip chip-danger">Return trip needed</span>
-                : <span className="chip chip-ok">Completed</span>)}
-              {v.status === 'planned' && <span className="chip chip-outline">Not checked in</span>}
+                : <span className="chip chip-ok">{v.checkout_outcome ? CHECK_OUT_OUTCOME_SHORT[v.checkout_outcome] : 'Completed'}</span>)}
+              {v.status === 'planned' && !pending && <span className="chip chip-outline">Not checked in</span>}
+              {pending && (
+                <span className="chip chip-warn" title={pending.requested_by ? `Asked by ${pending.requested_by}` : undefined}>
+                  <Icon name="clock" size={12} />
+                  {pending.action === 'check_in'
+                    ? 'Check-in requested'
+                    : `${pending.outcome ? CHECK_OUT_OUTCOME_LABEL[pending.outcome] : 'Check-out'} requested`}
+                  {pending.at ? ` · ${shortTime(pending.at)}` : ''}
+                  {pending.to_status_name ? ` → ${pending.to_status_name}` : ''}
+                  {' · waiting for a manager'}
+                </span>
+              )}
             </div>
           </>
         )}
@@ -628,17 +694,22 @@ function VisitRow({ v, now, canEdit, busy, visitTypes, checkInBlocked = false, o
           <select
             className="fld cv-status"
             value={statusValueOf(v)}
-            disabled={busy}
+            disabled={busy || statusLocked}
+            title={pending ? 'Waiting for a manager to decide the request' : statusLocked ? PENDING_HINT : undefined}
             aria-label={`Status of visit ${v.seq}`}
             onChange={(e) => onPatch(patchForStatus(e.target.value))}
           >
-            {STATUS_OPTIONS.map((o) => (
+            {(statusValueOf(v) === LEGACY_CHECKED_OUT.value ? [...STATUS_OPTIONS, LEGACY_CHECKED_OUT] : STATUS_OPTIONS).map((o) => (
               <option
                 key={o.value}
                 value={o.value}
-                disabled={checkInBlocked && o.value === 'checked_in' && statusValueOf(v) !== 'checked_in'}
+                title={o.title}
+                disabled={
+                  (checkInBlocked && o.value === 'checked_in' && statusValueOf(v) !== 'checked_in') ||
+                  (o.value === LEGACY_CHECKED_OUT.value && statusValueOf(v) !== o.value)
+                }
               >
-                {o.label}
+                {optionLabel(o, v, requestMode)}
               </option>
             ))}
           </select>
@@ -730,6 +801,10 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
   const [vendorId, setVendorId] = useState<string | null | undefined>(undefined);
   const [inAt, setInAt] = useState(toLocalInput(v.checked_in_at));
   const [outAt, setOutAt] = useState(toLocalInput(v.checked_out_at));
+  // 2026-11-18 · typing a check-out time on a visit not yet out IS a
+  // check-out, so it says how the visit ended.
+  const [outcome, setOutcome] = useState<CheckOutOutcome | ''>('');
+  const checkingOut = v.status !== 'checked_out' && outAt.trim() !== '';
 
   const types = visitTypes.includes(v.visit_type) ? visitTypes : [v.visit_type, ...visitTypes];
 
@@ -744,6 +819,10 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
     if (vendorId !== undefined) input.vendor_id = vendorId;
     if (inAt !== toLocalInput(v.checked_in_at)) input.checked_in_at = fromLocalInput(inAt);
     if (outAt !== toLocalInput(v.checked_out_at)) input.checked_out_at = fromLocalInput(outAt);
+    if (checkingOut) {
+      if (!outcome) return;
+      input.checkout_outcome = outcome;
+    }
     if (Object.keys(input).length === 0) { onCancel(); return; }
     onSave(input);
   };
@@ -786,6 +865,22 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
           <span className="lbl">Checked out</span>
           <input className="fld" type="datetime-local" step={1} value={outAt} onChange={(e) => setOutAt(e.target.value)} disabled={busy} />
         </label>
+        {checkingOut && (
+          <label className="field">
+            <span className={`lbl${!outcome ? ' is-missing' : ''}`}>How did the visit end?</span>
+            <select
+              className="fld"
+              value={outcome}
+              onChange={(e) => setOutcome(e.target.value as CheckOutOutcome | '')}
+              disabled={busy}
+            >
+              <option value="">Pick one…</option>
+              {CHECK_OUT_OUTCOMES.map((o) => (
+                <option key={o} value={o}>{CHECK_OUT_OUTCOME_LABEL[o]} → {CHECK_OUT_STATUS_NAME[o]}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       <div className="cv-form-foot">
         <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
@@ -801,7 +896,7 @@ function VisitEditForm({ v, visitTypes, busy, onCancel, onSave }: {
 
 // ── Logging a new visit ──────────────────────────────────────────────────────
 
-function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDetail, defaultPortal, busy, onCancel, onSubmit }: {
+function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDetail, defaultPortal, busy, requestMode = false, onCancel, onSubmit }: {
   woId: string;
   visitTypes: string[];
   defaultFrom: string | null;
@@ -809,6 +904,7 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
   defaultDetail: string | null;
   defaultPortal: string | null;
   busy: boolean;
+  requestMode?: boolean;
   onCancel: () => void;
   onSubmit: (input: VisitInput) => void;
 }) {
@@ -879,7 +975,7 @@ function VisitComposer({ woId, visitTypes, defaultFrom, defaultMethod, defaultDe
       <div className="cv-form-foot">
         <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
           <Icon name="plus" size={14} />
-          Check in
+          {requestMode ? 'Request check-in' : 'Check in'}
         </button>
         <button type="button" className="btn btn-sm" onClick={onCancel} disabled={busy}>Cancel</button>
         {touched && !type && <span className="cv-hint">Pick the visit type first.</span>}

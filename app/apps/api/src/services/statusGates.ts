@@ -224,6 +224,30 @@ export async function assertStatusGate(
   }
 }
 
+/**
+ * 2026-11-18 (Elise) · a check-out request is asked what a status request for
+ * its target is asked — except the Done gate's "a visit that checked in and
+ * out", which the check-out being requested is: it is stamped the moment the
+ * request is approved, before the move. Same 409 as assertStatusGate.
+ */
+export async function assertCheckOutGate(q: Queryable, taskId: string, targetStatusName: string): Promise<void> {
+  const blocked = await statusGateBlocker(q, taskId, targetStatusName);
+  if (!blocked) return;
+  let message = blocked.message;
+  let missing = blocked.missing;
+  if (blocked.gate === 'done' && missing) {
+    missing = missing.filter((m) => m !== 'visit');
+    if (missing.length === 0) return;
+    message = describeStatusGate('done', targetStatusName, missing);
+  }
+  throw new ApiError('CONFLICT', message, {
+    code: STATUS_GATE_ERROR_CODE,
+    gate: blocked.gate,
+    status: targetStatusName,
+    ...(missing ? { missing } : {}),
+  });
+}
+
 // ── M3 (Wave C) · a gated status holds its field ─────────────────────────────
 
 /** 409 STATUS_GATE (`details.held = true`) when the write would empty what

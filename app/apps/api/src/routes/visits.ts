@@ -43,6 +43,8 @@ const visitBodySchema = z.object({
   method_portal: z.string().max(80).nullable().optional(),
   checked_in_at: z.string().max(40).nullable().optional(),
   checked_out_at: z.string().max(40).nullable().optional(),
+  /** 0157 · how the visit ended; required with a new check-out. */
+  checkout_outcome: z.enum(['completed', 'quote', 'return', 'parts']).nullable().optional(),
   /** 0057 · the vendor record the technician was picked from; null = typed by
       hand. Not a visit column the service writes — see linkVisitVendor. */
   vendor_id: z.string().uuid().nullable().optional(),
