@@ -393,6 +393,13 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
   // Embedded in the Quotes tab, switching tabs unmounts the builder before the
   // autosave fires: send what is pending on the way out.
+  // 2026-11-19 (Elise): on the work order's Quote tab the autosave chip sits
+  // beside the tab strip (after All fields). A hook, so it sits here, above
+  // the loading / error returns: below them it crashed the page.
+  const [autosaveSlot, setAutosaveSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setAutosaveSlot(embedded ? document.getElementById(WO_TABS_ASIDE_ID) : null);
+  }, [embedded]);
   const pendingRef = useRef<DraftQuote | null>(null);
   pendingRef.current = draft && editable && dirty ? draft : null;
   useEffect(() => {
@@ -875,10 +882,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
   // Import transcript, Templates, Reset quote and the autosave chip.
   // 2026-11-19 (Elise): on the work order's Quote tab the autosave chip sits
   // beside the tab strip (after All fields), so the header row has room.
-  const [autosaveSlot, setAutosaveSlot] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    setAutosaveSlot(embedded ? document.getElementById(WO_TABS_ASIDE_ID) : null);
-  }, [embedded]);
   const autosaveChip = (
     <AutosaveChip
       editable={editable}
