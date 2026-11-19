@@ -1150,6 +1150,7 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     nte_override_open: nteOverride !== null,
     wo_actions: snap.actions,
     labor_rate: laborRate,
+    rate_change_request: await (await import('./quoteRateChange.js')).openRateChange(taskId),
   };
 }
 
@@ -1774,7 +1775,7 @@ async function assertCardRatesKept(
     if (expected == null || Math.round(Number(l.rate) * 100) === Math.round(expected * 100)) continue;
     if (kept.has(key(l.line_type, l.description ?? '', Number(l.rate)))) continue;
     throw badRequest(
-      `“${(l.description ?? '').trim() || 'This line'}” bills at the price list’s ${money(expected)}. Ask an admin to change the rate.`,
+      `“${(l.description ?? '').trim() || 'This line'}” bills at the price list’s ${money(expected)}. Use Request rate change to ask a manager.`,
       { code: QUOTE_RATE_LOCKED_CODE, expected, description: l.description },
     );
   }

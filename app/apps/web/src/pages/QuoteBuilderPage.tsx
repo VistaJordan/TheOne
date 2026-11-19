@@ -57,6 +57,7 @@ import {
 import { AppShell } from '../components/AppShell';
 import { NteIncreaseButton } from '../components/quote/NteIncreaseButton';
 import { QuoteHistoryButton } from '../components/quote/QuoteHistoryButton';
+import { RateChangeButton } from '../components/quote/RateChangeButton';
 import { useAuth } from '../auth/AuthProvider';
 import { CopyButton } from '../components/CopyButton';
 import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
@@ -889,6 +890,17 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       )}
       {/* 2026-11-19 · every saved version of the quote, with its date. */}
       <QuoteHistoryButton quote={quote} wo={woQuery.data} tpl={printTpl} />
+      {/* 2026-11-19 · a dispatcher asks a manager for another price-list rate. */}
+      {editable && quote.permissions.card_rates_locked === true && (
+        <RateChangeButton
+          quote={quote}
+          beforeOpen={() => flushThen(async () => {
+            const res = await getWorkOrderQuote(woNumber);
+            if (!res.quote) throw new Error('The quote could not be read');
+            return { quote: res.quote };
+          })}
+        />
+      )}
       {editable && (
         <button
           type="button"

@@ -259,6 +259,24 @@ function describe(e: ActivityEntry, byKey: Map<string, WoFieldDescriptor>): Reac
       return <>approved the quote<QuoteKept after={e.after} /></>;
     case 'quote_rejected':
       return <>rejected the quote</>;
+    case 'quote_rate_changed': {
+      // 2026-11-19 · a dispatcher's Request rate change, approved.
+      const a = (e.after ?? {}) as { lines?: Array<{ description?: string; from?: number; to?: number }>; requested_by?: string | null };
+      const ls = Array.isArray(a.lines) ? a.lines : [];
+      const usdOf = (n: unknown) => (typeof n === 'number' ? n.toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : '—');
+      return (
+        <>
+          changed the quote&rsquo;s rate{ls.length === 1 ? '' : 's'}
+          {ls.map((l, i) => (
+            <span key={i}>
+              {i === 0 ? ': ' : '; '}
+              {l.description || 'a line'} <Val>{usdOf(l.from)}</Val> → <Val>{usdOf(l.to)}</Val>
+            </span>
+          ))}
+          {a.requested_by ? <> · requested by {a.requested_by}</> : null}
+        </>
+      );
+    }
     case 'payment_requested':
       return e.after?.auto_approved === true ? (
         <>requested a technician payment — approved as requested (the requester may approve this amount)</>

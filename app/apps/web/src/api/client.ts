@@ -878,6 +878,17 @@ export async function getWorkOrderQuote(idOrNumber: string): Promise<QuoteEnvelo
   }
 }
 
+/** POST /api/work-orders/:id/quote/rate-change — ask a manager for another
+    rate on price-list lines (2026-11-19); 201 new, 200 replaced. */
+export const requestRateChange = (
+  idOrNumber: string,
+  body: { lines: Array<{ line_id: string; requested_rate: number }>; reason: string },
+) =>
+  request<{ approval_task_id: string; created: boolean }>(quotePath(idOrNumber, '/rate-change'), {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
 /** GET /api/work-orders/:id/quote/history — every saved version, newest first (2026-11-19). */
 export const getQuoteHistory = (idOrNumber: string) => request<QuoteHistoryResponse>(quotePath(idOrNumber, '/history'));
 

@@ -187,6 +187,31 @@ export function quoteCardRate(
 
 export const QUOTE_RATE_LOCKED_CODE = 'QUOTE_RATE_LOCKED';
 
+/** Elise, 2026-11-19 · a dispatcher asks a manager for a different rate on a
+    price-list line: a `rate_change` approval task (Approvals › Manager
+    reviews). Approving it writes the asked rates onto the lines. */
+export interface RateChangeLine {
+  line_id: string;
+  line_type: string;
+  description: string;
+  /** Incurred or Proposed. */
+  section: string;
+  current_rate: number;
+  requested_rate: number;
+}
+
+export interface RateChangeRequestDetail {
+  quote_id: string;
+  quote_number: string | null;
+  lines: RateChangeLine[];
+  reason: string;
+}
+
+export const RATE_CHANGE_STALE_CODE = 'RATE_CHANGE_STALE';
+
+/** The locked price's hint, and the refusal's last sentence. */
+export const RATE_CHANGE_HINT = 'Set by the price list — use Request rate change to ask a manager';
+
 /** True when this person may not change a rate the price list sets. */
 export function cardRatesLockedFor(role: string | null | undefined, isSuperAdmin: boolean): boolean {
   return !isSuperAdmin && isDispatcherRole(role);

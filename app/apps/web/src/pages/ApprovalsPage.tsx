@@ -399,7 +399,7 @@ function nteNumbers(item: ApprovalListItem): string | null {
 /** Elise, 2026-10-28: the requester's reason on a money hold raised by a
     payment that goes past the NTE or the approved quote. */
 function holdReason(item: ApprovalListItem): string | null {
-  if (item.type !== 'nte_override' && item.type !== 'over_quote') return null;
+  if (item.type !== 'nte_override' && item.type !== 'over_quote' && item.type !== 'rate_change') return null;
   const r = (item.detail as { reason?: unknown }).reason;
   return typeof r === 'string' && r.trim() !== '' ? r.trim() : null;
 }
@@ -1327,6 +1327,8 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
                       ? 'Reject this work order'
                       : pending.row.data.item.type === 'snooze_request'
                         ? 'Reject this snooze request'
+                      : pending.row.data.item.type === 'rate_change'
+                        ? 'Reject this rate change'
                         : 'Reject this task'
           }
           facts={facts(pending.row)}
@@ -1562,6 +1564,14 @@ function Ask({ row }: { row: Row }) {
             </small>
           )}
           {d.item.type === 'over_quote' && row.open && <small>ATL and above decide this</small>}
+          {d.item.type === 'rate_change' && (
+            <small>
+              {((d.item.detail as { lines?: Array<{ description?: string; current_rate?: number; requested_rate?: number }> }).lines ?? [])
+                .map((l) => `${l.description || 'Line'} ${usd(l.current_rate ?? 0)} → ${usd(l.requested_rate ?? 0)}`)
+                .join(' · ')}
+              {row.open ? ' · approving writes these rates onto the quote' : ''}
+            </small>
+          )}
         </div>
       );
     }

@@ -1148,6 +1148,8 @@ export interface Quote {
   /** The WO-status gate, same shape as WorkOrderDetail.actions. */
   wo_actions: WoActionMap;
   labor_rate: LaborRate | null;
+  /** 2026-11-19 · the open Request rate change on this quote, if any. */
+  rate_change_request?: { id: string; created_at: string; lines: number } | null;
   /** UAT Wave C (M5): on the reply to Send / client approve / client
       decline — the work-order status the event moved to, or why it did not
       (the quote action stands either way). Absent on every other read. */
@@ -1592,7 +1594,10 @@ export type ApprovalTaskType =
   | 'bill_over_owed'
   // Elise, 2026-10-22: a Pulse snooze asked for by someone who may not
   // snooze directly (no `approvals/snooze` approve). Applied by the approval.
-  | 'snooze_request';
+  | 'snooze_request'
+  // Elise, 2026-11-19: a dispatcher asks for another rate on a price-list
+  // quote line (Manager reviews). Applied by the approval.
+  | 'rate_change';
 
 export type ApprovalTaskStatus = 'open' | 'approved' | 'rejected' | 'cancelled';
 
@@ -1703,6 +1708,7 @@ export const APPROVAL_TASK_LABEL: Record<ApprovalTaskType, string> = {
   over_quote: 'Over the approved quote',
   bill_over_owed: 'Vendor bill over what is owed',
   snooze_request: 'Snooze request',
+  rate_change: 'Rate change',
 };
 
 // ── Pending acceptance (rules 7.1.1 – 7.1.4) ─────────────────────────────────

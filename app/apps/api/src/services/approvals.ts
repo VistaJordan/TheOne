@@ -63,6 +63,8 @@ import {
   onSiteStatusNameForVisitType,
   visitRequestLabel,
   type SnoozeRequestDetail,
+  type RateChangeRequestDetail,
+  RATE_CHANGE_STALE_CODE,
   type VisitRequestDetail,
 } from '@theone/shared';
 import { ApiError, badRequest, conflict, forbidden } from '../errors.js';
@@ -90,6 +92,8 @@ const TYPES = new Set<string>([
   // Elise, 2026-10-22: a Pulse snooze asked for by someone who may not
   // snooze directly (obligations.requestSnooze); never by a rule.
   'snooze_request',
+  // Elise, 2026-11-19: a rate asked for on a quote line (quoteRateChange.ts).
+  'rate_change',
 ]);
 const STATUSES: ApprovalTaskStatus[] = ['open', 'approved', 'rejected', 'cancelled'];
 
@@ -516,7 +520,7 @@ export async function createApprovalTask(
           title,
           JSON.stringify(detail),
           open.rows[0].id,
-          input.type === 'status_change' || input.type === 'snooze_request',
+          input.type === 'status_change' || input.type === 'snooze_request' || input.type === 'rate_change',
           input.actorId,
           input.type === 'status_change' && before.title !== title,
         ],
@@ -718,6 +722,18 @@ async function decide(
   // by evidence, or snoozed directly by a manager — is refused BEFORE the
   // decision commits (409), so an approval never promises a snooze it
   // cannot apply. Reject or withdraw it instead.
+  // Elise, 2026-11-19: a rate change whose quote moved on (submitted, sent)
+  // or lost a line is refused before the decision commits.
+  if (to === 'approved' && cur.type === 'rate_change') {
+    const { rateChangeStale } = await import('./quoteRateChange.js');
+    const stale = await rateChangeStale(cur.task_id, cur.detail as Partial<RateChangeRequestDetail>);
+    if (stale) {
+      throw conflict(`${stale}, so this rate change cannot be applied. Reject it with a note instead.`, {
+        code: RATE_CHANGE_STALE_CODE,
+        approval_task_id: id,
+      });
+    }
+  }
   if (to === 'approved' && cur.type === 'snooze_request') {
     const { snoozeRequestStale } = await import('./obligations.js');
     const stale = await snoozeRequestStale(cur.detail as Partial<SnoozeRequestDetail>);
@@ -847,6 +863,18 @@ async function decide(
   // Elise, 2026-10-22: an approved snooze request IS the snooze — applied
   // after the commit as the manager's act (snoozed_by), with the
   // requester's hours and reason; the obligation_snoozed row names the task.
+  // Elise, 2026-11-19: an approved rate change IS the change — the asked
+  // rates are written onto the quote lines as the manager's act.
+  if (to === 'approved' && cur.type === 'rate_change') {
+    const { applyRateChange } = await import('./quoteRateChange.js');
+    await applyRateChange(
+      cur.task_id,
+      cur.detail as Partial<RateChangeRequestDetail>,
+      id,
+      actor.id,
+      cur.created_by?.display_name ?? null,
+    );
+  }
   if (to === 'approved' && cur.type === 'snooze_request') {
     const { applySnoozeFromRequest } = await import('./obligations.js');
     await applySnoozeFromRequest(
@@ -1703,7 +1731,7 @@ export async function withdrawApprovalTask(id: string, actor: ActingPrincipal): 
  */
 export async function approvalCounts(viewer: ActingPrincipal): Promise<ApprovalCounts> {
   const allow = allowFor(viewer);
-  const decideTypes = (['wo_acceptance', 'nte_override', 'over_quote', 'bill_over_owed', 'status_change', 'snooze_request', 'manager_review'] as ApprovalTaskType[]).filter(
+  const decideTypes = (['wo_acceptance', 'nte_override', 'over_quote', 'bill_over_owed', 'status_change', 'snooze_request', 'rate_change', 'manager_review'] as ApprovalTaskType[]).filter(
     (t) => allow(approvalSectionPermKey(approvalSectionOf(t)), 'approve'),
   );
   const p = new Params();

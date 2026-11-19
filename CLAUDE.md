@@ -4240,6 +4240,26 @@ Description gets the reason. A work order whose Late Quote field was ever
 written (by the sweep or a person) is never touched again, so a manager's
 removal sticks.
 
+**Request rate change** (Elise, 2026-11-19, no migration;
+`services/quoteRateChange.ts`, `POST /work-orders/:id/quote/rate-change`
+(`quotes` edit), `RateChangeRequestDetail` / `RATE_CHANGE_HINT` in shared
+`quoteDefaults.ts`, `components/quote/RateChangeButton.tsx`). The way out of the
+2026-11-16 price-list lock: a dispatcher (`card_rates_locked`) on a quote still
+being written (draft / pending correction) asks for another rate on the lines
+the card prices, with a reason (≥ 5). It is an `approval_task` of type
+`rate_change` (one open per work order; a repeat replaces it), in Approvals ›
+**Manager reviews** (`approvals/reviews` approve — admin, TL, ATL, AM by
+default; on the job like every inbox row since 0144; maker ≠ checker).
+`decide` asks `rateChangeStale` before the approval commits (409
+`RATE_CHANGE_STALE`: the quote moved on, a line was removed), then
+`applyRateChange` writes the rates under the task + quote locks, bumps
+`quote.rev` (an open builder re-seeds instead of saving the card rate back;
+`assertCardRates` then keeps the approved rate as a line on file) and logs
+`quote_rate_changed` (lines from → to, requester, reason). The builder shows
+**Request rate change** in its header tools, or a "Rate change waiting for a
+manager" chip (`Quote.rate_change_request`). The price card is not changed —
+a wrong card is fixed in Prices.
+
 **Quote history** (Elise, 2026-11-19, no migration; `getQuoteHistory` in
 `services/quotes.ts`, `GET /work-orders/:id/quote/history` (`quotes` view),
 `QuoteHistoryEntry` in shared `index.ts`,

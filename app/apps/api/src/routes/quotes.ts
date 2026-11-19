@@ -297,6 +297,22 @@ export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
   lifecycle('retract', retractQuote);
   lifecycle('new-round', startNewRound);
 
+  /** 2026-11-19 · a dispatcher asks a manager for another rate on price-list lines. */
+  app.post('/work-orders/:id/quote/rate-change', async (req, reply) => {
+    const taskId = await taskIdOf(req);
+    const actor = actingPrincipalFromRequest(req);
+    const body = parse(
+      z.object({
+        lines: z.array(z.object({ line_id: z.string().min(1), requested_rate: z.number() })).min(1).max(50),
+        reason: z.string().max(2000),
+      }),
+      req.body,
+    );
+    const { requestRateChange } = await import('../services/quoteRateChange.js');
+    const out = await requestRateChange(taskId, body, actor);
+    return reply.status(out.created ? 201 : 200).send(out);
+  });
+
   app.post('/work-orders/:id/quote/reject', async (req) => {
     const taskId = await taskIdOf(req);
     const { note } = parse(rejectSchema, req.body);

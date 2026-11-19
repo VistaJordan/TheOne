@@ -1111,3 +1111,7 @@
 .qhist-doc-title { flex: 1; min-width: 0; font-size: 14px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qhist-doc { overflow: auto; }
 .qhist-doc .qdoc { box-shadow: none; }
+
+/* Request rate change (2026-11-19). */
+.rate-ask-in { display: inline-flex; width: 130px; margin-left: auto; }
+.rate-ask-sec { color: var(--ink-3); }

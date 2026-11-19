@@ -22,7 +22,7 @@
    its day (renumberLaborLines). */
 
 import { useEffect, useRef } from 'react';
-import { QUOTE_DEFAULT_TRIP_DESCRIPTION, lineTakesOt } from '@theone/shared';
+import { QUOTE_DEFAULT_TRIP_DESCRIPTION, RATE_CHANGE_HINT, lineTakesOt } from '@theone/shared';
 import type { DraftLine } from '../../lib/quoteDraft';
 import { LEGACY_LINE_TYPES, LINE_TYPES, TRIP_LINE_TYPE, blankLine, cardRateFor, fillCardRates, dayChoices, isAutoLaborDescription, moveItem, nextLaborDescription, removeAt, renumberLaborLines, replaceAt } from '../../lib/quoteDraft';
 import { OT_MULTIPLIER, lineAmount, lineErrors, lineFieldId, lineTax, usd } from '../../lib/quoteTotals';
@@ -292,13 +292,12 @@ export function LineItemsTable({
                       className={`fld${errs.rate ? ' is-err' : ''}`}
                       id={lineFieldId(line.key, 'rate')}
                       inputMode="decimal"
-                      placeholder="0.00"
                       aria-label={`${label} line ${n} unit price`}
                       aria-invalid={errs.rate ? true : undefined}
                       aria-describedby={describedBy('rate')}
                       value={line.rate}
                       disabled={!editable || (lockCardRates && cardRateFor(line, rate) != null)}
-                      title={lockCardRates && cardRateFor(line, rate) != null ? 'Set by the price list — ask an admin to change it' : undefined}
+                      title={lockCardRates && cardRateFor(line, rate) != null ? RATE_CHANGE_HINT : undefined}
                       onChange={(e) => set(i, { rate: e.target.value })}
                     />
                   </span>
@@ -314,7 +313,6 @@ export function LineItemsTable({
                   <input
                     className={`fld pct-in${errs.tax_pct ? ' is-err' : ''}`}
                     inputMode="decimal"
-                    placeholder="0"
                     aria-label={`${label} line ${n} tax percent`}
                     aria-invalid={errs.tax_pct ? true : undefined}
                     value={line.tax_pct}
