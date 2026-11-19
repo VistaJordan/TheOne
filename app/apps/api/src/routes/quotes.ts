@@ -27,6 +27,7 @@ import { parse, notFound } from '../errors.js';
 import { resolveTaskId, actingPrincipalFromRequest, type ActingPrincipal } from '../services/activity.js';
 import {
   getQuote,
+  getQuoteHistory,
   listQuotes,
   createQuote,
   updateQuote,
@@ -249,6 +250,14 @@ export default async function quoteRoutes(app: FastifyInstance): Promise<void> {
     const quote = await getQuote(taskId, actor);
     if (!quote) throw notFound('No quote on this work order');
     return { quote };
+  });
+
+  /** Quote history (2026-11-19): every saved version, newest first. */
+  app.get('/work-orders/:id/quote/history', async (req) => {
+    const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'quotes', 'view', 'You cannot view quotes');
+    const taskId = await taskIdOf(req);
+    return { items: await getQuoteHistory(taskId, actor) };
   });
 
   /** The derived sales-tax rate for this WO (Yoda QuoteSalesTax/SalesTaxPercentage). */

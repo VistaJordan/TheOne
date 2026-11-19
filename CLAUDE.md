@@ -4234,6 +4234,21 @@ Description gets the reason. A work order whose Late Quote field was ever
 written (by the sweep or a person) is never touched again, so a manager's
 removal sticks.
 
+**Quote history** (Elise, 2026-11-19, no migration; `getQuoteHistory` in
+`services/quotes.ts`, `GET /work-orders/:id/quote/history` (`quotes` view),
+`QuoteHistoryEntry` in shared `index.ts`,
+`components/quote/QuoteHistoryButton.tsx`). **History** in the builder's
+header tools (the page and the Quote tab) lists every saved version of the
+work order's quote, newest first: date (Chicago), what happened, who, total.
+Nothing new is stored: the versions are the `after.quote` snapshots on the
+submit / submit-for-correction / approve / send activity rows (2026-11-16)
+and the `quote_revision_snapshot` rows (send, client approved, client
+declined; a `sent` row within 2 minutes of a logged send is skipped). Each is
+rebuilt as a `Quote` (the live quote's fields, the version's sections, lines
+re-priced with the API's own arithmetic, totals recomputed; Date = the
+version's day) and a click draws it as the client document (`QuoteDocument`)
+with **PDF** (`QuotePdfButton`, the date added to the file name). Read-only.
+
 ## Verify
 
 ```

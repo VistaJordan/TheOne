@@ -100,7 +100,7 @@ export function QuotePrintPage() {
   );
 }
 
-type WoDetail = Awaited<ReturnType<typeof getWorkOrder>>;
+export type WoDetail = Awaited<ReturnType<typeof getWorkOrder>>;
 
 /** Download PDF (Elise, 2026-11-19): the client's document saved straight
     to a .pdf file, no print dialog. The document is drawn off screen at
@@ -112,6 +112,7 @@ export function QuotePdfButton({
   autoStart = false,
   primary = false,
   small = false,
+  fileSuffix,
 }: {
   quote: Quote;
   wo: WoDetail | undefined;
@@ -119,6 +120,8 @@ export function QuotePdfButton({
   autoStart?: boolean;
   primary?: boolean;
   small?: boolean;
+  /** Added to the file name (a history version's date). */
+  fileSuffix?: string;
 }) {
   const [busy, setBusy] = useState(autoStart);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +135,7 @@ export function QuotePdfButton({
         const el = holder.current?.firstElementChild as HTMLElement | null;
         try {
           if (!el) throw new Error('The document did not draw');
-          await downloadElementAsPdf(el, pdfFileName(quote.number ?? 'Quote', quote.wo_number));
+          await downloadElementAsPdf(el, pdfFileName(quote.number ?? 'Quote', quote.wo_number, fileSuffix));
           if (!cancelled) setError(null);
         } catch (e) {
           if (!cancelled) setError(e instanceof Error ? e.message : 'The PDF could not be made');
@@ -145,7 +148,7 @@ export function QuotePdfButton({
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [busy, quote.number, quote.wo_number]);
+  }, [busy, quote.number, quote.wo_number, fileSuffix]);
   return (
     <>
       <button

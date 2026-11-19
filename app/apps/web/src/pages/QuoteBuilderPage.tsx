@@ -56,6 +56,7 @@ import {
 } from '@theone/shared';
 import { AppShell } from '../components/AppShell';
 import { NteIncreaseButton } from '../components/quote/NteIncreaseButton';
+import { QuoteHistoryButton } from '../components/quote/QuoteHistoryButton';
 import { useAuth } from '../auth/AuthProvider';
 import { CopyButton } from '../components/CopyButton';
 import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
@@ -886,6 +887,8 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           }}
         />
       )}
+      {/* 2026-11-19 · every saved version of the quote, with its date. */}
+      <QuoteHistoryButton quote={quote} wo={woQuery.data} tpl={printTpl} />
       {editable && (
         <button
           type="button"

@@ -54,6 +54,8 @@ import {
 import type { Queryable } from '../db.js';
 import type {
   Quote,
+  QuoteHistoryEntry,
+  QuoteHistoryEvent,
   QuoteLine,
   QuoteLineType,
   QuoteSection,
@@ -1149,6 +1151,206 @@ export async function getQuote(taskId: string, actor: ActingPrincipal): Promise<
     wo_actions: snap.actions,
     labor_rate: laborRate,
   };
+}
+
+// ── Quote history (Elise, 2026-11-19) ───────────────────────────────────────
+//
+// Every saved version of the work order's quote, newest first, rebuilt as a
+// Quote so the client document draws it as it stood. Two stores, nothing new
+// written: the activity row of each move out of draft (submit, submit for
+// correction, approve, send) carries snapshotQuote under after.quote since
+// 2026-11-16, and quote_revision_snapshot holds the quote as it stood at a
+// send and at each client decision since 0076 (a `sent` row is skipped when
+// the activity log already holds that send). Read-only.
+
+const HISTORY_ACTIONS: Record<string, QuoteHistoryEvent> = {
+  quote_submitted_for_correction: 'submitted_for_correction',
+  quote_submitted: 'submitted',
+  quote_approved: 'approved',
+  quote_sent: 'sent',
+};
+const REVISION_EVENTS: Record<string, QuoteHistoryEvent> = {
+  sent: 'sent',
+  client_approved: 'client_approved',
+  client_declined: 'client_declined',
+};
+
+type SnapLine = { line_type?: QuoteLineType; description?: string; qty?: number; rate?: number; day?: number | null; ot?: boolean; uom?: string | null; tax_pct?: number; markup_pct?: number };
+type SnapSection = {
+  kind?: 'incurred' | 'option'; round?: number; locked?: boolean; approved_at?: string | null; rejection_note?: string | null;
+  name?: string | null; narrative_reported?: string | null; scope_lines?: unknown; specs?: string | null; note_to_customer?: string | null;
+  include_in_summary?: boolean; lines?: SnapLine[];
+};
+
+/** An activity-log snapshot (snapshotQuote's shape) back into priced sections. */
+function sectionsFromSnapshot(entryId: string, snap: Record<string, unknown>, taxApplies: boolean): QuoteSection[] {
+  const mult = Number(snap.ot_multiplier ?? OT_MULTIPLIER) || OT_MULTIPLIER;
+  const raw = Array.isArray(snap.sections) ? (snap.sections as SnapSection[]) : [];
+  const letters = new Map<number, number>();
+  return raw.map((s, i) => {
+    const round = Number(s.round ?? 1);
+    let label = 'Incurred';
+    if (s.kind === 'option') {
+      const idx = letters.get(round) ?? 0;
+      letters.set(round, idx + 1);
+      label = `Option ${optionLetter(idx)}`;
+    }
+    const lines: QuoteLine[] = (Array.isArray(s.lines) ? s.lines : []).map((l, j) => {
+      const math: TotalsLineInput = {
+        qty: Number(l.qty ?? 0),
+        rate: Number(l.rate ?? 0),
+        ot: l.ot === true,
+        line_type: (l.line_type ?? 'labor') as QuoteLineType,
+        tax_pct: Number(l.tax_pct ?? 0),
+        markup_pct: Number(l.markup_pct ?? 0),
+      };
+      return {
+        id: `${entryId}-s${i}-l${j}`,
+        line_type: math.line_type,
+        description: l.description ?? '',
+        qty: math.qty,
+        rate: math.rate,
+        day_value: null,
+        day: l.day == null ? null : Number(l.day),
+        ot: math.ot,
+        uom: l.uom ?? null,
+        tax_pct: math.tax_pct ?? 0,
+        markup_pct: math.markup_pct ?? 0,
+        position: j,
+        amount: computeLineAmount(math, mult),
+        tax: taxApplies ? computeLineTax(math, mult) : 0,
+      } as QuoteLine;
+    });
+    return {
+      id: `${entryId}-s${i}`,
+      kind: s.kind === 'option' ? 'option' : 'incurred',
+      label,
+      name: s.name ?? null,
+      narrative_reported: s.narrative_reported ?? null,
+      scope_lines: toStringArray(s.scope_lines),
+      specs: s.specs ?? null,
+      note_to_customer: s.note_to_customer ?? null,
+      include_in_summary: s.include_in_summary === true,
+      position: i,
+      round,
+      locked: s.locked === true,
+      approved_at: s.approved_at ?? null,
+      approved_by: null,
+      rejection_note: s.rejection_note ?? null,
+      lines,
+      subtotal: Math.round(lines.reduce((sum, l) => sum + l.amount, 0) * 100) / 100,
+    } as QuoteSection;
+  });
+}
+
+export async function getQuoteHistory(taskId: string, actor: ActingPrincipal): Promise<QuoteHistoryEntry[]> {
+  const current = await getQuote(taskId, actor);
+  if (!current) return [];
+  const acts = await query<{ id: string; action: string; at: string; after: Record<string, unknown>; by: string | null }>(
+    `SELECT a.id::text AS id, a.action, ${ISO('a.created_at')} AS at, a.after, p.display_name AS by
+       FROM activity_log a
+       LEFT JOIN principal p ON p.id = a.actor_principal_id
+      WHERE a.entity_type = 'task' AND a.entity_id = $1
+        AND a.action = ANY($2::text[])
+        AND a.after ? 'quote'
+        AND a.after->>'quote_id' = $3
+      ORDER BY a.created_at, a.id`,
+    [taskId, Object.keys(HISTORY_ACTIONS), current.id],
+  );
+  const revs = await query<{ id: string; status: string; rev: number; at: string; snapshot: Record<string, unknown>; by: string | null }>(
+    `SELECT r.id::text AS id, r.status, r.rev, ${ISO('r.created_at')} AS at, r.snapshot, p.display_name AS by
+       FROM quote_revision_snapshot r
+       LEFT JOIN principal p ON p.id = r.created_by
+      WHERE r.quote_id = $1
+      ORDER BY r.created_at`,
+    [current.id],
+  );
+
+  const out: QuoteHistoryEntry[] = [];
+  for (const a of acts.rows) {
+    const snap = (a.after?.quote ?? null) as Record<string, unknown> | null;
+    if (!snap) continue;
+    const entryId = `a:${a.id}`;
+    const sections = sectionsFromSnapshot(entryId, snap, current.tax_applies);
+    const mult = Number(snap.ot_multiplier ?? OT_MULTIPLIER) || OT_MULTIPLIER;
+    const salesTax = Number(snap.sales_tax_pct ?? 0);
+    const rule = (snap.total_rule as QuoteTotalRule | undefined) ?? 'incurred_plus_option';
+    const totals = computeQuoteTotals({
+      sections: totalsSections(sections, currentRoundOf(sections)),
+      sales_tax_pct: salesTax,
+      total_rule: rule,
+      approved_section_id: null,
+      total_cost: snap.is_cost_tbd === true || snap.total_cost == null ? null : Number(snap.total_cost),
+      nte: null,
+      ot_multiplier: mult,
+      tax_applies: current.tax_applies,
+    });
+    out.push({
+      id: entryId,
+      at: a.at,
+      event: HISTORY_ACTIONS[a.action],
+      by: a.by,
+      grand_total: totals.grand_total,
+      quote: {
+        ...current,
+        number: (snap.number as string | null | undefined) ?? current.number,
+        document_type: (snap.document_type as QuoteDocumentType | undefined) ?? current.document_type,
+        bill_to: (snap.bill_to as string | null | undefined) ?? null,
+        ship_to: (snap.ship_to as string | null | undefined) ?? null,
+        specs: (snap.specs as string | null | undefined) ?? null,
+        note_to_customer: (snap.note_to_customer as string | null | undefined) ?? null,
+        sales_tax_pct: salesTax,
+        total_rule: rule,
+        status: (a.after?.status as QuoteStatus | undefined) ?? current.status,
+        current_round: currentRoundOf(sections),
+        approved_section_id: null,
+        sections,
+        totals,
+        // The document's Date: the day of this version.
+        sent_at: a.at,
+        updated_at: a.at,
+      },
+    });
+  }
+
+  const sendTimes = out.filter((e) => e.event === 'sent').map((e) => Date.parse(e.at));
+  for (const r of revs.rows) {
+    const event = REVISION_EVENTS[r.status];
+    if (!event) continue;
+    const t = Date.parse(r.at);
+    if (event === 'sent' && sendTimes.some((x) => Math.abs(x - t) < 120_000)) continue;
+    const snap = r.snapshot ?? {};
+    const sections = (Array.isArray(snap.sections) ? (snap.sections as QuoteSection[]) : []).map((s) => ({
+      ...s,
+      scope_lines: toStringArray(s.scope_lines),
+      specs: s.specs ?? null,
+      note_to_customer: s.note_to_customer ?? null,
+      lines: (s.lines ?? []).map((l) => (current.tax_applies ? l : { ...l, tax: 0 })),
+    }));
+    const totals = (snap.totals as QuoteTotals | undefined) ?? current.totals;
+    out.push({
+      id: `r:${r.id}`,
+      at: r.at,
+      event,
+      by: r.by,
+      grand_total: Number(totals.grand_total ?? 0),
+      quote: {
+        ...current,
+        rev: Number(r.rev),
+        status: r.status as QuoteStatus,
+        current_round: currentRoundOf(sections),
+        sections,
+        totals,
+        sent_at: r.at,
+        updated_at: r.at,
+      },
+    });
+  }
+  // Newest first; within one second, the later act first (rows were read oldest first).
+  return out
+    .map((e, i) => ({ e, i }))
+    .sort((x, y) => Date.parse(y.e.at) - Date.parse(x.e.at) || y.i - x.i)
+    .map(({ e }) => e);
 }
 
 /** GET …/quote/sales-tax — Yoda QuoteSalesTaxEngine for this WO's quote. */

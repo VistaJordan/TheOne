@@ -1057,6 +1057,43 @@ export interface SalesTaxLookup {
   source: 'labor_rate_not_required' | 'entity_not_taxed' | 'cache' | 'provider' | 'state_fallback' | 'unavailable';
 }
 
+/** Quote history (Elise, 2026-11-19): one saved version of the work order's
+    quote — what was submitted, approved, sent, or decided by the client — kept
+    whole on the activity log (since 2026-11-16) or in quote_revision_snapshot
+    (sent / client decisions, since 0076), rebuilt as a Quote so the client
+    document draws it exactly as it stood. Read-only. */
+export type QuoteHistoryEvent =
+  | 'submitted_for_correction'
+  | 'submitted'
+  | 'approved'
+  | 'sent'
+  | 'client_approved'
+  | 'client_declined';
+
+export const QUOTE_HISTORY_EVENT_LABELS: Record<QuoteHistoryEvent, string> = {
+  submitted_for_correction: 'Submitted for correction',
+  submitted: 'Submitted for approval',
+  approved: 'Approved',
+  sent: 'Sent to the client',
+  client_approved: 'Client approved',
+  client_declined: 'Client declined',
+};
+
+export interface QuoteHistoryEntry {
+  /** a:<activity row> or r:<revision snapshot>. */
+  id: string;
+  at: string;
+  event: QuoteHistoryEvent;
+  by: string | null;
+  grand_total: number;
+  /** The version as a Quote (sections, totals, document fields as they stood). */
+  quote: Quote;
+}
+
+export interface QuoteHistoryResponse {
+  items: QuoteHistoryEntry[];
+}
+
 export interface Quote {
   id: string;
   task_id: string;

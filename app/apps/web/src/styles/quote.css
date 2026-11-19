@@ -1097,3 +1097,17 @@
 .qdoc-export .qdoc { max-width: none; margin: 0; border: 0; border-radius: 0; box-shadow: none; padding: 0; }
 .qdoc-export .qdoc.qdoc-b { padding: 0 28px; }
 .qdoc-export .qdoc-b-band, .qdoc-export .qdoc-b-sfm .qdoc-b-rule, .qdoc-export .qdoc-b-foot, .qdoc-export .qdoc-b-bkr .qdoc-b-accept { margin-left: -28px; margin-right: -28px; padding-left: 28px; padding-right: 28px; }
+
+/* Quote history (2026-11-19): the list of saved versions, then one version
+   drawn as the client document inside the dialog. */
+.qhist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.qhist-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--ink-3); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.qhist-table td { padding: 9px 8px; border-bottom: 1px solid var(--row-border); }
+.qhist-table .num { text-align: right; white-space: nowrap; }
+.qhist-row { cursor: pointer; }
+.qhist-row:hover td { background: var(--chip); }
+.modal.is-qhist-doc { width: min(900px, 100%); }
+.modal.is-qhist-doc .modal-head { gap: 10px; }
+.qhist-doc-title { flex: 1; min-width: 0; font-size: 14px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qhist-doc { overflow: auto; }
+.qhist-doc .qdoc { box-shadow: none; }

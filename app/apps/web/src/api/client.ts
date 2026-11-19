@@ -6,6 +6,7 @@ import type { PermDashboardInfo, PermFieldInfo, PermMap, PermissionSet } from '@
 import type { SignoffFormSubmit, SignoffFormView, SignoffShareInput, SignoffShareResult, WoSignoffResponse } from '@theone/shared';
 // 0073: a work order saved as a PDF.
 import type { WoNotificationsResponse } from '@theone/shared';
+import type { QuoteHistoryResponse } from '@theone/shared';
 // UAT #48: reminders to managers.
 import type { ApprovalReminderResult, PendingApprovalKind, PendingApprovalsResponse } from '@theone/shared';
 // 0140: address suggestions from Google Maps.
@@ -876,6 +877,9 @@ export async function getWorkOrderQuote(idOrNumber: string): Promise<QuoteEnvelo
     throw err;
   }
 }
+
+/** GET /api/work-orders/:id/quote/history — every saved version, newest first (2026-11-19). */
+export const getQuoteHistory = (idOrNumber: string) => request<QuoteHistoryResponse>(quotePath(idOrNumber, '/history'));
 
 /** POST /api/work-orders/:id/quote — opens a Draft. 403 when the actor is below
     Senior OM (the UI renders the control locked whenever it knows in advance). */
