@@ -4290,8 +4290,10 @@ default; on the job like every inbox row since 0144; maker ≠ checker).
 `quote.rev` (an open builder re-seeds instead of saving the card rate back;
 `assertCardRates` then keeps the approved rate as a line on file) and logs
 `quote_rate_changed` (lines from → to, requester, reason). The builder shows
-**Request rate change** in its header tools, or a "Rate change waiting for a
-manager" chip (`Quote.rate_change_request`). The price card is not changed —
+**Request rate change** as a link at the foot of each section whose lines the
+card prices, beside Add line (that section's lines only; moved out of the
+header the same day), or a "Rate change waiting for a manager" chip there
+(`Quote.rate_change_request`). The price card is not changed —
 a wrong card is fixed in Prices.
 
 **Quote history** (Elise, 2026-11-19, no migration; `getQuoteHistory` in

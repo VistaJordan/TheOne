@@ -1127,3 +1127,4 @@
 /* Request rate change (2026-11-19). */
 .rate-ask-in { display: inline-flex; width: 130px; margin-left: auto; }
 .rate-ask-sec { color: var(--ink-3); }
+.rate-ask-link { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; }

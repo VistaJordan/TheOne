@@ -45,6 +45,8 @@ interface OptionCardProps {
   lockCardRates?: boolean;
   /** Rendered in the card header when the client decision is open (Sent). */
   decisionActions?: ReactNode;
+  /** 2026-11-19 · Request rate change for this option's price-list lines, at its foot. */
+  rateChange?: ReactNode;
   onChange: (next: DraftSection) => void;
   onRemove: () => void;
   /** 0046 · the multiplier an OT line bills at; the house ×1.5 by default. */
@@ -68,6 +70,7 @@ export function OptionCard({
   rate,
   lockCardRates = false,
   decisionActions,
+  rateChange,
   onChange,
   onRemove,
   otMultiplier,
@@ -230,6 +233,7 @@ export function OptionCard({
 
       <div className="opt-foot">
         {canEdit && <AddLineButton lines={section.lines} onChange={setLines} dayOn={showDay} onToggleDay={onToggleDay} />}
+        {canEdit && rateChange}
         {note && (
           <span className="lt-note">
             <Icon name="alert" size={12} />

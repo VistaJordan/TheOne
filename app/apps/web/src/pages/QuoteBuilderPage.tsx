@@ -897,6 +897,24 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       failed={saveMutation.isError}
     />
   );
+  // 2026-11-19 (Elise) · Request rate change sits at the foot of each section
+  // whose lines the price list prices (only for someone the card locks), and
+  // asks about that section's lines only.
+  const rateChangeFor = (sectionId: string | null) =>
+    editable && quote.permissions.card_rates_locked === true && sectionId ? (
+      <RateChangeButton
+        quote={quote}
+        sectionId={sectionId}
+        beforeOpen={() =>
+          flushThen(async () => {
+            const res = await getWorkOrderQuote(woNumber);
+            if (!res.quote) throw new Error('The quote could not be read');
+            return { quote: res.quote };
+          })
+        }
+      />
+    ) : null;
+
   const headTools = (
     <>
       {/* 0077 · redraft from a transcript; Submit on the draft asks before replacing. */}
@@ -916,17 +934,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
       )}
       {/* 2026-11-19 · every saved version of the quote, with its date. */}
       <QuoteHistoryButton quote={quote} wo={woQuery.data} tpl={printTpl} />
-      {/* 2026-11-19 · a dispatcher asks a manager for another price-list rate. */}
-      {editable && quote.permissions.card_rates_locked === true && (
-        <RateChangeButton
-          quote={quote}
-          beforeOpen={() => flushThen(async () => {
-            const res = await getWorkOrderQuote(woNumber);
-            if (!res.quote) throw new Error('The quote could not be read');
-            return { quote: res.quote };
-          })}
-        />
-      )}
+
       {editable && (
         <button
           type="button"
@@ -1519,6 +1527,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                   onToggleDay={linesSpanDays(incurred.lines) ? (on) => setDayFor(incurred, on) : undefined}
                 />
               )}
+              {incurredEditable && rateChangeFor(incurred.id)}
               <span className="lt-note">
                 <Icon name={incurredNote ? 'alert' : 'info'} size={12} />
                 {incurredNote ??
@@ -1635,6 +1644,7 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
                 rate={quote.labor_rate}
                 lockCardRates={quote.permissions.card_rates_locked === true}
                 decisionActions={status === 'sent' && options.length > 1 ? decisionButton(s.key, true) : undefined}
+                rateChange={rateChangeFor(s.id)}
                 otMultiplier={otMult}
                 taxApplies={taxApplies}
                 salesTaxPct={taxPct}

@@ -17,7 +17,16 @@ import { Icon } from '../Icon';
 
 const REASON_MIN = 5;
 
-export function RateChangeButton({ quote, beforeOpen }: { quote: Quote; beforeOpen?: () => Promise<unknown> | void }) {
+export function RateChangeButton({
+  quote,
+  beforeOpen,
+  sectionId,
+}: {
+  quote: Quote;
+  beforeOpen?: () => Promise<unknown> | void;
+  /** 2026-11-19 · drawn at the foot of one section: only that section's lines. */
+  sectionId?: string | null;
+}) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [rates, setRates] = useState<Record<string, string>>({});
@@ -29,12 +38,13 @@ export function RateChangeButton({ quote, beforeOpen }: { quote: Quote; beforeOp
     () =>
       quote.sections
         .filter((s) => !s.locked && (s.kind === 'incurred' || (s.round === quote.current_round && s.approved_at === null)))
+        .filter((s) => sectionId === undefined || s.id === sectionId)
         .flatMap((s) =>
           s.lines
             .filter((l) => cardRateFor(l, quote.labor_rate) != null)
             .map((l) => ({ line: l, section: s.kind === 'incurred' ? 'Incurred' : s.name?.trim() || s.label })),
         ),
-    [quote],
+    [quote, sectionId],
   );
 
   const ask = useMutation({
@@ -54,6 +64,7 @@ export function RateChangeButton({ quote, beforeOpen }: { quote: Quote; beforeOp
     onError: (err) => setError(err instanceof ApiRequestError ? err.message : 'The request did not go through'),
   });
 
+  if (lines.length === 0) return null;
   if (quote.rate_change_request) {
     return (
       <span className="chip chip-accent chip-sm" title="A manager decides it in Approvals › Manager reviews">
@@ -62,8 +73,6 @@ export function RateChangeButton({ quote, beforeOpen }: { quote: Quote; beforeOp
       </span>
     );
   }
-  if (lines.length === 0) return null;
-
   const changed = lines.filter(({ line }) => {
     const v = (rates[line.id] ?? '').trim();
     return v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) !== line.rate;
@@ -74,7 +83,7 @@ export function RateChangeButton({ quote, beforeOpen }: { quote: Quote; beforeOp
     <>
       <button
         type="button"
-        className="btn btn-ghost btn-sm"
+        className="linkbtn rate-ask-link"
         onClick={async () => {
           // Ask about the lines as saved: flush a pending autosave first.
           await beforeOpen?.();
