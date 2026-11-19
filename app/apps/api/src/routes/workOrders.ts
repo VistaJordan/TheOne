@@ -238,6 +238,8 @@ const attachmentSchema = z
     client_visible: z.boolean().optional(),
     visit_id: z.string().uuid().nullable().optional(),
     from_client: z.boolean().optional(),
+    // 2026-11-19 · dropped on a Drive column: the group the review opens on.
+    kind: z.enum(['before', 'after', 'signoff', 'client', 'other']).optional(),
   })
   .strict();
 

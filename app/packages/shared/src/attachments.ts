@@ -194,6 +194,10 @@ export interface AttachmentUpload {
   visit_id?: string | null;
   /** Attached on Add work order: kind "client", approved as it lands. */
   from_client?: boolean;
+  /** Elise, 2026-11-19 · dropped on a Drive column (Before, After…): the
+      group the reviewer's "What is it?" opens on. The file still waits for
+      approval like any upload; nothing reads the kind of a pending file. */
+  kind?: AttachmentKind;
 }
 
 /** `details.code` when the server has no storage connected yet. */

@@ -714,6 +714,16 @@ files with a blob behind them count. The header feeds the status menu the
 approved kinds from the same `['wo-attachments', id]` cache entry, so the
 "Needs after photo" tag clears the moment a photo is approved.
 
+**Drop on a Drive column** (Elise, 2026-11-19, no migration; `PhotosCard.tsx`
+`kindUnder` / `data-drop-kind`, `AttachmentUpload.kind`). While a file is
+dragged over the Drive tab, Before · After · Sign-off · From client are each a
+drop target (a banner says what the drop will do). A file dropped on one
+uploads **pending** like any upload but with `attachment.kind` set to that
+group (logged `dropped_on`), so the review viewer opens with **What is it?**
+already on it — the reviewer looks and approves (or changes it). Nothing reads
+the kind of a pending file (lists, gates and names go by approved files). A
+drop anywhere else on the tab uploads with no group, as before.
+
 **Files are named by their group** (Elise, 2026-11-14, no migration;
 `ATTACHMENT_KIND_PREFIX` / `autoAttachmentName` / `nextAutoNumber` in shared
 `attachments.ts`, `autoNameFor` in `services/attachments.ts`,

@@ -117,13 +117,15 @@ export function PhotosCard({ wo }: PhotosCardProps) {
   const [uploading, setUploading] = useState(0);
   // Drag depth, not a boolean: dragenter / dragleave fire for every child.
   const [dragDepth, setDragDepth] = useState(0);
+  // 2026-11-19 · the Drive column under the cursor while a file is dragged.
+  const [dropKind, setDropKind] = useState<AttachmentKind | null>(null);
   const uploadsClosed = !canAttach
     ? 'Your role cannot add files'
     : q.data && !q.data.storage_ready
       ? 'File storage is not configured on this server'
       : null;
 
-  const sendFiles = async (list: FileList | File[] | null) => {
+  const sendFiles = async (list: FileList | File[] | null, kind?: AttachmentKind) => {
     if (!list || list.length === 0) return;
     if (uploadsClosed) {
       setError(uploadsClosed);
@@ -140,6 +142,7 @@ export function PhotosCard({ wo }: PhotosCardProps) {
           content_type: prepared.content_type,
           data: prepared.data,
           client_visible: false,
+          ...(kind ? { kind } : {}),
         });
       }
     } catch (err) {
@@ -173,6 +176,7 @@ export function PhotosCard({ wo }: PhotosCardProps) {
       // Always prevent the default, or the browser opens the file itself.
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = closedRef.current || busyRef.current ? 'none' : 'copy';
+      setDropKind(kindUnder(e.target));
     };
     const onLeave = (e: globalThis.DragEvent) => {
       if (!hasFiles(e)) return;
@@ -182,12 +186,17 @@ export function PhotosCard({ wo }: PhotosCardProps) {
       if (!hasFiles(e)) return;
       e.preventDefault();
       setDragDepth(0);
+      setDropKind(null);
       // A drop meant for another box (the message composer has its own) is left to it.
       if (e.defaultPrevented && e.target instanceof Element && e.target.closest('.composer')) return;
       if (busyRef.current) return;
-      void sendRef.current(Array.from(e.dataTransfer?.files ?? []));
+      // Dropped on a column: the file carries that group while it waits.
+      void sendRef.current(Array.from(e.dataTransfer?.files ?? []), kindUnder(e.target) ?? undefined);
     };
-    const reset = () => setDragDepth(0);
+    const reset = () => {
+      setDragDepth(0);
+      setDropKind(null);
+    };
     window.addEventListener('dragenter', onEnter);
     window.addEventListener('dragover', onOver);
     window.addEventListener('dragleave', onLeave);
@@ -211,9 +220,12 @@ export function PhotosCard({ wo }: PhotosCardProps) {
   return (
     <section className={`card photos-card${dragging ? ' is-dragging' : ''}`}>
       {dragging && (
-        <div className="photo-drop" aria-hidden="true">
-          <Icon name={uploadsClosed ? 'alert' : 'upload'} size={16} />
-          {uploadsClosed ?? 'Drop to upload — it waits for approval like any upload'}
+        <div className={`photo-drop-banner${uploadsClosed ? ' is-closed' : ''}`} aria-hidden="true">
+          <Icon name={uploadsClosed ? 'alert' : 'upload'} size={14} />
+          {uploadsClosed ??
+            (dropKind
+              ? `Drop to add as ${ATTACHMENT_KIND_LABEL[dropKind]} — it waits for approval`
+              : 'Drop on a column to file it there, or anywhere else to choose when approving')}
         </div>
       )}
       <div className="card-head">
@@ -306,6 +318,8 @@ export function PhotosCard({ wo }: PhotosCardProps) {
         <PhotoColumn
           woId={woId}
           label="Before"
+          dropKind="before"
+          dropping={dragging && !uploadsClosed ? dropKind === 'before' ? 'over' : 'ready' : null}
           items={before}
           empty="Add a photo here or from the message box — it shows here once approved as a before photo"
           onRemove={onRemove}
@@ -313,6 +327,8 @@ export function PhotosCard({ wo }: PhotosCardProps) {
         <PhotoColumn
           woId={woId}
           label="After"
+          dropKind="after"
+          dropping={dragging && !uploadsClosed ? dropKind === 'after' ? 'over' : 'ready' : null}
           items={after}
           empty="An approved after photo is needed before Done / Incurred"
           onRemove={onRemove}
@@ -320,6 +336,8 @@ export function PhotosCard({ wo }: PhotosCardProps) {
         <PhotoColumn
           woId={woId}
           label="Sign-off"
+          dropKind="signoff"
+          dropping={dragging && !uploadsClosed ? dropKind === 'signoff' ? 'over' : 'ready' : null}
           items={signoff}
           empty="The signed sheet shows here once it is approved as a sign-off"
           onRemove={onRemove}
@@ -327,6 +345,8 @@ export function PhotosCard({ wo }: PhotosCardProps) {
         <PhotoColumn
           woId={woId}
           label="From client"
+          dropKind="client"
+          dropping={dragging && !uploadsClosed ? dropKind === 'client' ? 'over' : 'ready' : null}
           items={fromClient}
           empty="Pictures the client shares show here once approved as From client"
           onRemove={onRemove}
@@ -460,18 +480,32 @@ function PhotoColumn({
   items,
   empty,
   onRemove,
+  dropKind,
+  dropping = null,
 }: {
   woId: string;
   label: string;
   items: Attachment[];
   empty: string;
   onRemove?: (id: string) => void;
+  /** 2026-11-19 · a file dropped here waits for approval as this group. */
+  dropKind?: AttachmentKind;
+  dropping?: 'ready' | 'over' | null;
 }) {
   const images = items.filter((a) => isImageType(a.content_type));
   const pdfs = items.filter((a) => isPdfType(a.content_type));
   const others = items.filter((a) => !isImageType(a.content_type) && !isPdfType(a.content_type));
   return (
-    <div className="photo-group photo-column">
+    <div
+      className={`photo-group photo-column${dropping ? ` is-drop-${dropping}` : ''}`}
+      data-drop-kind={dropKind}
+    >
+      {dropping && (
+        <div className="photo-col-drop" aria-hidden="true">
+          <Icon name="upload" size={14} />
+          Drop as {label}
+        </div>
+      )}
       <div className="group-label">
         {label}
         {items.length > 0 && (
@@ -642,4 +676,12 @@ function PdfViewer({ url, name, onClose }: { url: string; name: string; onClose:
     </div>,
     document.body,
   );
+}
+
+/** The Drive column a drag is over (its `data-drop-kind`), if any. */
+function kindUnder(target: EventTarget | null): AttachmentKind | null {
+  if (!(target instanceof Element)) return null;
+  const col = target.closest<HTMLElement>('[data-drop-kind]');
+  const k = col?.dataset.dropKind as AttachmentKind | undefined;
+  return k && (ATTACHMENT_KINDS as readonly string[]).includes(k) ? k : null;
 }

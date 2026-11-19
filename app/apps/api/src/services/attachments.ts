@@ -320,7 +320,9 @@ export async function addAttachment(
       input.visit_id ?? null,
       actor.id,
       reviewStatus,
-      fromClient ? 'client' : null,
+      // 2026-11-19 · a file dropped on a Drive column carries that group while
+      // it waits; the reviewer confirms (or changes) it on approval.
+      fromClient ? 'client' : (input.kind ?? null),
       fromClient,
     ],
     );
@@ -342,6 +344,7 @@ export async function addAttachment(
         byte_size: bytes.length,
         client_visible: input.client_visible ?? false,
         visit_id: input.visit_id ?? null,
+        ...(!fromClient && input.kind ? { dropped_on: input.kind } : {}),
         // 0061 / rule 1.3.1: it waits for a reviewer — unless the client sent it.
         review_status: reviewStatus,
         ...(fromClient ? { kind: 'client', via: 'create_form' } : {}),
