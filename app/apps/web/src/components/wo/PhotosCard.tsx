@@ -629,14 +629,16 @@ function PdfViewer({ url, name, onClose }: { url: string; name: string; onClose:
     <div className="pdf-viewer" role="dialog" aria-modal="true" aria-label={name} onClick={onClose}>
       <div className="pdf-viewer-bar" onClick={(e) => e.stopPropagation()}>
         <span className="pdf-viewer-name">{name}</span>
-        <a className="btn btn-sm" href={url} target="_blank" rel="noreferrer">
+        <a className="btn btn-sm" href={`${url}#zoom=100`} target="_blank" rel="noreferrer">
           Open in a new tab
         </a>
         <button type="button" className="icon-btn" onClick={onClose} aria-label="Close" autoFocus>
           <Icon name="x" size={16} />
         </button>
       </div>
-      <iframe className="pdf-viewer-frame" src={`${url}#view=FitH&navpanes=0`} title={name} onClick={(e) => e.stopPropagation()} />
+      {/* Opens at 100%, not fitted to the width (which read 228% on a wide
+          screen); the viewer's own +/- still zooms. */}
+      <iframe className="pdf-viewer-frame" src={`${url}#zoom=100&navpanes=0`} title={name} onClick={(e) => e.stopPropagation()} />
     </div>,
     document.body,
   );
