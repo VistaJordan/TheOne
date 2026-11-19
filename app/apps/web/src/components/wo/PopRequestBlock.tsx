@@ -1,8 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   PARTS_REQUIRED_KEY,
   POP_REQUEST_LINES,
+  emptyPopRequest,
   formatPopRequest,
   parsePopRequest,
   popCostInputValue,
@@ -35,6 +36,35 @@ const imageOf = (files: FileList) => Array.from(files).find((f) => f.type.starts
 
 const isUrl = (s: string) => /^https?:\/\//i.test(s.trim());
 
+/** 2026-11-19 (Elise): a POP request being filled survives a refresh. The
+    open form is kept in this browser per work order until it is saved,
+    cancelled or reset; storage can be off or full, so every touch is
+    guarded and the form works without it. */
+interface KeptPop {
+  draft: PopRequest;
+  shotUploaded: boolean;
+}
+const keptKey = (woId: string) => `theone.pop.draft.${woId}`;
+function readKept(woId: string): KeptPop | null {
+  try {
+    const raw = localStorage.getItem(keptKey(woId));
+    if (!raw) return null;
+    const v = JSON.parse(raw) as Partial<KeptPop>;
+    if (!v.draft || typeof v.draft !== 'object' || !v.draft.values) return null;
+    return { draft: { ...emptyPopRequest(), ...v.draft, values: { ...emptyPopRequest().values, ...v.draft.values } }, shotUploaded: v.shotUploaded === true };
+  } catch {
+    return null;
+  }
+}
+function writeKept(woId: string, kept: KeptPop | null): void {
+  try {
+    if (kept) localStorage.setItem(keptKey(woId), JSON.stringify(kept));
+    else localStorage.removeItem(keptKey(woId));
+  } catch {
+    // storage off or full: the form still works, it just is not kept
+  }
+}
+
 /**
  * The POP Request (Elise, 2026-11-16, UAT #44) over the work order's
  * `Parts Required` field: the ten lines the team asks parts with, read from
@@ -50,7 +80,7 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
   const canUpload = can('work_orders/attachments', 'create');
   const raw = (wo.fields ?? {})[PARTS_REQUIRED_KEY];
   const saved = parsePopRequest(raw);
-  const [draft, setDraft] = useState<PopRequest | null>(null);
+  const [draft, setDraft] = useState<PopRequest | null>(() => (canEdit ? (readKept(wo.id)?.draft ?? null) : null));
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   // Elise, 2026-11-17: every line but Specs is required; the boxes paint red
@@ -60,8 +90,12 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
   // but Save waits for one uploaded with Upload screenshot in this edit — or
   // a screenshot line already saved (it was asked then; the API still checks
   // the work order holds an image).
-  const [shotUploaded, setShotUploaded] = useState(false);
+  const [shotUploaded, setShotUploaded] = useState(() => readKept(wo.id)?.shotUploaded === true);
   const [dragging, setDragging] = useState(false);
+  // Keep the open form through a refresh; closing it (Save, Cancel) forgets it.
+  useEffect(() => {
+    writeKept(wo.id, draft ? { draft, shotUploaded } : null);
+  }, [wo.id, draft, shotUploaded]);
   const fileInput = useRef<HTMLInputElement>(null);
   const save = useWoFieldSave(wo.id, () => {
     setDraft(null);
@@ -253,7 +287,24 @@ export function PopRequestBlock({ wo }: { wo: WorkOrderDetailV2 }) {
         )}
         {(save.error || uploadError) && <p className="ife-err" role="alert">{save.error ?? uploadError}</p>}
         <div className="pop-actions">
-          <button type="button" className="btn btn-sm" onClick={() => { setDraft(null); setTriedSave(false); save.clearError(); setUploadError(null); }} disabled={busy}>
+          {draft && !popRequestEmpty(draft) && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              title="Empty every line and fill the request again"
+              onClick={() => {
+                setDraft(emptyPopRequest());
+                setShotUploaded(false);
+                setTriedSave(false);
+                save.clearError();
+                setUploadError(null);
+              }}
+              disabled={busy}
+            >
+              Reset
+            </button>
+          )}
+          <button type="button" className="btn btn-sm" onClick={() => { setDraft(null); setTriedSave(false); setShotUploaded(false); save.clearError(); setUploadError(null); }} disabled={busy}>
             Cancel
           </button>
           <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>

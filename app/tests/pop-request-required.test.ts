@@ -74,6 +74,15 @@ describe('POP request required lines', () => {
     expect(read('apps/web/src/components/wo/PopRequestBlock.tsx')).toContain("? popCostInputValue(value)");
   });
 
+  it('an open form survives a refresh until Save, Cancel or Reset (2026-11-19)', () => {
+    const form = read('apps/web/src/components/wo/PopRequestBlock.tsx');
+    expect(form).toContain('const keptKey = (woId: string) => `theone.pop.draft.${woId}`;');
+    expect(form).toContain('writeKept(wo.id, draft ? { draft, shotUploaded } : null);');
+    expect(form).toContain('useState<PopRequest | null>(() => (canEdit ? (readKept(wo.id)?.draft ?? null) : null))');
+    expect(form).toContain('setDraft(emptyPopRequest());');
+    expect(form).toMatch(/>\s*Reset\s*</);
+  });
+
   it('the screenshot can be pasted or dropped as well as uploaded (2026-11-19)', () => {
     const form = read('apps/web/src/components/wo/PopRequestBlock.tsx');
     expect(form).toContain('const pic = imageOf(e.clipboardData.files);');
