@@ -153,7 +153,9 @@ describe('quotes due', () => {
     expect(NOTICE_KINDS_ALWAYS_SHOWN).toContain('quote_due');
     const svc = read('apps/api/src/services/notices.ts');
     expect(svc).toContain('dedupeKey: `quote_due:${r.task_id}:${r.entered_at.getTime()}:${today}`');
-    expect(svc).toContain("q.status IN ('pending_correction', 'pending_approval', 'approved', 'sent', 'client_approved')");
+    // 2026-11-19: the list is shared with Late Quote (QUOTE_ON_ITS_WAY_STATUSES).
+    expect(svc).toContain('q.status = ANY($3::text[])');
+    expect(svc).toContain('[...QUOTE_ON_ITS_WAY_STATUSES]');
     expect(svc).toContain("unnest(ARRAY[${QUOTE_DUE_SEAT_SQL}]) AS seat(k)");
     expect(svc).toContain('OR p.role = ANY($2::text[])');
     expect(read('apps/api/src/routes/webhooks.ts')).toContain('await raiseQuoteDueNotifications(true)');

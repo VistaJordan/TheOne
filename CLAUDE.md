@@ -4267,12 +4267,18 @@ as a new technician" with the typed phone or name carried over
 it is offered (`ManualPayeeHint`). The API already created the `kind = 'tech'`
 vendor on submit. **Late Quote ticks itself:** `sweepLateQuotes`
 (`services/lateQuote.ts`, the rule in shared `lateQuote.ts`) runs on the hourly
-cron (every 15 min under `npm run dev`) and ticks `Late Quote` where the Quote
-Due Date has passed, the work order still owes a quote (`isQuoteOwed`) and
-there is no quote or only a draft; signed "Late quotes", an empty Manager
-Description gets the reason. A work order whose Late Quote field was ever
-written (by the sweep or a person) is never touched again, so a manager's
-removal sticks.
+cron (every 15 min under `npm run dev`) and ticks `Late Quote` on a work order
+that has sat in Waiting for Quote for `QUOTE_DUE_AFTER_HOURS` (48) working
+hours (`STATUS_SINCE_SQL` + `addWorkingHours`, weekends and holidays skipped)
+with no quote submitted (`QUOTE_ON_ITS_WAY_STATUSES`: none, a draft or a
+declined one still owes it) — since 2026-11-19 (Elise) the very clock and test
+of the Quote due notices, which now share that list; before, it keyed off the
+Quote Due Date, which only an Assessment check-out sets, so a work order moved
+to Waiting for Quote another way was never marked. Signed "Late quotes", an
+empty Manager Description gets the reason. A Late Quote field written (by the
+sweep or a person) since the work order last entered Waiting for Quote is left
+alone, so a manager's removal sticks; a work order sent back to Waiting for
+Quote starts a new clock.
 
 **Request rate change** (Elise, 2026-11-19, no migration;
 `services/quoteRateChange.ts`, `POST /work-orders/:id/quote/rate-change`

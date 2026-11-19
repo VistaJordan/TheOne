@@ -14,6 +14,7 @@ import {
   QUOTE_DUE_ROLE_CODES,
   QUOTE_DUE_SEAT_KEYS,
   QUOTE_DUE_STATUS_NAME,
+  QUOTE_ON_ITS_WAY_STATUSES,
   VENDOR_REVIEW_PERM_KEY,
   businessDay,
   parseNoticeCursor,
@@ -201,9 +202,9 @@ export async function raiseQuoteDueNotifications(force = false, now = new Date()
         WHERE t.deleted_at IS NULL AND s.name = $1
           -- Still owed: no quote on its way. A draft, or one the client declined
           -- (re-quoted in a new round), still has to be submitted.
-          AND NOT EXISTS (SELECT 1 FROM quote q WHERE q.task_id = t.id
-                             AND q.status IN ('pending_correction', 'pending_approval', 'approved', 'sent', 'client_approved'))`,
-      [QUOTE_DUE_STATUS_NAME, [...QUOTE_DUE_ROLE_CODES]],
+          -- The same test as Late Quote (QUOTE_ON_ITS_WAY_STATUSES, shared lateQuote.ts).
+          AND NOT EXISTS (SELECT 1 FROM quote q WHERE q.task_id = t.id AND q.status = ANY($3::text[]))`,
+      [QUOTE_DUE_STATUS_NAME, [...QUOTE_DUE_ROLE_CODES], [...QUOTE_ON_ITS_WAY_STATUSES]],
     );
     out.checked = rows.rows.length;
     if (rows.rows.length === 0) return out;
