@@ -63,6 +63,8 @@ import { CopyButton } from '../components/CopyButton';
 import { ImportTranscriptButton } from '../components/quote/ImportTranscriptButton';
 import { QuoteTemplatesButton } from '../components/quote/QuoteTemplatesButton';
 import { Icon } from '../components/Icon';
+import { createPortal } from 'react-dom';
+import { WO_TABS_ASIDE_ID } from '../lib/woTabsAside';
 import { LineItemsTable, AddLineButton, linesCarryTax, linesSpanDays } from '../components/quote/LineItemsTable';
 import { MoneyRail } from '../components/quote/MoneyRail';
 import { QuoteTaxBar, sectionTax } from '../components/quote/QuoteTaxBar';
@@ -871,6 +873,21 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
         : lockedButton(CLIENT_DECISION_APPROVED, 'Needs the quote-approve permission (or a dispatcher while the WO is awaiting approval)', `lockDecide-${sectionKey}`, 'sm');
 
   // Import transcript, Templates, Reset quote and the autosave chip.
+  // 2026-11-19 (Elise): on the work order's Quote tab the autosave chip sits
+  // beside the tab strip (after All fields), so the header row has room.
+  const [autosaveSlot, setAutosaveSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setAutosaveSlot(embedded ? document.getElementById(WO_TABS_ASIDE_ID) : null);
+  }, [embedded]);
+  const autosaveChip = (
+    <AutosaveChip
+      editable={editable}
+      saving={saveMutation.isPending}
+      dirty={dirty}
+      savedAt={savedAt}
+      failed={saveMutation.isError}
+    />
+  );
   const headTools = (
     <>
       {/* 0077 · redraft from a transcript; Submit on the draft asks before replacing. */}
@@ -913,13 +930,11 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
           <Icon name="refresh" size={14} />
         </button>
       )}
-      <AutosaveChip
-        editable={editable}
-        saving={saveMutation.isPending}
-        dirty={dirty}
-        savedAt={savedAt}
-        failed={saveMutation.isError}
-      />
+      {autosaveSlot ? (
+        createPortal(autosaveChip, autosaveSlot)
+      ) : (
+        autosaveChip
+      )}
     </>
   );
 

@@ -17,6 +17,7 @@ import {
 import { ApiRequestError } from '../api/client';
 import { AppShell } from '../components/AppShell';
 import { Icon } from '../components/Icon';
+import { WO_TABS_ASIDE_ID } from '../lib/woTabsAside';
 import { WoHeader } from '../components/wo/WoHeader';
 import { UpdatesFeed } from '../components/wo/UpdatesFeed';
 import { PhotosCard } from '../components/wo/PhotosCard';
@@ -367,6 +368,7 @@ export function WorkOrderDetailPage() {
             2026-11-13): the quote band sits right under the tabs there. */}
         <RecordBar woId={wo.id} woNumber={wo.wo_number} record={recordQuery.data} note={recordNote} chips={tab !== 'quotes'} />
 
+        <div className="wo-tabs-row">
         <div className="seg tabs" role="tablist" aria-label="Work order sections">
           {/* Elise, 2026-11-09 · Overview, CICO, Quote, Finances, Drive,
               Messages, Penalties, Parts, Tech Hub, Logs, All fields. Site and
@@ -389,6 +391,11 @@ export function WorkOrderDetailPage() {
           {show(TECH_HUB_TAB) && <TabButton id={TECH_HUB_TAB} tab={tab} onSelect={setTab}>Tech Hub</TabButton>}
           {show('audit') && <TabButton id="audit" tab={tab} onSelect={setTab}>Logs</TabButton>}
           {show('fields') && <TabButton id="fields" tab={tab} onSelect={setTab}>All fields</TabButton>}
+        </div>
+        {/* 2026-11-19 (Elise): beside the tabs, the open tab's status — the
+            Quote tab draws its "Draft saved" chip here (a portal), so the
+            quote's own header row has room. */}
+        <div className="wo-tabs-aside" id={WO_TABS_ASIDE_ID} />
         </div>
       </div>
 
