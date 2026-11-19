@@ -176,6 +176,16 @@ export default async function paymentRoutes(app: FastifyInstance): Promise<void>
     return listPaymentHistory(taskId);
   });
 
+  /** 2026-11-19 · would this request land approved by the person raising it? */
+  app.get('/work-orders/:id/payment-requests/preview', async (req) => {
+    const actor = actingPrincipalFromRequest(req);
+    requirePerm(actor, 'payments', 'create', 'You cannot request payments');
+    const taskId = await taskIdOf(req);
+    const q = (req.query ?? {}) as { amount?: string; method?: string };
+    const { paymentApprovalPreview } = await import('../services/payments.js');
+    return paymentApprovalPreview(taskId, Number(q.amount), q.method ?? null, actor);
+  });
+
   app.post('/work-orders/:id/payment-requests', async (req, reply) => {
     const actor = actingPrincipalFromRequest(req);
     requirePerm(actor, 'payments', 'create', 'You cannot request payments');

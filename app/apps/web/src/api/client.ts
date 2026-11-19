@@ -878,6 +878,13 @@ export async function getWorkOrderQuote(idOrNumber: string): Promise<QuoteEnvelo
   }
 }
 
+/** GET /api/work-orders/:id/payment-requests/preview — would a request of
+    this amount / method land approved by the person raising it (2026-11-19)? */
+export const paymentApprovalPreview = (idOrNumber: string, amount: number, method: string) =>
+  request<{ self_approves: boolean }>(
+    `/work-orders/${encodeURIComponent(idOrNumber)}/payment-requests/preview?amount=${encodeURIComponent(String(amount))}&method=${encodeURIComponent(method)}`,
+  );
+
 /** POST /api/work-orders/:id/quote/rate-change — ask a manager for another
     rate on price-list lines (2026-11-19); 201 new, 200 replaced. */
 export const requestRateChange = (

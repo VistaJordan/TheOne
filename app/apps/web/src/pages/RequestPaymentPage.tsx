@@ -25,6 +25,7 @@ import {
   getVendorYtd,
   getWorkOrder,
   getWorkOrderMessages,
+  paymentApprovalPreview,
   postPaymentRequest,
   searchVendors,
 } from '../api/client';
@@ -250,6 +251,22 @@ export function RequestPayment({
 
   // 0122: one key per request being filled in, renewed by Request another, so
   // a second click or a retry is answered with the request already filed.
+  // Elise, 2026-11-19 · a manager raising a payment within their own limit
+  // approves it as they raise it, so the button says "Approve payment". The
+  // API answers with the same tests it applies on submit (band, Zelle / Cash
+  // App, nothing past the NTE or the quote), a moment after typing stops.
+  const [previewAmount, setPreviewAmount] = useState<number | null>(null);
+  useEffect(() => {
+    const t = window.setTimeout(() => setPreviewAmount(amountValid && parsedAmount > 0 ? parsedAmount : null), 350);
+    return () => window.clearTimeout(t);
+  }, [amountValid, parsedAmount]);
+  const preview = useQuery({
+    queryKey: ['payment-approval-preview', woNumber, previewAmount, method],
+    queryFn: () => paymentApprovalPreview(woNumber, previewAmount as number, method),
+    enabled: previewAmount !== null,
+    staleTime: 30_000,
+  });
+  const selfApproves = previewAmount !== null && preview.data?.self_approves === true;
   const submitKey = useRef<string>(crypto.randomUUID());
   // Set on the click itself: isPending only lands on the next render, which a
   // fast double click beats.
@@ -833,7 +850,11 @@ export function RequestPayment({
                 {submitted && (
                   <>
                     <Icon name="check-circle" size={12} />
-                    {submitted.auto_approved ? 'Submitted · approved as requested · with AP to pay' : 'Submitted · in the AP queue'}
+                    {submitted.auto_approved
+                      ? submitted.approved_by?.id
+                        ? 'Payment approved by you · with AP to pay'
+                        : 'Submitted · approved as requested · with AP to pay'
+                      : 'Submitted · in the AP queue'}
                     {submitted.needs_w9 ? ' · W9 needed' : ''}
                   </>
                 )}
@@ -880,9 +901,9 @@ export function RequestPayment({
                       if (valid) send(null);
                     }}
                   >
-                    <Icon name={woBlocked || blacklisted ? 'lock' : 'send'} size={14} className="btn-ic" />
+                    <Icon name={woBlocked || blacklisted ? 'lock' : selfApproves ? 'check' : 'send'} size={14} className="btn-ic" />
                     <span className="spin" aria-hidden="true" />
-                    <span className="btn-txt">Submit payment request</span>
+                    <span className="btn-txt">{selfApproves ? 'Approve payment' : 'Submit payment request'}</span>
                   </button>
                 )}
               </div>

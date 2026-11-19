@@ -4168,6 +4168,18 @@ payment is approved first (the AM's reason, unchanged), then paid. AP still
 pays only approved requests and never their own (D2). The under-$500 band
 keeps `{atl,tl,am}`: it names who may pay those directly.
 
+**Approve payment** (Elise, 2026-11-19, no migration;
+`paymentApprovalPreview` in `services/payments.ts`, `GET
+/work-orders/:id/payment-requests/preview?amount=&method=` (`payments`
+create)). When the person filling in Request payment could approve that
+request themselves (`requesterMayApprove`: their band, Zelle / Cash App) and it
+is not past the NTE or the approved quote (`overageFor`, `aboveNteFor`), the
+form's button reads **Approve payment** (asked 350 ms after the amount stops
+changing) — the request lands approved by them, as it already did; the
+confirmation reads "Payment approved by you · with AP to pay". Otherwise it
+stays **Submit payment request**. Under $500 for anyone else is still
+"approved as requested", not their approval.
+
 **No More menu in the work-order header** (Elise, 2026-11-17, no migration):
 `WorkOrderDetailPage` no longer passes `RecordActions` to `WoHeader`, so
 Pause / Resume, Complete service, Cancel work order and Reopen are offered

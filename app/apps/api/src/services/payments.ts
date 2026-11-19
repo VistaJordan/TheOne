@@ -403,6 +403,26 @@ async function requesterMayApprove(actor: ActingPrincipal, amount: number, metho
   return tierAllows(tier, actor.role, actor.isSuperAdmin);
 }
 
+/** Elise, 2026-11-19: would a request of this amount and method, raised by
+    this person now, land APPROVED under their own approval? The same tests as
+    createPaymentRequest (their band, Zelle / Cash App, no overage past the
+    NTE or the approved quote, not a loss-making job). The Request payment
+    form reads it to label its button "Approve payment". Under $500 a
+    request lands approved for anyone, but that is no one's approval, so it
+    answers false unless the person could approve it themselves too. */
+export async function paymentApprovalPreview(
+  taskId: string,
+  amount: number,
+  method: string | null,
+  actor: ActingPrincipal,
+): Promise<{ self_approves: boolean }> {
+  if (!Number.isFinite(amount) || amount <= 0) return { self_approves: false };
+  if (!(await requesterMayApprove(actor, amount, method))) return { self_approves: false };
+  if (await overageFor(taskId, amount)) return { self_approves: false };
+  if (await aboveNteFor(taskId, amount)) return { self_approves: false };
+  return { self_approves: true };
+}
+
 /** 2026-11-17 (Elise): a manager whose band covers the amount may approve
     or PAY the request themselves — their own included — without AP's
     process grant: ATL to $3,000, TL to $5,000, AM to $50,000 (each level
