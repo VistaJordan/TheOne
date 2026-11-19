@@ -4060,6 +4060,12 @@ the rail's Open for (`time.received_at`) and the timelog — it used to be the
 received day at midnight UTC, hours before the work order existed. **OM Under
 Probation is view-only on the Dates** (0151; Add work order still takes
 Received on, Due Date and SLA Due Date — `CREATE_FILLABLE_FIELD_KEYS`).
+**Since 0160 (Elise, 2026-11-19) OM and Senior OM are too**: the whole
+`work_orders/fields/dates` section edit false, explicit edit grants under it
+cleared (0085's four SLA rows included), so Overview › Dates and All fields
+draw every date read-only for all three OM tiers and the field editor / bulk
+edit refuse them; Add work order is unchanged
+(`tests/om-dates-view-only.test.ts`).
 
 **Approved work reads as Incurred Day N; latest messages on Overview;
 Requested by first** (Elise, 2026-11-16, no migration; UAT #50, #43, #28).
