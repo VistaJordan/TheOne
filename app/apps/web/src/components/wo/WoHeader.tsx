@@ -231,12 +231,14 @@ export function WoHeader({ wo, phase, inStatusDays, obligations, onClockClick, q
           {wo.status_change && (
             <StatusChangeBanner
               state={wo.status_change}
+              oaDecides={wo.oa_interim === true}
               onRequestAgain={() => statusTriggerRef.current?.click()}
             />
           )}
           <StatusChangeMenu
             woId={wo.id}
             current={wo.status}
+            forceDirect={wo.oa_interim === true}
             align="right"
             ecotrakStatus={f[ECOTRAK_STATUS_KEY]}
             portalType={f[CLIENT_PORTAL_TYPE_KEY]}

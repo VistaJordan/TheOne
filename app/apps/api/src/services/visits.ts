@@ -720,7 +720,9 @@ export async function createVisit(
   // check-in / check-out too: the visit is logged planned, the request is
   // asked everything its status move would be asked BEFORE anything is
   // written, and the stamps land when a manager approves it.
-  const request = requestModeOf(actor) && stamps.status !== 'planned';
+  // 2026-11-19 · an OP Admin on the job checks in / out directly while OBI → Ecotrak is off.
+  const request =
+    requestModeOf(actor) && stamps.status !== 'planned' && !(await (await import('./oaInterim.js')).oaInterimFor(actor, taskId));
   const action: VisitRequestDetail['action'] = stamps.status === 'checked_out' ? 'check_out' : 'check_in';
   let plan: VisitRequestPlan | null = null;
   if (request) {
@@ -873,7 +875,10 @@ export async function updateVisit(
   // 2026-11-18 (Elise) · a status-request person's check-in / check-out is a
   // request: the visit keeps its status and stamps until a manager approves.
   // The rest of the patch (type, technician) is saved as usual.
-  const request = requestModeOf(actor) && (checkInNow || checkOutNow);
+  const request =
+    requestModeOf(actor) &&
+    (checkInNow || checkOutNow) &&
+    !(await (await import('./oaInterim.js')).oaInterimFor(actor, cur.task_id));
   let plan: VisitRequestPlan | null = null;
   if (request) {
     if (checkInNow) await assertNoOtherCheckedIn(cur.task_id, visitId);

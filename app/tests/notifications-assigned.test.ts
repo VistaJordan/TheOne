@@ -27,7 +27,7 @@ const read = (p: string) => readFileSync(join(root, p), 'utf8');
 
 describe('who is on the job', () => {
   it('any assigned seat counts, names matched without case or spaces', () => {
-    expect(ASSIGNED_SEAT_KEYS).toEqual(['Assignee', 'Support Trainee', 'TL', 'ATL', 'AM', 'Completion Assignee']);
+    expect(ASSIGNED_SEAT_KEYS).toEqual(['Assignee', 'Support Trainee', 'TL', 'ATL', 'AM', 'Completion Assignee', 'OP Admin']);
     expect(isAssignedTo({ Assignee: 'Ana Ruiz, Bo Li' }, ' bo li ')).toBe(true);
     expect(isAssignedTo({ TL: 'Jordan Brown' }, 'Jordan Brown')).toBe(true);
     expect(isAssignedTo({ AM: 'Kim' }, 'Kim')).toBe(true);

@@ -53,6 +53,7 @@ import {
   ADDRESS_KEY,
   COMPLETION_ASSIGNEE_KEY,
   SUPPORT_TRAINEE_KEY,
+  OA_SEAT_KEY,
   ORIGINAL_WO_KEY,
   ORIGINAL_WO_NOT_FOUND_CODE,
   RECALL_KEY,
@@ -70,7 +71,7 @@ import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { INTAKE_START_STATUS_NAME } from './intake.js';
 import { dispatchAutomations } from './automations.js';
-import { assertCompletionAssignees, assertDispatchers, assertSupportTrainees } from './dataRules.js';
+import { assertCompletionAssignees, assertDispatchers, assertSupportTrainees, assertOaSeat } from './dataRules.js';
 import { addressWritten, fillFromAddress } from './addressFill.js';
 
 const PERM_KEY = 'work_orders';
@@ -462,6 +463,8 @@ export async function createWorkOrder(
   if (str(bag[COMPLETION_ASSIGNEE_KEY])) await assertCompletionAssignees(assigneeNames(bag[COMPLETION_ASSIGNEE_KEY]));
   // 0124: a Support Trainee is an active OM Under Probation.
   if (str(bag[SUPPORT_TRAINEE_KEY])) await assertSupportTrainees(assigneeNames(bag[SUPPORT_TRAINEE_KEY]));
+  // 0161: an OP Admin is an active OP Admin.
+  if (str(bag[OA_SEAT_KEY])) await assertOaSeat(assigneeNames(bag[OA_SEAT_KEY]));
 
   const missing = woCreateMissing(form, bag, woNumber);
   if (missing.length > 0) {

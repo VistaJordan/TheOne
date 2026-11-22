@@ -209,7 +209,7 @@ export function parseNoticeCursor(raw: string | null | undefined): { at: string;
 // press is logged (`after_hours_opened` / `after_hours_closed`).
 
 /** The work-order seats that make a person "on the job". */
-export const ASSIGNED_SEAT_KEYS = ['Assignee', 'Support Trainee', 'TL', 'ATL', 'AM', 'Completion Assignee'] as const;
+export const ASSIGNED_SEAT_KEYS = ['Assignee', 'Support Trainee', 'TL', 'ATL', 'AM', 'Completion Assignee', 'OP Admin'] as const;
 
 /** Kinds shown whoever holds the work order: someone asked for this person by
     name (a mention), or it answers their own request. */

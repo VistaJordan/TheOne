@@ -409,6 +409,10 @@ export interface Membership {
 }
 
 export interface WorkOrderDetail {
+  /** 2026-11-19 · this OP Admin moves the status / checks in directly and
+      decides the dispatchers' requests here (OBI → Ecotrak off, named in
+      the OP Admin field). Set per viewer by GET /work-orders/:id. */
+  oa_interim?: boolean;
   id: string;
   wo_number: string;
   ext_name: string | null;
@@ -1866,6 +1870,9 @@ export interface ApprovalTask {
 /** One row of GET /api/approvals — the task plus the work order it sits on,
     with the columns the inbox filters by. */
 export interface ApprovalListItem extends ApprovalTask {
+  /** 2026-11-19 · this viewer may decide this row though their role may not
+      (an OP Admin's interim rights on the work order). */
+  can_decide?: boolean;
   wo_number: string;
   wo_title: string | null;
   client: string | null;

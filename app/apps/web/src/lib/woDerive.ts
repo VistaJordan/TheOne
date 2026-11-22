@@ -113,6 +113,9 @@ export function derivePeople(wo: WorkOrderDetailV2): WoPeople {
     // 0124 · an OM Under Probation on the job (picker lists that role only).
     { role: 'Support trainee', names: names(field(f, FIELD.supportTrainee)),
       fieldKey: `fields.${FIELD.supportTrainee}` },
+    // 0161 · the OP Admin on the job (picker lists OP Admins only).
+    { role: 'OP Admin', names: names(field(f, FIELD.opAdmin)),
+      fieldKey: `fields.${FIELD.opAdmin}` },
     { role: 'Previous assignees', names: names(field(f, FIELD.previousAssignees)),
       fieldKey: `fields.${FIELD.previousAssignees}` },
     { role: 'Sales owner', names: names(field(f, FIELD.salesOwner)),

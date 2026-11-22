@@ -27,6 +27,10 @@ import {
   COMPLETION_ASSIGNEE_NOT_AR_CODE,
   COMPLETION_ASSIGNEE_ROLE_CODES,
   SUPPORT_TRAINEE_KEY,
+  OA_SEAT_KEY,
+  OA_ROLE_CODE,
+  OA_SEAT_NOT_OA_CODE,
+  oaSeatNotOaMessage,
   SUPPORT_TRAINEE_NOT_PROBATION_CODE,
   SUPPORT_TRAINEE_ROLE_CODES,
   supportTraineeNotProbationMessage,
@@ -188,6 +192,16 @@ export async function assertSupportTrainees(
     supportTraineeNotProbationMessage,
     q,
   );
+}
+
+/** Each OP Admin named on a work order must be an active human with the
+    `oa` role (0161, Elise 2026-11-19); 400 `OA_SEAT_NOT_OA` otherwise. */
+export async function assertOaSeat(
+  names: readonly string[],
+  field = `fields.${OA_SEAT_KEY}`,
+  q: Queryable = pool,
+): Promise<string[]> {
+  return assertRoleHolders(names, [OA_ROLE_CODE], field, OA_SEAT_NOT_OA_CODE, oaSeatNotOaMessage, q);
 }
 
 /** Each name must be an active human holding one of `roles`. Returns the

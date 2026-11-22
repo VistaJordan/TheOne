@@ -229,6 +229,8 @@ export const FIELD_SECTIONS: FieldSectionDef[] = [
       'fields.Sales Owner',
       // 0124 · an OM Under Probation on the job (SUPPORT_TRAINEE_KEY).
       'fields.Support Trainee',
+      // 0161 · the OP Admin on the job (OA_SEAT_KEY).
+      'fields.OP Admin',
     ],
   },
   {

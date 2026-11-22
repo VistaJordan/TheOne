@@ -644,6 +644,9 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
     if (!(await resolveTaskId(id, p))) throw notFound('Work order not found');
     const detail = await getWorkOrderDetail(id);
     if (!detail) throw notFound('Work order not found');
+    // 2026-11-19 · an OP Admin's interim rights on this work order.
+    const { oaInterimFor } = await import('../services/oaInterim.js');
+    detail.oa_interim = await oaInterimFor(p, detail.id);
     return redactWorkOrder(allow, detail);
   });
 
@@ -668,9 +671,12 @@ export default async function workOrdersRoutes(app: FastifyInstance): Promise<vo
             [scoped],
           )).rows[0]?.name
         : null;
+      const { oaInterimFor } = await import('../services/oaInterim.js');
       const direct =
         (permAllows(p.perms, STATUS_PERM_KEY, 'create', p.isSuperAdmin) && statusMoveNeedsNoApproval(name, from)) ||
-        (statusApprovalNeedsNote(name) && mayMoveToApprovedDirectly(p.role));
+        (statusApprovalNeedsNote(name) && mayMoveToApprovedDirectly(p.role)) ||
+        // 2026-11-19 · an OP Admin on the job, while OBI → Ecotrak is off.
+        (await oaInterimFor(p, scoped));
       if (!direct) {
         requirePerm(p, STATUS_PERM_KEY, 'edit', 'You cannot change work-order status');
       }

@@ -94,11 +94,41 @@ export function supportTraineeNotProbationMessage(names: readonly string[]): str
     : `${list} are not active OMs Under Probation — the Support Trainee must hold that role`;
 }
 
+/** OP Admin (migration 0161, Elise 2026-11-19): the OP Admin on the work
+    order, People section, picked from `oa` accounts only. While OBI → Ecotrak
+    is off, the OP Admin named here moves the status and checks in / out
+    directly and decides the dispatchers' requests on this work order
+    (`oaInterimFor` in the API). */
+export const OA_SEAT_KEY = 'OP Admin';
+export const OA_ROLE_CODE = 'oa';
+/** The switch that ends OP Admin's interim rights: once our status changes
+    reach the client, they request like a dispatcher. */
+export const OA_INTERIM_INTEGRATION = 'ecotrak_outbound';
+export const OA_SEAT_NOT_OA_CODE = 'OA_SEAT_NOT_OA';
+
+export function oaSeatNotOaMessage(names: readonly string[]): string {
+  const list = names.map((n) => `"${n}"`).join(', ');
+  return names.length === 1
+    ? `${list} is not an active OP Admin — the OP Admin field must hold that role`
+    : `${list} are not active OP Admins — the OP Admin field must hold that role`;
+}
+
+/** Whether a comma-joined people value (a seat) names this person. */
+export function seatNamesInclude(value: string | null | undefined, name: string | null | undefined): boolean {
+  const me = (name ?? '').trim().toLowerCase();
+  if (!me || !value) return false;
+  return value
+    .split(',')
+    .map((n) => n.trim().toLowerCase())
+    .includes(me);
+}
+
 /** Person fields whose picker lists one role only (besides the AM / TL / ATL
     seats, `seatRoleForField`): bag key → role code. */
 export const ROLE_LIMITED_PERSON_FIELDS: Readonly<Record<string, string>> = {
   [COMPLETION_ASSIGNEE_KEY]: 'ar',
   [SUPPORT_TRAINEE_KEY]: 'om_probation',
+  [OA_SEAT_KEY]: OA_ROLE_CODE,
 };
 
 /** `details.code` when an assignee names a disabled account — asked of every

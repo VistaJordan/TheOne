@@ -714,6 +714,23 @@ files with a blob behind them count. The header feeds the status menu the
 approved kinds from the same `['wo-attachments', id]` cache entry, so the
 "Needs after photo" tag clears the moment a photo is approved.
 
+**OP Admin on the work order, and their interim rights** (migration 0161,
+Elise 2026-11-19; `OA_SEAT_KEY` / `seatNamesInclude` in shared
+`dataQuality.ts`, `services/oaInterim.ts`, `tests/oa-interim.test.ts`). A new
+**OP Admin** people field (People section; picker lists role `oa` only,
+`ROLE_LIMITED_PERSON_FIELDS`; `assertOaSeat`, 400 `OA_SEAT_NOT_OA`, in the
+field editor, bulk edit and Add work order; seed.ts in step) that counts as on
+the job (`ASSIGNED_SEAT_KEYS`). OP Admin is request mode by role (status and,
+since 0157, check-in / check-out). **While OBI → Ecotrak (`ecotrak_outbound`,
+`OA_INTERIM_INTEGRATION`) is off**, `oaInterimFor(actor, taskId)` — role `oa`,
+the switch off, named in the field — lets them: move the status directly
+(`PATCH …/status`), check in / out directly (`createVisit` / `updateVisit` skip
+the request), and approve / reject the dispatchers' `status_change` requests on
+that work order (`requireDecideOrOa`; the inbox row carries `can_decide`).
+`WorkOrderDetail.oa_interim` drives the screens (`StatusChangeMenu
+forceDirect`, `StatusChangeBanner oaDecides`, the CICO card). Turning the
+switch on ends it everywhere; no other role changes.
+
 **Switching tabs keeps what was typed** (Elise, 2026-11-19, no migration;
 `keep()` in `WorkOrderDetailPage.tsx`, `lib/woTabActive.ts`). A work-order tab
 is mounted the first time it is opened and then only hidden (`.wo-tabkeep`,

@@ -769,7 +769,7 @@ export function ApprovalsPage({ mode = 'inbox' }: { mode?: ApprovalsMode } = {})
         myId,
         myRole,
         held,
-        canDecideTask(t.type) && (t.type !== 'over_quote' || mayDecideOverQuote(myRole, mySuper)),
+        (canDecideTask(t.type) || t.can_decide === true) && (t.type !== 'over_quote' || mayDecideOverQuote(myRole, mySuper)),
       ),
     );
     for (const q of quotesQuery.data?.items ?? []) {
@@ -1906,7 +1906,8 @@ function Decisions({ row, myId, mySuper, myRole, canDecideTask, canApproveQuotes
 
   switch (d.kind) {
     case 'task': {
-      const may = canDecideTask(d.item.type);
+      // 2026-11-19 · or an OP Admin's interim rights on this work order.
+      const may = canDecideTask(d.item.type) || d.item.can_decide === true;
       const need = `Requires ${KIND_CHIP[row.section].toLowerCase()} approval rights`;
       // Rule 7.1.3: a new work order is ACCEPTED (and assigned), not approved.
       const accept = d.item.type === 'wo_acceptance';

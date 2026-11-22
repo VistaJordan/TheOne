@@ -63,6 +63,8 @@ interface StatusChangeMenuProps {
   /** Replace the default pill trigger (the detail header uses a button). The
       mode is handed over so the trigger can read "Request status change". */
   renderTrigger?: (api: { open: boolean; toggle: () => void; mode: StatusMenuMode }) => ReactNode;
+  /** 2026-11-19 · move directly whatever the role says (an OP Admin's interim rights). */
+  forceDirect?: boolean;
   /** Anchor the popover to the right edge — for triggers near the viewport edge. */
   align?: 'left' | 'right';
   /** The work order's current Ecotrak status (the `Ecotrak Status` bag key),
@@ -131,8 +133,12 @@ export function StatusChangeMenu({
   ecotrakStatus,
   gateHints,
   portalType,
+  forceDirect = false,
 }: StatusChangeMenuProps) {
-  const mode = useStatusMenuMode();
+  // 2026-11-19 · an OP Admin on the job moves the status directly while
+  // OBI → Ecotrak is off (the API's oaInterimFor; WorkOrderDetail.oa_interim).
+  const roleMode = useStatusMenuMode();
+  const mode: StatusMenuMode = forceDirect ? 'direct' : roleMode;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [sent, setSent] = useState<string | null>(null);

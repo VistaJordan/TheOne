@@ -37,15 +37,18 @@ import { Icon } from '../Icon';
 export function StatusChangeBanner({
   state,
   onRequestAgain,
+  oaDecides = false,
 }: {
   state: StatusChangeState;
+  /** 2026-11-19 · an OP Admin on the job decides it (OBI → Ecotrak off). */
+  oaDecides?: boolean;
   /** Opens the status menu — wired by the header. */
   onRequestAgain?: () => void;
 }) {
   const qc = useQueryClient();
   const { actingAs, can } = useAuth();
   const mine = !!actingAs && state.requested_by?.id === actingAs.id;
-  const approver = can(approvalSectionPermKey('status'), 'approve');
+  const approver = can(approvalSectionPermKey('status'), 'approve') || oaDecides;
   const mayAct = mine || approver;
   /** The note dialog: the rejection reason, or how the client approved. */
   const [asking, setAsking] = useState<'approve' | 'reject' | 'hold' | null>(null);

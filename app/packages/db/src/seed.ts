@@ -489,6 +489,8 @@ const CURATED_FIELDS: CuratedField[] = [
   // only, QC) and Portal ID (Integrations). The migration carries the same
   // rows and the admin-only grant; keep in step.
   { key: 'Support Trainee',          label: 'Support Trainee',      type: 'users' },
+  // 0161 · the OP Admin on the work order (People). Keep in step.
+  { key: 'OP Admin',                 label: 'OP Admin',             type: 'users' },
   { key: 'QC Notes',                 label: 'QC Notes',             type: 'long_text' },
   { key: 'Portal ID',                label: 'Portal ID',            type: 'short_text' },
   // 0130 (Elise, 2026-11-10) · the recall question on Add work order — keep in step.

@@ -342,6 +342,13 @@ export async function listApprovalTasks(
         i.created_by?.id === viewer.id ||
         allow(approvalSectionPermKey(approvalSectionOf(i.type)), 'view'),
     );
+  // 2026-11-19 · rows an OP Admin may decide on the work orders they hold.
+  const { oaInterimTasks } = await import('./oaInterim.js');
+  const oaTasks = await oaInterimTasks(
+    viewer,
+    items.filter((i) => i.type === 'status_change' && i.status === 'open').map((i) => i.task_id),
+  );
+  for (const i of items) if (i.type === 'status_change' && oaTasks.has(i.task_id)) i.can_decide = true;
   const counts = Object.fromEntries(STATUSES.map((s) => [s, 0])) as Record<ApprovalTaskStatus, number>;
   for (const i of items) counts[i.status] += 1;
   return { items, total: items.length, counts };
@@ -598,6 +605,21 @@ function requireDecide(actor: ActingPrincipal, type: ApprovalTaskType, verb: str
     'approve',
     `You cannot ${verb} ${APPROVAL_TASK_LABEL[type].toLowerCase()} tasks`,
   );
+}
+
+/** 2026-11-19 · an OP Admin on the job decides the dispatchers' status and
+    check-in / check-out requests (status_change) there while OBI → Ecotrak
+    is off (services/oaInterim.ts); anyone else needs the section's grant. */
+async function requireDecideOrOa(
+  actor: ActingPrincipal,
+  cur: { type: ApprovalTaskType; task_id: string },
+  verb: string,
+): Promise<void> {
+  if (cur.type === 'status_change') {
+    const { oaInterimFor } = await import('./oaInterim.js');
+    if (await oaInterimFor(actor, cur.task_id)) return;
+  }
+  requireDecide(actor, cur.type, verb);
 }
 
 /** Elise, 2026-10-28: paying more than the approved quote is decided by ATL
@@ -907,7 +929,7 @@ export async function approveApprovalTask(
   opts: DecideOptions = {},
 ): Promise<ApprovalTask> {
   const cur = await getApprovalTask(id);
-  requireDecide(actor, cur.type, 'approve');
+  await requireDecideOrOa(actor, cur, 'approve');
   requireOverQuoteLevel(actor, cur.type, 'approve');
   // Elise, 2026-11-03: an NTE hold raised for a payment that is still waiting
   // is approved WITH the payment — otherwise the hold clears and the payment
@@ -944,7 +966,7 @@ export async function rejectApprovalTask(
   actor: ActingPrincipal,
 ): Promise<ApprovalTask> {
   const cur = await getApprovalTask(id);
-  requireDecide(actor, cur.type, 'reject');
+  await requireDecideOrOa(actor, cur, 'reject');
   requireOverQuoteLevel(actor, cur.type, 'reject');
   // 2026-11-16 (Elise): a money hold raised for a payment that is still
   // waiting is the decision on that payment. Rejecting only the hold left the

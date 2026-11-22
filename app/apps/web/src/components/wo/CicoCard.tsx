@@ -365,7 +365,9 @@ function VisitLog({
   const canAdmin = can('admin/fields', 'view');
   // 2026-11-18 (Elise) · whoever requests status changes requests the
   // check-in and the check-out too; a manager approves them under Approvals.
-  const requestMode = can(STATUS_PERM_KEY, 'create') && !can(STATUS_PERM_KEY, 'edit');
+  // 2026-11-19 · an OP Admin on the job checks in / out directly while
+  // OBI → Ecotrak is off.
+  const requestMode = can(STATUS_PERM_KEY, 'create') && !can(STATUS_PERM_KEY, 'edit') && wo.oa_interim !== true;
   const pendingVisit = visits.find((v) => v.pending_request) ?? null;
 
   // A running "on site" figure ticks while somebody is checked in.

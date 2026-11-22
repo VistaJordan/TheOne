@@ -25,7 +25,7 @@ import { assertReadyToAssign, awaitingAcceptance } from './intakeGate.js';
 import { applyProfitFormula } from './money.js';
 import { stampDateCreated } from './dateCreated.js';
 import { assertNotVisitOwned } from './visits.js';
-import { assertCompletionAssignees, assertSupportTrainees, assertDateOrder, assertPenaltyDescription, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
+import { assertCompletionAssignees, assertSupportTrainees, assertOaSeat, assertDateOrder, assertPenaltyDescription, assertDispatchers, assertMayClearEmergency, assertMayClearEscalation, assertNotHistoryField, canonicalClient, clientRecordNames, disabledAssigneeKeys } from './dataRules.js';
 import { checkWriteValue } from './woFieldValues.js';
 import { assertMoneyNotLocked } from './moneySync.js';
 import { assertNteNotSynced } from './nteSync.js';
@@ -47,6 +47,7 @@ import {
   ASSIGNEE_FIELD_KEY,
   COMPLETION_ASSIGNEE_KEY,
   SUPPORT_TRAINEE_KEY,
+  OA_SEAT_KEY,
   assigneeNames,
   matchClientRecord,
   normalizeUsState,
@@ -173,6 +174,9 @@ export async function bulkUpdate(
     // 0124: a Support Trainee written in bulk names active OMs Under Probation.
     const trainee = customPatch.find((c) => c.key === SUPPORT_TRAINEE_KEY);
     if (trainee && trainee.value) await assertSupportTrainees(assigneeNames(trainee.value));
+    // 0161: an OP Admin written in bulk names active OP Admins.
+    const oaSeat = customPatch.find((c) => c.key === OA_SEAT_KEY);
+    if (oaSeat && oaSeat.value) await assertOaSeat(assigneeNames(oaSeat.value));
     // 2026-11-03 (0120): unticking Escalated in bulk is a TL / ATL / AM's call.
     const esc = customPatch.find((c) => c.key === ESCALATED_KEY);
     if (esc && !flagTicked(esc.value)) await assertMayClearEscalation(actorId);
