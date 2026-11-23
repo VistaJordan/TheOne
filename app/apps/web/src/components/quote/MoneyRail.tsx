@@ -83,12 +83,9 @@ export function MoneyRail({
             <div className="ntemeter-thresh" title={`${NTE_WARN_PCT}% warning threshold`} />
           </div>
           <div className="ntemeter-scale">
-            <span>
-              Quote {usd0(totals.grandTotal)}
-              <span className={`ntemeter-pct${over ? ' is-over' : warn ? ' is-warn' : ''}`}>
-                {Math.round(pct)}%
-              </span>
-            </span>
+            {/* No percentage beside the quote (Elise, 2026-11-23): the bar and
+                the two figures say it. */}
+            <span>Quote {usd0(totals.grandTotal)}</span>
             <span>NTE {usd0(nte)}</span>
           </div>
           {warn && (

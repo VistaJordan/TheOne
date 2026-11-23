@@ -123,7 +123,8 @@ describe('a status change is decided on the work order (2026-10-27)', () => {
     const chip = src('apps/web/src/components/wo/StatusChangeBanner.tsx');
     expect(chip).toContain('approveApprovalTask(');
     expect(chip).toContain('rejectApprovalTask(');
-    expect(chip).not.toContain('Decide');
+    // No "Decide" button (the 0161 `oaDecides` prop is not a label).
+    expect(chip).not.toMatch(/>\s*Decide/);
     expect(chip).toContain('{mine && (');
   });
   it('approving a move into Approved needs a note, on the API too', () => {

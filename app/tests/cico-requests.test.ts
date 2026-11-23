@@ -147,7 +147,7 @@ describe('the CICO card', () => {
   it('offers the four check-outs and the request wording', () => {
     expect(card).toContain('...CHECK_OUT_OUTCOMES.map((o) => ({');
     expect(card).toContain("'Request check-in'");
-    expect(card).toContain("const requestMode = can(STATUS_PERM_KEY, 'create') && !can(STATUS_PERM_KEY, 'edit');");
+    expect(card).toContain("const requestMode = can(STATUS_PERM_KEY, 'create') && !can(STATUS_PERM_KEY, 'edit') && wo.oa_interim !== true;");
     expect(card).toContain('disabled={busy || statusLocked}');
   });
 });
