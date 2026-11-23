@@ -1677,6 +1677,15 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
 
         {/* ══ Right rail ════════════════════════════════════════════════ */}
         <aside className="rail">
+          {/* Elise, 2026-11-23: the Summary heads the rail (it sat at the foot). */}
+          <SummaryCard
+            auto={quote.summary.auto}
+            pinned={draft.summary_pinned}
+            grandTotal={totals.grandTotal}
+            editable={editable}
+            onPinnedChange={(summary_pinned) => update({ ...draft, summary_pinned })}
+          />
+
           <MoneyRail
             totals={totals}
             nte={nte}
@@ -1756,14 +1765,6 @@ export function QuoteBuilder({ woNumber, embedded = false }: { woNumber: string;
               </div>
             </div>
           </section>
-
-          <SummaryCard
-            auto={quote.summary.auto}
-            pinned={draft.summary_pinned}
-            grandTotal={totals.grandTotal}
-            editable={editable}
-            onPinnedChange={(summary_pinned) => update({ ...draft, summary_pinned })}
-          />
         </aside>
       </div>
     </>,
