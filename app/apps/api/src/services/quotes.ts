@@ -572,10 +572,11 @@ function pushSpecs(out: string[], specs: string | null | undefined): void {
   for (const para of specs.trim().split(/\n+/)) out.push(...wrap(para, SUMMARY_WIDTH));
 }
 
-/** A note to the customer, paragraph by paragraph, after a blank line. */
+/** A note to the customer, paragraph by paragraph, after a blank line,
+    headed "Note to customer:" like the specs (UAT, Elise 2026-11-25). */
 function pushNote(out: string[], note: string | null | undefined): void {
   if (!note || note.trim() === '') return;
-  out.push('');
+  out.push('', 'Note to customer:');
   for (const para of note.trim().split(/\n+/)) out.push(...wrap(para, SUMMARY_WIDTH));
 }
 

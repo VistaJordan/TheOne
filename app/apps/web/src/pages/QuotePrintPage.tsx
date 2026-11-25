@@ -274,7 +274,11 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
               <b>Specs:</b> {incurred.specs}
             </p>
           )}
-          {incurred.note_to_customer?.trim() && <p>{incurred.note_to_customer}</p>}
+          {incurred.note_to_customer?.trim() && (
+            <p>
+              <b>Note to customer:</b> {incurred.note_to_customer}
+            </p>
+          )}
         </section>
       )}
 
@@ -342,7 +346,7 @@ export function QuoteDocument({ quote, wo, tpl }: { quote: Quote; wo: WoDetail |
       {/* A quote from before 0146 may still hold a quote-wide note. */}
       {quote.note_to_customer && (
         <section className="qdoc-note">
-          <h3>Note</h3>
+          <h3>Note to customer</h3>
           <p>{quote.note_to_customer}</p>
         </section>
       )}
@@ -503,7 +507,11 @@ function LinesBlock({ section, heading, note, taxPct = 0, num }: { section: Quot
           <b>Specs:</b> {section.specs}
         </p>
       )}
-      {section.note_to_customer?.trim() && <p className="qdoc-narr qdoc-section-note">{section.note_to_customer}</p>}
+      {section.note_to_customer?.trim() && (
+        <p className="qdoc-narr qdoc-section-note">
+          <b>Note to customer:</b> {section.note_to_customer}
+        </p>
+      )}
     </section>
   );
 }
