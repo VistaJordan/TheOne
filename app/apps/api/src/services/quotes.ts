@@ -484,7 +484,18 @@ export function buildAutoSummary(
       ? round2(incurredLike.reduce((sum, s) => sum + s.subtotal, 0))
       : totals.incurred_subtotal;
     out.push(...amountRows('Total incurred', incurredTotal));
+    // 2026-11-25 (UAT #27) · the incurred work prints its own sales tax in
+    // dollars, as the builder's Incurred card and the printed quote do.
+    if (yoda && totals.sales_tax_pct > 0) {
+      out.push(
+        ...amountRows(`Sales tax (${pctText(totals.sales_tax_pct)})`, round2((incurredTotal * totals.sales_tax_pct) / 100)),
+      );
+    }
   }
+  // Under the Yoda rule an option's tax is on incurred + option; the incurred
+  // share prints above, so each option prints its own share (its grand total
+  // is unchanged).
+  const incurredTax = yoda ? round2((totals.incurred_subtotal * totals.sales_tax_pct) / 100) : 0;
 
   // ── Proposed options ──────────────────────────────────────────────────────
 
@@ -510,7 +521,9 @@ export function buildAutoSummary(
     out.push(...amountRows(`${named(section.label)} total`, total ? total.total : 0));
     if (yoda && total) {
       if (totals.sales_tax_pct > 0) {
-        out.push(...amountRows(`Sales tax (${pctText(totals.sales_tax_pct)})`, total.tax));
+        out.push(
+          ...amountRows(`Sales tax (${pctText(totals.sales_tax_pct)})`, round2(Math.max(0, total.tax - incurredTax))),
+        );
       }
       out.push(...amountRows(optionCount > 1 ? `${section.label} grand total` : 'Grand total', total.grand_total));
     }
