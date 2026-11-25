@@ -42,13 +42,13 @@ describe('reading the sheet', () => {
     expect(parseSheetRef('not a link').sheet_id).toBeNull();
   });
 
-  it('matches AM / TL / ATL / OP Admin only; spans a start – end row; reports the rest', () => {
+  it('matches the on-call roles only (not AR); spans a start – end row; reports the rest', () => {
     const people = [
       { id: 'a', name: 'Jordan Brown', email: 'jordanb@byblosvista.com', role: 'am' },
       { id: 'b', name: 'Jeff Soren', email: null, role: 'tl' },
       { id: 'c', name: 'Jack Smith', email: null, role: 'atl' },
       { id: 'd', name: 'Rita Oa', email: null, role: 'oa' },
-      { id: 'e', name: 'Omar Om', email: null, role: 'om' },
+      { id: 'e', name: 'Omar Om', email: null, role: 'ar' },
     ];
     const r = parseOnCallSheet(
       [
@@ -66,6 +66,47 @@ describe('reading the sheet', () => {
       ].sort(),
     );
     expect(r.unmatched.map((u) => u.text)).toEqual(['Omar Om', 'Nobody Here']);
+  });
+
+  it('reads the Vista calendar: dates across, duty rows by role, the year nearest today', () => {
+    const people = [
+      { id: 'am1', name: 'Antonio Reyes', email: null, role: 'am' },
+      { id: 'om1', name: 'Nate Cole', email: null, role: 'om' },
+      { id: 'om2', name: 'John Park', email: null, role: 'senior_om' },
+      { id: 'om3', name: 'Nora Diaz', email: null, role: 'om' },
+      { id: 'oa1', name: 'Dean Ross', email: null, role: 'oa' },
+      { id: 'pay', name: 'Lana Fox', email: null, role: 'ap' },
+      // Same first name as the AM, but a dispatcher: never matched on the manager row.
+      { id: 'om4', name: 'Antonio Silva', email: null, role: 'om' },
+      { id: 'om5', name: 'Fady Haddad', email: null, role: 'om' },
+    ];
+    const blank = (n: number) => Array.from({ length: n }, () => '');
+    const r = parseOnCallSheet(
+      [
+        ['', '', ...blank(3), '30 Dec', '31 Dec', '1 Jan'],
+        ['', '', ...blank(3), 'Jordan trip', '', ''],
+        ['Night Manager', '', ...blank(3), 'Antonio Reyes', 'Fady', ''],
+        ['Night Dispatcher 1', '', ...blank(3), 'Nate', 'Nate', 'Antonio'],
+        ['Night Dispatcher 2', '', ...blank(3), 'John', '', ''],
+        ['Night Dispatcher 3', '', ...blank(3), 'Nora', '', ''],
+        ['Night Dispatcher 4', '', ...blank(3), '', '', ''],
+        ['Night Payer', '', ...blank(3), 'Lana', 'Lana', ''],
+        ['Night Admin', '', ...blank(3), 'Dean', '', ''],
+        ['', 'Bernard', ...blank(3), 'Remote', 'PTO', ''],
+      ],
+      people,
+      2026,
+      '2026-12-30',
+    );
+    expect(r.shifts.map((s) => `${s.day}:${s.principal_id}`).sort()).toEqual(
+      ['2026-12-30:am1', '2026-12-30:om1', '2026-12-30:om2', '2026-12-30:om3', '2026-12-30:oa1', '2026-12-31:om1', '2027-01-01:om4'].sort(),
+    );
+    // Fady is an OM, not an AM: refused on the Night Manager row and reported.
+    expect(r.unmatched.map((u) => u.text)).toEqual(['Night Manager · 2026-12-31: Fady']);
+  });
+
+  it('reads the whole tab, far past column Z', () => {
+    expect(read('apps/api/src/lib/googleSheets.ts')).not.toContain('A1:Z3000');
   });
 });
 

@@ -1,7 +1,8 @@
 // On call and After hours (Elise, 2026-11-17).
 //
-// A Google Sheet says who is on call on which day — an AM, TL, ATL or OP
-// Admin (`ON_CALL_ROLE_CODES`). OBI reads it (services/onCall.ts) into
+// A Google Sheet says who is on call on which day — an AM, TL, ATL, OP
+// Admin, OM or Senior OM (`ON_CALL_ROLE_CODES`; the Vista calendar's duty
+// rows, `ON_CALL_DUTIES`). OBI reads it (services/afterHours.ts) into
 // `on_call_shift`, one row per (day, person). While a person's shift is
 // running — `start_hour` to `end_hour`, America/Chicago, on the shift's day
 // (12 AM to 3 PM by default) — the header shows them an **After hours**
@@ -13,8 +14,25 @@
 //
 // Pure: no database, no clock of its own (the caller passes `now`).
 
-/** The roles the sheet may name. */
-export const ON_CALL_ROLE_CODES = ['am', 'tl', 'atl', 'oa'] as const;
+/** The roles the sheet may name. Elise, 2026-11-23: the night dispatchers
+    (OM, Senior OM) are on call too, from the Vista calendar's duty rows. */
+export const ON_CALL_ROLE_CODES = ['am', 'tl', 'atl', 'oa', 'om', 'senior_om'] as const;
+
+/**
+ * The Vista calendar's duty rows (Elise, 2026-11-23): dates run across one
+ * row, each duty is a row labelled in its first column, and the cell under a
+ * date names who holds that duty that night. A name is looked for only among
+ * the duty's roles. Rows with any other label (Night Payer, the staff list
+ * under the duties, notes) are not read.
+ */
+export const ON_CALL_DUTIES: { match: RegExp; label: string; roles: readonly string[] }[] = [
+  { match: /^night\s*manager\b/i, label: 'Night Manager', roles: ['am'] },
+  { match: /^night\s*dispatcher\b/i, label: 'Night Dispatcher', roles: ['om', 'senior_om'] },
+  { match: /^night\s*admin\b/i, label: 'Night Admin', roles: ['oa'] },
+];
+
+/** A dated row with at least this many dates is the calendar's date row. */
+const GRID_MIN_DATES = 3;
 
 export function isOnCallRole(role: string | null | undefined): boolean {
   return !!role && (ON_CALL_ROLE_CODES as readonly string[]).includes(role);
@@ -147,38 +165,17 @@ const IGNORED_WORDS = new Set(['am', 'tl', 'atl', 'oa', 'op admin', 'on call', '
  * email, by first name or by first name + last initial (only when exactly one
  * person answers to it). Rows with no date (headers, notes) are skipped.
  */
-export function parseOnCallSheet(rows: string[][], people: OnCallPerson[], defaultYear?: number): OnCallParseResult {
-  const pool = people.filter((p) => isOnCallRole(p.role));
-  const byName = new Map<string, OnCallPerson[]>();
-  const add = (k: string, p: OnCallPerson) => {
-    if (!k) return;
-    const list = byName.get(k) ?? [];
-    if (!list.includes(p)) list.push(p);
-    byName.set(k, list);
-  };
-  for (const p of pool) {
-    const full = norm(p.name);
-    add(full, p);
-    if (p.email) {
-      add(norm(p.email), p);
-      add(norm(p.email.split('@')[0]), p);
-    }
-    const parts = full.split(' ').filter(Boolean);
-    if (parts.length > 0) add(parts[0], p);
-    if (parts.length > 1) {
-      add(`${parts[0]} ${parts[parts.length - 1][0]}`, p);
-      add(`${parts[0]} ${parts[parts.length - 1]}`, p);
-    }
-  }
-  const match = (text: string): OnCallPerson | null => {
-    const k = norm(text);
-    const exact = byName.get(k);
-    if (exact?.length === 1) return exact[0];
-    // "Jordan B." / "Jordan Brown (AM)" → drop the bracket and the dot.
-    const k2 = norm(text.replace(/\(.*?\)/g, ' '));
-    const hit = byName.get(k2);
-    return hit?.length === 1 ? hit[0] : null;
-  };
+export function parseOnCallSheet(
+  rows: string[][],
+  people: OnCallPerson[],
+  defaultYear?: number,
+  /** Today (YYYY-MM-DD): a calendar's "23 Nov" takes the year nearest to it,
+      and names that match nobody are reported only from yesterday on. */
+  refDay?: string,
+): OnCallParseResult {
+  const grid = rows.findIndex((cells) => cells.filter((c) => sheetDateNear(String(c ?? ''), defaultYear, refDay)).length >= GRID_MIN_DATES);
+  if (grid >= 0) return parseOnCallGrid(rows, grid, people, defaultYear, refDay);
+  const match = makeMatcher(people.filter((p) => isOnCallRole(p.role)));
 
   const shifts: OnCallShiftRow[] = [];
   const unmatched: OnCallParseResult['unmatched'] = [];
@@ -201,11 +198,7 @@ export function parseOnCallSheet(rows: string[][], people: OnCallPerson[], defau
       for (let d = dates[0]; d <= dates[1] && days.length < ON_CALL_MAX_SPAN_DAYS; d = addDays(d, 1)) days.push(d);
     }
     for (const cell of others) {
-      for (const piece of cell.split(/[,/&\n;+]|\band\b/i)) {
-        const text = piece.trim();
-        if (!/[a-z]/i.test(text) || IGNORED_WORDS.has(norm(text))) continue;
-        // Weekday names next to the date ("Monday") are not people.
-        if (/^(mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(day|nesday|rsday|urday)?\.?$/i.test(text)) continue;
+      for (const text of namePieces(cell)) {
         const p = match(text);
         if (!p) {
           unmatched.push({ row, text });
@@ -221,6 +214,116 @@ export function parseOnCallSheet(rows: string[][], people: OnCallPerson[], defau
     }
   });
   return { shifts, unmatched };
+}
+
+/** A date cell; a date with no year takes the year nearest to `refDay`. */
+function sheetDateNear(cell: string, defaultYear?: number, refDay?: string): string | null {
+  const exact = parseSheetDate(cell);
+  if (exact || !refDay) return exact ?? parseSheetDate(cell, defaultYear);
+  const y = Number(refDay.slice(0, 4));
+  const ref = Date.parse(`${refDay}T00:00:00Z`);
+  let best: string | null = null;
+  for (const cand of [y - 1, y, y + 1]) {
+    const d = parseSheetDate(cell, cand);
+    if (d && (!best || Math.abs(Date.parse(`${d}T00:00:00Z`) - ref) < Math.abs(Date.parse(`${best}T00:00:00Z`) - ref))) best = d;
+  }
+  return best;
+}
+
+/** A cell split into the names it holds; role words and weekdays dropped. */
+function namePieces(cell: string): string[] {
+  const out: string[] = [];
+  for (const piece of cell.split(/[,/&\n;+]|\band\b/i)) {
+    const text = piece.trim();
+    if (!/[a-z]/i.test(text) || IGNORED_WORDS.has(norm(text))) continue;
+    // Weekday names next to the date ("Monday") are not people.
+    if (/^(mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)(day|nesday|rsday|urday)?\.?$/i.test(text)) continue;
+    out.push(text);
+  }
+  return out;
+}
+
+/**
+ * The Vista calendar: row `dateRow` holds the dates across, each duty row
+ * (ON_CALL_DUTIES, by the label in its first cells) names one person per
+ * date. A name is matched only among the duty's roles.
+ */
+function parseOnCallGrid(
+  rows: string[][],
+  dateRow: number,
+  people: OnCallPerson[],
+  defaultYear?: number,
+  refDay?: string,
+): OnCallParseResult {
+  const cols = new Map<number, string>();
+  rows[dateRow].forEach((c, j) => {
+    const d = sheetDateNear(String(c ?? ''), defaultYear, refDay);
+    if (d) cols.set(j, d);
+  });
+  const firstDateCol = Math.min(...cols.keys());
+  const reportFrom = refDay ? addDays(refDay, -1) : '';
+  const matchers = ON_CALL_DUTIES.map((d) => makeMatcher(people.filter((p) => !!p.role && d.roles.includes(p.role))));
+  const shifts: OnCallShiftRow[] = [];
+  const unmatched: OnCallParseResult['unmatched'] = [];
+  const seen = new Set<string>();
+  rows.forEach((cells, i) => {
+    if (i === dateRow) return;
+    const label = cells.slice(0, firstDateCol).map((c) => String(c ?? '').trim()).find(Boolean) ?? '';
+    const duty = ON_CALL_DUTIES.findIndex((d) => d.match.test(label));
+    if (duty < 0) return;
+    const row = i + 1;
+    for (const [j, day] of cols) {
+      const cell = String(cells[j] ?? '').trim();
+      if (!cell) continue;
+      for (const text of namePieces(cell)) {
+        const p = matchers[duty](text);
+        if (!p) {
+          if (day >= reportFrom) unmatched.push({ row, text: `${label} · ${day}: ${text}` });
+          continue;
+        }
+        const key = `${day}|${p.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        shifts.push({ day, principal_id: p.id, name: p.name, row });
+      }
+    }
+  });
+  return { shifts, unmatched };
+}
+
+/** Name → person among `pool`: display name, email, first name, first name +
+    last initial; only when exactly one person answers to it. */
+function makeMatcher(pool: OnCallPerson[]): (text: string) => OnCallPerson | null {
+  const byName = new Map<string, OnCallPerson[]>();
+  const add = (k: string, p: OnCallPerson) => {
+    if (!k) return;
+    const list = byName.get(k) ?? [];
+    if (!list.includes(p)) list.push(p);
+    byName.set(k, list);
+  };
+  for (const p of pool) {
+    const full = norm(p.name);
+    add(full, p);
+    if (p.email) {
+      add(norm(p.email), p);
+      add(norm(p.email.split('@')[0]), p);
+    }
+    const parts = full.split(' ').filter(Boolean);
+    if (parts.length > 0) add(parts[0], p);
+    if (parts.length > 1) {
+      add(`${parts[0]} ${parts[parts.length - 1][0]}`, p);
+      add(`${parts[0]} ${parts[parts.length - 1]}`, p);
+    }
+  }
+  return (text: string): OnCallPerson | null => {
+    const k = norm(text);
+    const exact = byName.get(k);
+    if (exact?.length === 1) return exact[0];
+    // "Jordan B." / "Jordan Brown (AM)" → drop the bracket and the dot.
+    const k2 = norm(text.replace(/\(.*?\)/g, ' '));
+    const hit = byName.get(k2);
+    return hit?.length === 1 ? hit[0] : null;
+  };
 }
 
 // ── The shift's window ──────────────────────────────────────────────────────

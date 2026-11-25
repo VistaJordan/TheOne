@@ -1,5 +1,7 @@
 // 0155 · Admin › Settings › On call (Elise, 2026-11-17). The Google Sheet that
-// says which AM, TL, ATL or OP Admin is on call on which day, the hours of a
+// says who is on call on which day (the Vista calendar since 2026-11-23: Night
+// Manager = AM, Night Dispatcher 1–4 = OM / Senior OM, Night Admin = OP
+// Admin, dates across the top; or one row per date), the hours of a
 // shift, what OBI read from it, and who switched After hours when. The person
 // on call gets the After hours button in the header during their shift
 // (components/AfterHoursToggle.tsx; services/afterHours.ts on the API).
@@ -69,11 +71,14 @@ export function OnCallCard() {
         <span className="card-meta">{!s?.sheet_id ? 'no sheet yet' : last?.ok ? `read ${when(last.at)}` : last ? 'last read failed' : 'not read yet'}</span>
       </div>
       <p className="adm-cico-note">
-        The Google Sheet that says which AM, TL, ATL or OP Admin is on call each day. During their shift, the person on call
+        The Google Sheet that says who is on call each night. On the Vista calendar the dates run across the top and OBI
+        reads three duty rows: Night Manager (an AM), Night Dispatcher 1 to 4 (an OM or Senior OM) and Night Admin (an OP
+        Admin); a name is looked for among that role only. During their shift, the person on call
         gets an <b>After hours</b> button in the header. It starts on all work orders, approvals and notifications, and
         one click goes back to their own jobs. Their role still decides what they can approve. Each click is logged.
-        OBI reads the sheet every 15 minutes. Each row needs a date (or a start and end date) and the people's names as
-        they appear in OBI.
+        OBI reads the sheet every 15 minutes. A sheet with one row per day works too: a date (or a start and end date)
+        and the names of the AM, TL, ATL, OP Admin, OM or Senior OM on call. Names as they appear in OBI; a first name
+        is enough when only one person of that role has it.
       </p>
 
       {q.isLoading && <div className="empty-flat">Loading…</div>}
@@ -166,7 +171,7 @@ export function OnCallCard() {
             <div className="callout adm-cico-err" role="status">
               <Icon name="alert" size={14} />
               <span>
-                Names OBI could not match to an active AM, TL, ATL or OP Admin:{' '}
+                Names OBI could not match to one active person of that role:{' '}
                 {last.unmatched.slice(0, 12).map((u) => `“${u.text}” (row ${u.row})`).join(', ')}
                 {last.unmatched.length > 12 ? `, and ${last.unmatched.length - 12} more` : ''}.
               </span>

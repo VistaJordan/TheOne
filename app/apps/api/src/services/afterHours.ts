@@ -158,7 +158,7 @@ async function doSync(actor: ActingPrincipal | null): Promise<OnCallSyncResult> 
       [[...ON_CALL_ROLE_CODES]],
     );
     const today = chicagoWall(new Date()).day;
-    const parsed = parseOnCallSheet(rows, people.rows, Number(today.slice(0, 4)));
+    const parsed = parseOnCallSheet(rows, people.rows, Number(today.slice(0, 4)), today);
     const yesterday = new Date(Date.parse(`${today}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
     const keep = parsed.shifts.filter((s) => s.day >= yesterday);
     await withTransaction(async (tx) => {

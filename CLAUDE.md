@@ -3563,7 +3563,17 @@ and the notices inbox and badge read every work order — so the lists, queues,
 counts and per-work-order routes all widen together, and what the person may
 DO is still their role's. The Work Orders "Yours only" chip hides while wide.
 "Who switched After hours" (`GET /after-hours/log`, `admin/audit` view) is on
-the On call card.
+the On call card. **The Vista calendar** (Elise, 2026-11-23, no migration;
+`ON_CALL_DUTIES`, `parseOnCallGrid` in shared `onCall.ts`,
+`tests/on-call.test.ts`): when a row holds 3+ dates it is the date row and
+each column is a day; only the duty rows labelled in the first column are
+read — Night Manager → `am`, Night Dispatcher 1–4 → `om` / `senior_om`,
+Night Admin → `oa` (Night Payer and the staff grid below are skipped) — and a
+name is matched only among that duty's roles. A "23 Nov" takes the year
+nearest today; names that match nobody are reported from yesterday on.
+`ON_CALL_ROLE_CODES` gained `om` and `senior_om`, so a night dispatcher's
+After hours widens their work-order list too. `readSheetRows` reads the whole
+tab (the calendar runs far past column Z).
 
 **The AM approves a payment far over the NTE** (#35, Elise 2026-11-17, no
 migration; `tests/on-call.test.ts`). A payment far enough over the NTE is also

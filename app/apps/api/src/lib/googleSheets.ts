@@ -71,7 +71,8 @@ export async function readSheetRows(
   opts: { tab: string | null; gid: string | null },
 ): Promise<string[][]> {
   const tab = opts.tab?.trim() || (await tabName(c, sheetId, opts.gid));
-  const range = tab ? `'${tab.replace(/'/g, "''")}'!A1:Z3000` : 'A1:Z3000';
+  // The whole tab: the Vista calendar runs one column per day, far past Z.
+  const range = tab ? `'${tab.replace(/'/g, "''")}'` : 'A1:ZZZ3000';
   const json = (await sheetsGet(
     c,
     `${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE`,
