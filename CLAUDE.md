@@ -2919,7 +2919,11 @@ $500 to $3,000 TL / ATL, $3,000 and over AM, for both kinds (0115 rewrites the
 payment bands too and drops Admin from them; a super admin always may).
 `actOnRequest` approve asks `assertTierAllows` (403 `APPROVAL_TIER`), each
 `PurchaseRequest` carries `tier` and the dialog locks Approve with the band.
-Still editable in Admin › Settings › Approval tiers.
+Still editable in Admin › Settings › Approval tiers. **The AM covers the
+bands below theirs** (migration 0162, Elise 2026-11-25,
+`tests/purchase-bands-am-0162.test.ts`): every purchase_request band that
+names roles and sits under the AM's band gains `am`, so $500 to $3,000 is
+TL / ATL / AM (payments already name the AM in every band to $50,000).
 
 **A payment that goes over asks for a reason** (migration 0107, Elise
 2026-10-28; `paymentOverage` / `paymentOverageSentence` /
