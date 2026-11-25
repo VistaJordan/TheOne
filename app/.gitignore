@@ -23,3 +23,6 @@ packages/db/pgtest*/
 
 .vercel
 .env*
+
+# load-simulation reports (scripts/simulate-load.mjs)
+.sim-reports/
